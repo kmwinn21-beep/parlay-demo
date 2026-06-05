@@ -1113,4 +1113,17 @@ export const migrations: string[] = [
   `ALTER TABLE meetings ADD COLUMN source TEXT DEFAULT 'rep'`,
   `ALTER TABLE follow_ups ADD COLUMN source TEXT DEFAULT 'rep'`,
   `ALTER TABLE attendee_touchpoints ADD COLUMN source TEXT DEFAULT 'rep'`,
+  `CREATE TABLE IF NOT EXISTS user_agenda_preferences (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_email TEXT NOT NULL,
+    conference_id INTEGER NOT NULL,
+    preference TEXT NOT NULL DEFAULT 'auto',
+    pending_global_notification INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(user_email, conference_id),
+    FOREIGN KEY (conference_id) REFERENCES conferences(id)
+  )`,
+  `ALTER TABLE conferences ADD COLUMN global_agenda_uploaded_at TEXT`,
+  `ALTER TABLE conferences ADD COLUMN global_agenda_uploaded_by_name TEXT`,
 ];

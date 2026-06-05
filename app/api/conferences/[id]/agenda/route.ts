@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import Anthropic from '@anthropic-ai/sdk';
+import { notifyConferenceInternalAttendees, getConfigIdByEmail } from '@/lib/notifications';
 
 export const maxDuration = 90;
 
@@ -176,9 +177,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     // Fetch conference start_date to provide the year as context for the LLM
     const confRow = await db.execute({
-      sql: 'SELECT start_date FROM conferences WHERE id = ? LIMIT 1',
+      sql: 'SELECT name, start_date FROM conferences WHERE id = ? LIMIT 1',
       args: [conferenceId],
     });
+    const conferenceName = confRow.rows.length > 0 && confRow.rows[0].name
+      ? String(confRow.rows[0].name)
+      : null;
     const startDate = confRow.rows.length > 0 && confRow.rows[0].start_date
       ? String(confRow.rows[0].start_date)
       : null;
@@ -363,6 +367,24 @@ Rules:
 
     if (insertStatements.length > 0) {
       await db.batch(insertStatements, 'write');
+    }
+
+    // Write upload metadata so the conference edit form can show when it was last uploaded
+    await db.execute({
+      sql: `UPDATE conferences SET global_agenda_uploaded_at = datetime('now'), global_agenda_uploaded_by_name = ? WHERE id = ?`,
+      args: [authResult.email, conferenceId],
+    });
+
+    // Notify all internal attendees — fire and forget
+    if (conferenceName) {
+      const changedByConfigId = await getConfigIdByEmail(authResult.email, db);
+      notifyConferenceInternalAttendees({
+        conferenceId,
+        conferenceName,
+        message: `The Agenda for ${conferenceName} has been added/updated!`,
+        changedByEmail: authResult.email,
+        changedByConfigId,
+      });
     }
 
     return NextResponse.json({ count: insertStatements.length });
