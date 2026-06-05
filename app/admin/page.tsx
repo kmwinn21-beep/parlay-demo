@@ -58,6 +58,7 @@ const CATEGORIES = [
   { key: 'buying_signal_template', label: 'Buying Signal Templates' },
   { key: 'event_type', label: 'Event Type' },
   { key: 'conference_strategy_type', label: 'Conference Strategy Type' },
+  { key: 'sponsorship_level', label: 'Sponsorship Level' },
   { key: 'rep_relationship_type', label: 'Rep Relationship Type/Status' },
   { key: 'touchpoints', label: 'Touchpoints' },
   { key: 'attendee_conference_status', label: 'Attendee Conference Status' },

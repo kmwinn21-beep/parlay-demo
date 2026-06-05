@@ -43,6 +43,37 @@ export function ConferenceForm() {
   const [conferenceMode, setConferenceMode] = useState<ConferenceMode>('new');
   const [selectedSeries, setSelectedSeries] = useState<SeriesOption | null>(null);
   const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null);
+  const [industryOptions, setIndustryOptions] = useState<{ id: number; value: string }[]>([]);
+  const [industrySearch, setIndustrySearch] = useState('');
+  const [industryDropdownOpen, setIndustryDropdownOpen] = useState(false);
+  const [selectedIndustryFocus, setSelectedIndustryFocus] = useState('');
+  const industryDropdownRef = useRef<HTMLDivElement>(null);
+  const [conferenceTypeInput, setConferenceTypeInput] = useState('');
+  const [websiteInput, setWebsiteInput] = useState('');
+  const [sponsorshipOptions, setSponsorshipOptions] = useState<{ id: number; value: string; color: string | null; is_system: number }[]>([]);
+  const [selectedSponsorshipLevel, setSelectedSponsorshipLevel] = useState('');
+  const [sponsorshipAddOpen, setSponsorshipAddOpen] = useState(false);
+  const [sponsorshipAddValue, setSponsorshipAddValue] = useState('');
+  const [sponsorshipAdding, setSponsorshipAdding] = useState(false);
+  const [boothPresent, setBoothPresent] = useState(false);
+  const [boothWidth, setBoothWidth] = useState('');
+  const [boothLength, setBoothLength] = useState('');
+  const [boothNumber, setBoothNumber] = useState('');
+  const [boothHall, setBoothHall] = useState('');
+  useEffect(() => {
+    fetch('/api/config?category=industry')
+      .then((r) => r.json())
+      .then((rows) => setIndustryOptions((rows ?? []).map((r: { id: number; value: string }) => ({ id: Number(r.id), value: String(r.value) }))))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/config/sponsorship-levels')
+      .then((r) => r.json())
+      .then((rows) => setSponsorshipOptions((rows ?? []).map((r: { id: number; value: string; color: string | null; is_system: number }) => ({ id: Number(r.id), value: String(r.value), color: r.color ?? null, is_system: Number(r.is_system ?? 0) }))))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     fetch('/api/config?category=conference_strategy_type&form=conference_form')
       .then((r) => r.json())
@@ -54,6 +85,9 @@ export function ConferenceForm() {
     function handleClickOutside(e: MouseEvent) {
       if (internalDropdownRef.current && !internalDropdownRef.current.contains(e.target as Node)) {
         setInternalDropdownOpen(false);
+      }
+      if (industryDropdownRef.current && !industryDropdownRef.current.contains(e.target as Node)) {
+        setIndustryDropdownOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -91,6 +125,64 @@ export function ConferenceForm() {
     }
   };
 
+  const createIndustryOption = async (value: string) => {
+    try {
+      const res = await fetch('/api/config/industry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value }),
+      });
+      if (!res.ok) throw new Error();
+      const created = await res.json() as { id: number; value: string };
+      const newOpt = { id: Number(created.id), value: String(created.value) };
+      setIndustryOptions((prev) => [...prev.filter(o => o.value !== newOpt.value), newOpt]);
+      setSelectedIndustryFocus(newOpt.value);
+      setIndustrySearch('');
+      setIndustryDropdownOpen(false);
+    } catch {
+      toast.error('Failed to create industry option.');
+    }
+  };
+
+  const createSponsorshipLevel = async () => {
+    const value = sponsorshipAddValue.trim();
+    if (!value) return;
+    setSponsorshipAdding(true);
+    try {
+      const res = await fetch('/api/config/sponsorship-levels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value }),
+      });
+      if (!res.ok) throw new Error();
+      const created = await res.json() as { id: number; value: string; color: string | null; is_system: number };
+      const newOpt = { id: Number(created.id), value: String(created.value), color: created.color ?? null, is_system: 0 };
+      setSponsorshipOptions((prev) => [...prev.filter((o) => o.id !== newOpt.id), newOpt]);
+      setSelectedSponsorshipLevel(newOpt.value);
+      setSponsorshipAddValue('');
+      setSponsorshipAddOpen(false);
+    } catch {
+      toast.error('Failed to add sponsorship level.');
+    } finally {
+      setSponsorshipAdding(false);
+    }
+  };
+
+  const deleteSponsorshipLevel = async (id: number, value: string) => {
+    try {
+      const res = await fetch(`/api/config/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string };
+        toast.error(data.error || 'Failed to delete.');
+        return;
+      }
+      setSponsorshipOptions((prev) => prev.filter((o) => o.id !== id));
+      if (selectedSponsorshipLevel === value) setSelectedSponsorshipLevel('');
+    } catch {
+      toast.error('Failed to delete sponsorship level.');
+    }
+  };
+
   const handleMappingConfirmed = (mapping: ColumnMapping) => {
     setConfirmedMapping(mapping);
     setFile(pendingFile);
@@ -112,6 +204,15 @@ export function ConferenceForm() {
       if (selectedSeries) formData.append('series_id', selectedSeries.id);
       if (selectedSeasonId) formData.append('season_id', selectedSeasonId);
       formData.append('is_historical', conferenceMode === 'historical' ? '1' : '0');
+      if (selectedIndustryFocus) formData.append('industry_focus', selectedIndustryFocus);
+      if (conferenceTypeInput) formData.append('conference_type', conferenceTypeInput);
+      if (websiteInput) formData.append('website', websiteInput);
+      if (selectedSponsorshipLevel) formData.append('sponsorship_level', selectedSponsorshipLevel);
+      formData.append('booth_present', boothPresent ? '1' : '0');
+      if (boothPresent && boothWidth) formData.append('booth_width', boothWidth);
+      if (boothPresent && boothLength) formData.append('booth_length', boothLength);
+      if (boothPresent && boothNumber) formData.append('booth_number', boothNumber);
+      if (boothPresent && boothHall) formData.append('booth_hall', boothHall);
 
       if (file) {
         formData.append('file', file);
@@ -177,9 +278,198 @@ export function ConferenceForm() {
           <SeriesSeasonCombobox
             seriesId={selectedSeries?.id ?? null}
             seasonId={selectedSeasonId}
-            onSeriesChange={(s) => { setSelectedSeries(s); if (!s) setSelectedSeasonId(null); }}
+            onSeriesChange={(s) => {
+              setSelectedSeries(s);
+              if (!s) setSelectedSeasonId(null);
+              if (s?.industry_focus) setSelectedIndustryFocus(s.industry_focus);
+              if (s?.conference_type) setConferenceTypeInput(s.conference_type);
+            }}
             onSeasonChange={setSelectedSeasonId}
           />
+
+          <div className="md:col-span-2" ref={industryDropdownRef}>
+            <label className="label flex items-center gap-2">
+              Industry Focus
+              {selectedSeries && <span className="text-xs font-normal text-teal-600">• Synced to series</span>}
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={industryDropdownOpen ? industrySearch : selectedIndustryFocus}
+                onFocus={() => { setIndustryDropdownOpen(true); setIndustrySearch(selectedIndustryFocus); }}
+                onChange={(e) => { setIndustrySearch(e.target.value); setSelectedIndustryFocus(e.target.value); }}
+                placeholder="Search or add industry..."
+                className="input-field pr-8"
+                autoComplete="off"
+              />
+              {selectedIndustryFocus && !industryDropdownOpen && (
+                <button type="button" onClick={() => { setSelectedIndustryFocus(''); setIndustrySearch(''); }} className="absolute inset-y-0 right-0 flex items-center pr-3">
+                  <svg className="h-4 w-4 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              )}
+              {industryDropdownOpen && (
+                <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                  {industryOptions
+                    .filter((o) => !industrySearch || o.value.toLowerCase().includes(industrySearch.toLowerCase()))
+                    .map((opt) => (
+                      <button key={opt.id} type="button" onClick={() => { setSelectedIndustryFocus(opt.value); setIndustryDropdownOpen(false); setIndustrySearch(''); }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
+                        {opt.value}
+                      </button>
+                    ))}
+                  {industrySearch && !industryOptions.some((o) => o.value.toLowerCase() === industrySearch.toLowerCase()) && (
+                    <button type="button" onClick={() => void createIndustryOption(industrySearch)} className="w-full text-left px-3 py-2 text-sm text-brand-secondary hover:bg-blue-50 flex items-center gap-2 font-medium">
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                      Create &ldquo;{industrySearch}&rdquo;
+                    </button>
+                  )}
+                  {industryOptions.length === 0 && !industrySearch && (
+                    <div className="px-3 py-2 text-sm text-gray-400">No industry options configured. Type to create one.</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="label flex items-center gap-2">
+              Conference Type
+              {selectedSeries && <span className="text-xs font-normal text-teal-600">• Synced to series</span>}
+            </label>
+            <select
+              value={conferenceTypeInput}
+              onChange={(e) => setConferenceTypeInput(e.target.value)}
+              className="input-field"
+            >
+              <option value="">Select type...</option>
+              <option>Trade show</option>
+              <option>User conference</option>
+              <option>Executive summit</option>
+              <option>Hosted dinner / private event</option>
+              <option>Roundtable</option>
+              <option>Field event</option>
+              <option>Industry association conference</option>
+              <option>Analyst conference</option>
+              <option>Partner / ecosystem event</option>
+              <option>Other</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="label">Website</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg>
+              </div>
+              <input
+                type="url"
+                value={websiteInput}
+                onChange={(e) => setWebsiteInput(e.target.value)}
+                className="input-field pl-9"
+                placeholder="https://example.com"
+              />
+            </div>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="label">Sponsorship Level</label>
+            <div className="flex flex-wrap items-center gap-2">
+              {sponsorshipOptions.map((opt) => {
+                const isSelected = selectedSponsorshipLevel === opt.value;
+                return (
+                  <div key={opt.id} className="relative inline-flex">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSponsorshipLevel(isSelected ? '' : opt.value)}
+                      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${isSelected ? 'border-transparent text-white shadow-sm' : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'} ${!opt.is_system ? 'pr-6' : ''}`}
+                      style={isSelected && opt.color ? { backgroundColor: opt.color } : {}}
+                    >
+                      {opt.is_system ? (
+                        <svg className="w-3 h-3 flex-shrink-0 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                      ) : (
+                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: isSelected ? 'rgba(255,255,255,0.55)' : '#9ca3af' }} />
+                      )}
+                      {opt.value}
+                    </button>
+                    {!opt.is_system && (
+                      <button
+                        type="button"
+                        onClick={() => void deleteSponsorshipLevel(opt.id, opt.value)}
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
+                        title={`Remove ${opt.value}`}
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {!sponsorshipAddOpen ? (
+                <button
+                  type="button"
+                  onClick={() => setSponsorshipAddOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm text-brand-secondary border border-dashed border-brand-secondary/50 hover:bg-blue-50 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                  Add custom level
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={sponsorshipAddValue}
+                    onChange={(e) => setSponsorshipAddValue(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void createSponsorshipLevel(); } if (e.key === 'Escape') { setSponsorshipAddOpen(false); setSponsorshipAddValue(''); } }}
+                    placeholder="Level name..."
+                    className="input-field text-sm py-1 h-8 w-36"
+                    autoFocus
+                  />
+                  <button type="button" onClick={() => void createSponsorshipLevel()} disabled={!sponsorshipAddValue.trim() || sponsorshipAdding} className="btn-primary text-xs px-3 h-8 disabled:opacity-50">
+                    {sponsorshipAdding ? '…' : 'Add'}
+                  </button>
+                  <button type="button" onClick={() => { setSponsorshipAddOpen(false); setSponsorshipAddValue(''); }} className="text-gray-400 hover:text-gray-600">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="label">Booth</label>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={boothPresent}
+                onClick={() => setBoothPresent(!boothPresent)}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${boothPresent ? 'bg-brand-secondary' : 'bg-gray-200'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${boothPresent ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+              <span className="text-sm text-gray-700">{boothPresent ? 'We have a booth' : 'No booth'}</span>
+            </div>
+            {boothPresent && (
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <div>
+                  <label className="label text-xs !mb-1">Length (ft)</label>
+                  <input type="number" min="1" value={boothLength} onChange={(e) => setBoothLength(e.target.value)} className="input-field w-24" placeholder="10" />
+                </div>
+                <span className="pb-2.5 text-gray-400 text-sm">×</span>
+                <div>
+                  <label className="label text-xs !mb-1">Width (ft)</label>
+                  <input type="number" min="1" value={boothWidth} onChange={(e) => setBoothWidth(e.target.value)} className="input-field w-24" placeholder="10" />
+                </div>
+                <div>
+                  <label className="label text-xs !mb-1">Booth #</label>
+                  <input type="text" value={boothNumber} onChange={(e) => setBoothNumber(e.target.value)} className="input-field w-28" placeholder="e.g., 412" />
+                </div>
+                <div>
+                  <label className="label text-xs !mb-1">Hall</label>
+                  <input type="text" value={boothHall} onChange={(e) => setBoothHall(e.target.value)} className="input-field w-36" placeholder="e.g., Hall B" />
+                </div>
+              </div>
+            )}
+          </div>
 
           <div>
             <label className="label">Start Date *</label>
