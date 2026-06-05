@@ -50,8 +50,11 @@ export function ConferenceForm() {
   const industryDropdownRef = useRef<HTMLDivElement>(null);
   const [conferenceTypeInput, setConferenceTypeInput] = useState('');
   const [websiteInput, setWebsiteInput] = useState('');
-  const [sponsorshipOptions, setSponsorshipOptions] = useState<{ id: number; value: string; color: string | null }[]>([]);
+  const [sponsorshipOptions, setSponsorshipOptions] = useState<{ id: number; value: string; color: string | null; is_system: number }[]>([]);
   const [selectedSponsorshipLevel, setSelectedSponsorshipLevel] = useState('');
+  const [sponsorshipAddOpen, setSponsorshipAddOpen] = useState(false);
+  const [sponsorshipAddValue, setSponsorshipAddValue] = useState('');
+  const [sponsorshipAdding, setSponsorshipAdding] = useState(false);
   const [boothPresent, setBoothPresent] = useState(false);
   const [boothWidth, setBoothWidth] = useState('');
   const [boothHeight, setBoothHeight] = useState('');
@@ -65,7 +68,7 @@ export function ConferenceForm() {
   useEffect(() => {
     fetch('/api/config/sponsorship-levels')
       .then((r) => r.json())
-      .then((rows) => setSponsorshipOptions((rows ?? []).map((r: { id: number; value: string; color: string | null }) => ({ id: Number(r.id), value: String(r.value), color: r.color ?? null }))))
+      .then((rows) => setSponsorshipOptions((rows ?? []).map((r: { id: number; value: string; color: string | null; is_system: number }) => ({ id: Number(r.id), value: String(r.value), color: r.color ?? null, is_system: Number(r.is_system ?? 0) }))))
       .catch(() => {});
   }, []);
 
@@ -136,6 +139,45 @@ export function ConferenceForm() {
       setIndustryDropdownOpen(false);
     } catch {
       toast.error('Failed to create industry option.');
+    }
+  };
+
+  const createSponsorshipLevel = async () => {
+    const value = sponsorshipAddValue.trim();
+    if (!value) return;
+    setSponsorshipAdding(true);
+    try {
+      const res = await fetch('/api/config/sponsorship-levels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value }),
+      });
+      if (!res.ok) throw new Error();
+      const created = await res.json() as { id: number; value: string; color: string | null; is_system: number };
+      const newOpt = { id: Number(created.id), value: String(created.value), color: created.color ?? null, is_system: 0 };
+      setSponsorshipOptions((prev) => [...prev.filter((o) => o.id !== newOpt.id), newOpt]);
+      setSelectedSponsorshipLevel(newOpt.value);
+      setSponsorshipAddValue('');
+      setSponsorshipAddOpen(false);
+    } catch {
+      toast.error('Failed to add sponsorship level.');
+    } finally {
+      setSponsorshipAdding(false);
+    }
+  };
+
+  const deleteSponsorshipLevel = async (id: number, value: string) => {
+    try {
+      const res = await fetch(`/api/config/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string };
+        toast.error(data.error || 'Failed to delete.');
+        return;
+      }
+      setSponsorshipOptions((prev) => prev.filter((o) => o.id !== id));
+      if (selectedSponsorshipLevel === value) setSelectedSponsorshipLevel('');
+    } catch {
+      toast.error('Failed to delete sponsorship level.');
     }
   };
 
@@ -289,13 +331,23 @@ export function ConferenceForm() {
               Conference Type
               {selectedSeries && <span className="text-xs font-normal text-teal-600">• Synced to series</span>}
             </label>
-            <input
-              type="text"
+            <select
               value={conferenceTypeInput}
               onChange={(e) => setConferenceTypeInput(e.target.value)}
               className="input-field"
-              placeholder="e.g., Trade Show, Summit, Forum..."
-            />
+            >
+              <option value="">Select type...</option>
+              <option>Trade show</option>
+              <option>User conference</option>
+              <option>Executive summit</option>
+              <option>Hosted dinner / private event</option>
+              <option>Roundtable</option>
+              <option>Field event</option>
+              <option>Industry association conference</option>
+              <option>Analyst conference</option>
+              <option>Partner / ecosystem event</option>
+              <option>Other</option>
+            </select>
           </div>
 
           <div>
@@ -316,27 +368,66 @@ export function ConferenceForm() {
 
           <div className="md:col-span-2">
             <label className="label">Sponsorship Level</label>
-            {sponsorshipOptions.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {sponsorshipOptions.map((opt) => {
-                  const isSelected = selectedSponsorshipLevel === opt.value;
-                  return (
+            <div className="flex flex-wrap items-center gap-2">
+              {sponsorshipOptions.map((opt) => {
+                const isSelected = selectedSponsorshipLevel === opt.value;
+                return (
+                  <div key={opt.id} className="relative inline-flex">
                     <button
-                      key={opt.id}
                       type="button"
                       onClick={() => setSelectedSponsorshipLevel(isSelected ? '' : opt.value)}
-                      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${isSelected ? 'border-transparent text-white shadow-sm' : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'}`}
+                      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${isSelected ? 'border-transparent text-white shadow-sm' : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'} ${!opt.is_system ? 'pr-6' : ''}`}
                       style={isSelected && opt.color ? { backgroundColor: opt.color } : {}}
                     >
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: isSelected ? 'rgba(255,255,255,0.55)' : (opt.color || '#9ca3af') }} />
+                      {opt.is_system ? (
+                        <svg className="w-3 h-3 flex-shrink-0 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                      ) : (
+                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: isSelected ? 'rgba(255,255,255,0.55)' : '#9ca3af' }} />
+                      )}
                       {opt.value}
                     </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-xs text-gray-400">No sponsorship levels configured. Add them in Admin Settings → Types.</p>
-            )}
+                    {!opt.is_system && (
+                      <button
+                        type="button"
+                        onClick={() => void deleteSponsorshipLevel(opt.id, opt.value)}
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
+                        title={`Remove ${opt.value}`}
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {!sponsorshipAddOpen ? (
+                <button
+                  type="button"
+                  onClick={() => setSponsorshipAddOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm text-brand-secondary border border-dashed border-brand-secondary/50 hover:bg-blue-50 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                  Add custom level
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={sponsorshipAddValue}
+                    onChange={(e) => setSponsorshipAddValue(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void createSponsorshipLevel(); } if (e.key === 'Escape') { setSponsorshipAddOpen(false); setSponsorshipAddValue(''); } }}
+                    placeholder="Level name..."
+                    className="input-field text-sm py-1 h-8 w-36"
+                    autoFocus
+                  />
+                  <button type="button" onClick={() => void createSponsorshipLevel()} disabled={!sponsorshipAddValue.trim() || sponsorshipAdding} className="btn-primary text-xs px-3 h-8 disabled:opacity-50">
+                    {sponsorshipAdding ? '…' : 'Add'}
+                  </button>
+                  <button type="button" onClick={() => { setSponsorshipAddOpen(false); setSponsorshipAddValue(''); }} className="text-gray-400 hover:text-gray-600">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="md:col-span-2">
