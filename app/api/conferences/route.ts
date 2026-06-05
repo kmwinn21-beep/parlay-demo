@@ -88,7 +88,9 @@ export async function POST(request: NextRequest) {
     const sponsorship_level = (formData.get('sponsorship_level') as string | null) || null;
     const booth_present = formData.get('booth_present') === '1' ? 1 : 0;
     const booth_width = booth_present ? (parseInt(formData.get('booth_width') as string) || null) : null;
-    const booth_height = booth_present ? (parseInt(formData.get('booth_height') as string) || null) : null;
+    const booth_length = booth_present ? (parseInt(formData.get('booth_length') as string) || null) : null;
+    const booth_number = booth_present ? ((formData.get('booth_number') as string | null) || null) : null;
+    const booth_hall = booth_present ? ((formData.get('booth_hall') as string | null) || null) : null;
     const file = formData.get('file') as File | null;
     const mappingJson = formData.get('mapping') as string | null;
     const mapping: ColumnMapping | null = mappingJson ? JSON.parse(mappingJson) as ColumnMapping : null;
@@ -116,13 +118,13 @@ export async function POST(request: NextRequest) {
               (name, start_date, end_date, location, notes, internal_attendees, conference_strategy_type_id,
                is_historical, post_conference_days, series_id, season_id,
                industry_focus, conference_type, website, sponsorship_level,
-               booth_present, booth_width, booth_height)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+               booth_present, booth_width, booth_length, booth_number, booth_hall)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       args: [name, start_date, end_date, location, notes || null, internal_attendees || null,
              conference_strategy_type_id ? Number(conference_strategy_type_id) : null,
              is_historical ? 1 : 0, defaultPostConferenceDays, series_id, season_id,
              industry_focus, conference_type, website, sponsorship_level,
-             booth_present, booth_width, booth_height],
+             booth_present, booth_width, booth_length, booth_number, booth_hall],
     });
     const conference = confResult.rows[0] as unknown as {
       id: number | bigint;

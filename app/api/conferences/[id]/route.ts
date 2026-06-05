@@ -74,7 +74,7 @@ export async function PUT(
   try {
     const body = await request.json();
     const { name, start_date, end_date, location, notes, internal_attendees, conference_strategy_type_id, series_id, season_id,
-            industry_focus, conference_type, website, sponsorship_level, booth_present, booth_width, booth_height } = body;
+            industry_focus, conference_type, website, sponsorship_level, booth_present, booth_width, booth_length, booth_number, booth_hall } = body;
 
     const existingResult = await db.execute({
       sql: 'SELECT id, name, internal_attendees FROM conferences WHERE id = ?',
@@ -90,14 +90,16 @@ export async function PUT(
               name = ?, start_date = ?, end_date = ?, location = ?, notes = ?,
               internal_attendees = ?, conference_strategy_type_id = ?, series_id = ?, season_id = ?,
               industry_focus = ?, conference_type = ?, website = ?, sponsorship_level = ?,
-              booth_present = ?, booth_width = ?, booth_height = ?,
+              booth_present = ?, booth_width = ?, booth_length = ?, booth_number = ?, booth_hall = ?,
               updated_at = datetime('now')
             WHERE id = ? RETURNING *`,
       args: [name, start_date, end_date, location, notes || null,
              internal_attendees || null, conference_strategy_type_id ? Number(conference_strategy_type_id) : null,
              series_id ?? null, season_id ?? null,
              industry_focus ?? null, conference_type ?? null, website ?? null, sponsorship_level ?? null,
-             booth_present ? 1 : 0, booth_present ? (booth_width ?? null) : null, booth_present ? (booth_height ?? null) : null,
+             booth_present ? 1 : 0,
+             booth_present ? (booth_width ?? null) : null, booth_present ? (booth_length ?? null) : null,
+             booth_present ? (booth_number ?? null) : null, booth_present ? (booth_hall ?? null) : null,
              params.id],
     });
 

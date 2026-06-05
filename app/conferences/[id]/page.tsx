@@ -138,7 +138,9 @@ interface Conference {
   sponsorship_level?: string | null;
   booth_present?: number | boolean | null;
   booth_width?: number | null;
-  booth_height?: number | null;
+  booth_length?: number | null;
+  booth_number?: string | null;
+  booth_hall?: string | null;
   global_agenda_uploaded_at?: string | null;
   global_agenda_uploaded_by_name?: string | null;
   created_at: string;
@@ -644,7 +646,9 @@ export default function ConferenceDetailPage() {
         sponsorship_level: data.sponsorship_level ?? null,
         booth_present: data.booth_present ?? 0,
         booth_width: data.booth_width ?? null,
-        booth_height: data.booth_height ?? null,
+        booth_length: data.booth_length ?? null,
+        booth_number: data.booth_number ?? null,
+        booth_hall: data.booth_hall ?? null,
       });
       setEditSeasonId(data.season_id ?? null);
       setEditInternalAttendees(
@@ -1592,7 +1596,7 @@ export default function ConferenceDetailPage() {
                     type="button"
                     role="switch"
                     aria-checked={Boolean(editData.booth_present)}
-                    onClick={() => setEditData((p) => ({ ...p, booth_present: p.booth_present ? 0 : 1, booth_width: p.booth_present ? null : p.booth_width, booth_height: p.booth_present ? null : p.booth_height }))}
+                    onClick={() => setEditData((p) => ({ ...p, booth_present: p.booth_present ? 0 : 1, booth_width: p.booth_present ? null : p.booth_width, booth_length: p.booth_present ? null : p.booth_length, booth_number: p.booth_present ? null : p.booth_number, booth_hall: p.booth_present ? null : p.booth_hall }))}
                     className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${editData.booth_present ? 'bg-brand-secondary' : 'bg-gray-200'}`}
                   >
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${editData.booth_present ? 'translate-x-6' : 'translate-x-1'}`} />
@@ -1600,15 +1604,23 @@ export default function ConferenceDetailPage() {
                   <span className="text-sm text-gray-700">{editData.booth_present ? 'We have a booth' : 'No booth'}</span>
                 </div>
                 {Boolean(editData.booth_present) && (
-                  <div className="mt-3 flex items-end gap-3">
+                  <div className="mt-3 flex flex-wrap items-end gap-3">
+                    <div>
+                      <label className="label text-xs !mb-1">Length (ft)</label>
+                      <input type="number" min="1" value={editData.booth_length ?? ''} onChange={(e) => setEditData((p) => ({ ...p, booth_length: e.target.value ? Number(e.target.value) : null }))} className="input-field w-24" placeholder="10" />
+                    </div>
+                    <span className="pb-2.5 text-gray-400 text-sm">×</span>
                     <div>
                       <label className="label text-xs !mb-1">Width (ft)</label>
                       <input type="number" min="1" value={editData.booth_width ?? ''} onChange={(e) => setEditData((p) => ({ ...p, booth_width: e.target.value ? Number(e.target.value) : null }))} className="input-field w-24" placeholder="10" />
                     </div>
-                    <span className="pb-2.5 text-gray-400 text-sm">×</span>
                     <div>
-                      <label className="label text-xs !mb-1">Height (ft)</label>
-                      <input type="number" min="1" value={editData.booth_height ?? ''} onChange={(e) => setEditData((p) => ({ ...p, booth_height: e.target.value ? Number(e.target.value) : null }))} className="input-field w-24" placeholder="10" />
+                      <label className="label text-xs !mb-1">Booth #</label>
+                      <input type="text" value={editData.booth_number ?? ''} onChange={(e) => setEditData((p) => ({ ...p, booth_number: e.target.value || null }))} className="input-field w-28" placeholder="e.g., 412" />
+                    </div>
+                    <div>
+                      <label className="label text-xs !mb-1">Hall</label>
+                      <input type="text" value={editData.booth_hall ?? ''} onChange={(e) => setEditData((p) => ({ ...p, booth_hall: e.target.value || null }))} className="input-field w-36" placeholder="e.g., Hall B" />
                     </div>
                   </div>
                 )}

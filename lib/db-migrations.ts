@@ -1152,4 +1152,10 @@ export const migrations: string[] = [
     ('sponsorship_level', 'Gold',         3, 'gold',     1, '#EF9F27'),
     ('sponsorship_level', 'Platinum',     4, 'platinum', 1, '#185FA5'),
     ('sponsorship_level', 'Title Sponsor',5, 'title',    1, '#534AB7')`,
+  // 414
+  `ALTER TABLE conferences RENAME COLUMN booth_height TO booth_length`,
+  // 415
+  `ALTER TABLE conferences ADD COLUMN booth_number TEXT`,
+  // 416
+  `ALTER TABLE conferences ADD COLUMN booth_hall TEXT`,
 ];

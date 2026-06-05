@@ -57,7 +57,9 @@ export function ConferenceForm() {
   const [sponsorshipAdding, setSponsorshipAdding] = useState(false);
   const [boothPresent, setBoothPresent] = useState(false);
   const [boothWidth, setBoothWidth] = useState('');
-  const [boothHeight, setBoothHeight] = useState('');
+  const [boothLength, setBoothLength] = useState('');
+  const [boothNumber, setBoothNumber] = useState('');
+  const [boothHall, setBoothHall] = useState('');
   useEffect(() => {
     fetch('/api/config?category=industry')
       .then((r) => r.json())
@@ -208,7 +210,9 @@ export function ConferenceForm() {
       if (selectedSponsorshipLevel) formData.append('sponsorship_level', selectedSponsorshipLevel);
       formData.append('booth_present', boothPresent ? '1' : '0');
       if (boothPresent && boothWidth) formData.append('booth_width', boothWidth);
-      if (boothPresent && boothHeight) formData.append('booth_height', boothHeight);
+      if (boothPresent && boothLength) formData.append('booth_length', boothLength);
+      if (boothPresent && boothNumber) formData.append('booth_number', boothNumber);
+      if (boothPresent && boothHall) formData.append('booth_hall', boothHall);
 
       if (file) {
         formData.append('file', file);
@@ -445,15 +449,23 @@ export function ConferenceForm() {
               <span className="text-sm text-gray-700">{boothPresent ? 'We have a booth' : 'No booth'}</span>
             </div>
             {boothPresent && (
-              <div className="mt-3 flex items-end gap-3">
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <div>
+                  <label className="label text-xs !mb-1">Length (ft)</label>
+                  <input type="number" min="1" value={boothLength} onChange={(e) => setBoothLength(e.target.value)} className="input-field w-24" placeholder="10" />
+                </div>
+                <span className="pb-2.5 text-gray-400 text-sm">×</span>
                 <div>
                   <label className="label text-xs !mb-1">Width (ft)</label>
                   <input type="number" min="1" value={boothWidth} onChange={(e) => setBoothWidth(e.target.value)} className="input-field w-24" placeholder="10" />
                 </div>
-                <span className="pb-2.5 text-gray-400 text-sm">×</span>
                 <div>
-                  <label className="label text-xs !mb-1">Height (ft)</label>
-                  <input type="number" min="1" value={boothHeight} onChange={(e) => setBoothHeight(e.target.value)} className="input-field w-24" placeholder="10" />
+                  <label className="label text-xs !mb-1">Booth #</label>
+                  <input type="text" value={boothNumber} onChange={(e) => setBoothNumber(e.target.value)} className="input-field w-28" placeholder="e.g., 412" />
+                </div>
+                <div>
+                  <label className="label text-xs !mb-1">Hall</label>
+                  <input type="text" value={boothHall} onChange={(e) => setBoothHall(e.target.value)} className="input-field w-36" placeholder="e.g., Hall B" />
                 </div>
               </div>
             )}
