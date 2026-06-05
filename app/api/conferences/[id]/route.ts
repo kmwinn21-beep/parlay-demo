@@ -73,7 +73,8 @@ export async function PUT(
   const db = await getDb(user?.accountId);
   try {
     const body = await request.json();
-    const { name, start_date, end_date, location, notes, internal_attendees, conference_strategy_type_id, series_id, season_id } = body;
+    const { name, start_date, end_date, location, notes, internal_attendees, conference_strategy_type_id, series_id, season_id,
+            industry_focus, conference_type, website, sponsorship_level, booth_present, booth_width, booth_height } = body;
 
     const existingResult = await db.execute({
       sql: 'SELECT id, name, internal_attendees FROM conferences WHERE id = ?',
@@ -85,9 +86,30 @@ export async function PUT(
     const prevInternalAttendees = existingResult.rows[0].internal_attendees as string | null;
 
     const updatedResult = await db.execute({
-      sql: `UPDATE conferences SET name = ?, start_date = ?, end_date = ?, location = ?, notes = ?, internal_attendees = ?, conference_strategy_type_id = ?, series_id = ?, season_id = ?, updated_at = datetime('now') WHERE id = ? RETURNING *`,
-      args: [name, start_date, end_date, location, notes || null, internal_attendees || null, conference_strategy_type_id ? Number(conference_strategy_type_id) : null, series_id ?? null, season_id ?? null, params.id],
+      sql: `UPDATE conferences SET
+              name = ?, start_date = ?, end_date = ?, location = ?, notes = ?,
+              internal_attendees = ?, conference_strategy_type_id = ?, series_id = ?, season_id = ?,
+              industry_focus = ?, conference_type = ?, website = ?, sponsorship_level = ?,
+              booth_present = ?, booth_width = ?, booth_height = ?,
+              updated_at = datetime('now')
+            WHERE id = ? RETURNING *`,
+      args: [name, start_date, end_date, location, notes || null,
+             internal_attendees || null, conference_strategy_type_id ? Number(conference_strategy_type_id) : null,
+             series_id ?? null, season_id ?? null,
+             industry_focus ?? null, conference_type ?? null, website ?? null, sponsorship_level ?? null,
+             booth_present ? 1 : 0, booth_present ? (booth_width ?? null) : null, booth_present ? (booth_height ?? null) : null,
+             params.id],
     });
+
+    // Sync industry_focus / conference_type up to the series (best-effort)
+    if (series_id && (industry_focus || conference_type)) {
+      const sets: string[] = [];
+      const args: (string | null)[] = [];
+      if (industry_focus) { sets.push('industry_focus = ?'); args.push(industry_focus); }
+      if (conference_type) { sets.push('conference_type = ?'); args.push(conference_type); }
+      args.push(series_id);
+      await db.execute({ sql: `UPDATE conference_series SET ${sets.join(', ')} WHERE id = ?`, args }).catch(() => {});
+    }
 
     // Notify newly added internal attendees (best-effort)
     if (internal_attendees) {
