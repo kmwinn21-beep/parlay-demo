@@ -1778,10 +1778,79 @@ export default function ConferenceDetailPage() {
             </div>
           </div>
         ) : (
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-            <div className="min-w-0 flex-1">
+          <div>
+            {/* Top row: report nav + Edit at far right */}
+            <div className="flex items-center gap-5 overflow-x-auto flex-nowrap hide-scrollbar">
+              <PreConferenceReview
+                conferenceId={conference.id}
+                conferenceName={conference.name}
+                targetsReadOnly={conferenceStage === 'closed'}
+              />
+              <PostConferenceReview
+                conferenceId={conference.id}
+                conferenceName={conference.name}
+              />
+              <ConferenceEffectivenessModal
+                conferenceId={conference.id}
+                conferenceName={conference.name}
+              />
+              <button
+                type="button"
+                onClick={() => setShowBudgetModal(true)}
+                className="flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-brand-accent cursor-pointer transition-colors flex-shrink-0"
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 11h.01M12 11h.01M15 11h.01M4 19h16a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                Budget vs. Actual
+              </button>
+              {capabilities?.capabilities?.crm_export && (
+                <button
+                  type="button"
+                  onClick={() => setShowCrmExport(true)}
+                  className="flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-brand-accent cursor-pointer transition-colors flex-shrink-0"
+                >
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Export CRM Files
+                </button>
+              )}
+              {isInternalAttendee && (
+                <>
+                  <div className="flex-shrink-0 self-center" style={{ width: '1px', height: '16px', background: 'var(--color-border-secondary, #D1D5DB)' }} />
+                  <button
+                    type="button"
+                    onClick={() => setShowDebrief(true)}
+                    className="flex items-center gap-1.5 text-sm font-medium text-brand-primary hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
+                  >
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v4a1 1 0 0 0 1 1h4" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 17l0 -5" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 17l0 -1" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 17l0 -3" />
+                    </svg>
+                    Field Report
+                  </button>
+                </>
+              )}
+              <div className="flex-shrink-0 self-center ml-auto" style={{ width: '1px', height: '16px', background: 'var(--color-border-secondary, #D1D5DB)' }} />
+              <button
+                onClick={() => setIsEditing(true)}
+                className="btn-secondary flex items-center justify-center gap-2 text-sm flex-shrink-0"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Edit
+              </button>
+            </div>
 
-              {/* Row 1: Conference name + status badge */}
+            {/* Main content */}
+            <div className="mt-5">
+
+              {/* Row 1: Name + status + Stage Controls */}
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-bold text-brand-primary font-serif">{conference.name}</h1>
                 {conferenceStage && (
@@ -1791,6 +1860,19 @@ export default function ConferenceDetailPage() {
                   <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border border-amber-400 bg-amber-100 text-amber-900">
                     Historical Conference
                   </span>
+                )}
+                {isAdminUser && conferenceStage && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminStage(!showAdminStage)}
+                    className="text-xs font-medium text-gray-400 hover:text-gray-600 flex items-center gap-1 transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Stage Controls
+                  </button>
                 )}
               </div>
 
@@ -1834,8 +1916,34 @@ export default function ConferenceDetailPage() {
                 )}
               </div>
 
-              {/* Row 3: Metadata pills */}
-              <div className="flex flex-wrap items-center gap-2 mt-3">
+              {/* Row 3: Internal attendee pills */}
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                {conference.internal_attendees?.split(',').filter(Boolean).map((user) => {
+                  const parts = user.trim().split(/\s+/);
+                  const initials = parts.length >= 2
+                    ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+                    : parts[0].substring(0, 2).toUpperCase();
+                  return (
+                    <span
+                      key={user}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-200"
+                      title={user.trim()}
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      <span className="sm:hidden">{initials}</span>
+                      <span className="hidden sm:inline">{user.trim()}</span>
+                    </span>
+                  );
+                })}
+                {!conference.internal_attendees?.trim() && (
+                  <span className="text-xs text-gray-400">None listed</span>
+                )}
+              </div>
+
+              {/* Row 4: Metadata pills */}
+              <div className="flex flex-wrap items-center gap-2 mt-4">
                 {conference.conference_type && (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-300">
                     <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
@@ -1925,95 +2033,6 @@ export default function ConferenceDetailPage() {
                 ) : null}
               </div>
 
-              {/* Row 4 + 5: Internal Attendees */}
-              <div className="mt-3">
-                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Internal Attendees</span>
-                <div className="flex flex-wrap gap-1.5 mt-1">
-                  {conference.internal_attendees?.split(',').filter(Boolean).map((user) => {
-                    const parts = user.trim().split(/\s+/);
-                    const initials = parts.length >= 2
-                      ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-                      : parts[0].substring(0, 2).toUpperCase();
-                    return (
-                      <span
-                        key={user}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-200"
-                        title={user.trim()}
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                        <span className="sm:hidden">{initials}</span>
-                        <span className="hidden sm:inline">{user.trim()}</span>
-                      </span>
-                    );
-                  })}
-                  {!conference.internal_attendees?.trim() && (
-                    <span className="text-xs text-gray-400">None listed</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Row 6: Action nav */}
-              <hr className="border-0 border-t border-gray-200 mt-4 mb-3" />
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Reports</span>
-              <div className="flex items-center gap-5 mt-1 overflow-x-auto flex-nowrap hide-scrollbar">
-                <PreConferenceReview
-                  conferenceId={conference.id}
-                  conferenceName={conference.name}
-                  targetsReadOnly={conferenceStage === 'closed'}
-                />
-                <PostConferenceReview
-                  conferenceId={conference.id}
-                  conferenceName={conference.name}
-                />
-                <ConferenceEffectivenessModal
-                  conferenceId={conference.id}
-                  conferenceName={conference.name}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowBudgetModal(true)}
-                  className="flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-brand-accent cursor-pointer transition-colors flex-shrink-0"
-                >
-                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 11h.01M12 11h.01M15 11h.01M4 19h16a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                  Budget vs. Actual
-                </button>
-                {capabilities?.capabilities?.crm_export && (
-                  <button
-                    type="button"
-                    onClick={() => setShowCrmExport(true)}
-                    className="flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-brand-accent cursor-pointer transition-colors flex-shrink-0"
-                  >
-                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    Export CRM Files
-                  </button>
-                )}
-                {isInternalAttendee && (
-                  <>
-                    <div className="flex-shrink-0 self-center" style={{ width: '1px', height: '16px', background: 'var(--color-border-secondary, #D1D5DB)' }} />
-                    <button
-                      type="button"
-                      onClick={() => setShowDebrief(true)}
-                      className="flex items-center gap-1.5 text-sm font-medium text-brand-primary hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
-                    >
-                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v4a1 1 0 0 0 1 1h4" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 17l0 -5" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 17l0 -1" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 17l0 -3" />
-                      </svg>
-                      Field Report
-                    </button>
-                  </>
-                )}
-              </div>
-
               {/* Banners */}
               {conference.notes && (
                 <p className="text-sm text-gray-600 mt-3 max-w-2xl">{conference.notes}</p>
@@ -2047,86 +2066,60 @@ export default function ConferenceDetailPage() {
               )}
               {isAdminUser && conferenceStage && showAdminStage && (
                 <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 flex flex-wrap items-center gap-2">
-                      {conferenceStage !== 'closed' && (
-                        <button
-                          type="button"
-                          disabled={stageActionLoading}
-                          onClick={() => applyStageAction('close_now')}
-                          className="px-3 py-1.5 rounded text-xs font-medium bg-gray-700 text-white hover:bg-gray-900 disabled:opacity-50 transition-colors"
-                        >
-                          Close Now
-                        </button>
-                      )}
-                      {conferenceStage === 'closed' && (
-                        <button
-                          type="button"
-                          disabled={stageActionLoading}
-                          onClick={() => applyStageAction('reopen')}
-                          className="px-3 py-1.5 rounded text-xs font-medium bg-green-700 text-white hover:bg-green-900 disabled:opacity-50 transition-colors"
-                        >
-                          Reopen
-                        </button>
-                      )}
-                      {conferenceStage === 'post_conference' && (
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            type="number"
-                            min={1}
-                            max={90}
-                            value={stageExtendDays}
-                            onChange={e => setStageExtendDays(Number(e.target.value))}
-                            className="w-14 rounded border border-gray-300 px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-brand-accent"
-                          />
-                          <button
-                            type="button"
-                            disabled={stageActionLoading}
-                            onClick={() => applyStageAction('extend_window', { days: stageExtendDays })}
-                            className="px-3 py-1.5 rounded text-xs font-medium bg-amber-600 text-white hover:bg-amber-800 disabled:opacity-50 transition-colors"
-                          >
-                            Extend Window
-                          </button>
-                        </div>
-                      )}
-                      {conference.stage_override && (
-                        <button
-                          type="button"
-                          disabled={stageActionLoading}
-                          onClick={() => applyStageAction('clear_override')}
-                          className="px-3 py-1.5 rounded text-xs font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50 transition-colors"
-                        >
-                          Clear Override
-                        </button>
-                      )}
-                      {conference.stage_override && (
-                        <span className="text-xs text-gray-500">Override set by {conference.stage_override_by}</span>
-                      )}
+                  {conferenceStage !== 'closed' && (
+                    <button
+                      type="button"
+                      disabled={stageActionLoading}
+                      onClick={() => applyStageAction('close_now')}
+                      className="px-3 py-1.5 rounded text-xs font-medium bg-gray-700 text-white hover:bg-gray-900 disabled:opacity-50 transition-colors"
+                    >
+                      Close Now
+                    </button>
+                  )}
+                  {conferenceStage === 'closed' && (
+                    <button
+                      type="button"
+                      disabled={stageActionLoading}
+                      onClick={() => applyStageAction('reopen')}
+                      className="px-3 py-1.5 rounded text-xs font-medium bg-green-700 text-white hover:bg-green-900 disabled:opacity-50 transition-colors"
+                    >
+                      Reopen
+                    </button>
+                  )}
+                  {conferenceStage === 'post_conference' && (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min={1}
+                        max={90}
+                        value={stageExtendDays}
+                        onChange={e => setStageExtendDays(Number(e.target.value))}
+                        className="w-14 rounded border border-gray-300 px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-brand-accent"
+                      />
+                      <button
+                        type="button"
+                        disabled={stageActionLoading}
+                        onClick={() => applyStageAction('extend_window', { days: stageExtendDays })}
+                        className="px-3 py-1.5 rounded text-xs font-medium bg-amber-600 text-white hover:bg-amber-800 disabled:opacity-50 transition-colors"
+                      >
+                        Extend Window
+                      </button>
+                    </div>
+                  )}
+                  {conference.stage_override && (
+                    <button
+                      type="button"
+                      disabled={stageActionLoading}
+                      onClick={() => applyStageAction('clear_override')}
+                      className="px-3 py-1.5 rounded text-xs font-medium bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50 transition-colors"
+                    >
+                      Clear Override
+                    </button>
+                  )}
+                  {conference.stage_override && (
+                    <span className="text-xs text-gray-500">Override set by {conference.stage_override_by}</span>
+                  )}
                 </div>
-              )}
-            </div>
-
-            {/* Right: Edit + Stage Controls */}
-            <div className="flex flex-col gap-2 sm:ml-4 flex-shrink-0 items-stretch">
-              <button
-                onClick={() => setIsEditing(true)}
-                className="btn-secondary flex items-center justify-center gap-2 text-sm"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                Edit
-              </button>
-              {isAdminUser && conferenceStage && (
-                <button
-                  type="button"
-                  onClick={() => setShowAdminStage(!showAdminStage)}
-                  className="text-xs font-medium text-gray-400 hover:text-gray-600 flex items-center justify-center gap-1 transition-colors"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  Stage Controls
-                </button>
               )}
             </div>
           </div>
