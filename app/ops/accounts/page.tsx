@@ -65,6 +65,35 @@ const PLAN_BADGE: Record<string, { label: string; cls: string }> = {
   read_only: { label: 'Read only', cls: 'bg-red-100 text-red-700' },
 };
 
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(value).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title="Copy account ID"
+      className="ml-1.5 text-gray-400 hover:text-gray-700 transition-colors flex-shrink-0"
+    >
+      {copied ? (
+        <svg className="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      ) : (
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2" />
+          <rect x="8" y="8" width="12" height="12" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 export default function OpsAccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [metrics, setMetrics] = useState<Metrics>({ total: 0, active_trials: 0, grace_period: 0, converted: 0 });
@@ -129,7 +158,7 @@ export default function OpsAccountsPage() {
           placeholder="Search company or email..."
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <select
           value={planFilter}
@@ -153,43 +182,43 @@ export default function OpsAccountsPage() {
         </select>
       </div>
 
-      {/* Table */}
       {loading ? (
         <div className="text-gray-500 text-sm py-8 text-center">Loading...</div>
+      ) : filtered.length === 0 ? (
+        <div className="text-gray-400 text-sm py-8 text-center">No accounts found.</div>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs text-gray-500 uppercase tracking-wide">
-                <th className="px-4 py-3">Company</th>
-                <th className="px-4 py-3">Admin email</th>
-                <th className="px-4 py-3">Plan</th>
-                <th className="px-4 py-3">Trial status</th>
-                <th className="px-4 py-3">Signed up</th>
-                <th className="px-4 py-3">Onboarding</th>
-                <th className="px-4 py-3">Last active</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
-                    No accounts found.
-                  </td>
+        <>
+          {/* Desktop table */}
+          <div className="hidden sm:block bg-white border border-gray-200 rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs text-gray-500 uppercase tracking-wide">
+                  <th className="px-4 py-3">Company</th>
+                  <th className="px-4 py-3">Account ID</th>
+                  <th className="px-4 py-3">Admin email</th>
+                  <th className="px-4 py-3">Plan</th>
+                  <th className="px-4 py-3">Trial status</th>
+                  <th className="px-4 py-3">Signed up</th>
+                  <th className="px-4 py-3">Onboarding</th>
+                  <th className="px-4 py-3">Last active</th>
                 </tr>
-              ) : (
-                filtered.map(account => {
+              </thead>
+              <tbody>
+                {filtered.map(account => {
                   const badge = PLAN_BADGE[account.plan_id] ?? { label: account.plan_id, cls: 'bg-gray-100 text-gray-700' };
                   const trial = trialStatus(account);
                   return (
                     <tr key={account.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="px-4 py-3">
-                        <Link
-                          href={`/ops/accounts/${account.id}`}
-                          className="font-medium text-blue-600 hover:underline"
-                        >
+                        <Link href={`/ops/accounts/${account.id}`} className="font-medium text-blue-600 hover:underline">
                           {account.company_name}
                         </Link>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center font-mono text-xs text-gray-500">
+                          {account.id}
+                          <CopyButton value={account.id} />
+                        </span>
                       </td>
                       <td className="px-4 py-3 text-gray-600">{account.admin_email}</td>
                       <td className="px-4 py-3">
@@ -211,11 +240,52 @@ export default function OpsAccountsPage() {
                       <td className="px-4 py-3 text-gray-500 text-xs">{relativeTime(account.last_active_at)}</td>
                     </tr>
                   );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile cards */}
+          <div className="sm:hidden flex flex-col gap-3">
+            {filtered.map(account => {
+              const badge = PLAN_BADGE[account.plan_id] ?? { label: account.plan_id, cls: 'bg-gray-100 text-gray-700' };
+              const trial = trialStatus(account);
+              return (
+                <div key={account.id} className="bg-white border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <Link href={`/ops/accounts/${account.id}`} className="font-semibold text-blue-600 hover:underline text-sm leading-tight">
+                      {account.company_name}
+                    </Link>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium flex-shrink-0 ${badge.cls}`}>
+                      {badge.label}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500 mb-2">{account.admin_email}</div>
+                  <div className="flex items-center mb-3">
+                    <span className="font-mono text-xs text-gray-400">{account.id}</span>
+                    <CopyButton value={account.id} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                    {trial.label && (
+                      <>
+                        <span className="text-gray-400">Trial</span>
+                        <span className={`font-medium ${trial.color}`}>{trial.label}</span>
+                      </>
+                    )}
+                    <span className="text-gray-400">Signed up</span>
+                    <span className="text-gray-600">{relativeTime(account.created_at)}</span>
+                    <span className="text-gray-400">Onboarding</span>
+                    <span className={account.onboarding_completed ? 'text-green-700' : 'text-gray-400'}>
+                      {account.onboarding_completed ? 'Complete' : 'Pending'}
+                    </span>
+                    <span className="text-gray-400">Last active</span>
+                    <span className="text-gray-600">{relativeTime(account.last_active_at)}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );
