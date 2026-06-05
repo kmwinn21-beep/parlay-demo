@@ -31,6 +31,13 @@ export async function computeAttendeeProductSignals(
   db: Client,
   conferenceId: number,
 ): Promise<{ upserted: number }> {
+  // Bail early if the conference no longer exists (race: deleted while this ran)
+  const confCheck = await db.execute({
+    sql: 'SELECT id FROM conferences WHERE id = ?',
+    args: [conferenceId],
+  }).catch(() => ({ rows: [] }));
+  if (confCheck.rows.length === 0) return { upserted: 0 };
+
   // Fetch active products
   const productsRes = await db.execute({
     sql: `SELECT id, value, metadata FROM config_options WHERE category = 'products'`,
