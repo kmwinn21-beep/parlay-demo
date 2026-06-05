@@ -365,6 +365,12 @@ Rules:
       await db.batch(insertStatements, 'write');
     }
 
+    // Write upload metadata so the conference edit form can show when it was last uploaded
+    await db.execute({
+      sql: `UPDATE conferences SET global_agenda_uploaded_at = datetime('now'), global_agenda_uploaded_by_name = ? WHERE id = ?`,
+      args: [authResult.email, conferenceId],
+    });
+
     return NextResponse.json({ count: insertStatements.length });
   } catch (error) {
     console.error('POST /api/conferences/[id]/agenda error:', error);
