@@ -197,13 +197,21 @@ async function fetchReturningAttendees(
     sql: `SELECT DISTINCT
             a.first_name, a.last_name, a.title, a.email,
             co.name AS company_name, co.website, co.company_type,
-            a."function", a.assigned_rep
+            a."function",
+            COALESCE(
+              (SELECT cad.assigned_rep FROM conference_attendee_details cad
+               WHERE cad.attendee_id = a.id
+                 AND cad.conference_id IN (${placeholders})
+                 AND cad.assigned_rep IS NOT NULL
+               LIMIT 1),
+              co.assigned_user
+            ) AS assigned_rep
           FROM attendees a
           JOIN conference_attendees ca ON ca.attendee_id = a.id
           LEFT JOIN companies co ON co.id = a.company_id
           WHERE ca.conference_id IN (${placeholders}) ${typeCondition}`,
-    args,
-  }).catch(() => ({ rows: [] }));
+    args: [...conferenceIds, ...args],
+  }).catch((err) => { console.error('[fetchReturningAttendees] query error:', err); return { rows: [] }; });
 
   return res.rows.map(r => ({
     _isReturning: true,
