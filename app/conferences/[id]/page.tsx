@@ -1835,16 +1835,6 @@ export default function ConferenceDetailPage() {
                   </button>
                 </>
               )}
-              <div className="flex-shrink-0 self-center ml-auto" style={{ width: '1px', height: '16px', background: 'var(--color-border-secondary, #D1D5DB)' }} />
-              <button
-                onClick={() => setIsEditing(true)}
-                className="btn-secondary flex items-center justify-center gap-2 text-sm flex-shrink-0"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                Edit
-              </button>
             </div>
 
             {/* Main content */}
@@ -1874,6 +1864,16 @@ export default function ConferenceDetailPage() {
                     Stage Controls
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  className="text-xs font-medium text-gray-400 hover:text-gray-600 flex items-center gap-1 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Edit
+                </button>
               </div>
 
               {/* Row 2: Dates · Location · Website */}
