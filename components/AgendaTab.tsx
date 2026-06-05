@@ -245,7 +245,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
 
   const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const pendingScopeRef = useRef<'global' | 'personal'>('global');
+  const pendingScopeRef = useRef<'global' | 'personal'>('personal');
 
   // ── Data fetching ────────────────────────────────────────────────────────────
 
