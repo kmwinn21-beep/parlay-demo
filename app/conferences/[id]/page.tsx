@@ -462,6 +462,69 @@ export default function ConferenceDetailPage() {
     }
   }
 
+  // Agenda upload state (edit form)
+  const [agendaUploading, setAgendaUploading] = useState(false);
+  const [agendaUploadError, setAgendaUploadError] = useState<string | null>(null);
+  const [agendaUploadSuccess, setAgendaUploadSuccess] = useState<string | null>(null);
+  const [agendaUrlPanelOpen, setAgendaUrlPanelOpen] = useState(false);
+  const [agendaUrlInput, setAgendaUrlInput] = useState('');
+  const [agendaUrlError, setAgendaUrlError] = useState<string | null>(null);
+  const agendaFileRef = useRef<HTMLInputElement>(null);
+
+  const handleAgendaFile = async (file: File) => {
+    setAgendaUploadError(null);
+    setAgendaUploadSuccess(null);
+    setAgendaUploading(true);
+    try {
+      const reader = new FileReader();
+      const { base64, mediaType } = await new Promise<{ base64: string; mediaType: string }>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          const [header, data] = result.split(',');
+          const mt = header.replace('data:', '').replace(';base64', '');
+          resolve({ base64: data, mediaType: mt });
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch(`/api/conferences/${id}/agenda`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_base64: base64, media_type: mediaType, scope: 'global' }),
+      });
+      const data = await res.json() as { count?: number; error?: string };
+      if (!res.ok) { setAgendaUploadError(data.error ?? 'Failed to upload agenda.'); return; }
+      setAgendaUploadSuccess(`Agenda uploaded — ${data.count ?? 0} sessions parsed.`);
+    } catch { setAgendaUploadError('Upload failed. Please try again.'); }
+    finally { setAgendaUploading(false); }
+  };
+
+  const handleAgendaUrl = async () => {
+    setAgendaUrlError(null);
+    const trimmed = agendaUrlInput.trim();
+    if (!trimmed) { setAgendaUrlError('Please enter a URL.'); return; }
+    try {
+      const p = new URL(trimmed);
+      if (p.protocol !== 'http:' && p.protocol !== 'https:') throw new Error();
+    } catch { setAgendaUrlError('Please enter a valid URL.'); return; }
+    setAgendaUploading(true);
+    setAgendaUploadError(null);
+    setAgendaUploadSuccess(null);
+    try {
+      const res = await fetch(`/api/conferences/${id}/agenda`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: trimmed, scope: 'global' }),
+      });
+      const data = await res.json() as { count?: number; error?: string };
+      if (!res.ok) { setAgendaUploadError(data.error ?? 'Failed to import agenda from URL.'); return; }
+      setAgendaUrlInput('');
+      setAgendaUrlPanelOpen(false);
+      setAgendaUploadSuccess(`Agenda uploaded — ${data.count ?? 0} sessions parsed.`);
+    } catch { setAgendaUploadError('Failed to connect. Please try again.'); }
+    finally { setAgendaUploading(false); }
+  };
+
   // Upload attendee list state
   const [isUploading, setIsUploading] = useState(false);
   const uploadFileRef = useRef<HTMLInputElement>(null);
@@ -1267,6 +1330,39 @@ export default function ConferenceDetailPage() {
                   onSeriesChange={(s) => { setEditSeries(s); setEditData((p) => ({ ...p, series_id: s?.id ?? null })); if (!s) { setEditSeasonId(null); setEditData((p2) => ({ ...p2, season_id: null })); } }}
                   onSeasonChange={(sid) => { setEditSeasonId(sid); setEditData((p) => ({ ...p, season_id: sid })); }}
                 />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="label">Conference Agenda <span className="text-gray-400 font-normal">(optional)</span></label>
+                <p className="text-xs text-gray-500 mb-2">Upload the conference agenda to share with all internal attendees.</p>
+                <input ref={agendaFileRef} type="file" accept="image/*,image/heic,application/pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleAgendaFile(f); e.target.value = ''; }} />
+                {agendaUploading ? (
+                  <p className="text-sm text-gray-500">Uploading agenda...</p>
+                ) : agendaUploadSuccess ? (
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-teal-700">{agendaUploadSuccess}</span>
+                    <button type="button" onClick={() => { setAgendaUploadSuccess(null); setAgendaUrlPanelOpen(false); }} className="text-xs text-gray-400 hover:text-gray-600 underline">Replace</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => agendaFileRef.current?.click()} className="inline-flex items-center gap-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors">
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                      Upload agenda
+                    </button>
+                    <button type="button" onClick={() => { setAgendaUrlPanelOpen(p => !p); setAgendaUrlError(null); }} className={`inline-flex items-center gap-1.5 text-sm border rounded-lg px-3 py-1.5 transition-colors ${agendaUrlPanelOpen ? 'border-brand-secondary text-brand-secondary' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                      From link
+                    </button>
+                  </div>
+                )}
+                {agendaUrlPanelOpen && !agendaUploadSuccess && (
+                  <div className="mt-2 flex gap-2">
+                    <input type="url" value={agendaUrlInput} onChange={(e) => { setAgendaUrlInput(e.target.value); setAgendaUrlError(null); }} onKeyDown={(e) => e.key === 'Enter' && void handleAgendaUrl()} placeholder="https://example.com/agenda" className="input-field flex-1 text-sm" autoFocus />
+                    <button type="button" onClick={() => void handleAgendaUrl()} disabled={!agendaUrlInput.trim()} className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap">Import</button>
+                  </div>
+                )}
+                {agendaUrlError && <p className="text-xs text-red-500 mt-1">{agendaUrlError}</p>}
+                {agendaUploadError && <p className="text-xs text-red-500 mt-1">{agendaUploadError}</p>}
               </div>
 
               <div className="md:col-span-2" ref={internalDropdownRef}>

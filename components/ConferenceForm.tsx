@@ -234,6 +234,15 @@ export function ConferenceForm() {
             />
           </div>
 
+          <div className="md:col-span-2">
+            <label className="label">Conference Agenda <span className="text-gray-400 font-normal">(optional)</span></label>
+            <p className="text-xs text-gray-500 mb-2">Upload the conference agenda to share with all internal attendees. Can be added from the conference detail page after creating.</p>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-300 bg-gray-50 text-xs text-gray-400">
+              <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              Available after the conference is created
+            </div>
+          </div>
+
           <div className="md:col-span-2" ref={internalDropdownRef}>
             <label className="label">Internal Attendees</label>
             <div className="relative">
