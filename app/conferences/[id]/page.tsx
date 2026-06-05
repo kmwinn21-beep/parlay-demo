@@ -1822,7 +1822,7 @@ export default function ConferenceDetailPage() {
                   <button
                     type="button"
                     onClick={() => setShowDebrief(true)}
-                    className="flex items-center gap-1.5 text-sm font-medium text-brand-primary hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
+                    className="flex items-center gap-1.5 text-sm font-medium text-brand-accent hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
                   >
                     <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v4a1 1 0 0 0 1 1h4" />
