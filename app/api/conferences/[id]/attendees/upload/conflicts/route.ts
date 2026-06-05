@@ -49,8 +49,8 @@ export async function POST(
 
     // Normalize config-driven fields
     const [companyTypeOptions, functionOptions] = await Promise.all([
-      getConfigOptionValues('company_type'),
-      getConfigOptionValues('function'),
+      getConfigOptionValues('company_type', db),
+      getConfigOptionValues('function', db),
     ]);
     if (companyTypeOptions.length > 0) {
       for (const p of valid) {
