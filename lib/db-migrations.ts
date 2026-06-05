@@ -1158,4 +1158,11 @@ export const migrations: string[] = [
   `ALTER TABLE conferences ADD COLUMN booth_number TEXT`,
   // 416
   `ALTER TABLE conferences ADD COLUMN booth_hall TEXT`,
+  // 417 — ensure 'Partner' and 'Vendor' company_type options exist on all tenant DBs.
+  // 'Prospect' was seeded via a prior migration; 'Partner' and 'Vendor' were only in the
+  // initial seed (runs once on empty DBs) so older accounts may be missing them.
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key)
+     VALUES ('company_type', 'Partner', (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM config_options WHERE category = 'company_type'), 'partner')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, action_key)
+     VALUES ('company_type', 'Vendor', (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM config_options WHERE category = 'company_type'), 'vendor')`,
 ];
