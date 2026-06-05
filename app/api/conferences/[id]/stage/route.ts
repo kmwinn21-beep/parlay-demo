@@ -77,15 +77,10 @@ export async function PATCH(
       updates = ['stage_override = ?', 'stage_override_by = ?', 'stage_override_at = ?', 'stage_override_reason = ?'];
       args = ['closed', user.email, Math.floor(Date.now() / 1000), reason ?? null];
     } else if (action === 'reopen') {
-      // Clear override so stage auto-computes
-      const autoStage = computeConferenceStage({
-        start_date: String(conf.start_date),
-        end_date: String(conf.end_date),
-        post_conference_days: conf.post_conference_days != null ? Number(conf.post_conference_days) : null,
-        stage_override: null,
-      });
-      toStage = autoStage;
-      updates = ['stage_override = NULL', 'stage_override_by = NULL', 'stage_override_at = NULL', 'stage_override_reason = NULL'];
+      // Force post_conference override so the stage stays open regardless of dates
+      toStage = 'post_conference';
+      updates = ['stage_override = ?', 'stage_override_by = ?', 'stage_override_at = ?', 'stage_override_reason = ?'];
+      args = ['post_conference', user.email, Math.floor(Date.now() / 1000), reason ?? null];
     } else if (action === 'extend_window') {
       if (!days || !Number.isFinite(Number(days)) || Number(days) <= 0) {
         return NextResponse.json({ error: 'Positive days value required for extend_window.' }, { status: 400 });
