@@ -1955,7 +1955,8 @@ export default function ConferenceDetailPage() {
               </div>
 
               {/* Row 6: Action nav */}
-              <div className="flex items-center gap-5 mt-3 overflow-x-auto flex-nowrap hide-scrollbar">
+              <hr className="border-0 border-t border-gray-200 mt-4 mb-3" />
+              <div className="flex items-center gap-5 overflow-x-auto flex-nowrap hide-scrollbar">
                 <PreConferenceReview
                   conferenceId={conference.id}
                   conferenceName={conference.name}
