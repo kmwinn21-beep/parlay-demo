@@ -135,6 +135,10 @@ interface Conference {
   industry_focus?: string | null;
   conference_type?: string | null;
   website?: string | null;
+  sponsorship_level?: string | null;
+  booth_present?: number | boolean | null;
+  booth_width?: number | null;
+  booth_height?: number | null;
   global_agenda_uploaded_at?: string | null;
   global_agenda_uploaded_by_name?: string | null;
   created_at: string;
@@ -370,6 +374,7 @@ export default function ConferenceDetailPage() {
   const [editIndustrySearch, setEditIndustrySearch] = useState('');
   const [editIndustryDropdownOpen, setEditIndustryDropdownOpen] = useState(false);
   const editIndustryDropdownRef = useRef<HTMLDivElement>(null);
+  const [sponsorshipOptions, setSponsorshipOptions] = useState<{ id: number; value: string; color: string | null }[]>([]);
 
   // Resizable column widths
   const [colWidths, setColWidths] = useState<Record<string, number>>({ name: 220, title: 160, company: 160, type: 120, seniority: 120, conferences: 80 });
@@ -633,6 +638,10 @@ export default function ConferenceDetailPage() {
         industry_focus: data.industry_focus ?? null,
         conference_type: data.conference_type ?? null,
         website: data.website ?? null,
+        sponsorship_level: data.sponsorship_level ?? null,
+        booth_present: data.booth_present ?? 0,
+        booth_width: data.booth_width ?? null,
+        booth_height: data.booth_height ?? null,
       });
       setEditSeasonId(data.season_id ?? null);
       setEditInternalAttendees(
@@ -685,6 +694,13 @@ export default function ConferenceDetailPage() {
     fetch('/api/config?category=industry')
       .then((r) => r.json())
       .then((rows) => setIndustryOptions((rows ?? []).map((r: { id: number; value: string }) => ({ id: Number(r.id), value: String(r.value) }))))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/config/sponsorship-levels')
+      .then((r) => r.json())
+      .then((rows) => setSponsorshipOptions((rows ?? []).map((r: { id: number; value: string; color: string | null }) => ({ id: Number(r.id), value: String(r.value), color: r.color ?? null }))))
       .catch(() => {});
   }, []);
 
@@ -1451,6 +1467,60 @@ export default function ConferenceDetailPage() {
                     placeholder="https://example.com"
                   />
                 </div>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="label">Sponsorship Level</label>
+                {sponsorshipOptions.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {sponsorshipOptions.map((opt) => {
+                      const isSelected = (editData.sponsorship_level ?? '') === opt.value;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setEditData((p) => ({ ...p, sponsorship_level: isSelected ? null : opt.value }))}
+                          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${isSelected ? 'border-transparent text-white shadow-sm' : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'}`}
+                          style={isSelected && opt.color ? { backgroundColor: opt.color } : {}}
+                        >
+                          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: isSelected ? 'rgba(255,255,255,0.55)' : (opt.color || '#9ca3af') }} />
+                          {opt.value}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400">No sponsorship levels configured. Add them in Admin Settings → Types.</p>
+                )}
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="label">Booth</label>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={Boolean(editData.booth_present)}
+                    onClick={() => setEditData((p) => ({ ...p, booth_present: p.booth_present ? 0 : 1, booth_width: p.booth_present ? null : p.booth_width, booth_height: p.booth_present ? null : p.booth_height }))}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${editData.booth_present ? 'bg-brand-secondary' : 'bg-gray-200'}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${editData.booth_present ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                  <span className="text-sm text-gray-700">{editData.booth_present ? 'We have a booth' : 'No booth'}</span>
+                </div>
+                {Boolean(editData.booth_present) && (
+                  <div className="mt-3 flex items-end gap-3">
+                    <div>
+                      <label className="label text-xs !mb-1">Width (ft)</label>
+                      <input type="number" min="1" value={editData.booth_width ?? ''} onChange={(e) => setEditData((p) => ({ ...p, booth_width: e.target.value ? Number(e.target.value) : null }))} className="input-field w-24" placeholder="10" />
+                    </div>
+                    <span className="pb-2.5 text-gray-400 text-sm">×</span>
+                    <div>
+                      <label className="label text-xs !mb-1">Height (ft)</label>
+                      <input type="number" min="1" value={editData.booth_height ?? ''} onChange={(e) => setEditData((p) => ({ ...p, booth_height: e.target.value ? Number(e.target.value) : null }))} className="input-field w-24" placeholder="10" />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="md:col-span-2">
