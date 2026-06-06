@@ -58,16 +58,19 @@ export const lastNames = [
   'Walsh', 'Murphy', 'O\'Brien', 'Ryan', 'Sullivan', 'Burke', 'Carroll', 'Brennan',
 ];
 
-export function generateUniqueName(usedNames: Set<string>): { firstName: string; lastName: string; fullName: string } {
+export function generateUniqueName(
+  usedNames: Set<string>,
+  firstPool: string[] = firstNames,
+  lastPool: string[] = lastNames,
+): { firstName: string; lastName: string; fullName: string } {
   let firstName: string, lastName: string, fullName: string;
   let attempts = 0;
   do {
-    firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
-    lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
+    firstName = firstPool[Math.floor(Math.random() * firstPool.length)];
+    lastName = lastPool[Math.floor(Math.random() * lastPool.length)];
     fullName = `${firstName} ${lastName}`;
     attempts++;
-    // After many attempts, append a number to guarantee uniqueness
-    if (attempts > 200) {
+    if (attempts > 500) {
       fullName = `${firstName} ${lastName} ${attempts}`;
       break;
     }

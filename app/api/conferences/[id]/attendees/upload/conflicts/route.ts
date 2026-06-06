@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
+
+export const maxDuration = 120;
 import { getConfigOptionValues } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
 import { parseFile, parseFileWithMapping, matchConfigOption, type ColumnMapping } from '@/lib/parsers';

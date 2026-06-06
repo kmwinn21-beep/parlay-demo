@@ -102,6 +102,7 @@ export function Header() {
   const [showSearch, setShowSearch] = useState(false);
   const [showHelpChat, setShowHelpChat] = useState(false);
   const [helpUnread, setHelpUnread] = useState(false);
+  const [uploadJob, setUploadJob] = useState<{ jobId: string; total: number; processed: number } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const addNewRef = useRef<HTMLDivElement>(null);
 
@@ -139,6 +140,31 @@ export function Header() {
     return () => document.removeEventListener('keydown', handler);
   }, []);
 
+  // Poll for background upload job progress
+  useEffect(() => {
+    const check = async () => {
+      const stored = localStorage.getItem('upload_job_in_progress');
+      if (!stored) { setUploadJob(null); return; }
+      try {
+        const parsed = JSON.parse(stored);
+        const res = await fetch(`/api/upload-jobs/${parsed.jobId}`).catch(() => null);
+        if (!res?.ok) return;
+        const data = await res.json();
+        if (data.status === 'done' || data.status === 'error') {
+          localStorage.removeItem('upload_job_in_progress');
+          setUploadJob(null);
+        } else {
+          setUploadJob({ jobId: parsed.jobId, total: parsed.totalRows ?? data.total_rows ?? 0, processed: Number(data.processed_rows ?? 0) });
+        }
+      } catch {
+        // non-fatal
+      }
+    };
+    check();
+    const t = setInterval(check, 25_000);
+    return () => clearInterval(t);
+  }, []);
+
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
@@ -174,6 +200,27 @@ export function Header() {
         <div className="hidden lg:block">
           <SetConferenceButton />
         </div>
+        {/* Background upload progress pill */}
+        {uploadJob && (
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 border border-blue-200 rounded-full text-xs text-blue-700 flex-shrink-0">
+            <svg className="animate-spin h-3 w-3 text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span>
+              Uploading
+              {uploadJob.total > 0 && ` ${Math.min(99, Math.round((uploadJob.processed / uploadJob.total) * 100))}%`}
+            </span>
+            <button
+              type="button"
+              onClick={() => { localStorage.removeItem('upload_job_in_progress'); setUploadJob(null); }}
+              className="text-blue-400 hover:text-blue-600 ml-0.5 leading-none"
+              title="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         {/* Notification Bell */}
         <NotificationBell />
         {/* Outstanding Follow Ups */}

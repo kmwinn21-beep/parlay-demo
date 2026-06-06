@@ -1179,8 +1179,12 @@ export default function ConferenceDetailPage() {
       const fd = new FormData();
       fd.append('file', file);
       const res = await fetch('/api/upload-preview', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        const msg = res.status === 413 ? 'File is too large. Please try a smaller file.' : (JSON.parse(text)?.error ?? 'Failed to read file');
+        throw new Error(msg);
+      }
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to read file');
       setPendingUploadFile(file);
       setColumnMappingData(data);
     } catch (err) {
@@ -1201,8 +1205,26 @@ export default function ConferenceDetailPage() {
         formData.append('conflict_resolutions', JSON.stringify(resolutions));
       }
       const res = await fetch(`/api/conferences/${id}/attendees/upload`, { method: 'POST', body: formData });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        let errMsg = 'Failed to upload attendees';
+        if (res.status === 413) errMsg = 'File is too large. Please try a smaller file.';
+        else { try { errMsg = JSON.parse(text)?.error ?? errMsg; } catch { /* plain-text error */ } }
+        throw new Error(errMsg);
+      }
       const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'Failed to upload attendees');
+
+      if (result.status === 'processing') {
+        localStorage.setItem('upload_job_in_progress', JSON.stringify({
+          jobId: result.job_id,
+          conferenceId: id,
+          conferenceName: result.conference_name,
+          totalRows: result.total_rows,
+        }));
+        toast('Large file upload started — you\'ll be notified when it\'s complete.', { duration: 6000, icon: '⏳' });
+        return;
+      }
+
       if (result.new_count === 0 && (!result.updated_count || result.updated_count === 0)) {
         toast.success('All attendees in the file are already in this conference.');
       } else {
@@ -1211,12 +1233,6 @@ export default function ConferenceDetailPage() {
         if (result.updated_count > 0) parts.push(`${result.updated_count} existing record(s) updated`);
         if (result.skipped_count > 0) parts.push(`${result.skipped_count} unchanged`);
         toast.success(parts.join('. ') + '.');
-      }
-      const cc = result.competitor_classification;
-      if (cc) {
-        if (cc.auto_classified > 0) toast.success(`${cc.auto_classified} company/companies auto-classified as Competitor.`);
-        if (cc.probable_matches > 0) toast(`${cc.probable_matches} companies may be competitors — review before confirming.`, { icon: '⚠️' });
-        if (cc.skipped_type_conflict > 0) toast(`${cc.skipped_type_conflict} competitor match(es) skipped — existing type conflict. Review manually.`, { icon: '⚠️' });
       }
       fetchConference();
     } catch (err) {
@@ -1239,7 +1255,13 @@ export default function ConferenceDetailPage() {
       fd.append('file', pendingUploadFile);
       fd.append('mapping', JSON.stringify(mapping));
       const res = await fetch(`/api/conferences/${id}/attendees/upload/conflicts`, { method: 'POST', body: fd });
-      if (!res.ok) throw new Error('Failed to check for conflicts');
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        let errMsg = 'Failed to check for conflicts';
+        if (res.status === 413) errMsg = 'File is too large. Please try a smaller file.';
+        else { try { errMsg = JSON.parse(text)?.error ?? errMsg; } catch { /* plain-text error */ } }
+        throw new Error(errMsg);
+      }
       const { conflicts }: { conflicts: ConflictItem[] } = await res.json();
       if (conflicts.length > 0) {
         setPendingConflicts(conflicts);

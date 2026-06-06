@@ -1175,4 +1175,22 @@ export const migrations: string[] = [
   // (row already existed) but had stale/missing values from the earlier migration.
   `UPDATE config_options SET is_system = 1, action_key = 'competitor', color = '#dc2626'
      WHERE category = 'company_type' AND LOWER(TRIM(value)) = 'competitor'`,
+  // 420 — background upload job tracking
+  `CREATE TABLE IF NOT EXISTS upload_jobs (
+    id TEXT PRIMARY KEY,
+    conference_id INTEGER NOT NULL,
+    conference_name TEXT NOT NULL DEFAULT '',
+    account_id TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'processing',
+    total_rows INTEGER NOT NULL DEFAULT 0,
+    processed_rows INTEGER NOT NULL DEFAULT 0,
+    new_count INTEGER,
+    updated_count INTEGER,
+    skipped_count INTEGER,
+    error_message TEXT,
+    created_by_user_id INTEGER,
+    created_by_email TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    completed_at TEXT
+  )`,
 ];
