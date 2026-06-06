@@ -57,7 +57,7 @@ export function ClassifyTitleModal({ rawTitle, meta, functionOptions, seniorityO
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4">
-      <div className="w-full max-w-lg rounded-xl bg-white shadow-xl max-h-[92vh] flex flex-col">
+      <div className="w-full max-w-lg rounded-xl bg-white shadow-xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[92vh] flex flex-col">
         <div className="flex items-start justify-between border-b border-gray-100 px-5 py-4">
           <div>
             <h2 className="text-lg font-semibold text-brand-primary font-serif">Classify Attendee Title</h2>
