@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { waitUntil } from '@vercel/functions';
-import { randomUUID } from 'crypto';
 import { sendNotificationEmail } from '@/lib/email';
 
 export const maxDuration = 300;
@@ -891,7 +890,7 @@ export async function POST(
     } // end run()
 
     if (valid.length > BACKGROUND_THRESHOLD) {
-      const jobId = randomUUID();
+      const jobId = crypto.randomUUID();
       await db.execute({
         sql: `INSERT INTO upload_jobs
               (id, conference_id, conference_name, account_id, status, total_rows,

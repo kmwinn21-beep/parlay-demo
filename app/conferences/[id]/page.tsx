@@ -1179,8 +1179,12 @@ export default function ConferenceDetailPage() {
       const fd = new FormData();
       fd.append('file', file);
       const res = await fetch('/api/upload-preview', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        const msg = res.status === 413 ? 'File is too large. Please try a smaller file.' : (JSON.parse(text)?.error ?? 'Failed to read file');
+        throw new Error(msg);
+      }
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to read file');
       setPendingUploadFile(file);
       setColumnMappingData(data);
     } catch (err) {
@@ -1201,8 +1205,14 @@ export default function ConferenceDetailPage() {
         formData.append('conflict_resolutions', JSON.stringify(resolutions));
       }
       const res = await fetch(`/api/conferences/${id}/attendees/upload`, { method: 'POST', body: formData });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        let errMsg = 'Failed to upload attendees';
+        if (res.status === 413) errMsg = 'File is too large. Please try a smaller file.';
+        else { try { errMsg = JSON.parse(text)?.error ?? errMsg; } catch { /* plain-text error */ } }
+        throw new Error(errMsg);
+      }
       const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'Failed to upload attendees');
 
       if (result.status === 'processing') {
         localStorage.setItem('upload_job_in_progress', JSON.stringify({
@@ -1245,7 +1255,13 @@ export default function ConferenceDetailPage() {
       fd.append('file', pendingUploadFile);
       fd.append('mapping', JSON.stringify(mapping));
       const res = await fetch(`/api/conferences/${id}/attendees/upload/conflicts`, { method: 'POST', body: fd });
-      if (!res.ok) throw new Error('Failed to check for conflicts');
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        let errMsg = 'Failed to check for conflicts';
+        if (res.status === 413) errMsg = 'File is too large. Please try a smaller file.';
+        else { try { errMsg = JSON.parse(text)?.error ?? errMsg; } catch { /* plain-text error */ } }
+        throw new Error(errMsg);
+      }
       const { conflicts }: { conflicts: ConflictItem[] } = await res.json();
       if (conflicts.length > 0) {
         setPendingConflicts(conflicts);
