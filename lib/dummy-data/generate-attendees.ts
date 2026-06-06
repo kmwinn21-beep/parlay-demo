@@ -268,12 +268,12 @@ async function fetchWordCorpora(db: Client): Promise<WordCorpora> {
     ]);
     const nameRows = nameRes.rows as Array<Record<string, unknown>>;
     const coRows = companyRes.rows as Array<Record<string, unknown>>;
-    const dbFirsts: string[] = [...new Set(nameRows.map(r => String(r.first_name ?? '')).filter((s): s is string => s.length > 0))];
-    const dbLasts: string[] = [...new Set(nameRows.map(r => String(r.last_name ?? '')).filter((s): s is string => s.length > 0))];
+    const dbFirsts: string[] = Array.from(new Set(nameRows.map(r => String(r.first_name ?? '')).filter((s): s is string => s.length > 0)));
+    const dbLasts: string[] = Array.from(new Set(nameRows.map(r => String(r.last_name ?? '')).filter((s): s is string => s.length > 0)));
     const companyNames: string[] = coRows.map(r => String(r.name ?? '')).filter((s): s is string => s.length > 0);
     return {
-      firstPool: dbFirsts.length >= 20 ? [...new Set([...staticFirstNames, ...dbFirsts])] : staticFirstNames,
-      lastPool: dbLasts.length >= 20 ? [...new Set([...staticLastNames, ...dbLasts])] : staticLastNames,
+      firstPool: dbFirsts.length >= 20 ? Array.from(new Set(staticFirstNames.concat(dbFirsts))) : staticFirstNames,
+      lastPool: dbLasts.length >= 20 ? Array.from(new Set(staticLastNames.concat(dbLasts))) : staticLastNames,
       companyCorpus: tokenizeCompanyNames(companyNames),
     };
   } catch {
