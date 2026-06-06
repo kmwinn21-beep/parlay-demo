@@ -427,15 +427,22 @@ export async function resolveAttendeeTitleMetadataBatch(
   if (titles.length === 0) return [];
   await ensureTitleNormalizationSchema(tenantDb);
   const ctx = await buildResolveContext(tenantDb);
-  return Promise.all(titles.map(async ({ rawTitle, organizationId = null }) => {
-    const title = String(rawTitle ?? '').trim();
-    const cacheKey = `${normalizeTitleKey(title)}:${organizationId ?? 'null'}`;
-    const cached = titleResolutionCache.get(cacheKey);
-    if (cached) return cached;
-    const result = await resolveAttendeeTitleMetadataUncached(tenantDb, ctx, rawTitle, organizationId ?? null);
-    titleResolutionCache.set(cacheKey, result);
-    return result;
-  }));
+  const results: TitleMatchMetadata[] = [];
+  const CHUNK = 10;
+  for (let i = 0; i < titles.length; i += CHUNK) {
+    const chunk = titles.slice(i, i + CHUNK);
+    const chunkResults = await Promise.all(chunk.map(async ({ rawTitle, organizationId = null }) => {
+      const title = String(rawTitle ?? '').trim();
+      const cacheKey = `${normalizeTitleKey(title)}:${organizationId ?? 'null'}`;
+      const cached = titleResolutionCache.get(cacheKey);
+      if (cached) return cached;
+      const result = await resolveAttendeeTitleMetadataUncached(tenantDb, ctx, rawTitle, organizationId ?? null);
+      titleResolutionCache.set(cacheKey, result);
+      return result;
+    }));
+    results.push(...chunkResults);
+  }
+  return results;
 }
 
 export async function applyRuleToExactTitle(tenantDb: Client, rule: TitleNormalizationRuleLike): Promise<{ attendeeCount: number; companyCount: number }> {
