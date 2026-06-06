@@ -35,10 +35,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `Company count cannot exceed ${MAX_COMPANIES}.` }, { status: 422 });
   }
 
-  // Open tenant DB if overlap is needed
+  // Open tenant DB for word corpus fetching and overlap
   let tenantClient: Awaited<ReturnType<typeof getDb>> | undefined;
-  if (body.overlap?.enabled && body.overlap.sourceConferenceIds?.length > 0) {
+  try {
     tenantClient = await getDb(accountId);
+  } catch {
+    // Non-fatal: generator falls back to static word pools
   }
 
   try {

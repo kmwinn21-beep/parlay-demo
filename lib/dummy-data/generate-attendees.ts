@@ -1,6 +1,6 @@
 import { companyPools, type Vertical, type CompanyRole } from './company-pools';
-import { buildCompanyList } from './company-name-generator';
-import { generateUniqueName } from './name-pools';
+import { buildCompanyList, tokenizeCompanyNames } from './company-name-generator';
+import { generateUniqueName, firstNames as staticFirstNames, lastNames as staticLastNames } from './name-pools';
 import { functions, pickTitle, type Seniority } from './title-pools';
 import type { Client } from '@libsql/client';
 
@@ -253,6 +253,34 @@ function returningToRow(
   return row;
 }
 
+interface WordCorpora {
+  firstPool: string[];
+  lastPool: string[];
+  companyCorpus: string[];
+}
+
+async function fetchWordCorpora(db: Client): Promise<WordCorpora> {
+  const fallback: WordCorpora = { firstPool: staticFirstNames, lastPool: staticLastNames, companyCorpus: [] };
+  try {
+    const [nameRes, companyRes] = await Promise.all([
+      db.execute({ sql: 'SELECT DISTINCT first_name, last_name FROM attendees WHERE first_name IS NOT NULL OR last_name IS NOT NULL', args: [] }),
+      db.execute({ sql: "SELECT name FROM companies WHERE name IS NOT NULL AND name != ''", args: [] }),
+    ]);
+    const nameRows = nameRes.rows as Array<Record<string, unknown>>;
+    const coRows = companyRes.rows as Array<Record<string, unknown>>;
+    const dbFirsts: string[] = [...new Set(nameRows.map(r => String(r.first_name ?? '')).filter((s): s is string => s.length > 0))];
+    const dbLasts: string[] = [...new Set(nameRows.map(r => String(r.last_name ?? '')).filter((s): s is string => s.length > 0))];
+    const companyNames: string[] = coRows.map(r => String(r.name ?? '')).filter((s): s is string => s.length > 0);
+    return {
+      firstPool: dbFirsts.length >= 20 ? [...new Set([...staticFirstNames, ...dbFirsts])] : staticFirstNames,
+      lastPool: dbLasts.length >= 20 ? [...new Set([...staticLastNames, ...dbLasts])] : staticLastNames,
+      companyCorpus: tokenizeCompanyNames(companyNames),
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 export async function generateDummyData(
   params: GeneratorParams,
   db?: Client,
@@ -261,6 +289,10 @@ export async function generateDummyData(
     conferenceName, vertical, prospects, partners, vendors, competitors,
     keywords, reps, customColumns, overlap,
   } = params;
+
+  const corpora: WordCorpora = db
+    ? await fetchWordCorpora(db)
+    : { firstPool: staticFirstNames, lastPool: staticLastNames, companyCorpus: [] };
 
   const usedEmails = new Set<string>();
   const usedNames = new Set<string>();
@@ -335,7 +367,7 @@ export async function generateDummyData(
       const seniority = seniorities[i];
       const fn = fnAssignments[i];
       const title = pickTitle(seniority, fn);
-      const { firstName, lastName } = generateUniqueName(usedNames);
+      const { firstName, lastName } = generateUniqueName(usedNames, corpora.firstPool, corpora.lastPool);
       const email = generateEmail(firstName, lastName, domain, usedEmails);
       allRows.push(makeRow(
         firstName, lastName, title, email, companyName, domain,
@@ -347,7 +379,7 @@ export async function generateDummyData(
   // ── Prospects ───────────────────────────────────────────────────────────────
   const returningProspectCount = returningProspects.length;
   const newProspectCompanies = Math.ceil(prospects.companyCount * (1 - (overlap?.prospectOverlapPct ?? 0) / 100));
-  const prospectCompanies = buildCompanyList(vertical, 'prospects', newProspectCompanies, shuffle, keywords);
+  const prospectCompanies = buildCompanyList(vertical, 'prospects', newProspectCompanies, shuffle, keywords, corpora.companyCorpus);
   const prospectRepDist = distributeWeighted(prospectCompanies.length, repList.length);
 
   let repIdx = 0;
@@ -369,7 +401,7 @@ export async function generateDummyData(
 
   // ── Partners ────────────────────────────────────────────────────────────────
   const newPartnerCompanies = Math.ceil(partners.companyCount * (1 - (overlap?.partnerOverlapPct ?? 0) / 100));
-  const partnerCompanies = buildCompanyList(vertical, 'partners', newPartnerCompanies, shuffle, keywords);
+  const partnerCompanies = buildCompanyList(vertical, 'partners', newPartnerCompanies, shuffle, keywords, corpora.companyCorpus);
   const partnerRepDist = distributeWeighted(partnerCompanies.length, repList.length);
 
   repIdx = 0; companyIdx = 0;
@@ -389,7 +421,7 @@ export async function generateDummyData(
 
   // ── Vendors ─────────────────────────────────────────────────────────────────
   const newVendorCompanies = Math.ceil(vendors.companyCount * (1 - (overlap?.vendorOverlapPct ?? 0) / 100));
-  const vendorCompanies = buildCompanyList(vertical, 'vendors', newVendorCompanies, shuffle, keywords);
+  const vendorCompanies = buildCompanyList(vertical, 'vendors', newVendorCompanies, shuffle, keywords, corpora.companyCorpus);
   const vendorRepDist = distributeWeighted(vendorCompanies.length, repList.length);
 
   repIdx = 0; companyIdx = 0;
@@ -409,7 +441,7 @@ export async function generateDummyData(
 
   // ── Competitors ──────────────────────────────────────────────────────────────
   if (competitors && competitors.companyCount > 0) {
-    const competitorCompanies = buildCompanyList(vertical, 'competitors', competitors.companyCount, shuffle, keywords);
+    const competitorCompanies = buildCompanyList(vertical, 'competitors', competitors.companyCount, shuffle, keywords, corpora.companyCorpus);
     const competitorRepDist = distributeWeighted(competitorCompanies.length, repList.length);
 
     repIdx = 0; companyIdx = 0;

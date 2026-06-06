@@ -157,6 +157,46 @@ export function generateSyntheticCompanyName(
   return fallback;
 }
 
+// ── Corpus-based generation ───────────────────────────────────────────────────
+
+const COMPANY_STOPWORDS = new Set([
+  'llc', 'inc', 'corp', 'ltd', 'co', 'the', 'and', 'of', 'for', 'at', 'in',
+  'a', 'an', 'to', 'by', 'on', 'is', 'it', 'as', 'or', 'be', 'its', 'via',
+]);
+
+export function tokenizeCompanyNames(names: string[]): string[] {
+  const tokens = new Set<string>();
+  for (const name of names) {
+    for (const raw of name.split(/[\s\-\/,.'&()]+/)) {
+      const w = raw.replace(/[^a-zA-Z]/g, '').trim();
+      if (w.length > 2 && !COMPANY_STOPWORDS.has(w.toLowerCase())) {
+        tokens.add(w.charAt(0).toUpperCase() + w.slice(1));
+      }
+    }
+  }
+  return Array.from(tokens);
+}
+
+function generateFromCorpus(corpus: string[], usedNames: Set<string>): string {
+  let attempts = 0;
+  while (attempts < 800) {
+    const w1 = corpus[Math.floor(Math.random() * corpus.length)];
+    const w2 = corpus[Math.floor(Math.random() * corpus.length)];
+    if (w1 === w2) { attempts++; continue; }
+    const name = Math.random() < 0.25 && corpus.length >= 20
+      ? `${w1} ${w2} ${corpus[Math.floor(Math.random() * corpus.length)]}`
+      : `${w1} ${w2}`;
+    if (!usedNames.has(name)) {
+      usedNames.add(name);
+      return name;
+    }
+    attempts++;
+  }
+  const fallback = `${corpus[0]} ${corpus[1 % corpus.length]} ${Date.now()}`;
+  usedNames.add(fallback);
+  return fallback;
+}
+
 /** Build a list of N unique company names: real names first, then synthetic */
 export function buildCompanyList(
   vertical: Vertical,
@@ -164,6 +204,7 @@ export function buildCompanyList(
   count: number,
   shuffleFn: <T>(arr: T[]) => T[],
   keywords?: string[],
+  dbCorpus?: string[],
 ): string[] {
   // Competitors share the prospects real name pool (same type of org)
   const poolRole = role === 'competitors' ? 'prospects' : role;
@@ -171,9 +212,14 @@ export function buildCompanyList(
   const usedNames = new Set(realPool);
   const result: string[] = realPool.slice(0, Math.min(count, realPool.length));
 
+  const useCorpus = dbCorpus && dbCorpus.length >= 10;
   let syntheticIdx = 0;
   while (result.length < count) {
-    result.push(generateSyntheticCompanyName(vertical, role, syntheticIdx++, usedNames, keywords));
+    result.push(
+      useCorpus
+        ? generateFromCorpus(dbCorpus!, usedNames)
+        : generateSyntheticCompanyName(vertical, role, syntheticIdx++, usedNames, keywords),
+    );
   }
 
   return result;
