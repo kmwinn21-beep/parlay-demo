@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
+import { waitUntil } from '@vercel/functions';
+import { randomUUID } from 'crypto';
+import { sendNotificationEmail } from '@/lib/email';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 import { getConfigOptionValues } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
 import type { Client } from '@libsql/client';
@@ -78,12 +81,13 @@ export async function POST(
 
     // Check conference exists
     const confResult = await db.execute({
-      sql: 'SELECT id FROM conferences WHERE id = ?',
+      sql: 'SELECT id, name FROM conferences WHERE id = ?',
       args: [conferenceId],
     });
     if (confResult.rows.length === 0) {
       return NextResponse.json({ error: 'Conference not found' }, { status: 404 });
     }
+    const conferenceName = String((confResult.rows[0] as Record<string, unknown>).name ?? `Conference ${conferenceId}`);
 
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
@@ -272,6 +276,12 @@ export async function POST(
       return NextResponse.json({ error: 'No valid attendees found in file' }, { status: 400 });
     }
 
+    const BACKGROUND_THRESHOLD = 5_000;
+    const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub';
+
+    // run() encapsulates all DB writes — called synchronously for small files,
+    // via waitUntil for large files so we can return immediately.
+    const run = async () => {
     // Get existing attendees already linked to this conference
     const existingLinked = await db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name FROM attendees a
@@ -296,14 +306,12 @@ export async function POST(
     });
 
     if (newEntries.length === 0 && existingEntries.length === 0) {
-      return NextResponse.json({
-        success: true,
+      return {
         total_in_file: valid.length,
         new_count: 0,
         updated_count: 0,
         skipped_count: valid.length,
-        message: 'All attendees in the file are already in this conference.',
-      });
+      };
     }
 
     // Load all existing companies and attendees for matching
@@ -861,13 +869,14 @@ export async function POST(
     const skippedCount = valid.length - newEntries.length;
     const updatedCount = existingAttendeeUpdates.length;
 
-    // Auto-compute product ICP signals after upload (best-effort, non-blocking)
-    computeAttendeeProductSignals(db, conferenceId).catch((e) =>
-      console.error('computeAttendeeProductSignals after upload error:', e),
-    );
+    // Auto-compute product ICP signals (skip for background jobs — non-critical)
+    if (valid.length <= BACKGROUND_THRESHOLD) {
+      computeAttendeeProductSignals(db, conferenceId).catch((e) =>
+        console.error('computeAttendeeProductSignals after upload error:', e),
+      );
+    }
 
-    return NextResponse.json({
-      success: true,
+    return {
       total_in_file: valid.length,
       new_count: attendeeIdsToLink.length,
       updated_count: updatedCount,
@@ -878,6 +887,86 @@ export async function POST(
         unmatched_values: Array.from(unmatchedAssignedUsers).slice(0, 25),
         ambiguous_values: Array.from(ambiguousAssignedUsers).slice(0, 25),
       },
+    };
+    } // end run()
+
+    if (valid.length > BACKGROUND_THRESHOLD) {
+      const jobId = randomUUID();
+      await db.execute({
+        sql: `INSERT INTO upload_jobs
+              (id, conference_id, conference_name, account_id, status, total_rows,
+               created_by_user_id, created_by_email)
+              VALUES (?, ?, ?, ?, 'processing', ?, ?, ?)`,
+        args: [
+          jobId, conferenceId, conferenceName,
+          currentUser.accountId ?? '', valid.length,
+          currentUser.id, currentUser.email,
+        ],
+      });
+
+      waitUntil(
+        run().then(async (result) => {
+          await db.execute({
+            sql: `UPDATE upload_jobs
+                  SET status = 'done', processed_rows = total_rows,
+                      new_count = ?, updated_count = ?, skipped_count = ?,
+                      completed_at = datetime('now')
+                  WHERE id = ?`,
+            args: [result.new_count, result.updated_count, result.skipped_count, jobId],
+          }).catch(() => {});
+          // In-app notification
+          await db.execute({
+            sql: `INSERT INTO notifications
+                  (user_id, type, record_id, record_name, message, changed_by_email,
+                   entity_type, entity_id, is_read)
+                  VALUES (?, 'conference', ?, ?, ?, ?, 'conference', ?, 0)`,
+            args: [
+              currentUser.id, conferenceId, conferenceName,
+              `Upload complete for ${conferenceName}: ${result.new_count} new attendee(s) added, ${result.updated_count} record(s) updated.`,
+              currentUser.email, conferenceId,
+            ],
+          }).catch(() => {});
+          // Email notification
+          const BASE = process.env.NEXT_PUBLIC_BASE_URL ?? '';
+          await sendNotificationEmail(
+            currentUser.email,
+            `${APP_NAME} - Upload Complete`,
+            `Your attendee list for "${conferenceName}" has finished uploading: ${result.new_count} new attendee(s) added, ${result.updated_count} record(s) updated.`,
+            `${BASE}/conferences/${conferenceId}`,
+          ).catch(() => {});
+        }).catch(async (err) => {
+          const msg = err instanceof Error ? err.message : 'Unknown error';
+          await db.execute({
+            sql: `UPDATE upload_jobs SET status = 'error', error_message = ?, completed_at = datetime('now') WHERE id = ?`,
+            args: [msg, jobId],
+          }).catch(() => {});
+          await db.execute({
+            sql: `INSERT INTO notifications
+                  (user_id, type, record_id, record_name, message, changed_by_email,
+                   entity_type, entity_id, is_read)
+                  VALUES (?, 'conference', ?, ?, ?, ?, 'conference', ?, 0)`,
+            args: [
+              currentUser.id, conferenceId, conferenceName,
+              `Upload failed for ${conferenceName}. Please try again or contact support if the issue persists.`,
+              currentUser.email, conferenceId,
+            ],
+          }).catch(() => {});
+        })
+      );
+
+      return NextResponse.json({
+        status: 'processing',
+        job_id: jobId,
+        total_rows: valid.length,
+        conference_name: conferenceName,
+      });
+    }
+
+    // Synchronous path for ≤5,000 rows
+    const result = await run();
+    return NextResponse.json({
+      success: true,
+      ...result,
     });
   } catch (error) {
     console.error('POST /api/conferences/[id]/attendees/upload error:', error);

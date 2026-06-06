@@ -1203,6 +1203,18 @@ export default function ConferenceDetailPage() {
       const res = await fetch(`/api/conferences/${id}/attendees/upload`, { method: 'POST', body: formData });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || 'Failed to upload attendees');
+
+      if (result.status === 'processing') {
+        localStorage.setItem('upload_job_in_progress', JSON.stringify({
+          jobId: result.job_id,
+          conferenceId: id,
+          conferenceName: result.conference_name,
+          totalRows: result.total_rows,
+        }));
+        toast('Large file upload started — you\'ll be notified when it\'s complete.', { duration: 6000, icon: '⏳' });
+        return;
+      }
+
       if (result.new_count === 0 && (!result.updated_count || result.updated_count === 0)) {
         toast.success('All attendees in the file are already in this conference.');
       } else {
@@ -1211,12 +1223,6 @@ export default function ConferenceDetailPage() {
         if (result.updated_count > 0) parts.push(`${result.updated_count} existing record(s) updated`);
         if (result.skipped_count > 0) parts.push(`${result.skipped_count} unchanged`);
         toast.success(parts.join('. ') + '.');
-      }
-      const cc = result.competitor_classification;
-      if (cc) {
-        if (cc.auto_classified > 0) toast.success(`${cc.auto_classified} company/companies auto-classified as Competitor.`);
-        if (cc.probable_matches > 0) toast(`${cc.probable_matches} companies may be competitors — review before confirming.`, { icon: '⚠️' });
-        if (cc.skipped_type_conflict > 0) toast(`${cc.skipped_type_conflict} competitor match(es) skipped — existing type conflict. Review manually.`, { icon: '⚠️' });
       }
       fetchConference();
     } catch (err) {
