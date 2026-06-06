@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
+
+export const maxDuration = 60;
 import { getConfigOptionValues } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
 import type { Client } from '@libsql/client';
@@ -442,12 +444,14 @@ export async function POST(
 
     // Apply redirected Services values to parent companies (merge with existing)
     if (parentServicesUpdates.size > 0) {
-      for (const [parentId, newServices] of Array.from(parentServicesUpdates.entries())) {
+      const servicesMergeStmts = Array.from(parentServicesUpdates.entries()).map(([parentId, newServices]) => {
         const parent = existingCompanies.find((c) => c.id === parentId);
         const existingServices = parent?.services ? parent.services.split(',').map((s) => s.trim()).filter(Boolean) : [];
         const merged = new Set([...existingServices, ...Array.from(newServices)]);
-        const mergedStr = Array.from(merged).join(',');
-        await db.execute({ sql: 'UPDATE companies SET services = ? WHERE id = ?', args: [mergedStr, parentId] });
+        return { sql: 'UPDATE companies SET services = ? WHERE id = ?', args: [Array.from(merged).join(',') as string | number | null, parentId as string | number | null] };
+      });
+      for (let i = 0; i < servicesMergeStmts.length; i += 100) {
+        await db.batch(servicesMergeStmts.slice(i, i + 100), 'write');
       }
     }
 
@@ -841,13 +845,16 @@ export async function POST(
       companyProductUpdates.set(coId, set);
     }
     if (companyProductUpdates.size > 0) {
-      for (const [coId, newProds] of Array.from(companyProductUpdates.entries())) {
+      const productMergeStmts = Array.from(companyProductUpdates.entries()).map(([coId, newProds]) => {
         const company = existingCompanies.find(c => c.id === coId);
         const existing = (company as { products?: string | null })?.products
           ? String((company as { products?: string | null }).products).split(',').map(s => s.trim()).filter(Boolean)
           : [];
         const merged = new Set([...existing, ...Array.from(newProds)]);
-        await db.execute({ sql: 'UPDATE companies SET products = ? WHERE id = ?', args: [Array.from(merged).join(','), coId] });
+        return { sql: 'UPDATE companies SET products = ? WHERE id = ?', args: [Array.from(merged).join(',') as string | number | null, coId as string | number | null] };
+      });
+      for (let i = 0; i < productMergeStmts.length; i += 100) {
+        await db.batch(productMergeStmts.slice(i, i + 100), 'write');
       }
     }
 
