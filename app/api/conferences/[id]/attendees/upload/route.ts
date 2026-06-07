@@ -36,7 +36,7 @@ async function batchInsert<T>(
   dbClient: Client,
   items: T[],
   toStatement: (item: T) => { sql: string; args: (string | number | null)[] },
-  chunkSize = 100
+  chunkSize = 300
 ): Promise<Array<{ rows: Record<string, unknown>[] }>> {
   const allResults: Array<{ rows: Record<string, unknown>[] }> = [];
   for (let i = 0; i < items.length; i += chunkSize) {
@@ -682,7 +682,8 @@ export async function POST(
         const rawProduct = p.product?.trim() || undefined;
         const autoProduct = !rawProduct ? computeAutoProducts(undefined, p.title?.trim(), functionVal) : null;
         const consentVal = p.consent?.trim() ? normalizeConsentValue(p.consent.trim()) : undefined;
-        existingAttendeeUpdates.push({
+        const hasUpdate = (companyId && companyId > 0) || p.title?.trim() || p.email?.trim() || functionVal || rawProduct || autoProduct || consentVal;
+        if (hasUpdate) existingAttendeeUpdates.push({
           id: hit.match.id,
           company_id: companyId && companyId > 0 ? companyId : null,
           title: p.title?.trim() || null,
@@ -737,7 +738,8 @@ export async function POST(
         const rawProduct = p.product?.trim() || undefined;
         const autoProduct = !rawProduct ? computeAutoProducts(undefined, p.title?.trim(), functionVal) : null;
         const consentVal = p.consent?.trim() ? normalizeConsentValue(p.consent.trim()) : undefined;
-        existingAttendeeUpdates.push({
+        const hasUpdate = (companyId && companyId > 0) || p.title?.trim() || p.email?.trim() || functionVal || rawProduct || autoProduct || consentVal;
+        if (hasUpdate) existingAttendeeUpdates.push({
           id: existingId,
           company_id: companyId && companyId > 0 ? companyId : null,
           title: p.title?.trim() || null,
