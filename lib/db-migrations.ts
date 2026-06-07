@@ -1221,4 +1221,32 @@ export const migrations: string[] = [
     companies_3plus_instances INTEGER,
     FOREIGN KEY (conference_id) REFERENCES conferences(id)
   )`,
+  // 422 — conference_snapshots: strategy name
+  `ALTER TABLE conference_snapshots ADD COLUMN strategy_name TEXT`,
+  // 423 — conference_snapshots: sponsorship level
+  `ALTER TABLE conference_snapshots ADD COLUMN sponsorship_level TEXT`,
+  // 424 — conference_snapshots: booth presence flag
+  `ALTER TABLE conference_snapshots ADD COLUMN booth_present INTEGER`,
+  // 425 — conference_snapshots: booth width
+  `ALTER TABLE conference_snapshots ADD COLUMN booth_width INTEGER`,
+  // 426 — conference_snapshots: booth length
+  `ALTER TABLE conference_snapshots ADD COLUMN booth_length INTEGER`,
+  // 427 — conference_snapshots: booth number
+  `ALTER TABLE conference_snapshots ADD COLUMN booth_number TEXT`,
+  // 428 — conference_snapshots: booth hall
+  `ALTER TABLE conference_snapshots ADD COLUMN booth_hall TEXT`,
+  // 429 — conference_snapshots: raw budget total
+  `ALTER TABLE conference_snapshots ADD COLUMN budget_total REAL`,
+  // 430 — conference_snapshots: raw actual total
+  `ALTER TABLE conference_snapshots ADD COLUMN actual_total REAL`,
+  // 431 — conference_snapshots: budget variance (actual - budget)
+  `ALTER TABLE conference_snapshots ADD COLUMN budget_variance REAL`,
+  // 432 — conference_snapshots: raw line_items JSON string
+  `ALTER TABLE conference_snapshots ADD COLUMN budget_line_items TEXT`,
+  // 433 — conference_snapshots: required pipeline multiple
+  `ALTER TABLE conference_snapshots ADD COLUMN required_pipeline_multiple REAL`,
+  // 434 — conference_snapshots: required pipeline amount
+  `ALTER TABLE conference_snapshots ADD COLUMN required_pipeline_amount REAL`,
+  // 435 — conference_snapshots: expected return (actual_total × required_pipeline_multiple)
+  `ALTER TABLE conference_snapshots ADD COLUMN expected_return_amount REAL`,
 ];
