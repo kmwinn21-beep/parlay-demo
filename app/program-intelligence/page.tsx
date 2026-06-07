@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   BarChart,
   Bar,
@@ -1842,8 +1843,13 @@ export default function ProgramIntelligencePage() {
                         {/* Saturation trend dots per series */}
                         {satData.seriesGroups.map(series => (
                           <div key={series.series_id} className="card">
-                            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                              {series.series_name}
+                            <h4 className="text-xs font-semibold uppercase tracking-wide mb-3">
+                              <Link
+                                href={`/conference-series/${series.series_id}`}
+                                className="text-brand-secondary hover:underline cursor-pointer"
+                              >
+                                {series.series_name}
+                              </Link>
                             </h4>
                             <div className="flex items-end gap-3 flex-wrap">
                               {[...series.conferences]

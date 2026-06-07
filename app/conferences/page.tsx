@@ -23,6 +23,8 @@ interface Conference {
   is_historical?: number | null;
   post_conference_days?: number | null;
   stage_override?: string | null;
+  series_id?: string | null;
+  series_name?: string | null;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -109,6 +111,7 @@ function getConfStage(conf: Conference) {
 }
 
 function ConferenceCard({ conf }: { conf: Conference }) {
+  const router = useRouter();
   const stage = getConfStage(conf);
   const daysRemaining = stage === 'post_conference'
     ? postConferenceDaysRemaining({ end_date: conf.end_date, post_conference_days: conf.post_conference_days ?? null })
@@ -144,6 +147,17 @@ function ConferenceCard({ conf }: { conf: Conference }) {
               </svg>
               <span className="truncate">{conf.location}</span>
             </div>
+            {conf.series_id && conf.series_name && (
+              <div className="mt-1">
+                <button
+                  type="button"
+                  onClick={e => { e.preventDefault(); e.stopPropagation(); router.push(`/conference-series/${conf.series_id}`); }}
+                  className="text-xs text-brand-secondary hover:underline"
+                >
+                  Part of {conf.series_name}
+                </button>
+              </div>
+            )}
           </div>
           {conf.internal_attendees && (
             <div className="flex flex-wrap gap-1 mt-3">
