@@ -1193,4 +1193,32 @@ export const migrations: string[] = [
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     completed_at TEXT
   )`,
+  // 421 — conference YoY snapshot store
+  `CREATE TABLE IF NOT EXISTS conference_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conference_id INTEGER NOT NULL UNIQUE,
+    series_id TEXT,
+    snapshot_taken_at TEXT NOT NULL DEFAULT (datetime('now')),
+    ces_score REAL,
+    cost_efficiency_score REAL,
+    total_cost REAL,
+    pipeline_influenced REAL,
+    pipeline_net_new REAL,
+    pipeline_continued_engagement REAL,
+    pipeline_per_1k REAL,
+    cost_per_company_engaged REAL,
+    cost_per_meeting_held REAL,
+    icp_companies_total INTEGER,
+    icp_companies_engaged INTEGER,
+    icp_engagement_rate REAL,
+    buying_committee_coverage_rate REAL,
+    decision_makers_engaged INTEGER,
+    meeting_hold_rate REAL,
+    followup_scheduling_rate REAL,
+    followup_completion_rate REAL,
+    avg_health_score_engaged REAL,
+    returning_attendee_rate REAL,
+    companies_3plus_instances INTEGER,
+    FOREIGN KEY (conference_id) REFERENCES conferences(id)
+  )`,
 ];
