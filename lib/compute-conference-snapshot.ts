@@ -1,38 +1,69 @@
 import type { Client } from '@libsql/client';
 
 interface CesBenchmarks {
-  pipeline_per_1k: { elite_min: number; strong_min: number; healthy_min: number; weak_min: number };
   cost_per_company: { elite_max: number; strong_max: number; healthy_max: number; weak_max: number };
-  cost_per_meeting: { elite_max: number; strong_max: number; healthy_max: number; weak_max: number };
+  cost_per_meeting:  { elite_max: number; strong_max: number; healthy_max: number; weak_max: number };
+  pipeline_per_1k:  { elite_min: number; strong_min: number; healthy_min: number; weak_min: number };
 }
 
-function scorePipelinePerK(val: number, b: CesBenchmarks): number {
-  if (val >= b.pipeline_per_1k.elite_min) return 100;
-  if (val >= b.pipeline_per_1k.strong_min) return 75;
-  if (val >= b.pipeline_per_1k.healthy_min) return 50;
-  if (val >= b.pipeline_per_1k.weak_min) return 25;
-  return 10;
+const DEFAULT_BENCHMARKS: CesBenchmarks = {
+  cost_per_company: { elite_max: 350, strong_max: 650, healthy_max: 1000, weak_max: 1600 },
+  cost_per_meeting:  { elite_max: 400, strong_max: 700, healthy_max: 1100, weak_max: 1800 },
+  pipeline_per_1k:  { elite_min: 10000, strong_min: 6000, healthy_min: 3500, weak_min: 1500 },
+};
+
+const DEFAULT_EVENT_MODIFIERS: Record<string, number> = {
+  flagship_industry_event: 5,
+  regional_operator_conference: 0,
+  vendor_heavy_trade_show: -5,
+  other: 0,
+};
+
+// Matches effectiveness route scoreLowerIsBetter exactly
+function scoreLowerIsBetter(value: number, eliteMax: number, strongMax: number, healthyMax: number, weakMax: number): number {
+  if (value < eliteMax) {
+    const pct = eliteMax > 0 ? value / eliteMax : 0;
+    return Math.round(100 - pct * 5);
+  }
+  if (value <= strongMax) {
+    const pct = (value - eliteMax) / Math.max(strongMax - eliteMax, 1);
+    return Math.round(94 - pct * 14);
+  }
+  if (value <= healthyMax) {
+    const pct = (value - strongMax) / Math.max(healthyMax - strongMax, 1);
+    return Math.round(79 - pct * 14);
+  }
+  if (value <= weakMax) {
+    const pct = (value - healthyMax) / Math.max(weakMax - healthyMax, 1);
+    return Math.round(64 - pct * 14);
+  }
+  const pct = Math.min((value - weakMax) / Math.max(weakMax, 1), 1);
+  return Math.max(35, Math.round(49 - pct * 14));
 }
 
-function scoreCostPerCompany(val: number, b: CesBenchmarks): number {
-  if (val <= b.cost_per_company.elite_max) return 100;
-  if (val <= b.cost_per_company.strong_max) return 75;
-  if (val <= b.cost_per_company.healthy_max) return 50;
-  if (val <= b.cost_per_company.weak_max) return 25;
-  return 10;
+// Matches effectiveness route scoreHigherIsBetter exactly
+function scoreHigherIsBetter(value: number, eliteMin: number, strongMin: number, healthyMin: number, weakMin: number): number {
+  if (value >= eliteMin) {
+    const pct = Math.min((value - eliteMin) / Math.max(eliteMin, 1), 1);
+    return Math.min(100, Math.round(95 + pct * 5));
+  }
+  if (value >= strongMin) {
+    const pct = (value - strongMin) / Math.max(eliteMin - strongMin, 1);
+    return Math.round(80 + pct * 14);
+  }
+  if (value >= healthyMin) {
+    const pct = (value - healthyMin) / Math.max(strongMin - healthyMin, 1);
+    return Math.round(65 + pct * 14);
+  }
+  if (value >= weakMin) {
+    const pct = (value - weakMin) / Math.max(healthyMin - weakMin, 1);
+    return Math.round(50 + pct * 14);
+  }
+  const pct = Math.min(value / Math.max(weakMin, 1), 1);
+  return Math.max(35, Math.round(35 + pct * 14));
 }
 
-function scoreCostPerMeeting(val: number, b: CesBenchmarks): number {
-  if (val <= b.cost_per_meeting.elite_max) return 100;
-  if (val <= b.cost_per_meeting.strong_max) return 75;
-  if (val <= b.cost_per_meeting.healthy_max) return 50;
-  if (val <= b.cost_per_meeting.weak_max) return 25;
-  return 10;
-}
-
-// CTE fragment shared by both the per-company pipeline query and CES score query.
-// Each sub-CTE is filtered to a single conference via ? parameters.
-// Parameter order: conferenceId × 4 (meetings, tp, he, cc)
+// Shared CTE fragment — 4 positional params: conferenceId × 4
 const ENGAGEMENT_CTES = `
   all_meetings AS (
     SELECT m.conference_id, a.company_id,
@@ -92,32 +123,61 @@ export async function computeConferenceSnapshot(
   db: Client,
 ): Promise<void> {
   try {
-    // Step 1 — conference record
+    // Step 1 — conference record (includes conf_event_type and strategy_key)
     const confRes = await db.execute({
-      sql: `SELECT id, series_id, start_date, end_date, cost_efficiency_modifier FROM conferences WHERE id = ?`,
+      sql: `SELECT c.id, c.series_id, c.start_date, c.conf_event_type, c.cost_efficiency_modifier,
+                   co.action_key AS strategy_key
+            FROM conferences c
+            LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
+            WHERE c.id = ?`,
       args: [conferenceId],
     });
     if (confRes.rows.length === 0) throw new Error(`Conference ${conferenceId} not found`);
     const conf = confRes.rows[0] as Record<string, unknown>;
     const seriesId = conf.series_id ? String(conf.series_id) : null;
-    const startDate = String(conf.start_date ?? '');
-    const costEfficiencyModifier = conf.cost_efficiency_modifier != null
-      ? Number(conf.cost_efficiency_modifier) : 0;
+    const confEventType = String(conf.conf_event_type ?? 'other');
+    const confModifierOverride = conf.cost_efficiency_modifier != null
+      ? Number(conf.cost_efficiency_modifier) : null;
 
-    // Step 2 — total cost from conference_budget.line_items
-    const budgetRes = await db.execute({
-      sql: `SELECT line_items FROM conference_budget WHERE conference_id = ?`,
+    // Step 2 — total spend via SQL (correct: actual if nonzero, else budget per line item)
+    const spendRes = await db.execute({
+      sql: `SELECT COALESCE(SUM(
+               COALESCE(NULLIF(CAST(json_extract(li.value,'$.actual') AS REAL),0),
+                        COALESCE(CAST(json_extract(li.value,'$.budget') AS REAL),0),0)
+             ),0) AS total_spend
+            FROM conference_budget cb, json_each(cb.line_items) li
+            WHERE cb.conference_id = ?`,
       args: [conferenceId],
     });
-    let totalCost: number | null = null;
-    if (budgetRes.rows.length > 0) {
-      type LineItem = { actual?: number | null; budget?: number | null };
-      const lineItems: LineItem[] = JSON.parse(String(budgetRes.rows[0].line_items ?? '[]'));
-      const sum = lineItems.reduce((acc, item) => acc + (item.actual ?? item.budget ?? 0), 0);
-      if (sum > 0) totalCost = sum;
-    }
+    const totalSpend = Number(spendRes.rows[0]?.total_spend ?? 0);
+    const totalCost = totalSpend > 0 ? totalSpend : null;
 
-    // Step 3 — per-company pipeline contributions (CES all_pi logic, filtered to this conference)
+    // Step 3 — budget settings (used for pipeline index dimension)
+    const budgetSettingsRes = await db.execute({
+      sql: `SELECT return_on_cost, required_pipeline_multiple, required_pipeline_amount
+            FROM conference_budget WHERE conference_id = ? LIMIT 1`,
+      args: [conferenceId],
+    });
+    const bsRow = budgetSettingsRes.rows[0] as Record<string, unknown> | undefined;
+    const returnOnCostMultiple = Number(bsRow?.return_on_cost ?? 0);
+    const requiredPipelineMultiple = Number(bsRow?.required_pipeline_multiple ?? 3.5) > 0
+      ? Number(bsRow?.required_pipeline_multiple ?? 3.5) : 3.5;
+    const persistedRequiredPipelineAmount = bsRow?.required_pipeline_amount != null
+      ? Number(bsRow.required_pipeline_amount) : null;
+
+    // Step 4 — effectiveness defaults, CES benchmarks, event type modifiers
+    const effDefaultsRes = await db.execute({ sql: `SELECT key, value FROM effectiveness_defaults`, args: [] });
+    const effDefaults: Record<string, string> = {};
+    for (const r of effDefaultsRes.rows) effDefaults[String(r.key)] = String(r.value ?? '');
+    const expectedReturn = Number(effDefaults.expected_return_on_event_cost ?? 0);
+
+    let benchmarks = DEFAULT_BENCHMARKS;
+    try { benchmarks = { ...DEFAULT_BENCHMARKS, ...JSON.parse(effDefaults.ces_benchmarks ?? '{}') }; } catch { /* use defaults */ }
+
+    let eventModifiers = DEFAULT_EVENT_MODIFIERS;
+    try { eventModifiers = { ...DEFAULT_EVENT_MODIFIERS, ...JSON.parse(effDefaults.ces_event_type_modifiers ?? '{}') }; } catch { /* use defaults */ }
+
+    // Step 5 — per-company pipeline contribution (ENGAGEMENT_CTES, no source filters)
     const piRes = await db.execute({
       sql: `WITH ${ENGAGEMENT_CTES}
             SELECT ae.company_id,
@@ -130,134 +190,217 @@ export async function computeConferenceSnapshot(
       args: [conferenceId, conferenceId, conferenceId, conferenceId],
     });
 
-    const companiesEngaged = piRes.rows.length;
-
-    // Step 4 — prior companies for net-new vs continued split
+    // Step 6 — prior companies (any other conference) for net-new split
     const priorRes = await db.execute({
       sql: `SELECT DISTINCT a.company_id
             FROM attendees a
             JOIN conference_attendees ca ON ca.attendee_id = a.id
-            JOIN conferences c ON c.id = ca.conference_id
-            WHERE a.company_id IS NOT NULL
-              AND c.end_date < ?
-              AND ca.conference_id != ?`,
-      args: [startDate, conferenceId],
+            WHERE a.company_id IS NOT NULL AND ca.conference_id != ?`,
+      args: [conferenceId],
     });
     const priorCompanyIds = new Set(priorRes.rows.map(r => Number(r.company_id)));
 
     let totalPi = 0;
     let pipelineNetNew = 0;
     let pipelineContinued = 0;
+    let netNewLogos = 0;
     for (const row of piRes.rows) {
       const cid = Number(row.company_id);
       const pi = Number(row.company_pi ?? 0);
       totalPi += pi;
-      if (priorCompanyIds.has(cid)) pipelineContinued += pi;
-      else pipelineNetNew += pi;
+      if (priorCompanyIds.has(cid)) { pipelineContinued += pi; }
+      else { pipelineNetNew += pi; netNewLogos++; }
     }
     const pipelineInfluenced = totalPi > 0 ? totalPi : null;
     const pipelineNetNewVal = pipelineInfluenced != null ? pipelineNetNew : null;
     const pipelineContinuedVal = pipelineInfluenced != null ? pipelineContinued : null;
 
-    // Step 5 — meetings held count (for cost_per_meeting)
-    const meetingsHeldRes = await db.execute({
-      sql: `SELECT COUNT(*) as n
-            FROM meetings m
-            LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome) = LOWER(cop.value)
-            WHERE m.conference_id = ? AND cop.action_key = 'meeting_held'`,
-      args: [conferenceId],
-    });
-    const meetingsHeld = Number(meetingsHeldRes.rows[0]?.n ?? 0);
-
-    // Step 6 — cost efficiency sub-metrics
-    const pipelinePerK = totalCost && totalCost > 0 ? (totalPi / totalCost) * 1000 : null;
-    const costPerCompany = totalCost && companiesEngaged > 0 ? totalCost / companiesEngaged : null;
-    const costPerMeeting = totalCost && meetingsHeld > 0 ? totalCost / meetingsHeld : null;
-
-    // Step 7 — cost efficiency score (weighted blend of three sub-metrics vs benchmark tiers)
-    let costEfficiencyScore: number | null = null;
-    const benchmarksRes = await db.execute({
-      sql: `SELECT value FROM effectiveness_defaults WHERE key = 'ces_benchmarks'`,
-      args: [],
-    });
-    if (benchmarksRes.rows.length > 0) {
-      try {
-        const benchmarks = JSON.parse(String(benchmarksRes.rows[0].value)) as CesBenchmarks;
-        const subScores: { score: number; weight: number }[] = [];
-        if (pipelinePerK != null) subScores.push({ score: scorePipelinePerK(pipelinePerK, benchmarks), weight: 0.50 });
-        if (costPerCompany != null) subScores.push({ score: scoreCostPerCompany(costPerCompany, benchmarks), weight: 0.30 });
-        if (costPerMeeting != null) subScores.push({ score: scoreCostPerMeeting(costPerMeeting, benchmarks), weight: 0.20 });
-        if (subScores.length > 0) {
-          const totalWeight = subScores.reduce((a, b) => a + b.weight, 0);
-          const raw = subScores.reduce((acc, s) => acc + s.score * (s.weight / totalWeight), 0);
-          costEfficiencyScore = Math.min(100, Math.max(0, raw + costEfficiencyModifier * 10));
-        }
-      } catch { /* malformed benchmarks — leave null */ }
-    }
-
-    // Step 8 — CES score (full CES CTE replicated with conference filter)
-    const cesRes = await db.execute({
-      sql: `WITH ${ENGAGEMENT_CTES},
-            all_pi AS (
-              SELECT ae.conference_id,
-                SUM(MIN(
-                  CASE WHEN ae.mtg>0 THEN ed.fur WHEN ae.tp>0 THEN ed.tpr WHEN ae.he>0 THEN ed.her ELSE 0 END
-                  * CASE WHEN ae.ti>=3 THEN 1.5 WHEN ae.ti=2 THEN 1.25 ELSE 1.0 END,
-                  0.95
-                ) * CASE WHEN COALESCE(ae.wse,0)>0 THEN ae.wse*ed.cpu ELSE ed.ds END) AS total_pi
-              FROM all_eng ae CROSS JOIN eff_d ed
-              GROUP BY ae.conference_id
-            ),
-            all_spend AS (
-              SELECT cb.conference_id,
-                COALESCE(SUM(COALESCE(NULLIF(CAST(json_extract(li.value,'$.actual') AS REAL),0),
-                  COALESCE(CAST(json_extract(li.value,'$.budget') AS REAL),0),0)),0) AS eff_spend
-              FROM conference_budget cb, json_each(cb.line_items) li
-              WHERE cb.conference_id = ?
-              GROUP BY cb.conference_id
-            )
+    // Step 7 — engagement summary: total companies, companies_engaged, ICP coverage
+    const engSummaryRes = await db.execute({
+      sql: `WITH ${ENGAGEMENT_CTES}
             SELECT
-              CASE WHEN COALESCE(asp.eff_spend,0)>0 AND ed.er>0
-                THEN ROUND(MIN(ap.total_pi/(asp.eff_spend*ed.er),1.0)*100)
-                ELSE NULL
-              END AS ces_score
-            FROM all_pi ap
-            LEFT JOIN all_spend asp ON ap.conference_id=asp.conference_id
-            CROSS JOIN eff_d ed`,
-      args: [conferenceId, conferenceId, conferenceId, conferenceId, conferenceId],
-    });
-    const cesScore = cesRes.rows.length > 0 && cesRes.rows[0].ces_score != null
-      ? Number(cesRes.rows[0].ces_score) : null;
-
-    // Step 9 — ICP companies (using pre-computed companies.icp = 'Yes')
-    const icpTotalRes = await db.execute({
-      sql: `SELECT COUNT(DISTINCT a.company_id) as n
-            FROM attendees a
-            JOIN conference_attendees ca ON ca.attendee_id = a.id AND ca.conference_id = ?
-            JOIN companies co ON co.id = a.company_id
-            WHERE a.company_id IS NOT NULL AND co.icp = 'Yes'`,
-      args: [conferenceId],
-    });
-    const icpTotal = Number(icpTotalRes.rows[0]?.n ?? 0);
-
-    const icpEngagedRes = await db.execute({
-      sql: `SELECT COUNT(DISTINCT a.company_id) as n
-            FROM attendees a
-            JOIN conference_attendees ca ON ca.attendee_id = a.id AND ca.conference_id = ?
-            JOIN companies co ON co.id = a.company_id
-            WHERE a.company_id IS NOT NULL AND co.icp = 'Yes'
-              AND (
-                EXISTS (SELECT 1 FROM meetings m WHERE m.attendee_id = a.id AND m.conference_id = ? AND m.source != 'simulated')
-                OR EXISTS (SELECT 1 FROM follow_ups f WHERE f.attendee_id = a.id AND f.conference_id = ? AND f.source != 'simulated')
-                OR EXISTS (SELECT 1 FROM attendee_touchpoints t WHERE t.attendee_id = a.id AND t.conference_id = ?)
-              )`,
+              (SELECT COUNT(DISTINCT acc2.company_id) FROM all_cc acc2) AS total_companies,
+              COUNT(DISTINCT ae.company_id) AS companies_engaged,
+              (SELECT COUNT(DISTINCT acc3.company_id)
+               FROM all_cc acc3
+               JOIN companies co3 ON co3.id = acc3.company_id
+               WHERE co3.icp = 'Yes') AS icp_companies_total,
+              COUNT(DISTINCT CASE WHEN co.icp = 'Yes' THEN ae.company_id END) AS icp_companies_engaged
+            FROM all_eng ae
+            JOIN companies co ON co.id = ae.company_id`,
       args: [conferenceId, conferenceId, conferenceId, conferenceId],
     });
-    const icpEngaged = Number(icpEngagedRes.rows[0]?.n ?? 0);
+    const engRow = engSummaryRes.rows[0] as Record<string, unknown>;
+    const totalCompanies = Number(engRow?.total_companies ?? 0);
+    const companiesEngaged = Number(engRow?.companies_engaged ?? 0);
+    const icpTotal = Number(engRow?.icp_companies_total ?? 0);
+    const icpEngaged = Number(engRow?.icp_companies_engaged ?? 0);
+    const engagementRatePct = totalCompanies > 0 ? companiesEngaged / totalCompanies * 100 : 0;
+    const icpEngagementRatePct = icpTotal > 0 ? icpEngaged / icpTotal * 100 : 0;
     const icpEngagementRate = icpTotal > 0 ? icpEngaged / icpTotal : null;
 
-    // Step 10 — buying committee coverage rate
-    // Reads required roles from product config_options metadata.buying_committee
+    // Step 8 — meeting hold rate (scheduled = all meetings, held = action_key='meeting_held')
+    const mtgRes = await db.execute({
+      sql: `SELECT
+              COUNT(DISTINCT m.id) AS total_scheduled,
+              COUNT(DISTINCT CASE WHEN cop.action_key='meeting_held' THEN m.id END) AS total_held
+            FROM meetings m
+            LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+            WHERE m.conference_id = ?`,
+      args: [conferenceId],
+    });
+    const mtgRow = mtgRes.rows[0] as Record<string, unknown>;
+    const totalScheduled = Number(mtgRow?.total_scheduled ?? 0);
+    const totalHeld = Number(mtgRow?.total_held ?? 0);
+    const meetingHoldRate = totalScheduled > 0 ? totalHeld / totalScheduled : null;
+    const holdRatePct = totalScheduled > 0 ? totalHeld / totalScheduled * 100 : 0;
+    const meetingsHeld = totalHeld;
+
+    // Step 9 — follow-up scheduling rate and completion rate (no source filters)
+    const fuRatesRes = await db.execute({
+      sql: `SELECT
+              COUNT(DISTINCT CASE WHEN cm.meetings_held > 0 THEN cm.company_id END) AS companies_with_held,
+              COUNT(DISTINCT CASE WHEN cm.meetings_held > 0 AND COALESCE(cf.followups_created,0) > 0 THEN cm.company_id END) AS companies_meeting_with_fu,
+              (SELECT COUNT(DISTINCT f.id) FROM follow_ups f WHERE f.conference_id = ?) AS fu_total_created,
+              (SELECT COUNT(DISTINCT f.id) FROM follow_ups f WHERE f.conference_id = ? AND COALESCE(f.completed,0) = 1) AS fu_total_completed
+            FROM (
+              SELECT a.company_id,
+                COUNT(DISTINCT CASE WHEN cop.action_key='meeting_held' THEN m.id END) AS meetings_held
+              FROM meetings m
+              JOIN attendees a ON m.attendee_id = a.id
+              LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+              WHERE m.conference_id = ?
+              GROUP BY a.company_id
+            ) cm
+            LEFT JOIN (
+              SELECT a.company_id, COUNT(DISTINCT f.id) AS followups_created
+              FROM follow_ups f JOIN attendees a ON f.attendee_id = a.id
+              WHERE f.conference_id = ? AND a.company_id IS NOT NULL
+              GROUP BY a.company_id
+            ) cf ON cm.company_id = cf.company_id`,
+      args: [conferenceId, conferenceId, conferenceId, conferenceId],
+    });
+    const fuRow = fuRatesRes.rows[0] as Record<string, unknown>;
+    const companiesWithHeld = Number(fuRow?.companies_with_held ?? 0);
+    const companiesMeetingWithFu = Number(fuRow?.companies_meeting_with_fu ?? 0);
+    const fuTotalCreated = Number(fuRow?.fu_total_created ?? 0);
+    const fuTotalCompleted = Number(fuRow?.fu_total_completed ?? 0);
+    const fuSchedulingRatePct = companiesWithHeld > 0 ? companiesMeetingWithFu / companiesWithHeld * 100 : 0;
+    const followupSchedulingRate = companiesWithHeld > 0 ? companiesMeetingWithFu / companiesWithHeld : null;
+    const followupCompletionRate = fuTotalCreated > 0 ? fuTotalCompleted / fuTotalCreated : null;
+    const followupCompletionRatePct = fuTotalCreated > 0 ? fuTotalCompleted / fuTotalCreated * 100 : 0;
+
+    // Step 10 — conference target engagement (for dim1 target_engagement_pct)
+    const targetsRes = await db.execute({
+      sql: `SELECT
+              COUNT(DISTINCT ct.attendee_id) AS targets_total,
+              COUNT(DISTINCT CASE
+                WHEN mh.meeting_held = 1 OR tp.has_tp = 1 OR fu.has_fu = 1 OR se.has_se = 1
+                THEN ct.attendee_id
+              END) AS targets_engaged
+            FROM conference_targets ct
+            LEFT JOIN (
+              SELECT m.attendee_id, 1 AS meeting_held
+              FROM meetings m
+              LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+              WHERE m.conference_id = ? AND cop.action_key='meeting_held'
+              GROUP BY m.attendee_id
+            ) mh ON mh.attendee_id = ct.attendee_id
+            LEFT JOIN (
+              SELECT attendee_id, 1 AS has_tp
+              FROM attendee_touchpoints WHERE conference_id = ?
+              GROUP BY attendee_id
+            ) tp ON tp.attendee_id = ct.attendee_id
+            LEFT JOIN (
+              SELECT attendee_id, 1 AS has_fu
+              FROM follow_ups
+              WHERE conference_id = ? AND next_steps IS NOT NULL AND next_steps != ''
+              GROUP BY attendee_id
+            ) fu ON fu.attendee_id = ct.attendee_id
+            LEFT JOIN (
+              SELECT rsvp.attendee_id, 1 AS has_se
+              FROM social_event_rsvps rsvp
+              JOIN social_events se ON se.id = rsvp.social_event_id
+              WHERE se.conference_id = ? AND rsvp.rsvp_status='attended'
+              GROUP BY rsvp.attendee_id
+            ) se ON se.attendee_id = ct.attendee_id
+            WHERE ct.conference_id = ?`,
+      args: [conferenceId, conferenceId, conferenceId, conferenceId, conferenceId],
+    });
+    const targetsRow = targetsRes.rows[0] as Record<string, unknown>;
+    const targetsTotal = Number(targetsRow?.targets_total ?? 0);
+    const targetsEngaged = Number(targetsRow?.targets_engaged ?? 0);
+    const targetEngagementPct = targetsTotal > 0 ? targetsEngaged / targetsTotal * 100 : 0;
+
+    // Step 11 — cost efficiency sub-metrics
+    const pipelinePerK = totalSpend > 0 ? totalPi / (totalSpend / 1000) : null;
+    const costPerCompany = totalSpend > 0 && companiesEngaged > 0 ? totalSpend / companiesEngaged : null;
+    const costPerMeeting = totalSpend > 0 && meetingsHeld > 0 ? totalSpend / meetingsHeld : null;
+
+    // Step 12 — cost efficiency score (interpolated, with event type modifier — matches effectiveness route)
+    const bCPC = benchmarks.cost_per_company;
+    const bCPM = benchmarks.cost_per_meeting;
+    const bPI = benchmarks.pipeline_per_1k;
+
+    let rawCEScore = 0;
+    let rawCEWeight = 0;
+    if (pipelinePerK != null) {
+      rawCEScore += scoreHigherIsBetter(pipelinePerK, bPI.elite_min, bPI.strong_min, bPI.healthy_min, bPI.weak_min) * 0.50;
+      rawCEWeight += 0.50;
+    }
+    if (costPerCompany != null) {
+      rawCEScore += scoreLowerIsBetter(costPerCompany, bCPC.elite_max, bCPC.strong_max, bCPC.healthy_max, bCPC.weak_max) * 0.30;
+      rawCEWeight += 0.30;
+    }
+    if (costPerMeeting != null) {
+      rawCEScore += scoreLowerIsBetter(costPerMeeting, bCPM.elite_max, bCPM.strong_max, bCPM.healthy_max, bCPM.weak_max) * 0.20;
+      rawCEWeight += 0.20;
+    }
+    const costEfficiencyScoreRaw = rawCEWeight > 0 ? Math.round(rawCEScore / rawCEWeight) : 0;
+    const defaultModifier = eventModifiers[confEventType] ?? 0;
+    const modifier = confModifierOverride != null ? confModifierOverride : defaultModifier;
+    const adjustedCEScore = Math.max(0, Math.min(100, costEfficiencyScoreRaw + modifier));
+    const costEfficiencyScore = rawCEWeight > 0 ? adjustedCEScore : null;
+
+    // Step 13 — 7-dimensional CES (matches effectiveness route exactly)
+    // dim1: ICP target quality
+    const dim1IcpTarget = (icpEngagementRatePct * 0.5) + (targetEngagementPct * 0.5);
+
+    // dim2: Meeting execution
+    const dim2MeetingExec = (holdRatePct * 0.5) + (fuSchedulingRatePct * 0.5);
+
+    // dim3: Pipeline influence index
+    const expectedReturnAmount = totalSpend > 0 && returnOnCostMultiple > 0 ? totalSpend * returnOnCostMultiple : null;
+    const computedRequiredPipelineAmount = expectedReturnAmount != null ? expectedReturnAmount * requiredPipelineMultiple : null;
+    const requiredPipelineAmount = persistedRequiredPipelineAmount ?? computedRequiredPipelineAmount;
+    const targetInfluence = requiredPipelineAmount ??
+      (totalSpend > 0 && expectedReturn > 0 ? totalSpend * expectedReturn : null);
+    const dim3PipelineIndex = targetInfluence && targetInfluence > 0
+      ? Math.min(totalPi / targetInfluence * 100, 100) : 0;
+
+    // dim4: Engagement breadth
+    const dim4Breadth = engagementRatePct;
+
+    // dim5: Follow-up execution (completion rate)
+    const dim5Followup = followupCompletionRatePct;
+
+    // dim6: Net-new engaged
+    const dim6NetNew = companiesEngaged > 0 ? Math.min(netNewLogos / companiesEngaged * 100, 100) : 0;
+
+    // dim7: Cost efficiency
+    const dim7CostEfficiency = costEfficiencyScore ?? 0;
+
+    const cesScore = Math.round(
+      (dim1IcpTarget  * 0.20) +
+      (dim2MeetingExec * 0.20) +
+      (dim3PipelineIndex * 0.30) +
+      (dim4Breadth     * 0.05) +
+      (dim7CostEfficiency * 0.10) +
+      (dim5Followup    * 0.10) +
+      (dim6NetNew      * 0.05)
+    );
+
+    // Step 14 — buying committee coverage rate
     let buyingCommitteeCoverageRate: number | null = null;
     const productMetaRes = await db.execute({
       sql: `SELECT metadata FROM config_options WHERE category = 'product' AND metadata IS NOT NULL AND metadata != ''`,
@@ -274,16 +417,11 @@ export async function computeConferenceSnapshot(
     }
     if (allRequiredRoles.size > 0 && icpEngaged > 0) {
       const engagedIcpCoRes = await db.execute({
-        sql: `SELECT DISTINCT a.company_id
-              FROM attendees a
-              JOIN conference_attendees ca ON ca.attendee_id = a.id AND ca.conference_id = ?
-              JOIN companies co ON co.id = a.company_id
-              WHERE a.company_id IS NOT NULL AND co.icp = 'Yes'
-                AND (
-                  EXISTS (SELECT 1 FROM meetings m WHERE m.attendee_id = a.id AND m.conference_id = ? AND m.source != 'simulated')
-                  OR EXISTS (SELECT 1 FROM follow_ups f WHERE f.attendee_id = a.id AND f.conference_id = ? AND f.source != 'simulated')
-                  OR EXISTS (SELECT 1 FROM attendee_touchpoints t WHERE t.attendee_id = a.id AND t.conference_id = ?)
-                )`,
+        sql: `WITH ${ENGAGEMENT_CTES}
+              SELECT DISTINCT ae.company_id
+              FROM all_eng ae
+              JOIN companies co ON co.id = ae.company_id
+              WHERE co.icp = 'Yes'`,
         args: [conferenceId, conferenceId, conferenceId, conferenceId],
       });
       let fullCommitteeCount = 0;
@@ -306,8 +444,7 @@ export async function computeConferenceSnapshot(
       buyingCommitteeCoverageRate = icpEngaged > 0 ? fullCommitteeCount / icpEngaged : null;
     }
 
-    // Step 11 — decision makers engaged (C-Suite/VP/SVP seniority or decision_maker buyer_role)
-    // Note: attendees has no conference_id column — must join through conference_attendees
+    // Step 15 — decision makers engaged at this conference (no source filter)
     const dmRes = await db.execute({
       sql: `SELECT COUNT(DISTINCT a.id) as n
             FROM attendees a
@@ -320,77 +457,31 @@ export async function computeConferenceSnapshot(
               )
             )
             AND (
-              EXISTS (SELECT 1 FROM meetings m WHERE m.attendee_id = a.id AND m.conference_id = ? AND m.source != 'simulated')
-              OR EXISTS (SELECT 1 FROM follow_ups f WHERE f.attendee_id = a.id AND f.conference_id = ? AND f.source != 'simulated')
+              EXISTS (
+                SELECT 1 FROM meetings m
+                LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+                WHERE m.attendee_id = a.id AND m.conference_id = ? AND cop.action_key='meeting_held'
+              )
+              OR EXISTS (SELECT 1 FROM follow_ups f WHERE f.attendee_id = a.id AND f.conference_id = ?)
               OR EXISTS (SELECT 1 FROM attendee_touchpoints t WHERE t.attendee_id = a.id AND t.conference_id = ?)
             )`,
       args: [conferenceId, conferenceId, conferenceId, conferenceId],
     });
     const decisionMakersEngaged = Number(dmRes.rows[0]?.n ?? 0);
 
-    // Step 12 — meeting hold rate
-    const scheduledRes = await db.execute({
-      sql: `SELECT COUNT(*) as n FROM meetings WHERE conference_id = ? AND source != 'simulated'`,
-      args: [conferenceId],
-    });
-    const heldRes = await db.execute({
-      sql: `SELECT COUNT(*) as n FROM meetings WHERE conference_id = ? AND outcome IS NOT NULL AND outcome != 'No Show' AND source != 'simulated'`,
-      args: [conferenceId],
-    });
-    const scheduledCount = Number(scheduledRes.rows[0]?.n ?? 0);
-    const heldCount = Number(heldRes.rows[0]?.n ?? 0);
-    const meetingHoldRate = scheduledCount > 0 ? heldCount / scheduledCount : null;
-
-    // Step 13 — follow-up scheduling rate
-    // = companies that had a held meeting AND at least one follow-up / companies with a held meeting
-    const coWithHeldRes = await db.execute({
-      sql: `SELECT DISTINCT a.company_id
-            FROM meetings m
-            JOIN attendees a ON a.id = m.attendee_id
-            WHERE m.conference_id = ? AND m.source != 'simulated'
-              AND m.outcome IS NOT NULL AND m.outcome != 'No Show'
-              AND a.company_id IS NOT NULL`,
-      args: [conferenceId],
-    });
-    const coWithHeld = new Set(coWithHeldRes.rows.map(r => Number(r.company_id)));
-    let coWithFollowUpCount = 0;
-    if (coWithHeld.size > 0) {
-      const fuCoRes = await db.execute({
-        sql: `SELECT DISTINCT a.company_id
-              FROM follow_ups f
-              JOIN attendees a ON a.id = f.attendee_id
-              WHERE f.conference_id = ? AND f.source != 'simulated'
-                AND a.company_id IS NOT NULL`,
-        args: [conferenceId],
-      });
-      for (const r of fuCoRes.rows) {
-        if (coWithHeld.has(Number(r.company_id))) coWithFollowUpCount++;
-      }
-    }
-    const followupSchedulingRate = coWithHeld.size > 0 ? coWithFollowUpCount / coWithHeld.size : null;
-
-    // Step 14 — follow-up completion rate
-    const fuCreatedRes = await db.execute({
-      sql: `SELECT COUNT(*) as n FROM follow_ups WHERE conference_id = ? AND source != 'simulated'`,
-      args: [conferenceId],
-    });
-    const fuCompletedRes = await db.execute({
-      sql: `SELECT COUNT(*) as n FROM follow_ups WHERE conference_id = ? AND completed = 1 AND source != 'simulated'`,
-      args: [conferenceId],
-    });
-    const fuCreated = Number(fuCreatedRes.rows[0]?.n ?? 0);
-    const fuCompleted = Number(fuCompletedRes.rows[0]?.n ?? 0);
-    const followupCompletionRate = fuCreated > 0 ? fuCompleted / fuCreated : null;
-
-    // Step 15 — average health score of engaged attendees
+    // Step 16 — average health score of engaged attendees (no source filter)
     const avgHealthRes = await db.execute({
       sql: `SELECT AVG(a.health_score) as avg_hs
             FROM attendees a
             JOIN conference_attendees ca ON ca.attendee_id = a.id AND ca.conference_id = ?
             WHERE a.health_score IS NOT NULL
               AND (
-                EXISTS (SELECT 1 FROM meetings m WHERE m.attendee_id = a.id AND m.conference_id = ? AND m.source != 'simulated')
-                OR EXISTS (SELECT 1 FROM follow_ups f WHERE f.attendee_id = a.id AND f.conference_id = ? AND f.source != 'simulated')
+                EXISTS (
+                  SELECT 1 FROM meetings m
+                  LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+                  WHERE m.attendee_id = a.id AND m.conference_id = ? AND cop.action_key='meeting_held'
+                )
+                OR EXISTS (SELECT 1 FROM follow_ups f WHERE f.attendee_id = a.id AND f.conference_id = ?)
                 OR EXISTS (SELECT 1 FROM attendee_touchpoints t WHERE t.attendee_id = a.id AND t.conference_id = ?)
               )`,
       args: [conferenceId, conferenceId, conferenceId, conferenceId],
@@ -398,7 +489,7 @@ export async function computeConferenceSnapshot(
     const avgHealthScore = avgHealthRes.rows[0]?.avg_hs != null
       ? Number(avgHealthRes.rows[0].avg_hs) : null;
 
-    // Step 16 — returning attendee rate (requires contact_conference_history to be populated)
+    // Step 17 — returning attendee rate (no source filter)
     let returningAttendeeRate: number | null = null;
     if (seriesId) {
       const returningRes = await db.execute({
@@ -411,8 +502,12 @@ export async function computeConferenceSnapshot(
                   FROM attendees a
                   JOIN conference_attendees ca ON ca.attendee_id = a.id AND ca.conference_id = ?
                   WHERE (
-                    EXISTS (SELECT 1 FROM meetings m WHERE m.attendee_id = a.id AND m.conference_id = ? AND m.source != 'simulated')
-                    OR EXISTS (SELECT 1 FROM follow_ups f WHERE f.attendee_id = a.id AND f.conference_id = ? AND f.source != 'simulated')
+                    EXISTS (
+                      SELECT 1 FROM meetings m
+                      LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+                      WHERE m.attendee_id = a.id AND m.conference_id = ? AND cop.action_key='meeting_held'
+                    )
+                    OR EXISTS (SELECT 1 FROM follow_ups f WHERE f.attendee_id = a.id AND f.conference_id = ?)
                     OR EXISTS (SELECT 1 FROM attendee_touchpoints t WHERE t.attendee_id = a.id AND t.conference_id = ?)
                   )
                 )`,
@@ -423,8 +518,12 @@ export async function computeConferenceSnapshot(
               FROM attendees a
               JOIN conference_attendees ca ON ca.attendee_id = a.id AND ca.conference_id = ?
               WHERE (
-                EXISTS (SELECT 1 FROM meetings m WHERE m.attendee_id = a.id AND m.conference_id = ? AND m.source != 'simulated')
-                OR EXISTS (SELECT 1 FROM follow_ups f WHERE f.attendee_id = a.id AND f.conference_id = ? AND f.source != 'simulated')
+                EXISTS (
+                  SELECT 1 FROM meetings m
+                  LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+                  WHERE m.attendee_id = a.id AND m.conference_id = ? AND cop.action_key='meeting_held'
+                )
+                OR EXISTS (SELECT 1 FROM follow_ups f WHERE f.attendee_id = a.id AND f.conference_id = ?)
                 OR EXISTS (SELECT 1 FROM attendee_touchpoints t WHERE t.attendee_id = a.id AND t.conference_id = ?)
               )`,
         args: [conferenceId, conferenceId, conferenceId, conferenceId],
@@ -434,21 +533,20 @@ export async function computeConferenceSnapshot(
       if (totalEngaged > 0) returningAttendeeRate = returningCount / totalEngaged;
     }
 
-    // Step 17 — companies engaged at 3+ instances of this series
+    // Step 18 — companies engaged 3+ instances of this series
     let companies3Plus: number | null = null;
     if (seriesId) {
       const c3Res = await db.execute({
         sql: `SELECT COUNT(DISTINCT a.company_id) as n
               FROM attendees a
               JOIN contact_conference_history cch ON cch.attendee_id = a.id AND cch.series_id = ?
-              WHERE cch.interaction_count >= 3
-                AND a.company_id IS NOT NULL`,
+              WHERE cch.interaction_count >= 3 AND a.company_id IS NOT NULL`,
         args: [seriesId],
       });
       companies3Plus = Number(c3Res.rows[0]?.n ?? 0);
     }
 
-    // Step 18 — upsert into conference_snapshots
+    // Step 19 — upsert into conference_snapshots
     await db.execute({
       sql: `INSERT INTO conference_snapshots (
               conference_id, series_id, snapshot_taken_at,
@@ -486,7 +584,7 @@ export async function computeConferenceSnapshot(
       args: [
         conferenceId,
         seriesId,
-        cesScore,
+        cesScore || null,
         costEfficiencyScore,
         totalCost,
         pipelineInfluenced,
