@@ -4,6 +4,8 @@ import { getConfigOptionValues } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
 import type { Client } from '@libsql/client';
 import { trackEvent } from '@/lib/trackEvent';
+import { waitUntil } from '@vercel/functions';
+import { sendNotificationEmail } from '@/lib/email';
 import { parseFile, parseFileWithMapping, classifyCompanyType, matchConfigOption, type ColumnMapping } from '@/lib/parsers';
 import {
   buildCompanyMatcher,
@@ -14,6 +16,7 @@ import {
 } from '@/lib/matching';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -147,6 +150,8 @@ export async function POST(request: NextRequest) {
       await db.execute({ sql: `UPDATE conference_series SET ${sets.join(', ')} WHERE id = ?`, args }).catch(() => {});
     }
 
+    const BACKGROUND_THRESHOLD = 5_000;
+    const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub';
     let parsedCount = 0;
 
     if (file && file.size > 0) {
@@ -200,6 +205,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (valid.length > 0) {
+        const run = async (): Promise<number> => {
         // ── Step 1: Load ALL existing companies and attendees in two queries ──
         const [existingCoRes, existingAtRes, userRows, usersWithConfig] = await Promise.all([
           db.execute({ sql: 'SELECT id, name, website, parent_company_id, assigned_user FROM companies', args: [] }),
@@ -518,7 +524,57 @@ export async function POST(request: NextRequest) {
           args: [conferenceId, aid],
         }));
 
-        parsedCount = attendeeIdsToLink.length;
+        return attendeeIdsToLink.length;
+        }; // end run()
+
+        if (valid.length > BACKGROUND_THRESHOLD) {
+          const jobId = crypto.randomUUID();
+          await db.execute({
+            sql: `INSERT INTO upload_jobs
+                  (id, conference_id, conference_name, account_id, status, total_rows,
+                   created_by_user_id, created_by_email)
+                  VALUES (?, ?, ?, ?, 'processing', ?, ?, ?)`,
+            args: [jobId, conferenceId, name, authResult.accountId ?? '', valid.length,
+                   authResult.id, authResult.email],
+          });
+          waitUntil(
+            run().then(async (count) => {
+              await db.execute({
+                sql: `UPDATE upload_jobs SET status='done', new_count=?, updated_count=0,
+                      skipped_count=0, completed_at=datetime('now') WHERE id=?`,
+                args: [count, jobId],
+              });
+              await db.execute({
+                sql: `INSERT INTO notifications
+                      (user_id, type, record_id, record_name, message, changed_by_email, entity_type, entity_id, is_read)
+                      VALUES (?, 'conference', ?, ?, ?, ?, 'conference', ?, 0)`,
+                args: [authResult.id, conferenceId, name,
+                       `Upload complete: ${count} attendees imported`,
+                       authResult.email, conferenceId],
+              });
+              await sendNotificationEmail(
+                authResult.email,
+                `${APP_NAME} - Upload Complete`,
+                `Your attendee list for "${name}" has finished uploading: ${count} attendees imported.`,
+                `${process.env.NEXT_PUBLIC_BASE_URL}/conferences/${conferenceId}`
+              ).catch(() => {});
+            }).catch(async (err) => {
+              await db.execute({
+                sql: `UPDATE upload_jobs SET status='error', error_message=?,
+                      completed_at=datetime('now') WHERE id=?`,
+                args: [String(err?.message ?? err), jobId],
+              });
+            })
+          );
+          trackEvent(authResult?.accountId, 'conference_created', authResult?.id).catch(() => {});
+          return NextResponse.json(
+            { ...conference, id: conferenceId, status: 'processing', job_id: jobId,
+              conference_name: name, total_rows: valid.length },
+            { status: 201 }
+          );
+        }
+
+        parsedCount = await run();
       }
     }
 
