@@ -30,10 +30,12 @@ export async function GET(
     const confsRes = await client.execute({
       sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.stage_override,
                    co.action_key AS strategy_key,
-                   cb.return_on_cost
+                   cb.return_on_cost,
+                   cs.snapshot_taken_at
             FROM conferences c
             LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
             LEFT JOIN conference_budget cb ON cb.conference_id = c.id
+            LEFT JOIN conference_snapshots cs ON cs.conference_id = c.id
             ORDER BY c.start_date DESC`,
       args: [],
     });
@@ -89,6 +91,8 @@ export async function GET(
         icpAttendeeCount,
         currentCes: null,
         hasSimulatedActivity,
+        hasSnapshot: row.snapshot_taken_at != null,
+        snapshotTakenAt: row.snapshot_taken_at ? String(row.snapshot_taken_at) : null,
       };
     }));
 
