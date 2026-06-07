@@ -34,9 +34,10 @@ export async function GET(request: NextRequest) {
       });
     }
     const result = await db.execute({
-      sql: `SELECT c.*, COUNT(ca.attendee_id) as attendee_count
+      sql: `SELECT c.*, cs.display_name as series_name, COUNT(ca.attendee_id) as attendee_count
             FROM conferences c
             LEFT JOIN conference_attendees ca ON c.id = ca.conference_id
+            LEFT JOIN conference_series cs ON cs.id = c.series_id
             GROUP BY c.id
             ORDER BY c.start_date DESC`,
       args: [],

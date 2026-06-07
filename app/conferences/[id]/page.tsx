@@ -1951,6 +1951,14 @@ export default function ConferenceDetailPage() {
                     </a>
                   </span>
                 )}
+                {conference.series_id && (
+                  <Link
+                    href={`/conference-series/${conference.series_id}`}
+                    className="text-sm text-brand-secondary hover:underline"
+                  >
+                    View series →
+                  </Link>
+                )}
               </div>
 
               {/* Row 3: Internal attendee pills */}

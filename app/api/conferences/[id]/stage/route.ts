@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { computeConferenceStage } from '@/lib/conference-stage';
 import type { ConferenceStage } from '@/lib/conference-stage';
+import { computeConferenceSnapshot } from '@/lib/compute-conference-snapshot';
 
 const VALID_STAGES: ConferenceStage[] = ['planning', 'in_progress', 'post_conference', 'closed'];
 const VALID_ACTIONS = ['set_override', 'clear_override', 'extend_window', 'close_now', 'reopen'];
@@ -111,6 +112,12 @@ export async function PATCH(
             VALUES (?, ?, ?, ?, ?, ?)`,
       args: [conferenceId, currentStage, toStage, action, user.id, reason ?? null],
     });
+
+    if (toStage === 'closed') {
+      computeConferenceSnapshot(conferenceId, db).catch(err =>
+        console.error(`[snapshot] Failed for conference ${conferenceId}:`, err)
+      );
+    }
 
     return NextResponse.json({ success: true, stage: toStage });
   } catch (error) {

@@ -23,6 +23,8 @@ interface ConferenceItem {
   currentCes: number | null;
   hasSimulatedActivity: boolean;
   icpAttendeeCount?: number;
+  hasSnapshot?: boolean;
+  snapshotTakenAt?: string | null;
 }
 
 interface RepItem {
@@ -137,6 +139,10 @@ export default function SimulatorPage() {
   const [resetLoading, setResetLoading] = useState(false);
   const [resetStatus, setResetStatus] = useState('');
 
+  const [snapshotLoading, setSnapshotLoading] = useState(false);
+  const [snapshotStatus, setSnapshotStatus] = useState('');
+  const [snapshotError, setSnapshotError] = useState('');
+
   const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null);
   const [preflightLoading, setPreflightLoading] = useState(false);
   const [preflightError, setPreflightError] = useState('');
@@ -201,6 +207,8 @@ export default function SimulatorPage() {
     setTouchpointsCount(5);
     setPreflightResult(null);
     setPreflightError('');
+    setSnapshotStatus('');
+    setSnapshotError('');
   };
 
   const toggleRep = (id: number) => {
@@ -214,6 +222,42 @@ export default function SimulatorPage() {
 
   const selectAllReps = () => setSelectedRepIds(new Set(reps.map(r => r.id)));
   const deselectAllReps = () => setSelectedRepIds(new Set());
+
+  const runSnapshot = async () => {
+    if (!selectedConference) return;
+    setSnapshotLoading(true);
+    setSnapshotStatus('');
+    setSnapshotError('');
+    try {
+      const res = await fetch('/api/ops/compute-conference-snapshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId: accountId.trim(), conferenceId: selectedConference.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSnapshotError(data.error ?? 'Snapshot computation failed');
+        return;
+      }
+      if (data.failed > 0) {
+        setSnapshotError(`Failed: ${data.errors[0]?.error ?? 'Unknown error'}`);
+      } else {
+        setSnapshotStatus('Snapshot computed successfully.');
+        // Refresh conference list to update hasSnapshot / snapshotTakenAt
+        const confsRes = await fetch(`/api/ops/simulate-conference-activity/accounts/${accountId.trim()}/conferences`);
+        if (confsRes.ok) {
+          const confsData = await confsRes.json();
+          setConferences(confsData.conferences ?? []);
+          const updated = (confsData.conferences ?? []).find((c: ConferenceItem) => c.id === selectedConference.id);
+          if (updated) setSelectedConference(updated);
+        }
+      }
+    } catch (e) {
+      setSnapshotError(e instanceof Error ? e.message : 'Snapshot computation failed');
+    } finally {
+      setSnapshotLoading(false);
+    }
+  };
 
   const followUpsCreated = meetingsHeld + touchpointsCount;
   const followUpsCompleted = Math.round(followUpsCreated * (followUpCompletionPct / 100));
@@ -877,6 +921,45 @@ export default function SimulatorPage() {
               {resetStatus}
             </p>
           )}
+        </div>
+      )}
+
+      {/* Conference Snapshots */}
+      {selectedConference && (
+        <div className="bg-white border border-gray-200 rounded-lg p-5">
+          <h2 className="font-semibold text-gray-900 mb-4">Conference Snapshots</h2>
+          <div className="space-y-3">
+            <div className="border border-gray-200 rounded-md p-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-gray-900">{selectedConference.name}</p>
+                {selectedConference.hasSnapshot ? (
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Snapshot taken {selectedConference.snapshotTakenAt
+                      ? new Date(selectedConference.snapshotTakenAt).toLocaleString()
+                      : '—'}
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-400 mt-0.5">No snapshot yet</p>
+                )}
+              </div>
+              <span className={`text-xs px-2 py-0.5 rounded-full border flex-shrink-0 ${
+                selectedConference.hasSnapshot
+                  ? 'bg-green-50 text-green-700 border-green-200'
+                  : 'bg-gray-100 text-gray-500 border-gray-200'
+              }`}>
+                {selectedConference.hasSnapshot ? 'computed' : 'missing'}
+              </span>
+            </div>
+            <button
+              onClick={runSnapshot}
+              disabled={snapshotLoading}
+              className="px-4 py-2 bg-gray-900 text-white text-sm rounded-md hover:bg-gray-700 disabled:opacity-50"
+            >
+              {snapshotLoading ? 'Computing...' : selectedConference.hasSnapshot ? 'Recompute Snapshot' : 'Compute Snapshot'}
+            </button>
+            {snapshotError && <p className="text-sm text-red-600">{snapshotError}</p>}
+            {snapshotStatus && <p className="text-sm text-green-700">{snapshotStatus}</p>}
+          </div>
         </div>
       )}
     </div>
