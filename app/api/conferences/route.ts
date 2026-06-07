@@ -205,7 +205,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (valid.length > 0) {
-        const run = async (): Promise<number> => {
+        const run = async (bgJobId?: string): Promise<number> => {
         // ── Step 1: Load ALL existing companies and attendees in two queries ──
         const [existingCoRes, existingAtRes, userRows, usersWithConfig] = await Promise.all([
           db.execute({ sql: 'SELECT id, name, website, parent_company_id, assigned_user FROM companies', args: [] }),
@@ -412,6 +412,7 @@ export async function POST(request: NextRequest) {
             if (id > 0) companyIdCache.set(newCoNames[i], id);
           }
         }
+        if (bgJobId) await db.execute({ sql: 'UPDATE upload_jobs SET processed_rows=? WHERE id=?', args: [Math.round(valid.length * 0.2), bgJobId] }).catch(() => {});
 
         // ── Step 4: Build attendee lookup (exact name match + secondary confirmation) ──
         type AtRow = { id: number; full_name: string; email: string | null; website: string | null; company_name: string | null };
@@ -518,12 +519,14 @@ export async function POST(request: NextRequest) {
           if (id > 0) linkedIdSet.add(id);
         });
         const attendeeIdsToLink = Array.from(linkedIdSet);
+        if (bgJobId) await db.execute({ sql: 'UPDATE upload_jobs SET processed_rows=? WHERE id=?', args: [Math.round(valid.length * 0.7), bgJobId] }).catch(() => {});
 
         // ── Step 7: Batch-insert conference_attendees ──
         await batchInsert(db, attendeeIdsToLink, (aid) => ({
           sql: 'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)',
           args: [conferenceId, aid],
         }));
+        if (bgJobId) await db.execute({ sql: 'UPDATE upload_jobs SET processed_rows=? WHERE id=?', args: [Math.round(valid.length * 0.95), bgJobId] }).catch(() => {});
 
         return attendeeIdsToLink.length;
         }; // end run()
@@ -539,7 +542,7 @@ export async function POST(request: NextRequest) {
                    authResult.id, authResult.email],
           });
           waitUntil(
-            run().then(async (count) => {
+            run(jobId).then(async (count) => {
               await db.execute({
                 sql: `UPDATE upload_jobs SET status='done', new_count=?, updated_count=0,
                       skipped_count=0, completed_at=datetime('now') WHERE id=?`,

@@ -280,7 +280,7 @@ export async function POST(
 
     // run() encapsulates all DB writes — called synchronously for small files,
     // via waitUntil for large files so we can return immediately.
-    const run = async () => {
+    const run = async (bgJobId?: string) => {
     // Get existing attendees already linked to this conference
     const existingLinked = await db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name FROM attendees a
@@ -552,6 +552,8 @@ export async function POST(
         if (id > 0) companyIdCache.set(newCoNames[i], id);
       }
     }
+
+    if (bgJobId) await db.execute({ sql: 'UPDATE upload_jobs SET processed_rows=? WHERE id=?', args: [Math.round(valid.length * 0.2), bgJobId] }).catch(() => {});
 
     // Compute ICP for all companies touched by this upload
     // If the uploaded file includes an ICP column, that value overrides the calculated ICP.
@@ -835,12 +837,15 @@ export async function POST(
     });
     const attendeeIdsToLink = Array.from(linkedIdSet);
 
+    if (bgJobId) await db.execute({ sql: 'UPDATE upload_jobs SET processed_rows=? WHERE id=?', args: [Math.round(valid.length * 0.7), bgJobId] }).catch(() => {});
+
     // Batch-insert conference_attendees
     await batchInsert(db, attendeeIdsToLink, (aid) => ({
       sql: 'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)',
       args: [conferenceId, aid],
     }));
     await db.execute({ sql: "UPDATE conferences SET calendar_score_invalidated_at = datetime('now') WHERE id = ?", args: [conferenceId] }).catch(() => {});
+    if (bgJobId) await db.execute({ sql: 'UPDATE upload_jobs SET processed_rows=? WHERE id=?', args: [Math.round(valid.length * 0.95), bgJobId] }).catch(() => {});
 
     // Propagate attendee products to their associated companies (merge, don't overwrite)
     const companyProductUpdates = new Map<number, Set<string>>();
@@ -906,7 +911,7 @@ export async function POST(
       });
 
       waitUntil(
-        run().then(async (result) => {
+        run(jobId).then(async (result) => {
           await db.execute({
             sql: `UPDATE upload_jobs
                   SET status = 'done', processed_rows = total_rows,
