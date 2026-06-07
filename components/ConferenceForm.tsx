@@ -224,14 +224,30 @@ export function ConferenceForm() {
         body: formData,
       });
 
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        let errMsg = 'Failed to create conference';
+        if (res.status === 413) errMsg = 'File is too large. Please try a smaller file.';
+        else { try { errMsg = JSON.parse(text)?.error ?? errMsg; } catch { /* plain-text */ } }
+        throw new Error(errMsg);
+      }
+
       const result = await res.json();
 
-      if (!res.ok) {
-        throw new Error(result.error || 'Failed to create conference');
+      if (result.status === 'processing') {
+        localStorage.setItem('upload_job_in_progress', JSON.stringify({
+          jobId: result.job_id,
+          conferenceId: result.id,
+          conferenceName: result.conference_name,
+          totalRows: result.total_rows,
+        }));
+        toast('Large file upload started — you\'ll be notified when it\'s complete.', { duration: 6000, icon: '⏳' });
+        router.push(`/conferences/${result.id}`);
+        return;
       }
 
       toast.success(
-        `Conference created! ${result.parsed_count > 0 ? `${result.parsed_count} attendees imported.` : ''}`
+        `Conference created!${result.parsed_count > 0 ? ` ${result.parsed_count} attendees imported.` : ''}`
       );
       router.push(`/conferences/${result.id}`);
     } catch (err) {

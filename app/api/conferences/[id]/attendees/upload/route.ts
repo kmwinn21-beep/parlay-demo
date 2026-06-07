@@ -36,7 +36,7 @@ async function batchInsert<T>(
   dbClient: Client,
   items: T[],
   toStatement: (item: T) => { sql: string; args: (string | number | null)[] },
-  chunkSize = 100
+  chunkSize = 300
 ): Promise<Array<{ rows: Record<string, unknown>[] }>> {
   const allResults: Array<{ rows: Record<string, unknown>[] }> = [];
   for (let i = 0; i < items.length; i += chunkSize) {
@@ -280,7 +280,7 @@ export async function POST(
 
     // run() encapsulates all DB writes — called synchronously for small files,
     // via waitUntil for large files so we can return immediately.
-    const run = async () => {
+    const run = async (bgJobId?: string) => {
     // Get existing attendees already linked to this conference
     const existingLinked = await db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name FROM attendees a
@@ -553,6 +553,8 @@ export async function POST(
       }
     }
 
+    if (bgJobId) await db.execute({ sql: 'UPDATE upload_jobs SET processed_rows=? WHERE id=?', args: [Math.round(valid.length * 0.2), bgJobId] }).catch(() => {});
+
     // Compute ICP for all companies touched by this upload
     // If the uploaded file includes an ICP column, that value overrides the calculated ICP.
     // Otherwise, calculate ICP from company type + WSE + services rules. Default fallback is "No".
@@ -682,7 +684,8 @@ export async function POST(
         const rawProduct = p.product?.trim() || undefined;
         const autoProduct = !rawProduct ? computeAutoProducts(undefined, p.title?.trim(), functionVal) : null;
         const consentVal = p.consent?.trim() ? normalizeConsentValue(p.consent.trim()) : undefined;
-        existingAttendeeUpdates.push({
+        const hasUpdate = (companyId && companyId > 0) || p.title?.trim() || p.email?.trim() || functionVal || rawProduct || autoProduct || consentVal;
+        if (hasUpdate) existingAttendeeUpdates.push({
           id: hit.match.id,
           company_id: companyId && companyId > 0 ? companyId : null,
           title: p.title?.trim() || null,
@@ -737,7 +740,8 @@ export async function POST(
         const rawProduct = p.product?.trim() || undefined;
         const autoProduct = !rawProduct ? computeAutoProducts(undefined, p.title?.trim(), functionVal) : null;
         const consentVal = p.consent?.trim() ? normalizeConsentValue(p.consent.trim()) : undefined;
-        existingAttendeeUpdates.push({
+        const hasUpdate = (companyId && companyId > 0) || p.title?.trim() || p.email?.trim() || functionVal || rawProduct || autoProduct || consentVal;
+        if (hasUpdate) existingAttendeeUpdates.push({
           id: existingId,
           company_id: companyId && companyId > 0 ? companyId : null,
           title: p.title?.trim() || null,
@@ -833,12 +837,15 @@ export async function POST(
     });
     const attendeeIdsToLink = Array.from(linkedIdSet);
 
+    if (bgJobId) await db.execute({ sql: 'UPDATE upload_jobs SET processed_rows=? WHERE id=?', args: [Math.round(valid.length * 0.7), bgJobId] }).catch(() => {});
+
     // Batch-insert conference_attendees
     await batchInsert(db, attendeeIdsToLink, (aid) => ({
       sql: 'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)',
       args: [conferenceId, aid],
     }));
     await db.execute({ sql: "UPDATE conferences SET calendar_score_invalidated_at = datetime('now') WHERE id = ?", args: [conferenceId] }).catch(() => {});
+    if (bgJobId) await db.execute({ sql: 'UPDATE upload_jobs SET processed_rows=? WHERE id=?', args: [Math.round(valid.length * 0.95), bgJobId] }).catch(() => {});
 
     // Propagate attendee products to their associated companies (merge, don't overwrite)
     const companyProductUpdates = new Map<number, Set<string>>();
@@ -904,7 +911,7 @@ export async function POST(
       });
 
       waitUntil(
-        run().then(async (result) => {
+        run(jobId).then(async (result) => {
           await db.execute({
             sql: `UPDATE upload_jobs
                   SET status = 'done', processed_rows = total_rows,
