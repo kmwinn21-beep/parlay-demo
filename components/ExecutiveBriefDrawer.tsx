@@ -358,7 +358,38 @@ function CountCard({ label, value }: { label: string; value: string | number }) 
 
 export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seriesYoY, snapshot }: Props) {
   const [mounted, setMounted] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+
+  const handleSavePdf = async () => {
+    setPdfLoading(true);
+    try {
+      const res = await fetch(`/api/conferences/${conference.id}/executive-brief-pdf`);
+      if (!res.ok) throw new Error('PDF generation failed');
+      const contentType = res.headers.get('content-type');
+      if (contentType?.includes('application/pdf')) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Executive-Brief-${conference.name.replace(/\s+/g, '-')}-${new Date(conference.start_date).getFullYear()}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const { html } = await res.json();
+        const win = window.open('', '_blank');
+        if (win) {
+          win.document.write(html);
+          win.document.close();
+          win.onload = () => { win.focus(); win.print(); };
+        }
+      }
+    } catch (err) {
+      console.error('PDF export failed:', err);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   if (!isOpen) return null;
   if (!mounted) return null;
@@ -405,21 +436,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
         @keyframes execBriefFadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes execBriefSlideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
         @media print {
-          body > *:not(.executive-brief-print-root) { display: none !important; }
-          .no-print { display: none !important; }
-          .executive-brief-print-root {
-            position: static !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            height: auto !important;
-            overflow: visible !important;
-            box-shadow: none !important;
-            border-radius: 0 !important;
-          }
-          .executive-brief-print-root .overflow-y-auto {
-            overflow: visible !important;
-            max-height: none !important;
-          }
+          .executive-brief-drawer-root { display: none !important; }
         }
       `}</style>
 
@@ -434,7 +451,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
       {/* Drawer */}
       <div className="absolute inset-0 sm:left-64 sm:flex sm:items-center sm:justify-center sm:p-5 pointer-events-none">
         <div
-          className="executive-brief-print-root pointer-events-auto relative w-full h-full sm:h-[90vh] sm:max-w-[1100px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden"
+          className="executive-brief-drawer-root pointer-events-auto relative w-full h-full sm:h-[90vh] sm:max-w-[1100px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden"
           style={{ animation: 'execBriefSlideIn 0.25s ease-out' }}
         >
           {/* ── Header ──────────────────────────────────────────────── */}
@@ -458,16 +475,14 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
             <div className="flex items-center gap-2 flex-shrink-0">
               <button
                 type="button"
-                onClick={() => window.print()}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                onClick={handleSavePdf}
+                disabled={pdfLoading || !snapshot}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {/* ti-download */}
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 11l5 5 5-5" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12" />
-                </svg>
-                Save to PDF
+                {pdfLoading
+                  ? <><i className="ti ti-loader-2 text-xs animate-spin" aria-hidden="true" />Generating...</>
+                  : <><i className="ti ti-download text-xs" aria-hidden="true" />Save to PDF</>
+                }
               </button>
               <button
                 type="button"
