@@ -2627,12 +2627,163 @@ export default function ProgramIntelligencePage() {
                 <p className="text-sm text-gray-400 py-4">No conferences found in this series.</p>
               )}
 
-              {/* Table will be added in Section 2 */}
-              {!snapshotYoYLoading && snapshotYoY && snapshotYoY.instances.length > 0 && (
-                <div className="text-sm text-gray-400 py-4 border border-dashed border-gray-200 rounded-lg text-center">
-                  {snapshotYoY.instances.length} conference{snapshotYoY.instances.length !== 1 ? 's' : ''} found — table coming in Section 2
-                </div>
-              )}
+              {!snapshotYoYLoading && snapshotYoY && snapshotYoY.instances.length > 0 && (() => {
+                const SNAPSHOT_FIELDS = [
+                  'cesScore', 'costEfficiencyScore', 'totalCost', 'pipelineInfluenced',
+                  'pipelineNetNew', 'pipelineContinuedEngagement', 'pipelinePerK',
+                  'costPerCompany', 'costPerMeeting', 'icpCompaniesTotal',
+                  'icpCompaniesEngaged', 'icpEngagementRate', 'buyingCommitteeCoverageRate',
+                  'decisionMakersEngaged', 'meetingHoldRate', 'followupSchedulingRate',
+                  'followupCompletionRate', 'avgHealthScoreEngaged', 'returningAttendeeRate',
+                  'companies3PlusInstances', 'strategyName', 'sponsorshipLevel',
+                  'boothPresent', 'boothWidth', 'boothLength', 'boothNumber', 'boothHall',
+                  'budgetTotal', 'actualTotal', 'budgetVariance', 'budgetLineItems',
+                  'requiredPipelineMultiple', 'requiredPipelineAmount', 'expectedReturnAmount',
+                ] as const;
+
+                function relativeDate(iso: string | null): string {
+                  if (!iso) return '—';
+                  const d = new Date(iso);
+                  const diffDays = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+                  if (diffDays === 0) return 'Today';
+                  if (diffDays === 1) return 'Yesterday';
+                  if (diffDays < 30) return `${diffDays} days ago`;
+                  if (diffDays < 60) return 'Last month';
+                  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                }
+
+                function stageLabel(s: string | null): { label: string; cls: string } {
+                  switch (s) {
+                    case 'closed': return { label: 'Closed', cls: 'bg-gray-100 text-gray-600 border border-gray-200' };
+                    case 'in_progress': return { label: 'In progress', cls: 'bg-blue-50 text-blue-700 border border-blue-200' };
+                    case 'planning': return { label: 'Planning', cls: 'bg-white text-gray-500 border border-gray-200' };
+                    case 'post_conference': return { label: 'Post-conference', cls: 'bg-purple-50 text-purple-700 border border-purple-200' };
+                    default: return { label: s ?? 'Unknown', cls: 'bg-gray-50 text-gray-500 border border-gray-200' };
+                  }
+                }
+
+                const instances = [...snapshotYoY.instances].sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+                return (
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Conference</th>
+                          <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                          <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Snapshot</th>
+                          <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Snapshot taken</th>
+                          <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Data completeness</th>
+                          <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {instances.map(instance => {
+                          const override = snapshotOverrides[instance.conferenceId];
+                          const hasSnapshot = override?.hasSnapshot ?? instance.hasSnapshot;
+                          const snapshotTakenAt = override?.snapshotTakenAt ?? instance.snapshotTakenAt;
+                          const isClosed = instance.stageOverride === 'closed';
+                          const isComputing = computing === instance.conferenceId;
+                          const err = snapshotErrors[instance.conferenceId];
+                          const justComputed = override?.justComputed === true;
+
+                          let completeness = 0;
+                          if (override) {
+                            completeness = override.completenessPercent;
+                          } else if (hasSnapshot) {
+                            const nonNull = SNAPSHOT_FIELDS.filter(f => instance[f as keyof typeof instance] != null).length;
+                            completeness = Math.round((nonNull / SNAPSHOT_FIELDS.length) * 100);
+                          }
+
+                          const dateRange = [instance.startDate, instance.endDate].filter(Boolean).join(' – ');
+                          const { label: sLabel, cls: sCls } = stageLabel(instance.stageOverride);
+
+                          return (
+                            <tr key={instance.conferenceId} className="hover:bg-gray-50 transition-colors">
+                              {/* Conference */}
+                              <td className="px-4 py-3">
+                                <p className="font-medium text-gray-800">{instance.conferenceName}</p>
+                                {dateRange && <p className="text-xs text-gray-400 mt-0.5">{dateRange}</p>}
+                              </td>
+
+                              {/* Stage */}
+                              <td className="px-4 py-3">
+                                <span className={`inline-flex items-center text-xs font-medium rounded-full px-2 py-0.5 ${sCls}`}>
+                                  {sLabel}
+                                </span>
+                              </td>
+
+                              {/* Snapshot badge */}
+                              <td className="px-4 py-3">
+                                {hasSnapshot ? (
+                                  <span className="inline-flex items-center gap-1 text-xs font-medium bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5">
+                                    <i className="ti ti-circle-check text-xs" aria-hidden="true" />Current
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200 rounded-full px-2 py-0.5">
+                                    <i className="ti ti-circle-dashed text-xs" aria-hidden="true" />Missing
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Snapshot taken */}
+                              <td className="px-4 py-3 text-xs text-gray-500">
+                                {justComputed ? (
+                                  <span className="text-green-600 font-medium">✓ Snapshot computed</span>
+                                ) : (
+                                  relativeDate(snapshotTakenAt)
+                                )}
+                              </td>
+
+                              {/* Completeness */}
+                              <td className="px-4 py-3">
+                                {hasSnapshot ? (
+                                  <div title={completeness < 40 ? 'Limited data — budget or activity may not be recorded for this conference.' : undefined}>
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                        <div
+                                          className="h-full rounded-full bg-brand-secondary"
+                                          style={{ width: `${completeness}%` }}
+                                        />
+                                      </div>
+                                      <span className="text-xs text-gray-500">{completeness}%</span>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-gray-400">—</span>
+                                )}
+                              </td>
+
+                              {/* Actions */}
+                              <td className="px-4 py-3">
+                                {isClosed ? (
+                                  <div>
+                                    <button
+                                      onClick={() => handleComputeSnapshot(instance.conferenceId)}
+                                      disabled={isComputing || computingAll}
+                                      className="flex items-center gap-1 text-xs font-medium text-brand-secondary hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      {isComputing
+                                        ? <><i className="ti ti-loader-2 text-xs animate-spin" aria-hidden="true" />Computing...</>
+                                        : hasSnapshot
+                                          ? <><i className="ti ti-refresh text-xs" aria-hidden="true" />Recompute</>
+                                          : <><i className="ti ti-bolt text-xs" aria-hidden="true" />Compute</>
+                                      }
+                                    </button>
+                                    {err && <p className="text-xs text-red-500 mt-1">{err}</p>}
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-gray-400">Not yet closed</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
             </div>
           );
         })()}
