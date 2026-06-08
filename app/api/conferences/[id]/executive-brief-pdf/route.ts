@@ -49,6 +49,10 @@ export async function GET(
     }
   }
 
-  const html = generateExecutiveBriefHTML({ conference, snapshot, seriesYoY });
+  const proto = request.headers.get('x-forwarded-proto') ?? 'https';
+  const host = request.headers.get('host') ?? '';
+  const baseUrl = host ? `${proto}://${host}` : '';
+
+  const html = generateExecutiveBriefHTML({ conference, snapshot, seriesYoY, baseUrl });
   return NextResponse.json({ html });
 }

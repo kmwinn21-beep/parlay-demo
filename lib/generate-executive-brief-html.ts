@@ -224,7 +224,10 @@ export function generateExecutiveBriefHTML(data: {
   conference: ConferenceRecord;
   snapshot: ConferenceSnapshot;
   seriesYoY: SeriesYoYData | null;
+  baseUrl?: string;
 }): string {
+
+  const baseUrl = data.baseUrl ?? '';
 
   // ── Snapshot field accessors ──────────────────────────────────────────────
   const n = (key: string): number | null => {
@@ -298,22 +301,22 @@ export function generateExecutiveBriefHTML(data: {
     const dateRange = conf.end_date ? fmtRange(conf.start_date, conf.end_date) : fmtDate(conf.start_date);
     const generated = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     const meta = [s('strategy_name'), s('sponsorship_level')].filter(Boolean).join(' · ');
-    return `<div style="background:#223A5E;padding:16px 0 14px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between">
+    return `<div style="-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#223A5E;padding:16px 0 14px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between">
     <div>
       <p style="font-size:9px;font-weight:600;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.1em;margin:0 0 3px">Executive brief</p>
       <p style="font-size:18px;font-weight:600;color:#FFFFFF;margin:0;line-height:1.2">${escHtml(conf.name)}</p>
       <p style="font-size:10px;color:rgba(255,255,255,.5);margin:4px 0 0">${escHtml(dateRange)}${meta ? ' · ' + escHtml(meta) : ''}</p>
     </div>
     <div style="text-align:right">
-      <p style="font-size:16px;font-weight:700;color:#34D399;margin:0">Parlay</p>
-      <p style="font-size:9px;color:rgba(255,255,255,.35);margin:3px 0 0">Generated ${generated}</p>
+      <img src="${baseUrl}/V2ParlayLogoNew.png" alt="Parlay" style="height:26px;display:block;margin-left:auto;filter:brightness(0)invert(1)" />
+      <p style="font-size:9px;color:rgba(255,255,255,.35);margin:5px 0 0">Generated ${generated}</p>
     </div>
   </div>`;
   }
 
   function pageFooter(page: number): string {
     return `<div style="margin-top:24px;padding-top:10px;border-top:1px solid #F1F5F9;display:flex;align-items:center;justify-content:space-between">
-    <p style="font-size:9px;font-weight:600;color:#34D399;margin:0">Parlay</p>
+    <img src="${baseUrl}/V2ParlayLogoNew.png" alt="Parlay" style="height:14px;display:block" />
     <p style="font-size:9px;color:#94A3B8;margin:0">${escHtml(conf.name)} · Executive brief · Page ${page} of 3</p>
   </div>`;
   }
@@ -323,7 +326,7 @@ export function generateExecutiveBriefHTML(data: {
   }
 
   function statCard(label: string, value: string, sub?: string): string {
-    return `<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:8px 10px;border-left:3px solid #185FA5">
+    return `<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:8px 10px;border-left:3px solid #185FA5;height:100%;box-sizing:border-box">
     <p style="font-size:9px;color:#64748B;margin:0 0 3px">${escHtml(label)}</p>
     <p style="font-size:15px;font-weight:600;color:#1E293B;margin:0">${escHtml(value)}</p>
     ${sub ? `<p style="font-size:9px;color:#94A3B8;margin:2px 0 0">${escHtml(sub)}</p>` : ''}
@@ -455,11 +458,11 @@ export function generateExecutiveBriefHTML(data: {
 
   <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
     <tr>
-      <td style="width:20%;padding-right:6px">${statCard('Total spend', fmt$(actualTotal), n('budget_total') != null ? `Budget: ${fmt$(n('budget_total'))}` : undefined)}</td>
-      <td style="width:20%;padding:0 6px">${statCard('Budget variance', budgetVarianceStr, budgetVarianceSub)}</td>
-      <td style="width:20%;padding:0 6px">${statCard('Cost per company', fmt$(n('cost_per_company_engaged')), icpEngaged != null ? `${icpEngaged} engaged` : undefined)}</td>
-      <td style="width:20%;padding:0 6px">${statCard('Cost per meeting', fmt$(n('cost_per_meeting_held')))}</td>
-      <td style="width:20%;padding-left:6px">${statCard('Cost per internal attendee', fmt$(cpInternalAttendee), internalHeadcount != null ? `${internalHeadcount} attendees` : undefined)}</td>
+      <td style="width:20%;padding-right:6px;vertical-align:top">${statCard('Total spend', fmt$(actualTotal), n('budget_total') != null ? `Budget: ${fmt$(n('budget_total'))}` : undefined)}</td>
+      <td style="width:20%;padding:0 6px;vertical-align:top">${statCard('Budget variance', budgetVarianceStr, budgetVarianceSub)}</td>
+      <td style="width:20%;padding:0 6px;vertical-align:top">${statCard('Cost per company', fmt$(n('cost_per_company_engaged')), icpEngaged != null ? `${icpEngaged} engaged` : undefined)}</td>
+      <td style="width:20%;padding:0 6px;vertical-align:top">${statCard('Cost per meeting', fmt$(n('cost_per_meeting_held')))}</td>
+      <td style="width:20%;padding-left:6px;vertical-align:top">${statCard('Cost per internal attendee', fmt$(cpInternalAttendee), internalHeadcount != null ? `${internalHeadcount} attendees` : undefined)}</td>
     </tr>
   </table>
   ${budgetTableHtml}`;
@@ -588,7 +591,7 @@ export function generateExecutiveBriefHTML(data: {
   <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
     <tr>
       <td style="width:50%;padding-right:8px;vertical-align:top">
-        <div style="background:#E6F1FB;border:1px solid #B5D4F4;border-radius:8px;padding:12px">
+        <div style="background:#E6F1FB;border:1px solid #B5D4F4;border-radius:8px;padding:12px;height:100%;box-sizing:border-box">
           <p style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#0C447C;margin:0 0 6px">Conference effectiveness</p>
           <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:4px">
             <span style="font-size:28px;font-weight:500;color:#223A5E">${cesScore ?? '—'}</span>
@@ -599,7 +602,7 @@ export function generateExecutiveBriefHTML(data: {
         </div>
       </td>
       <td style="width:50%;padding-left:8px;vertical-align:top">
-        <div style="background:#EAF3DE;border:1px solid #C0DD97;border-radius:8px;padding:12px">
+        <div style="background:#EAF3DE;border:1px solid #C0DD97;border-radius:8px;padding:12px;height:100%;box-sizing:border-box">
           <p style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#27500A;margin:0 0 6px">Cost efficiency</p>
           <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:4px">
             <span style="font-size:28px;font-weight:500;color:#3B6D11">${costEffScore ?? '—'}</span>
@@ -615,7 +618,7 @@ export function generateExecutiveBriefHTML(data: {
   <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
     <tr>
       <td style="width:33.33%;padding-right:6px;vertical-align:top">
-        <div style="background:#EAF3DE;border:1px solid #C0DD97;border-radius:6px;padding:8px 10px">
+        <div style="background:#EAF3DE;border:1px solid #C0DD97;border-radius:6px;padding:8px 10px;height:100%;box-sizing:border-box">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
             <p style="font-size:9px;font-weight:600;color:#475569;margin:0">Pipeline per $1K</p>
             ${benchBadge(pipelinePerKBench(pipelinePerK))}
@@ -624,7 +627,7 @@ export function generateExecutiveBriefHTML(data: {
         </div>
       </td>
       <td style="width:33.33%;padding:0 6px;vertical-align:top">
-        <div style="background:#EAF3DE;border:1px solid #C0DD97;border-radius:6px;padding:8px 10px">
+        <div style="background:#EAF3DE;border:1px solid #C0DD97;border-radius:6px;padding:8px 10px;height:100%;box-sizing:border-box">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
             <p style="font-size:9px;font-weight:600;color:#475569;margin:0">Cost per company engaged</p>
             ${benchBadge(costPerCompanyBench(costPerCompany))}
@@ -633,7 +636,7 @@ export function generateExecutiveBriefHTML(data: {
         </div>
       </td>
       <td style="width:33.33%;padding-left:6px;vertical-align:top">
-        <div style="background:#EAF3DE;border:1px solid #C0DD97;border-radius:6px;padding:8px 10px">
+        <div style="background:#EAF3DE;border:1px solid #C0DD97;border-radius:6px;padding:8px 10px;height:100%;box-sizing:border-box">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
             <p style="font-size:9px;font-weight:600;color:#475569;margin:0">Cost per meeting</p>
             ${benchBadge(costPerMeetingBench(costPerMeeting))}
@@ -647,25 +650,25 @@ export function generateExecutiveBriefHTML(data: {
   <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
     <tr>
       <td style="width:25%;padding-right:6px;vertical-align:top">
-        <div style="background:#E6F1FB;border:1px solid #B5D4F4;border-radius:6px;padding:8px 10px">
+        <div style="background:#E6F1FB;border:1px solid #B5D4F4;border-radius:6px;padding:8px 10px;height:100%;box-sizing:border-box">
           <p style="font-size:9px;font-weight:600;color:#475569;margin:0 0 4px">Pipeline influenced</p>
           <p style="font-size:14px;font-weight:600;color:#1E293B;margin:0">${fmt$(pipelineInfluenced)}</p>
         </div>
       </td>
       <td style="width:25%;padding:0 6px;vertical-align:top">
-        <div style="background:#E6F1FB;border:1px solid #B5D4F4;border-radius:6px;padding:8px 10px">
+        <div style="background:#E6F1FB;border:1px solid #B5D4F4;border-radius:6px;padding:8px 10px;height:100%;box-sizing:border-box">
           <p style="font-size:9px;font-weight:600;color:#475569;margin:0 0 4px">Net-new pipeline</p>
           <p style="font-size:14px;font-weight:600;color:#1E293B;margin:0">${fmt$(pipelineNetNew)}</p>
         </div>
       </td>
       <td style="width:25%;padding:0 6px;vertical-align:top">
-        <div style="background:#E6F1FB;border:1px solid #B5D4F4;border-radius:6px;padding:8px 10px">
+        <div style="background:#E6F1FB;border:1px solid #B5D4F4;border-radius:6px;padding:8px 10px;height:100%;box-sizing:border-box">
           <p style="font-size:9px;font-weight:600;color:#475569;margin:0 0 4px">Continued engagement</p>
           <p style="font-size:14px;font-weight:600;color:#1E293B;margin:0">${fmt$(pipelineContinued)}</p>
         </div>
       </td>
       <td style="width:25%;padding-left:6px;vertical-align:top">
-        <div style="background:#E6F1FB;border:1px solid #B5D4F4;border-radius:6px;padding:8px 10px">
+        <div style="background:#E6F1FB;border:1px solid #B5D4F4;border-radius:6px;padding:8px 10px;height:100%;box-sizing:border-box">
           <p style="font-size:9px;font-weight:600;color:#475569;margin:0 0 4px">Required pipeline</p>
           <p style="font-size:14px;font-weight:600;color:#1E293B;margin:0">${fmt$(requiredPipelineAmount)}</p>
           ${n('required_pipeline_multiple') != null ? `<p style="font-size:8px;color:#94A3B8;margin:2px 0 0">${n('required_pipeline_multiple')}× spend target</p>` : ''}
@@ -779,7 +782,7 @@ export function generateExecutiveBriefHTML(data: {
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Executive Brief — ${escHtml(conf.name)}</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 11px; color: #1E293B; }
   @page { size: letter portrait; margin: 0.65in 0.7in; }
   .page-break { page-break-before: always; }
