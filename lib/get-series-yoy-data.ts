@@ -30,6 +30,20 @@ export type ConferenceYoYRow = {
   companies3PlusInstances: number | null;
   hasSnapshot: boolean;
   snapshotTakenAt: string | null;
+  strategyName: string | null;
+  sponsorshipLevel: string | null;
+  boothPresent: boolean | null;
+  boothWidth: number | null;
+  boothLength: number | null;
+  boothNumber: string | null;
+  boothHall: string | null;
+  budgetTotal: number | null;
+  actualTotal: number | null;
+  budgetVariance: number | null;
+  budgetLineItems: string | null;
+  requiredPipelineMultiple: number | null;
+  requiredPipelineAmount: number | null;
+  expectedReturnAmount: number | null;
 };
 
 export type SeriesYoYData = {
@@ -89,7 +103,21 @@ export async function getSeriesYoYData(
             snap.followup_completion_rate,
             snap.avg_health_score_engaged,
             snap.returning_attendee_rate,
-            snap.companies_3plus_instances
+            snap.companies_3plus_instances,
+            snap.strategy_name,
+            snap.sponsorship_level,
+            snap.booth_present,
+            snap.booth_width,
+            snap.booth_length,
+            snap.booth_number,
+            snap.booth_hall,
+            snap.budget_total,
+            snap.actual_total,
+            snap.budget_variance,
+            snap.budget_line_items,
+            snap.required_pipeline_multiple,
+            snap.required_pipeline_amount,
+            snap.expected_return_amount
           FROM conferences c
           LEFT JOIN conference_seasons cs_track ON cs_track.id = c.season_id
           LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
@@ -132,6 +160,20 @@ export async function getSeriesYoYData(
       companies3PlusInstances: num(row.companies_3plus_instances),
       hasSnapshot: row.snapshot_taken_at != null,
       snapshotTakenAt: row.snapshot_taken_at != null ? String(row.snapshot_taken_at) : null,
+      strategyName: row.strategy_name != null ? String(row.strategy_name) : null,
+      sponsorshipLevel: row.sponsorship_level != null ? String(row.sponsorship_level) : null,
+      boothPresent: row.booth_present != null ? Number(row.booth_present) === 1 : null,
+      boothWidth: num(row.booth_width),
+      boothLength: num(row.booth_length),
+      boothNumber: row.booth_number != null ? String(row.booth_number) : null,
+      boothHall: row.booth_hall != null ? String(row.booth_hall) : null,
+      budgetTotal: num(row.budget_total),
+      actualTotal: num(row.actual_total),
+      budgetVariance: num(row.budget_variance),
+      budgetLineItems: row.budget_line_items != null ? String(row.budget_line_items) : null,
+      requiredPipelineMultiple: num(row.required_pipeline_multiple),
+      requiredPipelineAmount: num(row.required_pipeline_amount),
+      expectedReturnAmount: num(row.expected_return_amount),
     };
   });
 

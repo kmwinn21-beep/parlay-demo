@@ -123,9 +123,11 @@ export async function computeConferenceSnapshot(
   db: Client,
 ): Promise<void> {
   try {
-    // Step 1 — conference record (includes conf_event_type and strategy_key)
+    // Step 1 — conference record (includes conf_event_type, strategy_key, booth, sponsorship)
     const confRes = await db.execute({
       sql: `SELECT c.id, c.series_id, c.start_date, c.conf_event_type, c.cost_efficiency_modifier,
+                   c.booth_present, c.booth_width, c.booth_length, c.booth_number, c.booth_hall,
+                   c.sponsorship_level,
                    co.action_key AS strategy_key
             FROM conferences c
             LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
@@ -138,6 +140,56 @@ export async function computeConferenceSnapshot(
     const confEventType = String(conf.conf_event_type ?? 'other');
     const confModifierOverride = conf.cost_efficiency_modifier != null
       ? Number(conf.cost_efficiency_modifier) : null;
+
+    // Step 1b — budget line items + strategy display name (parallel)
+    const [budgetLineRes, strategyRes] = await Promise.all([
+      db.execute({
+        sql: `SELECT line_items, required_pipeline_multiple, required_pipeline_amount
+              FROM conference_budget WHERE conference_id = ?`,
+        args: [conferenceId],
+      }),
+      db.execute({
+        sql: `SELECT co.value AS strategy_name
+              FROM conferences c
+              LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
+              WHERE c.id = ?`,
+        args: [conferenceId],
+      }),
+    ]);
+
+    // Budget totals (strip non-numeric — budget/actual stored as strings)
+    const parseDollar = (v: unknown): number =>
+      Number(String(v ?? '').replace(/[^0-9.]/g, '')) || 0;
+    const lineItemsRaw = String(budgetLineRes.rows[0]?.line_items ?? '[]');
+    let lineItems: Array<Record<string, unknown>> = [];
+    try { lineItems = JSON.parse(lineItemsRaw); } catch { /* empty */ }
+    const budgetTotal = lineItems.length > 0
+      ? lineItems.reduce((sum, item) => sum + parseDollar(item.budget), 0) || null
+      : null;
+    const actualTotal = lineItems.length > 0
+      ? lineItems.reduce((sum, item) => sum + parseDollar(item.actual), 0) || null
+      : null;
+    const budgetVariance = budgetTotal != null && actualTotal != null
+      ? actualTotal - budgetTotal : null;
+
+    const snapRequiredPipelineMultiple = budgetLineRes.rows[0]?.required_pipeline_multiple != null
+      ? Number(budgetLineRes.rows[0].required_pipeline_multiple) : null;
+    const snapRequiredPipelineAmount = budgetLineRes.rows[0]?.required_pipeline_amount != null
+      ? Number(budgetLineRes.rows[0].required_pipeline_amount) : null;
+    const snapExpectedReturnAmount = (actualTotal && snapRequiredPipelineMultiple)
+      ? actualTotal * snapRequiredPipelineMultiple
+      : snapRequiredPipelineAmount ?? null;
+
+    const strategyName = strategyRes.rows[0]?.strategy_name != null
+      ? String(strategyRes.rows[0].strategy_name) : null;
+
+    // Booth and sponsorship from conf record
+    const boothPresent = conf.booth_present != null ? Number(conf.booth_present) : null;
+    const boothWidth = conf.booth_width != null ? Number(conf.booth_width) : null;
+    const boothLength = conf.booth_length != null ? Number(conf.booth_length) : null;
+    const boothNumber = conf.booth_number != null ? String(conf.booth_number) : null;
+    const boothHall = conf.booth_hall != null ? String(conf.booth_hall) : null;
+    const sponsorshipLevel = conf.sponsorship_level != null ? String(conf.sponsorship_level) : null;
 
     // Step 2 — total spend via SQL (correct: actual if nonzero, else budget per line item)
     const spendRes = await db.execute({
@@ -556,8 +608,12 @@ export async function computeConferenceSnapshot(
               icp_companies_total, icp_companies_engaged, icp_engagement_rate,
               buying_committee_coverage_rate, decision_makers_engaged,
               meeting_hold_rate, followup_scheduling_rate, followup_completion_rate,
-              avg_health_score_engaged, returning_attendee_rate, companies_3plus_instances
-            ) VALUES (?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              avg_health_score_engaged, returning_attendee_rate, companies_3plus_instances,
+              strategy_name, sponsorship_level,
+              booth_present, booth_width, booth_length, booth_number, booth_hall,
+              budget_total, actual_total, budget_variance, budget_line_items,
+              required_pipeline_multiple, required_pipeline_amount, expected_return_amount
+            ) VALUES (?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(conference_id) DO UPDATE SET
               snapshot_taken_at = datetime('now'),
               series_id = excluded.series_id,
@@ -580,7 +636,21 @@ export async function computeConferenceSnapshot(
               followup_completion_rate = excluded.followup_completion_rate,
               avg_health_score_engaged = excluded.avg_health_score_engaged,
               returning_attendee_rate = excluded.returning_attendee_rate,
-              companies_3plus_instances = excluded.companies_3plus_instances`,
+              companies_3plus_instances = excluded.companies_3plus_instances,
+              strategy_name = excluded.strategy_name,
+              sponsorship_level = excluded.sponsorship_level,
+              booth_present = excluded.booth_present,
+              booth_width = excluded.booth_width,
+              booth_length = excluded.booth_length,
+              booth_number = excluded.booth_number,
+              booth_hall = excluded.booth_hall,
+              budget_total = excluded.budget_total,
+              actual_total = excluded.actual_total,
+              budget_variance = excluded.budget_variance,
+              budget_line_items = excluded.budget_line_items,
+              required_pipeline_multiple = excluded.required_pipeline_multiple,
+              required_pipeline_amount = excluded.required_pipeline_amount,
+              expected_return_amount = excluded.expected_return_amount`,
       args: [
         conferenceId,
         seriesId,
@@ -604,6 +674,20 @@ export async function computeConferenceSnapshot(
         avgHealthScore,
         returningAttendeeRate,
         companies3Plus,
+        strategyName,
+        sponsorshipLevel,
+        boothPresent,
+        boothWidth,
+        boothLength,
+        boothNumber,
+        boothHall,
+        budgetTotal,
+        actualTotal,
+        budgetVariance,
+        lineItemsRaw,
+        snapRequiredPipelineMultiple,
+        snapRequiredPipelineAmount,
+        snapExpectedReturnAmount,
       ],
     });
   } catch (err) {
