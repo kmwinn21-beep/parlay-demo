@@ -557,9 +557,16 @@ export async function GET(
     const netNewLogos = (await runQuery(db,
       `${w},
        prior_companies AS (
-         SELECT DISTINCT a.company_id FROM conference_attendees ca
-         JOIN attendees a ON ca.attendee_id=a.id
-         WHERE ca.conference_id != ${cid} AND a.company_id IS NOT NULL
+         SELECT DISTINCT a2.company_id
+         FROM attendees a2
+         JOIN conference_attendees ca2 ON ca2.attendee_id = a2.id
+         WHERE a2.company_id IS NOT NULL
+           AND ca2.conference_id != ${cid}
+           AND (
+             EXISTS (SELECT 1 FROM meetings m WHERE m.attendee_id = a2.id AND m.conference_id = ca2.conference_id AND m.source != 'simulated')
+             OR EXISTS (SELECT 1 FROM follow_ups f WHERE f.attendee_id = a2.id AND f.conference_id = ca2.conference_id AND f.source != 'simulated')
+             OR EXISTS (SELECT 1 FROM attendee_touchpoints t WHERE t.attendee_id = a2.id AND t.conference_id = ca2.conference_id)
+           )
        )
        SELECT
          COUNT(DISTINCT CASE WHEN pi.company_id NOT IN (SELECT company_id FROM prior_companies) THEN pi.company_id END) AS net_new_logos,
@@ -591,14 +598,20 @@ export async function GET(
     );
     const icpCompanyIdSet = new Set<number>(icpCompanyRows.map(r => Number(r.company_id)));
 
-    const netNewCompanyRows = await runQuery(db, 
+    const netNewCompanyRows = await runQuery(db,
       `SELECT DISTINCT a.company_id FROM conference_attendees ca
        JOIN attendees a ON ca.attendee_id = a.id
        WHERE ca.conference_id = ${cid} AND a.company_id IS NOT NULL
-         AND a.company_id NOT IN (
-           SELECT DISTINCT a2.company_id FROM conference_attendees ca2
-           JOIN attendees a2 ON ca2.attendee_id = a2.id
-           WHERE ca2.conference_id != ${cid} AND a2.company_id IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM attendees a2
+           JOIN conference_attendees ca2 ON ca2.attendee_id = a2.id
+           WHERE a2.company_id = a.company_id
+             AND ca2.conference_id != ${cid}
+             AND (
+               EXISTS (SELECT 1 FROM meetings m WHERE m.attendee_id = a2.id AND m.conference_id = ca2.conference_id AND m.source != 'simulated')
+               OR EXISTS (SELECT 1 FROM follow_ups f WHERE f.attendee_id = a2.id AND f.conference_id = ca2.conference_id AND f.source != 'simulated')
+               OR EXISTS (SELECT 1 FROM attendee_touchpoints t WHERE t.attendee_id = a2.id AND t.conference_id = ca2.conference_id)
+             )
          )`
     );
     const netNewCompanyIdSet = new Set<number>(netNewCompanyRows.map(r => Number(r.company_id)));
@@ -1647,10 +1660,16 @@ export async function GET(
                    WHERE atp.attendee_id = a.id AND atp.conference_id = ${cid})
                )
            )
-           AND co.id NOT IN (
-             SELECT DISTINCT a2.company_id FROM conference_attendees ca2
-             JOIN attendees a2 ON ca2.attendee_id = a2.id
-             WHERE ca2.conference_id != ${cid} AND a2.company_id IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM attendees a2
+             JOIN conference_attendees ca2 ON ca2.attendee_id = a2.id
+             WHERE a2.company_id = co.id
+               AND ca2.conference_id != ${cid}
+               AND (
+                 EXISTS (SELECT 1 FROM meetings m WHERE m.attendee_id = a2.id AND m.conference_id = ca2.conference_id AND m.source != 'simulated')
+                 OR EXISTS (SELECT 1 FROM follow_ups f WHERE f.attendee_id = a2.id AND f.conference_id = ca2.conference_id AND f.source != 'simulated')
+                 OR EXISTS (SELECT 1 FROM attendee_touchpoints t WHERE t.attendee_id = a2.id AND t.conference_id = ca2.conference_id)
+               )
            )`
         );
 
@@ -1723,10 +1742,16 @@ export async function GET(
              cc.company_id,
              co.name AS company_name,
              co.icp,
-             CASE WHEN co.id NOT IN (
-               SELECT DISTINCT a2.company_id FROM conference_attendees ca2
-               JOIN attendees a2 ON ca2.attendee_id = a2.id
-               WHERE ca2.conference_id != ${cid} AND a2.company_id IS NOT NULL
+             CASE WHEN NOT EXISTS (
+               SELECT 1 FROM attendees a2
+               JOIN conference_attendees ca2 ON ca2.attendee_id = a2.id
+               WHERE a2.company_id = co.id
+                 AND ca2.conference_id != ${cid}
+                 AND (
+                   EXISTS (SELECT 1 FROM meetings m WHERE m.attendee_id = a2.id AND m.conference_id = ca2.conference_id AND m.source != 'simulated')
+                   OR EXISTS (SELECT 1 FROM follow_ups f WHERE f.attendee_id = a2.id AND f.conference_id = ca2.conference_id AND f.source != 'simulated')
+                   OR EXISTS (SELECT 1 FROM attendee_touchpoints t WHERE t.attendee_id = a2.id AND t.conference_id = ca2.conference_id)
+                 )
              ) THEN 1 ELSE 0 END AS is_net_new,
              COALESCE(cm.meetings_held, 0) AS meetings_held,
              COALESCE(ct.touchpoints, 0) AS touchpoints,

@@ -219,7 +219,7 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
             <div className={`grid grid-cols-2 sm:grid-cols-5 gap-2 mt-3 ${statsOpen ? 'grid' : 'hidden sm:grid'}`}>
               <ScoreStatPill label="Conference Effectiveness Score" score={ces.score} />
               <ScoreStatPill label="Sales Execution Score" score={salesScore} />
-              <ScoreStatPill label="Audience & Messaging Score" score={audienceScore} />
+              <ScoreStatPill label="Marketing Coverage Score" score={audienceScore} />
               <ScoreStatPill label="Cost Efficiency Score" score={costScore} />
               <StatPill label="Pipeline Influence" value={fmt$(pi)} />
             </div>

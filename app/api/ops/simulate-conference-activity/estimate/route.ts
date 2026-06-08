@@ -13,7 +13,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { accountId, conferenceId, repIds, meetingsHeld, touchpoints, followUpCompletionPct } = body;
+  const { accountId, conferenceId, repIds, meetingsHeld, touchpoints, followUpCompletionPct,
+    netNewMeetingsPct = 0, netNewTouchpointsPct = 0 } = body;
 
   if (!accountId || typeof accountId !== 'string') {
     return NextResponse.json({ error: 'accountId is required' }, { status: 400 });
@@ -43,6 +44,8 @@ export async function POST(request: NextRequest) {
       touchpoints,
       followUpCompletionPct,
       dryRun: true,
+      netNewMeetingsPct: typeof netNewMeetingsPct === 'number' ? netNewMeetingsPct : 0,
+      netNewTouchpointsPct: typeof netNewTouchpointsPct === 'number' ? netNewTouchpointsPct : 0,
     });
     return NextResponse.json({ plan: result.plan, cesEstimate: result.cesEstimate, warning: result.warning });
   } catch (err) {
