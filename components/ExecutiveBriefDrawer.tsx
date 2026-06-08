@@ -527,7 +527,14 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                     />
                     <StatCard
                       label="Cost per internal attendee"
-                      value={formatCurrency(snapshot.cost_per_internal_attendee)}
+                      value={formatCurrency(
+                        snapshot.cost_per_internal_attendee
+                          ?? (internalHeadcount && internalHeadcount > 0
+                              ? (snapshot.actual_total ?? snapshot.total_cost ?? null) != null
+                                ? (snapshot.actual_total ?? snapshot.total_cost)! / internalHeadcount
+                                : null
+                              : null)
+                      )}
                       sub={internalHeadcount != null ? `${internalHeadcount} attendees` : undefined}
                       className="bg-gray-50 border border-gray-200 rounded-lg p-2.5"
                     />
@@ -543,20 +550,30 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                             <th className="text-left font-medium text-gray-500 pb-1.5 pr-4">Line item</th>
                             <th className="text-right font-medium text-gray-500 pb-1.5 px-3">Budget</th>
                             <th className="text-right font-medium text-gray-500 pb-1.5 px-3">Actual</th>
-                            <th className="text-right font-medium text-gray-500 pb-1.5 pl-3">Variance</th>
+                            <th className="text-right font-medium text-gray-500 pb-1.5 px-3">Variance ($)</th>
+                            <th className="text-right font-medium text-gray-500 pb-1.5 pl-3 pr-4">Variance (%)</th>
                           </tr>
                         </thead>
                         <tbody>
                           {lineItems.map((item, i) => {
+                            const varianceDollar = item.actual - item.budget;
                             const variancePct = item.budget > 0
-                              ? ((item.actual - item.budget) / item.budget) * 100 : 0;
-                            const over = variancePct > 0;
+                              ? (varianceDollar / item.budget) * 100 : 0;
+                            const over = varianceDollar > 0;
+                            const rowBg = i % 2 === 1 ? 'bg-gray-100' : '';
                             return (
-                              <tr key={i} className="border-b border-gray-100">
+                              <tr key={i} className={rowBg}>
                                 <td className="py-1.5 pr-4 text-gray-700">{item.name}</td>
                                 <td className="py-1.5 px-3 text-right text-gray-600">{formatCurrencyFull(item.budget)}</td>
                                 <td className="py-1.5 px-3 text-right text-gray-600">{formatCurrencyFull(item.actual)}</td>
-                                <td className="py-1.5 pl-3 text-right">
+                                <td className="py-1.5 px-3 text-right">
+                                  <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                                    over ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                                  }`}>
+                                    {over ? '+' : ''}{formatCurrencyFull(varianceDollar)}
+                                  </span>
+                                </td>
+                                <td className="py-1.5 pl-3 pr-4 text-right">
                                   <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
                                     over ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
                                   }`}>
@@ -567,30 +584,34 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                             );
                           })}
                           {/* Total row */}
-                          <tr className="border-t border-gray-200 font-medium">
-                            <td className="py-1.5 pr-4 text-gray-800">Total</td>
-                            <td className="py-1.5 px-3 text-right text-gray-700">
-                              {formatCurrencyFull(lineItems.reduce((s, item) => s + item.budget, 0))}
-                            </td>
-                            <td className="py-1.5 px-3 text-right text-gray-700">
-                              {formatCurrencyFull(lineItems.reduce((s, item) => s + item.actual, 0))}
-                            </td>
-                            <td className="py-1.5 pl-3 text-right">
-                              {(() => {
-                                const totalBudget = lineItems.reduce((s, item) => s + item.budget, 0);
-                                const totalActual = lineItems.reduce((s, item) => s + item.actual, 0);
-                                const pct = totalBudget > 0 ? ((totalActual - totalBudget) / totalBudget) * 100 : 0;
-                                const over = pct > 0;
-                                return (
+                          {(() => {
+                            const totalBudget = lineItems.reduce((s, item) => s + item.budget, 0);
+                            const totalActual = lineItems.reduce((s, item) => s + item.actual, 0);
+                            const totalDollar = totalActual - totalBudget;
+                            const totalPct = totalBudget > 0 ? (totalDollar / totalBudget) * 100 : 0;
+                            const over = totalDollar > 0;
+                            return (
+                              <tr className="border-t border-gray-200 font-medium">
+                                <td className="py-1.5 pr-4 text-gray-800">Total</td>
+                                <td className="py-1.5 px-3 text-right text-gray-700">{formatCurrencyFull(totalBudget)}</td>
+                                <td className="py-1.5 px-3 text-right text-gray-700">{formatCurrencyFull(totalActual)}</td>
+                                <td className="py-1.5 px-3 text-right">
                                   <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
                                     over ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
                                   }`}>
-                                    {over ? '+' : ''}{pct.toFixed(1)}%
+                                    {over ? '+' : ''}{formatCurrencyFull(totalDollar)}
                                   </span>
-                                );
-                              })()}
-                            </td>
-                          </tr>
+                                </td>
+                                <td className="py-1.5 pl-3 pr-4 text-right">
+                                  <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                                    over ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                                  }`}>
+                                    {over ? '+' : ''}{totalPct.toFixed(1)}%
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })()}
                         </tbody>
                       </table>
                     </div>
