@@ -630,7 +630,7 @@ export function generateExecutiveBriefHTML(data: {
       <td style="width:33.33%;padding:0 6px;vertical-align:top">
         <div style="background:#EAF3DE;border:1px solid #C0DD97;border-radius:6px;padding:8px 10px;height:100%;box-sizing:border-box">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <p style="font-size:9px;font-weight:600;color:#475569;margin:0">Cost per company engaged</p>
+            <p style="font-size:9px;font-weight:600;color:#475569;margin:0">Cost/Company Engaged</p>
             ${benchBadge(costPerCompanyBench(costPerCompany))}
           </div>
           <p style="font-size:14px;font-weight:600;color:#1E293B;margin:0">${fmt$(costPerCompany)}</p>
