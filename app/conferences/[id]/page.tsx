@@ -1879,45 +1879,44 @@ export default function ConferenceDetailPage() {
                 </button>
               )}
               </div>
-              {/* Pinned right: divider + Field Report */}
+              {/* Pinned right: divider + stacked Field Report / Executive Brief */}
               {isInternalAttendee && (
-                <div className="flex items-center gap-3 flex-shrink-0 bg-white pl-2">
-                  <div className="self-center" style={{ width: '1px', height: '16px', background: 'var(--color-border-secondary, #D1D5DB)' }} />
-                  <button
-                    type="button"
-                    onClick={() => setShowDebrief(true)}
-                    className="flex items-center gap-1.5 text-sm font-medium text-brand-accent hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
-                  >
-                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v4a1 1 0 0 0 1 1h4" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 17l0 -5" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 17l0 -1" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 17l0 -3" />
-                    </svg>
-                    Field Report
-                  </button>
+                <div className="flex items-stretch gap-3 flex-shrink-0 bg-white pl-2">
+                  <div className="self-stretch w-px bg-gray-200" />
+                  <div className="flex flex-col gap-1.5 justify-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowDebrief(true)}
+                      className="flex items-center gap-1.5 text-sm font-medium text-brand-accent hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
+                    >
+                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v4a1 1 0 0 0 1 1h4" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 17l0 -5" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 17l0 -1" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 17l0 -3" />
+                      </svg>
+                      Field Report
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExecutiveBriefOpen(true)}
+                      className="flex items-center gap-1.5 text-sm font-medium text-brand-accent hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
+                    >
+                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-10" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v4" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 20h6" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12v-4" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 12v-6" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12v-2" />
+                      </svg>
+                      Executive brief
+                    </button>
+                  </div>
                 </div>
               )}
-            </div>
-            {/* Executive Brief — second row */}
-            <div className="flex items-center mt-2">
-              <button
-                type="button"
-                onClick={() => setExecutiveBriefOpen(true)}
-                className="flex items-center gap-1.5 text-sm font-medium text-brand-accent hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
-              >
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-10" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v4" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 20h6" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12v-4" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 12v-6" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12v-2" />
-                </svg>
-                Executive brief
-              </button>
             </div>
 
             {/* Main content */}
