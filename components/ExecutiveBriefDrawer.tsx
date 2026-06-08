@@ -75,8 +75,6 @@ interface Props {
 
 function formatCurrency(val: number | null | undefined): string {
   if (val == null) return '—';
-  if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(1)}M`;
-  if (val >= 1_000) return `$${Math.round(val / 1_000)}K`;
   return `$${Math.round(val).toLocaleString()}`;
 }
 
@@ -88,7 +86,7 @@ function formatCurrencyFull(val: number | null | undefined): string {
 
 function formatMillions(val: number | null | undefined): string {
   if (val == null || val === 0) return '—';
-  return `$${(val / 1_000_000).toFixed(1)}M`;
+  return `$${Math.round(val).toLocaleString()}`;
 }
 
 function formatPct(val: number | null | undefined, decimals = 0): string {
