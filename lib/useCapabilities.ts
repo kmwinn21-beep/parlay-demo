@@ -46,7 +46,7 @@ async function fetchCapabilities(): Promise<CapabilitiesState | null> {
   }
 }
 
-export function useCapabilities(): CapabilitiesState {
+export function useCapabilities(): CapabilitiesState & { isLoaded: boolean } {
   const [state, setState] = useState<CapabilitiesState | null>(_cache);
 
   useEffect(() => {
@@ -66,13 +66,16 @@ export function useCapabilities(): CapabilitiesState {
     });
   }, []);
 
-  return state ?? {
-    role: 'user' as UserRole,
-    capabilities: DEFAULT_ROLE_CAPABILITIES['user'],
-    planId: 'trial' as PlanId,
-    trialState: 'activated' as TrialState,
-    daysRemaining: null,
-    planCapabilities: PLAN_CAPABILITIES['trial'],
-    isImpersonating: false,
+  return {
+    ...(state ?? {
+      role: 'user' as UserRole,
+      capabilities: DEFAULT_ROLE_CAPABILITIES['user'],
+      planId: 'trial' as PlanId,
+      trialState: 'activated' as TrialState,
+      daysRemaining: null,
+      planCapabilities: PLAN_CAPABILITIES['trial'],
+      isImpersonating: false,
+    }),
+    isLoaded: state !== null,
   };
 }

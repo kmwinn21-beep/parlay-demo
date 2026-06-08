@@ -110,7 +110,7 @@ function computeClientCES(
 
 export default function SimulatePage() {
   const router = useRouter();
-  const { role } = useCapabilities();
+  const { role, isLoaded } = useCapabilities();
 
   const [conferences, setConferences] = useState<ConferenceItem[]>([]);
   const [reps, setReps] = useState<RepItem[]>([]);
@@ -148,12 +148,12 @@ export default function SimulatePage() {
   const [budgetInput, setBudgetInput] = useState(50000);
   const [fixLoading, setFixLoading] = useState(false);
 
-  // Redirect non-admins
+  // Redirect non-admins — only after capabilities have loaded from the server
   useEffect(() => {
-    if (role && role !== 'administrator') {
+    if (isLoaded && role !== 'administrator') {
       router.replace('/');
     }
-  }, [role, router]);
+  }, [isLoaded, role, router]);
 
   const reloadConferences = useCallback(async () => {
     const confsRes = await fetch('/api/simulator/conferences');
@@ -531,16 +531,13 @@ export default function SimulatePage() {
   };
 
   // Don't render content until role is resolved
+  if (!isLoaded) return null;
   if (role !== 'administrator') {
-    if (role === 'user' || role === 'sales_rep' || role === 'manager' || role === 'analyst' || role === 'conference_coordinator' || role === 'stakeholder') {
-      return (
-        <div className="max-w-3xl mx-auto py-12 text-center">
-          <p className="text-gray-500 text-sm">You do not have permission to access this page.</p>
-        </div>
-      );
-    }
-    // Still loading role — show nothing yet
-    return null;
+    return (
+      <div className="max-w-3xl mx-auto py-12 text-center">
+        <p className="text-gray-500 text-sm">You do not have permission to access this page.</p>
+      </div>
+    );
   }
 
   return (
