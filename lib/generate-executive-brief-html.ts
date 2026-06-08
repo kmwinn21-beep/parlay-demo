@@ -308,7 +308,7 @@ export function generateExecutiveBriefHTML(data: {
       <p style="font-size:10px;color:rgba(255,255,255,.5);margin:4px 0 0">${escHtml(dateRange)}${meta ? ' · ' + escHtml(meta) : ''}</p>
     </div>
     <div style="text-align:right">
-      <img src="${baseUrl}/ParlayLogoWhite_New.png" alt="Parlay" style="height:36px;display:block;margin-left:auto" />
+      <img src="${baseUrl}/ParlayLogoWhite_New.png" alt="Parlay" style="height:22px;display:block;margin-left:auto" />
       <p style="font-size:9px;color:rgba(255,255,255,.35);margin:5px 0 0">Generated ${generated}</p>
     </div>
   </div>`;
@@ -316,7 +316,7 @@ export function generateExecutiveBriefHTML(data: {
 
   function pageFooter(page: number): string {
     return `<div style="margin-top:24px;padding-top:10px;border-top:1px solid #F1F5F9;display:flex;align-items:center;justify-content:space-between">
-    <img src="${baseUrl}/ParlayLogoColor_New.png" alt="Parlay" style="height:18px;display:block" />
+    <img src="${baseUrl}/ParlayLogoColor_New.png" alt="Parlay" style="height:13px;display:block" />
     <p style="font-size:9px;color:#94A3B8;margin:0">${escHtml(conf.name)} · Executive brief · Page ${page} of 3</p>
   </div>`;
   }
@@ -725,14 +725,14 @@ export function generateExecutiveBriefHTML(data: {
           : `<span style="color:#A32D2D;font-weight:600">↓ ${cesDiff} pts</span>`;
       }
       return `<tr style="background:${rowBg}">
-        <td style="padding:5px 8px 5px 0;font-size:9px;font-weight:600;color:#1E293B">${escHtml(row.year || '—')}</td>
+        <td style="padding:5px 6px 5px 8px;font-size:9px;font-weight:600;color:#1E293B">${escHtml(row.year || '—')}</td>
         <td style="padding:5px 6px;text-align:right;font-size:9px;color:#475569">${fmt$(row.totalCost)}</td>
         <td style="padding:5px 6px;text-align:right;font-size:9px;font-weight:600;color:${cesTierRow.c}">${row.cesScore ?? '—'}</td>
         <td style="padding:5px 6px;text-align:right;font-size:9px;color:#475569">${fmt$(row.pipelineInfluenced)}</td>
-        <td style="padding:5px 6px;text-align:right;font-size:9px;color:#475569">${row.icpCompaniesEngaged ?? '—'}</td>
-        <td style="padding:5px 6px;text-align:right;font-size:9px;color:#475569">${row.meetingHoldRate != null ? Math.round(row.meetingHoldRate * 100) + '%' : '—'}</td>
-        <td style="padding:5px 6px;text-align:right;font-size:9px;color:#475569">${fmt$(row.pipelinePerK)}</td>
-        <td style="padding:5px 0 5px 6px;text-align:right;font-size:9px">${vsPrior}</td>
+        <td style="padding:5px 6px;text-align:center;font-size:9px;color:#475569">${row.icpCompaniesEngaged ?? '—'}</td>
+        <td style="padding:5px 6px;text-align:center;font-size:9px;color:#475569">${row.meetingHoldRate != null ? Math.round(row.meetingHoldRate * 100) + '%' : '—'}</td>
+        <td style="padding:5px 6px;text-align:center;font-size:9px;color:#475569">${fmt$(row.pipelinePerK)}</td>
+        <td style="padding:5px 8px 5px 6px;text-align:right;font-size:9px">${vsPrior}</td>
       </tr>`;
     }).join('');
 
@@ -741,14 +741,14 @@ export function generateExecutiveBriefHTML(data: {
   <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
     <thead>
       <tr style="border-bottom:1px solid #E2E8F0">
-        <th style="text-align:left;font-size:8px;font-weight:600;color:#64748B;padding-bottom:5px;padding-right:8px">Year</th>
-        <th style="text-align:right;font-size:8px;font-weight:600;color:#64748B;padding-bottom:5px;padding:0 6px 5px">Cost</th>
-        <th style="text-align:right;font-size:8px;font-weight:600;color:#64748B;padding-bottom:5px;padding:0 6px 5px">CES</th>
-        <th style="text-align:right;font-size:8px;font-weight:600;color:#64748B;padding-bottom:5px;padding:0 6px 5px">Pipeline</th>
-        <th style="text-align:right;font-size:8px;font-weight:600;color:#64748B;padding-bottom:5px;padding:0 6px 5px">ICP Engaged</th>
-        <th style="text-align:right;font-size:8px;font-weight:600;color:#64748B;padding-bottom:5px;padding:0 6px 5px">Hold Rate</th>
-        <th style="text-align:right;font-size:8px;font-weight:600;color:#64748B;padding-bottom:5px;padding:0 6px 5px">Pipeline/$1K</th>
-        <th style="text-align:right;font-size:8px;font-weight:600;color:#64748B;padding-bottom:5px;padding:0 0 5px 6px">vs. prior</th>
+        <th style="text-align:left;font-size:8px;font-weight:600;color:#64748B;padding:0 6px 5px 8px">Year</th>
+        <th style="text-align:right;font-size:8px;font-weight:600;color:#64748B;padding:0 6px 5px">Cost</th>
+        <th style="text-align:right;font-size:8px;font-weight:600;color:#64748B;padding:0 6px 5px">CES</th>
+        <th style="text-align:right;font-size:8px;font-weight:600;color:#64748B;padding:0 6px 5px">Pipeline</th>
+        <th style="text-align:center;font-size:8px;font-weight:600;color:#64748B;padding:0 6px 5px">ICP Engaged</th>
+        <th style="text-align:center;font-size:8px;font-weight:600;color:#64748B;padding:0 6px 5px">Hold Rate</th>
+        <th style="text-align:center;font-size:8px;font-weight:600;color:#64748B;padding:0 6px 5px">Pipeline/$1K</th>
+        <th style="text-align:right;font-size:8px;font-weight:600;color:#64748B;padding:0 8px 5px 6px">vs. prior</th>
       </tr>
     </thead>
     <tbody>
