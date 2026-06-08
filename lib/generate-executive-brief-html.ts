@@ -9,8 +9,6 @@ type ConferenceSnapshot = Record<string, unknown>;
 
 function fmt$(val: number | null | undefined): string {
   if (val == null) return '—';
-  if (val >= 1e6) return '$' + (val / 1e6).toFixed(1) + 'M';
-  if (val >= 1000) return '$' + Math.round(val / 1000) + 'K';
   return '$' + Math.round(val).toLocaleString();
 }
 
