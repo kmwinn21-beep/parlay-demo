@@ -1,8 +1,9 @@
-import { createClient } from '@libsql/client';
+import { createClient, type Client } from '@libsql/client';
 import { db, dbReady } from '@/lib/db';
 
 export type SimulationParams = {
   accountId: string
+  client?: Client  // if provided, skip the turso DB lookup
   conferenceId: number
   repIds: number[]
   meetingsHeld: number
@@ -135,18 +136,23 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
   const meetingsScheduled = Math.round(meetingsHeldParam / 0.85);
   const meetingsNoShow = meetingsScheduled - meetingsHeldParam;
 
-  await dbReady;
-  const accountRow = await db.execute({
-    sql: `SELECT turso_db_url, turso_auth_token, company_name FROM accounts WHERE id = ?`,
-    args: [accountId],
-  });
-  if (!accountRow.rows[0]?.turso_db_url) {
-    throw new Error(`No tenant DB found for account ${accountId}`);
+  let client: Client;
+  if (params.client) {
+    client = params.client;
+  } else {
+    await dbReady;
+    const accountRow = await db.execute({
+      sql: `SELECT turso_db_url, turso_auth_token, company_name FROM accounts WHERE id = ?`,
+      args: [accountId],
+    });
+    if (!accountRow.rows[0]?.turso_db_url) {
+      throw new Error(`No tenant DB found for account ${accountId}`);
+    }
+    client = createClient({
+      url: String(accountRow.rows[0].turso_db_url),
+      authToken: String(accountRow.rows[0].turso_auth_token),
+    });
   }
-  const client = createClient({
-    url: String(accountRow.rows[0].turso_db_url),
-    authToken: String(accountRow.rows[0].turso_auth_token),
-  });
 
   const confRes = await client.execute({
     sql: `SELECT c.id, c.name, c.start_date, c.end_date,
