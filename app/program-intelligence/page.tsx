@@ -27,7 +27,7 @@ import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
 
 type DatePreset = 'this_year' | 'last_year' | 'last_12' | 'last_24' | 'custom';
 type SortMode = 'date' | 'score';
-type TabId = 'performance' | 'budget' | 'pipeline' | 'reps' | 'trends';
+type TabId = 'performance' | 'budget' | 'pipeline' | 'reps' | 'trends' | 'snapshots';
 
 interface CESComponents {
   dim1_icp_target: number | null;
@@ -284,6 +284,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'pipeline', label: 'Pipeline Attribution' },
   { id: 'reps', label: 'Rep Performance' },
   { id: 'trends', label: 'Conference Trends' },
+  { id: 'snapshots', label: 'Series Snapshots' },
 ];
 
 // Matches DIM_COLORS order from SummaryTab.tsx
@@ -946,6 +947,20 @@ export default function ProgramIntelligencePage() {
   const [satDetailLoading, setSatDetailLoading] = useState(false);
   const [satFollowUpAttendeeId, setSatFollowUpAttendeeId] = useState<number | null>(null);
 
+  // Series Snapshots tab state
+  const isAdmin = capabilities.role === 'administrator';
+  const [snapshotSeries, setSnapshotSeries] = useState<Array<{ id: string; display_name: string }>>([]);
+  const [snapshotSeriesLoading, setSnapshotSeriesLoading] = useState(false);
+  const [selectedSeriesId, setSelectedSeriesId] = useState('');
+  const [snapshotYoY, setSnapshotYoY] = useState<import('@/lib/get-series-yoy-data').SeriesYoYData | null>(null);
+  const [snapshotYoYLoading, setSnapshotYoYLoading] = useState(false);
+  const [computing, setComputing] = useState<number | null>(null);
+  const [computingAll, setComputingAll] = useState(false);
+  const [computeProgress, setComputeProgress] = useState({ done: 0, total: 0 });
+  const [snapshotOverrides, setSnapshotOverrides] = useState<Record<number, { hasSnapshot: boolean; snapshotTakenAt: string | null; completenessPercent: number; justComputed?: boolean }>>({});
+  const [snapshotErrors, setSnapshotErrors] = useState<Record<number, string>>({});
+  const [batchSummary, setBatchSummary] = useState<{ done: number; failed: number } | null>(null);
+
   useEffect(() => {
     const mql = window.matchMedia('(orientation: portrait)');
     setIsPortrait(mql.matches);
@@ -1089,6 +1104,32 @@ export default function ProgramIntelligencePage() {
       markStepComplete('performance_visited');
     }
   }, [activeTab, onboardingTrack, onboardingProgress, markStepComplete]);
+
+  // Load series list when snapshots tab is opened
+  useEffect(() => {
+    if (activeTab !== 'snapshots' || !isAdmin) return;
+    if (snapshotSeries.length > 0) return;
+    setSnapshotSeriesLoading(true);
+    fetch('/api/conference-series')
+      .then(r => r.json() as Promise<Array<{ id: string; display_name: string }>>)
+      .then(data => setSnapshotSeries(Array.isArray(data) ? data : []))
+      .catch(() => {})
+      .finally(() => setSnapshotSeriesLoading(false));
+  }, [activeTab, isAdmin, snapshotSeries.length]);
+
+  // Load YoY data when series is selected
+  useEffect(() => {
+    if (!selectedSeriesId) { setSnapshotYoY(null); return; }
+    setSnapshotYoYLoading(true);
+    setSnapshotOverrides({});
+    setSnapshotErrors({});
+    setBatchSummary(null);
+    fetch(`/api/conferences/series/${selectedSeriesId}/yoy`)
+      .then(r => r.json() as Promise<import('@/lib/get-series-yoy-data').SeriesYoYData>)
+      .then(data => setSnapshotYoY(data))
+      .catch(() => {})
+      .finally(() => setSnapshotYoYLoading(false));
+  }, [selectedSeriesId]);
 
   // All derived state computed before any conditional returns (rules of hooks)
 
@@ -1363,7 +1404,7 @@ export default function ProgramIntelligencePage() {
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto">
           <nav className="flex gap-1 -mb-px overflow-x-auto hide-scrollbar px-6">
-            {TABS.map((tab) => (
+            {TABS.filter(t => t.id !== 'snapshots' || isAdmin).map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
@@ -2435,6 +2476,166 @@ export default function ProgramIntelligencePage() {
             )}
           </div>
         )}
+
+        {activeTab === 'snapshots' && isAdmin && (() => {
+          const closedConferences = snapshotYoY?.instances.filter(i => i.stageOverride === 'closed') ?? [];
+
+          const handleComputeSnapshot = async (conferenceId: number) => {
+            setComputing(conferenceId);
+            setSnapshotErrors(prev => { const n = { ...prev }; delete n[conferenceId]; return n; });
+            try {
+              const res = await fetch(`/api/conferences/${conferenceId}/compute-snapshot`, { method: 'POST' });
+              const json = await res.json() as { success: boolean; completenessPercent?: number; snapshotTakenAt?: string; error?: string };
+              if (!res.ok || !json.success) throw new Error(json.error ?? `HTTP ${res.status}`);
+              setSnapshotOverrides(prev => ({
+                ...prev,
+                [conferenceId]: {
+                  hasSnapshot: true,
+                  snapshotTakenAt: json.snapshotTakenAt ?? new Date().toISOString(),
+                  completenessPercent: json.completenessPercent ?? 0,
+                  justComputed: true,
+                },
+              }));
+              setTimeout(() => {
+                setSnapshotOverrides(prev => {
+                  const updated = prev[conferenceId];
+                  if (!updated) return prev;
+                  return { ...prev, [conferenceId]: { ...updated, justComputed: false } };
+                });
+              }, 3000);
+            } catch (err) {
+              setSnapshotErrors(prev => ({ ...prev, [conferenceId]: err instanceof Error ? err.message : String(err) }));
+            } finally {
+              setComputing(null);
+            }
+          };
+
+          const handleComputeAll = async () => {
+            if (!closedConferences.length) return;
+            setComputingAll(true);
+            setBatchSummary(null);
+            setComputeProgress({ done: 0, total: closedConferences.length });
+            let done = 0; let failed = 0;
+            for (const instance of closedConferences) {
+              setComputing(instance.conferenceId);
+              try {
+                const res = await fetch(`/api/conferences/${instance.conferenceId}/compute-snapshot`, { method: 'POST' });
+                const json = await res.json() as { success: boolean; completenessPercent?: number; snapshotTakenAt?: string; error?: string };
+                if (!res.ok || !json.success) throw new Error(json.error ?? `HTTP ${res.status}`);
+                setSnapshotOverrides(prev => ({
+                  ...prev,
+                  [instance.conferenceId]: {
+                    hasSnapshot: true,
+                    snapshotTakenAt: json.snapshotTakenAt ?? new Date().toISOString(),
+                    completenessPercent: json.completenessPercent ?? 0,
+                    justComputed: true,
+                  },
+                }));
+                setTimeout(() => {
+                  setSnapshotOverrides(prev => {
+                    const updated = prev[instance.conferenceId];
+                    if (!updated) return prev;
+                    return { ...prev, [instance.conferenceId]: { ...updated, justComputed: false } };
+                  });
+                }, 3000);
+                done++;
+              } catch (err) {
+                setSnapshotErrors(prev => ({ ...prev, [instance.conferenceId]: err instanceof Error ? err.message : String(err) }));
+                failed++;
+              }
+              setComputeProgress(prev => ({ ...prev, done: done + failed }));
+            }
+            setComputing(null);
+            setComputingAll(false);
+            setBatchSummary({ done, failed });
+          };
+
+          return (
+            <div>
+              {/* Explanation block */}
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+                <div className="flex items-start gap-3">
+                  <i className="ti ti-info-circle text-gray-400 text-base flex-shrink-0 mt-0.5" aria-hidden="true" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-1">About conference snapshots</p>
+                    <p className="text-sm text-gray-500 leading-relaxed">
+                      Snapshots are point-in-time computations stored when a conference closes. They power the
+                      Year-over-year analysis and Executive Brief for each series. Snapshots are computed
+                      automatically when a conference moves to Closed status. Use this tab to manually compute
+                      or recompute snapshots for any closed conference, and to identify conferences with missing
+                      snapshot data.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Series selector */}
+              <div className="flex items-center gap-3 mb-5">
+                <label className="text-sm font-medium text-gray-600 flex-shrink-0">Series</label>
+                {snapshotSeriesLoading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin" />
+                    <span className="text-sm text-gray-400">Loading series...</span>
+                  </div>
+                ) : (
+                  <select
+                    value={selectedSeriesId}
+                    onChange={e => setSelectedSeriesId(e.target.value)}
+                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand-secondary bg-white"
+                  >
+                    <option value="">Select a series...</option>
+                    {snapshotSeries.map(s => (
+                      <option key={s.id} value={s.id}>{s.display_name}</option>
+                    ))}
+                  </select>
+                )}
+                {selectedSeriesId && (
+                  <button
+                    onClick={handleComputeAll}
+                    disabled={computingAll || !closedConferences.length}
+                    className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-brand-primary text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {computingAll
+                      ? <><i className="ti ti-loader-2 text-xs animate-spin" aria-hidden="true" />Computing... {computeProgress.done} of {computeProgress.total}</>
+                      : <><i className="ti ti-refresh text-xs" aria-hidden="true" />Compute all snapshots</>
+                    }
+                  </button>
+                )}
+              </div>
+
+              {/* Batch summary */}
+              {batchSummary && (
+                <div className="mb-4 text-sm text-gray-600">
+                  <span className="text-green-700 font-medium">✓ {batchSummary.done} snapshot{batchSummary.done !== 1 ? 's' : ''} computed</span>
+                  {batchSummary.failed > 0 && <span className="text-red-600 ml-2">· {batchSummary.failed} failed</span>}
+                </div>
+              )}
+
+              {/* YoY loading / table placeholder (Section 2 will fill in the table) */}
+              {snapshotYoYLoading && (
+                <div className="flex items-center gap-2 text-sm text-gray-400 py-8">
+                  <div className="w-4 h-4 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin" />
+                  Loading conferences...
+                </div>
+              )}
+
+              {!snapshotYoYLoading && selectedSeriesId && !snapshotYoY && (
+                <p className="text-sm text-gray-400 py-4">No data found for this series.</p>
+              )}
+
+              {!snapshotYoYLoading && snapshotYoY && snapshotYoY.instances.length === 0 && (
+                <p className="text-sm text-gray-400 py-4">No conferences found in this series.</p>
+              )}
+
+              {/* Table will be added in Section 2 */}
+              {!snapshotYoYLoading && snapshotYoY && snapshotYoY.instances.length > 0 && (
+                <div className="text-sm text-gray-400 py-4 border border-dashed border-gray-200 rounded-lg text-center">
+                  {snapshotYoY.instances.length} conference{snapshotYoY.instances.length !== 1 ? 's' : ''} found — table coming in Section 2
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {activeTab === 'performance' && (
           <div className="space-y-6">

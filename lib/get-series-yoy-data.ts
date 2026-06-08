@@ -44,6 +44,7 @@ export type ConferenceYoYRow = {
   requiredPipelineMultiple: number | null;
   requiredPipelineAmount: number | null;
   expectedReturnAmount: number | null;
+  stageOverride: string | null;
 };
 
 export type SeriesYoYData = {
@@ -117,7 +118,8 @@ export async function getSeriesYoYData(
             snap.budget_line_items,
             snap.required_pipeline_multiple,
             snap.required_pipeline_amount,
-            snap.expected_return_amount
+            snap.expected_return_amount,
+            c.stage_override
           FROM conferences c
           LEFT JOIN conference_seasons cs_track ON cs_track.id = c.season_id
           LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
@@ -174,6 +176,7 @@ export async function getSeriesYoYData(
       requiredPipelineMultiple: num(row.required_pipeline_multiple),
       requiredPipelineAmount: num(row.required_pipeline_amount),
       expectedReturnAmount: num(row.expected_return_amount),
+      stageOverride: row.stage_override != null ? String(row.stage_override) : null,
     };
   });
 
