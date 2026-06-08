@@ -49,6 +49,8 @@ import { BulkClassifyTitlesModal } from '@/components/BulkClassifyTitlesModal';
 import { MergeModal } from '@/components/MergeModal';
 import { SeriesSeasonCombobox, type SeriesOption } from '@/components/SeriesSeasonCombobox';
 import { MyDebriefDrawer } from '@/components/MyDebriefDrawer';
+import ExecutiveBriefDrawer, { type ConferenceSnapshot } from '@/components/ExecutiveBriefDrawer';
+import type { SeriesYoYData } from '@/lib/get-series-yoy-data';
 import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 
 interface Attendee {
@@ -412,6 +414,10 @@ export default function ConferenceDetailPage() {
   const [showBatchScan, setShowBatchScan] = useState(false);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [showDebrief, setShowDebrief] = useState(false);
+  const [executiveBriefOpen, setExecutiveBriefOpen] = useState(false);
+  const [executiveBriefSnapshot, setExecutiveBriefSnapshot] = useState<ConferenceSnapshot | null>(null);
+  const [executiveBriefYoY, setExecutiveBriefYoY] = useState<SeriesYoYData | null>(null);
+  const [executiveBriefLoading, setExecutiveBriefLoading] = useState(false);
   const [showCrmExport, setShowCrmExport] = useState(false);
   const [showAdminStage, setShowAdminStage] = useState(false);
   const [stageActionLoading, setStageActionLoading] = useState(false);
@@ -458,6 +464,27 @@ export default function ConferenceDetailPage() {
       window.history.replaceState(null, '', window.location.pathname);
     }
   }, [searchParams, isInternalAttendee]);
+
+  // Fetch snapshot + YoY data when executive brief opens
+  useEffect(() => {
+    if (!executiveBriefOpen || !conference) return;
+    setExecutiveBriefLoading(true);
+    const fetches: Promise<void>[] = [
+      fetch(`/api/conferences/${conference.id}/snapshot`)
+        .then(r => r.json())
+        .then(data => setExecutiveBriefSnapshot(data.snapshot ?? null))
+        .catch(() => setExecutiveBriefSnapshot(null)),
+    ];
+    if (conference.series_id) {
+      fetches.push(
+        fetch(`/api/conferences/series/${conference.series_id}/yoy`)
+          .then(r => r.json())
+          .then(data => setExecutiveBriefYoY(data ?? null))
+          .catch(() => setExecutiveBriefYoY(null))
+      );
+    }
+    Promise.all(fetches).finally(() => setExecutiveBriefLoading(false));
+  }, [executiveBriefOpen, conference?.id, conference?.series_id]);
 
   async function applyStageAction(action: string, extra?: Record<string, unknown>) {
     setStageActionLoading(true);
@@ -1852,24 +1879,42 @@ export default function ConferenceDetailPage() {
                 </button>
               )}
               </div>
-              {/* Pinned right: divider + Field Report */}
+              {/* Pinned right: divider + stacked Field Report / Executive Brief */}
               {isInternalAttendee && (
-                <div className="flex items-center gap-3 flex-shrink-0 bg-white pl-2">
-                  <div className="self-center" style={{ width: '1px', height: '16px', background: 'var(--color-border-secondary, #D1D5DB)' }} />
-                  <button
-                    type="button"
-                    onClick={() => setShowDebrief(true)}
-                    className="flex items-center gap-1.5 text-sm font-medium text-brand-accent hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
-                  >
-                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v4a1 1 0 0 0 1 1h4" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 17l0 -5" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 17l0 -1" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 17l0 -3" />
-                    </svg>
-                    Field Report
-                  </button>
+                <div className="flex items-stretch gap-3 flex-shrink-0 bg-white pl-2">
+                  <div className="self-stretch w-px bg-gray-200" />
+                  <div className="flex flex-col gap-1.5 justify-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowDebrief(true)}
+                      className="flex items-center gap-1.5 text-sm font-medium text-brand-accent hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
+                    >
+                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v4a1 1 0 0 0 1 1h4" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 17l0 -5" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 17l0 -1" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 17l0 -3" />
+                      </svg>
+                      Field Report
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExecutiveBriefOpen(true)}
+                      className="flex items-center gap-1.5 text-sm font-medium text-brand-accent hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
+                    >
+                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-10" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v4" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 20h6" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12v-4" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 12v-6" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12v-2" />
+                      </svg>
+                      Executive brief
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -3245,6 +3290,16 @@ export default function ConferenceDetailPage() {
         isOpen={showDebrief}
         onClose={() => setShowDebrief(false)}
       />
+
+      {conference && (
+        <ExecutiveBriefDrawer
+          isOpen={executiveBriefOpen}
+          onClose={() => setExecutiveBriefOpen(false)}
+          conference={conference}
+          seriesYoY={executiveBriefYoY}
+          snapshot={executiveBriefLoading ? null : executiveBriefSnapshot}
+        />
+      )}
 
       {showBatchScan && (
         <BatchCardScanModal
