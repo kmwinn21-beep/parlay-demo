@@ -173,6 +173,11 @@ type RecommendationResult = {
   borderClass: string;
 };
 
+function getNextYear(dateStr: string | null | undefined): string {
+  if (!dateStr) return 'next year'
+  return String(new Date(dateStr).getFullYear() + 1)
+}
+
 function getPrevInstance(snapshot: ConferenceSnapshot, seriesYoY: SeriesYoYData | null) {
   const instances = seriesYoY?.instances ?? [];
   const idx = instances.findIndex(i => i.conferenceId === snapshot.conference_id);
@@ -980,7 +985,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                       </p>
                       <p className={`text-sm font-medium mb-2 ${rec.textClass} flex items-center gap-1.5`}>
                         <i className={`ti ${rec.icon} text-base leading-none`} />
-                        {rec.label} {conference.name}
+                        {rec.label} {conference.name} in {getNextYear(conference.start_date)}
                       </p>
                       {rationale.split('\n\n').map((para, i) => (
                         <p key={i} className={`text-xs leading-relaxed ${rec.textClass} ${i > 0 ? 'mt-2 pt-2 border-t border-amber-200' : ''}`}>
