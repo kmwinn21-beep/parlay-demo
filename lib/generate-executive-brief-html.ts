@@ -301,13 +301,13 @@ export function generateExecutiveBriefHTML(data: {
     const meta = [s('strategy_name'), s('sponsorship_level')].filter(Boolean).join(' · ');
     return `<div style="-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#223A5E;padding:16px 24px 14px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between">
     <div>
+      <img src="${baseUrl}/ParlayLogoWhite_New.png" alt="Parlay" style="height:22px;display:block" />
+      <p style="font-size:9px;color:rgba(255,255,255,.35);margin:5px 0 0">Generated ${generated}</p>
+    </div>
+    <div style="text-align:right">
       <p style="font-size:9px;font-weight:600;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.1em;margin:0 0 3px">Executive brief</p>
       <p style="font-size:18px;font-weight:600;color:#FFFFFF;margin:0;line-height:1.2">${escHtml(conf.name)}</p>
       <p style="font-size:10px;color:rgba(255,255,255,.5);margin:4px 0 0">${escHtml(dateRange)}${meta ? ' · ' + escHtml(meta) : ''}</p>
-    </div>
-    <div style="text-align:right">
-      <img src="${baseUrl}/ParlayLogoWhite_New.png" alt="Parlay" style="height:22px;display:block;margin-left:auto" />
-      <p style="font-size:9px;color:rgba(255,255,255,.35);margin:5px 0 0">Generated ${generated}</p>
     </div>
   </div>`;
   }
@@ -592,8 +592,7 @@ export function generateExecutiveBriefHTML(data: {
 
   <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
     <tr>
-      <td style="width:50%;padding-right:8px;vertical-align:top">
-        <div style="background:#E6F1FB;border:1px solid #B5D4F4;border-radius:8px;padding:12px;height:100%;box-sizing:border-box">
+      <td style="vertical-align:top;background:#E6F1FB;border:1px solid #B5D4F4;border-radius:8px;padding:12px">
           <p style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#0C447C;margin:0 0 6px">Conference effectiveness</p>
           <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:4px">
             <span style="font-size:28px;font-weight:500;color:#223A5E">${cesScore ?? '—'}</span>
@@ -601,10 +600,9 @@ export function generateExecutiveBriefHTML(data: {
           </div>
           <p style="font-size:10px;font-weight:600;color:${cesTier.c};margin:0 0 6px">${cesTier.l}</p>
           <p style="font-size:9px;color:#185FA5;line-height:1.5;margin:0">${escHtml(cesDesc)}</p>
-        </div>
       </td>
-      <td style="width:50%;padding-left:8px;vertical-align:top">
-        <div style="background:#EAF3DE;border:1px solid #C0DD97;border-radius:8px;padding:12px;height:100%;box-sizing:border-box">
+      <td style="width:8px;padding:0"></td>
+      <td style="vertical-align:top;background:#EAF3DE;border:1px solid #C0DD97;border-radius:8px;padding:12px">
           <p style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#27500A;margin:0 0 6px">Cost efficiency</p>
           <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:4px">
             <span style="font-size:28px;font-weight:500;color:#3B6D11">${costEffScore ?? '—'}</span>
@@ -612,7 +610,6 @@ export function generateExecutiveBriefHTML(data: {
           </div>
           <p style="font-size:10px;font-weight:600;color:${costEffTier.c};margin:0 0 6px">${costEffTier.l}</p>
           <p style="font-size:9px;color:#3B6D11;line-height:1.5;margin:0">${escHtml(costEffDesc)}</p>
-        </div>
       </td>
     </tr>
   </table>
