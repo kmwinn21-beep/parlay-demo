@@ -127,7 +127,7 @@ export async function computeConferenceSnapshot(
     const confRes = await db.execute({
       sql: `SELECT c.id, c.series_id, c.start_date, c.conf_event_type, c.cost_efficiency_modifier,
                    c.booth_present, c.booth_width, c.booth_length, c.booth_number, c.booth_hall,
-                   c.sponsorship_level,
+                   c.sponsorship_level, c.internal_attendees,
                    co.action_key AS strategy_key
             FROM conferences c
             LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
@@ -190,6 +190,9 @@ export async function computeConferenceSnapshot(
     const boothNumber = conf.booth_number != null ? String(conf.booth_number) : null;
     const boothHall = conf.booth_hall != null ? String(conf.booth_hall) : null;
     const sponsorshipLevel = conf.sponsorship_level != null ? String(conf.sponsorship_level) : null;
+    const numInternalAttendees = conf.internal_attendees
+      ? String(conf.internal_attendees).split(',').map(s => s.trim()).filter(Boolean).length
+      : 0;
 
     // Step 2 — total spend via SQL (correct: actual if nonzero, else budget per line item)
     const spendRes = await db.execute({
@@ -388,6 +391,8 @@ export async function computeConferenceSnapshot(
     const pipelinePerK = totalSpend > 0 ? totalPi / (totalSpend / 1000) : null;
     const costPerCompany = totalSpend > 0 && companiesEngaged > 0 ? totalSpend / companiesEngaged : null;
     const costPerMeeting = totalSpend > 0 && meetingsHeld > 0 ? totalSpend / meetingsHeld : null;
+    const costPerInternalAttendee = totalSpend > 0 && numInternalAttendees > 0
+      ? totalSpend / numInternalAttendees : null;
 
     // Step 12 — cost efficiency score (interpolated, with event type modifier — matches effectiveness route)
     const bCPC = benchmarks.cost_per_company;
@@ -612,8 +617,9 @@ export async function computeConferenceSnapshot(
               strategy_name, sponsorship_level,
               booth_present, booth_width, booth_length, booth_number, booth_hall,
               budget_total, actual_total, budget_variance, budget_line_items,
-              required_pipeline_multiple, required_pipeline_amount, expected_return_amount
-            ) VALUES (?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              required_pipeline_multiple, required_pipeline_amount, expected_return_amount,
+              cost_per_internal_attendee
+            ) VALUES (?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(conference_id) DO UPDATE SET
               snapshot_taken_at = datetime('now'),
               series_id = excluded.series_id,
@@ -650,7 +656,8 @@ export async function computeConferenceSnapshot(
               budget_line_items = excluded.budget_line_items,
               required_pipeline_multiple = excluded.required_pipeline_multiple,
               required_pipeline_amount = excluded.required_pipeline_amount,
-              expected_return_amount = excluded.expected_return_amount`,
+              expected_return_amount = excluded.expected_return_amount,
+              cost_per_internal_attendee = excluded.cost_per_internal_attendee`,
       args: [
         conferenceId,
         seriesId,
@@ -688,6 +695,7 @@ export async function computeConferenceSnapshot(
         snapRequiredPipelineMultiple,
         snapRequiredPipelineAmount,
         snapExpectedReturnAmount,
+        costPerInternalAttendee,
       ],
     });
   } catch (err) {

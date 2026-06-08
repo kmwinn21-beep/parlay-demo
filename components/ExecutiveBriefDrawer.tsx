@@ -44,6 +44,7 @@ export interface ConferenceSnapshot {
   required_pipeline_multiple: number | null;
   required_pipeline_amount: number | null;
   expected_return_amount: number | null;
+  cost_per_internal_attendee: number | null;
 }
 
 interface ConferenceSummary {
@@ -482,11 +483,12 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                   </div>
 
                   {/* Stat cards */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-3">
                     <StatCard
                       label="Total spend"
                       value={formatCurrency(snapshot.actual_total ?? snapshot.budget_total ?? snapshot.total_cost)}
                       sub={snapshot.budget_total ? `Budget: ${formatCurrency(snapshot.budget_total)}` : undefined}
+                      className="bg-gray-50 border border-gray-200 rounded-lg p-2.5"
                     />
                     <StatCard
                       label="Budget variance"
@@ -510,15 +512,24 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                           : snapshot.budget_variance > 0 ? 'text-red-500'
                           : 'text-gray-800'
                       }
+                      className="bg-gray-50 border border-gray-200 rounded-lg p-2.5"
                     />
                     <StatCard
                       label="Cost per company"
                       value={formatCurrency(snapshot.cost_per_company_engaged)}
                       sub={snapshot.icp_companies_engaged != null ? `${snapshot.icp_companies_engaged} engaged` : undefined}
+                      className="bg-gray-50 border border-gray-200 rounded-lg p-2.5"
                     />
                     <StatCard
                       label="Cost per meeting"
                       value={formatCurrency(snapshot.cost_per_meeting_held)}
+                      className="bg-gray-50 border border-gray-200 rounded-lg p-2.5"
+                    />
+                    <StatCard
+                      label="Cost per internal attendee"
+                      value={formatCurrency(snapshot.cost_per_internal_attendee)}
+                      sub={internalHeadcount != null ? `${internalHeadcount} attendees` : undefined}
+                      className="bg-gray-50 border border-gray-200 rounded-lg p-2.5"
                     />
                   </div>
 

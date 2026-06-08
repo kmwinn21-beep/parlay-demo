@@ -1249,4 +1249,6 @@ export const migrations: string[] = [
   `ALTER TABLE conference_snapshots ADD COLUMN required_pipeline_amount REAL`,
   // 435 — conference_snapshots: expected return (actual_total × required_pipeline_multiple)
   `ALTER TABLE conference_snapshots ADD COLUMN expected_return_amount REAL`,
+  // 436 — conference_snapshots: allocated cost per internal attendee (total_spend / num_internal_attendees)
+  `ALTER TABLE conference_snapshots ADD COLUMN cost_per_internal_attendee REAL`,
 ];
