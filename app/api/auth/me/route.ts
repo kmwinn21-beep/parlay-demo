@@ -109,6 +109,7 @@ export async function GET(request: NextRequest) {
         ...user,
         configId, displayName, repName, createdAt, firstName,
         capabilities, demoVisitor,
+        accountId: user.accountId,
         planId: planState.planId,
         trialState: planState.trialState,
         daysRemaining: planState.daysRemaining,
