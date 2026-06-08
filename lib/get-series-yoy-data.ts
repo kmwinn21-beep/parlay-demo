@@ -1,4 +1,5 @@
 import type { Client } from '@libsql/client';
+import { computeConferenceStage, type ConferenceStage } from './conference-stage';
 
 export type ConferenceYoYRow = {
   conferenceId: number;
@@ -45,6 +46,7 @@ export type ConferenceYoYRow = {
   requiredPipelineAmount: number | null;
   expectedReturnAmount: number | null;
   stageOverride: string | null;
+  effectiveStage: ConferenceStage;
 };
 
 export type SeriesYoYData = {
@@ -119,7 +121,9 @@ export async function getSeriesYoYData(
             snap.required_pipeline_multiple,
             snap.required_pipeline_amount,
             snap.expected_return_amount,
-            c.stage_override
+            c.stage_override,
+            c.is_historical,
+            c.post_conference_days
           FROM conferences c
           LEFT JOIN conference_seasons cs_track ON cs_track.id = c.season_id
           LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
@@ -177,6 +181,19 @@ export async function getSeriesYoYData(
       requiredPipelineAmount: num(row.required_pipeline_amount),
       expectedReturnAmount: num(row.expected_return_amount),
       stageOverride: row.stage_override != null ? String(row.stage_override) : null,
+      effectiveStage: (() => {
+        try {
+          return computeConferenceStage({
+            start_date: startDate,
+            end_date: String(row.end_date ?? ''),
+            stage_override: row.stage_override != null ? String(row.stage_override) : null,
+            is_historical: row.is_historical != null ? Number(row.is_historical) : null,
+            post_conference_days: row.post_conference_days != null ? Number(row.post_conference_days) : null,
+          });
+        } catch {
+          return 'closed' as ConferenceStage;
+        }
+      })(),
     };
   });
 

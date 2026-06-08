@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { computeConferenceSnapshot } from '@/lib/compute-conference-snapshot';
+import { computeConferenceStage } from '@/lib/conference-stage';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,13 +39,26 @@ export async function POST(
   const db = await getDb(authResult.accountId);
 
   const confRes = await db.execute({
-    sql: `SELECT id, stage_override FROM conferences WHERE id = ?`,
+    sql: `SELECT id, start_date, end_date, stage_override, is_historical, post_conference_days FROM conferences WHERE id = ?`,
     args: [conferenceId],
   });
   if (confRes.rows.length === 0) {
     return NextResponse.json({ error: 'Conference not found' }, { status: 404 });
   }
-  if (confRes.rows[0].stage_override !== 'closed') {
+  const conf = confRes.rows[0];
+  let effectiveStage: string;
+  try {
+    effectiveStage = computeConferenceStage({
+      start_date: String(conf.start_date ?? ''),
+      end_date: String(conf.end_date ?? ''),
+      stage_override: conf.stage_override != null ? String(conf.stage_override) : null,
+      is_historical: conf.is_historical != null ? Number(conf.is_historical) : null,
+      post_conference_days: conf.post_conference_days != null ? Number(conf.post_conference_days) : null,
+    });
+  } catch {
+    effectiveStage = 'closed'; // historical conferences are considered closed
+  }
+  if (effectiveStage !== 'closed') {
     return NextResponse.json(
       { error: 'Snapshots can only be computed for closed conferences' },
       { status: 400 }

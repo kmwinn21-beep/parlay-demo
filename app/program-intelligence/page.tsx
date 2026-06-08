@@ -2161,7 +2161,7 @@ export default function ProgramIntelligencePage() {
           );
         })()}
 
-        {activeTab !== 'performance' && (activeTab as string) !== 'calendar' && activeTab !== 'reps' && activeTab !== 'trends' && (
+        {activeTab !== 'performance' && (activeTab as string) !== 'calendar' && activeTab !== 'reps' && activeTab !== 'trends' && activeTab !== 'snapshots' && (
           <div className="card flex items-center justify-center h-48">
             <p className="text-sm text-gray-400">Coming soon.</p>
           </div>
@@ -2478,7 +2478,7 @@ export default function ProgramIntelligencePage() {
         )}
 
         {activeTab === 'snapshots' && isAdmin && (() => {
-          const closedConferences = snapshotYoY?.instances.filter(i => i.stageOverride === 'closed') ?? [];
+          const closedConferences = snapshotYoY?.instances.filter(i => i.effectiveStage === 'closed') ?? [];
 
           const handleComputeSnapshot = async (conferenceId: number) => {
             setComputing(conferenceId);
@@ -2645,7 +2645,7 @@ export default function ProgramIntelligencePage() {
                   if (!iso) return '—';
                   const d = new Date(iso);
                   const diffDays = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
-                  if (diffDays === 0) return 'Today';
+                  if (diffDays <= 0) return 'Today';
                   if (diffDays === 1) return 'Yesterday';
                   if (diffDays < 30) return `${diffDays} days ago`;
                   if (diffDays < 60) return 'Last month';
@@ -2682,7 +2682,7 @@ export default function ProgramIntelligencePage() {
                           const override = snapshotOverrides[instance.conferenceId];
                           const hasSnapshot = override?.hasSnapshot ?? instance.hasSnapshot;
                           const snapshotTakenAt = override?.snapshotTakenAt ?? instance.snapshotTakenAt;
-                          const isClosed = instance.stageOverride === 'closed';
+                          const isClosed = instance.effectiveStage === 'closed';
                           const isComputing = computing === instance.conferenceId;
                           const err = snapshotErrors[instance.conferenceId];
                           const justComputed = override?.justComputed === true;
@@ -2696,7 +2696,7 @@ export default function ProgramIntelligencePage() {
                           }
 
                           const dateRange = [instance.startDate, instance.endDate].filter(Boolean).join(' – ');
-                          const { label: sLabel, cls: sCls } = stageLabel(instance.stageOverride);
+                          const { label: sLabel, cls: sCls } = stageLabel(instance.effectiveStage);
 
                           return (
                             <tr key={instance.conferenceId} className="hover:bg-gray-50 transition-colors">
