@@ -2564,7 +2564,7 @@ export default function ProgramIntelligencePage() {
                         ]}
                       />
                       <ScoreCard
-                        title="Audience & Messaging Score"
+                        title="Marketing Coverage Score"
                         score={avgAudience}
                         showTier
                         components={[
