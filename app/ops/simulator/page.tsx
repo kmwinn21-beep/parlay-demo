@@ -123,7 +123,9 @@ export default function SimulatorPage() {
   const [selectedConference, setSelectedConference] = useState<ConferenceItem | null>(null);
   const [selectedRepIds, setSelectedRepIds] = useState<Set<number>>(new Set());
   const [meetingsHeld, setMeetingsHeld] = useState(10);
+  const [netNewMeetingsPct, setNetNewMeetingsPct] = useState(0);
   const [touchpointsCount, setTouchpointsCount] = useState(5);
+  const [netNewTouchpointsPct, setNetNewTouchpointsPct] = useState(0);
   const [followUpCompletionPct, setFollowUpCompletionPct] = useState(75);
   const [icpAttendeeCount, setIcpAttendeeCount] = useState(0);
 
@@ -286,6 +288,8 @@ export default function SimulatorPage() {
           meetingsHeld,
           touchpoints: touchpointsCount,
           followUpCompletionPct,
+          netNewMeetingsPct,
+          netNewTouchpointsPct,
         }),
       });
       const data = await res.json();
@@ -318,6 +322,8 @@ export default function SimulatorPage() {
           touchpoints: touchpointsCount,
           followUpCompletionPct,
           dryRun: false,
+          netNewMeetingsPct,
+          netNewTouchpointsPct,
         }),
       });
       const data = await res.json();
@@ -739,15 +745,28 @@ export default function SimulatorPage() {
                 <label className="text-sm text-gray-700">Meetings held</label>
                 <span className="text-sm font-semibold text-gray-900 tabular-nums">{meetingsHeld}</span>
               </div>
-              <input
-                type="range"
-                min={0}
-                max={Math.max(icpAttendeeCount, meetingsHeld, 1)}
-                step={1}
-                value={meetingsHeld}
-                onChange={e => setMeetingsHeld(Number(e.target.value))}
-                className="w-full"
-              />
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={0}
+                  max={Math.max(icpAttendeeCount, meetingsHeld, 1)}
+                  step={1}
+                  value={meetingsHeld}
+                  onChange={e => setMeetingsHeld(Number(e.target.value))}
+                  className="flex-1"
+                />
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={netNewMeetingsPct}
+                    onChange={e => setNetNewMeetingsPct(Math.min(100, Math.max(0, Number(e.target.value))))}
+                    className="border border-gray-300 rounded px-2 py-0.5 text-sm w-14 tabular-nums text-right"
+                  />
+                  <span className="text-xs text-gray-500 whitespace-nowrap">% Net-New</span>
+                </div>
+              </div>
               <div className="flex justify-between text-xs text-gray-400 mt-0.5">
                 <span>0</span>
                 <span>{Math.max(icpAttendeeCount, meetingsHeld, 1)}</span>
@@ -759,15 +778,28 @@ export default function SimulatorPage() {
                 <label className="text-sm text-gray-700">Touchpoints</label>
                 <span className="text-sm font-semibold text-gray-900 tabular-nums">{touchpointsCount}</span>
               </div>
-              <input
-                type="range"
-                min={0}
-                max={Math.max(icpAttendeeCount * 2, touchpointsCount, 1)}
-                step={1}
-                value={touchpointsCount}
-                onChange={e => setTouchpointsCount(Number(e.target.value))}
-                className="w-full"
-              />
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={0}
+                  max={Math.max(icpAttendeeCount * 2, touchpointsCount, 1)}
+                  step={1}
+                  value={touchpointsCount}
+                  onChange={e => setTouchpointsCount(Number(e.target.value))}
+                  className="flex-1"
+                />
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={netNewTouchpointsPct}
+                    onChange={e => setNetNewTouchpointsPct(Math.min(100, Math.max(0, Number(e.target.value))))}
+                    className="border border-gray-300 rounded px-2 py-0.5 text-sm w-14 tabular-nums text-right"
+                  />
+                  <span className="text-xs text-gray-500 whitespace-nowrap">% Net-New</span>
+                </div>
+              </div>
               <div className="flex justify-between text-xs text-gray-400 mt-0.5">
                 <span>0</span>
                 <span>{Math.max(icpAttendeeCount * 2, touchpointsCount, 1)}</span>

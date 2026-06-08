@@ -9,6 +9,8 @@ export type SimulationParams = {
   touchpoints: number
   followUpCompletionPct: number  // 0–100
   dryRun: boolean
+  netNewMeetingsPct?: number     // 0–100, % of meetings allocated to net-new companies
+  netNewTouchpointsPct?: number  // 0–100, % of touchpoints allocated to net-new companies
 }
 
 export type SimulationResult = {
@@ -123,6 +125,8 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
     touchpoints: touchpointsParam,
     followUpCompletionPct,
     dryRun,
+    netNewMeetingsPct = 0,
+    netNewTouchpointsPct = 0,
   } = params;
 
   const followUpsCreated = meetingsHeldParam + touchpointsParam;
@@ -247,6 +251,27 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
   // Attendee selection
   const icpMatchedAttendees = allAttendees.filter(a => a.company_id != null && icpCompanyIdSet.has(a.company_id));
 
+  // Identify previously-engaged companies (engagement-based, not just attendance)
+  const prevEngagedRes = await client.execute({
+    sql: `SELECT DISTINCT a2.company_id
+          FROM attendees a2
+          JOIN conference_attendees ca2 ON ca2.attendee_id = a2.id
+          JOIN conferences c2 ON c2.id = ca2.conference_id
+          WHERE a2.company_id IS NOT NULL
+            AND ca2.conference_id != ?
+            AND c2.end_date < (SELECT end_date FROM conferences WHERE id = ?)
+            AND (
+              EXISTS (SELECT 1 FROM meetings m
+                      WHERE m.attendee_id = a2.id AND m.conference_id = ca2.conference_id AND m.source != 'simulated')
+              OR EXISTS (SELECT 1 FROM follow_ups f
+                         WHERE f.attendee_id = a2.id AND f.conference_id = ca2.conference_id AND f.source != 'simulated')
+              OR EXISTS (SELECT 1 FROM attendee_touchpoints t
+                         WHERE t.attendee_id = a2.id AND t.conference_id = ca2.conference_id)
+            )`,
+    args: [conferenceId, conferenceId],
+  }).catch(() => ({ rows: [] as { company_id: unknown }[] }));
+  const previouslyEngagedCompanyIds = new Set(prevEngagedRes.rows.map(r => Number(r.company_id)));
+
   if (icpMatchedAttendees.length === 0) {
     const emptyPlan = {
       meetingsScheduled,
@@ -267,17 +292,32 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
     };
   }
 
-  const shuffled = shuffle(icpMatchedAttendees);
-  const meetingAttendees = shuffled.slice(0, Math.min(meetingsHeldParam, shuffled.length));
+  // Partition ICP attendees into net-new and returning pools
+  const netNewIcpAttendees    = shuffle(icpMatchedAttendees.filter(a => !previouslyEngagedCompanyIds.has(a.company_id!)));
+  const returningIcpAttendees = shuffle(icpMatchedAttendees.filter(a =>  previouslyEngagedCompanyIds.has(a.company_id!)));
+
+  // Meetings: honour net-new % then fill remainder from returning (or overflow back to net-new)
+  const targetNetNewMeetings      = Math.min(Math.round(meetingsHeldParam * netNewMeetingsPct / 100), netNewIcpAttendees.length);
+  const targetReturningMeetings   = Math.min(meetingsHeldParam - targetNetNewMeetings, returningIcpAttendees.length);
+  const meetingOverflow           = meetingsHeldParam - targetNetNewMeetings - targetReturningMeetings;
+  const meetingAttendees = shuffle([
+    ...netNewIcpAttendees.slice(0, targetNetNewMeetings + Math.max(0, meetingOverflow)),
+    ...returningIcpAttendees.slice(0, targetReturningMeetings),
+  ]).slice(0, Math.min(meetingsHeldParam, icpMatchedAttendees.length));
+
+  // Touchpoints: same pattern, prefer attendees not already in meeting list
   const meetingAttendeeIds = new Set(meetingAttendees.map(a => a.id));
-  const remainingForTouchpoints = shuffled.filter(a => !meetingAttendeeIds.has(a.id));
-  const touchpointPool = remainingForTouchpoints.length >= touchpointsParam
-    ? remainingForTouchpoints.slice(0, touchpointsParam)
-    : [
-        ...remainingForTouchpoints,
-        ...shuffled.slice(0, Math.max(0, touchpointsParam - remainingForTouchpoints.length)),
-      ];
-  const touchpointAttendees = touchpointPool.slice(0, touchpointsParam);
+  const netNewForTp    = shuffle(netNewIcpAttendees.filter(a => !meetingAttendeeIds.has(a.id)));
+  const returningForTp = shuffle(returningIcpAttendees.filter(a => !meetingAttendeeIds.has(a.id)));
+  const targetNetNewTp    = Math.min(Math.round(touchpointsParam * netNewTouchpointsPct / 100), netNewForTp.length);
+  const targetReturningTp = Math.min(touchpointsParam - targetNetNewTp, returningForTp.length);
+  const tpOverflow        = touchpointsParam - targetNetNewTp - targetReturningTp;
+  const touchpointAttendees = shuffle([
+    ...netNewForTp.slice(0, targetNetNewTp + Math.max(0, tpOverflow)),
+    ...returningForTp.slice(0, targetReturningTp),
+    // if still short, allow overlap with meeting attendees
+    ...shuffle(icpMatchedAttendees).slice(0, Math.max(0, touchpointsParam - targetNetNewTp - targetReturningTp - tpOverflow)),
+  ]).slice(0, touchpointsParam);
 
   const engagedCompanyIdsSet = new Set<number>();
   for (const a of meetingAttendees) {
@@ -286,29 +326,11 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
   const companiesEngaged = engagedCompanyIdsSet.size;
   const engagedCompanyIds = Array.from(engagedCompanyIdsSet);
 
-  // Net-new logos
-  let netNewCount = 0;
-  if (engagedCompanyIds.length > 0) {
-    const nnPlaceholders = engagedCompanyIds.map(() => '?').join(',');
-    const netNewRes = await client.execute({
-      sql: `SELECT co.id FROM companies co
-            WHERE co.id IN (${nnPlaceholders})
-              AND co.id NOT IN (
-                SELECT DISTINCT a2.company_id
-                FROM attendees a2
-                JOIN conference_attendees ca2 ON ca2.attendee_id = a2.id
-                WHERE ca2.conference_id != ? AND a2.company_id IS NOT NULL
-              )`,
-      args: [...engagedCompanyIds, conferenceId],
-    }).catch(() => ({ rows: [] as { id: unknown }[] }));
-    netNewCount = Math.min(netNewRes.rows.length, engagedCompanyIds.length);
-  }
-
-  // Hard assertion
-  if (netNewCount > companiesEngaged) {
-    console.warn(`[simulator] netNewCount (${netNewCount}) > companiesEngaged (${companiesEngaged}), capping`);
-    netNewCount = companiesEngaged;
-  }
+  // Net-new logos — companies engaged here that were never previously engaged (engagement-based)
+  const netNewCount = Math.min(
+    engagedCompanyIds.filter(id => !previouslyEngagedCompanyIds.has(id)).length,
+    companiesEngaged,
+  );
 
   // CES estimation
   const cesEstimate = estimateCESRange({
