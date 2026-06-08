@@ -49,6 +49,8 @@ import { BulkClassifyTitlesModal } from '@/components/BulkClassifyTitlesModal';
 import { MergeModal } from '@/components/MergeModal';
 import { SeriesSeasonCombobox, type SeriesOption } from '@/components/SeriesSeasonCombobox';
 import { MyDebriefDrawer } from '@/components/MyDebriefDrawer';
+import ExecutiveBriefDrawer, { type ConferenceSnapshot } from '@/components/ExecutiveBriefDrawer';
+import type { SeriesYoYData } from '@/lib/get-series-yoy-data';
 import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 
 interface Attendee {
@@ -413,6 +415,9 @@ export default function ConferenceDetailPage() {
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [showDebrief, setShowDebrief] = useState(false);
   const [executiveBriefOpen, setExecutiveBriefOpen] = useState(false);
+  const [executiveBriefSnapshot, setExecutiveBriefSnapshot] = useState<ConferenceSnapshot | null>(null);
+  const [executiveBriefYoY, setExecutiveBriefYoY] = useState<SeriesYoYData | null>(null);
+  const [executiveBriefLoading, setExecutiveBriefLoading] = useState(false);
   const [showCrmExport, setShowCrmExport] = useState(false);
   const [showAdminStage, setShowAdminStage] = useState(false);
   const [stageActionLoading, setStageActionLoading] = useState(false);
@@ -459,6 +464,27 @@ export default function ConferenceDetailPage() {
       window.history.replaceState(null, '', window.location.pathname);
     }
   }, [searchParams, isInternalAttendee]);
+
+  // Fetch snapshot + YoY data when executive brief opens
+  useEffect(() => {
+    if (!executiveBriefOpen || !conference) return;
+    setExecutiveBriefLoading(true);
+    const fetches: Promise<void>[] = [
+      fetch(`/api/conferences/${conference.id}/snapshot`)
+        .then(r => r.json())
+        .then(data => setExecutiveBriefSnapshot(data.snapshot ?? null))
+        .catch(() => setExecutiveBriefSnapshot(null)),
+    ];
+    if (conference.series_id) {
+      fetches.push(
+        fetch(`/api/conferences/series/${conference.series_id}/yoy`)
+          .then(r => r.json())
+          .then(data => setExecutiveBriefYoY(data ?? null))
+          .catch(() => setExecutiveBriefYoY(null))
+      );
+    }
+    Promise.all(fetches).finally(() => setExecutiveBriefLoading(false));
+  }, [executiveBriefOpen, conference?.id, conference?.series_id]);
 
   async function applyStageAction(action: string, extra?: Record<string, unknown>) {
     setStageActionLoading(true);
@@ -3263,6 +3289,16 @@ export default function ConferenceDetailPage() {
         isOpen={showDebrief}
         onClose={() => setShowDebrief(false)}
       />
+
+      {conference && (
+        <ExecutiveBriefDrawer
+          isOpen={executiveBriefOpen}
+          onClose={() => setExecutiveBriefOpen(false)}
+          conference={conference}
+          seriesYoY={executiveBriefYoY}
+          snapshot={executiveBriefLoading ? null : executiveBriefSnapshot}
+        />
+      )}
 
       {showBatchScan && (
         <BatchCardScanModal
