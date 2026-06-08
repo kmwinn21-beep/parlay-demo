@@ -245,13 +245,42 @@ export async function computeConferenceSnapshot(
       args: [conferenceId, conferenceId, conferenceId, conferenceId],
     });
 
-    // Step 6 — prior companies (any other conference) for net-new split
+    // Step 6 — prior companies for net-new split: a company is "continued engagement" only if
+    // a rep logged at least one meeting, follow-up, or touchpoint with one of their attendees
+    // at a prior conference (end_date before this conference). Pure attendance does not count.
     const priorRes = await db.execute({
       sql: `SELECT DISTINCT a.company_id
             FROM attendees a
-            JOIN conference_attendees ca ON ca.attendee_id = a.id
-            WHERE a.company_id IS NOT NULL AND ca.conference_id != ?`,
-      args: [conferenceId],
+            WHERE a.company_id IS NOT NULL
+              AND a.company_id IN (
+                SELECT DISTINCT a2.company_id
+                FROM attendees a2
+                JOIN conference_attendees ca2 ON ca2.attendee_id = a2.id
+                JOIN conferences c2 ON c2.id = ca2.conference_id
+                WHERE a2.company_id IS NOT NULL
+                  AND ca2.conference_id != ?
+                  AND c2.end_date < (SELECT end_date FROM conferences WHERE id = ?)
+                  AND (
+                    EXISTS (
+                      SELECT 1 FROM meetings m
+                      WHERE m.attendee_id = a2.id
+                        AND m.conference_id = ca2.conference_id
+                        AND m.source != 'simulated'
+                    )
+                    OR EXISTS (
+                      SELECT 1 FROM follow_ups f
+                      WHERE f.attendee_id = a2.id
+                        AND f.conference_id = ca2.conference_id
+                        AND f.source != 'simulated'
+                    )
+                    OR EXISTS (
+                      SELECT 1 FROM attendee_touchpoints t
+                      WHERE t.attendee_id = a2.id
+                        AND t.conference_id = ca2.conference_id
+                    )
+                  )
+              )`,
+      args: [conferenceId, conferenceId],
     });
     const priorCompanyIds = new Set(priorRes.rows.map(r => Number(r.company_id)));
 
