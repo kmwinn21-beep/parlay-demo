@@ -75,8 +75,6 @@ interface Props {
 
 function formatCurrency(val: number | null | undefined): string {
   if (val == null) return '—';
-  if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(1)}M`;
-  if (val >= 1_000) return `$${Math.round(val / 1_000)}K`;
   return `$${Math.round(val).toLocaleString()}`;
 }
 
@@ -88,7 +86,7 @@ function formatCurrencyFull(val: number | null | undefined): string {
 
 function formatMillions(val: number | null | undefined): string {
   if (val == null || val === 0) return '—';
-  return `$${(val / 1_000_000).toFixed(1)}M`;
+  return `$${Math.round(val).toLocaleString()}`;
 }
 
 function formatPct(val: number | null | undefined, decimals = 0): string {
@@ -165,12 +163,18 @@ function getCostPerMeetingBench(val: number | null): BenchResult {
 // ─── Recommendation logic ─────────────────────────────────────────────────────
 
 type RecommendationResult = {
-  action: 'attend' | 'reduce' | 'review';
+  action: 'attend' | 'attend_conditional' | 'reduce' | 'review';
   label: string;
+  icon: string;
   boxClass: string;
   textClass: string;
-  iconPath: string;
+  borderClass: string;
 };
+
+function getNextYear(dateStr: string | null | undefined): string {
+  if (!dateStr) return 'next year'
+  return String(new Date(dateStr).getFullYear() + 1)
+}
 
 function getPrevInstance(snapshot: ConferenceSnapshot, seriesYoY: SeriesYoYData | null) {
   const instances = seriesYoY?.instances ?? [];
@@ -179,53 +183,97 @@ function getPrevInstance(snapshot: ConferenceSnapshot, seriesYoY: SeriesYoYData 
 }
 
 function getRecommendation(snapshot: ConferenceSnapshot, seriesYoY: SeriesYoYData | null): RecommendationResult {
-  const ces = snapshot.ces_score ?? 0;
-  const prevInstance = getPrevInstance(snapshot, seriesYoY);
-  const trend = prevInstance?.cesScore != null ? ces - prevInstance.cesScore : null;
+  const ces = snapshot.ces_score;
+  if (!ces) return {
+    action: 'review', label: 'Review before committing to',
+    icon: 'ti-alert-circle', boxClass: 'bg-red-50 border-red-200',
+    textClass: 'text-red-800', borderClass: 'border',
+  };
+
+  const instances = seriesYoY?.instances ?? [];
+  const prev = instances.length >= 2 ? instances[instances.length - 2] : null;
+  const trend = prev?.cesScore != null ? ces - prev.cesScore : null;
 
   if (ces >= 75) return {
     action: 'attend', label: 'Attend',
-    boxClass: 'bg-green-50 border-green-200',
-    textClass: 'text-green-800',
-    iconPath: 'M5 13l4 4L19 7',
+    icon: 'ti-circle-check', boxClass: 'bg-green-50 border-green-200',
+    textClass: 'text-green-800', borderClass: 'border',
   };
+
   if (ces >= 60 && (trend === null || trend >= 0)) return {
     action: 'attend', label: 'Attend',
-    boxClass: 'bg-green-50 border-green-200',
-    textClass: 'text-green-800',
-    iconPath: 'M5 13l4 4L19 7',
+    icon: 'ti-circle-check', boxClass: 'bg-green-50 border-green-200',
+    textClass: 'text-green-800', borderClass: 'border',
   };
+
+  // CES 60–74 AND declining year-over-year — conditional path
   if (ces >= 60 && trend !== null && trend < 0) return {
-    action: 'reduce', label: 'Reduce footprint at',
-    boxClass: 'bg-amber-50 border-amber-200',
-    textClass: 'text-amber-800',
-    iconPath: 'M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z',
+    action: 'attend_conditional', label: 'Reduce footprint or improve execution at',
+    icon: 'ti-alert-triangle', boxClass: 'bg-amber-50 border-amber-200',
+    textClass: 'text-amber-800', borderClass: 'border',
   };
+
   return {
     action: 'review', label: 'Review before committing to',
-    boxClass: 'bg-red-50 border-red-200',
-    textClass: 'text-red-800',
-    iconPath: 'M12 8v4m0 4h.01M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z',
+    icon: 'ti-alert-circle', boxClass: 'bg-red-50 border-red-200',
+    textClass: 'text-red-800', borderClass: 'border',
   };
 }
 
-function generateRationale(snapshot: ConferenceSnapshot, conference: ConferenceSummary, seriesYoY: SeriesYoYData | null): string {
+function generateRationale(
+  snapshot: ConferenceSnapshot,
+  conference: ConferenceSummary,
+  seriesYoY: SeriesYoYData | null,
+  rec: RecommendationResult,
+): string {
   const ces = snapshot.ces_score ?? 0;
   const tier = getCesTier(ces).label;
   const engRate = Math.round((snapshot.icp_engagement_rate ?? 0) * 100);
   const missed = (snapshot.icp_companies_total ?? 0) - (snapshot.icp_companies_engaged ?? 0);
-  const prev = getPrevInstance(snapshot, seriesYoY);
+  const instances = seriesYoY?.instances ?? [];
+  const prev = instances.length >= 2 ? instances[instances.length - 2] : null;
   const trend = prev?.cesScore != null ? ces - prev.cesScore : null;
 
-  const trendText = trend !== null
-    ? `CES has ${trend > 0 ? 'improved' : 'declined'} ${Math.abs(trend)} points year-over-year. `
-    : '';
-  const missedPipeline = ((snapshot.pipeline_influenced ?? 0) / (snapshot.icp_companies_engaged || 1)) * missed;
-  const missedText = missed > 0
-    ? `${missed} ICP companies were present but not engaged, representing an estimated ${formatCurrency(missedPipeline)} in addressable pipeline. `
-    : '';
+  const baseText = `${conference.name} delivered a CES of ${ces} (${tier}) against a ${snapshot.strategy_name ?? 'defined'} strategy. ` +
+    `${snapshot.icp_companies_engaged} of ${snapshot.icp_companies_total} ICP companies were engaged (${engRate}% engagement rate). ` +
+    (missed > 0 ? `${missed} ICP companies were present but not engaged, representing an estimated ${formatCurrency(
+      ((snapshot.pipeline_influenced ?? 0) / Math.max(snapshot.icp_companies_engaged ?? 1, 1)) * missed
+    )} in addressable pipeline. ` : '') +
+    (trend !== null ? `CES has ${trend > 0 ? 'improved' : 'declined'} ${Math.abs(trend)} points year-over-year. ` : '');
 
-  return `${conference.name} delivered a CES of ${ces} (${tier}) against a ${snapshot.strategy_name ?? 'defined'} strategy. ${snapshot.icp_companies_engaged ?? '—'} of ${snapshot.icp_companies_total ?? '—'} ICP companies were engaged (${engRate}% engagement rate). ${missedText}${trendText}`.trim();
+  if (rec.action === 'attend_conditional' && prev) {
+    const commitments: string[] = [];
+
+    const engDelta = (snapshot.icp_engagement_rate ?? 0) - (prev.icpEngagementRate ?? 0);
+    if (engDelta < -0.03) {
+      const targetRate = Math.round(((prev.icpEngagementRate ?? 0) + 0.05) * 100);
+      commitments.push(`ICP engagement rate above ${targetRate}% (vs. ${engRate}% in this cycle)`);
+    }
+
+    const holdCurrent = Math.round((snapshot.meeting_hold_rate ?? 0) * 100);
+    const holdPrev = Math.round((prev.meetingHoldRate ?? 0) * 100);
+    if (holdCurrent < holdPrev - 5) {
+      commitments.push(`Meeting hold rate above ${holdPrev}% through pre-conference confirmation outreach`);
+    }
+
+    const fuCurrent = Math.round((snapshot.followup_completion_rate ?? 0) * 100);
+    const fuPrev = Math.round((prev.followupCompletionRate ?? 0) * 100);
+    if (fuCurrent < fuPrev - 5) {
+      commitments.push(`Follow-up completion rate above ${fuPrev}% within 14 days post-conference`);
+    }
+
+    if (engRate < 25) {
+      const targetEngaged = Math.round((snapshot.icp_companies_total ?? 0) * 0.30);
+      commitments.push(`Minimum ${targetEngaged} ICP companies engaged (top targets pre-identified before arrival)`);
+    }
+
+    if (commitments.length > 0) {
+      return baseText.trim() + `\n\nTo justify continued investment, the team should commit to: ${commitments.join('; ')}. ` +
+        `These targets give leadership a basis for conditional approval and the team a clear execution benchmark for the next cycle.`;
+    }
+  }
+
+  return baseText.trim();
 }
 
 // ─── Budget line items parser ─────────────────────────────────────────────────
@@ -313,7 +361,38 @@ function CountCard({ label, value }: { label: string; value: string | number }) 
 
 export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seriesYoY, snapshot }: Props) {
   const [mounted, setMounted] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+
+  const handleSavePdf = async () => {
+    setPdfLoading(true);
+    try {
+      const res = await fetch(`/api/conferences/${conference.id}/executive-brief-pdf`);
+      if (!res.ok) throw new Error('PDF generation failed');
+      const contentType = res.headers.get('content-type');
+      if (contentType?.includes('application/pdf')) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Executive-Brief-${conference.name.replace(/\s+/g, '-')}-${new Date(conference.start_date).getFullYear()}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const { html } = await res.json();
+        const win = window.open('', '_blank');
+        if (win) {
+          win.document.write(html);
+          win.document.close();
+          win.onload = () => { win.focus(); win.print(); };
+        }
+      }
+    } catch (err) {
+      console.error('PDF export failed:', err);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   if (!isOpen) return null;
   if (!mounted) return null;
@@ -334,7 +413,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
 
   // Recommendation
   const rec = snapshot ? getRecommendation(snapshot, seriesYoY) : null;
-  const rationale = snapshot ? generateRationale(snapshot, conference, seriesYoY) : '';
+  const rationale = snapshot && rec ? generateRationale(snapshot, conference, seriesYoY, rec) : '';
 
   // Internal attendee headcount from comma-separated string
   const internalHeadcount = conference.internal_attendees
@@ -342,8 +421,17 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
     : null;
 
   // Proposed next budget
-  const nextBudgetMultiplier = rec?.action === 'reduce' ? 0.90 : 1.05;
-  const proposedNextBudget = snapshot?.actual_total ? snapshot.actual_total * nextBudgetMultiplier : null;
+  const budgetMultiplier =
+    rec?.action === 'attend' ? 1.05 :
+    rec?.action === 'attend_conditional' ? 0.9 :
+    rec?.action === 'reduce' ? 0.85 :
+    0.9;
+  const proposedNextBudget = snapshot?.actual_total ? snapshot.actual_total * budgetMultiplier : null;
+  const budgetSubLabel =
+    rec?.action === 'attend' ? '+5% vs. actual' :
+    rec?.action === 'attend_conditional' ? '−10% vs. actual — subject to execution targets' :
+    rec?.action === 'reduce' ? '−15% vs. actual' :
+    '−10% vs. actual';
 
   const content = (
     <div className="fixed inset-0 z-50">
@@ -351,21 +439,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
         @keyframes execBriefFadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes execBriefSlideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
         @media print {
-          body > *:not(.executive-brief-print-root) { display: none !important; }
-          .no-print { display: none !important; }
-          .executive-brief-print-root {
-            position: static !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            height: auto !important;
-            overflow: visible !important;
-            box-shadow: none !important;
-            border-radius: 0 !important;
-          }
-          .executive-brief-print-root .overflow-y-auto {
-            overflow: visible !important;
-            max-height: none !important;
-          }
+          .executive-brief-drawer-root { display: none !important; }
         }
       `}</style>
 
@@ -380,7 +454,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
       {/* Drawer */}
       <div className="absolute inset-0 sm:left-64 sm:flex sm:items-center sm:justify-center sm:p-5 pointer-events-none">
         <div
-          className="executive-brief-print-root pointer-events-auto relative w-full h-full sm:h-[90vh] sm:max-w-[1100px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden"
+          className="executive-brief-drawer-root pointer-events-auto relative w-full h-full sm:h-[90vh] sm:max-w-[1100px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden"
           style={{ animation: 'execBriefSlideIn 0.25s ease-out' }}
         >
           {/* ── Header ──────────────────────────────────────────────── */}
@@ -404,16 +478,14 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
             <div className="flex items-center gap-2 flex-shrink-0">
               <button
                 type="button"
-                onClick={() => window.print()}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                onClick={handleSavePdf}
+                disabled={pdfLoading || !snapshot}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {/* ti-download */}
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 11l5 5 5-5" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12" />
-                </svg>
-                Save to PDF
+                {pdfLoading
+                  ? <><i className="ti ti-loader-2 text-xs animate-spin" aria-hidden="true" />Generating...</>
+                  : <><i className="ti ti-download text-xs" aria-hidden="true" />Save to PDF</>
+                }
               </button>
               <button
                 type="button"
@@ -905,17 +977,19 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                   <SectionEyebrow num="06" label="Recommendation" />
 
                   {rec && (
-                    <div className={`rounded-xl p-4 mb-3 border ${rec.boxClass}`}>
+                    <div className={`rounded-xl p-4 mb-3 ${rec.borderClass} ${rec.boxClass}`}>
                       <p className={`text-[10px] font-semibold uppercase tracking-wider mb-1.5 ${rec.textClass} opacity-70`}>
                         Recommendation
                       </p>
                       <p className={`text-sm font-medium mb-2 ${rec.textClass} flex items-center gap-1.5`}>
-                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d={rec.iconPath} />
-                        </svg>
-                        {rec.label} {conference.name}
+                        <i className={`ti ${rec.icon} text-base leading-none`} />
+                        {rec.label} {conference.name} in {getNextYear(conference.start_date)}
                       </p>
-                      <p className={`text-xs leading-relaxed ${rec.textClass}`}>{rationale}</p>
+                      {rationale.split('\n\n').map((para, i) => (
+                        <p key={i} className={`text-xs leading-relaxed ${rec.textClass} ${i > 0 ? 'mt-2 pt-2 border-t border-amber-200' : ''}`}>
+                          {para}
+                        </p>
+                      ))}
                     </div>
                   )}
 
@@ -924,7 +998,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                     <StatCard
                       label="Proposed next budget"
                       value={formatCurrency(proposedNextBudget)}
-                      sub={rec?.action === 'reduce' ? '−10% vs. actual' : '+5% vs. actual'}
+                      sub={budgetSubLabel}
                       className="bg-gray-50 border border-gray-200 rounded-lg p-2.5"
                     />
                     <StatCard
