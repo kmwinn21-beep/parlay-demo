@@ -343,7 +343,7 @@ function DimBarRow({
         <div className="h-full rounded-full" style={{ width: `${Math.min(Math.max(pct, 0), 100)}%`, background: barColor }} />
       </div>
       <span className="text-[11px] font-medium text-gray-700 w-10 text-right">{displayVal}</span>
-      <span className={`text-[10px] font-medium w-14 text-right ${tier.textClass}`}>{tier.label}</span>
+      <span className={`text-xs font-medium w-14 text-left ${tier.textClass}`}>{tier.label}</span>
     </div>
   );
 }
@@ -587,7 +587,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                       className="bg-gray-50 border border-gray-200 rounded-lg p-2.5"
                     />
                     <StatCard
-                      label="Cost per company"
+                      label="Cost per company engaged"
                       value={formatCurrency(snapshot.cost_per_company_engaged)}
                       sub={snapshot.icp_companies_engaged != null ? `${snapshot.icp_companies_engaged} engaged` : undefined}
                       className="bg-gray-50 border border-gray-200 rounded-lg p-2.5"
@@ -595,6 +595,13 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                     <StatCard
                       label="Cost per meeting"
                       value={formatCurrency(snapshot.cost_per_meeting_held)}
+                      sub={(() => {
+                        const totalCost = snapshot.actual_total ?? snapshot.total_cost;
+                        if (totalCost && snapshot.cost_per_meeting_held && snapshot.cost_per_meeting_held > 0) {
+                          return `${Math.round(totalCost / snapshot.cost_per_meeting_held)} meetings held`;
+                        }
+                        return undefined;
+                      })()}
                       className="bg-gray-50 border border-gray-200 rounded-lg p-2.5"
                     />
                     <StatCard
@@ -635,18 +642,39 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                             const rowBg = i % 2 === 1 ? 'bg-gray-100' : '';
                             return (
                               <tr key={i} className={rowBg}>
-                                <td className="py-1.5 pr-4 text-gray-700">{item.name}</td>
+                                <td className="py-1.5 pr-4 text-gray-700">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    {item.name}
+                                    {/sponsorship/i.test(item.name) && snapshot.sponsorship_level && snapshot.sponsorship_level !== 'none' && (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-medium rounded-full px-1.5 py-0.5 bg-amber-50 text-amber-800 border border-amber-200">
+                                        <svg className="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 21h8m-4-4v4M5 7H3a2 2 0 0 0-2 2v1a4 4 0 0 0 4 4h.5M19 7h2a2 2 0 0 1 2 2v1a4 4 0 0 1-4 4h-.5M7 3h10a2 2 0 0 1 2 2v5a7 7 0 0 1-14 0V5a2 2 0 0 1 2-2z" />
+                                        </svg>
+                                        {snapshot.sponsorship_level}
+                                      </span>
+                                    )}
+                                    {/booth/i.test(item.name) && snapshot.booth_present && (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-medium rounded-full px-1.5 py-0.5 bg-purple-50 text-purple-800 border border-purple-200">
+                                        <svg className="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                                          <rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" />
+                                          <rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" />
+                                        </svg>
+                                        {`${snapshot.booth_width ?? '?'}×${snapshot.booth_length ?? '?'} ft`}
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
                                 <td className="py-1.5 px-3 text-right text-gray-600">{formatCurrencyFull(item.budget)}</td>
                                 <td className="py-1.5 px-3 text-right text-gray-600">{formatCurrencyFull(item.actual)}</td>
                                 <td className="py-1.5 px-3 text-right">
-                                  <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                                  <span className={`inline-block px-1.5 py-0.5 rounded-full text-xs font-semibold ${
                                     over ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
                                   }`}>
                                     {over ? '+' : ''}{formatCurrencyFull(varianceDollar)}
                                   </span>
                                 </td>
                                 <td className="py-1.5 pl-3 pr-4 text-right">
-                                  <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                                  <span className={`inline-block px-1.5 py-0.5 rounded-full text-xs font-semibold ${
                                     over ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
                                   }`}>
                                     {over ? '+' : ''}{variancePct.toFixed(1)}%
@@ -668,14 +696,14 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                                 <td className="py-1.5 px-3 text-right text-gray-700">{formatCurrencyFull(totalBudget)}</td>
                                 <td className="py-1.5 px-3 text-right text-gray-700">{formatCurrencyFull(totalActual)}</td>
                                 <td className="py-1.5 px-3 text-right">
-                                  <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                                  <span className={`inline-block px-1.5 py-0.5 rounded-full text-xs font-semibold ${
                                     over ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
                                   }`}>
                                     {over ? '+' : ''}{formatCurrencyFull(totalDollar)}
                                   </span>
                                 </td>
                                 <td className="py-1.5 pl-3 pr-4 text-right">
-                                  <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                                  <span className={`inline-block px-1.5 py-0.5 rounded-full text-xs font-semibold ${
                                     over ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
                                   }`}>
                                     {over ? '+' : ''}{totalPct.toFixed(1)}%
@@ -762,22 +790,53 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
 
                   {/* Pipeline stat cards — blue to match Conference Effectiveness score */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-3">
-                    {[
-                      { label: 'Pipeline influenced', value: formatMillions(snapshot.pipeline_influenced), sub: undefined },
-                      { label: 'Net-new pipeline', value: formatMillions(snapshot.pipeline_net_new), sub: undefined },
-                      { label: 'Continued engagement', value: formatMillions(snapshot.pipeline_continued_engagement), sub: undefined },
-                      {
-                        label: 'Required pipeline',
-                        value: formatMillions(snapshot.required_pipeline_amount),
-                        sub: snapshot.required_pipeline_multiple != null ? `${snapshot.required_pipeline_multiple}× spend target` : undefined,
-                      },
-                    ].map(({ label, value, sub }) => (
-                      <div key={label} className="flex flex-col gap-1.5 p-2.5 bg-blue-50 rounded-lg border border-blue-200">
-                        <span className="text-[12px] font-semibold text-gray-700 leading-tight">{label}</span>
-                        <span className="text-base font-semibold text-gray-800">{value}</span>
-                        {sub && <span className="text-[11px] text-gray-400">{sub}</span>}
-                      </div>
-                    ))}
+                    {(() => {
+                      const influenced = snapshot.pipeline_influenced;
+                      const netNew = snapshot.pipeline_net_new;
+                      const continued = snapshot.pipeline_continued_engagement;
+                      const required = snapshot.required_pipeline_amount;
+
+                      const pct = (num: number | null, denom: number | null) =>
+                        num != null && denom != null && denom > 0
+                          ? `${Math.round((num / denom) * 100)}%`
+                          : null;
+
+                      const cards: { label: string; value: string; sub?: string; pill?: string }[] = [
+                        {
+                          label: 'Total Pipeline Influenced',
+                          value: formatMillions(influenced),
+                          pill: pct(influenced, required) ? `${pct(influenced, required)} of required` : undefined,
+                        },
+                        {
+                          label: 'Net-New Pipeline Influenced',
+                          value: formatMillions(netNew),
+                          pill: pct(netNew, influenced) ? `${pct(netNew, influenced)} of total` : undefined,
+                        },
+                        {
+                          label: 'Reengaged Pipeline',
+                          value: formatMillions(continued),
+                          pill: pct(continued, influenced) ? `${pct(continued, influenced)} of total` : undefined,
+                        },
+                        {
+                          label: 'Required Influenced Pipeline',
+                          value: formatMillions(required),
+                          sub: snapshot.required_pipeline_multiple != null ? `${snapshot.required_pipeline_multiple}× spend target` : undefined,
+                        },
+                      ];
+
+                      return cards.map(({ label, value, sub, pill }) => (
+                        <div key={label} className="flex flex-col gap-1.5 p-2.5 bg-blue-50 rounded-lg border border-blue-200">
+                          <span className="text-[12px] font-semibold text-gray-700 leading-tight">{label}</span>
+                          <span className="text-base font-semibold text-gray-800">{value}</span>
+                          {sub && <span className="text-[11px] text-gray-400">{sub}</span>}
+                          {pill && (
+                            <span className="inline-flex self-start items-center text-[10px] font-medium rounded-full px-1.5 py-0.5 bg-blue-100 text-blue-700 border border-blue-200">
+                              {pill}
+                            </span>
+                          )}
+                        </div>
+                      ));
+                    })()}
                   </div>
 
                   {/* Pipeline target indicator */}
