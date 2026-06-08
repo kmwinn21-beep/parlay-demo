@@ -412,6 +412,7 @@ export default function ConferenceDetailPage() {
   const [showBatchScan, setShowBatchScan] = useState(false);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [showDebrief, setShowDebrief] = useState(false);
+  const [executiveBriefOpen, setExecutiveBriefOpen] = useState(false);
   const [showCrmExport, setShowCrmExport] = useState(false);
   const [showAdminStage, setShowAdminStage] = useState(false);
   const [stageActionLoading, setStageActionLoading] = useState(false);
@@ -1852,7 +1853,7 @@ export default function ConferenceDetailPage() {
                 </button>
               )}
               </div>
-              {/* Pinned right: divider + Field Report */}
+              {/* Pinned right: divider + Field Report + Executive Brief */}
               {isInternalAttendee && (
                 <div className="flex items-center gap-3 flex-shrink-0 bg-white pl-2">
                   <div className="self-center" style={{ width: '1px', height: '16px', background: 'var(--color-border-secondary, #D1D5DB)' }} />
@@ -1869,6 +1870,23 @@ export default function ConferenceDetailPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15 17l0 -3" />
                     </svg>
                     Field Report
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExecutiveBriefOpen(true)}
+                    className="flex items-center gap-1.5 text-sm font-medium text-brand-accent hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
+                  >
+                    {/* ti-presentation-analytics */}
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-10" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v4" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 20h6" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12v-4" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 12v-6" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12v-2" />
+                    </svg>
+                    Executive brief
                   </button>
                 </div>
               )}
