@@ -301,14 +301,14 @@ export function generateExecutiveBriefHTML(data: {
     const dateRange = conf.end_date ? fmtRange(conf.start_date, conf.end_date) : fmtDate(conf.start_date);
     const generated = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     const meta = [s('strategy_name'), s('sponsorship_level')].filter(Boolean).join(' · ');
-    return `<div style="-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#223A5E;padding:16px 0 14px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between">
+    return `<div style="-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#223A5E;padding:16px 24px 14px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between">
     <div>
       <p style="font-size:9px;font-weight:600;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.1em;margin:0 0 3px">Executive brief</p>
       <p style="font-size:18px;font-weight:600;color:#FFFFFF;margin:0;line-height:1.2">${escHtml(conf.name)}</p>
       <p style="font-size:10px;color:rgba(255,255,255,.5);margin:4px 0 0">${escHtml(dateRange)}${meta ? ' · ' + escHtml(meta) : ''}</p>
     </div>
     <div style="text-align:right">
-      <img src="${baseUrl}/V2ParlayLogoNew.png" alt="Parlay" style="height:26px;display:block;margin-left:auto;filter:brightness(0)invert(1)" />
+      <img src="${baseUrl}/ParlayLogoWhite_New.png" alt="Parlay" style="height:36px;display:block;margin-left:auto" />
       <p style="font-size:9px;color:rgba(255,255,255,.35);margin:5px 0 0">Generated ${generated}</p>
     </div>
   </div>`;
@@ -316,7 +316,7 @@ export function generateExecutiveBriefHTML(data: {
 
   function pageFooter(page: number): string {
     return `<div style="margin-top:24px;padding-top:10px;border-top:1px solid #F1F5F9;display:flex;align-items:center;justify-content:space-between">
-    <img src="${baseUrl}/V2ParlayLogoNew.png" alt="Parlay" style="height:14px;display:block" />
+    <img src="${baseUrl}/ParlayLogoColor_New.png" alt="Parlay" style="height:18px;display:block" />
     <p style="font-size:9px;color:#94A3B8;margin:0">${escHtml(conf.name)} · Executive brief · Page ${page} of 3</p>
   </div>`;
   }
@@ -326,10 +326,14 @@ export function generateExecutiveBriefHTML(data: {
   }
 
   function statCard(label: string, value: string, sub?: string): string {
-    return `<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:8px 10px;border-left:3px solid #185FA5;height:100%;box-sizing:border-box">
+    // Always render the sub line (transparent when absent) so all cards are the same height
+    const subLine = sub
+      ? `<p style="font-size:9px;color:#94A3B8;margin:2px 0 0">${escHtml(sub)}</p>`
+      : `<p style="font-size:9px;color:transparent;margin:2px 0 0" aria-hidden="true">·</p>`;
+    return `<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:8px 10px;border-left:3px solid #185FA5">
     <p style="font-size:9px;color:#64748B;margin:0 0 3px">${escHtml(label)}</p>
     <p style="font-size:15px;font-weight:600;color:#1E293B;margin:0">${escHtml(value)}</p>
-    ${sub ? `<p style="font-size:9px;color:#94A3B8;margin:2px 0 0">${escHtml(sub)}</p>` : ''}
+    ${subLine}
   </div>`;
   }
 
@@ -653,25 +657,28 @@ export function generateExecutiveBriefHTML(data: {
         <div style="background:#E6F1FB;border:1px solid #B5D4F4;border-radius:6px;padding:8px 10px;height:100%;box-sizing:border-box">
           <p style="font-size:9px;font-weight:600;color:#475569;margin:0 0 4px">Pipeline influenced</p>
           <p style="font-size:14px;font-weight:600;color:#1E293B;margin:0">${fmt$(pipelineInfluenced)}</p>
+          <p style="font-size:8px;color:transparent;margin:2px 0 0" aria-hidden="true">·</p>
         </div>
       </td>
       <td style="width:25%;padding:0 6px;vertical-align:top">
         <div style="background:#E6F1FB;border:1px solid #B5D4F4;border-radius:6px;padding:8px 10px;height:100%;box-sizing:border-box">
           <p style="font-size:9px;font-weight:600;color:#475569;margin:0 0 4px">Net-new pipeline</p>
           <p style="font-size:14px;font-weight:600;color:#1E293B;margin:0">${fmt$(pipelineNetNew)}</p>
+          <p style="font-size:8px;color:transparent;margin:2px 0 0" aria-hidden="true">·</p>
         </div>
       </td>
       <td style="width:25%;padding:0 6px;vertical-align:top">
         <div style="background:#E6F1FB;border:1px solid #B5D4F4;border-radius:6px;padding:8px 10px;height:100%;box-sizing:border-box">
           <p style="font-size:9px;font-weight:600;color:#475569;margin:0 0 4px">Continued engagement</p>
           <p style="font-size:14px;font-weight:600;color:#1E293B;margin:0">${fmt$(pipelineContinued)}</p>
+          <p style="font-size:8px;color:transparent;margin:2px 0 0" aria-hidden="true">·</p>
         </div>
       </td>
       <td style="width:25%;padding-left:6px;vertical-align:top">
         <div style="background:#E6F1FB;border:1px solid #B5D4F4;border-radius:6px;padding:8px 10px;height:100%;box-sizing:border-box">
           <p style="font-size:9px;font-weight:600;color:#475569;margin:0 0 4px">Required pipeline</p>
           <p style="font-size:14px;font-weight:600;color:#1E293B;margin:0">${fmt$(requiredPipelineAmount)}</p>
-          ${n('required_pipeline_multiple') != null ? `<p style="font-size:8px;color:#94A3B8;margin:2px 0 0">${n('required_pipeline_multiple')}× spend target</p>` : ''}
+          ${n('required_pipeline_multiple') != null ? `<p style="font-size:8px;color:#94A3B8;margin:2px 0 0">${n('required_pipeline_multiple')}× spend target</p>` : '<p style="font-size:8px;color:transparent;margin:2px 0 0" aria-hidden="true">·</p>'}
         </div>
       </td>
     </tr>
