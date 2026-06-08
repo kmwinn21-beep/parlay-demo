@@ -251,24 +251,22 @@ export async function simulateConferenceActivity(params: SimulationParams): Prom
   // Attendee selection
   const icpMatchedAttendees = allAttendees.filter(a => a.company_id != null && icpCompanyIdSet.has(a.company_id));
 
-  // Identify previously-engaged companies (engagement-based, not just attendance)
+  // Identify previously-engaged companies: any company whose attendees have real (non-simulated)
+  // meetings, follow-ups, or touchpoints anywhere in the system. No conference scoping — if a
+  // company has any prior activity at all, it is not net-new.
   const prevEngagedRes = await client.execute({
     sql: `SELECT DISTINCT a2.company_id
           FROM attendees a2
-          JOIN conference_attendees ca2 ON ca2.attendee_id = a2.id
-          JOIN conferences c2 ON c2.id = ca2.conference_id
           WHERE a2.company_id IS NOT NULL
-            AND ca2.conference_id != ?
-            AND c2.end_date < (SELECT end_date FROM conferences WHERE id = ?)
             AND (
               EXISTS (SELECT 1 FROM meetings m
-                      WHERE m.attendee_id = a2.id AND m.conference_id = ca2.conference_id AND m.source != 'simulated')
+                      WHERE m.attendee_id = a2.id AND m.source != 'simulated')
               OR EXISTS (SELECT 1 FROM follow_ups f
-                         WHERE f.attendee_id = a2.id AND f.conference_id = ca2.conference_id AND f.source != 'simulated')
+                         WHERE f.attendee_id = a2.id AND f.source != 'simulated')
               OR EXISTS (SELECT 1 FROM attendee_touchpoints t
-                         WHERE t.attendee_id = a2.id AND t.conference_id = ca2.conference_id)
+                         WHERE t.attendee_id = a2.id)
             )`,
-    args: [conferenceId, conferenceId],
+    args: [],
   }).catch(() => ({ rows: [] as { company_id: unknown }[] }));
   const previouslyEngagedCompanyIds = new Set(prevEngagedRes.rows.map(r => Number(r.company_id)));
 
