@@ -9,17 +9,21 @@ export async function GET(request: NextRequest) {
 
   const db = await getDb(auth.accountId);
 
-  const repsRes = await db.execute({
-    sql: `SELECT id, value, email FROM config_options WHERE category = 'user' ORDER BY sort_order, value`,
-    args: [],
-  });
+  try {
+    const repsRes = await db.execute({
+      sql: `SELECT id, value FROM config_options WHERE category = 'user' ORDER BY sort_order, value`,
+      args: [],
+    });
 
-  const reps = repsRes.rows.map(r => ({
-    id: Number(r.id),
-    name: String(r.value ?? ''),
-    email: r.email ? String(r.email) : '',
-    role: 'Rep',
-  }));
+    const reps = repsRes.rows.map(r => ({
+      id: Number(r.id),
+      name: String(r.value ?? ''),
+      email: '',
+      role: 'Rep',
+    }));
 
-  return NextResponse.json({ reps });
+    return NextResponse.json({ reps });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+  }
 }

@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
 
   const db = await getDb(auth.accountId);
 
+  try {
   const confsRes = await db.execute({
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.stage_override,
                  co.action_key AS strategy_key,
@@ -45,4 +46,7 @@ export async function GET(request: NextRequest) {
   }));
 
   return NextResponse.json({ conferences });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+  }
 }
