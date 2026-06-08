@@ -129,7 +129,7 @@ function parseBudgetLineItems(raw: string | null | undefined): Array<{ name: str
       .map((item: Record<string, unknown>) => {
         const parseDollar = (v: unknown) => Number(String(v ?? '').replace(/[^0-9.]/g, '')) || 0;
         return {
-          name: String(item.name ?? item.category ?? 'Item'),
+          name: String(item.label ?? item.name ?? item.category ?? 'Item'),
           budget: parseDollar(item.budget),
           actual: parseDollar(item.actual) || parseDollar(item.budget),
         };
@@ -145,9 +145,10 @@ function generateRecommendation(snapshot: ConferenceSnapshot | null, conference:
 
   const ces = snapshot.ces_score ?? 0;
   const ceff = snapshot.cost_efficiency_score ?? 0;
-  const icpRate = snapshot.icp_engagement_rate ?? 0;
-  const holdRate = snapshot.meeting_hold_rate ?? 0;
-  const followupRate = snapshot.followup_completion_rate ?? 0;
+  // These are stored as 0-1 decimals; convert to 0-100 for threshold comparisons
+  const icpRate = (snapshot.icp_engagement_rate ?? 0) * 100;
+  const holdRate = (snapshot.meeting_hold_rate ?? 0) * 100;
+  const followupRate = (snapshot.followup_completion_rate ?? 0) * 100;
   const pipeline = snapshot.pipeline_influenced ?? 0;
   const required = snapshot.required_pipeline_amount ?? 0;
 
@@ -264,7 +265,7 @@ function YoYTable({ instances }: { instances: ConferenceYoYRow[] }) {
               <td className="py-1.5 px-3 text-right text-gray-600">
                 {row.icpCompaniesEngaged != null ? fmtNum(row.icpCompaniesEngaged) : '—'}
               </td>
-              <td className="py-1.5 px-3 text-right text-gray-600">{fmtPct(row.meetingHoldRate)}</td>
+              <td className="py-1.5 px-3 text-right text-gray-600">{fmtPct(row.meetingHoldRate != null ? row.meetingHoldRate * 100 : null)}</td>
               <td className="py-1.5 pl-3 text-right text-gray-600">{fmt$(row.pipelinePerK)}</td>
             </tr>
           ))}
@@ -435,7 +436,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                         Sponsorship: <strong className="text-gray-700">{snapshot.sponsorship_level ?? conference.sponsorship_level}</strong>
                       </span>
                     )}
-                    {(snapshot.booth_present === 1 || conference.booth_present) && (
+                    {!!(snapshot.booth_present === 1 || conference.booth_present) && (
                       <span className="text-xs text-gray-500">
                         Booth:{' '}
                         <strong className="text-gray-700">
@@ -564,13 +565,13 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                 <section>
                   <SectionHeader>Execution quality</SectionHeader>
                   <div className="space-y-3">
-                    <DimRow label="ICP target quality" value={snapshot.icp_engagement_rate} />
-                    <DimRow label="Meeting hold rate" value={snapshot.meeting_hold_rate} />
-                    <DimRow label="Buying committee coverage" value={snapshot.buying_committee_coverage_rate} />
-                    <DimRow label="Follow-up scheduling rate" value={snapshot.followup_scheduling_rate} />
-                    <DimRow label="Follow-up completion rate" value={snapshot.followup_completion_rate} />
+                    <DimRow label="ICP target quality" value={snapshot.icp_engagement_rate != null ? snapshot.icp_engagement_rate * 100 : null} />
+                    <DimRow label="Meeting hold rate" value={snapshot.meeting_hold_rate != null ? snapshot.meeting_hold_rate * 100 : null} />
+                    <DimRow label="Buying committee coverage" value={snapshot.buying_committee_coverage_rate != null ? snapshot.buying_committee_coverage_rate * 100 : null} />
+                    <DimRow label="Follow-up scheduling rate" value={snapshot.followup_scheduling_rate != null ? snapshot.followup_scheduling_rate * 100 : null} />
+                    <DimRow label="Follow-up completion rate" value={snapshot.followup_completion_rate != null ? snapshot.followup_completion_rate * 100 : null} />
                     <DimRow label="Avg. health score (engaged)" value={snapshot.avg_health_score_engaged} />
-                    <DimRow label="Returning attendee rate" value={snapshot.returning_attendee_rate} />
+                    <DimRow label="Returning attendee rate" value={snapshot.returning_attendee_rate != null ? snapshot.returning_attendee_rate * 100 : null} />
                   </div>
                   <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div className="text-center">
@@ -617,13 +618,13 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                                   ? (snapshot.icp_companies_engaged / snapshot.icp_companies_total) * 100
                                   : 0,
                                 100
-                              )}%`,
+                              ).toFixed(2)}%`,
                             }}
                           />
                         </div>
                         <div className="text-xs text-gray-400 mt-1">
                           {snapshot.icp_engagement_rate != null
-                            ? `${Math.round(snapshot.icp_engagement_rate)}% engagement rate`
+                            ? `${Math.round(snapshot.icp_engagement_rate * 100)}% engagement rate`
                             : ''}
                         </div>
                       </div>
