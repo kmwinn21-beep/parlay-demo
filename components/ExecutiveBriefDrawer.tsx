@@ -79,6 +79,12 @@ function formatCurrency(val: number | null | undefined): string {
   return `$${Math.round(val).toLocaleString()}`;
 }
 
+// Full precision with commas — used in line items table
+function formatCurrencyFull(val: number | null | undefined): string {
+  if (val == null) return '—';
+  return `$${Math.round(val).toLocaleString()}`;
+}
+
 function formatMillions(val: number | null | undefined): string {
   if (val == null || val === 0) return '—';
   return `$${(val / 1_000_000).toFixed(1)}M`;
@@ -126,33 +132,33 @@ function getCesTier(score: number | null): TierResult {
   return { label: 'Inefficient', textClass: 'text-red-600', bgClass: 'bg-red-100' };
 }
 
-type BenchResult = { label: string; bg: string; text: string } | null;
+type BenchResult = { label: string; bg: string; text: string; border: string } | null;
 
 function getPipelinePerKBench(val: number | null): BenchResult {
   if (val == null) return null;
-  if (val >= 10000) return { label: 'Elite', bg: 'bg-green-100', text: 'text-green-800' };
-  if (val >= 6000) return { label: 'Strong', bg: 'bg-green-100', text: 'text-green-800' };
-  if (val >= 3500) return { label: 'Healthy', bg: 'bg-amber-100', text: 'text-amber-800' };
-  if (val >= 1500) return { label: 'Weak', bg: 'bg-red-100', text: 'text-red-800' };
-  return { label: 'Below', bg: 'bg-red-100', text: 'text-red-800' };
+  if (val >= 10000) return { label: 'Elite',    bg: 'bg-green-100',  text: 'text-green-800',  border: 'border-green-300' };
+  if (val >= 6000)  return { label: 'Strong',   bg: 'bg-green-100',  text: 'text-green-800',  border: 'border-green-300' };
+  if (val >= 3500)  return { label: 'Healthy',  bg: 'bg-amber-100',  text: 'text-amber-800',  border: 'border-amber-300' };
+  if (val >= 1500)  return { label: 'Weak',     bg: 'bg-red-100',    text: 'text-red-800',    border: 'border-red-300'   };
+  return              { label: 'Poor',     bg: 'bg-red-100',    text: 'text-red-800',    border: 'border-red-300'   };
 }
 
 function getCostPerCompanyBench(val: number | null): BenchResult {
   if (val == null) return null;
-  if (val <= 350) return { label: 'Elite', bg: 'bg-green-100', text: 'text-green-800' };
-  if (val <= 650) return { label: 'Strong', bg: 'bg-green-100', text: 'text-green-800' };
-  if (val <= 1000) return { label: 'Healthy', bg: 'bg-amber-100', text: 'text-amber-800' };
-  if (val <= 1600) return { label: 'Weak', bg: 'bg-red-100', text: 'text-red-800' };
-  return { label: 'Below', bg: 'bg-red-100', text: 'text-red-800' };
+  if (val <= 350)  return { label: 'Elite',    bg: 'bg-green-100',  text: 'text-green-800',  border: 'border-green-300' };
+  if (val <= 650)  return { label: 'Strong',   bg: 'bg-green-100',  text: 'text-green-800',  border: 'border-green-300' };
+  if (val <= 1000) return { label: 'Healthy',  bg: 'bg-amber-100',  text: 'text-amber-800',  border: 'border-amber-300' };
+  if (val <= 1600) return { label: 'Weak',     bg: 'bg-red-100',    text: 'text-red-800',    border: 'border-red-300'   };
+  return             { label: 'Poor',     bg: 'bg-red-100',    text: 'text-red-800',    border: 'border-red-300'   };
 }
 
 function getCostPerMeetingBench(val: number | null): BenchResult {
   if (val == null) return null;
-  if (val <= 400) return { label: 'Elite', bg: 'bg-green-100', text: 'text-green-800' };
-  if (val <= 700) return { label: 'Strong', bg: 'bg-green-100', text: 'text-green-800' };
-  if (val <= 1100) return { label: 'Healthy', bg: 'bg-amber-100', text: 'text-amber-800' };
-  if (val <= 1800) return { label: 'Weak', bg: 'bg-red-100', text: 'text-red-800' };
-  return { label: 'Below', bg: 'bg-red-100', text: 'text-red-800' };
+  if (val <= 400)  return { label: 'Elite',    bg: 'bg-green-100',  text: 'text-green-800',  border: 'border-green-300' };
+  if (val <= 700)  return { label: 'Strong',   bg: 'bg-green-100',  text: 'text-green-800',  border: 'border-green-300' };
+  if (val <= 1100) return { label: 'Healthy',  bg: 'bg-amber-100',  text: 'text-amber-800',  border: 'border-amber-300' };
+  if (val <= 1800) return { label: 'Weak',  bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-300' };
+  return                   { label: 'Poor', bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-300' };
 }
 
 // ─── Recommendation logic ─────────────────────────────────────────────────────
@@ -165,11 +171,16 @@ type RecommendationResult = {
   iconPath: string;
 };
 
+function getPrevInstance(snapshot: ConferenceSnapshot, seriesYoY: SeriesYoYData | null) {
+  const instances = seriesYoY?.instances ?? [];
+  const idx = instances.findIndex(i => i.conferenceId === snapshot.conference_id);
+  return idx > 0 ? instances[idx - 1] : null;
+}
+
 function getRecommendation(snapshot: ConferenceSnapshot, seriesYoY: SeriesYoYData | null): RecommendationResult {
   const ces = snapshot.ces_score ?? 0;
-  const instances = seriesYoY?.instances ?? [];
-  const prevInstance = instances.length >= 2 ? instances[instances.length - 2] : null;
-  const trend = prevInstance?.cesScore != null && ces != null ? ces - prevInstance.cesScore : null;
+  const prevInstance = getPrevInstance(snapshot, seriesYoY);
+  const trend = prevInstance?.cesScore != null ? ces - prevInstance.cesScore : null;
 
   if (ces >= 75) return {
     action: 'attend', label: 'Attend',
@@ -202,8 +213,7 @@ function generateRationale(snapshot: ConferenceSnapshot, conference: ConferenceS
   const tier = getCesTier(ces).label;
   const engRate = Math.round((snapshot.icp_engagement_rate ?? 0) * 100);
   const missed = (snapshot.icp_companies_total ?? 0) - (snapshot.icp_companies_engaged ?? 0);
-  const instances = seriesYoY?.instances ?? [];
-  const prev = instances.length >= 2 ? instances[instances.length - 2] : null;
+  const prev = getPrevInstance(snapshot, seriesYoY);
   const trend = prev?.cesScore != null ? ces - prev.cesScore : null;
 
   const trendText = trend !== null
@@ -242,15 +252,15 @@ function parseBudgetLineItems(raw: string | null | undefined): Array<{ name: str
 
 function SectionEyebrow({ num, label }: { num: string; label: string }) {
   return (
-    <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-3 pb-2 border-b border-gray-100">
+    <p className="text-[12px] font-semibold uppercase tracking-widest text-gray-400 mb-3 pb-2 border-b border-gray-100">
       {num} — {label}
     </p>
   );
 }
 
-function StatCard({ label, value, sub, valueClass }: { label: string; value: string; sub?: string; valueClass?: string }) {
+function StatCard({ label, value, sub, valueClass, className }: { label: string; value: string; sub?: string; valueClass?: string; className?: string }) {
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className={`flex flex-col gap-0.5${className ? ` ${className}` : ''}`}>
       <span className="text-[11px] text-gray-500">{label}</span>
       <span className={`text-xl font-semibold ${valueClass ?? 'text-gray-800'}`}>{value}</span>
       {sub && <span className="text-[11px] text-gray-400">{sub}</span>}
@@ -261,7 +271,7 @@ function StatCard({ label, value, sub, valueClass }: { label: string; value: str
 function BenchBadge({ bench }: { bench: BenchResult }) {
   if (!bench) return null;
   return (
-    <span className={`inline-block text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${bench.bg} ${bench.text}`}>
+    <span className={`inline-block text-xs font-semibold px-1.5 py-0.5 rounded-full border ${bench.bg} ${bench.text} ${bench.border}`}>
       {bench.label}
     </span>
   );
@@ -515,32 +525,59 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                   {/* Budget line items table */}
                   {lineItems.length > 0 && (
                     <div className="overflow-x-auto">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">Budget vs. Actual</p>
                       <table className="w-full text-xs">
                         <thead>
                           <tr className="border-b border-gray-100">
                             <th className="text-left font-medium text-gray-500 pb-1.5 pr-4">Line item</th>
                             <th className="text-right font-medium text-gray-500 pb-1.5 px-3">Budget</th>
-                            <th className="text-right font-medium text-gray-500 pb-1.5 pl-3">Actual</th>
+                            <th className="text-right font-medium text-gray-500 pb-1.5 px-3">Actual</th>
+                            <th className="text-right font-medium text-gray-500 pb-1.5 pl-3">Variance</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {lineItems.map((item, i) => (
-                            <tr key={i} className="border-b border-gray-100">
-                              <td className="py-1.5 pr-4 text-gray-700">{item.name}</td>
-                              <td className="py-1.5 px-3 text-right text-gray-600">{formatCurrency(item.budget)}</td>
-                              <td className={`py-1.5 pl-3 text-right font-medium ${item.actual > item.budget * 1.05 ? 'text-red-500' : item.actual < item.budget * 0.95 ? 'text-emerald-600' : 'text-gray-700'}`}>
-                                {formatCurrency(item.actual)}
-                              </td>
-                            </tr>
-                          ))}
+                          {lineItems.map((item, i) => {
+                            const variancePct = item.budget > 0
+                              ? ((item.actual - item.budget) / item.budget) * 100 : 0;
+                            const over = variancePct > 0;
+                            return (
+                              <tr key={i} className="border-b border-gray-100">
+                                <td className="py-1.5 pr-4 text-gray-700">{item.name}</td>
+                                <td className="py-1.5 px-3 text-right text-gray-600">{formatCurrencyFull(item.budget)}</td>
+                                <td className="py-1.5 px-3 text-right text-gray-600">{formatCurrencyFull(item.actual)}</td>
+                                <td className="py-1.5 pl-3 text-right">
+                                  <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                                    over ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                                  }`}>
+                                    {over ? '+' : ''}{variancePct.toFixed(1)}%
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
                           {/* Total row */}
                           <tr className="border-t border-gray-200 font-medium">
                             <td className="py-1.5 pr-4 text-gray-800">Total</td>
                             <td className="py-1.5 px-3 text-right text-gray-700">
-                              {formatCurrency(lineItems.reduce((s, i) => s + i.budget, 0))}
+                              {formatCurrencyFull(lineItems.reduce((s, item) => s + item.budget, 0))}
                             </td>
-                            <td className="py-1.5 pl-3 text-right text-gray-700">
-                              {formatCurrency(lineItems.reduce((s, i) => s + i.actual, 0))}
+                            <td className="py-1.5 px-3 text-right text-gray-700">
+                              {formatCurrencyFull(lineItems.reduce((s, item) => s + item.actual, 0))}
+                            </td>
+                            <td className="py-1.5 pl-3 text-right">
+                              {(() => {
+                                const totalBudget = lineItems.reduce((s, item) => s + item.budget, 0);
+                                const totalActual = lineItems.reduce((s, item) => s + item.actual, 0);
+                                const pct = totalBudget > 0 ? ((totalActual - totalBudget) / totalBudget) * 100 : 0;
+                                const over = pct > 0;
+                                return (
+                                  <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                                    over ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                                  }`}>
+                                    {over ? '+' : ''}{pct.toFixed(1)}%
+                                  </span>
+                                );
+                              })()}
                             </td>
                           </tr>
                         </tbody>
@@ -602,42 +639,41 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                     </div>
                   </div>
 
-                  {/* Cost sub-metric cards */}
+                  {/* Cost sub-metric cards — green to match Cost Efficiency score */}
                   <div className="grid grid-cols-3 gap-2 mb-3">
-                    <div className="flex flex-col gap-1 p-2.5 bg-gray-50 rounded-lg border border-gray-100">
-                      <span className="text-[10px] text-gray-500">Pipeline per $1K</span>
-                      <span className="text-base font-semibold text-gray-800">{formatCurrency(snapshot.pipeline_per_1k)}</span>
-                      <BenchBadge bench={getPipelinePerKBench(snapshot.pipeline_per_1k)} />
-                    </div>
-                    <div className="flex flex-col gap-1 p-2.5 bg-gray-50 rounded-lg border border-gray-100">
-                      <span className="text-[10px] text-gray-500">Cost per company</span>
-                      <span className="text-base font-semibold text-gray-800">{formatCurrency(snapshot.cost_per_company_engaged)}</span>
-                      <BenchBadge bench={getCostPerCompanyBench(snapshot.cost_per_company_engaged)} />
-                    </div>
-                    <div className="flex flex-col gap-1 p-2.5 bg-gray-50 rounded-lg border border-gray-100">
-                      <span className="text-[10px] text-gray-500">Cost per meeting</span>
-                      <span className="text-base font-semibold text-gray-800">{formatCurrency(snapshot.cost_per_meeting_held)}</span>
-                      <BenchBadge bench={getCostPerMeetingBench(snapshot.cost_per_meeting_held)} />
-                    </div>
+                    {[
+                      { label: 'Pipeline per $1K', value: formatCurrency(snapshot.pipeline_per_1k), bench: getPipelinePerKBench(snapshot.pipeline_per_1k) },
+                      { label: 'Cost Per Company Engaged', value: formatCurrency(snapshot.cost_per_company_engaged), bench: getCostPerCompanyBench(snapshot.cost_per_company_engaged) },
+                      { label: 'Cost per meeting', value: formatCurrency(snapshot.cost_per_meeting_held), bench: getCostPerMeetingBench(snapshot.cost_per_meeting_held) },
+                    ].map(({ label, value, bench }) => (
+                      <div key={label} className="flex flex-col gap-1.5 p-2.5 bg-green-50 rounded-lg border border-green-200">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-[12px] font-semibold text-gray-700 leading-tight">{label}</span>
+                          <BenchBadge bench={bench} />
+                        </div>
+                        <span className="text-base font-semibold text-gray-800">{value}</span>
+                      </div>
+                    ))}
                   </div>
 
-                  {/* Pipeline stat cards */}
+                  {/* Pipeline stat cards — blue to match Conference Effectiveness score */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-3">
-                    <StatCard label="Pipeline influenced" value={formatMillions(snapshot.pipeline_influenced)} />
-                    <StatCard
-                      label="Net-new pipeline"
-                      value={snapshot.pipeline_net_new == null || snapshot.pipeline_net_new === 0
-                        ? '$0' : formatMillions(snapshot.pipeline_net_new)}
-                      valueClass={!snapshot.pipeline_net_new ? 'text-gray-400' : 'text-gray-800'}
-                    />
-                    <StatCard label="Continued engagement" value={formatMillions(snapshot.pipeline_continued_engagement)} />
-                    <StatCard
-                      label="Required pipeline"
-                      value={formatMillions(snapshot.required_pipeline_amount)}
-                      sub={snapshot.required_pipeline_multiple != null
-                        ? `${snapshot.required_pipeline_multiple}× spend target`
-                        : undefined}
-                    />
+                    {[
+                      { label: 'Pipeline influenced', value: formatMillions(snapshot.pipeline_influenced), sub: undefined },
+                      { label: 'Net-new pipeline', value: formatMillions(snapshot.pipeline_net_new), sub: undefined },
+                      { label: 'Continued engagement', value: formatMillions(snapshot.pipeline_continued_engagement), sub: undefined },
+                      {
+                        label: 'Required pipeline',
+                        value: formatMillions(snapshot.required_pipeline_amount),
+                        sub: snapshot.required_pipeline_multiple != null ? `${snapshot.required_pipeline_multiple}× spend target` : undefined,
+                      },
+                    ].map(({ label, value, sub }) => (
+                      <div key={label} className="flex flex-col gap-1.5 p-2.5 bg-blue-50 rounded-lg border border-blue-200">
+                        <span className="text-[12px] font-semibold text-gray-700 leading-tight">{label}</span>
+                        <span className="text-base font-semibold text-gray-800">{value}</span>
+                        {sub && <span className="text-[11px] text-gray-400">{sub}</span>}
+                      </div>
+                    ))}
                   </div>
 
                   {/* Pipeline target indicator */}
@@ -857,16 +893,19 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                       label="Proposed next budget"
                       value={formatCurrency(proposedNextBudget)}
                       sub={rec?.action === 'reduce' ? '−10% vs. actual' : '+5% vs. actual'}
+                      className="bg-gray-50 border border-gray-200 rounded-lg p-2.5"
                     />
                     <StatCard
                       label="Current headcount"
                       value={internalHeadcount != null ? String(internalHeadcount) : '—'}
                       sub="Internal attendees"
+                      className="bg-gray-50 border border-gray-200 rounded-lg p-2.5"
                     />
                     <StatCard
                       label="CES target"
                       value={snapshot.ces_score != null ? `${snapshot.ces_score + 5}+` : '—'}
                       sub="Next instance goal"
+                      className="bg-gray-50 border border-gray-200 rounded-lg p-2.5"
                     />
                   </div>
 
