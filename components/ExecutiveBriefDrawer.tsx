@@ -659,7 +659,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                                           <rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" />
                                           <rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" />
                                         </svg>
-                                        {snapshot.booth_number ? `#${snapshot.booth_number}` : `${snapshot.booth_width ?? '?'}×${snapshot.booth_length ?? '?'} ft`}
+                                        {`${snapshot.booth_width ?? '?'}×${snapshot.booth_length ?? '?'} ft`}
                                       </span>
                                     )}
                                   </div>
@@ -813,7 +813,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                           pill: pct(netNew, influenced) ? `${pct(netNew, influenced)} of total` : undefined,
                         },
                         {
-                          label: 'Pipeline Influenced by Reengagement',
+                          label: 'Reengaged Pipeline',
                           value: formatMillions(continued),
                           pill: pct(continued, influenced) ? `${pct(continued, influenced)} of total` : undefined,
                         },

@@ -352,7 +352,7 @@ export function generateExecutiveBriefHTML(data: {
         </tr></table>
       </td>
       <td style="font-size:9px;font-weight:600;color:#1E293B;width:36px;text-align:right;padding:3px 6px 3px 0">${escHtml(displayVal)}</td>
-      <td style="font-size:8px;font-weight:600;color:${tierColor};width:56px;text-align:right;padding:3px 0">${escHtml(tierLabel)}</td>
+      <td style="font-size:9px;font-weight:600;color:${tierColor};width:56px;text-align:left;padding:3px 0">${escHtml(tierLabel)}</td>
     </tr>`;
   }
 
@@ -404,7 +404,9 @@ export function generateExecutiveBriefHTML(data: {
       const pillBg = over ? '#FCEBEB' : '#EAF3DE';
       const pillColor = over ? '#A32D2D' : '#3B6D11';
       return `<tr style="background:${rowBg}">
-        <td style="padding:5px 8px 5px 0;font-size:9px;color:#475569">${escHtml(item.name)}</td>
+        <td style="padding:5px 8px 5px 0;font-size:9px;color:#475569">
+          ${escHtml(item.name)}${/sponsorship/i.test(item.name) && sponsorshipLevel && sponsorshipLevel !== 'none' ? ` <span style="display:inline-flex;align-items:center;font-size:7px;font-weight:600;border-radius:9999px;padding:1px 5px;background:#FAEEDA;color:#633806;border:1px solid #FAC775;vertical-align:middle">${escHtml(sponsorshipLevel)}</span>` : ''}${/booth/i.test(item.name) && boothPresent ? ` <span style="display:inline-flex;align-items:center;font-size:7px;font-weight:600;border-radius:9999px;padding:1px 5px;background:#F3F0FF;color:#5B3CC4;border:1px solid #C4B5FD;vertical-align:middle">${escHtml(`${boothWidth ?? '?'}×${boothLength ?? '?'} ft`)}</span>` : ''}
+        </td>
         <td style="padding:5px 6px;text-align:right;font-size:9px;color:#475569">${fmtFull$(item.budget)}</td>
         <td style="padding:5px 6px;text-align:right;font-size:9px;color:#475569">${fmtFull$(item.actual)}</td>
         <td style="padding:5px 6px;text-align:right">
@@ -462,8 +464,8 @@ export function generateExecutiveBriefHTML(data: {
     <tr>
       <td style="width:20%;padding-right:6px;vertical-align:top">${statCard('Total spend', fmt$(actualTotal), n('budget_total') != null ? `Budget: ${fmt$(n('budget_total'))}` : undefined)}</td>
       <td style="width:20%;padding:0 6px;vertical-align:top">${statCard('Budget variance', budgetVarianceStr, budgetVarianceSub)}</td>
-      <td style="width:20%;padding:0 6px;vertical-align:top">${statCard('Cost per company', fmt$(n('cost_per_company_engaged')), icpEngaged != null ? `${icpEngaged} engaged` : undefined)}</td>
-      <td style="width:20%;padding:0 6px;vertical-align:top">${statCard('Cost per meeting', fmt$(n('cost_per_meeting_held')))}</td>
+      <td style="width:20%;padding:0 6px;vertical-align:top">${statCard('Cost per company engaged', fmt$(n('cost_per_company_engaged')), icpEngaged != null ? `${icpEngaged} engaged` : undefined)}</td>
+      <td style="width:20%;padding:0 6px;vertical-align:top">${statCard('Cost per meeting', fmt$(n('cost_per_meeting_held')), (() => { const tc = n('actual_total') ?? n('total_cost'); const cpm = n('cost_per_meeting_held'); return tc && cpm && cpm > 0 ? `${Math.round(tc / cpm)} meetings held` : undefined; })())}</td>
       <td style="width:20%;padding-left:6px;vertical-align:top">${statCard('Cost per internal attendee', fmt$(cpInternalAttendee), internalHeadcount != null ? `${internalHeadcount} attendees` : undefined)}</td>
     </tr>
   </table>
@@ -650,28 +652,28 @@ export function generateExecutiveBriefHTML(data: {
     <tr>
       <td style="width:25%;padding-right:6px;vertical-align:top">
         <div style="background:#E6F1FB;border:1px solid #B5D4F4;border-radius:6px;padding:8px 10px;height:100%;box-sizing:border-box">
-          <p style="font-size:9px;font-weight:600;color:#475569;margin:0 0 4px">Pipeline influenced</p>
+          <p style="font-size:9px;font-weight:600;color:#475569;margin:0 0 4px">Total Pipeline Influenced</p>
           <p style="font-size:14px;font-weight:600;color:#1E293B;margin:0">${fmt$(pipelineInfluenced)}</p>
-          <p style="font-size:8px;color:transparent;margin:2px 0 0" aria-hidden="true">·</p>
+          ${pipelineInfluenced != null && requiredPipelineAmount != null && requiredPipelineAmount > 0 ? `<span style="display:inline-block;margin-top:4px;font-size:7px;font-weight:600;border-radius:9999px;padding:1px 5px;background:#DBEAFE;color:#1E40AF;border:1px solid #BFDBFE">${Math.round((pipelineInfluenced / requiredPipelineAmount) * 100)}% of required</span>` : '<p style="font-size:8px;color:transparent;margin:2px 0 0" aria-hidden="true">·</p>'}
         </div>
       </td>
       <td style="width:25%;padding:0 6px;vertical-align:top">
         <div style="background:#E6F1FB;border:1px solid #B5D4F4;border-radius:6px;padding:8px 10px;height:100%;box-sizing:border-box">
-          <p style="font-size:9px;font-weight:600;color:#475569;margin:0 0 4px">Net-new pipeline</p>
+          <p style="font-size:9px;font-weight:600;color:#475569;margin:0 0 4px">Net-New Pipeline Influenced</p>
           <p style="font-size:14px;font-weight:600;color:#1E293B;margin:0">${fmt$(pipelineNetNew)}</p>
-          <p style="font-size:8px;color:transparent;margin:2px 0 0" aria-hidden="true">·</p>
+          ${pipelineNetNew != null && pipelineInfluenced != null && pipelineInfluenced > 0 ? `<span style="display:inline-block;margin-top:4px;font-size:7px;font-weight:600;border-radius:9999px;padding:1px 5px;background:#DBEAFE;color:#1E40AF;border:1px solid #BFDBFE">${Math.round((pipelineNetNew / pipelineInfluenced) * 100)}% of total</span>` : '<p style="font-size:8px;color:transparent;margin:2px 0 0" aria-hidden="true">·</p>'}
         </div>
       </td>
       <td style="width:25%;padding:0 6px;vertical-align:top">
         <div style="background:#E6F1FB;border:1px solid #B5D4F4;border-radius:6px;padding:8px 10px;height:100%;box-sizing:border-box">
-          <p style="font-size:9px;font-weight:600;color:#475569;margin:0 0 4px">Continued engagement</p>
+          <p style="font-size:9px;font-weight:600;color:#475569;margin:0 0 4px">Reengaged Pipeline</p>
           <p style="font-size:14px;font-weight:600;color:#1E293B;margin:0">${fmt$(pipelineContinued)}</p>
-          <p style="font-size:8px;color:transparent;margin:2px 0 0" aria-hidden="true">·</p>
+          ${pipelineContinued != null && pipelineInfluenced != null && pipelineInfluenced > 0 ? `<span style="display:inline-block;margin-top:4px;font-size:7px;font-weight:600;border-radius:9999px;padding:1px 5px;background:#DBEAFE;color:#1E40AF;border:1px solid #BFDBFE">${Math.round((pipelineContinued / pipelineInfluenced) * 100)}% of total</span>` : '<p style="font-size:8px;color:transparent;margin:2px 0 0" aria-hidden="true">·</p>'}
         </div>
       </td>
       <td style="width:25%;padding-left:6px;vertical-align:top">
         <div style="background:#E6F1FB;border:1px solid #B5D4F4;border-radius:6px;padding:8px 10px;height:100%;box-sizing:border-box">
-          <p style="font-size:9px;font-weight:600;color:#475569;margin:0 0 4px">Required pipeline</p>
+          <p style="font-size:9px;font-weight:600;color:#475569;margin:0 0 4px">Required Influenced Pipeline</p>
           <p style="font-size:14px;font-weight:600;color:#1E293B;margin:0">${fmt$(requiredPipelineAmount)}</p>
           ${n('required_pipeline_multiple') != null ? `<p style="font-size:8px;color:#94A3B8;margin:2px 0 0">${n('required_pipeline_multiple')}× spend target</p>` : '<p style="font-size:8px;color:transparent;margin:2px 0 0" aria-hidden="true">·</p>'}
         </div>
