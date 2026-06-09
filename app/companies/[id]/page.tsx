@@ -197,6 +197,7 @@ export default function CompanyDetailPage() {
 
   // Activity timeline state
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const [relMapOpen, setRelMapOpen] = useState(false);
 
   // Intel drawer state
   interface IntelItem {
@@ -941,6 +942,18 @@ export default function CompanyDetailPage() {
                           </svg>
                         </button>
                       )}
+                      {planCapabilities?.intelligence_core?.internal_relationship_mapping && (
+                        <button
+                          type="button"
+                          title="View relationship map"
+                          onClick={() => setRelMapOpen(true)}
+                          className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0"
+                        >
+                          <svg className="w-4 h-4 sm:w-5 sm:h-5 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                          </svg>
+                        </button>
+                      )}
                     </h1>
                     {company.parent_company && (
                       <p className="text-sm text-gray-500 mt-0.5">
@@ -1504,6 +1517,8 @@ export default function CompanyDetailPage() {
                   relTypeOptions={relTypeOptions}
                   relationships={internalRelationships}
                   onRefresh={fetchInternalRelationships}
+                  mapOpen={relMapOpen}
+                  onMapClose={() => setRelMapOpen(false)}
                 />
               ),
               operator_capital: (
