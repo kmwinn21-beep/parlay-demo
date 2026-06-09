@@ -2026,7 +2026,7 @@ export default function ConferenceDetailPage() {
 
               {/* Row 4: Metadata pills */}
               <div style={{ height: '0.5px' }} className="bg-gray-100 my-3" />
-              <div className="flex flex-wrap items-end gap-3 mt-1">
+              <div className="flex flex-wrap items-end gap-6 mt-1">
                 {conference.conference_type && (
                   <div>
                     <p className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.07em] mb-1.5">Type</p>
