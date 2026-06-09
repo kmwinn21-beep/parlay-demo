@@ -128,41 +128,28 @@ export async function GET(
         });
     }
 
-    // Step 7b — Health score by conference (proxy: current health_score of engaged attendees per conference)
-    // "Engaged" = at least one meeting, follow-up, or touchpoint at that conference
-    const engagedByConf = new Map<number, number[]>();
-    for (const row of meetingsResult.rows) {
-      const cid = Number(row.conference_id);
-      const aid = Number(row.attendee_id);
-      if (!engagedByConf.has(cid)) engagedByConf.set(cid, []);
-      engagedByConf.get(cid)!.push(aid);
-    }
-    for (const row of followUpsResult.rows) {
-      const cid = Number(row.conference_id);
-      const aid = Number(row.attendee_id);
-      if (!engagedByConf.has(cid)) engagedByConf.set(cid, []);
-      engagedByConf.get(cid)!.push(aid);
-    }
-    for (const row of touchpointsResult.rows) {
-      const cid = Number(row.conference_id);
-      const aid = Number(row.attendee_id);
-      if (!engagedByConf.has(cid)) engagedByConf.set(cid, []);
-      engagedByConf.get(cid)!.push(aid);
-    }
-
-    const healthScoreByAttendee = new Map<number, number | null>();
-    for (const row of attendeesResult.rows) {
-      healthScoreByAttendee.set(Number(row.id), row.health_score != null ? Number(row.health_score) : null);
-    }
-
-    const healthByConference = conferenceIds.map(cid => {
-      const engagedAttendeeIds = Array.from(new Set(engagedByConf.get(cid) ?? []));
-      const scores = engagedAttendeeIds
-        .map(aid => healthScoreByAttendee.get(aid) ?? null)
-        .filter((s): s is number => s !== null);
-      const avg = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
-      return { conferenceId: cid, healthScore: avg };
+    // Step 7b — Avg health score per conference: SQL AVG over all company attendees present at each conference
+    const placeholders7b = conferenceIds.map(() => '?').join(',');
+    const healthResult = await db.execute({
+      sql: `SELECT ca.conference_id, ROUND(AVG(a.health_score)) as avg_hs
+            FROM conference_attendees ca
+            JOIN attendees a ON a.id = ca.attendee_id
+            WHERE a.company_id = ?
+              AND a.health_score IS NOT NULL
+              AND ca.conference_id IN (${placeholders7b})
+            GROUP BY ca.conference_id`,
+      args: [companyId, ...conferenceIds],
     });
+
+    const healthScoreMap = new Map<number, number>();
+    for (const row of healthResult.rows) {
+      if (row.avg_hs != null) healthScoreMap.set(Number(row.conference_id), Math.round(Number(row.avg_hs)));
+    }
+
+    const healthByConference = conferenceIds.map(cid => ({
+      conferenceId: cid,
+      healthScore: healthScoreMap.get(cid) ?? null,
+    }));
 
     // Shape response
     return NextResponse.json({

@@ -302,6 +302,7 @@ export function ActivityTimelineModal({
     meetings: [], followUps: [], touchpoints: [], hostedEvents: [], firstContacts: [],
   };
   const healthByConference = data?.healthByConference ?? [];
+  const hasAnyHealthScore = healthByConference.some(h => h.healthScore != null);
   const attendeeIds = attendees.map(a => a.attendeeId);
 
   const confYear = (c: ConferenceEntry) =>
@@ -459,43 +460,45 @@ export function ActivityTimelineModal({
                   })}
                 </tr>
 
-                {/* Health score sub-row */}
-                <tr>
-                  <td
-                    className="px-3 py-2 border-b border-gray-100"
-                    style={{ position: 'sticky', left: 0, backgroundColor: 'white', zIndex: 2 }}
-                  >
-                    <p className="text-[10px] text-gray-400 italic">Avg health score</p>
-                  </td>
-                  {conferences.map(c => {
-                    const entry = healthByConference.find(h => h.conferenceId === c.conferenceId);
-                    const isCurrent = c.conferenceId === currentConferenceId;
-                    return (
-                      <td
-                        key={c.conferenceId}
-                        className="text-center border-b border-gray-100"
-                        style={{
-                          backgroundColor: isCurrent ? '#F0F7FF' : undefined,
-                          borderLeft: isCurrent ? '0.5px solid #B5D4F4' : undefined,
-                          borderRight: isCurrent ? '0.5px solid #B5D4F4' : undefined,
-                          padding: '6px 4px',
-                        }}
-                      >
-                        {entry?.healthScore != null ? (
-                          <span
-                            className={`text-[10px] font-semibold tabular-nums ${
-                              isCurrent ? 'text-blue-600' : 'text-gray-500'
-                            }`}
-                          >
-                            HS: {entry.healthScore}
-                          </span>
-                        ) : (
-                          <span className="text-gray-200 text-xs">—</span>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
+                {/* Health score sub-row — only shown when at least one conference has a score */}
+                {hasAnyHealthScore && (
+                  <tr>
+                    <td
+                      className="px-3 py-2 border-b border-gray-100"
+                      style={{ position: 'sticky', left: 0, backgroundColor: 'white', zIndex: 2 }}
+                    >
+                      <p className="text-[10px] text-gray-400 italic">Avg health score</p>
+                    </td>
+                    {conferences.map(c => {
+                      const entry = healthByConference.find(h => h.conferenceId === c.conferenceId);
+                      const isCurrent = c.conferenceId === currentConferenceId;
+                      return (
+                        <td
+                          key={c.conferenceId}
+                          className="text-center border-b border-gray-100"
+                          style={{
+                            backgroundColor: isCurrent ? '#F0F7FF' : undefined,
+                            borderLeft: isCurrent ? '0.5px solid #B5D4F4' : undefined,
+                            borderRight: isCurrent ? '0.5px solid #B5D4F4' : undefined,
+                            padding: '6px 4px',
+                          }}
+                        >
+                          {entry?.healthScore != null ? (
+                            <span
+                              className={`text-[10px] font-semibold tabular-nums ${
+                                isCurrent ? 'text-blue-600' : 'text-gray-500'
+                              }`}
+                            >
+                              {entry.healthScore}
+                            </span>
+                          ) : (
+                            <span className="text-gray-300 text-xs">—</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                )}
 
                 {/* ── Individual attendees section ── */}
                 {attendees.length > 0 && (
