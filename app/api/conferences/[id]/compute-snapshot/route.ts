@@ -22,6 +22,9 @@ const SNAPSHOT_TRACKED_FIELDS = [
   'pipeline_influence_execution_score', 'meeting_execution_score',
   'followup_execution_score', 'target_account_execution_score',
   'rep_productivity_score', 'sales_effectiveness_score',
+  'marketing_audience_signal_score', 'icp_coverage_rate_score',
+  'buyer_access_quality_score', 'conversation_quality_signal_score',
+  'market_intelligence_yield_score', 'engagement_momentum_score',
 ] as const;
 
 export async function POST(

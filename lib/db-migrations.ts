@@ -1267,4 +1267,16 @@ export const migrations: string[] = [
   `ALTER TABLE conference_snapshots ADD COLUMN rep_productivity_score REAL`,
   // 444 — conference_snapshots: overall sales effectiveness score (0–100, weighted avg of components)
   `ALTER TABLE conference_snapshots ADD COLUMN sales_effectiveness_score REAL`,
+  // 445 — conference_snapshots: overall pre-conference marketing audience signal score (0–100)
+  `ALTER TABLE conference_snapshots ADD COLUMN marketing_audience_signal_score REAL`,
+  // 446 — conference_snapshots: ICP coverage rate component score (weight 0.25)
+  `ALTER TABLE conference_snapshots ADD COLUMN icp_coverage_rate_score REAL`,
+  // 447 — conference_snapshots: buyer access quality component score (weight 0.25)
+  `ALTER TABLE conference_snapshots ADD COLUMN buyer_access_quality_score REAL`,
+  // 448 — conference_snapshots: conversation quality signal component score (weight 0.20)
+  `ALTER TABLE conference_snapshots ADD COLUMN conversation_quality_signal_score REAL`,
+  // 449 — conference_snapshots: market intelligence yield component score (weight 0.15)
+  `ALTER TABLE conference_snapshots ADD COLUMN market_intelligence_yield_score REAL`,
+  // 450 — conference_snapshots: engagement momentum component score (weight 0.15)
+  `ALTER TABLE conference_snapshots ADD COLUMN engagement_momentum_score REAL`,
 ];

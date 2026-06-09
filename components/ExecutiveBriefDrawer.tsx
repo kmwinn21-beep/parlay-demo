@@ -53,6 +53,12 @@ export interface ConferenceSnapshot {
   target_account_execution_score?: number | null;
   rep_productivity_score?: number | null;
   sales_effectiveness_score?: number | null;
+  marketing_audience_signal_score?: number | null;
+  icp_coverage_rate_score?: number | null;
+  buyer_access_quality_score?: number | null;
+  conversation_quality_signal_score?: number | null;
+  market_intelligence_yield_score?: number | null;
+  engagement_momentum_score?: number | null;
 }
 
 interface ConferenceSummary {

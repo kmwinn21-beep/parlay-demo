@@ -2644,6 +2644,9 @@ export default function ProgramIntelligencePage() {
                   'pipelineInfluenceExecutionScore', 'meetingExecutionScore',
                   'followupExecutionScore', 'targetAccountExecutionScore',
                   'repProductivityScore', 'salesEffectivenessScore',
+                  'marketingAudienceSignalScore', 'icpCoverageRateScore',
+                  'buyerAccessQualityScore', 'conversationQualitySignalScore',
+                  'marketIntelligenceYieldScore', 'engagementMomentumScore',
                 ] as const;
 
                 function relativeDate(iso: string | null): string {
