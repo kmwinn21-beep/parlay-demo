@@ -221,7 +221,11 @@ function findConfiguredAliasSync(ctx: ResolveContext, rawTitle: string): TitleMa
   const rawKey = normalizeTitleKey(rawTitle);
   const configured = ctx.configuredTitles.find(candidate => {
     const candidateKey = normalizeTitleKey(candidate.title);
-    return candidateKey && (rawKey === candidateKey || rawKey.includes(candidateKey) || candidateKey.includes(rawKey));
+    if (!candidateKey) return false;
+    if (rawKey === candidateKey) return true;
+    // Use word-boundary-aware match so "cto" inside "director" (dire*cto*r) doesn't match
+    const escaped = candidateKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?:^|\\s)${escaped}(?:\\s|$)`).test(rawKey);
   });
   if (!configured) return null;
   return buildTitleMetadata({
