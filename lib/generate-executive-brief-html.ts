@@ -12,6 +12,13 @@ function fmt$(val: number | null | undefined): string {
   return '$' + Math.round(val).toLocaleString();
 }
 
+function fmtAbbrev$(val: number | null | undefined): string {
+  if (val == null) return '—';
+  if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(1)}M`;
+  if (val >= 1_000) return `$${Math.round(val / 1_000)}K`;
+  return `$${Math.round(val)}`;
+}
+
 function fmtFull$(val: number | null | undefined): string {
   if (val == null) return '—';
   return '$' + Math.round(val).toLocaleString();
@@ -541,7 +548,7 @@ export function generateExecutiveBriefHTML(data: {
       followupCompletionRate != null ? `${Math.round(followupCompletionRate * 100)}%` : '—',
       dimTier(followupCompletionRate != null ? followupCompletionRate * 100 : null).l, dimTier(followupCompletionRate != null ? followupCompletionRate * 100 : null).c)}
     ${dimBar('Pipeline per Meeting', pipelineInfluenceExecutionScore, '#185FA5',
-      pipelinePerMeeting != null ? fmt$(pipelinePerMeeting) : '—',
+      pipelinePerMeeting != null ? fmtAbbrev$(pipelinePerMeeting) : '—',
       dimTier(pipelineInfluenceExecutionScore).l, dimTier(pipelineInfluenceExecutionScore).c)}
     ${dimBar('Pipeline Influence', pipelineInfluenceExecutionScore, '#1D9E75',
       pipelineInfluenceExecutionScore != null ? `${Math.round(pipelineInfluenceExecutionScore)}` : '—',

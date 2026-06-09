@@ -98,6 +98,13 @@ function formatCurrencyFull(val: number | null | undefined): string {
   return `$${Math.round(val).toLocaleString()}`;
 }
 
+function formatCurrencyAbbrev(val: number | null | undefined): string {
+  if (val == null) return '—';
+  if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(1)}M`;
+  if (val >= 1_000) return `$${Math.round(val / 1_000)}K`;
+  return `$${Math.round(val)}`;
+}
+
 function formatMillions(val: number | null | undefined): string {
   if (val == null || val === 0) return '—';
   return `$${Math.round(val).toLocaleString()}`;
@@ -911,7 +918,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                       value={snapshot.pipeline_influence_execution_score ?? 0}
                       barColor="#185FA5"
                       tier={getCesTier(snapshot.pipeline_influence_execution_score ?? null)}
-                      displayVal={snapshot.pipeline_per_meeting != null ? formatCurrencyFull(snapshot.pipeline_per_meeting) : '—'}
+                      displayVal={snapshot.pipeline_per_meeting != null ? formatCurrencyAbbrev(snapshot.pipeline_per_meeting) : '—'}
                     />
                     <DimBarRow
                       label="Pipeline Influence"
