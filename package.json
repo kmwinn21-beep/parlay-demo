@@ -12,6 +12,7 @@
     "@anthropic-ai/sdk": "^0.90.0",
     "@aws-sdk/client-s3": "^3.1034.0",
     "@aws-sdk/s3-request-presigner": "^3.1034.0",
+    "@clerk/nextjs": "^5.7.6",
     "@libsql/client": "^0.14.0",
     "@tiptap/extension-color": "^3.22.5",
     "@tiptap/extension-font-family": "^3.22.5",
@@ -35,6 +36,7 @@
     "react-hot-toast": "^2.4.1",
     "recharts": "^2.12.7",
     "stripe": "^22.1.1",
+    "svix": "^1.95.2",
     "workbox-window": "^7.4.0",
     "xlsx": "^0.18.5"
   },

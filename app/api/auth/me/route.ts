@@ -1,12 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSessionUser, resolveCapabilities, DEFAULT_ROLE_CAPABILITIES } from '@/lib/auth';
+import { getSessionUser, resolveCapabilities, DEFAULT_ROLE_CAPABILITIES, type SessionUser, type UserRole } from '@/lib/auth';
+import { getClerkSessionUser } from '@/lib/clerkAuth';
 import { db, dbReady } from '@/lib/db';
 import { resolvePlanState } from '@/lib/trialState';
 import { getDb } from '@/lib/getDb';
 import { PLAN_CAPABILITIES, type PlanId } from '@/lib/capabilities';
 
 export async function GET(request: NextRequest) {
-  const user = await getSessionUser(request);
+  // Try Clerk session first; fall back to legacy JWT cookie for existing sessions.
+  let user: SessionUser | null = null;
+
+  const clerkUser = await getClerkSessionUser();
+  if (clerkUser) {
+    user = {
+      id: clerkUser.id,
+      email: clerkUser.email,
+      role: clerkUser.role as UserRole,
+      emailVerified: Boolean(clerkUser.emailVerified),
+      accountId: clerkUser.accountId,
+    };
+  } else {
+    user = await getSessionUser(request);
+  }
+
   if (!user) {
     return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
   }

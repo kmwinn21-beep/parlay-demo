@@ -1,87 +1,41 @@
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import type { UserRole } from '@/lib/auth';
 
-const COOKIE_NAME = 'auth_token';
-const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-CHANGE-IN-PRODUCTION-minimum-32-chars!!';
+const isPublicRoute = createRouteMatcher([
+  '/auth/login(.*)',
+  '/auth/signup(.*)',
+  '/auth/accept-invite(.*)',
+  '/auth/forgot-password(.*)',
+  '/auth/reset-password(.*)',
+  '/api/auth/login(.*)',
+  '/api/auth/signup(.*)',
+  '/api/auth/trial-signup(.*)',
+  '/api/auth/accept-invite(.*)',
+  '/api/auth/forgot-password(.*)',
+  '/api/auth/reset-password(.*)',
+  '/api/auth/verify(.*)',
+  '/api/logo-config(.*)',
+  '/api/tagline(.*)',
+  '/api/app-name(.*)',
+  // Clerk internals + webhook (arrives without a user session)
+  '/api/webhooks/clerk(.*)',
+  '/__clerk(.*)',
+  '/signup(.*)',
+]);
 
-// Paths that don't require a session
-const PUBLIC_PREFIXES = ['/auth/', '/api/auth/', '/api/logo-config', '/api/tagline', '/api/app-name', '/signup'];
+const isAdminRoute = createRouteMatcher(['/admin(.*)']);
 
-// Paths that require administrator role
-const ADMIN_PREFIXES = ['/admin'];
+// /ops routes intentionally redirect to plain /auth/login (no ?next=) so that
+// after login the ops user lands on the dashboard rather than re-entering ops.
+const isOpsRoute = createRouteMatcher(['/ops(.*)', '/api/ops(.*)']);
 
-function isPublic(pathname: string): boolean {
-  return PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
-}
+export default clerkMiddleware(async (auth, request: NextRequest) => {
+  const url = request.nextUrl;
+  const { pathname } = url;
 
-function isAdminOnly(pathname: string): boolean {
-  return ADMIN_PREFIXES.some((p) => pathname.startsWith(p));
-}
-
-type MiddlewareSessionUser = {
-  id: number;
-  email: string;
-  role: UserRole;
-  emailVerified: boolean;
-};
-
-function base64UrlToBytes(value: string): Uint8Array {
-  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
-function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i += 1) diff |= a[i] ^ b[i];
-  return diff === 0;
-}
-
-async function verifyTokenEdge(token: string): Promise<MiddlewareSessionUser | null> {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const [headerB64, payloadB64, sigB64] = parts;
-    const enc = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      'raw',
-      enc.encode(JWT_SECRET),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
-    const signingInput = `${headerB64}.${payloadB64}`;
-    const expectedSig = new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(signingInput)));
-    const tokenSig = base64UrlToBytes(sigB64);
-    if (!timingSafeEqual(expectedSig, tokenSig)) return null;
-
-    const payloadJson = new TextDecoder().decode(base64UrlToBytes(payloadB64));
-    const payload = JSON.parse(payloadJson) as {
-      sub?: string; email?: string; role?: UserRole; emailVerified?: boolean; exp?: number;
-    };
-    if (!payload.sub || !payload.email || !payload.role) return null;
-    if (payload.exp && Date.now() >= payload.exp * 1000) return null;
-    return {
-      id: Number(payload.sub),
-      email: payload.email,
-      role: payload.role,
-      emailVerified: Boolean(payload.emailVerified),
-    };
-  } catch {
-    return null;
-  }
-}
-
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  // Handle CORS preflight for trial signup — must be resolved at the edge
-  // before Vercel's routing layer can interfere.
+  // ── CORS — trial signup from marketing site ──────────────────────────────
+  // Exact-origin check preserved from the original middleware.
   if (request.method === 'OPTIONS' && pathname === '/api/auth/trial-signup') {
     const origin = request.headers.get('origin') ?? '';
     const allowed = origin === 'https://useparlay.app' || origin === 'https://www.useparlay.app';
@@ -96,20 +50,21 @@ export async function middleware(request: NextRequest) {
     });
   }
 
-  // Always allow public auth paths through
-  if (isPublic(pathname)) return NextResponse.next();
+  // ── Public routes — skip all auth ────────────────────────────────────────
+  if (isPublicRoute(request)) {
+    return NextResponse.next();
+  }
 
-  // Verify session token from cookie
-  const token = request.cookies.get(COOKIE_NAME)?.value;
-  const user = token ? await verifyTokenEdge(token) : null;
+  // ── Require Clerk session for everything else ────────────────────────────
+  const { userId, sessionClaims } = await auth();
 
-  // /ops routes: redirect unauthenticated to /auth/login (no error, no params)
-  // is_admin check happens per-route-handler (requires DB, unavailable in Edge Runtime)
-  if (pathname.startsWith('/ops') || pathname.startsWith('/api/ops')) {
-    if (!user) {
+  // ── /ops routes — special unauthenticated redirect (no ?next= param) ─────
+  // Impersonation header is forwarded here so downstream ops handlers get it
+  // before the general impersonation block below runs.
+  if (isOpsRoute(request)) {
+    if (!userId) {
       return NextResponse.redirect(new URL('/auth/login', request.url));
     }
-    // Pass impersonation cookie as request header for downstream handlers
     const impersonationId = request.cookies.get('ops_impersonation')?.value;
     const requestHeaders = new Headers(request.headers);
     if (impersonationId) {
@@ -118,33 +73,39 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
-  if (!user) {
-    // API routes → 401 JSON; page routes → redirect to login
+  // ── Unauthenticated ──────────────────────────────────────────────────────
+  if (!userId) {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     const loginUrl = new URL('/auth/login', request.url);
-    const search = request.nextUrl.search;
+    const search = url.search;
     loginUrl.searchParams.set('next', pathname + (search || ''));
-    // Forward Vercel preview bypass token so the login page is not blocked by deployment protection
-    const vToken = request.nextUrl.searchParams.get('_v');
+    // Forward Vercel preview bypass token so the login page isn't blocked by
+    // deployment protection on preview URLs.
+    const vToken = url.searchParams.get('_v');
     if (vToken) loginUrl.searchParams.set('_v', vToken);
     return NextResponse.redirect(loginUrl);
   }
 
-  // Enforce administrator role for admin routes
-  if (isAdminOnly(pathname) && user.role !== 'administrator') {
-    if (pathname.startsWith('/api/')) {
-      return NextResponse.json(
-        { error: 'Forbidden: administrator access required' },
-        { status: 403 }
-      );
+  // ── Admin route protection ───────────────────────────────────────────────
+  if (isAdminRoute(request)) {
+    const role = sessionClaims?.role as string | undefined;
+    if (role !== 'administrator') {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json(
+          { error: 'Forbidden: administrator access required' },
+          { status: 403 }
+        );
+      }
+      return NextResponse.redirect(new URL('/auth/access-denied', request.url));
     }
-    return NextResponse.redirect(new URL('/auth/access-denied', request.url));
   }
 
-  // Impersonation write-blocking: block all writes while impersonating
-  // (allow /api/ops/impersonate/end so the admin can exit)
+  // ── Impersonation write-blocking ─────────────────────────────────────────
+  // Block all mutations while an ops_impersonation cookie is active.
+  // Exempt the entire /api/ops/ prefix (not just the end-session path) so
+  // all ops management actions still work during impersonation.
   const impersonationId = request.cookies.get('ops_impersonation')?.value;
   if (impersonationId && pathname.startsWith('/api/') && !pathname.startsWith('/api/ops/')) {
     const method = request.method.toUpperCase();
@@ -156,14 +117,14 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Forward impersonation ID to downstream handlers for main app API routes
+  // ── Forward impersonation header for main-app API routes ─────────────────
   if (impersonationId) {
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set('x-ops-impersonation-id', impersonationId);
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
-  // Demo mode: intercept all writes and return fake 200 responses
+  // ── Demo mode — intercept all mutations ──────────────────────────────────
   const bypassSecret = process.env.DEMO_BYPASS_SECRET;
   const bypassCookie = request.cookies.get('demo_bypass')?.value;
   const hasBypass = !!bypassSecret && bypassCookie === bypassSecret;
@@ -180,7 +141,7 @@ export async function middleware(request: NextRequest) {
       ];
       if (!DEMO_PASSTHROUGH.some(p => pathname.startsWith(p))) {
         let body: Record<string, unknown> = {};
-        try { body = await request.json(); } catch { /* non-JSON or file upload body */ }
+        try { body = await request.json(); } catch { /* non-JSON or file upload */ }
         const now = new Date().toISOString();
         const fake = method === 'DELETE'
           ? {}
@@ -191,16 +152,12 @@ export async function middleware(request: NextRequest) {
   }
 
   return NextResponse.next();
-}
+});
 
 export const config = {
   matcher: [
-    /*
-     * Run on all paths EXCEPT:
-     *  - _next/static  (Next.js build assets)
-     *  - _next/image   (image optimisation)
-     *  - Static files with extensions (images, fonts, favicon)
-     */
     '/((?!_next/static|_next/image|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?|ttf|eot)$).*)',
+    '/__clerk/:path*',
+    '/(api|trpc)(.*)',
   ],
 };
