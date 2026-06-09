@@ -4,7 +4,9 @@ import { randomUUID } from 'crypto';
 import { db, dbReady } from '@/lib/db';
 import { signToken, authCookieOptions, validatePassword } from '@/lib/auth';
 import { provisionAccount } from '@/lib/provision';
+import { createTenantDb } from '@/lib/tenantDb';
 import { sendWelcomeEmail } from '@/lib/email';
+import { clerkClient } from '@clerk/nextjs/server';
 
 const ALLOWED_ORIGINS = new Set(['https://useparlay.app', 'https://www.useparlay.app']);
 
@@ -103,7 +105,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Provision tenant DB (create Turso DB, seed schema, insert user + site_settings)
-    const { slug } = await provisionAccount({
+    const { slug, tursoDbUrl, tursoAuthToken } = await provisionAccount({
       accountId,
       companyName,
       email,
@@ -123,11 +125,35 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // We don't know the userId in the tenant DB yet — query it
-    // (provisioning inserted the user; get the id for the JWT)
-    // For now sign with id=0; the me route will re-fetch the real user from tenant DB
+    // Resolve the real user ID from the newly-provisioned tenant DB
+    // so the JWT and Clerk metadata carry the correct parlay_user_id.
+    const tenantClient = createTenantDb(tursoDbUrl, tursoAuthToken);
+    const userRow = await tenantClient.execute({
+      sql: 'SELECT id FROM users WHERE email = ?',
+      args: [email],
+    });
+    const parlayUserId = Number(userRow.rows[0]?.id ?? 1);
+
+    // If Clerk is configured, create a Clerk account for this new user so
+    // they can sign back in via SSO after their JWT session expires.
+    if (process.env.CLERK_SECRET_KEY) {
+      clerkClient.users.createUser({
+        emailAddress: [email],
+        password,
+        firstName,
+        lastName,
+        publicMetadata: {
+          account_id:     accountId,
+          parlay_user_id: parlayUserId,
+          role:           'administrator',
+        },
+      }).catch((err: unknown) => {
+        console.error('[trial-signup] Clerk user creation failed (non-fatal):', err);
+      });
+    }
+
     const sessionUser = {
-      id: 0,
+      id: parlayUserId,
       email,
       role: 'administrator' as const,
       emailVerified: true,

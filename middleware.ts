@@ -100,9 +100,12 @@ async function handleCore(
     }
 
     // ── Admin route protection ─────────────────────────────────────────────
+    // Only block when role is explicitly non-administrator. If role is absent
+    // from claims (Clerk JWT template not yet configured), pass through and
+    // let per-route requireAdmin() check the tenant DB role instead.
     if (isAdminRoute(request)) {
       const role = sessionClaims?.role as string | undefined;
-      if (role !== 'administrator') {
+      if (role !== undefined && role !== 'administrator') {
         if (pathname.startsWith('/api/')) {
           return NextResponse.json(
             { error: 'Forbidden: administrator access required' },
