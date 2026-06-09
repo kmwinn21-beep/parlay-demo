@@ -22,6 +22,9 @@ const isPublicRoute = createRouteMatcher([
   '/api/webhooks/clerk(.*)',
   '/__clerk(.*)',
   '/signup(.*)',
+  // Ops panel uses its own JWT auth (requireOpsAdmin) — fully Clerk-independent
+  '/ops(.*)',
+  '/api/ops/(.*)',
 ]);
 
 const isAdminRoute = createRouteMatcher(['/admin(.*)']);
@@ -55,23 +58,23 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
     return NextResponse.next();
   }
 
+  // ── Ops routes — bypass Clerk entirely ───────────────────────────────────
+  // requireOpsAdmin / requireOpsAdminPage inside each handler are the real
+  // auth gate (JWT auth_token cookie + master DB is_admin check). Returning
+  // here before await auth() means Clerk is never contacted for ops routes,
+  // so the ops panel remains accessible even if Clerk is unavailable.
+  if (isOpsRoute(request)) {
+    const impersonationId = request.cookies.get('ops_impersonation')?.value;
+    if (impersonationId) {
+      const requestHeaders = new Headers(request.headers);
+      requestHeaders.set('x-ops-impersonation-id', impersonationId);
+      return NextResponse.next({ request: { headers: requestHeaders } });
+    }
+    return NextResponse.next();
+  }
+
   // ── Require Clerk session for everything else ────────────────────────────
   const { userId, sessionClaims } = await auth();
-
-  // ── /ops routes — special unauthenticated redirect (no ?next= param) ─────
-  // Impersonation header is forwarded here so downstream ops handlers get it
-  // before the general impersonation block below runs.
-  if (isOpsRoute(request)) {
-    if (!userId) {
-      return NextResponse.redirect(new URL('/auth/login', request.url));
-    }
-    const impersonationId = request.cookies.get('ops_impersonation')?.value;
-    const requestHeaders = new Headers(request.headers);
-    if (impersonationId) {
-      requestHeaders.set('x-ops-impersonation-id', impersonationId);
-    }
-    return NextResponse.next({ request: { headers: requestHeaders } });
-  }
 
   // ── Unauthenticated ──────────────────────────────────────────────────────
   if (!userId) {
