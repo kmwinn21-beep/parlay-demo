@@ -102,7 +102,17 @@ async function BrandStyles() {
   }
 }
 
+const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const body = (
+    <>
+      {process.env.NEXT_PUBLIC_DEMO_MODE === 'true' && <DemoBanner />}
+      <ToastProvider>
+        <AppShell>{children}</AppShell>
+      </ToastProvider>
+    </>
+  );
   return (
     <html lang="en">
       <head>
@@ -114,12 +124,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <BrandStyles />
       </head>
       <body className="font-sans">
-        <ClerkProvider>
-          {process.env.NEXT_PUBLIC_DEMO_MODE === 'true' && <DemoBanner />}
-          <ToastProvider>
-            <AppShell>{children}</AppShell>
-          </ToastProvider>
-        </ClerkProvider>
+        {CLERK_ENABLED ? <ClerkProvider>{body}</ClerkProvider> : body}
       </body>
     </html>
   );
