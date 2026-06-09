@@ -25,6 +25,7 @@ import { useSectionConfig } from '@/lib/useSectionConfig';
 import { ComposeEmailModal } from '@/components/ComposeEmailModal';
 import { BUYER_ROLE_OPTIONS, shouldWarnForTitleMetadata, type BuyerRoleKey, type TitleMatchMetadata } from '@/lib/titleNormalization';
 import { ActivityTimelineModal } from '@/components/ActivityTimelineModal';
+import { useCapabilities } from '@/lib/useCapabilities';
 
 interface Conference { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -77,6 +78,7 @@ export default function AttendeeDetailPage() {
   const id = params.id as string;
   const colorMaps = useConfigColors();
   const userOptionsFull = useUserOptions();
+  const { planCapabilities } = useCapabilities();
   const { getLabel: getSectionLabel, orderedKeys: sectionOrder, isVisible: isSectionVisible } = useSectionConfig('attendee');
 
   const [attendee, setAttendee] = useState<Attendee | null>(null);
@@ -828,7 +830,7 @@ export default function AttendeeDetailPage() {
                     <div>
                       <div className="flex flex-wrap items-center gap-3">
                         <h1 className="text-2xl font-bold text-brand-primary font-serif">{attendee.first_name} {attendee.last_name}</h1>
-                        {attendee.company_id && (
+                        {attendee.company_id && planCapabilities?.intelligence_core?.activity_timeline && (
                           <button
                             type="button"
                             title="View activity timeline"

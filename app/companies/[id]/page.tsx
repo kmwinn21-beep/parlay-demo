@@ -28,6 +28,7 @@ import { useSectionConfig } from '@/lib/useSectionConfig';
 import { ComposeEmailModal } from '@/components/ComposeEmailModal';
 import { CompanyDrawer } from '@/components/CompanyDrawer';
 import { ActivityTimelineModal } from '@/components/ActivityTimelineModal';
+import { useCapabilities } from '@/lib/useCapabilities';
 
 interface ConferenceItem { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -130,6 +131,7 @@ export default function CompanyDetailPage() {
   const colorMaps = useConfigColors();
   const { getLabel: getSectionLabel, orderedKeys: sectionOrder, isVisible: isSectionVisible } = useSectionConfig('company');
   const unitTypeLabel = useUnitTypeLabel();
+  const { planCapabilities } = useCapabilities();
   const avgCostPerUnit = useAvgCostPerUnit();
 
   const [company, setCompany] = useState<Company | null>(null);
@@ -921,14 +923,16 @@ export default function CompanyDetailPage() {
                           </svg>
                         </button>
                       )}
-                      <button
-                        type="button"
-                        title="View activity timeline"
-                        onClick={() => setTimelineOpen(true)}
-                        className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0"
-                      >
-                        <i className="ti ti-timeline w-4 h-4 sm:w-5 sm:h-5 text-brand-secondary text-base" aria-hidden="true" />
-                      </button>
+                      {planCapabilities?.intelligence_core?.activity_timeline && (
+                        <button
+                          type="button"
+                          title="View activity timeline"
+                          onClick={() => setTimelineOpen(true)}
+                          className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0"
+                        >
+                          <i className="ti ti-timeline w-4 h-4 sm:w-5 sm:h-5 text-brand-secondary text-base" aria-hidden="true" />
+                        </button>
+                      )}
                     </h1>
                     {company.parent_company && (
                       <p className="text-sm text-gray-500 mt-0.5">
