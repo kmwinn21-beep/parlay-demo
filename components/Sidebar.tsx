@@ -12,6 +12,7 @@ import { LogoImage } from './LogoImage';
 import { useLogoConfig } from '@/lib/useLogoConfig';
 import { OnboardingChecklist } from './onboarding/OnboardingChecklist';
 import { clearActiveConferenceStorage } from '@/components/ActiveConferenceContext';
+import { useClerk } from '@clerk/nextjs';
 
 const operationsItems = [
   {
@@ -93,6 +94,7 @@ const calendarIntelligenceItem = {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { signOut } = useClerk();
   const { user } = useUser();
   const unreadCount = useUnreadNotificationCount();
   const needsAttentionCount = useNeedsAttentionCount();
@@ -109,7 +111,7 @@ export function Sidebar() {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
       clearActiveConferenceStorage();
-      window.location.href = '/auth/login';
+      await signOut({ redirectUrl: '/auth/login' });
     } catch {
       toast.error('Logout failed.');
     }
