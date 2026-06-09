@@ -1,13 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { SignUp } from '@clerk/nextjs';
 import { LogoImage } from '@/components/LogoImage';
 
 const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 function ClerkSignUpPage() {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { SignUp } = require('@clerk/nextjs') as typeof import('@clerk/nextjs');
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <SignUp />

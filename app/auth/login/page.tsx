@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
+import { SignIn } from '@clerk/nextjs';
 import { LogoImage } from '@/components/LogoImage';
 import { useTagline } from '@/lib/useTagline';
 import { useAppName } from '@/lib/useAppName';
@@ -14,9 +15,6 @@ import { useAppName } from '@/lib/useAppName';
 const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 function ClerkLoginPage() {
-  // Imported lazily so the Clerk SDK is only evaluated in Clerk-enabled builds.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { SignIn } = require('@clerk/nextjs') as typeof import('@clerk/nextjs');
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <SignIn />
