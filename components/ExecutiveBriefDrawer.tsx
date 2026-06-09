@@ -336,7 +336,7 @@ function StatCard({ label, value, sub, valueClass, className }: { label: string;
   return (
     <div className={`flex flex-col gap-0.5${className ? ` ${className}` : ''}`}>
       <span className="text-[11px] text-gray-500">{label}</span>
-      <span className={`text-xl font-semibold ${valueClass ?? 'text-gray-800'}`}>{value}</span>
+      <span className={`text-base sm:text-xl font-semibold ${valueClass ?? 'text-gray-800'}`}>{value}</span>
       {sub && <span className="text-[11px] text-gray-400">{sub}</span>}
     </div>
   );
@@ -363,7 +363,7 @@ function DimBarRow({
   const pct = value ?? 0;
   return (
     <div className="flex items-center gap-3 mb-2">
-      <span className="text-[11px] text-gray-600 w-44 flex-shrink-0">{label}</span>
+      <span className="text-[11px] text-gray-600 w-32 sm:w-44 flex-shrink-0">{label}</span>
       <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
         <div className="h-full rounded-full" style={{ width: `${Math.min(Math.max(pct, 0), 100)}%`, background: barColor }} />
       </div>
@@ -483,7 +483,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
           style={{ animation: 'execBriefSlideIn 0.25s ease-out' }}
         >
           {/* ── Header ──────────────────────────────────────────────── */}
-          <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white no-print">
+          <div className="flex-shrink-0 flex items-center justify-between px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-100 bg-white no-print">
             <div className="flex items-center gap-3 min-w-0">
               {/* ti-presentation-analytics */}
               <svg className="w-5 h-5 text-brand-secondary flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
@@ -508,8 +508,8 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {pdfLoading
-                  ? <><i className="ti ti-loader-2 text-xs animate-spin" aria-hidden="true" />Generating...</>
-                  : <><i className="ti ti-download text-xs" aria-hidden="true" />Save to PDF</>
+                  ? <><i className="ti ti-loader-2 text-xs animate-spin" aria-hidden="true" /><span className="hidden sm:inline">Generating...</span></>
+                  : <><i className="ti ti-download text-xs" aria-hidden="true" /><span className="hidden sm:inline">Save to PDF</span></>
                 }
               </button>
               <button
@@ -526,7 +526,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
           </div>
 
           {/* ── Body ────────────────────────────────────────────────── */}
-          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-7">
+          <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-5 space-y-7">
 
             {/* Empty state */}
             {!snapshot && (
@@ -548,7 +548,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                   <SectionEyebrow num="01" label="Investment" />
 
                   {/* Meta pills */}
-                  <div className="flex items-end gap-6 mb-3">
+                  <div className="flex flex-wrap items-end gap-x-6 gap-y-3 mb-3">
                     {(snapshot.conference_type ?? conference.conference_type) && (
                       <div>
                         <p className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.07em] mb-1.5">Type</p>
@@ -833,7 +833,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                   </div>
 
                   {/* Cost sub-metric cards — green to match Cost Efficiency score */}
-                  <div className="grid grid-cols-3 gap-2 mb-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
                     {[
                       { label: 'Pipeline per $1K', value: formatCurrency(snapshot.pipeline_per_1k), bench: getPipelinePerKBench(snapshot.pipeline_per_1k) },
                       { label: 'Cost per Engagement', value: formatCurrency(snapshot.cost_per_company_engaged), bench: getCostPerCompanyBench(snapshot.cost_per_company_engaged) },
@@ -976,7 +976,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                     />
                   </div>
 
-                  <div className="grid grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <CountCard label="Decision makers engaged" value={snapshot.decision_makers_engaged ?? '—'} />
                     <CountCard label="ICP companies engaged" value={snapshot.icp_companies_engaged ?? '—'} />
                     <CountCard label="ICP companies total" value={snapshot.icp_companies_total ?? '—'} />
@@ -1112,7 +1112,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                   )}
 
                   {/* Summary stat cards */}
-                  <div className="grid grid-cols-3 gap-2.5 mb-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-2">
                     <StatCard
                       label="Proposed next budget"
                       value={formatCurrency(proposedNextBudget)}
