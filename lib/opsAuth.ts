@@ -21,7 +21,7 @@ function isEnvOpsAdmin(email: string): boolean {
 export async function requireOpsAdmin(request: NextRequest): Promise<OpsAdmin | NextResponse> {
   const user = await getSessionUser(request);
   if (!user) {
-    return NextResponse.redirect(new URL('/ops/login', request.url));
+    return NextResponse.redirect(new URL('/ops-login', request.url));
   }
   if (isEnvOpsAdmin(user.email)) {
     return { userId: user.id, email: user.email };
@@ -32,7 +32,7 @@ export async function requireOpsAdmin(request: NextRequest): Promise<OpsAdmin | 
     args: [user.id],
   });
   if (!row.rows[0] || Number(row.rows[0].is_admin) !== 1) {
-    return NextResponse.redirect(new URL('/ops/login', request.url));
+    return NextResponse.redirect(new URL('/ops-login', request.url));
   }
   return { userId: user.id, email: user.email };
 }
@@ -63,7 +63,7 @@ export async function getOpsAdmin(): Promise<OpsAdmin | null> {
 // Use in server components: redirects to /ops/login if not ops admin
 export async function requireOpsAdminPage(): Promise<OpsAdmin> {
   const admin = await getOpsAdmin();
-  if (!admin) redirect('/ops/login');
+  if (!admin) redirect('/ops-login');
   return admin;
 }
 
