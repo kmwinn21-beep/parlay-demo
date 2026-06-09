@@ -2,9 +2,9 @@
 
 import { AuthenticateWithRedirectCallback } from '@clerk/nextjs';
 
-// Clerk redirects here after an OAuth/SSO provider handshake.
-// AuthenticateWithRedirectCallback exchanges the callback tokens and
-// then redirects to the original after_sign_in_url.
+const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
 export default function SSOCallbackPage() {
+  if (!CLERK_ENABLED) return null;
   return <AuthenticateWithRedirectCallback />;
 }
