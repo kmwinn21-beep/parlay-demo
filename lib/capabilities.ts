@@ -14,6 +14,7 @@ export interface PlanCapabilities {
     notifications_all_types: boolean;
     admin_configuration_panel: boolean;
     user_management: boolean;
+    help_chat: boolean;
   };
   intelligence_core: {
     icp_rules_engine: boolean;
@@ -21,6 +22,7 @@ export interface PlanCapabilities {
     prospect_recommendations: boolean;
     internal_relationship_mapping: boolean;
     activity_timeline: boolean;
+    company_intel: boolean;
   };
   floor_capture: {
     ai_card_scanning: boolean;
@@ -50,11 +52,17 @@ export interface PlanCapabilities {
     budget_tracking: boolean;
     roi_modeling: boolean;
     effectiveness_benchmarks: boolean;
+    conference_snapshots: boolean;
+    executive_brief: boolean;
+    meeting_note_analysis: boolean;
   };
   program_intelligence: {
     global_reporting: boolean;
     cross_conference_trends: boolean;
     configurable_benchmarks: boolean;
+    yoy_series_analysis: boolean;
+    series_detail_page: boolean;
+    series_snapshots_admin: boolean;
   };
   org_infrastructure: {
     brand_customization: boolean;
@@ -99,15 +107,17 @@ const CORE_ALL_TRUE = {
   followup_tracking: true, social_event_management: true, touchpoint_logging: true,
   standard_notes: true, conference_agenda: true, my_agenda: true,
   notifications_all_types: true, admin_configuration_panel: true, user_management: true,
+  help_chat: true,
 };
 const CORE_ALL_FALSE = {
   csv_import: false, pre_post_conference_review: false, meetings_tracking: false,
   followup_tracking: false, social_event_management: false, touchpoint_logging: false,
   standard_notes: false, conference_agenda: false, my_agenda: false,
   notifications_all_types: false, admin_configuration_panel: false, user_management: false,
+  help_chat: false,
 };
-const INTEL_ALL_TRUE = { icp_rules_engine: true, target_priority_scoring: true, prospect_recommendations: true, internal_relationship_mapping: true, activity_timeline: true };
-const INTEL_ALL_FALSE = { icp_rules_engine: false, target_priority_scoring: false, prospect_recommendations: false, internal_relationship_mapping: false, activity_timeline: false };
+const INTEL_ALL_TRUE = { icp_rules_engine: true, target_priority_scoring: true, prospect_recommendations: true, internal_relationship_mapping: true, activity_timeline: true, company_intel: true };
+const INTEL_ALL_FALSE = { icp_rules_engine: false, target_priority_scoring: false, prospect_recommendations: false, internal_relationship_mapping: false, activity_timeline: false, company_intel: false };
 const FLOOR_ALL_TRUE = { ai_card_scanning: true, ai_batch_card_scanning: true, floor_notes: true, auto_followup_triggers: true };
 const FLOOR_ALL_FALSE = { ai_card_scanning: false, ai_batch_card_scanning: false, floor_notes: false, auto_followup_triggers: false };
 const COLLAB_ALL_TRUE = { direct_messaging: true, group_messaging: true, rich_notes_mentions: true, rich_notes_comments: true, rich_notes_reactions: true };
@@ -118,14 +128,16 @@ const REV_INTEL_ALL_TRUE = {
   effectiveness_analytics: true, effectiveness_tab_summary: true, effectiveness_tab_sales_execution: true,
   effectiveness_tab_audience_messaging: true, effectiveness_tab_cost_efficiency: true,
   effectiveness_tab_definitions: true, budget_tracking: true, roi_modeling: true, effectiveness_benchmarks: true,
+  conference_snapshots: true, executive_brief: true, meeting_note_analysis: true,
 };
 const REV_INTEL_ALL_FALSE = {
   effectiveness_analytics: false, effectiveness_tab_summary: false, effectiveness_tab_sales_execution: false,
   effectiveness_tab_audience_messaging: false, effectiveness_tab_cost_efficiency: false,
   effectiveness_tab_definitions: false, budget_tracking: false, roi_modeling: false, effectiveness_benchmarks: false,
+  conference_snapshots: false, executive_brief: false, meeting_note_analysis: false,
 };
-const PROG_INTEL_ALL_TRUE = { global_reporting: true, cross_conference_trends: true, configurable_benchmarks: true };
-const PROG_INTEL_ALL_FALSE = { global_reporting: false, cross_conference_trends: false, configurable_benchmarks: false };
+const PROG_INTEL_ALL_TRUE = { global_reporting: true, cross_conference_trends: true, configurable_benchmarks: true, yoy_series_analysis: true, series_detail_page: true, series_snapshots_admin: true };
+const PROG_INTEL_ALL_FALSE = { global_reporting: false, cross_conference_trends: false, configurable_benchmarks: false, yoy_series_analysis: false, series_detail_page: false, series_snapshots_admin: false };
 const ORG_ALL_TRUE = { brand_customization: true, white_label: true, form_builder: true, lead_capture: true, role_scope_matrix: true };
 const ORG_ALL_FALSE = { brand_customization: false, white_label: false, form_builder: false, lead_capture: false, role_scope_matrix: false };
 const CUSTOM_ONLY_ALL_TRUE = { native_crm_integration: true, multi_team_architecture: true, multi_org_architecture: true, api_access: true, custom_sla: true, custom_data_migration: true, dedicated_onboarding: true };
@@ -153,6 +165,7 @@ export function buildCustomPlanCapabilities(
         capabilities.intelligence_core.prospect_recommendations = true;
         capabilities.intelligence_core.internal_relationship_mapping = true;
         capabilities.intelligence_core.activity_timeline = true;
+        capabilities.intelligence_core.company_intel = true;
         break;
       case 'floor_capture':
         capabilities.floor_capture.ai_card_scanning = true;
@@ -177,6 +190,9 @@ export function buildCustomPlanCapabilities(
         capabilities.revenue_intelligence.budget_tracking = true;
         capabilities.revenue_intelligence.roi_modeling = true;
         capabilities.revenue_intelligence.effectiveness_benchmarks = true;
+        capabilities.revenue_intelligence.conference_snapshots = true;
+        capabilities.revenue_intelligence.executive_brief = true;
+        capabilities.revenue_intelligence.meeting_note_analysis = true;
         capabilities.revenue.crm_export = true;
         capabilities.revenue.email_integration_google = true;
         capabilities.revenue.email_integration_microsoft = true;
@@ -185,6 +201,9 @@ export function buildCustomPlanCapabilities(
         capabilities.program_intelligence.global_reporting = true;
         capabilities.program_intelligence.cross_conference_trends = true;
         capabilities.program_intelligence.configurable_benchmarks = true;
+        capabilities.program_intelligence.yoy_series_analysis = true;
+        capabilities.program_intelligence.series_detail_page = true;
+        capabilities.program_intelligence.series_snapshots_admin = true;
         break;
       case 'org_infrastructure':
         capabilities.org_infrastructure.brand_customization = true;
@@ -266,6 +285,7 @@ export const PLAN_CAPABILITIES: Record<PlanId, PlanCapabilities> = {
       followup_tracking: false, social_event_management: false, touchpoint_logging: false,
       standard_notes: false, conference_agenda: true, my_agenda: true,
       notifications_all_types: true, admin_configuration_panel: false, user_management: false,
+      help_chat: true,
     },
     intelligence_core: INTEL_ALL_FALSE,
     floor_capture: FLOOR_ALL_FALSE,
@@ -276,6 +296,7 @@ export const PLAN_CAPABILITIES: Record<PlanId, PlanCapabilities> = {
       effectiveness_tab_sales_execution: true, effectiveness_tab_audience_messaging: true,
       effectiveness_tab_cost_efficiency: true, effectiveness_tab_definitions: true,
       budget_tracking: false, roi_modeling: false, effectiveness_benchmarks: false,
+      conference_snapshots: true, executive_brief: false, meeting_note_analysis: false,
     },
     program_intelligence: PROG_INTEL_ALL_FALSE,
     org_infrastructure: ORG_ALL_FALSE,
