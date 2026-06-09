@@ -36,6 +36,7 @@
     "react-hot-toast": "^2.4.1",
     "recharts": "^2.12.7",
     "stripe": "^22.1.1",
+    "svix": "^1.95.2",
     "workbox-window": "^7.4.0",
     "xlsx": "^0.18.5"
   },
