@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { ClerkProvider } from '@clerk/nextjs';
 import './globals.css';
 
 // Always render dynamically so BrandStyles, FontStyles, and favicon re-query
@@ -113,10 +114,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <BrandStyles />
       </head>
       <body className="font-sans">
-        {process.env.NEXT_PUBLIC_DEMO_MODE === 'true' && <DemoBanner />}
-        <ToastProvider>
-          <AppShell>{children}</AppShell>
-        </ToastProvider>
+        <ClerkProvider>
+          {process.env.NEXT_PUBLIC_DEMO_MODE === 'true' && <DemoBanner />}
+          <ToastProvider>
+            <AppShell>{children}</AppShell>
+          </ToastProvider>
+        </ClerkProvider>
       </body>
     </html>
   );
