@@ -75,23 +75,56 @@ function Tooltip({ text, children }: { text: string; children: React.ReactNode }
 
 type DotType = 'meeting' | 'followup' | 'touchpoint' | 'hostedEvent' | 'firstContact';
 
-const DOT_CONFIG: Record<DotType, { bg: string; iconClass: string; color: string }> = {
-  meeting:      { bg: '#EFF6FF', iconClass: 'ti ti-users',        color: '#2563EB' },
-  followup:     { bg: '#F0FDF4', iconClass: 'ti ti-check',        color: '#16A34A' },
-  touchpoint:   { bg: '#FFFBEB', iconClass: 'ti ti-hand-finger',  color: '#D97706' },
-  hostedEvent:  { bg: '#E1F5EE', iconClass: 'ti ti-glass-full',   color: '#0F6E56' },
-  firstContact: { bg: '#EEEDFE', iconClass: 'ti ti-sparkles',     color: '#534AB7' },
+const DOT_ICONS: Record<DotType, React.ReactNode> = {
+  meeting: (
+    <svg viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" width="11" height="11" aria-hidden="true">
+      <circle cx="5.5" cy="5" r="2" />
+      <path d="M1 13c0-2 2-3.5 4.5-3.5S10 11 10 13" />
+      <path d="M11 7c1.1 0 2 .9 2 2s-.9 2-2 2" strokeDasharray="0" />
+      <path d="M13 13c0-1.4-.9-2.5-2-3" />
+    </svg>
+  ),
+  followup: (
+    <svg viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="11" height="11" aria-hidden="true">
+      <path d="M3 8l3 3 7-7" />
+    </svg>
+  ),
+  touchpoint: (
+    <svg viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" width="11" height="11" aria-hidden="true">
+      <path d="M8 2v5" />
+      <path d="M5.5 4.5v3M10.5 4.5v3" />
+      <path d="M5.5 7.5c0 1.4.7 2.5 2.5 4 1.8-1.5 2.5-2.6 2.5-4" />
+    </svg>
+  ),
+  hostedEvent: (
+    <svg viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" width="11" height="11" aria-hidden="true">
+      <rect x="2" y="4" width="12" height="10" rx="1.5" />
+      <path d="M5 2v2M11 2v2M2 7h12" />
+    </svg>
+  ),
+  firstContact: (
+    <svg viewBox="0 0 16 16" fill="white" width="11" height="11" aria-hidden="true">
+      <path d="M8 1l1.8 3.6 4 .6-2.9 2.8.7 4-3.6-1.9L4.4 12l.7-4L2.2 5.2l4-.6z" />
+    </svg>
+  ),
+};
+
+const DOT_BG: Record<DotType, string> = {
+  meeting:      '#3B82F6',
+  followup:     '#22C55E',
+  touchpoint:   '#F59E0B',
+  hostedEvent:  '#0D9488',
+  firstContact: '#8B5CF6',
 };
 
 function ActivityDot({ type, tooltip }: { type: DotType; tooltip: string }) {
-  const cfg = DOT_CONFIG[type];
   return (
     <Tooltip text={tooltip}>
       <div
         className="flex items-center justify-center rounded-full flex-shrink-0"
-        style={{ width: 22, height: 22, backgroundColor: cfg.bg }}
+        style={{ width: 22, height: 22, backgroundColor: DOT_BG[type] }}
       >
-        <i className={`${cfg.iconClass} text-[11px]`} style={{ color: cfg.color }} aria-hidden="true" />
+        {DOT_ICONS[type]}
       </div>
     </Tooltip>
   );
@@ -296,7 +329,15 @@ export function ActivityTimelineModal({
         {/* ── Header ── */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center gap-2 min-w-0">
-            <i className="ti ti-timeline text-brand-secondary text-lg flex-shrink-0" aria-hidden="true" />
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-brand-secondary flex-shrink-0" aria-hidden="true">
+              <line x1="2" y1="10" x2="18" y2="10" />
+              <circle cx="6" cy="6" r="1.5" fill="currentColor" stroke="none" />
+              <circle cx="10" cy="13" r="1.5" fill="currentColor" stroke="none" />
+              <circle cx="14" cy="5" r="1.5" fill="currentColor" stroke="none" />
+              <line x1="6" y1="10" x2="6" y2="6" strokeWidth="1.4" />
+              <line x1="10" y1="10" x2="10" y2="13" strokeWidth="1.4" />
+              <line x1="14" y1="10" x2="14" y2="5" strokeWidth="1.4" />
+            </svg>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-brand-primary truncate">
                 Activity timeline — {companyName}
@@ -345,7 +386,7 @@ export function ActivityTimelineModal({
           )}
 
           {!loading && !error && data && conferences.length > 0 && (
-            <table className="border-separate border-spacing-0 min-w-max">
+            <table className="border-separate border-spacing-0" style={{ width: 'max-content', minWidth: '100%' }}>
               <colgroup>
                 <col style={{ minWidth: 160, width: 160 }} />
                 {conferences.map(c => (
@@ -497,31 +538,25 @@ export function ActivityTimelineModal({
         {!loading && !error && data && conferences.length > 0 && (
           <div className="flex-shrink-0 flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-gray-50">
             <div className="flex items-center flex-wrap gap-x-4 gap-y-1.5">
-              {(Object.entries(DOT_CONFIG) as Array<[DotType, typeof DOT_CONFIG[DotType]]>).map(
-                ([type, cfg]) => (
-                  <div key={type} className="flex items-center gap-1.5">
-                    <div
-                      className="flex items-center justify-center rounded-full flex-shrink-0"
-                      style={{ width: 18, height: 18, backgroundColor: cfg.bg }}
-                    >
-                      <i
-                        className={`${cfg.iconClass} text-[9px]`}
-                        style={{ color: cfg.color }}
-                        aria-hidden="true"
-                      />
-                    </div>
-                    <span className="text-[10px] text-gray-500 capitalize">
-                      {type === 'firstContact'
-                        ? 'First contact'
-                        : type === 'hostedEvent'
-                        ? 'Hosted event'
-                        : type === 'followup'
-                        ? 'Follow-up'
-                        : type.charAt(0).toUpperCase() + type.slice(1)}
-                    </span>
+              {(Object.keys(DOT_BG) as DotType[]).map(type => (
+                <div key={type} className="flex items-center gap-1.5">
+                  <div
+                    className="flex items-center justify-center rounded-full flex-shrink-0"
+                    style={{ width: 18, height: 18, backgroundColor: DOT_BG[type] }}
+                  >
+                    {DOT_ICONS[type]}
                   </div>
-                ),
-              )}
+                  <span className="text-[10px] text-gray-500 capitalize">
+                    {type === 'firstContact'
+                      ? 'First contact'
+                      : type === 'hostedEvent'
+                      ? 'Hosted event'
+                      : type === 'followup'
+                      ? 'Follow-up'
+                      : type.charAt(0).toUpperCase() + type.slice(1)}
+                  </span>
+                </div>
+              ))}
             </div>
             {currentConferenceId && (
               <div className="flex items-center gap-1.5 text-[10px] text-gray-400 flex-shrink-0 ml-4">
