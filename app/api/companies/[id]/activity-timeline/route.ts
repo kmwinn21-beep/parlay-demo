@@ -59,21 +59,21 @@ export async function GET(
       args: [companyId],
     });
 
-    // Step 3 — All meetings (exclude simulated)
+    // Step 3 — All meetings
     const meetingsResult = await db.execute({
       sql: `SELECT m.id, m.attendee_id, m.conference_id, m.outcome, m.meeting_date, m.source
             FROM meetings m
             JOIN attendees a ON a.id = m.attendee_id
-            WHERE a.company_id = ? AND (m.source IS NULL OR m.source != 'simulated')`,
+            WHERE a.company_id = ?`,
       args: [companyId],
     });
 
-    // Step 4 — All follow-ups (exclude simulated)
+    // Step 4 — All follow-ups
     const followUpsResult = await db.execute({
       sql: `SELECT f.id, f.attendee_id, f.conference_id, f.completed, f.source
             FROM follow_ups f
             JOIN attendees a ON a.id = f.attendee_id
-            WHERE a.company_id = ? AND (f.source IS NULL OR f.source != 'simulated')`,
+            WHERE a.company_id = ?`,
       args: [companyId],
     });
 
