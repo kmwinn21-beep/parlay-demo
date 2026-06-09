@@ -173,8 +173,9 @@ import { NextResponse } from 'next/server';
 
 /**
  * Returns the session user or a 401 JSON response.
- * Usage: const result = await requireAuth(request);
- *        if (result instanceof NextResponse) return result;
+ * When an ops impersonation session is active (x-ops-impersonation-id header
+ * forwarded by middleware), overrides accountId with the impersonated tenant's
+ * account ID so getDb() routes to the correct tenant database.
  */
 export async function requireAuth(
   request: NextRequest
@@ -183,6 +184,22 @@ export async function requireAuth(
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const impersonationId = request.headers.get('x-ops-impersonation-id');
+  if (impersonationId) {
+    try {
+      const { db, dbReady } = await import('./db');
+      await dbReady;
+      const row = await db.execute({
+        sql: `SELECT account_id FROM impersonation_sessions WHERE id = ? AND ended_at IS NULL AND last_active_at > datetime('now', '-60 minutes')`,
+        args: [impersonationId],
+      });
+      if (row.rows[0]) {
+        return { ...user, accountId: String(row.rows[0].account_id) };
+      }
+    } catch { /* fallthrough — impersonation lookup failure is non-fatal */ }
+  }
+
   return user;
 }
 
