@@ -24,6 +24,8 @@
  */
 
 import { auth } from '@clerk/nextjs/server';
+import { NextResponse } from 'next/server';
+import type { SessionUser, UserRole } from './auth';
 
 export type ClerkSessionUser = {
   id: number;
@@ -53,5 +55,26 @@ export async function getClerkSessionUser(): Promise<ClerkSessionUser | null> {
     emailVerified: 1,
     accountId,
     clerkId: userId,
+  };
+}
+
+/**
+ * Clerk-backed variant of requireAuth. Uses Clerk session claims instead of
+ * the legacy auth_token cookie. Mirrors the same return type so call sites
+ * can swap requireAuth → requireClerkAuth without any other changes.
+ * Kept in this file (not lib/auth.ts) because @clerk/nextjs/server is
+ * server-only and cannot be imported from client component module chains.
+ */
+export async function requireClerkAuth(): Promise<SessionUser | NextResponse> {
+  const clerkUser = await getClerkSessionUser();
+  if (!clerkUser) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  return {
+    id: clerkUser.id,
+    email: clerkUser.email,
+    role: clerkUser.role as UserRole,
+    emailVerified: Boolean(clerkUser.emailVerified),
+    accountId: clerkUser.accountId,
   };
 }
