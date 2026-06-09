@@ -27,6 +27,7 @@ import { InternalRelationshipsSection } from '@/components/InternalRelationships
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { ComposeEmailModal } from '@/components/ComposeEmailModal';
 import { CompanyDrawer } from '@/components/CompanyDrawer';
+import { ActivityTimelineModal } from '@/components/ActivityTimelineModal';
 
 interface ConferenceItem { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -191,6 +192,9 @@ export default function CompanyDetailPage() {
   // Internal relationships state
   const [internalRelationships, setInternalRelationships] = useState<{ id: number; company_id: number; rep_ids: string | null; contact_ids: string | null; relationship_status: string; description: string; created_at: string }[]>([]);
   const [relTypeOptions, setRelTypeOptions] = useState<{ id: number; value: string }[]>([]);
+
+  // Activity timeline state
+  const [timelineOpen, setTimelineOpen] = useState(false);
 
   // Intel drawer state
   interface IntelItem {
@@ -917,6 +921,14 @@ export default function CompanyDetailPage() {
                           </svg>
                         </button>
                       )}
+                      <button
+                        type="button"
+                        title="View activity timeline"
+                        onClick={() => setTimelineOpen(true)}
+                        className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0"
+                      >
+                        <i className="ti ti-timeline w-4 h-4 sm:w-5 sm:h-5 text-brand-secondary text-base" aria-hidden="true" />
+                      </button>
                     </h1>
                     {company.parent_company && (
                       <p className="text-sm text-gray-500 mt-0.5">
@@ -1876,6 +1888,16 @@ export default function CompanyDetailPage() {
           </div>
         );
       })()}
+
+      {/* Activity timeline modal */}
+      {timelineOpen && company && (
+        <ActivityTimelineModal
+          isOpen={timelineOpen}
+          onClose={() => setTimelineOpen(false)}
+          companyId={company.id}
+          companyName={company.name}
+        />
+      )}
     </div>
   );
 }
