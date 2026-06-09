@@ -160,6 +160,7 @@ export async function DELETE(
     return NextResponse.json({ message: 'User deleted and records reassigned.' });
   } catch (err) {
     console.error('User delete error:', err);
-    return NextResponse.json({ error: 'Failed to delete user. Please try again.' }, { status: 500 });
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: `Failed to delete user: ${message}` }, { status: 500 });
   }
 }
