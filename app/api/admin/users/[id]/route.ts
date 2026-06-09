@@ -154,6 +154,18 @@ export async function DELETE(
       await db.execute({ sql: 'DELETE FROM config_options WHERE id = ?', args: [Number(du.config_id)] });
     }
 
+    // Null out non-cascading FK references before deleting
+    await Promise.all([
+      db.execute({ sql: `UPDATE conference_stage_log SET user_id = NULL WHERE user_id = ?`, args: [userId] }).catch(() => {}),
+      db.execute({ sql: `UPDATE conference_decisions SET updated_by = NULL WHERE updated_by = ?`, args: [userId] }).catch(() => {}),
+      db.execute({ sql: `DELETE FROM calendar_notes WHERE author_user_id = ?`, args: [userId] }).catch(() => {}),
+      db.execute({ sql: `UPDATE meeting_notes SET created_by = NULL WHERE created_by = ?`, args: [userId] }).catch(() => {}),
+      db.execute({ sql: `UPDATE meeting_tasks SET assigned_to = NULL WHERE assigned_to = ?`, args: [userId] }).catch(() => {}),
+      db.execute({ sql: `UPDATE meeting_tasks SET created_by = NULL WHERE created_by = ?`, args: [userId] }).catch(() => {}),
+      db.execute({ sql: `UPDATE title_normalization_rules SET created_by = NULL WHERE created_by = ?`, args: [userId] }).catch(() => {}),
+      db.execute({ sql: `UPDATE title_normalization_rules SET updated_by = NULL WHERE updated_by = ?`, args: [userId] }).catch(() => {}),
+    ]);
+
     // Delete the user (cascades: notifications, sessions, messages, reactions, comments)
     await db.execute({ sql: 'DELETE FROM users WHERE id = ?', args: [userId] });
 
