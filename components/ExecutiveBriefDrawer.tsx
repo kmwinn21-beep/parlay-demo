@@ -648,7 +648,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                       className="bg-gray-50 border border-gray-200 rounded-lg p-2.5"
                     />
                     <StatCard
-                      label="Cost per company engaged"
+                      label="Cost per Engagement"
                       value={formatCurrency(snapshot.cost_per_company_engaged)}
                       sub={snapshot.icp_companies_engaged != null ? `${snapshot.icp_companies_engaged} engaged` : undefined}
                       className="bg-gray-50 border border-gray-200 rounded-lg p-2.5"
@@ -836,7 +836,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                   <div className="grid grid-cols-3 gap-2 mb-3">
                     {[
                       { label: 'Pipeline per $1K', value: formatCurrency(snapshot.pipeline_per_1k), bench: getPipelinePerKBench(snapshot.pipeline_per_1k) },
-                      { label: 'Cost Per Company Engaged', value: formatCurrency(snapshot.cost_per_company_engaged), bench: getCostPerCompanyBench(snapshot.cost_per_company_engaged) },
+                      { label: 'Cost per Engagement', value: formatCurrency(snapshot.cost_per_company_engaged), bench: getCostPerCompanyBench(snapshot.cost_per_company_engaged) },
                       { label: 'Cost per meeting', value: formatCurrency(snapshot.cost_per_meeting_held), bench: getCostPerMeetingBench(snapshot.cost_per_meeting_held) },
                     ].map(({ label, value, bench }) => (
                       <div key={label} className="flex flex-col gap-1.5 p-2.5 bg-green-50 rounded-lg border border-green-200">

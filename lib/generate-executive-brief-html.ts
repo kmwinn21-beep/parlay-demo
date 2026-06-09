@@ -478,7 +478,7 @@ export function generateExecutiveBriefHTML(data: {
     <tr>
       <td style="width:20%;padding-right:6px;vertical-align:top">${statCard('Total spend', fmt$(actualTotal), n('budget_total') != null ? `Budget: ${fmt$(n('budget_total'))}` : undefined)}</td>
       <td style="width:20%;padding:0 6px;vertical-align:top">${statCard('Budget variance', budgetVarianceStr, budgetVarianceSub)}</td>
-      <td style="width:20%;padding:0 6px;vertical-align:top">${statCard('Cost per company engaged', fmt$(n('cost_per_company_engaged')), icpEngaged != null ? `${icpEngaged} engaged` : undefined)}</td>
+      <td style="width:20%;padding:0 6px;vertical-align:top">${statCard('Cost per Engagement', fmt$(n('cost_per_company_engaged')), icpEngaged != null ? `${icpEngaged} engaged` : undefined)}</td>
       <td style="width:20%;padding:0 6px;vertical-align:top">${statCard('Cost per meeting', fmt$(n('cost_per_meeting_held')), (() => { const tc = n('actual_total') ?? n('total_cost'); const cpm = n('cost_per_meeting_held'); return tc && cpm && cpm > 0 ? `${Math.round(tc / cpm)} meetings held` : undefined; })())}</td>
       <td style="width:20%;padding-left:6px;vertical-align:top">${statCard('Cost per internal attendee', fmt$(cpInternalAttendee), internalHeadcount != null ? `${internalHeadcount} attendees` : undefined)}</td>
     </tr>
