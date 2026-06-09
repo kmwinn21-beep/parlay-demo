@@ -1279,4 +1279,8 @@ export const migrations: string[] = [
   `ALTER TABLE conference_snapshots ADD COLUMN market_intelligence_yield_score REAL`,
   // 450 — conference_snapshots: engagement momentum component score (weight 0.15)
   `ALTER TABLE conference_snapshots ADD COLUMN engagement_momentum_score REAL`,
+  // 451 — conference_snapshots: conference type (Trade show, Summit, etc.)
+  `ALTER TABLE conference_snapshots ADD COLUMN conference_type TEXT`,
+  // 452 — conference_snapshots: total attendee count at snapshot time
+  `ALTER TABLE conference_snapshots ADD COLUMN attendee_count INTEGER`,
 ];

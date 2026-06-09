@@ -2647,6 +2647,7 @@ export default function ProgramIntelligencePage() {
                   'marketingAudienceSignalScore', 'icpCoverageRateScore',
                   'buyerAccessQualityScore', 'conversationQualitySignalScore',
                   'marketIntelligenceYieldScore', 'engagementMomentumScore',
+                  'conferenceType', 'attendeeCount',
                 ] as const;
 
                 function relativeDate(iso: string | null): string {
