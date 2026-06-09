@@ -100,7 +100,9 @@ export async function GET(
             FROM social_event_rsvps r
             JOIN social_events se ON se.id = r.social_event_id
             JOIN attendees a ON a.id = r.attendee_id
-            WHERE a.company_id = ? AND r.rsvp_status = 'attended'`,
+            WHERE a.company_id = ?
+              AND se.event_type = 'Company Hosted'
+              AND r.rsvp_status LIKE '%attended%'`,
       args: [companyId],
     });
 
