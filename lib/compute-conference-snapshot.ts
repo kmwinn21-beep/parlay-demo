@@ -127,7 +127,7 @@ export async function computeConferenceSnapshot(
     const confRes = await db.execute({
       sql: `SELECT c.id, c.series_id, c.start_date, c.conf_event_type, c.cost_efficiency_modifier,
                    c.booth_present, c.booth_width, c.booth_length, c.booth_number, c.booth_hall,
-                   c.sponsorship_level, c.internal_attendees,
+                   c.sponsorship_level, c.internal_attendees, c.conference_type,
                    co.action_key AS strategy_key
             FROM conferences c
             LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
@@ -141,8 +141,8 @@ export async function computeConferenceSnapshot(
     const confModifierOverride = conf.cost_efficiency_modifier != null
       ? Number(conf.cost_efficiency_modifier) : null;
 
-    // Step 1b — budget line items + strategy display name (parallel)
-    const [budgetLineRes, strategyRes] = await Promise.all([
+    // Step 1b — budget line items + strategy display name + attendee count (parallel)
+    const [budgetLineRes, strategyRes, attendeeCountRes] = await Promise.all([
       db.execute({
         sql: `SELECT line_items, required_pipeline_multiple, required_pipeline_amount
               FROM conference_budget WHERE conference_id = ?`,
@@ -153,6 +153,10 @@ export async function computeConferenceSnapshot(
               FROM conferences c
               LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
               WHERE c.id = ?`,
+        args: [conferenceId],
+      }),
+      db.execute({
+        sql: `SELECT COUNT(*) as cnt FROM conference_attendees WHERE conference_id = ?`,
         args: [conferenceId],
       }),
     ]);
@@ -193,6 +197,8 @@ export async function computeConferenceSnapshot(
     const numInternalAttendees = conf.internal_attendees
       ? String(conf.internal_attendees).split(',').map(s => s.trim()).filter(Boolean).length
       : 0;
+    const conferenceType = conf.conference_type != null ? String(conf.conference_type) : null;
+    const attendeeCount = attendeeCountRes.rows[0]?.cnt != null ? Number(attendeeCountRes.rows[0].cnt) : null;
 
     // Step 2 — total spend via SQL (correct: actual if nonzero, else budget per line item)
     const spendRes = await db.execute({
@@ -950,8 +956,9 @@ export async function computeConferenceSnapshot(
               rep_productivity_score, sales_effectiveness_score,
               marketing_audience_signal_score, icp_coverage_rate_score,
               buyer_access_quality_score, conversation_quality_signal_score,
-              market_intelligence_yield_score, engagement_momentum_score
-            ) VALUES (?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              market_intelligence_yield_score, engagement_momentum_score,
+              conference_type, attendee_count
+            ) VALUES (?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(conference_id) DO UPDATE SET
               snapshot_taken_at = datetime('now'),
               series_id = excluded.series_id,
@@ -1003,7 +1010,9 @@ export async function computeConferenceSnapshot(
               buyer_access_quality_score = excluded.buyer_access_quality_score,
               conversation_quality_signal_score = excluded.conversation_quality_signal_score,
               market_intelligence_yield_score = excluded.market_intelligence_yield_score,
-              engagement_momentum_score = excluded.engagement_momentum_score`,
+              engagement_momentum_score = excluded.engagement_momentum_score,
+              conference_type = excluded.conference_type,
+              attendee_count = excluded.attendee_count`,
       args: [
         conferenceId,
         seriesId,
@@ -1056,6 +1065,8 @@ export async function computeConferenceSnapshot(
         maComp3Score,
         maComp4Score,
         maComp5Score,
+        conferenceType,
+        attendeeCount,
       ],
     });
   } catch (err) {

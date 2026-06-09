@@ -59,6 +59,8 @@ export interface ConferenceSnapshot {
   conversation_quality_signal_score?: number | null;
   market_intelligence_yield_score?: number | null;
   engagement_momentum_score?: number | null;
+  conference_type?: string | null;
+  attendee_count?: number | null;
 }
 
 interface ConferenceSummary {
@@ -75,6 +77,8 @@ interface ConferenceSummary {
   booth_number?: string | null;
   booth_hall?: string | null;
   conference_strategy_type_display_name?: string | null;
+  conference_type?: string | null;
+  attendees?: Array<unknown>;
 }
 
 interface Props {
@@ -544,35 +548,71 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                   <SectionEyebrow num="01" label="Investment" />
 
                   {/* Meta pills */}
-                  <div className="flex flex-wrap gap-1.5 mb-3">
-                    {snapshot.sponsorship_level && snapshot.sponsorship_level !== 'none' && (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-medium rounded-full px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200">
-                        {/* ti-trophy */}
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 21h8m-4-4v4M5 7H3a2 2 0 0 0-2 2v1a4 4 0 0 0 4 4h.5M19 7h2a2 2 0 0 1 2 2v1a4 4 0 0 1-4 4h-.5M7 3h10a2 2 0 0 1 2 2v5a7 7 0 0 1-14 0V5a2 2 0 0 1 2-2z" />
-                        </svg>
-                        {snapshot.sponsorship_level}
-                      </span>
+                  <div className="flex items-end gap-6 mb-3">
+                    {(snapshot.conference_type ?? conference.conference_type) && (
+                      <div>
+                        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.07em] mb-1.5">Type</p>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2.5 py-1.5 bg-amber-50 text-amber-800 border border-amber-300">
+                          <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 21l18 0" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v1a3 3 0 0 0 6 0v-1m0 1a3 3 0 0 0 6 0v-1m0 1a3 3 0 0 0 6 0v-1h-18l2 -4h14l2 4" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 21l0 -10.15" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 21l0 -10.15" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 21v-4a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v4" />
+                          </svg>
+                          {snapshot.conference_type ?? conference.conference_type}
+                        </span>
+                      </div>
                     )}
-                    {snapshot.strategy_name && (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-medium rounded-full px-2.5 py-1 bg-blue-50 text-blue-800 border border-blue-200">
-                        {/* ti-target */}
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                          <circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" />
-                        </svg>
-                        {snapshot.strategy_name}
-                      </span>
+                    {(snapshot.strategy_name ?? conference.conference_strategy_type_display_name) && (
+                      <div>
+                        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.07em] mb-1.5">Strategy</p>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2.5 py-1.5 bg-blue-50 text-blue-800 border border-blue-200">
+                          {/* ti-target */}
+                          <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" />
+                          </svg>
+                          {snapshot.strategy_name ?? conference.conference_strategy_type_display_name}
+                        </span>
+                      </div>
                     )}
-                    <span className="inline-flex items-center gap-1 text-[11px] font-medium rounded-full px-2.5 py-1 bg-purple-50 text-purple-800 border border-purple-200">
-                      {/* ti-layout-grid */}
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                        <rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" />
-                        <rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" />
-                      </svg>
-                      {snapshot.booth_present
-                        ? `Booth #${snapshot.booth_number ?? '—'} · ${snapshot.booth_width ?? '?'}×${snapshot.booth_length ?? '?'} ft`
-                        : 'No booth'}
-                    </span>
+                    {(snapshot.sponsorship_level ?? conference.sponsorship_level) && (snapshot.sponsorship_level ?? conference.sponsorship_level) !== 'none' && (
+                      <div>
+                        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.07em] mb-1.5">Sponsorship</p>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2.5 py-1.5 bg-green-50 text-green-800 border border-green-200">
+                          {/* ti-trophy */}
+                          <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 21h8m-4-4v4M5 7H3a2 2 0 0 0-2 2v1a4 4 0 0 0 4 4h.5M19 7h2a2 2 0 0 1 2 2v1a4 4 0 0 1-4 4h-.5M7 3h10a2 2 0 0 1 2 2v5a7 7 0 0 1-14 0V5a2 2 0 0 1 2-2z" />
+                          </svg>
+                          {snapshot.sponsorship_level ?? conference.sponsorship_level}
+                        </span>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.07em] mb-1.5">Attendees</p>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2.5 py-1.5 bg-blue-50 text-blue-800 border border-blue-200">
+                        <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 7m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M16 3.13a4 4 0 0 1 0 7.75" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21v-2a4 4 0 0 0 -3 -3.85" />
+                        </svg>
+                        {(snapshot.attendee_count ?? conference.attendees?.length ?? 0)} attendees
+                      </span>
+                    </div>
+                    {snapshot.booth_present && (
+                      <div>
+                        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.07em] mb-1.5">Booth</p>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2.5 py-1.5 bg-purple-50 text-purple-800 border border-purple-200">
+                          {/* ti-layout-grid */}
+                          <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                            <rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" />
+                            <rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" />
+                          </svg>
+                          {`Booth #${snapshot.booth_number ?? '—'} · ${snapshot.booth_width ?? '?'}×${snapshot.booth_length ?? '?'} ft`}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Stat cards */}

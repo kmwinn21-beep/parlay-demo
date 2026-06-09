@@ -25,6 +25,7 @@ const SNAPSHOT_TRACKED_FIELDS = [
   'marketing_audience_signal_score', 'icp_coverage_rate_score',
   'buyer_access_quality_score', 'conversation_quality_signal_score',
   'market_intelligence_yield_score', 'engagement_momentum_score',
+  'conference_type', 'attendee_count',
 ] as const;
 
 export async function POST(

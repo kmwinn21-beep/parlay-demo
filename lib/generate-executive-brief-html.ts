@@ -371,20 +371,27 @@ export function generateExecutiveBriefHTML(data: {
   const boothNumber = s('booth_number');
   const boothWidth = n('booth_width');
   const boothLength = n('booth_length');
+  const conferenceType = s('conference_type');
+  const attendeeCount = n('attendee_count');
 
-  const metaPills = [
-    sponsorshipLevel && sponsorshipLevel !== 'none'
-      ? `<span style="display:inline-flex;align-items:center;font-size:9px;font-weight:600;border-radius:9999px;padding:3px 8px;background:#FAEEDA;color:#633806;border:1px solid #FAC775">${escHtml(sponsorshipLevel)}</span>`
+  const pillBase = 'display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:600;border-radius:9999px;padding:3px 8px';
+  const eyebrowStyle = 'font-size:8px;font-weight:600;color:#94A3B8;text-transform:uppercase;letter-spacing:.07em;margin:0 0 4px';
+
+  const metaPillsRow = `<div style="margin-bottom:12px">${[
+    conferenceType
+      ? `<div style="display:inline-block;margin-right:24px;vertical-align:top"><p style="${eyebrowStyle}">Type</p><span style="${pillBase};background:#FEFCE8;color:#92400E;border:1px solid #FCD34D">${escHtml(conferenceType)}</span></div>`
       : '',
     strategyName
-      ? `<span style="display:inline-flex;align-items:center;font-size:9px;font-weight:600;border-radius:9999px;padding:3px 8px;background:#E6F1FB;color:#0C447C;border:1px solid #B5D4F4">${escHtml(strategyName)}</span>`
+      ? `<div style="display:inline-block;margin-right:24px;vertical-align:top"><p style="${eyebrowStyle}">Strategy</p><span style="${pillBase};background:#E6F1FB;color:#0C447C;border:1px solid #B5D4F4">${escHtml(strategyName)}</span></div>`
       : '',
-    `<span style="display:inline-flex;align-items:center;font-size:9px;font-weight:600;border-radius:9999px;padding:3px 8px;background:#F3F0FF;color:#5B3CC4;border:1px solid #C4B5FD">${
-      boothPresent
-        ? escHtml(`Booth #${boothNumber ?? '—'} · ${boothWidth ?? '?'}×${boothLength ?? '?'} ft`)
-        : 'No booth'
-    }</span>`,
-  ].filter(Boolean).join(' ');
+    sponsorshipLevel && sponsorshipLevel !== 'none'
+      ? `<div style="display:inline-block;margin-right:24px;vertical-align:top"><p style="${eyebrowStyle}">Sponsorship</p><span style="${pillBase};background:#F0FDF4;color:#166534;border:1px solid #86EFAC">${escHtml(sponsorshipLevel)}</span></div>`
+      : '',
+    `<div style="display:inline-block;margin-right:24px;vertical-align:top"><p style="${eyebrowStyle}">Attendees</p><span style="${pillBase};background:#E6F1FB;color:#0C447C;border:1px solid #B5D4F4">${escHtml(String(attendeeCount ?? 0))} attendees</span></div>`,
+    boothPresent
+      ? `<div style="display:inline-block;margin-right:24px;vertical-align:top"><p style="${eyebrowStyle}">Booth</p><span style="${pillBase};background:#F5F3FF;color:#5B3CC4;border:1px solid #C4B5FD">${escHtml(`Booth #${boothNumber ?? '—'} · ${boothWidth ?? '?'}×${boothLength ?? '?'} ft`)}</span></div>`
+      : '',
+  ].filter(Boolean).join('')}</div>`;
 
   const budgetVariance = n('budget_variance');
   const budgetVarianceStr = budgetVariance == null ? '—'
@@ -465,7 +472,7 @@ export function generateExecutiveBriefHTML(data: {
   }
 
   const page1Content = `
-  <div style="margin-bottom:16px">${metaPills}</div>
+  ${metaPillsRow}
 
   <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
     <tr>
