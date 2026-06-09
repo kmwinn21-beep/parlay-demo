@@ -1283,4 +1283,8 @@ export const migrations: string[] = [
   `ALTER TABLE conference_snapshots ADD COLUMN conference_type TEXT`,
   // 452 — conference_snapshots: total attendee count at snapshot time
   `ALTER TABLE conference_snapshots ADD COLUMN attendee_count INTEGER`,
+  // 453 — users: Clerk user ID for SSO integration
+  `ALTER TABLE users ADD COLUMN clerk_id TEXT`,
+  // 454 — users: unique index on clerk_id
+  `CREATE UNIQUE INDEX IF NOT EXISTS users_clerk_id_idx ON users(clerk_id)`,
 ];
