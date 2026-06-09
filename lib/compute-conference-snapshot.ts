@@ -464,6 +464,30 @@ export async function computeConferenceSnapshot(
     const dim3PipelineIndex = targetInfluence && targetInfluence > 0
       ? Math.min(totalPi / targetInfluence * 100, 100) : 0;
 
+    // Effectiveness score components (stored for exec brief + future use)
+    const pipelinePerMeeting = meetingsHeld > 0 ? totalPi / meetingsHeld : null;
+    const pipelinePerCompany = companiesEngaged > 0 ? totalPi / companiesEngaged : null;
+    const pipelineInfluenceExecutionScore = Math.round(dim3PipelineIndex);
+    const meetingExecutionScore = Math.round(dim2MeetingExec);
+    const followupExecutionScore = Math.round(followupCompletionRatePct);
+    const targetAccountExecutionScore = Math.round(targetEngagementPct);
+    // Rep productivity: weighted proxy using execution metrics available in snapshot
+    const repProductivityScore = Math.round(
+      holdRatePct * 0.40 + followupCompletionRatePct * 0.35 + icpEngagementRatePct * 0.25
+    );
+    // Sales effectiveness: weighted avg matching DEFAULT_SALES_WEIGHTS (0.25/0.20/0.25/0.15/0.15)
+    const salesEffComponents = [
+      { score: meetingExecutionScore, weight: 0.25 },
+      { score: followupExecutionScore, weight: 0.20 },
+      { score: pipelineInfluenceExecutionScore, weight: 0.25 },
+      { score: targetAccountExecutionScore, weight: 0.15 },
+      { score: repProductivityScore, weight: 0.15 },
+    ];
+    const salesEffTotal = salesEffComponents.reduce((s, c) => s + c.weight, 0);
+    const salesEffectivenessScore = salesEffTotal > 0
+      ? Math.round(salesEffComponents.reduce((s, c) => s + c.score * (c.weight / salesEffTotal), 0))
+      : null;
+
     // dim4: Engagement breadth
     const dim4Breadth = engagementRatePct;
 
@@ -647,8 +671,12 @@ export async function computeConferenceSnapshot(
               booth_present, booth_width, booth_length, booth_number, booth_hall,
               budget_total, actual_total, budget_variance, budget_line_items,
               required_pipeline_multiple, required_pipeline_amount, expected_return_amount,
-              cost_per_internal_attendee
-            ) VALUES (?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              cost_per_internal_attendee,
+              pipeline_per_meeting, pipeline_per_company,
+              pipeline_influence_execution_score, meeting_execution_score,
+              followup_execution_score, target_account_execution_score,
+              rep_productivity_score, sales_effectiveness_score
+            ) VALUES (?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(conference_id) DO UPDATE SET
               snapshot_taken_at = datetime('now'),
               series_id = excluded.series_id,
@@ -686,7 +714,15 @@ export async function computeConferenceSnapshot(
               required_pipeline_multiple = excluded.required_pipeline_multiple,
               required_pipeline_amount = excluded.required_pipeline_amount,
               expected_return_amount = excluded.expected_return_amount,
-              cost_per_internal_attendee = excluded.cost_per_internal_attendee`,
+              cost_per_internal_attendee = excluded.cost_per_internal_attendee,
+              pipeline_per_meeting = excluded.pipeline_per_meeting,
+              pipeline_per_company = excluded.pipeline_per_company,
+              pipeline_influence_execution_score = excluded.pipeline_influence_execution_score,
+              meeting_execution_score = excluded.meeting_execution_score,
+              followup_execution_score = excluded.followup_execution_score,
+              target_account_execution_score = excluded.target_account_execution_score,
+              rep_productivity_score = excluded.rep_productivity_score,
+              sales_effectiveness_score = excluded.sales_effectiveness_score`,
       args: [
         conferenceId,
         seriesId,
@@ -725,6 +761,14 @@ export async function computeConferenceSnapshot(
         snapRequiredPipelineAmount,
         snapExpectedReturnAmount,
         costPerInternalAttendee,
+        pipelinePerMeeting,
+        pipelinePerCompany,
+        pipelineInfluenceExecutionScore,
+        meetingExecutionScore,
+        followupExecutionScore,
+        targetAccountExecutionScore,
+        repProductivityScore,
+        salesEffectivenessScore,
       ],
     });
   } catch (err) {

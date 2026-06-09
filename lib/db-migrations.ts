@@ -1251,4 +1251,20 @@ export const migrations: string[] = [
   `ALTER TABLE conference_snapshots ADD COLUMN expected_return_amount REAL`,
   // 436 — conference_snapshots: allocated cost per internal attendee (total_spend / num_internal_attendees)
   `ALTER TABLE conference_snapshots ADD COLUMN cost_per_internal_attendee REAL`,
+  // 437 — conference_snapshots: pipeline influenced per meeting held
+  `ALTER TABLE conference_snapshots ADD COLUMN pipeline_per_meeting REAL`,
+  // 438 — conference_snapshots: pipeline influenced per company engaged
+  `ALTER TABLE conference_snapshots ADD COLUMN pipeline_per_company REAL`,
+  // 439 — conference_snapshots: pipeline influence execution score (0–100, = dim3PipelineIndex)
+  `ALTER TABLE conference_snapshots ADD COLUMN pipeline_influence_execution_score REAL`,
+  // 440 — conference_snapshots: meeting execution score (0–100, = dim2MeetingExec)
+  `ALTER TABLE conference_snapshots ADD COLUMN meeting_execution_score REAL`,
+  // 441 — conference_snapshots: followup execution score (0–100, = followup completion rate)
+  `ALTER TABLE conference_snapshots ADD COLUMN followup_execution_score REAL`,
+  // 442 — conference_snapshots: target account execution score (0–100, = target engagement pct)
+  `ALTER TABLE conference_snapshots ADD COLUMN target_account_execution_score REAL`,
+  // 443 — conference_snapshots: rep productivity score (0–100, weighted proxy)
+  `ALTER TABLE conference_snapshots ADD COLUMN rep_productivity_score REAL`,
+  // 444 — conference_snapshots: overall sales effectiveness score (0–100, weighted avg of components)
+  `ALTER TABLE conference_snapshots ADD COLUMN sales_effectiveness_score REAL`,
 ];

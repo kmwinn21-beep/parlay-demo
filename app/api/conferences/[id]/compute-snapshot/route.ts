@@ -18,6 +18,10 @@ const SNAPSHOT_TRACKED_FIELDS = [
   'budget_total', 'actual_total', 'budget_variance', 'budget_line_items',
   'required_pipeline_multiple', 'required_pipeline_amount', 'expected_return_amount',
   'cost_per_internal_attendee',
+  'pipeline_per_meeting', 'pipeline_per_company',
+  'pipeline_influence_execution_score', 'meeting_execution_score',
+  'followup_execution_score', 'target_account_execution_score',
+  'rep_productivity_score', 'sales_effectiveness_score',
 ] as const;
 
 export async function POST(

@@ -2639,6 +2639,11 @@ export default function ProgramIntelligencePage() {
                   'boothPresent', 'boothWidth', 'boothLength', 'boothNumber', 'boothHall',
                   'budgetTotal', 'actualTotal', 'budgetVariance', 'budgetLineItems',
                   'requiredPipelineMultiple', 'requiredPipelineAmount', 'expectedReturnAmount',
+                  'costPerInternalAttendee',
+                  'pipelinePerMeeting', 'pipelinePerCompany',
+                  'pipelineInfluenceExecutionScore', 'meetingExecutionScore',
+                  'followupExecutionScore', 'targetAccountExecutionScore',
+                  'repProductivityScore', 'salesEffectivenessScore',
                 ] as const;
 
                 function relativeDate(iso: string | null): string {
