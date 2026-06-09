@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 import type { NextRequest } from 'next/server';
+import { getClerkSessionUser } from './clerkAuth';
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET ?? 'dev-secret-CHANGE-IN-PRODUCTION-minimum-32-chars!!'
@@ -184,6 +185,28 @@ export async function requireAuth(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   return user;
+}
+
+/**
+ * Clerk-backed variant of requireAuth. Uses Clerk session claims instead of
+ * the legacy auth_token cookie. Mirrors the same return type so call sites
+ * can swap requireAuth → requireClerkAuth without any other changes.
+ * Keep both during the transition period.
+ */
+export async function requireClerkAuth(
+  _request?: Request
+): Promise<SessionUser | NextResponse> {
+  const clerkUser = await getClerkSessionUser();
+  if (!clerkUser) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  return {
+    id: clerkUser.id,
+    email: clerkUser.email,
+    role: clerkUser.role as SessionUser['role'],
+    emailVerified: Boolean(clerkUser.emailVerified),
+    accountId: clerkUser.accountId,
+  };
 }
 
 /**
