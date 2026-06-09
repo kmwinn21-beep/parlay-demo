@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
 
   const db = await getDb(authResult?.accountId);
 
+  try {
   const placeholders = ids.map(() => '?').join(',');
   const result = await db.execute({
     sql: `SELECT id, title FROM attendees WHERE id IN (${placeholders})`,
@@ -59,4 +60,8 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json(output);
+  } catch (err) {
+    console.error('[title-metadata] error:', err);
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+  }
 }
