@@ -464,6 +464,302 @@ export async function computeConferenceSnapshot(
     const dim3PipelineIndex = targetInfluence && targetInfluence > 0
       ? Math.min(totalPi / targetInfluence * 100, 100) : 0;
 
+    // Effectiveness score components (stored for exec brief + future use)
+    const pipelinePerMeeting = meetingsHeld > 0 ? totalPi / meetingsHeld : null;
+    const pipelinePerCompany = companiesEngaged > 0 ? totalPi / companiesEngaged : null;
+    const pipelineInfluenceExecutionScore = Math.round(dim3PipelineIndex);
+    const meetingExecutionScore = Math.round(dim2MeetingExec);
+    const followupExecutionScore = Math.round(followupCompletionRatePct);
+    const targetAccountExecutionScore = Math.round(targetEngagementPct);
+    // Rep productivity: weighted proxy using execution metrics available in snapshot
+    const repProductivityScore = Math.round(
+      holdRatePct * 0.40 + followupCompletionRatePct * 0.35 + icpEngagementRatePct * 0.25
+    );
+    // Sales effectiveness: weighted avg matching DEFAULT_SALES_WEIGHTS (0.25/0.20/0.25/0.15/0.15)
+    const salesEffComponents = [
+      { score: meetingExecutionScore, weight: 0.25 },
+      { score: followupExecutionScore, weight: 0.20 },
+      { score: pipelineInfluenceExecutionScore, weight: 0.25 },
+      { score: targetAccountExecutionScore, weight: 0.15 },
+      { score: repProductivityScore, weight: 0.15 },
+    ];
+    const salesEffTotal = salesEffComponents.reduce((s, c) => s + c.weight, 0);
+    const salesEffectivenessScore = salesEffTotal > 0
+      ? Math.round(salesEffComponents.reduce((s, c) => s + c.score * (c.weight / salesEffTotal), 0))
+      : null;
+
+    // ── Marketing Audience Signal Score (pre-conference) ────────────────────
+    // Replicates the logic from app/api/conferences/[id]/effectiveness/route.ts
+    // marketing_audience section. Uses the same queries and scoring functions.
+
+    // Fetch conf dates and internal attendees for this computation
+    const confDatesRes = await db.execute({
+      sql: `SELECT start_date, end_date, internal_attendees FROM conferences WHERE id = ?`,
+      args: [conferenceId],
+    });
+    const confDatesRow = confDatesRes.rows[0] as Record<string, unknown> | undefined;
+
+    // ICP coverage metrics (icpTotal / icpEngaged already computed above in step 7)
+    // Replicate: icpAttending = icpTotal, icpEngaged = icpEngaged
+    const maIcpAttending = icpTotal;
+    const maIcpEngaged = icpEngaged;
+
+    // Rep count and conference duration for benchmark
+    const maInternalAttendeeIds = confDatesRow?.internal_attendees
+      ? String(confDatesRow.internal_attendees).split(',').map((s: string) => s.trim()).filter(Boolean)
+      : [];
+    const maRepsForBenchmark = maInternalAttendeeIds.length > 0 ? maInternalAttendeeIds.length : 1;
+    const maConfStartMs = confDatesRow?.start_date ? new Date(String(confDatesRow.start_date)).getTime() : null;
+    const maConfEndMs = confDatesRow?.end_date ? new Date(String(confDatesRow.end_date)).getTime() : null;
+    const maConfEndDate = confDatesRow?.end_date ? new Date(String(confDatesRow.end_date)) : null;
+    const maConfDurationDays = (maConfStartMs != null && maConfEndMs != null)
+      ? Math.max(1, Math.round((maConfEndMs - maConfStartMs) / (1000 * 60 * 60 * 24)) + 1)
+      : 2;
+    const maRepAdjustedBenchmark = maIcpAttending > 0
+      ? Math.min(0.30, (maRepsForBenchmark * maConfDurationDays * 8 * 0.6) / maIcpAttending)
+      : 0.30;
+
+    // comp1: ICP coverage rate score
+    const maActualCoverageRate = maIcpAttending > 0 ? maIcpEngaged / maIcpAttending : 0;
+    const maIcpCoverageRatio = maRepAdjustedBenchmark > 0 ? maActualCoverageRate / maRepAdjustedBenchmark : 0;
+
+    const maScoreIcpCoverageByRatio = (ratio: number): number => {
+      const bp: [number, number][] = [[0,0],[0.25,12],[0.50,28],[0.75,45],[1.00,62],[1.25,73],[1.50,82],[1.75,90],[2.00,95],[2.50,100]];
+      if (ratio <= 0) return 0;
+      if (ratio >= 2.50) return 100;
+      for (let i = 1; i < bp.length; i++) {
+        const [x0,y0] = bp[i-1], [x1,y1] = bp[i];
+        if (ratio <= x1) return Math.round(y0 + (ratio - x0) / (x1 - x0) * (y1 - y0));
+      }
+      return 100;
+    };
+
+    const maComp1Score = maIcpAttending > 0 ? maScoreIcpCoverageByRatio(maIcpCoverageRatio) : 0;
+
+    // comp2: Buyer access quality score
+    // Fetch DM/influencer titles from site_settings
+    let maDecisionMakerTitles: string[] = [];
+    let maInfluencerTitles: string[] = [];
+    try {
+      const maTitleSettingsRes = await db.execute({
+        sql: `SELECT key, value FROM site_settings WHERE key IN ('icp_decision_maker_titles','icp_influencer_titles')`,
+        args: [],
+      });
+      for (const r of maTitleSettingsRes.rows) {
+        try {
+          if (String(r.key) === 'icp_decision_maker_titles') {
+            maDecisionMakerTitles = JSON.parse(String(r.value ?? '[]')).map((v: unknown) => String(v ?? '').trim().toLowerCase()).filter(Boolean);
+          } else if (String(r.key) === 'icp_influencer_titles') {
+            maInfluencerTitles = JSON.parse(String(r.value ?? '[]')).map((v: unknown) => String(v ?? '').trim().toLowerCase()).filter(Boolean);
+          }
+        } catch { /* ignore */ }
+      }
+    } catch { /* site_settings may not have these keys */ }
+
+    // Confirmed title normalization rules
+    const maConfirmedTitleRules = new Map<string, { buyerRole: string }>();
+    try {
+      const maTitleRulesRes = await db.execute({
+        sql: `SELECT raw_title_key, buyer_role FROM title_normalization_rules WHERE source = 'user_confirmed'`,
+        args: [],
+      });
+      for (const r of maTitleRulesRes.rows) {
+        maConfirmedTitleRules.set(String(r.raw_title_key ?? ''), { buyerRole: String(r.buyer_role ?? '') });
+      }
+    } catch { /* title_normalization_rules may not exist */ }
+
+    // Buyer access rows: DM/influencer contacts at ICP companies
+    const maBuyerAccessRes = await db.execute({
+      sql: `SELECT
+               a.id AS attendee_id, a.company_id,
+               LOWER(TRIM(COALESCE(a.title,''))) AS title,
+               CASE WHEN EXISTS (
+                 SELECT 1 FROM meetings m
+                 LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+                 WHERE m.attendee_id = a.id AND m.conference_id = ? AND cop.action_key='meeting_held'
+               ) THEN 1 ELSE 0 END AS has_meeting_held,
+               CASE WHEN EXISTS (
+                 SELECT 1 FROM meetings m
+                 LEFT JOIN config_options cop ON cop.category='action' AND LOWER(m.outcome)=LOWER(cop.value)
+                 JOIN meeting_notes mn ON mn.meeting_id = m.id
+                 WHERE m.attendee_id = a.id AND m.conference_id = ? AND cop.action_key='meeting_held'
+               ) THEN 1 ELSE 0 END AS has_meeting_with_notes,
+               CASE WHEN EXISTS (
+                 SELECT 1 FROM attendee_touchpoints atp
+                 WHERE atp.attendee_id = a.id AND atp.conference_id = ?
+               ) THEN 1 ELSE 0 END AS has_touchpoint
+             FROM conference_attendees ca
+             JOIN attendees a ON ca.attendee_id = a.id
+             JOIN companies co ON a.company_id = co.id
+             WHERE ca.conference_id = ? AND co.icp = 'Yes' AND a.company_id IS NOT NULL`,
+      args: [conferenceId, conferenceId, conferenceId, conferenceId],
+    });
+
+    // Inline title key normalization (lowercase + trim, matching normalizeTitleKey behaviour)
+    const normalizeTitleKeyLocal = (title: string): string => title.toLowerCase().trim().replace(/\s+/g, ' ');
+    const maTitleMatch = (title: string, list: string[]): boolean => {
+      const t = title.toLowerCase().trim();
+      return list.some((s: string) => t.includes(s) || s.includes(t));
+    };
+
+    let maBaqNumerator = 0, maBaqDenominator = 0;
+    for (const row of maBuyerAccessRes.rows) {
+      const titleKey = normalizeTitleKeyLocal(String((row as Record<string,unknown>).title ?? ''));
+      const rule = maConfirmedTitleRules.get(titleKey);
+      const titleStr = String((row as Record<string,unknown>).title ?? '');
+      const isDM = rule?.buyerRole === 'decision_maker' || (maDecisionMakerTitles.length > 0 && titleStr && maTitleMatch(titleStr, maDecisionMakerTitles));
+      const isInfluencer = !isDM && (rule?.buyerRole === 'influencer' || rule?.buyerRole === 'target_title' || (maInfluencerTitles.length > 0 && titleStr && maTitleMatch(titleStr, maInfluencerTitles)));
+      if (!isDM && !isInfluencer) continue;
+      maBaqDenominator++;
+      const hasMeetingWithNotes = Number((row as Record<string,unknown>).has_meeting_with_notes ?? 0) === 1;
+      const hasMeetingHeld = Number((row as Record<string,unknown>).has_meeting_held ?? 0) === 1;
+      const hasTouchpoint = Number((row as Record<string,unknown>).has_touchpoint ?? 0) === 1;
+      let accessScore = 15;
+      if (hasMeetingWithNotes) { accessScore = 100; }
+      else if (hasMeetingHeld) { accessScore = 70; }
+      else if (hasTouchpoint) { accessScore = 40; }
+      maBaqNumerator += accessScore;
+    }
+    const maBuyerAccessQuality = maBaqDenominator > 0 ? maBaqNumerator / maBaqDenominator : 0;
+    const maComp2Score = Math.round(maBuyerAccessQuality);
+
+    // comp3: Conversation quality signal score (buying signals + pain point coverage)
+    const maMeetingInsightsRes = await db.execute({
+      sql: `SELECT mi.insight_type, mi.meeting_id
+             FROM meeting_insights mi
+             JOIN meetings m ON mi.meeting_id = m.id
+             WHERE m.conference_id = ? AND mi.insight_type IN ('buying_signal','pain_point')`,
+      args: [conferenceId],
+    });
+
+    const maBuyingSignalRows = maMeetingInsightsRes.rows.filter(r => String((r as Record<string,unknown>).insight_type) === 'buying_signal');
+    const maPainPointRows = maMeetingInsightsRes.rows.filter(r => String((r as Record<string,unknown>).insight_type) === 'pain_point');
+    const maInsightsAvailable = maMeetingInsightsRes.rows.length > 0;
+    const maPainPointsAvailable = maPainPointRows.length > 0;
+    const maBuyingSignalsCount = maBuyingSignalRows.length;
+    const maMeetingsWithBuyingSignal = new Set(maBuyingSignalRows.map(r => String((r as Record<string,unknown>).meeting_id))).size;
+    const maMeetingsWithPainPoint = new Set(maPainPointRows.map(r => String((r as Record<string,unknown>).meeting_id))).size;
+    const maBuyingSignalsPerMeeting = meetingsHeld > 0 ? maBuyingSignalsCount / meetingsHeld : 0;
+    const maPainPointCoveragePct = meetingsHeld > 0 ? maMeetingsWithPainPoint / meetingsHeld * 100 : 0;
+
+    const maScoreBuyingSignalDensity = (bspm: number): number => {
+      if (bspm <= 0) return 20;
+      if (bspm < 1) return Math.round(20 + bspm * 30);
+      if (bspm < 2) return Math.round(50 + (bspm - 1) * 30);
+      if (bspm < 3) return Math.round(80 + (bspm - 2) * 20);
+      return 100;
+    };
+
+    const maScorePainPointCoverage = (pct2: number): number => {
+      if (pct2 <= 0) return 20;
+      if (pct2 < 30) return Math.round(20 + pct2 / 30 * 30);
+      if (pct2 < 60) return Math.round(50 + (pct2 - 30) / 30 * 30);
+      if (pct2 < 80) return Math.round(80 + (pct2 - 60) / 20 * 20);
+      return 100;
+    };
+
+    let maComp3Score: number;
+    if (!maInsightsAvailable) {
+      maComp3Score = 50;
+    } else {
+      const bsDensityScore = maScoreBuyingSignalDensity(maBuyingSignalsPerMeeting);
+      const ppCoverageScore = maScorePainPointCoverage(maPainPointCoveragePct);
+      const boothSentimentScore = 50;
+      maComp3Score = Math.round(bsDensityScore * 0.5 + ppCoverageScore * 0.3 + boothSentimentScore * 0.2);
+    }
+
+    // comp4: Market intelligence yield score (pain point themes)
+    const maPainPointThemes = new Map<string, number>();
+    for (const r of maPainPointRows) {
+      // Use meeting_id as a proxy for content grouping (matches route logic which uses content substring)
+      const theme = String((r as Record<string,unknown>).meeting_id ?? '');
+      if (theme) maPainPointThemes.set(theme, (maPainPointThemes.get(theme) ?? 0) + 1);
+    }
+    const maDistinctThemeCount = maPainPointThemes.size;
+    const maTopThemeCount = maPainPointThemes.size > 0 ? Math.max(...Array.from(maPainPointThemes.values())) : 0;
+    const maTopThemeConcentrationPct = maMeetingsWithPainPoint > 0 ? maTopThemeCount / maMeetingsWithPainPoint * 100 : 0;
+
+    const maScoreDistinctThemes = (count: number): number => {
+      if (count <= 0) return 0;
+      if (count === 1) return 30;
+      if (count <= 3) return 50;
+      if (count <= 6) return 70;
+      return 90;
+    };
+
+    const maScoreTopConcentration = (pct2: number): number => {
+      if (pct2 < 20) return 40;
+      if (pct2 < 40) return 60;
+      if (pct2 < 60) return 75;
+      return 90;
+    };
+
+    let maComp4Score: number;
+    if (!maPainPointsAvailable) {
+      maComp4Score = 50;
+    } else {
+      const themeScore = maScoreDistinctThemes(maDistinctThemeCount);
+      const meetCoverageScore = maScorePainPointCoverage(maPainPointCoveragePct);
+      const concentrationScore = maScoreTopConcentration(maTopThemeConcentrationPct);
+      maComp4Score = Math.round(themeScore * 0.3 + meetCoverageScore * 0.4 + concentrationScore * 0.3);
+    }
+
+    // comp5: Engagement momentum score (ICP follow-up creation + completion)
+    const maIcpFollowupRes = await db.execute({
+      sql: `SELECT
+               COUNT(DISTINCT a.company_id) AS icp_companies_with_followup,
+               COUNT(DISTINCT fu.id) AS total_followups,
+               COUNT(DISTINCT CASE WHEN COALESCE(fu.completed,0)=1 THEN fu.id END) AS completed_followups
+             FROM follow_ups fu
+             JOIN attendees a ON fu.attendee_id = a.id
+             JOIN companies co ON a.company_id = co.id
+             WHERE fu.conference_id = ? AND co.icp = 'Yes'`,
+      args: [conferenceId],
+    });
+    const maIcpFuRow = maIcpFollowupRes.rows[0] as Record<string, unknown> | undefined;
+    const maIcpCompaniesWithFollowup = Number(maIcpFuRow?.icp_companies_with_followup ?? 0);
+    const maFollowupsTotal = Number(maIcpFuRow?.total_followups ?? 0);
+    const maFollowupsCompleted = Number(maIcpFuRow?.completed_followups ?? 0);
+    const maFollowupCompletionRate = maFollowupsTotal > 0 ? maFollowupsCompleted / maFollowupsTotal * 100 : 0;
+    const maIcpFollowupCreationRate = maIcpEngaged > 0 ? maIcpCompaniesWithFollowup / maIcpEngaged * 100 : 0;
+
+    const maDaysSinceEnd = maConfEndDate
+      ? Math.floor((new Date().getTime() - maConfEndDate.getTime()) / (1000 * 60 * 60 * 24))
+      : 999;
+    const maCompletionWindowOpen = maDaysSinceEnd < 7;
+
+    const maScoreFollowupCreation = (pct2: number): number => {
+      if (pct2 <= 0) return 0;
+      if (pct2 < 50) return Math.round(pct2 / 50 * 40);
+      if (pct2 < 70) return Math.round(40 + (pct2-50) / 20 * 25);
+      if (pct2 < 85) return Math.round(65 + (pct2-70) / 15 * 20);
+      if (pct2 < 95) return Math.round(85 + (pct2-85) / 10 * 15);
+      return 100;
+    };
+
+    const maScoreFollowupCompletion = (pct2: number): number => {
+      if (pct2 <= 0) return 0;
+      if (pct2 < 30) return Math.round(pct2 / 30 * 30);
+      if (pct2 < 50) return Math.round(30 + (pct2-30) / 20 * 20);
+      if (pct2 < 70) return Math.round(50 + (pct2-50) / 20 * 20);
+      if (pct2 < 85) return Math.round(70 + (pct2-70) / 15 * 15);
+      if (pct2 < 95) return Math.round(85 + (pct2-85) / 10 * 15);
+      return 100;
+    };
+
+    const maCreationScore = maScoreFollowupCreation(maIcpFollowupCreationRate);
+    const maCompletionScoreRaw = maCompletionWindowOpen ? 50 : maScoreFollowupCompletion(maFollowupCompletionRate);
+    const maComp5Score = Math.round(maCreationScore * 0.5 + maCompletionScoreRaw * 0.5);
+
+    // Overall marketing audience signal score (weighted avg of 5 components)
+    const marketingAudienceSignalScore = Math.round(
+      maComp1Score * 0.25 +
+      maComp2Score * 0.25 +
+      maComp3Score * 0.20 +
+      maComp4Score * 0.15 +
+      maComp5Score * 0.15
+    );
+
     // dim4: Engagement breadth
     const dim4Breadth = engagementRatePct;
 
@@ -647,8 +943,15 @@ export async function computeConferenceSnapshot(
               booth_present, booth_width, booth_length, booth_number, booth_hall,
               budget_total, actual_total, budget_variance, budget_line_items,
               required_pipeline_multiple, required_pipeline_amount, expected_return_amount,
-              cost_per_internal_attendee
-            ) VALUES (?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              cost_per_internal_attendee,
+              pipeline_per_meeting, pipeline_per_company,
+              pipeline_influence_execution_score, meeting_execution_score,
+              followup_execution_score, target_account_execution_score,
+              rep_productivity_score, sales_effectiveness_score,
+              marketing_audience_signal_score, icp_coverage_rate_score,
+              buyer_access_quality_score, conversation_quality_signal_score,
+              market_intelligence_yield_score, engagement_momentum_score
+            ) VALUES (?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(conference_id) DO UPDATE SET
               snapshot_taken_at = datetime('now'),
               series_id = excluded.series_id,
@@ -686,7 +989,21 @@ export async function computeConferenceSnapshot(
               required_pipeline_multiple = excluded.required_pipeline_multiple,
               required_pipeline_amount = excluded.required_pipeline_amount,
               expected_return_amount = excluded.expected_return_amount,
-              cost_per_internal_attendee = excluded.cost_per_internal_attendee`,
+              cost_per_internal_attendee = excluded.cost_per_internal_attendee,
+              pipeline_per_meeting = excluded.pipeline_per_meeting,
+              pipeline_per_company = excluded.pipeline_per_company,
+              pipeline_influence_execution_score = excluded.pipeline_influence_execution_score,
+              meeting_execution_score = excluded.meeting_execution_score,
+              followup_execution_score = excluded.followup_execution_score,
+              target_account_execution_score = excluded.target_account_execution_score,
+              rep_productivity_score = excluded.rep_productivity_score,
+              sales_effectiveness_score = excluded.sales_effectiveness_score,
+              marketing_audience_signal_score = excluded.marketing_audience_signal_score,
+              icp_coverage_rate_score = excluded.icp_coverage_rate_score,
+              buyer_access_quality_score = excluded.buyer_access_quality_score,
+              conversation_quality_signal_score = excluded.conversation_quality_signal_score,
+              market_intelligence_yield_score = excluded.market_intelligence_yield_score,
+              engagement_momentum_score = excluded.engagement_momentum_score`,
       args: [
         conferenceId,
         seriesId,
@@ -725,6 +1042,20 @@ export async function computeConferenceSnapshot(
         snapRequiredPipelineAmount,
         snapExpectedReturnAmount,
         costPerInternalAttendee,
+        pipelinePerMeeting,
+        pipelinePerCompany,
+        pipelineInfluenceExecutionScore,
+        meetingExecutionScore,
+        followupExecutionScore,
+        targetAccountExecutionScore,
+        repProductivityScore,
+        salesEffectivenessScore,
+        marketingAudienceSignalScore,
+        maComp1Score,
+        maComp2Score,
+        maComp3Score,
+        maComp4Score,
+        maComp5Score,
       ],
     });
   } catch (err) {

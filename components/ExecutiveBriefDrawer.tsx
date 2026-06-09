@@ -45,6 +45,20 @@ export interface ConferenceSnapshot {
   required_pipeline_amount: number | null;
   expected_return_amount: number | null;
   cost_per_internal_attendee: number | null;
+  pipeline_per_meeting?: number | null;
+  pipeline_per_company?: number | null;
+  pipeline_influence_execution_score?: number | null;
+  meeting_execution_score?: number | null;
+  followup_execution_score?: number | null;
+  target_account_execution_score?: number | null;
+  rep_productivity_score?: number | null;
+  sales_effectiveness_score?: number | null;
+  marketing_audience_signal_score?: number | null;
+  icp_coverage_rate_score?: number | null;
+  buyer_access_quality_score?: number | null;
+  conversation_quality_signal_score?: number | null;
+  market_intelligence_yield_score?: number | null;
+  engagement_momentum_score?: number | null;
 }
 
 interface ConferenceSummary {
@@ -82,6 +96,13 @@ function formatCurrency(val: number | null | undefined): string {
 function formatCurrencyFull(val: number | null | undefined): string {
   if (val == null) return '—';
   return `$${Math.round(val).toLocaleString()}`;
+}
+
+function formatCurrencyAbbrev(val: number | null | undefined): string {
+  if (val == null) return '—';
+  if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(1)}M`;
+  if (val >= 1_000) return `$${Math.round(val / 1_000)}K`;
+  return `$${Math.round(val)}`;
 }
 
 function formatMillions(val: number | null | undefined): string {
@@ -893,27 +914,25 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                       displayVal={snapshot.followup_completion_rate != null ? `${Math.round(snapshot.followup_completion_rate * 100)}%` : '—'}
                     />
                     <DimBarRow
-                      label="Buying committee coverage"
-                      value={snapshot.buying_committee_coverage_rate != null ? snapshot.buying_committee_coverage_rate * 100 : 0}
+                      label="Pipeline per Meeting"
+                      value={snapshot.pipeline_influence_execution_score ?? 0}
                       barColor="#185FA5"
-                      tier={getCesTier(snapshot.buying_committee_coverage_rate != null ? snapshot.buying_committee_coverage_rate * 100 : null)}
-                      displayVal={snapshot.buying_committee_coverage_rate != null ? `${Math.round(snapshot.buying_committee_coverage_rate * 100)}%` : '—'}
+                      tier={getCesTier(snapshot.pipeline_influence_execution_score ?? null)}
+                      displayVal={snapshot.pipeline_per_meeting != null ? formatCurrencyAbbrev(snapshot.pipeline_per_meeting) : '—'}
                     />
                     <DimBarRow
-                      label="Avg health score"
-                      value={snapshot.avg_health_score_engaged}
-                      barColor="#7F77DD"
-                      tier={getCesTier(snapshot.avg_health_score_engaged)}
-                      displayVal={snapshot.avg_health_score_engaged != null ? `${Math.round(snapshot.avg_health_score_engaged)}` : '—'}
+                      label="Pipeline Influence"
+                      value={snapshot.pipeline_influence_execution_score ?? 0}
+                      barColor="#1D9E75"
+                      tier={getCesTier(snapshot.pipeline_influence_execution_score ?? null)}
+                      displayVal={snapshot.pipeline_influence_execution_score != null ? `${Math.round(snapshot.pipeline_influence_execution_score)}` : '—'}
                     />
                     <DimBarRow
-                      label="Returning attendee rate"
-                      value={snapshot.returning_attendee_rate != null ? snapshot.returning_attendee_rate * 100 : 0}
+                      label="Rep Productivity"
+                      value={snapshot.rep_productivity_score ?? 0}
                       barColor="#7F77DD"
-                      tier={snapshot.returning_attendee_rate != null
-                        ? getCesTier(snapshot.returning_attendee_rate * 100)
-                        : { label: 'First year', textClass: 'text-gray-400', bgClass: 'bg-gray-100' }}
-                      displayVal={snapshot.returning_attendee_rate != null ? `${Math.round(snapshot.returning_attendee_rate * 100)}%` : '—'}
+                      tier={getCesTier(snapshot.rep_productivity_score ?? null)}
+                      displayVal={snapshot.rep_productivity_score != null ? `${Math.round(snapshot.rep_productivity_score)}` : '—'}
                     />
                   </div>
 
