@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { resolvePlanState } from '@/lib/trialState';
+import { hasCapability } from '@/lib/capabilities';
 import { getSeriesYoYData } from '@/lib/get-series-yoy-data';
 import { computeConferenceSnapshot } from '@/lib/compute-conference-snapshot';
 
@@ -13,6 +15,11 @@ export async function GET(
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
+
+  const { planCapabilities } = await resolvePlanState(db);
+  if (!hasCapability(planCapabilities, 'program_intelligence.yoy_series_analysis')) {
+    return NextResponse.json({ error: 'Upgrade required' }, { status: 403 });
+  }
 
   try {
     // All closed conferences for this series

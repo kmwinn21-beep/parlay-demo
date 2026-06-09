@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { requireAuth } from '@/lib/auth';
+import { getDb } from '@/lib/getDb';
+import { resolvePlanState } from '@/lib/trialState';
+import { hasCapability } from '@/lib/capabilities';
 
 const client = new Anthropic();
 
@@ -91,6 +95,15 @@ TONE AND BEHAVIOR
 - If a question is completely unrelated to Parlay, politely redirect: "I'm only able to help with questions about Parlay. Is there something about the app I can help with?"`;
 
 export async function POST(request: NextRequest) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+
+  const db = await getDb(authResult.accountId);
+  const { planCapabilities } = await resolvePlanState(db);
+  if (!hasCapability(planCapabilities, 'core.help_chat')) {
+    return NextResponse.json({ error: 'Upgrade required' }, { status: 403 });
+  }
+
   try {
     const body = await request.json() as { messages: { role: 'user' | 'assistant'; content: string }[] };
     const { messages } = body;

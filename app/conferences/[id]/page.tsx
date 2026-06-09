@@ -1898,6 +1898,7 @@ export default function ConferenceDetailPage() {
                       </svg>
                       Field Report
                     </button>
+                    {capabilities?.planCapabilities?.revenue_intelligence?.executive_brief && (
                     <button
                       type="button"
                       onClick={() => setExecutiveBriefOpen(true)}
@@ -1914,6 +1915,7 @@ export default function ConferenceDetailPage() {
                       </svg>
                       Executive brief
                     </button>
+                    )}
                   </div>
                 </div>
               )}

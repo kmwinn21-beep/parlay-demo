@@ -3,6 +3,8 @@ import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { getSeriesYoYData } from '@/lib/get-series-yoy-data';
 import { generateExecutiveBriefHTML } from '@/lib/generate-executive-brief-html';
+import { resolvePlanState } from '@/lib/trialState';
+import { hasCapability } from '@/lib/capabilities';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +15,11 @@ export async function GET(
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult.accountId);
+
+  const { planCapabilities } = await resolvePlanState(db);
+  if (!hasCapability(planCapabilities, 'revenue_intelligence.executive_brief')) {
+    return NextResponse.json({ error: 'Upgrade required' }, { status: 403 });
+  }
 
   const conferenceId = Number(params.id);
   if (!Number.isFinite(conferenceId)) {

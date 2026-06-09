@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { resolvePlanState } from '@/lib/trialState';
+import { hasCapability } from '@/lib/capabilities';
 import { computeConferenceSnapshot } from '@/lib/compute-conference-snapshot';
 import { computeConferenceStage } from '@/lib/conference-stage';
 
@@ -45,6 +47,11 @@ export async function POST(
   }
 
   const db = await getDb(authResult.accountId);
+
+  const { planCapabilities } = await resolvePlanState(db);
+  if (!hasCapability(planCapabilities, 'revenue_intelligence.conference_snapshots')) {
+    return NextResponse.json({ error: 'Upgrade required' }, { status: 403 });
+  }
 
   const confRes = await db.execute({
     sql: `SELECT id, start_date, end_date, stage_override, is_historical, post_conference_days FROM conferences WHERE id = ?`,

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { resolvePlanState } from '@/lib/trialState';
+import { hasCapability } from '@/lib/capabilities';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +18,11 @@ export async function GET(
   if (isNaN(companyId)) return NextResponse.json({ error: 'Invalid company ID' }, { status: 400 });
 
   const db = await getDb(authResult.accountId);
+
+  const { planCapabilities } = await resolvePlanState(db);
+  if (!hasCapability(planCapabilities, 'intelligence_core.activity_timeline')) {
+    return NextResponse.json({ error: 'Upgrade required' }, { status: 403 });
+  }
 
   try {
     // Step 1 — All conferences this company has appeared in

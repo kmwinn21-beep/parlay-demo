@@ -3,6 +3,8 @@ import { waitUntil } from '@vercel/functions';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { generateCompanyIntel } from '@/lib/intel/generateCompanyIntel';
+import { resolvePlanState } from '@/lib/trialState';
+import { hasCapability } from '@/lib/capabilities';
 
 export const maxDuration = 300;
 
@@ -33,6 +35,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!companyId) return NextResponse.json({ error: 'company_id required' }, { status: 400 });
 
     const db = await getDb(authResult.accountId);
+
+    const { planCapabilities } = await resolvePlanState(db);
+    if (!hasCapability(planCapabilities, 'intelligence_core.company_intel')) {
+      return NextResponse.json({ error: 'Upgrade required' }, { status: 403 });
+    }
 
     // Run all independent queries in parallel — cuts sequential Turso round-trip overhead
     const [companyRow, tierRow, attendeeRows, icpRows, brandRows] = await Promise.all([

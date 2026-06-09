@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { resolvePlanState } from '@/lib/trialState';
+import { hasCapability } from '@/lib/capabilities';
 import { intelProcessingState, stateKey } from '@/lib/intel/intelState';
 
 export const maxDuration = 30;
@@ -21,6 +23,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   // Cross-instance fallback: read DB-persisted progress
   try {
     const db = await getDb(authResult.accountId);
+    const { planCapabilities } = await resolvePlanState(db);
+    if (!hasCapability(planCapabilities, 'intelligence_core.company_intel')) {
+      return NextResponse.json({ error: 'Upgrade required' }, { status: 403 });
+    }
     const row = await db.execute({
       sql: `SELECT intel_job_status, intel_job_completed, intel_job_total FROM conferences WHERE id = ?`,
       args: [conferenceId],

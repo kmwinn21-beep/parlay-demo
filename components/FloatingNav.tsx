@@ -15,6 +15,7 @@ import { useChatPanel } from './ChatPanelContext';
 import { BadgeScanResultsModal, type BadgeScanCard, compressImage, formatCardAsText } from './DashboardActionCard';
 import { BatchCardScanModal, makeCard, type ScannedCard, type CardDraft } from './BatchCardScanModal';
 import { resolveProductRelevance, type ProductRelevanceResult } from '@/lib/productRelevance';
+import { useCapabilities } from '@/lib/useCapabilities';
 
 const STORAGE_KEY = 'floatingNavPos';
 const BTN = 56; // diameter in px (w-14)
@@ -97,6 +98,7 @@ export function FloatingNav() {
   const pathname = usePathname();
   const { hidden } = useBottomNav();
   const { navHidden, setNavHidden, setHelpChatOpen } = useFloatingNavHidden();
+  const { planCapabilities } = useCapabilities();
   const unreadCount = useUnreadNotificationCount();
   const unreadChatCount = useUnreadChatCount();
   const { setPanelOpen } = useChatPanel();
@@ -355,8 +357,14 @@ export function FloatingNav() {
       action: 'quick-note' as const,
     },
   ];
+  const filteredItems = items.filter(item => {
+    if (item.key === 'help-chat') return planCapabilities?.core?.help_chat !== false;
+    if (item.key === 'scan') return planCapabilities?.floor_capture?.ai_card_scanning !== false;
+    return true;
+  });
+
   // When above, reverse so stagger goes from FAB outward (Dashboard closest, Search farthest)
-  const ordered = above ? [...items].reverse() : items;
+  const ordered = above ? [...filteredItems].reverse() : filteredItems;
 
   const n = ordered.length;
 

@@ -1,5 +1,9 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { requireAuth } from '@/lib/auth';
+import { getDb } from '@/lib/getDb';
+import { resolvePlanState } from '@/lib/trialState';
+import { hasCapability } from '@/lib/capabilities';
 
 export const dynamic = 'force-dynamic';
 
@@ -144,6 +148,15 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+
+  const db = await getDb(authResult.accountId);
+  const { planCapabilities } = await resolvePlanState(db);
+  if (!hasCapability(planCapabilities, 'revenue_intelligence.effectiveness_analytics')) {
+    return NextResponse.json({ error: 'Upgrade required' }, { status: 403 });
+  }
+
   try {
     const body = await request.json() as { data: Record<string, unknown> };
     const formattedData = formatData(body.data ?? {});
