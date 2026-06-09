@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { useEditor } from '@tiptap/react';
+import { useClerk } from '@clerk/nextjs';
 import { useUser } from '@/components/UserContext';
 import { BackButton } from '@/components/BackButton';
 import { RichTextEditor, getEditorExtensions } from '@/components/RichTextEditor';
@@ -678,13 +679,14 @@ function EmailSignatureSection() {
 
 export default function AccountPage() {
   const { user, refresh } = useUser();
+  const { signOut } = useClerk();
   const [loggingOut, setLoggingOut] = useState(false);
 
   const handleLogout = async () => {
     setLoggingOut(true);
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
-      window.location.href = '/auth/login';
+      await signOut({ redirectUrl: '/auth/login' });
     } catch {
       toast.error('Logout failed.');
       setLoggingOut(false);

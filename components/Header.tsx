@@ -18,6 +18,7 @@ import { OutstandingFollowUps } from './OutstandingFollowUps';
 import { useUser } from './UserContext';
 import { useAppName } from '@/lib/useAppName';
 import { useCapabilities } from '@/lib/useCapabilities';
+import { useClerk } from '@clerk/nextjs';
 import { clearActiveConferenceStorage } from '@/components/ActiveConferenceContext';
 import { SetConferenceButton } from '@/components/SetConferenceButton';
 const pageTitles: Record<string, string> = {
@@ -84,6 +85,7 @@ loadConferences();
 
 export function Header() {
   const pathname = usePathname();
+  const { signOut } = useClerk();
   const { user } = useUser();
   const appName = useAppName();
   const { navHidden, setNavHidden, setHelpChatOpen } = useFloatingNavHidden();
@@ -171,7 +173,7 @@ export function Header() {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
       clearActiveConferenceStorage();
-      window.location.href = '/auth/login';
+      await signOut({ redirectUrl: '/auth/login' });
     } catch {
       toast.error('Logout failed.');
     }
