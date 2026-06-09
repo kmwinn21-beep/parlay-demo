@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+import type { ClerkMiddlewareAuth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
@@ -33,12 +34,17 @@ const isAdminRoute = createRouteMatcher(['/admin(.*)']);
 // after login the ops user lands on the dashboard rather than re-entering ops.
 const isOpsRoute = createRouteMatcher(['/ops(.*)', '/api/ops(.*)']);
 
-export default clerkMiddleware(async (auth, request: NextRequest) => {
+// Core middleware logic shared by both Clerk and legacy (JWT-only) paths.
+// When clerkAuth is null, Clerk is not configured — session validation is
+// delegated to per-route requireAuth() (JWT cookie path, e.g. demo env).
+async function handleCore(
+  clerkAuth: ClerkMiddlewareAuth | null,
+  request: NextRequest,
+): Promise<NextResponse> {
   const url = request.nextUrl;
   const { pathname } = url;
 
   // ── CORS — trial signup from marketing site ──────────────────────────────
-  // Exact-origin check preserved from the original middleware.
   if (request.method === 'OPTIONS' && pathname === '/api/auth/trial-signup') {
     const origin = request.headers.get('origin') ?? '';
     const allowed = origin === 'https://useparlay.app' || origin === 'https://www.useparlay.app';
@@ -73,49 +79,49 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
     return NextResponse.next();
   }
 
-  // ── Require Clerk session for everything else ────────────────────────────
-  const { userId, sessionClaims } = await auth();
+  // ── Clerk session check (only when Clerk is configured) ──────────────────
+  // When clerkAuth is null (e.g. demo environment without Clerk keys),
+  // route handlers call requireAuth() which validates the JWT cookie directly.
+  if (clerkAuth) {
+    const { userId, sessionClaims } = clerkAuth();
 
-  // ── Unauthenticated ──────────────────────────────────────────────────────
-  if (!userId) {
-    if (pathname.startsWith('/api/')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    const loginUrl = new URL('/auth/login', request.url);
-    const search = url.search;
-    loginUrl.searchParams.set('next', pathname + (search || ''));
-    // Forward Vercel preview bypass token so the login page isn't blocked by
-    // deployment protection on preview URLs.
-    const vToken = url.searchParams.get('_v');
-    if (vToken) loginUrl.searchParams.set('_v', vToken);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  // ── Admin route protection ───────────────────────────────────────────────
-  if (isAdminRoute(request)) {
-    const role = sessionClaims?.role as string | undefined;
-    if (role !== 'administrator') {
+    if (!userId) {
       if (pathname.startsWith('/api/')) {
-        return NextResponse.json(
-          { error: 'Forbidden: administrator access required' },
-          { status: 403 }
-        );
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
       }
-      return NextResponse.redirect(new URL('/auth/access-denied', request.url));
+      const loginUrl = new URL('/auth/login', request.url);
+      const search = url.search;
+      loginUrl.searchParams.set('next', pathname + (search || ''));
+      // Forward Vercel preview bypass token so the login page isn't blocked by
+      // deployment protection on preview URLs.
+      const vToken = url.searchParams.get('_v');
+      if (vToken) loginUrl.searchParams.set('_v', vToken);
+      return NextResponse.redirect(loginUrl);
+    }
+
+    // ── Admin route protection ─────────────────────────────────────────────
+    if (isAdminRoute(request)) {
+      const role = sessionClaims?.role as string | undefined;
+      if (role !== 'administrator') {
+        if (pathname.startsWith('/api/')) {
+          return NextResponse.json(
+            { error: 'Forbidden: administrator access required' },
+            { status: 403 },
+          );
+        }
+        return NextResponse.redirect(new URL('/auth/access-denied', request.url));
+      }
     }
   }
 
   // ── Impersonation write-blocking ─────────────────────────────────────────
-  // Block all mutations while an ops_impersonation cookie is active.
-  // Exempt the entire /api/ops/ prefix (not just the end-session path) so
-  // all ops management actions still work during impersonation.
   const impersonationId = request.cookies.get('ops_impersonation')?.value;
   if (impersonationId && pathname.startsWith('/api/') && !pathname.startsWith('/api/ops/')) {
     const method = request.method.toUpperCase();
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
       return NextResponse.json(
         { error: 'Write actions are disabled in admin view.' },
-        { status: 403 }
+        { status: 403 },
       );
     }
   }
@@ -155,7 +161,14 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
   }
 
   return NextResponse.next();
-});
+}
+
+// When CLERK_SECRET_KEY is present, wrap with clerkMiddleware so auth() works.
+// When absent (e.g. demo environment), export a plain middleware — Clerk is never
+// contacted and all auth is handled by per-route requireAuth() JWT cookie checks.
+export default process.env.CLERK_SECRET_KEY
+  ? clerkMiddleware((auth, request: NextRequest) => handleCore(auth, request))
+  : (request: NextRequest) => handleCore(null, request);
 
 export const config = {
   matcher: [
