@@ -20,6 +20,7 @@ export interface PlanCapabilities {
     target_priority_scoring: boolean;
     prospect_recommendations: boolean;
     internal_relationship_mapping: boolean;
+    activity_timeline: boolean;
   };
   floor_capture: {
     ai_card_scanning: boolean;
@@ -105,8 +106,8 @@ const CORE_ALL_FALSE = {
   standard_notes: false, conference_agenda: false, my_agenda: false,
   notifications_all_types: false, admin_configuration_panel: false, user_management: false,
 };
-const INTEL_ALL_TRUE = { icp_rules_engine: true, target_priority_scoring: true, prospect_recommendations: true, internal_relationship_mapping: true };
-const INTEL_ALL_FALSE = { icp_rules_engine: false, target_priority_scoring: false, prospect_recommendations: false, internal_relationship_mapping: false };
+const INTEL_ALL_TRUE = { icp_rules_engine: true, target_priority_scoring: true, prospect_recommendations: true, internal_relationship_mapping: true, activity_timeline: true };
+const INTEL_ALL_FALSE = { icp_rules_engine: false, target_priority_scoring: false, prospect_recommendations: false, internal_relationship_mapping: false, activity_timeline: false };
 const FLOOR_ALL_TRUE = { ai_card_scanning: true, ai_batch_card_scanning: true, floor_notes: true, auto_followup_triggers: true };
 const FLOOR_ALL_FALSE = { ai_card_scanning: false, ai_batch_card_scanning: false, floor_notes: false, auto_followup_triggers: false };
 const COLLAB_ALL_TRUE = { direct_messaging: true, group_messaging: true, rich_notes_mentions: true, rich_notes_comments: true, rich_notes_reactions: true };
@@ -151,6 +152,7 @@ export function buildCustomPlanCapabilities(
         capabilities.intelligence_core.target_priority_scoring = true;
         capabilities.intelligence_core.prospect_recommendations = true;
         capabilities.intelligence_core.internal_relationship_mapping = true;
+        capabilities.intelligence_core.activity_timeline = true;
         break;
       case 'floor_capture':
         capabilities.floor_capture.ai_card_scanning = true;

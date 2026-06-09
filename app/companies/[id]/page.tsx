@@ -27,6 +27,8 @@ import { InternalRelationshipsSection } from '@/components/InternalRelationships
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { ComposeEmailModal } from '@/components/ComposeEmailModal';
 import { CompanyDrawer } from '@/components/CompanyDrawer';
+import { ActivityTimelineModal } from '@/components/ActivityTimelineModal';
+import { useCapabilities } from '@/lib/useCapabilities';
 
 interface ConferenceItem { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -129,6 +131,7 @@ export default function CompanyDetailPage() {
   const colorMaps = useConfigColors();
   const { getLabel: getSectionLabel, orderedKeys: sectionOrder, isVisible: isSectionVisible } = useSectionConfig('company');
   const unitTypeLabel = useUnitTypeLabel();
+  const { planCapabilities } = useCapabilities();
   const avgCostPerUnit = useAvgCostPerUnit();
 
   const [company, setCompany] = useState<Company | null>(null);
@@ -191,6 +194,10 @@ export default function CompanyDetailPage() {
   // Internal relationships state
   const [internalRelationships, setInternalRelationships] = useState<{ id: number; company_id: number; rep_ids: string | null; contact_ids: string | null; relationship_status: string; description: string; created_at: string }[]>([]);
   const [relTypeOptions, setRelTypeOptions] = useState<{ id: number; value: string }[]>([]);
+
+  // Activity timeline state
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [relMapOpen, setRelMapOpen] = useState(false);
 
   // Intel drawer state
   interface IntelItem {
@@ -917,6 +924,36 @@ export default function CompanyDetailPage() {
                           </svg>
                         </button>
                       )}
+                      {planCapabilities?.intelligence_core?.activity_timeline && (
+                        <button
+                          type="button"
+                          title="View activity timeline"
+                          onClick={() => setTimelineOpen(true)}
+                          className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0"
+                        >
+                          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 sm:w-5 sm:h-5 text-brand-secondary" aria-hidden="true">
+                            <line x1="2" y1="10" x2="18" y2="10" />
+                            <circle cx="6" cy="6" r="1.5" fill="currentColor" stroke="none" />
+                            <circle cx="10" cy="13" r="1.5" fill="currentColor" stroke="none" />
+                            <circle cx="14" cy="5" r="1.5" fill="currentColor" stroke="none" />
+                            <line x1="6" y1="10" x2="6" y2="6" strokeWidth="1.4" />
+                            <line x1="10" y1="10" x2="10" y2="13" strokeWidth="1.4" />
+                            <line x1="14" y1="10" x2="14" y2="5" strokeWidth="1.4" />
+                          </svg>
+                        </button>
+                      )}
+                      {planCapabilities?.intelligence_core?.internal_relationship_mapping && (
+                        <button
+                          type="button"
+                          title="View relationship map"
+                          onClick={() => setRelMapOpen(true)}
+                          className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#EEEDFE] hover:bg-[#E0DEF8] transition-colors flex-shrink-0"
+                        >
+                          <svg className="w-4 h-4 sm:w-5 sm:h-5 text-[#7F77DD]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                          </svg>
+                        </button>
+                      )}
                     </h1>
                     {company.parent_company && (
                       <p className="text-sm text-gray-500 mt-0.5">
@@ -1480,6 +1517,8 @@ export default function CompanyDetailPage() {
                   relTypeOptions={relTypeOptions}
                   relationships={internalRelationships}
                   onRefresh={fetchInternalRelationships}
+                  mapOpen={relMapOpen}
+                  onMapClose={() => setRelMapOpen(false)}
                 />
               ),
               operator_capital: (
@@ -1876,6 +1915,16 @@ export default function CompanyDetailPage() {
           </div>
         );
       })()}
+
+      {/* Activity timeline modal */}
+      {timelineOpen && company && (
+        <ActivityTimelineModal
+          isOpen={timelineOpen}
+          onClose={() => setTimelineOpen(false)}
+          companyId={company.id}
+          companyName={company.name}
+        />
+      )}
     </div>
   );
 }

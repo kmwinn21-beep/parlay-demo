@@ -24,6 +24,8 @@ import { TouchpointsSection } from '@/components/TouchpointsSection';
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { ComposeEmailModal } from '@/components/ComposeEmailModal';
 import { BUYER_ROLE_OPTIONS, shouldWarnForTitleMetadata, type BuyerRoleKey, type TitleMatchMetadata } from '@/lib/titleNormalization';
+import { ActivityTimelineModal } from '@/components/ActivityTimelineModal';
+import { useCapabilities } from '@/lib/useCapabilities';
 
 interface Conference { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -76,10 +78,12 @@ export default function AttendeeDetailPage() {
   const id = params.id as string;
   const colorMaps = useConfigColors();
   const userOptionsFull = useUserOptions();
+  const { planCapabilities } = useCapabilities();
   const { getLabel: getSectionLabel, orderedKeys: sectionOrder, isVisible: isSectionVisible } = useSectionConfig('attendee');
 
   const [attendee, setAttendee] = useState<Attendee | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [timelineOpen, setTimelineOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<{ first_name?: string; last_name?: string; title?: string; company_id?: string; email?: string; seniority?: string; linkedin_url?: string; phone?: string; function?: string; consent?: string }>({});
@@ -826,6 +830,16 @@ export default function AttendeeDetailPage() {
                     <div>
                       <div className="flex flex-wrap items-center gap-3">
                         <h1 className="text-2xl font-bold text-brand-primary font-serif">{attendee.first_name} {attendee.last_name}</h1>
+                        {attendee.company_id && planCapabilities?.intelligence_core?.activity_timeline && (
+                          <button
+                            type="button"
+                            title="View activity timeline"
+                            onClick={() => setTimelineOpen(true)}
+                            className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0"
+                          >
+                            <i className="ti ti-timeline text-brand-secondary text-base" aria-hidden="true" />
+                          </button>
+                        )}
                         {attendee.consent === 'Opted-Out' && (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700 border border-red-300">
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
@@ -1566,6 +1580,16 @@ export default function AttendeeDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Activity timeline modal */}
+      {timelineOpen && attendee?.company_id && (
+        <ActivityTimelineModal
+          isOpen={timelineOpen}
+          onClose={() => setTimelineOpen(false)}
+          companyId={attendee.company_id}
+          companyName={attendee.company_name ?? ''}
+        />
       )}
     </div>
   );

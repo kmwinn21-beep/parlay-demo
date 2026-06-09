@@ -67,6 +67,9 @@ interface InternalRelationshipsSectionProps {
   relTypeOptions: RelTypeOption[];
   relationships: InternalRelationship[];
   onRefresh: () => void;
+  /** Controlled from outside (e.g. header icon button on company page) */
+  mapOpen?: boolean;
+  onMapClose?: () => void;
 }
 
 const EMPTY_ATTENDEES: AttendeeOption[] = [];
@@ -346,6 +349,8 @@ export function InternalRelationshipsSection({
   relTypeOptions,
   relationships,
   onRefresh,
+  mapOpen,
+  onMapClose,
 }: InternalRelationshipsSectionProps) {
   const [sectionExpanded, setSectionExpanded] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -477,7 +482,8 @@ export function InternalRelationshipsSection({
         </div>
       </div>
 
-      {relationships.length > 0 && (
+      {/* In attendee context, show inline text button; in company context the button lives in the page header */}
+      {isAttendeeContext && relationships.length > 0 && (
         <div className="mt-1.5 pl-6">
           <button
             type="button"
@@ -560,15 +566,15 @@ export function InternalRelationshipsSection({
         </div>
       )}
 
-      {/* Relationship map drawer */}
-      {showMapDrawer && (
+      {/* Relationship map drawer — opened by internal button (attendee context) or external prop (company header) */}
+      {(showMapDrawer || mapOpen) && (
         <RelationshipMapDrawer
           relationships={relationships}
           contacts={attendeeDetailMap}
           userOptions={userOptions}
           relTypeOptions={relTypeOptions}
           companyName={companyName}
-          onClose={() => setShowMapDrawer(false)}
+          onClose={() => { setShowMapDrawer(false); onMapClose?.(); }}
         />
       )}
     </div>
