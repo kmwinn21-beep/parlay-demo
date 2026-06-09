@@ -24,6 +24,7 @@ const isPublicRoute = createRouteMatcher([
   '/__clerk(.*)',
   '/signup(.*)',
   // Ops panel uses its own JWT auth (requireOpsAdmin) — fully Clerk-independent
+  '/ops-login',
   '/ops(.*)',
   '/api/ops/(.*)',
 ]);
