@@ -1404,7 +1404,10 @@ export default function ProgramIntelligencePage() {
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto">
           <nav className="flex gap-1 -mb-px overflow-x-auto hide-scrollbar px-6">
-            {TABS.filter(t => t.id !== 'snapshots' || isAdmin).map((tab) => (
+            {TABS.filter(t => {
+              if (t.id === 'snapshots') return isAdmin && capabilities?.planCapabilities?.program_intelligence?.series_snapshots_admin;
+              return true;
+            }).map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
@@ -1885,12 +1888,16 @@ export default function ProgramIntelligencePage() {
                         {satData.seriesGroups.map(series => (
                           <div key={series.series_id} className="card">
                             <h4 className="text-xs font-semibold uppercase tracking-wide mb-3">
+                              {capabilities?.planCapabilities?.program_intelligence?.yoy_series_analysis ? (
                               <Link
                                 href={`/conference-series/${series.series_id}`}
                                 className="text-brand-secondary hover:underline cursor-pointer"
                               >
                                 {series.series_name}
                               </Link>
+                              ) : (
+                                <span>{series.series_name}</span>
+                              )}
                             </h4>
                             <div className="flex items-end gap-3 flex-wrap">
                               {[...series.conferences]

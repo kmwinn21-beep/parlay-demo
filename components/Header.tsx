@@ -17,6 +17,7 @@ import { useFloatingNavHidden } from './FloatingNavHiddenContext';
 import { OutstandingFollowUps } from './OutstandingFollowUps';
 import { useUser } from './UserContext';
 import { useAppName } from '@/lib/useAppName';
+import { useCapabilities } from '@/lib/useCapabilities';
 import { clearActiveConferenceStorage } from '@/components/ActiveConferenceContext';
 import { SetConferenceButton } from '@/components/SetConferenceButton';
 const pageTitles: Record<string, string> = {
@@ -86,6 +87,7 @@ export function Header() {
   const { user } = useUser();
   const appName = useAppName();
   const { navHidden, setNavHidden, setHelpChatOpen } = useFloatingNavHidden();
+  const { planCapabilities } = useCapabilities();
   const title = getPageTitle(pathname);
   const [showConferences, setShowConferences] = useState(false);
   // Initialise directly from cache — if the fetch already completed the
@@ -454,6 +456,7 @@ export function Header() {
         )}
 
         {/* Help / Parlay AI — desktop only; mobile uses FloatingNav */}
+        {planCapabilities?.core?.help_chat && (
         <button
           type="button"
           aria-label="Ask Parlay AI"
@@ -468,6 +471,7 @@ export function Header() {
             <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-blue-500 border border-white" />
           )}
         </button>
+        )}
 
         {/* User menu — hidden on mobile */}
         {user && (

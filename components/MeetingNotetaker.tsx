@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
+import { useCapabilities } from '@/lib/useCapabilities';
 
 interface TranscriptSegment {
   text: string;
@@ -336,6 +337,9 @@ function ExternalAttendeeForm({ conferenceId, defaultCompanyId, defaultCompanyNa
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, onMeetingLoaded, onAnalysisStateChange }: Props) {
+  const { planCapabilities } = useCapabilities();
+  const canAnalyze = planCapabilities?.revenue_intelligence?.meeting_note_analysis === true;
+
   // Data state
   const [loading, setLoading] = useState(true);
   const [meeting, setMeeting] = useState<MeetingContext | null>(null);
@@ -1195,6 +1199,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                 )}
 
                 {/* Generate AI Summary */}
+                {canAnalyze && (
                 <button
                   onClick={() => { handleAnalyze(); setShowMobileTools(false); }}
                   disabled={analysisLoading || !hasAudioOrTranscript}
@@ -1205,6 +1210,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                   </svg>
                   <span className="font-medium">{analysisLoading ? 'Analyzing…' : 'Generate AI Summary'}</span>
                 </button>
+                )}
               </div>
             </>
           )}
@@ -1304,6 +1310,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
           )}
 
           {/* Generate AI Summary */}
+          {canAnalyze && (
           <button
             onClick={handleAnalyze}
             disabled={analysisLoading || (!hasAudioOrTranscript)}
@@ -1315,6 +1322,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
             </svg>
             {analysisLoading ? 'Analyzing…' : 'Generate AI Summary'}
           </button>
+          )}
 
           <div className="w-px h-5 bg-gray-200 mx-1 flex-shrink-0" />
 

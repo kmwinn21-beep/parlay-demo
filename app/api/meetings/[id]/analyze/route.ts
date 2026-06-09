@@ -3,6 +3,8 @@ import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import Anthropic from '@anthropic-ai/sdk';
 import { trackEvent, trackFeature } from '@/lib/trackEvent';
+import { resolvePlanState } from '@/lib/trialState';
+import { hasCapability } from '@/lib/capabilities';
 
 export const maxDuration = 300;
 
@@ -25,6 +27,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
   const db = await getDb(user.accountId);
+
+  const { planCapabilities } = await resolvePlanState(db);
+  if (!hasCapability(planCapabilities, 'revenue_intelligence.meeting_note_analysis')) {
+    return NextResponse.json({ error: 'Upgrade required' }, { status: 403 });
+  }
+
   const { id } = await params;
   const meetingId = Number(id);
 

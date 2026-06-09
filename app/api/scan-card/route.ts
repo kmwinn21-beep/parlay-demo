@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
+import { getDb } from '@/lib/getDb';
+import { resolvePlanState } from '@/lib/trialState';
+import { hasCapability } from '@/lib/capabilities';
 import Anthropic from '@anthropic-ai/sdk';
 import { trackEvent, trackFeature } from '@/lib/trackEvent';
 
@@ -16,6 +19,12 @@ export interface CardScanResult {
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
+
+  const db = await getDb(authResult.accountId);
+  const { planCapabilities } = await resolvePlanState(db);
+  if (!hasCapability(planCapabilities, 'floor_capture.ai_card_scanning')) {
+    return NextResponse.json({ error: 'Upgrade required' }, { status: 403 });
+  }
 
   if (!process.env.ANTHROPIC_API_KEY) {
     console.error('ANTHROPIC_API_KEY is not set');
