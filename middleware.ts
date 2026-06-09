@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+import type { ClerkMiddlewareAuth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
@@ -37,7 +38,7 @@ const isOpsRoute = createRouteMatcher(['/ops(.*)', '/api/ops(.*)']);
 // When clerkAuth is null, Clerk is not configured — session validation is
 // delegated to per-route requireAuth() (JWT cookie path, e.g. demo env).
 async function handleCore(
-  clerkAuth: (() => Promise<{ userId: string | null; sessionClaims: Record<string, unknown> | null }>) | null,
+  clerkAuth: ClerkMiddlewareAuth | null,
   request: NextRequest,
 ): Promise<NextResponse> {
   const url = request.nextUrl;
@@ -82,7 +83,7 @@ async function handleCore(
   // When clerkAuth is null (e.g. demo environment without Clerk keys),
   // route handlers call requireAuth() which validates the JWT cookie directly.
   if (clerkAuth) {
-    const { userId, sessionClaims } = await clerkAuth();
+    const { userId, sessionClaims } = clerkAuth();
 
     if (!userId) {
       if (pathname.startsWith('/api/')) {
