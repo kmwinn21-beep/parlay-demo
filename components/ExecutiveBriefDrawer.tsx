@@ -405,12 +405,24 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
         URL.revokeObjectURL(url);
       } else {
         const { html } = await res.json();
-        const win = window.open('', '_blank');
-        if (win) {
-          win.document.write(html);
-          win.document.close();
-          win.onload = () => { win.focus(); win.print(); };
-        }
+        // Print via a hidden iframe so the user stays on the current page.
+        // window.open('', '_blank') leaves mobile users stranded in a new tab
+        // with no navigation back.
+        const iframe = document.createElement('iframe');
+        iframe.style.cssText = 'position:fixed;width:0;height:0;border:none;opacity:0;pointer-events:none;';
+        document.body.appendChild(iframe);
+        iframe.srcdoc = html;
+        iframe.onload = () => {
+          const cw = iframe.contentWindow;
+          if (!cw) { document.body.removeChild(iframe); return; }
+          const cleanup = () => {
+            cw.removeEventListener('afterprint', cleanup);
+            if (iframe.parentNode) document.body.removeChild(iframe);
+          };
+          cw.addEventListener('afterprint', cleanup);
+          cw.focus();
+          cw.print();
+        };
       }
     } catch (err) {
       console.error('PDF export failed:', err);
