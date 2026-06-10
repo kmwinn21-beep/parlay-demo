@@ -36,3 +36,27 @@ export async function GET(
   const row = res.rows[0];
   return NextResponse.json({ snapshot: row });
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  if (authResult.role !== 'administrator') {
+    return NextResponse.json({ error: 'Administrator access required.' }, { status: 403 });
+  }
+  const db = await getDb(authResult?.accountId);
+
+  const conferenceId = Number(params.id);
+  if (!Number.isFinite(conferenceId)) {
+    return NextResponse.json({ error: 'Invalid conference id' }, { status: 400 });
+  }
+
+  await db.execute({
+    sql: `DELETE FROM conference_snapshots WHERE conference_id = ?`,
+    args: [conferenceId],
+  });
+
+  return NextResponse.json({ success: true });
+}

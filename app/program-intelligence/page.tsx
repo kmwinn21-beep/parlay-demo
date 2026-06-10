@@ -2517,6 +2517,21 @@ export default function ProgramIntelligencePage() {
             }
           };
 
+          const handleDeleteSnapshot = async (conferenceId: number) => {
+            if (!confirm('Delete this snapshot? The data will be removed from series analytics until recomputed.')) return;
+            try {
+              const res = await fetch(`/api/conferences/${conferenceId}/snapshot`, { method: 'DELETE' });
+              if (!res.ok) throw new Error();
+              setSnapshotOverrides(prev => ({
+                ...prev,
+                [conferenceId]: { hasSnapshot: false, snapshotTakenAt: null, completenessPercent: 0 },
+              }));
+              setSnapshotErrors(prev => { const n = { ...prev }; delete n[conferenceId]; return n; });
+            } catch {
+              setSnapshotErrors(prev => ({ ...prev, [conferenceId]: 'Failed to delete snapshot.' }));
+            }
+          };
+
           const handleComputeAll = async () => {
             if (!closedConferences.length) return;
             setComputingAll(true);
@@ -2773,7 +2788,7 @@ export default function ProgramIntelligencePage() {
                               {/* Actions */}
                               <td className="px-4 py-3">
                                 {isClosed ? (
-                                  <div>
+                                  <div className="flex items-center gap-3">
                                     <button
                                       onClick={() => handleComputeSnapshot(instance.conferenceId)}
                                       disabled={isComputing || computingAll}
@@ -2786,6 +2801,15 @@ export default function ProgramIntelligencePage() {
                                           : <><i className="ti ti-bolt text-xs" aria-hidden="true" />Compute</>
                                       }
                                     </button>
+                                    {hasSnapshot && !isComputing && (
+                                      <button
+                                        onClick={() => handleDeleteSnapshot(instance.conferenceId)}
+                                        disabled={computingAll}
+                                        className="flex items-center gap-1 text-xs font-medium text-red-400 hover:text-red-600 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                                      >
+                                        <i className="ti ti-trash text-xs" aria-hidden="true" />Clear
+                                      </button>
+                                    )}
                                     {err && <p className="text-xs text-red-500 mt-1">{err}</p>}
                                   </div>
                                 ) : (

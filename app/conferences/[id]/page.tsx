@@ -499,19 +499,20 @@ export default function ConferenceDetailPage() {
         toast.error(data.error || 'Failed to update stage.');
         return;
       }
-      // Immediately reflect the new override in local state so the stage badge
-      // updates before the full re-fetch completes.
-      if (data.stage) {
-        const overrideActions = ['close_now', 'reopen', 'set_override'];
-        const clearActions = ['clear_override'];
-        if (overrideActions.includes(action)) {
-          setConference(prev => prev ? { ...prev, stage_override: data.stage } : prev);
-        } else if (clearActions.includes(action)) {
-          setConference(prev => prev ? { ...prev, stage_override: null } : prev);
-        }
+      // Re-fetch the conference bypassing the browser's 30s cache so the updated
+      // stage_override (or cleared override) is reflected immediately, not stale.
+      const freshConf = await fetch(`/api/conferences/${id}?_t=${Date.now()}`)
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null);
+      if (freshConf && !freshConf.error) {
+        setConference(freshConf);
       }
-      fetchConference();
       toast.success('Conference stage updated.');
+      // After closing, trigger an explicit snapshot computation so it runs to
+      // completion (serverless functions may not finish fire-and-forget tasks).
+      if (action === 'close_now') {
+        fetch(`/api/conferences/${id}/compute-snapshot`, { method: 'POST' }).catch(() => {});
+      }
     } catch {
       toast.error('Failed to update stage.');
     } finally {
