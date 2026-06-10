@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -15,6 +15,7 @@ export default function SignupPage() {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [domainConflict, setDomainConflict] = useState(false);
   const [companyName, setCompanyName] = useState('');
   const [conferenceTimingAnswer, setConferenceTimingAnswer] = useState<'upcoming' | 'planning' | ''>('');
   const [loading, setLoading] = useState(false);
@@ -25,6 +26,19 @@ export default function SignupPage() {
   const [signupConferencesPerYear, setSignupConferencesPerYear] = useState('');
   const [signupPrimaryGoal, setSignupPrimaryGoal] = useState('');
   const [signupCurrentTool, setSignupCurrentTool] = useState('');
+
+  const handleEmailBlur = useCallback(async () => {
+    setDomainConflict(false);
+    const atIdx = email.indexOf('@');
+    if (atIdx === -1 || !email.slice(atIdx + 1)) return;
+    try {
+      const res = await fetch(`/api/auth/check-domain?email=${encodeURIComponent(email)}`);
+      const data = await res.json() as { conflict: boolean };
+      setDomainConflict(data.conflict);
+    } catch {
+      // Non-fatal — just don't show the warning
+    }
+  }, [email]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,12 +122,25 @@ export default function SignupPage() {
               <input
                 type="email"
                 value={email}
-                onChange={e => setEmail(e.target.value)}
+                onChange={e => { setEmail(e.target.value); setDomainConflict(false); }}
+                onBlur={handleEmailBlur}
                 required
                 autoComplete="email"
                 className="input-field w-full"
                 placeholder="jane@company.com"
               />
+              {domainConflict && (
+                <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+                  <svg className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                  </svg>
+                  <span>
+                    It looks like your company may already have a Parlay account.{' '}
+                    <a href="/auth/login" className="font-semibold underline underline-offset-2 hover:text-amber-900">Sign in instead</a>
+                    {' '}or contact your account admin. You can still continue below.
+                  </span>
+                </div>
+              )}
             </div>
 
             {!CLERK_ENABLED && (
