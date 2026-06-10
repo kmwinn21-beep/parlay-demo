@@ -43,6 +43,10 @@ export type ClerkSessionUser = {
 };
 
 export async function getClerkSessionUser(): Promise<ClerkSessionUser | null> {
+  // Skip entirely when Clerk isn't configured — auth() throws without a
+  // clerkMiddleware context, which would crash the route before JWT fallback.
+  if (!process.env.CLERK_SECRET_KEY) return null;
+
   const { userId, sessionClaims } = await auth();
   if (!userId) return null;
 
