@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { effectiveSeniority } from '@/lib/parsers';
@@ -73,8 +73,33 @@ function formatDate(d: string) {
 export default function AttendeeDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isEmbed = searchParams.get('embed') === 'true';
   const routerRef = useRef(router);
   useEffect(() => { routerRef.current = router; }, [router]);
+
+  // When running inside a QuickView iframe, broadcast attendee field changes
+  // to the parent page so it can update its table without a full refresh.
+  // Skip the initial load (null → data) — only fire after user-initiated saves.
+  const embedInitialLoadDone = useRef(false);
+  useEffect(() => {
+    if (!attendee) return;
+    if (!embedInitialLoadDone.current) { embedInitialLoadDone.current = true; return; }
+    if (!isEmbed) return;
+    window.parent.postMessage({
+      type: 'parlay:attendee:updated',
+      attendee: {
+        id: attendee.id,
+        first_name: attendee.first_name,
+        last_name: attendee.last_name,
+        title: attendee.title ?? null,
+        seniority: attendee.seniority ?? null,
+        email: attendee.email ?? null,
+        company_id: attendee.company_id ?? null,
+      },
+    }, '*');
+  }, [attendee]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const id = params.id as string;
   const colorMaps = useConfigColors();
   const userOptionsFull = useUserOptions();

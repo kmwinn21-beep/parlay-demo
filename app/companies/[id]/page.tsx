@@ -351,6 +351,21 @@ export default function CompanyDetailPage() {
     fetchInternalRelationships();
   }, [fetchCompany, fetchInternalRelationships]);
 
+  // Sync edits made inside a QuickView iframe back to this page's attendee list.
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type !== 'parlay:attendee:updated') return;
+      const u = e.data.attendee;
+      if (!u?.id) return;
+      setCompany(prev => {
+        if (!prev) return prev;
+        return { ...prev, attendees: prev.attendees.map(a => a.id === u.id ? { ...a, ...u } : a) };
+      });
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
   useEffect(() => {
     const handler = (e: Event) => {
       const { meetingId: deletedId } = (e as CustomEvent<{ meetingId: number }>).detail;
