@@ -78,6 +78,7 @@ function ClerkLoginPage() {
       </div>
 
       <div className="relative z-10 flex flex-col items-center">
+        <p className="text-white/60 text-sm tracking-wide mb-6 text-center">The Conference Operating System for Revenue Teams</p>
         <SignIn
           signUpUrl="https://www.useparlay.app/?trial=true"
           appearance={{ elements: { headerTitle: 'hidden', headerSubtitle: 'hidden' } }}
@@ -143,7 +144,8 @@ function LoginForm() {
       <div className="relative z-10 w-full max-w-sm flex flex-col items-center">
         <div className="flex flex-col items-center mb-8">
           <LogoImage variant="sidebar" width={160} height={48} className="object-contain mb-2" alt="Logo" />
-          {tagline && <p className="text-white/60 text-sm italic">{tagline}</p>}
+          <p className="text-white/60 text-sm tracking-wide text-center">The Conference Operating System for Revenue Teams</p>
+          {tagline && <p className="text-white/60 text-sm italic mt-1">{tagline}</p>}
         </div>
 
         <div className="w-full bg-white rounded-2xl shadow-2xl p-8">
