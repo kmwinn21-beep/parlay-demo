@@ -1375,11 +1375,11 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                 )}
               </div>
 
-              {/* Mobile meeting notes overlay — slides in over the modal, full-screen */}
+              {/* Mobile meeting notes overlay — slides up from the bottom over the modal */}
               {activeMeetingId != null && activeMeeting && selectedCompany && (
                 <div
                   className="sm:hidden absolute inset-0 z-10 bg-white flex flex-col"
-                  style={{ animation: 'slideInRight 0.25s ease-out' }}
+                  style={{ animation: 'slideInUp 0.25s ease-out' }}
                 >
                   <MeetingNotesPanel
                     activeMeeting={activeMeeting}
@@ -1510,9 +1510,12 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
         />
       )}
       <div
-        className={`fixed top-0 right-0 h-screen bg-white border-l border-gray-200 shadow-2xl z-[60] flex flex-col overflow-hidden transition-all ease-out ${
-          recordDrawer != null ? 'w-full sm:w-[400px]' : 'w-0'
-        }`}
+        className={`fixed z-[60] flex flex-col overflow-hidden bg-white shadow-2xl border-gray-200
+          inset-x-0 bottom-0 h-[90vh] rounded-t-2xl border-t
+          sm:top-0 sm:bottom-auto sm:right-0 sm:left-auto sm:h-screen sm:rounded-none sm:border-t-0 sm:border-l
+          transition-all ease-out
+          ${recordDrawer != null ? 'translate-y-0 sm:translate-y-0 sm:w-[400px]' : 'translate-y-full sm:translate-y-0 sm:w-0'}
+        `}
         style={{ transitionDuration: '200ms' }}
         onClick={e => e.stopPropagation()}
       >

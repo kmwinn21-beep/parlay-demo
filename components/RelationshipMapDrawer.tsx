@@ -537,8 +537,7 @@ export function RelationshipMapDrawer({
       <div className="fixed inset-0 z-50">
         <div className="absolute inset-0 bg-black/40" onClick={onClose} />
         <div
-          className="fixed inset-y-0 right-0 z-50 w-full sm:w-[520px] bg-white shadow-2xl flex flex-col"
-          style={{ animation: 'slideInRight 0.25s ease-out' }}
+          className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[520px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-none z-50"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">

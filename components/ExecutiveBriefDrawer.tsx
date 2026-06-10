@@ -461,8 +461,11 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
   const content = (
     <div className="fixed inset-0 z-50">
       <style>{`
-        @keyframes execBriefFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes execBriefFadeIn  { from { opacity: 0; }              to { opacity: 1; } }
         @keyframes execBriefSlideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes execBriefSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .exec-brief-panel { animation: execBriefSlideUp 0.25s ease-out; }
+        @media (min-width: 640px) { .exec-brief-panel { animation: execBriefSlideIn 0.25s ease-out; } }
         @media print {
           .executive-brief-drawer-root { display: none !important; }
         }
@@ -479,8 +482,7 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
       {/* Drawer */}
       <div className="absolute inset-0 sm:left-64 sm:flex sm:items-center sm:justify-center sm:p-5 pointer-events-none">
         <div
-          className="executive-brief-drawer-root pointer-events-auto relative w-full h-full sm:h-[90vh] sm:max-w-[1100px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden"
-          style={{ animation: 'execBriefSlideIn 0.25s ease-out' }}
+          className="exec-brief-panel executive-brief-drawer-root pointer-events-auto relative w-full h-full sm:h-[90vh] sm:max-w-[1100px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden"
         >
           {/* ── Header ──────────────────────────────────────────────── */}
           <div className="flex-shrink-0 flex items-center justify-between px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-100 bg-white no-print">

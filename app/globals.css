@@ -108,3 +108,19 @@ h1, h2, h3 {
   from { transform: translateX(100%); }
   to   { transform: translateX(0); }
 }
+
+@keyframes slideInUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+/* Drawers slide up from the bottom on mobile, from the right on desktop */
+.drawer-mobile-responsive {
+  animation: slideInUp 0.25s ease-out;
+}
+
+@media (min-width: 640px) {
+  .drawer-mobile-responsive {
+    animation: slideInRight 0.25s ease-out;
+  }
+}

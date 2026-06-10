@@ -148,9 +148,20 @@ export function CommitteeDrawer({
   const content = (
     <>
       <style>{`
-        @keyframes committeeSlideIn {
-          from { transform: translateX(100%); }
-          to   { transform: translateX(0); }
+        @keyframes committeeSlideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes committeeSlideUp  { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .committee-drawer-panel {
+          position: fixed; bottom: 0; left: 0; right: 0;
+          height: 90vh; border-radius: 1rem 1rem 0 0;
+          animation: committeeSlideUp 0.25s ease-out;
+        }
+        @media (min-width: 640px) {
+          .committee-drawer-panel {
+            top: 0; right: 0; bottom: auto; left: auto;
+            height: 100vh; border-radius: 0;
+            width: calc((100vw - 16rem) / 2);
+            animation: committeeSlideIn 0.25s ease-out;
+          }
         }
       `}</style>
 
@@ -163,8 +174,7 @@ export function CommitteeDrawer({
 
       {/* Drawer panel */}
       <div
-        className="fixed top-0 right-0 h-screen bg-white border-l border-gray-200 shadow-2xl z-[60] flex flex-col overflow-hidden"
-        style={{ width: 'calc((100vw - 16rem) / 2)', animation: 'committeeSlideIn 0.25s ease-out' }}
+        className="committee-drawer-panel bg-white border-t sm:border-t-0 sm:border-l border-gray-200 shadow-2xl z-[60] flex flex-col overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-start justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
