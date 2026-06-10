@@ -3,24 +3,87 @@
 import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import toast from 'react-hot-toast';
 import { SignIn } from '@clerk/nextjs';
 import { LogoImage } from '@/components/LogoImage';
 import { useTagline } from '@/lib/useTagline';
-import { useAppName } from '@/lib/useAppName';
 
 // When NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is set at build time, delegate to
 // Clerk's hosted sign-in. Otherwise render the legacy JWT login form so that
 // environments without Clerk configured (e.g. demo) continue to work.
 const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
+const YEAR = new Date().getFullYear();
+
+function BackgroundSVG() {
+  return (
+    <svg
+      className="absolute inset-0 w-full h-full opacity-[0.07] pointer-events-none"
+      viewBox="0 0 1200 800"
+      preserveAspectRatio="xMidYMid slice"
+      aria-hidden="true"
+    >
+      <line x1="200" y1="150" x2="450" y2="300" stroke="white" strokeWidth="1" />
+      <line x1="450" y1="300" x2="700" y2="200" stroke="white" strokeWidth="1" />
+      <line x1="700" y1="200" x2="900" y2="350" stroke="white" strokeWidth="1" />
+      <line x1="450" y1="300" x2="350" y2="550" stroke="white" strokeWidth="1" />
+      <line x1="350" y1="550" x2="600" y2="620" stroke="white" strokeWidth="1" />
+      <line x1="600" y1="620" x2="850" y2="500" stroke="white" strokeWidth="1" />
+      <line x1="900" y1="350" x2="850" y2="500" stroke="white" strokeWidth="1" />
+      <line x1="700" y1="200" x2="600" y2="620" stroke="white" strokeWidth="0.5" />
+      <line x1="100" y1="400" x2="350" y2="550" stroke="white" strokeWidth="1" />
+      <line x1="100" y1="400" x2="200" y2="150" stroke="white" strokeWidth="0.5" />
+      <line x1="1050" y1="200" x2="900" y2="350" stroke="white" strokeWidth="1" />
+      <line x1="1050" y1="200" x2="1100" y2="500" stroke="white" strokeWidth="1" />
+      <line x1="1100" y1="500" x2="850" y2="500" stroke="white" strokeWidth="1" />
+      <line x1="150" y1="680" x2="350" y2="550" stroke="white" strokeWidth="1" />
+      <line x1="150" y1="680" x2="600" y2="620" stroke="white" strokeWidth="0.5" />
+      <circle cx="200" cy="150" r="5" fill="white" />
+      <circle cx="450" cy="300" r="7" fill="white" />
+      <circle cx="700" cy="200" r="6" fill="white" />
+      <circle cx="900" cy="350" r="8" fill="white" />
+      <circle cx="350" cy="550" r="6" fill="white" />
+      <circle cx="600" cy="620" r="7" fill="white" />
+      <circle cx="850" cy="500" r="5" fill="white" />
+      <circle cx="100" cy="400" r="4" fill="white" />
+      <circle cx="1050" cy="200" r="5" fill="white" />
+      <circle cx="1100" cy="500" r="6" fill="white" />
+      <circle cx="150" cy="680" r="4" fill="white" />
+    </svg>
+  );
+}
+
+function PageFooter() {
+  return (
+    <div className="mt-8 text-center text-white/40 text-xs space-y-1">
+      <p>&copy; {YEAR} All Rights Reserved.</p>
+      <p>
+        <a href="https://www.useparlay.app/privacy" className="hover:text-white/70 transition-colors">Privacy Policy</a>
+        {' '}and{' '}
+        <a href="https://www.useparlay.app/terms" className="hover:text-white/70 transition-colors">Terms</a>
+      </p>
+    </div>
+  );
+}
+
 function ClerkLoginPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-brand-primary">
-      <SignIn
-        signUpUrl="https://www.useparlay.app/?trial=true"
-        appearance={{ elements: { headerTitle: 'hidden', headerSubtitle: 'hidden' } }}
-      />
+    <div className="relative min-h-screen flex flex-col items-center justify-center bg-brand-primary overflow-hidden">
+      <BackgroundSVG />
+
+      {/* Top-left logo */}
+      <div className="absolute top-5 left-6 z-10">
+        <Image src="/ParlayLogoWhite_New.png" alt="Parlay" height={25} width={0} style={{ width: 'auto', height: 25 }} unoptimized />
+      </div>
+
+      <div className="relative z-10 flex flex-col items-center">
+        <SignIn
+          signUpUrl="https://www.useparlay.app/?trial=true"
+          appearance={{ elements: { headerTitle: 'hidden', headerSubtitle: 'hidden' } }}
+        />
+        <PageFooter />
+      </div>
     </div>
   );
 }
@@ -30,7 +93,6 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const next = searchParams.get('next') || '/';
   const tagline = useTagline();
-  const appName = useAppName();
 
   const [email, setEmail] = useState(process.env.NEXT_PUBLIC_DEMO_EMAIL ?? '');
   const [password, setPassword] = useState(process.env.NEXT_PUBLIC_DEMO_PASSWORD ?? '');
@@ -70,14 +132,21 @@ function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen bg-brand-primary flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-sm">
+    <div className="relative min-h-screen bg-brand-primary flex flex-col items-center justify-center p-4 overflow-hidden">
+      <BackgroundSVG />
+
+      {/* Top-left logo */}
+      <div className="absolute top-5 left-6 z-10">
+        <Image src="/ParlayLogoWhite_New.png" alt="Parlay" height={25} width={0} style={{ width: 'auto', height: 25 }} unoptimized />
+      </div>
+
+      <div className="relative z-10 w-full max-w-sm flex flex-col items-center">
         <div className="flex flex-col items-center mb-8">
           <LogoImage variant="sidebar" width={160} height={48} className="object-contain mb-2" alt="Logo" />
           {tagline && <p className="text-white/60 text-sm italic">{tagline}</p>}
         </div>
 
-        <div className="bg-white rounded-2xl shadow-2xl p-8">
+        <div className="w-full bg-white rounded-2xl shadow-2xl p-8">
           <h1 className="text-2xl font-bold text-brand-primary font-serif mb-6">Welcome back</h1>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -143,10 +212,12 @@ function LoginForm() {
         </div>
 
         {process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN && (
-          <p className="text-center text-white/50 text-xs mt-6">
+          <p className="text-center text-white/50 text-xs mt-4">
             Only @{process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN} accounts are permitted.
           </p>
         )}
+
+        <PageFooter />
       </div>
     </div>
   );
