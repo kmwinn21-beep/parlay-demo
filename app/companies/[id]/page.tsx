@@ -29,6 +29,7 @@ import { ComposeEmailModal } from '@/components/ComposeEmailModal';
 import { CompanyDrawer } from '@/components/CompanyDrawer';
 import { ActivityTimelineModal } from '@/components/ActivityTimelineModal';
 import { useCapabilities } from '@/lib/useCapabilities';
+import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
 
 interface ConferenceItem { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -197,6 +198,7 @@ export default function CompanyDetailPage() {
 
   // Activity timeline state
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
   const [relMapOpen, setRelMapOpen] = useState(false);
 
   // Intel drawer state
@@ -1190,11 +1192,14 @@ export default function CompanyDetailPage() {
                   {paginatedAttendees.map((attendee) => {
                     const seniority = effectiveSeniority(attendee.seniority, attendee.title);
                     return (
-                    <tr key={attendee.id} className="hover:bg-gray-50 transition-colors">
+                    <tr key={attendee.id} className="hover:bg-gray-50 transition-colors group">
                       <td className="px-4 py-3 font-medium overflow-hidden" style={{ maxWidth: 220 }}>
-                        <Link href={`/attendees/${attendee.id}`} className="text-brand-secondary hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
-                          {attendee.first_name} {attendee.last_name}
-                        </Link>
+                        <div className="flex items-center gap-1">
+                          <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: attendee.id, name: `${attendee.first_name} ${attendee.last_name}` })} />
+                          <Link href={`/attendees/${attendee.id}`} className="text-brand-secondary hover:underline truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
+                            {attendee.first_name} {attendee.last_name}
+                          </Link>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-gray-600">
                         {attendee.title ? (
@@ -1924,6 +1929,11 @@ export default function CompanyDetailPage() {
           companyId={company.id}
           companyName={company.name}
         />
+      )}
+
+      {/* Attendee quick view drawer */}
+      {quickView && (
+        <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
       )}
     </div>
   );
