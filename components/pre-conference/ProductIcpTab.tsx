@@ -42,25 +42,25 @@ interface DrawerState {
 
 const strengthPill = (s: BcProduct['strength']) => {
   const map = {
-    high:     { label: 'High',     style: { background: '#EAF3DE', color: '#27500A' } },
-    moderate: { label: 'Moderate', style: { background: '#FAEEDA', color: '#633806' } },
-    low:      { label: 'Low',      style: { background: '#FCEBEB', color: '#791F1F' } },
-    none:     { label: 'None',     style: { background: '#F1EFE8', color: '#5F5E5A' } },
+    high:     { label: 'High',     border: '#3B6D11', fill: '#EAF3DE', text: '#3B6D11' },
+    moderate: { label: 'Moderate', border: '#EF9F27', fill: '#FDF3E0', text: '#8A5A00' },
+    low:      { label: 'Low',      border: '#D85A30', fill: '#FAE9E3', text: '#D85A30' },
+    none:     { label: 'None',     border: '#9CA3AF', fill: '#F3F4F6', text: '#6B7280' },
   };
-  const { label, style } = map[s];
-  return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold border" style={{ ...style, borderColor: style.color + '44' }}>{label}</span>;
+  const { label, border, fill, text } = map[s];
+  return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold border" style={{ background: fill, color: text, borderColor: border }}>{label}</span>;
 };
 
 const floorPill = (p: BcProduct['floor_priority']) => {
   const map = {
-    high:    { label: 'High',    style: { background: '#EAF3DE', color: '#0F6E56' } },
-    medium:  { label: 'Medium',  style: { background: '#E6F1FB', color: '#0C447C' } },
-    low:     { label: 'Low',     style: { background: '#FAEEDA', color: '#633806' } },
-    partial: { label: 'Partial', style: { background: '#FAEEDA', color: '#633806' } },
-    gap:     { label: 'Gap',     style: { background: '#FCEBEB', color: '#A32D2D' } },
+    high:    { label: 'High',    border: '#3B6D11', fill: '#EAF3DE', text: '#3B6D11' },
+    medium:  { label: 'Medium',  border: '#185FA5', fill: '#E8F1FA', text: '#185FA5' },
+    low:     { label: 'Low',     border: '#EF9F27', fill: '#FDF3E0', text: '#8A5A00' },
+    partial: { label: 'Partial', border: '#7F77DD', fill: '#EEECFB', text: '#7F77DD' },
+    gap:     { label: 'Gap',     border: '#D85A30', fill: '#FAE9E3', text: '#D85A30' },
   };
-  const { label, style } = map[p];
-  return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold border" style={{ ...style, borderColor: style.color + '44' }}>{label}</span>;
+  const { label, border, fill, text } = map[p];
+  return <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold border" style={{ background: fill, color: text, borderColor: border }}>{label}</span>;
 };
 
 function CommitteeCountPill({
@@ -74,16 +74,16 @@ function CommitteeCountPill({
 }) {
   if (count === 0) return <span className="text-gray-400">—</span>;
   const style = variant === 'full'
-    ? { background: '#EAF3DE', color: '#0F6E56', borderColor: '#0F6E5644' }
-    : { background: '#FAEEDA', color: '#854F0B', borderColor: '#854F0B44' };
+    ? { background: '#E8FAF4', color: '#0F7A5A', borderColor: '#34D399' }
+    : { background: '#FDF3E0', color: '#8A5A00', borderColor: '#EF9F27' };
   return (
     <button
       type="button"
       onClick={onClick}
-      className="px-2 py-0.5 rounded-full text-[11px] font-semibold border hover:opacity-80 transition-opacity"
+      className="px-2 py-0.5 rounded-full text-xs font-semibold border hover:opacity-80 transition-opacity"
       style={style}
     >
-      {count} {count === 1 ? 'co.' : 'cos.'}
+      {count}
     </button>
   );
 }
@@ -265,7 +265,7 @@ export function ProductIcpTab({
               <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Strength:</span>
               {(['high', 'moderate', 'low', 'none'] as const).map(s => (
                 <span key={s} className="flex items-center gap-1 text-[11px] text-gray-500">
-                  <span className="w-2 h-2 rounded-full inline-block" style={{ background: s === 'high' ? '#27500A' : s === 'moderate' ? '#633806' : s === 'low' ? '#791F1F' : '#9CA3AF' }} />
+                  <span className="w-2 h-2 rounded-full inline-block" style={{ background: s === 'high' ? '#3B6D11' : s === 'moderate' ? '#EF9F27' : s === 'low' ? '#D85A30' : '#9CA3AF' }} />
                   {s === 'high' ? 'High (5+)' : s === 'moderate' ? 'Moderate (2–4)' : s === 'low' ? 'Low (1)' : 'None (0)'}
                 </span>
               ))}
