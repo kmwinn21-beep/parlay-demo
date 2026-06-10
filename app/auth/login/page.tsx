@@ -17,7 +17,10 @@ const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 function ClerkLoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-brand-primary">
-      <SignIn />
+      <SignIn
+        signUpUrl="https://www.useparlay.app/?trial=true"
+        appearance={{ elements: { headerTitle: 'hidden', headerSubtitle: 'hidden' } }}
+      />
     </div>
   );
 }
@@ -75,8 +78,7 @@ function LoginForm() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-2xl p-8">
-          <h1 className="text-2xl font-bold text-brand-primary font-serif mb-1">Welcome back</h1>
-          <p className="text-sm text-gray-500 mb-6">Sign in to {appName}</p>
+          <h1 className="text-2xl font-bold text-brand-primary font-serif mb-6">Welcome back</h1>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -134,9 +136,9 @@ function LoginForm() {
 
           <p className="text-center text-sm text-gray-500 mt-6">
             Don&apos;t have an account?{' '}
-            <Link href="/auth/signup" className="text-brand-secondary font-medium hover:underline">
+            <a href="https://www.useparlay.app/?trial=true" className="text-brand-secondary font-medium hover:underline">
               Sign up
-            </Link>
+            </a>
           </p>
         </div>
 
