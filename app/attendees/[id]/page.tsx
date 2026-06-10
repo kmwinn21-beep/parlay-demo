@@ -837,7 +837,15 @@ export default function AttendeeDetailPage() {
                             onClick={() => setTimelineOpen(true)}
                             className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0"
                           >
-                            <i className="ti ti-timeline text-brand-secondary text-base" aria-hidden="true" />
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 sm:w-5 sm:h-5 text-brand-secondary" aria-hidden="true">
+                              <line x1="2" y1="10" x2="18" y2="10" />
+                              <circle cx="6" cy="6" r="1.5" fill="currentColor" stroke="none" />
+                              <circle cx="10" cy="13" r="1.5" fill="currentColor" stroke="none" />
+                              <circle cx="14" cy="5" r="1.5" fill="currentColor" stroke="none" />
+                              <line x1="6" y1="10" x2="6" y2="6" strokeWidth="1.4" />
+                              <line x1="10" y1="10" x2="10" y2="13" strokeWidth="1.4" />
+                              <line x1="14" y1="10" x2="14" y2="5" strokeWidth="1.4" />
+                            </svg>
                           </button>
                         )}
                         {attendee.consent === 'Opted-Out' && (
