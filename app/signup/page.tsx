@@ -6,6 +6,8 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { LogoImage } from '@/components/LogoImage';
 
+const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
 export default function SignupPage() {
   const router = useRouter();
 
@@ -36,7 +38,9 @@ export default function SignupPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          firstName, lastName, email, password, companyName, conferenceTimingAnswer,
+          firstName, lastName, email, companyName, conferenceTimingAnswer,
+          // Only include password for legacy (non-Clerk) deployments
+          ...(!CLERK_ENABLED && { password }),
           signupRole: signupRole || undefined,
           signupIndustry: signupIndustry || undefined,
           signupTeamSize: signupTeamSize || undefined,
@@ -50,7 +54,9 @@ export default function SignupPage() {
         toast.error(data.error ?? 'Signup failed.');
         return;
       }
-      router.push(data.redirectTo ?? '/');
+      // In Clerk mode, redirectTo points to /auth/signup (Clerk's hosted sign-up).
+      // In legacy mode, redirectTo points to /?welcome=true with a session cookie set.
+      window.location.href = data.redirectTo ?? '/';
     } catch {
       toast.error('Signup failed. Please try again.');
     } finally {
@@ -110,18 +116,20 @@ export default function SignupPage() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-                autoComplete="new-password"
-                className="input-field w-full"
-                placeholder="8+ characters"
-              />
-            </div>
+            {!CLERK_ENABLED && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                  autoComplete="new-password"
+                  className="input-field w-full"
+                  placeholder="8+ characters"
+                />
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Company name</label>

@@ -6,9 +6,12 @@ import { signToken, authCookieOptions, validatePassword } from '@/lib/auth';
 import { provisionAccount } from '@/lib/provision';
 import { createTenantDb } from '@/lib/tenantDb';
 import { sendWelcomeEmail } from '@/lib/email';
-import { clerkClient } from '@clerk/nextjs/server';
 
 const ALLOWED_ORIGINS = new Set(['https://useparlay.app', 'https://www.useparlay.app']);
+
+// When Clerk is configured, users complete authentication through Clerk's hosted
+// sign-up flow (SSO or email/password) — no password is collected here.
+const CLERK_MODE = !!process.env.CLERK_SECRET_KEY;
 
 function getCorsHeaders(request: NextRequest) {
   const origin = request.headers.get('origin') ?? '';
@@ -56,7 +59,13 @@ export async function POST(request: NextRequest) {
     const signupPrimaryGoal = body.signupPrimaryGoal?.trim() ?? '';
     const signupCurrentTool = body.signupCurrentTool?.trim() ?? '';
 
-    if (!firstName || !lastName || !email || !password || !companyName) {
+    // In Clerk mode, password is not collected — Clerk handles authentication.
+    // In legacy mode, password is required for the JWT session.
+    const requiredFields = CLERK_MODE
+      ? !firstName || !lastName || !email || !companyName
+      : !firstName || !lastName || !email || !password || !companyName;
+
+    if (requiredFields) {
       return NextResponse.json({ error: 'All fields are required.' }, { status: 400, headers: getCorsHeaders(request) });
     }
 
@@ -65,9 +74,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid email address.' }, { status: 400, headers: getCorsHeaders(request) });
     }
 
-    const pwCheck = validatePassword(password);
-    if (!pwCheck.valid) {
-      return NextResponse.json({ error: pwCheck.error }, { status: 400, headers: getCorsHeaders(request) });
+    if (!CLERK_MODE) {
+      const pwCheck = validatePassword(password);
+      if (!pwCheck.valid) {
+        return NextResponse.json({ error: pwCheck.error }, { status: 400, headers: getCorsHeaders(request) });
+      }
     }
 
     // Reject if email already has an account
@@ -76,7 +87,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'An account with this email already exists.' }, { status: 409, headers: getCorsHeaders(request) });
     }
 
-    const passwordHash = await bcrypt.hash(password, 12);
+    // In Clerk mode, store a random unusable hash — the user will never log in
+    // with a password through Parlay's backend; Clerk handles real authentication.
+    const passwordHash = await bcrypt.hash(CLERK_MODE ? randomUUID() : password, 12);
 
     // Set trial dates (14-day trial + 2-day grace)
     const now = new Date();
@@ -105,7 +118,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Provision tenant DB (create Turso DB, seed schema, insert user + site_settings)
-    const { slug, tursoDbUrl, tursoAuthToken } = await provisionAccount({
+    const { tursoDbUrl, tursoAuthToken } = await provisionAccount({
       accountId,
       companyName,
       email,
@@ -125,32 +138,26 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Resolve the real user ID from the newly-provisioned tenant DB
-    // so the JWT and Clerk metadata carry the correct parlay_user_id.
+    sendWelcomeEmail({ to: email, firstName, onboardingTrack }).catch(err => {
+      console.error('[trial-signup] Welcome email failed:', err);
+    });
+
+    if (CLERK_MODE) {
+      // Redirect to Clerk's sign-up page with email pre-filled.
+      // The user completes authentication there (SSO or email/password).
+      // The Clerk webhook (user.created) will sync account_id + parlay_user_id
+      // into Clerk publicMetadata by matching on accounts.admin_email.
+      const redirectTo = `https://work.useparlay.app/auth/signup?email=${encodeURIComponent(email)}&welcome=true`;
+      return NextResponse.json({ success: true, redirectTo, onboardingTrack }, { headers: getCorsHeaders(request) });
+    }
+
+    // Legacy mode: create a JWT session immediately so the user lands logged in.
     const tenantClient = createTenantDb(tursoDbUrl, tursoAuthToken);
     const userRow = await tenantClient.execute({
       sql: 'SELECT id FROM users WHERE email = ?',
       args: [email],
     });
     const parlayUserId = Number(userRow.rows[0]?.id ?? 1);
-
-    // If Clerk is configured, create a Clerk account for this new user so
-    // they can sign back in via SSO after their JWT session expires.
-    if (process.env.CLERK_SECRET_KEY) {
-      clerkClient.users.createUser({
-        emailAddress: [email],
-        password,
-        firstName,
-        lastName,
-        publicMetadata: {
-          account_id:     accountId,
-          parlay_user_id: parlayUserId,
-          role:           'administrator',
-        },
-      }).catch((err: unknown) => {
-        console.error('[trial-signup] Clerk user creation failed (non-fatal):', err);
-      });
-    }
 
     const sessionUser = {
       id: parlayUserId,
@@ -161,18 +168,9 @@ export async function POST(request: NextRequest) {
     };
 
     const token = await signToken(sessionUser);
-
-    sendWelcomeEmail({ to: email, firstName, onboardingTrack }).catch(err => {
-      console.error('[trial-signup] Welcome email failed:', err);
-    });
-
     const redirectTo = `https://work.useparlay.app/?welcome=true`;
 
-    const response = NextResponse.json({
-      success: true,
-      redirectTo,
-      onboardingTrack,
-    }, { headers: getCorsHeaders(request) });
+    const response = NextResponse.json({ success: true, redirectTo, onboardingTrack }, { headers: getCorsHeaders(request) });
     response.cookies.set({ ...authCookieOptions(), value: token });
     return response;
   } catch (err) {
