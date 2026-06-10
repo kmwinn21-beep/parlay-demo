@@ -829,8 +829,8 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
           {filtered.length === 0 ? (
             <div className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</div>
           ) : paginated.map(company => (
-            <div key={company.id} className={`p-4 ${selectedIds.has(company.id) ? 'bg-blue-50' : 'bg-white'}`}>
-              {/* Top row: name (left) | rep pills (upper-right) */}
+            <div key={company.id} className={`px-4 py-4 ${selectedIds.has(company.id) ? 'bg-blue-50' : 'bg-white'}`}>
+              {/* Row 1: name (left) | rep pills (upper-right) */}
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-brand-secondary flex-shrink-0" />
@@ -845,21 +845,25 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                     </svg>
                   </button>
-                  <Link href={`/companies/${company.id}`} className="font-semibold text-brand-secondary hover:underline text-xs break-words whitespace-normal leading-snug">
-                    {company.name}
-                  </Link>
-                  {company.parent_company_name && (
-                    <span className="text-[10px] text-gray-400 ml-1">
-                      (<Link href={`/companies/${company.parent_company_id}`} className="hover:text-brand-secondary">{company.parent_company_name}</Link>)
-                    </span>
-                  )}
-                  {Number(company.pinned_notes_count) > 0 && (
-                    <span title="Has pinned note" className="flex-shrink-0 inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-400 text-white">
-                      <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
-                      </svg>
-                    </span>
-                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Link href={`/companies/${company.id}`} className="font-semibold text-brand-secondary hover:underline text-sm leading-snug">
+                        {company.name}
+                      </Link>
+                      {Number(company.pinned_notes_count) > 0 && (
+                        <span title="Has pinned note" className="flex-shrink-0 inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-400 text-white">
+                          <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                          </svg>
+                        </span>
+                      )}
+                    </div>
+                    {company.parent_company_name && (
+                      <p className="text-[10px] text-gray-400 mt-0.5">
+                        <Link href={`/companies/${company.parent_company_id}`} className="hover:text-brand-secondary">{company.parent_company_name}</Link>
+                      </p>
+                    )}
+                  </div>
                 </div>
                 {/* Rep pills — upper right, tap to edit */}
                 <button
@@ -881,33 +885,35 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                   )}
                 </button>
               </div>
-              <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
-                <span className="flex flex-wrap gap-1">
-                  {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}
-                  {(company.my_user_status_ids || []).map(optId => {
-                    const label = userScopedStatusMap.get(optId);
-                    return label ? <span key={optId} className={getBadgeClass(label, colorMaps.status || {})}>{label}</span> : null;
-                  })}
-                  {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && (company.my_user_status_ids || []).length === 0 && <span className="text-gray-400">—</span>}
-                </span>
-                {company.company_type && (company.company_type === 'Competitor'
-                  ? <CompetitorTypePill competitorType={company.competitor_type} badgeClass={getBadgeClass(company.company_type, colorMaps.company_type || {})}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</CompetitorTypePill>
-                  : <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span>
-                )}
+              {/* Row 2: company type (like attendee title row) */}
+              {company.company_type && (
+                <div className="mt-1 ml-6">
+                  {company.company_type === 'Competitor'
+                    ? <CompetitorTypePill competitorType={company.competitor_type} badgeClass={getBadgeClass(company.company_type, colorMaps.company_type || {})}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</CompetitorTypePill>
+                    : <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span>
+                  }
+                </div>
+              )}
+              {/* Row 3: status badges */}
+              <div className="mt-1 ml-6 flex items-center flex-wrap gap-1">
+                {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}
+                {(company.my_user_status_ids || []).map(optId => {
+                  const label = userScopedStatusMap.get(optId);
+                  return label ? <span key={optId} className={getBadgeClass(label, colorMaps.status || {})}>{label}</span> : null;
+                })}
+                {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && (company.my_user_status_ids || []).length === 0 && <span className="text-gray-400">—</span>}
               </div>
-              {/* Bottom row: stats (left) | WSE (bottom-right) */}
+              {/* Row 4: stats */}
               <div className="mt-2 ml-6 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                  <span className="inline-flex items-center gap-1 text-xs text-gray-500">
                     <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                     <AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} />
-                  </div>
-                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-xs text-gray-500">
                     <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                     <ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} />
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                  </span>
                   {Number(company.relationship_count) > 0 && (
                     <button
                       type="button"
@@ -918,7 +924,8 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                       {Number(company.relationship_count)}
                     </button>
                   )}
-                  {/* WSE — bottom right */}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
                   {company.wse != null && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
                       <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
