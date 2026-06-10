@@ -382,6 +382,7 @@ export default function ConferenceDetailPage() {
   const [sponsorshipAddOpen, setSponsorshipAddOpen] = useState(false);
   const [sponsorshipAddValue, setSponsorshipAddValue] = useState('');
   const [sponsorshipAdding, setSponsorshipAdding] = useState(false);
+  const [metaPillsExpanded, setMetaPillsExpanded] = useState(false);
 
   // Resizable column widths
   const [colWidths, setColWidths] = useState<Record<string, number>>({ name: 220, title: 160, company: 160, type: 120, seniority: 120, conferences: 80 });
@@ -2030,8 +2031,25 @@ export default function ConferenceDetailPage() {
               </div>
 
               {/* Row 4: Metadata pills */}
-              <div style={{ height: '0.5px' }} className="bg-gray-100 my-3" />
-              <div className="flex flex-wrap items-end gap-6 mt-1">
+              {/* Mobile: collapsible toggle row */}
+              <div className="sm:hidden flex items-center justify-between mt-3 mb-1">
+                <button
+                  type="button"
+                  onClick={() => setMetaPillsExpanded(v => !v)}
+                  className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+                >
+                  <svg
+                    className={`w-3.5 h-3.5 transition-transform duration-200 ${metaPillsExpanded ? 'rotate-180' : ''}`}
+                    fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                  Details
+                </button>
+              </div>
+              {/* Desktop: always visible divider; Mobile: hidden */}
+              <div style={{ height: '0.5px' }} className="hidden sm:block bg-gray-100 my-3" />
+              <div className={`flex flex-wrap items-end gap-6 mt-1 sm:flex ${metaPillsExpanded ? 'flex' : 'hidden'}`}>
                 {conference.conference_type && (
                   <div>
                     <p className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.07em] mb-1.5">Type</p>
