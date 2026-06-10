@@ -1926,7 +1926,9 @@ export default function ConferenceDetailPage() {
 
               {/* Row 1: Name + status + Stage Controls */}
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-bold text-brand-primary font-serif">{conference.name}</h1>
+                <h1 className="text-2xl font-bold text-brand-primary font-serif">
+                  {conference.name}{conference.start_date ? ` - ${new Date(conference.start_date).getUTCFullYear()}` : ''}
+                </h1>
                 {conferenceStage && (
                   <ConferenceStageBadge stage={conferenceStage} daysRemaining={stageDaysRemaining} />
                 )}

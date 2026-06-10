@@ -1,15 +1,31 @@
 'use client';
 
+import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { SignUp } from '@clerk/nextjs';
 import { LogoImage } from '@/components/LogoImage';
 
 const CLERK_ENABLED = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
+function ClerkSignUpInner() {
+  const searchParams = useSearchParams();
+  const email = searchParams.get('email') ?? '';
+  const afterUrl = searchParams.get('welcome') ? '/?welcome=true' : '/';
+  return (
+    <SignUp
+      initialValues={email ? { emailAddress: email } : undefined}
+      fallbackRedirectUrl={afterUrl}
+    />
+  );
+}
+
 function ClerkSignUpPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <SignUp />
+      <Suspense fallback={null}>
+        <ClerkSignUpInner />
+      </Suspense>
     </div>
   );
 }
