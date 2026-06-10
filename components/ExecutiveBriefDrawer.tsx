@@ -521,10 +521,22 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                 disabled={pdfLoading || !snapshot}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {pdfLoading
-                  ? <><i className="ti ti-loader-2 text-xs animate-spin" aria-hidden="true" /><span className="hidden sm:inline">Generating...</span></>
-                  : <><i className="ti ti-download text-xs" aria-hidden="true" /><span className="hidden sm:inline">Save to PDF</span></>
-                }
+                {pdfLoading ? (
+                  <>
+                    <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16v-4l-3 3 3 3v-4a8 8 0 01-8-8z" />
+                    </svg>
+                    <span className="hidden sm:inline">Generating...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17v3a1 1 0 001 1h16a1 1 0 001-1v-3" />
+                    </svg>
+                    <span className="hidden sm:inline">Save to PDF</span>
+                  </>
+                )}
               </button>
               <button
                 type="button"
