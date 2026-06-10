@@ -565,7 +565,7 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
     <MeetingNotesDrawer meetingId={notetakerMeetingId} onClose={() => setNotetakerMeetingId(null)} />
     {/* Note Expand Drawer */}
     {noteDrawerItem && typeof document !== 'undefined' && createPortal(
-      <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="fixed inset-0 z-50 flex items-end sm:items-stretch sm:justify-end">
         <div className="absolute inset-0 bg-black/40" onClick={() => {
           const drawerSavedVal = savedNoteContents.get(noteDrawerItem.key) ?? noteDrawerItem.note_content ?? '';
           if (drawerDraft !== drawerSavedVal) {
@@ -575,8 +575,7 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
           }
         }} />
         <div
-          className="relative flex flex-col bg-white w-full sm:w-[560px] h-full shadow-2xl"
-          style={{ animation: 'slideInRight 200ms ease-out' }}
+          className="drawer-mobile-responsive relative flex flex-col bg-white w-full sm:w-[560px] h-[90vh] sm:h-full shadow-2xl rounded-t-2xl sm:rounded-none"
         >
           {/* Header */}
           <div className="flex items-start gap-3 px-4 py-3 border-b border-gray-100 flex-shrink-0">
