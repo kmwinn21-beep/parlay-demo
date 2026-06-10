@@ -923,54 +923,33 @@ export default function CompanyDetailPage() {
                   <div>
                     <h1 className="text-2xl font-bold text-brand-primary font-serif flex items-center gap-2">
                       {company.name}
-                      {icpOptions.length > 0 && normalizeIcpValue(company.icp, icpOptions) === icpOptions[0] && (
-                        <span title="Ideal Customer Profile" className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-green-100 flex-shrink-0">
-                          <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                        </span>
-                      )}
-                      {intelItems.length > 0 && (
-                        <button
-                          onClick={() => { setSelectedIntelIdx(0); setShowIntelDrawer(true); }}
-                          title="View company intel"
-                          className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-amber-100 hover:bg-amber-200 transition-colors flex-shrink-0"
-                        >
-                          <svg className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                          </svg>
-                        </button>
-                      )}
-                      {planCapabilities?.intelligence_core?.activity_timeline && (
-                        <button
-                          type="button"
-                          title="View activity timeline"
-                          onClick={() => setTimelineOpen(true)}
-                          className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0"
-                        >
-                          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 sm:w-5 sm:h-5 text-brand-secondary" aria-hidden="true">
-                            <line x1="2" y1="10" x2="18" y2="10" />
-                            <circle cx="6" cy="6" r="1.5" fill="currentColor" stroke="none" />
-                            <circle cx="10" cy="13" r="1.5" fill="currentColor" stroke="none" />
-                            <circle cx="14" cy="5" r="1.5" fill="currentColor" stroke="none" />
-                            <line x1="6" y1="10" x2="6" y2="6" strokeWidth="1.4" />
-                            <line x1="10" y1="10" x2="10" y2="13" strokeWidth="1.4" />
-                            <line x1="14" y1="10" x2="14" y2="5" strokeWidth="1.4" />
-                          </svg>
-                        </button>
-                      )}
-                      {planCapabilities?.intelligence_core?.internal_relationship_mapping && (
-                        <button
-                          type="button"
-                          title="View relationship map"
-                          onClick={() => setRelMapOpen(true)}
-                          className="inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#EEEDFE] hover:bg-[#E0DEF8] transition-colors flex-shrink-0"
-                        >
-                          <svg className="w-4 h-4 sm:w-5 sm:h-5 text-[#7F77DD]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                          </svg>
-                        </button>
-                      )}
+                      {/* Desktop-only: icon buttons inline with name */}
+                      <span className="hidden sm:inline-flex items-center gap-2">
+                        {icpOptions.length > 0 && normalizeIcpValue(company.icp, icpOptions) === icpOptions[0] && (
+                          <span title="Ideal Customer Profile" className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 flex-shrink-0">
+                            <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          </span>
+                        )}
+                        {intelItems.length > 0 && (
+                          <button onClick={() => { setSelectedIntelIdx(0); setShowIntelDrawer(true); }} title="View company intel" className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-amber-100 hover:bg-amber-200 transition-colors flex-shrink-0">
+                            <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                          </button>
+                        )}
+                        {planCapabilities?.intelligence_core?.activity_timeline && (
+                          <button type="button" title="View activity timeline" onClick={() => setTimelineOpen(true)} className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0">
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-brand-secondary" aria-hidden="true">
+                              <line x1="2" y1="10" x2="18" y2="10" /><circle cx="6" cy="6" r="1.5" fill="currentColor" stroke="none" /><circle cx="10" cy="13" r="1.5" fill="currentColor" stroke="none" /><circle cx="14" cy="5" r="1.5" fill="currentColor" stroke="none" /><line x1="6" y1="10" x2="6" y2="6" strokeWidth="1.4" /><line x1="10" y1="10" x2="10" y2="13" strokeWidth="1.4" /><line x1="14" y1="10" x2="14" y2="5" strokeWidth="1.4" />
+                            </svg>
+                          </button>
+                        )}
+                        {planCapabilities?.intelligence_core?.internal_relationship_mapping && (
+                          <button type="button" title="View relationship map" onClick={() => setRelMapOpen(true)} className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[#EEEDFE] hover:bg-[#E0DEF8] transition-colors flex-shrink-0">
+                            <svg className="w-5 h-5 text-[#7F77DD]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                          </button>
+                        )}
+                      </span>
                     </h1>
                     {company.parent_company && (
                       <p className="text-sm text-gray-500 mt-0.5">
@@ -982,11 +961,18 @@ export default function CompanyDetailPage() {
                     )}
                   </div>
                   <div className="flex gap-2 flex-shrink-0">
-                    <button onClick={() => setIsEditing(true)} className="btn-secondary text-sm flex items-center gap-2">
+                    {/* Mobile: borderless icon-only button */}
+                    <button onClick={() => setIsEditing(true)} className="sm:hidden p-1.5 rounded hover:bg-gray-100 text-gray-500 transition-colors">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                       </svg>
-                      <span className="hidden sm:inline">Edit</span>
+                    </button>
+                    {/* Desktop: labelled button with border */}
+                    <button onClick={() => setIsEditing(true)} className="hidden sm:flex btn-secondary text-sm items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      Edit
                     </button>
                   </div>
                 </div>
@@ -1028,6 +1014,31 @@ export default function CompanyDetailPage() {
                       {getRepInitials(user!.value)}
                     </span>
                   ))}
+                </div>
+                {/* Mobile-only: icon buttons row below pills, above divider */}
+                <div className="flex sm:hidden items-center gap-2 mt-2">
+                  {icpOptions.length > 0 && normalizeIcpValue(company.icp, icpOptions) === icpOptions[0] && (
+                    <span title="Ideal Customer Profile" className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-100 flex-shrink-0">
+                      <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    </span>
+                  )}
+                  {intelItems.length > 0 && (
+                    <button onClick={() => { setSelectedIntelIdx(0); setShowIntelDrawer(true); }} title="View company intel" className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 hover:bg-amber-200 transition-colors flex-shrink-0">
+                      <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                    </button>
+                  )}
+                  {planCapabilities?.intelligence_core?.activity_timeline && (
+                    <button type="button" title="View activity timeline" onClick={() => setTimelineOpen(true)} className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0">
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-brand-secondary" aria-hidden="true">
+                        <line x1="2" y1="10" x2="18" y2="10" /><circle cx="6" cy="6" r="1.5" fill="currentColor" stroke="none" /><circle cx="10" cy="13" r="1.5" fill="currentColor" stroke="none" /><circle cx="14" cy="5" r="1.5" fill="currentColor" stroke="none" /><line x1="6" y1="10" x2="6" y2="6" strokeWidth="1.4" /><line x1="10" y1="10" x2="10" y2="13" strokeWidth="1.4" /><line x1="14" y1="10" x2="14" y2="5" strokeWidth="1.4" />
+                      </svg>
+                    </button>
+                  )}
+                  {planCapabilities?.intelligence_core?.internal_relationship_mapping && (
+                    <button type="button" title="View relationship map" onClick={() => setRelMapOpen(true)} className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#EEEDFE] hover:bg-[#E0DEF8] transition-colors flex-shrink-0">
+                      <svg className="w-4 h-4 text-[#7F77DD]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1823,13 +1834,16 @@ export default function CompanyDetailPage() {
       {showIntelDrawer && intelItems.length > 0 && (() => {
         const intel = intelItems[selectedIntelIdx];
         return (
-          <div className="fixed inset-0 z-50 flex">
+          <div className="fixed inset-0 z-50 flex items-end sm:items-stretch sm:justify-end">
             <style>{`
-              @keyframes intelFadeIn { from { opacity: 0; } to { opacity: 1; } }
-              @keyframes intelSlideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+              @keyframes intelFadeIn   { from { opacity: 0; }              to { opacity: 1; } }
+              @keyframes intelSlideUp  { from { transform: translateY(100%); } to { transform: translateY(0); } }
+              @keyframes intelSlideIn  { from { transform: translateX(100%); } to { transform: translateX(0); } }
+              .intel-panel { animation: intelSlideUp 0.25s ease-out; }
+              @media (min-width: 640px) { .intel-panel { animation: intelSlideIn 0.25s ease-out; } }
             `}</style>
-            <div className="flex-1" style={{ animation: 'intelFadeIn 0.25s ease-out', backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setShowIntelDrawer(false)} />
-            <div className="w-full max-w-md bg-white shadow-2xl flex flex-col border-l border-gray-200 overflow-hidden" style={{ animation: 'intelSlideInRight 0.25s ease-out' }}>
+            <div className="absolute inset-0" style={{ animation: 'intelFadeIn 0.25s ease-out', backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setShowIntelDrawer(false)} />
+            <div className="intel-panel relative w-full sm:max-w-md h-[90vh] sm:h-full bg-white shadow-2xl flex flex-col border-t sm:border-t-0 sm:border-l border-gray-200 overflow-hidden rounded-t-2xl sm:rounded-none">
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
                 <div>
