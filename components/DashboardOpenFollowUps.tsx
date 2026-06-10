@@ -296,8 +296,7 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
             onClick={() => setCompanyDrawerId(null)}
           />
           <div
-            className="fixed inset-y-0 right-0 z-50 w-full sm:w-[600px] bg-white shadow-2xl flex flex-col"
-            style={{ animation: 'slideInRight 0.25s ease-out' }}
+            className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[600px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-none z-50"
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
               <div className="flex items-center gap-3">
@@ -341,8 +340,7 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
           />
           {/* Drawer */}
           <div
-            className="fixed inset-y-0 right-0 z-50 w-full sm:w-[520px] bg-white shadow-2xl flex flex-col"
-            style={{ animation: 'slideInRight 0.25s ease-out' }}
+            className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[520px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-none z-50"
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
               <div className="flex items-center gap-3">
