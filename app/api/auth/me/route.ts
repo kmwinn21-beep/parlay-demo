@@ -120,9 +120,16 @@ export async function GET(request: NextRequest) {
     const hasBypass = !!bypassSecret && bypassCookie === bypassSecret;
     const demoVisitor = process.env.NEXT_PUBLIC_DEMO_MODE === 'true' && !hasBypass;
 
+    // In demo mode everyone sees the full admin UI (writes are still faked by
+    // the middleware for non-bypass visitors, so this is display-only).
+    const effectiveRole = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
+      ? 'administrator' as const
+      : user.role;
+
     return NextResponse.json({
       user: {
         ...user,
+        role: effectiveRole,
         configId, displayName, repName, createdAt, firstName,
         capabilities, demoVisitor,
         accountId: user.accountId,

@@ -200,6 +200,12 @@ export async function requireAuth(
     } catch { /* fallthrough — impersonation lookup failure is non-fatal */ }
   }
 
+  // Demo mode: elevate role to administrator so inline role checks in admin
+  // routes pass. Writes are still faked by the middleware for non-bypass users.
+  if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true' && user.role !== 'administrator') {
+    return { ...user, role: 'administrator' as UserRole };
+  }
+
   return user;
 }
 
@@ -212,6 +218,11 @@ export async function requireAdmin(
   const user = await getSessionUser(request);
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  // Demo mode: all authenticated users get admin access (writes are still
+  // faked by the middleware — this only gates the role check).
+  if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
+    return { ...user, role: 'administrator' as UserRole };
   }
   if (user.role !== 'administrator') {
     return NextResponse.json({ error: 'Forbidden: administrator access required' }, { status: 403 });
