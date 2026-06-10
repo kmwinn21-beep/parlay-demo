@@ -78,6 +78,22 @@ export default function AttendeeDetailPage() {
   const routerRef = useRef(router);
   useEffect(() => { routerRef.current = router; }, [router]);
 
+  const id = params.id as string;
+  const colorMaps = useConfigColors();
+  const userOptionsFull = useUserOptions();
+  const { planCapabilities } = useCapabilities();
+  const { getLabel: getSectionLabel, orderedKeys: sectionOrder, isVisible: isSectionVisible } = useSectionConfig('attendee');
+
+  const [attendee, setAttendee] = useState<Attendee | null>(null);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState<{ first_name?: string; last_name?: string; title?: string; company_id?: string; email?: string; seniority?: string; linkedin_url?: string; phone?: string; function?: string; consent?: string }>({});
+  const [showPhonePopup, setShowPhonePopup] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // When running inside a QuickView iframe, broadcast attendee field changes
   // to the parent page so it can update its table without a full refresh.
   // Skip the initial load (null → data) — only fire after user-initiated saves.
@@ -99,22 +115,6 @@ export default function AttendeeDetailPage() {
       },
     }, '*');
   }, [attendee]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const id = params.id as string;
-  const colorMaps = useConfigColors();
-  const userOptionsFull = useUserOptions();
-  const { planCapabilities } = useCapabilities();
-  const { getLabel: getSectionLabel, orderedKeys: sectionOrder, isVisible: isSectionVisible } = useSectionConfig('attendee');
-
-  const [attendee, setAttendee] = useState<Attendee | null>(null);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [timelineOpen, setTimelineOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editData, setEditData] = useState<{ first_name?: string; last_name?: string; title?: string; company_id?: string; email?: string; seniority?: string; linkedin_url?: string; phone?: string; function?: string; consent?: string }>({});
-  const [showPhonePopup, setShowPhonePopup] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   const { user } = useUser();
   const isAdminUser = user?.role === 'administrator';
