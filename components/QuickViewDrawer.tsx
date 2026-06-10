@@ -73,7 +73,7 @@ export function QuickViewIcon({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClick(); }}
-      className="opacity-0 group-hover:opacity-100 flex-shrink-0 text-gray-400 hover:text-brand-secondary transition-all"
+      className="flex-shrink-0 text-gray-400 hover:text-brand-secondary transition-colors"
       title="Quick view"
     >
       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
