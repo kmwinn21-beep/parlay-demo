@@ -405,12 +405,24 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
         URL.revokeObjectURL(url);
       } else {
         const { html } = await res.json();
-        const win = window.open('', '_blank');
-        if (win) {
-          win.document.write(html);
-          win.document.close();
-          win.onload = () => { win.focus(); win.print(); };
-        }
+        // Print via a hidden iframe so the user stays on the current page.
+        // window.open('', '_blank') leaves mobile users stranded in a new tab
+        // with no navigation back.
+        const iframe = document.createElement('iframe');
+        iframe.style.cssText = 'position:fixed;width:0;height:0;border:none;opacity:0;pointer-events:none;';
+        document.body.appendChild(iframe);
+        iframe.srcdoc = html;
+        iframe.onload = () => {
+          const cw = iframe.contentWindow;
+          if (!cw) { document.body.removeChild(iframe); return; }
+          const cleanup = () => {
+            cw.removeEventListener('afterprint', cleanup);
+            if (iframe.parentNode) document.body.removeChild(iframe);
+          };
+          cw.addEventListener('afterprint', cleanup);
+          cw.focus();
+          cw.print();
+        };
       }
     } catch (err) {
       console.error('PDF export failed:', err);
@@ -509,10 +521,22 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                 disabled={pdfLoading || !snapshot}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {pdfLoading
-                  ? <><i className="ti ti-loader-2 text-xs animate-spin" aria-hidden="true" /><span className="hidden sm:inline">Generating...</span></>
-                  : <><i className="ti ti-download text-xs" aria-hidden="true" /><span className="hidden sm:inline">Save to PDF</span></>
-                }
+                {pdfLoading ? (
+                  <>
+                    <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16v-4l-3 3 3 3v-4a8 8 0 01-8-8z" />
+                    </svg>
+                    <span className="hidden sm:inline">Generating...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17v3a1 1 0 001 1h16a1 1 0 001-1v-3" />
+                    </svg>
+                    <span className="hidden sm:inline">Save to PDF</span>
+                  </>
+                )}
               </button>
               <button
                 type="button"
