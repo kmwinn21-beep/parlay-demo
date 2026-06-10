@@ -1834,13 +1834,16 @@ export default function CompanyDetailPage() {
       {showIntelDrawer && intelItems.length > 0 && (() => {
         const intel = intelItems[selectedIntelIdx];
         return (
-          <div className="fixed inset-0 z-50 flex">
+          <div className="fixed inset-0 z-50 flex items-end sm:items-stretch sm:justify-end">
             <style>{`
-              @keyframes intelFadeIn { from { opacity: 0; } to { opacity: 1; } }
-              @keyframes intelSlideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+              @keyframes intelFadeIn   { from { opacity: 0; }              to { opacity: 1; } }
+              @keyframes intelSlideUp  { from { transform: translateY(100%); } to { transform: translateY(0); } }
+              @keyframes intelSlideIn  { from { transform: translateX(100%); } to { transform: translateX(0); } }
+              .intel-panel { animation: intelSlideUp 0.25s ease-out; }
+              @media (min-width: 640px) { .intel-panel { animation: intelSlideIn 0.25s ease-out; } }
             `}</style>
-            <div className="flex-1" style={{ animation: 'intelFadeIn 0.25s ease-out', backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setShowIntelDrawer(false)} />
-            <div className="w-full max-w-md bg-white shadow-2xl flex flex-col border-l border-gray-200 overflow-hidden" style={{ animation: 'intelSlideInRight 0.25s ease-out' }}>
+            <div className="absolute inset-0" style={{ animation: 'intelFadeIn 0.25s ease-out', backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setShowIntelDrawer(false)} />
+            <div className="intel-panel relative w-full sm:max-w-md h-[90vh] sm:h-full bg-white shadow-2xl flex flex-col border-t sm:border-t-0 sm:border-l border-gray-200 overflow-hidden rounded-t-2xl sm:rounded-none">
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
                 <div>

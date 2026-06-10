@@ -309,23 +309,25 @@ export function ActivityTimelineModal({
     c.startDate ? new Date(c.startDate + 'T00:00:00').getFullYear() : '';
 
   return (
-    <div className="fixed inset-0 z-50 flex">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-stretch sm:justify-end">
       <style>{`
-        @keyframes timelineFadeIn  { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes timelineFadeIn  { from { opacity: 0; }              to { opacity: 1; } }
+        @keyframes timelineSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         @keyframes timelineSlideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        .timeline-panel { animation: timelineSlideUp 0.25s ease-out; }
+        @media (min-width: 640px) { .timeline-panel { animation: timelineSlideIn 0.25s ease-out; } }
       `}</style>
 
       {/* Scrim */}
       <div
-        className="flex-1"
+        className="absolute inset-0"
         style={{ animation: 'timelineFadeIn 0.2s ease-out', backgroundColor: 'rgba(0,0,0,0.45)' }}
         onClick={onClose}
       />
 
       {/* Panel */}
       <div
-        className="w-full max-w-5xl bg-white shadow-2xl flex flex-col border-l border-gray-200 overflow-hidden"
-        style={{ animation: 'timelineSlideIn 0.25s ease-out' }}
+        className="timeline-panel relative w-full sm:max-w-5xl h-[92vh] sm:h-full bg-white shadow-2xl flex flex-col border-t sm:border-t-0 sm:border-l border-gray-200 overflow-hidden rounded-t-2xl sm:rounded-none"
       >
         {/* ── Header ── */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
@@ -352,9 +354,11 @@ export function ActivityTimelineModal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0 ml-4"
+            className="flex-shrink-0 ml-4 p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 transition-colors"
           >
-            <i className="ti ti-x text-base" aria-hidden="true" />
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
 
