@@ -656,12 +656,12 @@ export function ClosedWonDealModal() {
                 <button
                   type="button"
                   onClick={() => setValueEntryMode('by_product')}
-                  className={`px-4 py-2 text-sm font-medium transition-colors ${valueEntryMode === 'by_product' ? 'bg-brand-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                  className={`px-4 py-2 text-xs font-medium transition-colors ${valueEntryMode === 'by_product' ? 'bg-brand-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
                 >By Product</button>
                 <button
                   type="button"
                   onClick={() => setValueEntryMode('manual')}
-                  className={`px-4 py-2 text-sm font-medium transition-colors border-l border-gray-300 ${valueEntryMode === 'manual' ? 'bg-brand-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                  className={`px-4 py-2 text-xs font-medium transition-colors border-l border-gray-300 ${valueEntryMode === 'manual' ? 'bg-brand-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
                 >Manual</button>
               </div>
             </div>

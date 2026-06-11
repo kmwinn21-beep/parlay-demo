@@ -140,6 +140,17 @@ export async function POST(
 
   const dealId = Number(result.lastInsertRowid);
 
+  // Promote company to Customer type on first closed deal
+  const customerTypeRow = await db.execute({
+    sql: `SELECT value FROM config_options WHERE category = 'company_type' AND LOWER(TRIM(value)) = 'customer' LIMIT 1`,
+    args: [],
+  });
+  const customerTypeValue = customerTypeRow.rows[0]?.value ? String(customerTypeRow.rows[0].value) : 'Customer';
+  await db.execute({
+    sql: `UPDATE companies SET company_type = ?, updated_at = datetime('now') WHERE id = ?`,
+    args: [customerTypeValue, companyId],
+  });
+
   const insertedProducts: { id: number; product_name: string; quantity: number | null; unit_price: number | null; sort_order: number }[] = [];
   if (Array.isArray(products)) {
     for (let i = 0; i < products.length; i++) {
