@@ -29,7 +29,7 @@
  * Copy the Signing Secret into CLERK_WEBHOOK_SECRET in .env.local.
  */
 
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { SessionUser, UserRole } from './auth-shared';
 
@@ -50,21 +50,49 @@ export async function getClerkSessionUser(): Promise<ClerkSessionUser | null> {
   const { userId, sessionClaims } = await auth();
   if (!userId) return null;
 
-  const accountId = sessionClaims?.account_id as string | undefined;
-  const parlayUserId = sessionClaims?.parlay_user_id as number | undefined;
-  const role = sessionClaims?.role as string | undefined;
-  const email = (sessionClaims?.email as string | undefined) ?? '';
+  const claimsAccountId = sessionClaims?.account_id as string | undefined;
+  const claimsParlayUserId = sessionClaims?.parlay_user_id as number | undefined;
+  const claimsRole = sessionClaims?.role as string | undefined;
+  const claimsEmail = (sessionClaims?.email as string | undefined) ?? '';
 
-  // parlay_user_id is required — it's set by the webhook or trial-signup.
-  // account_id is optional: absent means master-DB user (no tenant Turso DB).
-  if (!parlayUserId) return null;
+  // If parlay_user_id is missing from claims the JWT template may not be set
+  // up yet, or the user.created webhook fired after this session token was
+  // issued. Fall back to currentUser() which always reads live publicMetadata.
+  if (!claimsParlayUserId) {
+    const user = await currentUser();
+    if (!user) return null;
+    const meta = user.publicMetadata as Record<string, unknown>;
+    const parlayUserId = meta.parlay_user_id as number | undefined;
+    if (!parlayUserId) return null;
+    const primary = user.emailAddresses.find(e => e.id === user.primaryEmailAddressId);
+    return {
+      id: parlayUserId,
+      email: primary?.emailAddress ?? claimsEmail,
+      role: (meta.role as string | undefined) ?? 'user',
+      emailVerified: 1,
+      accountId: meta.account_id as string | undefined,
+      clerkId: userId,
+    };
+  }
+
+  // Happy path: JWT claims already have everything we need.
+  // If the role claim is missing or stale (e.g. admin panel role change after
+  // token issuance), refetch from publicMetadata without a full currentUser() call.
+  let role = claimsRole;
+  let accountId = claimsAccountId;
+  if (!role) {
+    const user = await currentUser();
+    const meta = (user?.publicMetadata ?? {}) as Record<string, unknown>;
+    role = (meta.role as string | undefined) ?? 'user';
+    if (!accountId) accountId = meta.account_id as string | undefined;
+  }
 
   return {
-    id: parlayUserId,
-    email,
+    id: claimsParlayUserId,
+    email: claimsEmail,
     role: role ?? 'user',
     emailVerified: 1,
-    accountId, // may be undefined → getDb(undefined) → master DB
+    accountId,
     clerkId: userId,
   };
 }
