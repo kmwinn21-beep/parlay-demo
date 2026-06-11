@@ -739,9 +739,9 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
 
       <p className="text-xs text-gray-500 mb-3">Showing {filtered.length} of {localAttendees.length} attendees{selectedIds.size > 0 && ` · ${selectedIds.size} selected`}</p>
 
-      <div className="rounded-xl border border-gray-200 overflow-hidden">
+      <div className="lg:rounded-xl lg:border lg:border-gray-200 lg:overflow-hidden">
         {/* Mobile card layout */}
-        <div className="block lg:hidden divide-y divide-gray-100 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 18rem)' }}>
+        <div className="block lg:hidden divide-y divide-gray-100 -mx-0">
           {filtered.length === 0 ? (
             <div className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</div>
           ) : paginated.map(attendee => {
