@@ -450,26 +450,31 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
                           </button>
                         </>
                       )}
-                      {opt.is_system && category !== 'company_type' && category !== 'products' && category !== 'product_category'
-                        ? <div className="flex items-center gap-0.5">
-                            <span className="inline-flex items-center gap-1 text-xs text-gray-400 px-2 py-1 italic">
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                              System
-                            </span>
-                            {availableForms.length > 0 && (
-                              <button type="button" onClick={() => handleFormVisibilityOnly(opt)} className="text-brand-secondary hover:text-brand-primary text-xs font-medium px-2 py-1">
-                                Form Visibility
+                      <div className="flex-shrink-0 w-[104px] flex items-center justify-end">
+                        {opt.is_system && category !== 'products' && category !== 'product_category' && !(category === 'company_type' && opt.action_key === 'prospect')
+                          ? <div className="flex items-center gap-0.5">
+                              <span className="inline-flex items-center gap-1 text-xs text-gray-400 px-2 py-1 italic">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                                System
+                              </span>
+                              {availableForms.length > 0 && (
+                                <button type="button" onClick={() => handleFormVisibilityOnly(opt)} className="text-brand-secondary hover:text-brand-primary text-xs font-medium px-2 py-1">
+                                  Edit
+                                </button>
+                              )}
+                            </div>
+                          : !(category === 'company_type' && opt.action_key === 'prospect') && (
+                              <button type="button" onClick={() => handleEdit(opt)} className="text-brand-secondary hover:text-brand-primary text-xs font-medium px-2 py-1">
+                                Edit
                               </button>
-                            )}
-                          </div>
-                        : <button type="button" onClick={() => handleEdit(opt)} className="text-brand-secondary hover:text-brand-primary text-xs font-medium px-2 py-1">
-                            <span className="hidden sm:inline">Edit Name / Form Visibility</span>
-                            <span className="sm:hidden">Edit</span>
-                          </button>
-                      }
-                      {!opt.is_system && (
-                        <button type="button" onClick={() => handleDelete(opt.id, opt.value)} className="text-red-400 hover:text-red-600 text-xs font-medium px-2 py-1">Delete</button>
-                      )}
+                            )
+                        }
+                      </div>
+                      <div className="flex-shrink-0 w-[60px] flex items-center justify-end">
+                        {!opt.is_system && !(category === 'company_type' && opt.action_key === 'prospect') && (
+                          <button type="button" onClick={() => handleDelete(opt.id, opt.value)} className="text-red-400 hover:text-red-600 text-xs font-medium px-2 py-1">Delete</button>
+                        )}
+                      </div>
                     </div>
                     {category === 'company_type' && opt.action_key === 'prospect' && isEditing && (
                       <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg mx-2 mb-2 px-3 py-2">
@@ -480,7 +485,7 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
                       <div className="px-7 pb-3 pt-1 border-t border-gray-200 space-y-3">
                         <div>
                           <label className="text-xs text-gray-500 mb-1 block">Option Name</label>
-                          {opt.is_system && category !== 'company_type' && category !== 'products' && category !== 'product_category' ? (
+                          {opt.is_system && category !== 'products' && category !== 'product_category' && !(category === 'company_type' && opt.action_key === 'prospect') ? (
                             <div className="input-field w-full text-sm bg-gray-50 text-gray-500 flex items-center justify-between">
                               <span>{opt.value}</span>
                               <span className="text-[10px] text-gray-400 italic ml-2">locked</span>
