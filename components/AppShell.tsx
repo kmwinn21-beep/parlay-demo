@@ -21,10 +21,32 @@ import { UpgradeQueryTrigger } from './UpgradeQueryTrigger';
 import { ActiveConferenceProvider } from '@/components/ActiveConferenceContext';
 import { MeetingNotesDrawerProvider, useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 import { MeetingNotesDrawer } from '@/components/MeetingNotesDrawer';
+import { ClosedDealDraftProvider, useClosedDealDraft } from '@/lib/ClosedDealDraftContext';
+import { ClosedWonDealModal } from '@/components/ClosedWonDealModal';
 
 function GlobalMeetingDrawer() {
   const { meetingId, closeMeetingNotes } = useMeetingNotesDrawer();
   return <MeetingNotesDrawer meetingId={meetingId} onClose={closeMeetingNotes} />;
+}
+
+function GlobalClosedDealBar() {
+  const { isOpen, isMinimized, draftLabel, expandDeal, closeDeal } = useClosedDealDraft();
+  if (!isOpen || !isMinimized) return null;
+  return (
+    <div className="fixed bottom-4 left-4 z-[60] flex items-center gap-2 bg-white border border-brand-highlight shadow-lg rounded-full px-3 py-2 max-w-xs">
+      <svg className="w-4 h-4 text-brand-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+      </svg>
+      <button type="button" onClick={expandDeal} className="text-sm font-medium text-gray-800 truncate hover:text-brand-primary transition-colors flex-1 text-left min-w-0">
+        {draftLabel || 'Deal draft'}
+      </button>
+      <button type="button" onClick={closeDeal} className="text-gray-400 hover:text-red-500 transition-colors flex-shrink-0" title="Discard draft">
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+  );
 }
 
 function AppShellInner({ children }: { children: React.ReactNode }) {
@@ -77,6 +99,10 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
       {/* Global meeting notes drawer — persists across page navigations */}
       <GlobalMeetingDrawer />
+
+      {/* Global closed deal modal — persists across page navigations */}
+      <ClosedWonDealModal />
+      <GlobalClosedDealBar />
     </>
   );
 }
@@ -105,9 +131,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <UpgradeModalProvider>
       <ActiveConferenceProvider>
       <MeetingNotesDrawerProvider>
+      <ClosedDealDraftProvider>
         <Suspense fallback={<AppShellInner>{children}</AppShellInner>}>
           <EmbedChecker>{children}</EmbedChecker>
         </Suspense>
+      </ClosedDealDraftProvider>
       </MeetingNotesDrawerProvider>
       </ActiveConferenceProvider>
       </UpgradeModalProvider>

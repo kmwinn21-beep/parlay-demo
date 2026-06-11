@@ -10,7 +10,7 @@ import { AssignFollowUpModal } from './AssignFollowUpModal';
 import { NewRelationshipModal } from './NewRelationshipModal';
 import { AgendaUploadModal } from './AgendaUploadModal';
 import { TouchpointQuickModal } from './DashboardActionCard';
-import { ClosedWonDealModal } from './ClosedWonDealModal';
+import { useClosedDealDraft } from '@/lib/ClosedDealDraftContext';
 import { GlobalSearchModal } from './GlobalSearch';
 import { HelpChatDrawer } from './HelpChatDrawer';
 import { NotificationBell } from './NotificationBell';
@@ -101,7 +101,7 @@ export function Header() {
   const [showRelationshipModal, setShowRelationshipModal] = useState(false);
   const [showAgendaModal, setShowAgendaModal] = useState(false);
   const [showTouchpointsModal, setShowTouchpointsModal] = useState(false);
-  const [showClosedDealModal, setShowClosedDealModal] = useState(false);
+  const { openDeal: openClosedDeal } = useClosedDealDraft();
   const [showAddNew, setShowAddNew] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showHelpChat, setShowHelpChat] = useState(false);
@@ -345,7 +345,7 @@ export function Header() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setShowAddNew(false); setShowClosedDealModal(true); }}
+                  onClick={() => { setShowAddNew(false); openClosedDeal(); }}
                   className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3"
                 >
                   <svg className="w-[18px] h-[18px] text-brand-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -525,7 +525,6 @@ export function Header() {
       <NewRelationshipModal isOpen={showRelationshipModal} onClose={() => setShowRelationshipModal(false)} />
       {showAgendaModal && <AgendaUploadModal onClose={() => setShowAgendaModal(false)} />}
       {showTouchpointsModal && <TouchpointQuickModal onClose={() => setShowTouchpointsModal(false)} />}
-      <ClosedWonDealModal isOpen={showClosedDealModal} onClose={() => setShowClosedDealModal(false)} onSuccess={() => {}} />
       {showSearch && <GlobalSearchModal onClose={() => setShowSearch(false)} />}
       {showHelpChat && (
         <HelpChatDrawer

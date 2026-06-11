@@ -31,7 +31,7 @@ import { ActivityTimelineModal } from '@/components/ActivityTimelineModal';
 import { useCapabilities } from '@/lib/useCapabilities';
 import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { ClosedWonDealsSection } from '@/components/ClosedWonDealsSection';
-import type { ClosedDeal } from '@/components/ClosedWonDealModal';
+import type { ClosedDeal } from '@/lib/ClosedDealDraftContext';
 
 interface ConferenceItem { id: number; name: string; start_date: string; end_date: string; location: string; }
 

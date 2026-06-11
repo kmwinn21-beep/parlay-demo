@@ -17,7 +17,9 @@ export async function GET(
 
   const dealsRes = await db.execute({
     sql: `SELECT d.id, d.company_id, d.deal_name, d.close_date, d.amount, d.currency,
-                 d.notes, d.opportunity_id, d.deal_type, d.contact_signor,
+                 d.notes, d.opportunity_id, d.deal_type,
+                 d.contact_signor, d.contact_signor_attendee_id, d.contact_signor_title,
+                 d.contact_signor_function, d.contact_signor_seniority,
                  d.attributed_conference, d.attribution_type, d.attributed_rep,
                  d.created_by_user_id, d.created_at, d.updated_at,
                  u.display_name as created_by_name
@@ -64,6 +66,10 @@ export async function GET(
     opportunity_id: r.opportunity_id ? String(r.opportunity_id) : null,
     deal_type: r.deal_type ? String(r.deal_type) : null,
     contact_signor: r.contact_signor ? String(r.contact_signor) : null,
+    contact_signor_attendee_id: r.contact_signor_attendee_id != null ? Number(r.contact_signor_attendee_id) : null,
+    contact_signor_title: r.contact_signor_title ? String(r.contact_signor_title) : null,
+    contact_signor_function: r.contact_signor_function ? String(r.contact_signor_function) : null,
+    contact_signor_seniority: r.contact_signor_seniority ? String(r.contact_signor_seniority) : null,
     attributed_conference: r.attributed_conference ? String(r.attributed_conference) : null,
     attribution_type: r.attribution_type ? String(r.attribution_type) : null,
     attributed_rep: r.attributed_rep ? String(r.attributed_rep) : null,
@@ -91,17 +97,24 @@ export async function POST(
   if (isNaN(companyId)) return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
 
   const body = await request.json();
-  const { deal_name, close_date, amount, currency, notes, products,
-          opportunity_id, deal_type, contact_signor, attributed_conference, attribution_type, attributed_rep } = body;
+  const {
+    deal_name, close_date, amount, currency, notes, products,
+    opportunity_id, deal_type,
+    contact_signor, contact_signor_attendee_id, contact_signor_title, contact_signor_function, contact_signor_seniority,
+    attributed_conference, attribution_type, attributed_rep,
+  } = body;
 
   if (!deal_name?.trim()) return NextResponse.json({ error: 'deal_name is required' }, { status: 400 });
   if (!close_date?.trim()) return NextResponse.json({ error: 'close_date is required' }, { status: 400 });
 
   const result = await db.execute({
-    sql: `INSERT INTO closed_deals (company_id, deal_name, close_date, amount, currency, notes,
-                 opportunity_id, deal_type, contact_signor, attributed_conference, attribution_type, attributed_rep,
-                 created_by_user_id, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    sql: `INSERT INTO closed_deals (
+            company_id, deal_name, close_date, amount, currency, notes,
+            opportunity_id, deal_type,
+            contact_signor, contact_signor_attendee_id, contact_signor_title, contact_signor_function, contact_signor_seniority,
+            attributed_conference, attribution_type, attributed_rep,
+            created_by_user_id, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
     args: [
       companyId,
       deal_name.trim(),
@@ -112,7 +125,11 @@ export async function POST(
       opportunity_id?.trim() || null,
       deal_type?.trim() || null,
       contact_signor?.trim() || null,
-      attributed_conference?.trim() || null,
+      contact_signor_attendee_id != null ? Number(contact_signor_attendee_id) : null,
+      contact_signor_title?.trim() || null,
+      contact_signor_function?.trim() || null,
+      contact_signor_seniority?.trim() || null,
+      attributed_conference || null,
       attribution_type?.trim() || null,
       attributed_rep?.trim() || null,
       authResult.id,
@@ -158,7 +175,11 @@ export async function POST(
     opportunity_id: opportunity_id?.trim() || null,
     deal_type: deal_type?.trim() || null,
     contact_signor: contact_signor?.trim() || null,
-    attributed_conference: attributed_conference?.trim() || null,
+    contact_signor_attendee_id: contact_signor_attendee_id != null ? Number(contact_signor_attendee_id) : null,
+    contact_signor_title: contact_signor_title?.trim() || null,
+    contact_signor_function: contact_signor_function?.trim() || null,
+    contact_signor_seniority: contact_signor_seniority?.trim() || null,
+    attributed_conference: attributed_conference || null,
     attribution_type: attribution_type?.trim() || null,
     attributed_rep: attributed_rep?.trim() || null,
     created_by_user_id: authResult.id,

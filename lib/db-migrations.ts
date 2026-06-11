@@ -1325,4 +1325,12 @@ export const migrations: string[] = [
   `ALTER TABLE closed_deals ADD COLUMN attribution_type TEXT`,
   // 464 — closed_deals: attributed sales rep name
   `ALTER TABLE closed_deals ADD COLUMN attributed_rep TEXT`,
+  // 465 — closed_deals: attendee ID of the contact/signor (null for custom "Other" entry)
+  `ALTER TABLE closed_deals ADD COLUMN contact_signor_attendee_id INTEGER`,
+  // 466 — closed_deals: contact/signor job title
+  `ALTER TABLE closed_deals ADD COLUMN contact_signor_title TEXT`,
+  // 467 — closed_deals: contact/signor function (from config_options category=function)
+  `ALTER TABLE closed_deals ADD COLUMN contact_signor_function TEXT`,
+  // 468 — closed_deals: contact/signor seniority (from config_options category=seniority)
+  `ALTER TABLE closed_deals ADD COLUMN contact_signor_seniority TEXT`,
 ];
