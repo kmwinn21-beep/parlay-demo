@@ -1291,4 +1291,48 @@ export const migrations: string[] = [
   `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('cost_type', 'Booth', 10)`,
   // 456 — effectiveness_defaults: seed conference_cost_types if not already set
   `INSERT OR IGNORE INTO effectiveness_defaults (key, value) VALUES ('conference_cost_types', '["Registration","Sponsorship","Swag","Booth","Booth Setup","Travel","Lodging","Entertainment","Meals","Other"]')`,
+  // 457 — closed_deals: track closed/won deals linked to companies
+  `CREATE TABLE IF NOT EXISTS closed_deals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    deal_name TEXT NOT NULL,
+    close_date TEXT NOT NULL,
+    amount REAL,
+    currency TEXT DEFAULT 'USD',
+    notes TEXT,
+    created_by_user_id INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  // 458 — closed_deal_products: products/services on each closed deal
+  `CREATE TABLE IF NOT EXISTS closed_deal_products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    deal_id INTEGER NOT NULL REFERENCES closed_deals(id) ON DELETE CASCADE,
+    product_name TEXT NOT NULL,
+    quantity INTEGER DEFAULT 1,
+    unit_price REAL,
+    sort_order INTEGER DEFAULT 0
+  )`,
+  // 459 — closed_deals: external CRM opportunity ID
+  `ALTER TABLE closed_deals ADD COLUMN opportunity_id TEXT`,
+  // 460 — closed_deals: deal type (New Business, Upsell, Renewal, etc.)
+  `ALTER TABLE closed_deals ADD COLUMN deal_type TEXT`,
+  // 461 — closed_deals: contact / signor name
+  `ALTER TABLE closed_deals ADD COLUMN contact_signor TEXT`,
+  // 462 — closed_deals: attributed conference name
+  `ALTER TABLE closed_deals ADD COLUMN attributed_conference TEXT`,
+  // 463 — closed_deals: attribution type (Direct Source, Influenced, etc.)
+  `ALTER TABLE closed_deals ADD COLUMN attribution_type TEXT`,
+  // 464 — closed_deals: attributed sales rep name
+  `ALTER TABLE closed_deals ADD COLUMN attributed_rep TEXT`,
+  // 465 — closed_deals: attendee ID of the contact/signor (null for custom "Other" entry)
+  `ALTER TABLE closed_deals ADD COLUMN contact_signor_attendee_id INTEGER`,
+  // 466 — closed_deals: contact/signor job title
+  `ALTER TABLE closed_deals ADD COLUMN contact_signor_title TEXT`,
+  // 467 — closed_deals: contact/signor function (from config_options category=function)
+  `ALTER TABLE closed_deals ADD COLUMN contact_signor_function TEXT`,
+  // 468 — closed_deals: contact/signor seniority (from config_options category=seniority)
+  `ALTER TABLE closed_deals ADD COLUMN contact_signor_seniority TEXT`,
+  // 469 — closed_deals: attribution percentage (0–100) used to split deal value across attributed conferences
+  `ALTER TABLE closed_deals ADD COLUMN attribution_pct REAL`,
 ];
