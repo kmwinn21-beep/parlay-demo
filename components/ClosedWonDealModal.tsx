@@ -144,6 +144,7 @@ export function ClosedWonDealModal() {
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('USD');
   const [notes, setNotes] = useState('');
+  const [valueEntryMode, setValueEntryMode] = useState<'by_product' | 'manual'>('by_product');
 
   // ── Promoted fields (under deal name) ───────────────────────────────────────
   // Contact / Signor
@@ -275,6 +276,7 @@ export function ClosedWonDealModal() {
         setContactName(''); setContactTitle(''); setContactFunction(''); setContactSeniority('');
       }
       setProducts(editingDeal.products.length > 0 ? editingDeal.products.map(p => ({ ...p })) : []);
+      setValueEntryMode(editingDeal.products.length > 0 ? 'by_product' : (editingDeal.amount != null ? 'manual' : 'by_product'));
       setShowAdvanced(!!(editingDeal.opportunity_id || editingDeal.deal_type));
     } else {
       setDealName(''); setCloseDate(''); setAmount(''); setCurrency('USD'); setNotes('');
@@ -282,7 +284,7 @@ export function ClosedWonDealModal() {
       setContactMode(''); setContactAttendeeId(null);
       setContactName(''); setContactTitle(''); setContactFunction(''); setContactSeniority('');
       setAttributedReps([]); setAttributedConferences([]);
-      setProducts([]); setShowAdvanced(false);
+      setProducts([]); setValueEntryMode('by_product'); setShowAdvanced(false);
     }
     setError('');
     if (targetCompanyId == null) {
@@ -342,7 +344,9 @@ export function ClosedWonDealModal() {
     if (p.unit_price != null && p.quantity != null) return sum + p.unit_price * p.quantity;
     return sum;
   }, 0);
-  const useComputedAmount = products.some(p => p.product_name.trim() && p.unit_price != null && p.quantity != null);
+  const displayAmount: number | null = valueEntryMode === 'by_product'
+    ? (computedTotal > 0 ? computedTotal : null)
+    : (amount !== '' ? Number(amount) : null);
 
   const getCategoryForProduct = (productName: string): ConfigOption | null => {
     const opt = configProducts.find(p => p.value === productName);
@@ -410,7 +414,7 @@ export function ClosedWonDealModal() {
       const body = {
         deal_name: dealName.trim(),
         close_date: closeDate.trim(),
-        amount: useComputedAmount ? computedTotal : (amount !== '' ? Number(amount) : null),
+        amount: valueEntryMode === 'by_product' ? (computedTotal > 0 ? computedTotal : null) : (amount !== '' ? Number(amount) : null),
         currency: currency || 'USD',
         notes: notes.trim() || null,
         opportunity_id: opportunityId.trim() || null,
@@ -424,7 +428,7 @@ export function ClosedWonDealModal() {
         attribution_type: attributionType.trim() || null,
         attribution_pct: (attributionType === 'Influenced' || attributionType === 'Accelerated') ? attributionPct : null,
         attributed_rep: attributedReps.length > 0 ? JSON.stringify(attributedReps) : null,
-        products: products.filter(p => p.product_name.trim()).map((p, i) => ({ ...p, sort_order: i })),
+        products: valueEntryMode === 'by_product' ? products.filter(p => p.product_name.trim()).map((p, i) => ({ ...p, sort_order: i })) : [],
       };
       const url = isEditing
         ? `/api/companies/${resolvedCompanyId}/closed-deals/${editingDeal!.id}`
@@ -621,102 +625,120 @@ export function ClosedWonDealModal() {
             )}
           </div>
 
-          {/* ── Close date + Amount ──────────────────────────────────────────── */}
+          {/* ── Close Date + Annual Deal Value display ───────────────────────── */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Close Date <span className="text-red-500">*</span></label>
               <input type="date" value={closeDate} onChange={e => setCloseDate(e.target.value)} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Deal Amount</label>
-              {useComputedAmount ? (
-                <div className="flex gap-1">
-                  <div className="border border-gray-200 rounded-lg px-2 py-2 text-sm text-gray-500 bg-gray-50 w-20 flex-shrink-0 flex items-center justify-center">{currency}</div>
-                  <div className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-700 font-medium flex items-center gap-1">
-                    <svg className="w-3 h-3 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 11h.01M12 11h.01M15 11h.01M4 19h16a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                    <span className="truncate">{computedTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                </div>
+              <label className={labelCls}>
+                <span className="hidden sm:inline">Annual Deal Value</span>
+                <span className="sm:hidden">Annual Value</span>
+              </label>
+              <div className="flex items-center border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 min-h-[38px]">
+                {displayAmount != null ? (
+                  <span className="text-sm font-medium text-gray-700 truncate">
+                    {currency} {displayAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                ) : (
+                  <span className="text-sm text-gray-400">—</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Deal Value Entry toggle ──────────────────────────────────────── */}
+          <div className="flex items-end gap-3">
+            <div className="flex-shrink-0">
+              <label className={labelCls}>Deal Value Entry</label>
+              <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setValueEntryMode('by_product')}
+                  className={`px-4 py-2 text-sm font-medium transition-colors ${valueEntryMode === 'by_product' ? 'bg-brand-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                >By Product</button>
+                <button
+                  type="button"
+                  onClick={() => setValueEntryMode('manual')}
+                  className={`px-4 py-2 text-sm font-medium transition-colors border-l border-gray-300 ${valueEntryMode === 'manual' ? 'bg-brand-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                >Manual</button>
+              </div>
+            </div>
+            {valueEntryMode === 'manual' && (
+              <div className="flex-1 min-w-0 flex gap-1">
+                <select value={currency} onChange={e => setCurrency(e.target.value)} className="border border-gray-300 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary w-16 flex-shrink-0">
+                  {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary" />
+              </div>
+            )}
+          </div>
+
+          {/* ── Products / Services (By Product mode only) ──────────────────── */}
+          {valueEntryMode === 'by_product' && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-medium text-gray-700">Products / Services</label>
+                <button type="button" onClick={handleAddProduct} className="text-xs text-brand-primary hover:underline font-medium">+ Add line</button>
+              </div>
+              {products.length === 0 ? (
+                <p className="text-xs text-gray-400 py-1">No products added.</p>
               ) : (
-                <div className="flex gap-1">
-                  <select value={currency} onChange={e => setCurrency(e.target.value)} className="border border-gray-300 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary w-20 flex-shrink-0">
-                    {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                  <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary" />
+                <div className="space-y-2">
+                  <div className="grid grid-cols-[minmax(0,1fr)_80px_108px_20px] gap-1.5 px-0.5">
+                    <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Product</span>
+                    <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Qty</span>
+                    <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Unit Price/yr</span>
+                    <span />
+                  </div>
+                  {products.map((p, i) => {
+                    const cat = getCategoryForProduct(p.product_name);
+                    const inConfig = configProducts.some(o => o.value === p.product_name);
+                    const allOptions = [...configProducts, ...(!inConfig && p.product_name ? [{ id: -1, value: p.product_name, category_id: null, color: null }] : [])];
+                    return (
+                      <div key={i} className="space-y-0.5">
+                        <div className="grid grid-cols-[minmax(0,1fr)_80px_108px_20px] gap-1.5 items-center">
+                          <div className="relative">
+                            <select value={p.product_name} onChange={e => handleProductChange(i, 'product_name', e.target.value)} className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-brand-primary/30 focus:border-brand-primary appearance-none pr-6 truncate">
+                              <option value="">— Select —</option>
+                              {allOptions.map(o => <option key={o.id} value={o.value}>{o.value}</option>)}
+                            </select>
+                            <svg className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                          </div>
+                          <input type="number" min="0" value={p.quantity ?? ''} onChange={e => handleProductChange(i, 'quantity', e.target.value)} placeholder="1" className="border border-gray-300 rounded px-2 py-1 text-sm text-right focus:outline-none focus:ring-1 focus:ring-brand-primary/30 focus:border-brand-primary" />
+                          <input type="number" min="0" step="0.01" value={p.unit_price ?? ''} onChange={e => handleProductChange(i, 'unit_price', e.target.value)} placeholder="0.00" className="border border-gray-300 rounded px-2 py-1 text-sm text-right focus:outline-none focus:ring-1 focus:ring-brand-primary/30 focus:border-brand-primary" />
+                          <button type="button" onClick={() => handleRemoveProduct(i)} className="text-gray-300 hover:text-red-400 transition-colors flex items-center justify-center">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </div>
+                        {cat && <div className="pl-0.5"><span className="inline-block text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">{cat.value}</span></div>}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
-              {useComputedAmount && <p className="text-[10px] text-gray-400 mt-0.5">Calculated from products</p>}
-            </div>
-          </div>
-
-          {/* Notes */}
-          <div>
-            <label className={labelCls}>Notes</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Additional context, deal terms, etc." className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary resize-none" />
-          </div>
-
-          {/* Products / Services */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-medium text-gray-700">Products / Services</label>
-              <button type="button" onClick={handleAddProduct} className="text-xs text-brand-primary hover:underline font-medium">+ Add line</button>
-            </div>
-            {products.length === 0 ? (
-              <p className="text-xs text-gray-400 py-1">No products added.</p>
-            ) : (
-              <div className="space-y-2">
-                <div className="grid grid-cols-[minmax(0,1fr)_80px_108px_20px] gap-1.5 px-0.5">
-                  <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Product</span>
-                  <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide text-right">Qty</span>
-                  <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide text-right">Unit Price</span>
-                  <span />
+              {!showNewProductForm ? (
+                <button type="button" onClick={() => setShowNewProductForm(true)} className="mt-2 text-xs text-brand-primary hover:underline font-medium">+ Create new</button>
+              ) : (
+                <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg space-y-2">
+                  <p className="text-xs font-medium text-gray-700">New product</p>
+                  <input type="text" value={newProductName} onChange={e => setNewProductName(e.target.value)} placeholder="Product name" className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-primary/30 focus:border-brand-primary" />
+                  {configCategories.length > 0 && (
+                    <select value={newProductCategoryId} onChange={e => setNewProductCategoryId(e.target.value === '' ? '' : Number(e.target.value))} className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-primary/30 focus:border-brand-primary">
+                      <option value="">No category</option>
+                      {configCategories.map(c => <option key={c.id} value={c.id}>{c.value}</option>)}
+                    </select>
+                  )}
+                  {createProductError && <p className="text-xs text-red-500">{createProductError}</p>}
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={handleCreateProduct} disabled={creatingProduct} className="px-3 py-1 text-xs font-medium bg-brand-primary text-white rounded hover:opacity-90 transition-opacity disabled:opacity-50">{creatingProduct ? 'Saving…' : 'Create'}</button>
+                    <button type="button" onClick={() => { setShowNewProductForm(false); setNewProductName(''); setNewProductCategoryId(''); setCreateProductError(''); }} className="px-3 py-1 text-xs text-gray-500 hover:text-gray-700 transition-colors">Cancel</button>
+                  </div>
                 </div>
-                {products.map((p, i) => {
-                  const cat = getCategoryForProduct(p.product_name);
-                  const inConfig = configProducts.some(o => o.value === p.product_name);
-                  const allOptions = [...configProducts, ...(!inConfig && p.product_name ? [{ id: -1, value: p.product_name, category_id: null, color: null }] : [])];
-                  return (
-                    <div key={i} className="space-y-0.5">
-                      <div className="grid grid-cols-[minmax(0,1fr)_80px_108px_20px] gap-1.5 items-center">
-                        <div className="relative">
-                          <select value={p.product_name} onChange={e => handleProductChange(i, 'product_name', e.target.value)} className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-brand-primary/30 focus:border-brand-primary appearance-none pr-6 truncate">
-                            <option value="">— Select —</option>
-                            {allOptions.map(o => <option key={o.id} value={o.value}>{o.value}</option>)}
-                          </select>
-                          <svg className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                        </div>
-                        <input type="number" min="0" value={p.quantity ?? ''} onChange={e => handleProductChange(i, 'quantity', e.target.value)} placeholder="1" className="border border-gray-300 rounded px-2 py-1 text-sm text-right focus:outline-none focus:ring-1 focus:ring-brand-primary/30 focus:border-brand-primary" />
-                        <input type="number" min="0" step="0.01" value={p.unit_price ?? ''} onChange={e => handleProductChange(i, 'unit_price', e.target.value)} placeholder="0.00" className="border border-gray-300 rounded px-2 py-1 text-sm text-right focus:outline-none focus:ring-1 focus:ring-brand-primary/30 focus:border-brand-primary" />
-                        <button type="button" onClick={() => handleRemoveProduct(i)} className="text-gray-300 hover:text-red-400 transition-colors flex items-center justify-center">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                        </button>
-                      </div>
-                      {cat && <div className="pl-0.5"><span className="inline-block text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">{cat.value}</span></div>}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            {!showNewProductForm ? (
-              <button type="button" onClick={() => setShowNewProductForm(true)} className="mt-2 text-xs text-brand-primary hover:underline font-medium">+ Create new</button>
-            ) : (
-              <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg space-y-2">
-                <p className="text-xs font-medium text-gray-700">New product</p>
-                <input type="text" value={newProductName} onChange={e => setNewProductName(e.target.value)} placeholder="Product name" className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-primary/30 focus:border-brand-primary" />
-                {configCategories.length > 0 && (
-                  <select value={newProductCategoryId} onChange={e => setNewProductCategoryId(e.target.value === '' ? '' : Number(e.target.value))} className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-primary/30 focus:border-brand-primary">
-                    <option value="">No category</option>
-                    {configCategories.map(c => <option key={c.id} value={c.id}>{c.value}</option>)}
-                  </select>
-                )}
-                {createProductError && <p className="text-xs text-red-500">{createProductError}</p>}
-                <div className="flex items-center gap-2">
-                  <button type="button" onClick={handleCreateProduct} disabled={creatingProduct} className="px-3 py-1 text-xs font-medium bg-brand-primary text-white rounded hover:opacity-90 transition-opacity disabled:opacity-50">{creatingProduct ? 'Saving…' : 'Create'}</button>
-                  <button type="button" onClick={() => { setShowNewProductForm(false); setNewProductName(''); setNewProductCategoryId(''); setCreateProductError(''); }} className="px-3 py-1 text-xs text-gray-500 hover:text-gray-700 transition-colors">Cancel</button>
-                </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           {/* Advanced details — Opportunity ID, Deal Type */}
           <div className="border border-gray-100 rounded-lg overflow-hidden">
@@ -741,6 +763,12 @@ export function ClosedWonDealModal() {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Notes — below Advanced */}
+          <div>
+            <label className={labelCls}>Notes</label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Additional context, deal terms, etc." className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary resize-none" />
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
