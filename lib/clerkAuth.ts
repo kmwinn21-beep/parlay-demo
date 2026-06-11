@@ -31,7 +31,7 @@
 
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import type { SessionUser, UserRole } from './auth';
+import type { SessionUser, UserRole } from './auth-shared';
 
 export type ClerkSessionUser = {
   id: number;
