@@ -138,32 +138,24 @@ export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = 
           style={{ scrollbarWidth: 'none' } as React.CSSProperties}
         >
           {/* Deals count */}
-          <div className="flex-shrink-0 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg min-w-[80px]">
+          <div className="flex-shrink-0 px-3 py-2 bg-green-50 border border-green-100 rounded-lg min-w-[72px] text-center">
             <p className="text-xs text-gray-500 whitespace-nowrap">Deals</p>
             <p className="text-sm font-semibold text-gray-800">{deals.length}</p>
           </div>
 
           {/* Total Value */}
           {totalAmount > 0 && (
-            <div className="flex-shrink-0 px-3 py-2 bg-green-50 border border-green-100 rounded-lg min-w-[100px]">
+            <div className="flex-shrink-0 px-3 py-2 bg-green-50 border border-green-100 rounded-lg min-w-[90px] text-center">
               <p className="text-xs text-gray-500 whitespace-nowrap">Total Value</p>
               <p className="text-sm font-semibold text-gray-800">{formatCurrency(totalAmount, primaryCurrency)}</p>
             </div>
           )}
 
-          {/* Attributed Value */}
+          {/* Attributed */}
           {totalAttributed > 0 && (
-            <div
-              className="flex-shrink-0 px-3 py-2 rounded-lg min-w-[110px]"
-              style={{
-                borderWidth: 1,
-                borderStyle: 'solid',
-                borderColor: 'rgb(var(--brand-primary-rgb))',
-                backgroundColor: 'rgb(var(--brand-primary-rgb) / 0.06)',
-              }}
-            >
-              <p className="text-xs text-brand-primary whitespace-nowrap">Attributed Value</p>
-              <p className="text-sm font-semibold text-brand-primary">{formatCurrency(totalAttributed, primaryCurrency)}</p>
+            <div className="flex-shrink-0 px-3 py-2 bg-green-50 border border-green-100 rounded-lg min-w-[90px] text-center">
+              <p className="text-xs text-gray-500 whitespace-nowrap">Attributed</p>
+              <p className="text-sm font-semibold text-gray-800">{formatCurrency(totalAttributed, primaryCurrency)}</p>
             </div>
           )}
         </div>
@@ -217,43 +209,52 @@ export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = 
                   <div className="px-3 pb-3 border-t border-gray-100 bg-gray-50">
                     {deal.notes && <p className="text-xs text-gray-600 mt-2 mb-2 leading-relaxed">{deal.notes}</p>}
 
-                    {/* Metadata row */}
-                    {(deal.deal_type || deal.attribution_type || repList.length > 0 || deal.contact_signor || deal.opportunity_id) && (
-                      <div className="mt-2 mb-2 flex flex-wrap gap-x-4 gap-y-1.5 items-center">
-                        {deal.deal_type && (
-                          <span className="text-xs text-gray-500"><span className="text-gray-400">Type:</span> {deal.deal_type}</span>
-                        )}
-                        {deal.attribution_type && deal.attribution_type !== 'None' && (() => {
-                          const cls = ATTRIBUTION_PILL[deal.attribution_type] ?? 'bg-gray-50 text-gray-600 border-gray-200';
-                          return (
+                    {/* Metadata rows */}
+                    <div className="mt-2 mb-2 space-y-1.5">
+                      {/* Attribution type */}
+                      {deal.attribution_type && deal.attribution_type !== 'None' && (() => {
+                        const cls = ATTRIBUTION_PILL[deal.attribution_type] ?? 'bg-gray-50 text-gray-600 border-gray-200';
+                        return (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-400 flex-shrink-0">Attribution Type:</span>
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs font-medium ${cls}`}>
                               {deal.attribution_type}
                             </span>
-                          );
-                        })()}
-                        {repList.length > 0 && (
-                          <div className="flex items-center gap-1 flex-wrap">
-                            {repList.map(rep => (
-                              <span key={rep} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-200 text-xs font-medium">
-                                <svg className="w-3 h-3 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                </svg>
-                                {getInitials(rep)}
-                              </span>
-                            ))}
                           </div>
-                        )}
-                        {deal.contact_signor && (
-                          <span className="text-xs text-gray-500">
-                            <span className="text-gray-400">Signor:</span> {deal.contact_signor}
-                            {deal.contact_signor_title && <span className="text-gray-400"> ({deal.contact_signor_title})</span>}
-                          </span>
-                        )}
-                        {deal.opportunity_id && (
-                          <span className="text-xs text-gray-500"><span className="text-gray-400">Opp ID:</span> {deal.opportunity_id}</span>
-                        )}
-                      </div>
-                    )}
+                        );
+                      })()}
+
+                      {/* Rep pills */}
+                      {repList.length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-xs text-gray-400 flex-shrink-0">Rep(s):</span>
+                          {repList.map(rep => (
+                            <span key={rep} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-200 text-xs font-medium">
+                              <svg className="w-3 h-3 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                              </svg>
+                              {getInitials(rep)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Signor */}
+                      {deal.contact_signor && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-gray-400">Signor:</span>
+                          <span className="text-xs text-gray-600">{deal.contact_signor}{deal.contact_signor_title && <span className="text-gray-400"> ({deal.contact_signor_title})</span>}</span>
+                        </div>
+                      )}
+
+                      {/* Other metadata */}
+                      {(deal.deal_type || deal.opportunity_id) && (
+                        <div className="flex flex-wrap gap-x-4 gap-y-1">
+                          {deal.deal_type && <span className="text-xs text-gray-500"><span className="text-gray-400">Type:</span> {deal.deal_type}</span>}
+                          {deal.opportunity_id && <span className="text-xs text-gray-500"><span className="text-gray-400">Opp ID:</span> {deal.opportunity_id}</span>}
+                        </div>
+                      )}
+                    </div>
 
                     {/* Products table */}
                     {deal.products.length > 0 && (

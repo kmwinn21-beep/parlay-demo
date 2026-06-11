@@ -584,6 +584,43 @@ export function ClosedWonDealModal() {
             setIsOpen={setShowConferenceDropdown}
           />
 
+          {/* ── Attribution Type + % ─────────────────────────────────────────── */}
+          <div>
+            {(attributionType === 'Influenced' || attributionType === 'Accelerated') ? (
+              <div className="flex items-end gap-2">
+                <div className="flex-1 min-w-0">
+                  <label className={labelCls}>Attribution Type</label>
+                  <select value={attributionType} onChange={e => setAttributionType(e.target.value)} className={inputCls}>
+                    <option value="">— Select —</option>
+                    {ATTRIBUTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div className="w-32 flex-shrink-0">
+                  <label className={labelCls}>Attribution %</label>
+                  <div className="relative flex items-center">
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={attributionPct}
+                      onChange={e => setAttributionPct(Math.min(100, Math.max(1, Number(e.target.value) || 1)))}
+                      className="w-full border border-gray-300 rounded-lg pl-3 pr-7 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+                    />
+                    <span className="pointer-events-none absolute right-3 text-sm text-gray-400">%</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className={labelCls}>Attribution Type</label>
+                <select value={attributionType} onChange={e => setAttributionType(e.target.value)} className={inputCls}>
+                  <option value="">— Select —</option>
+                  {ATTRIBUTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+
           {/* ── Close date + Amount ──────────────────────────────────────────── */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -677,43 +714,6 @@ export function ClosedWonDealModal() {
                   <button type="button" onClick={handleCreateProduct} disabled={creatingProduct} className="px-3 py-1 text-xs font-medium bg-brand-primary text-white rounded hover:opacity-90 transition-opacity disabled:opacity-50">{creatingProduct ? 'Saving…' : 'Create'}</button>
                   <button type="button" onClick={() => { setShowNewProductForm(false); setNewProductName(''); setNewProductCategoryId(''); setCreateProductError(''); }} className="px-3 py-1 text-xs text-gray-500 hover:text-gray-700 transition-colors">Cancel</button>
                 </div>
-              </div>
-            )}
-          </div>
-
-          {/* ── Attribution Type + % ─────────────────────────────────────────── */}
-          <div>
-            {(attributionType === 'Influenced' || attributionType === 'Accelerated') ? (
-              <div className="flex items-end gap-2">
-                <div className="flex-1 min-w-0">
-                  <label className={labelCls}>Attribution Type</label>
-                  <select value={attributionType} onChange={e => setAttributionType(e.target.value)} className={inputCls}>
-                    <option value="">— Select —</option>
-                    {ATTRIBUTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-                <div className="w-32 flex-shrink-0">
-                  <label className={labelCls}>Attribution %</label>
-                  <div className="relative flex items-center">
-                    <input
-                      type="number"
-                      min={1}
-                      max={100}
-                      value={attributionPct}
-                      onChange={e => setAttributionPct(Math.min(100, Math.max(1, Number(e.target.value) || 1)))}
-                      className="w-full border border-gray-300 rounded-lg pl-3 pr-7 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
-                    />
-                    <span className="pointer-events-none absolute right-3 text-sm text-gray-400">%</span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <label className={labelCls}>Attribution Type</label>
-                <select value={attributionType} onChange={e => setAttributionType(e.target.value)} className={inputCls}>
-                  <option value="">— Select —</option>
-                  {ATTRIBUTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
               </div>
             )}
           </div>
