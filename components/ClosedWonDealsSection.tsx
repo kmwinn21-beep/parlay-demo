@@ -150,7 +150,7 @@ export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = 
                         {deal.deal_type && <span className="text-xs text-gray-500"><span className="text-gray-400">Type:</span> {deal.deal_type}</span>}
                         {confList.length > 0 && <span className="text-xs text-gray-500"><span className="text-gray-400">Conference{confList.length > 1 ? 's' : ''}:</span> {confList.join(', ')}</span>}
                         {deal.attribution_type && <span className="text-xs text-gray-500"><span className="text-gray-400">Attribution:</span> {deal.attribution_type}</span>}
-                        {deal.attributed_rep && <span className="text-xs text-gray-500"><span className="text-gray-400">Rep:</span> {deal.attributed_rep}</span>}
+                        {deal.attributed_rep && <span className="text-xs text-gray-500"><span className="text-gray-400">Rep:</span> {parseAttributedConferences(deal.attributed_rep).join(', ')}</span>}
                         {deal.contact_signor && (
                           <span className="text-xs text-gray-500">
                             <span className="text-gray-400">Signor:</span> {deal.contact_signor}
