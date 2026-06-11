@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { DEFAULT_ROLE_CAPABILITIES, type UserRole, type RoleCapabilityMap } from './auth';
+import { DEFAULT_ROLE_CAPABILITIES, type UserRole, type RoleCapabilityMap } from './auth-shared';
 import { PLAN_CAPABILITIES, type PlanCapabilities, type PlanId } from './capabilities';
 import type { TrialState } from './trialState';
 

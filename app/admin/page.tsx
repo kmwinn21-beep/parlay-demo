@@ -12,7 +12,7 @@ import { AVAILABLE_COLUMNS, DISPLAY_TYPE_LABELS, type DisplayType } from '@/lib/
 import { SECTION_DEFS, invalidateSectionConfig } from '@/lib/useSectionConfig';
 import { CATEGORY_FORM_USAGE } from '@/lib/configOptionForms';
 import { BRAND_COLOR_DEFAULTS, BRAND_COLOR_META, BRAND_CSS_VARS, hexToRgbChannels, FONT_OPTIONS, DEFAULT_FONT_KEY, type BrandColorKey } from '@/lib/brand';
-import { DEFAULT_ROLE_CAPABILITIES, CAPABILITY_LABELS, LOCKED_ADMIN_CAPS, type UserRole, type RoleCapabilities, type CapabilityKey } from '@/lib/auth';
+import { DEFAULT_ROLE_CAPABILITIES, CAPABILITY_LABELS, LOCKED_ADMIN_CAPS, type UserRole, type RoleCapabilities, type CapabilityKey } from '@/lib/auth-shared';
 import { useCapabilities, invalidateCapabilitiesCache } from '@/lib/useCapabilities';
 import { useOnboarding } from '@/lib/OnboardingContext';
 import { invalidateAppName } from '@/lib/useAppName';
