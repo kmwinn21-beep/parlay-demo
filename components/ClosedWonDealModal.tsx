@@ -39,7 +39,7 @@ const ATTRIBUTION_TYPES = ['Direct Source', 'Influenced', 'Accelerated', 'None']
 
 const EMPTY_PRODUCT = (): DealProduct => ({ product_name: '', quantity: null, unit_price: null, sort_order: 0 });
 
-function parseAttributedConferences(raw: string | null): string[] {
+function parseJsonArray(raw: string | null): string[] {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
@@ -49,23 +49,103 @@ function parseAttributedConferences(raw: string | null): string[] {
   }
 }
 
+// Shared multiselect dropdown UI
+function MultiSelectField({
+  label,
+  options,
+  selected,
+  onToggle,
+  placeholder,
+  disabledMessage,
+  dropdownRef,
+  isOpen,
+  setIsOpen,
+}: {
+  label: string;
+  options: { value: string }[];
+  selected: string[];
+  onToggle: (v: string) => void;
+  placeholder: string;
+  disabledMessage?: string;
+  dropdownRef: React.RefObject<HTMLDivElement>;
+  isOpen: boolean;
+  setIsOpen: (v: boolean) => void;
+}) {
+  const disabled = !!disabledMessage;
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-700 mb-1">{label}</label>
+      <div className="relative" ref={dropdownRef}>
+        <button
+          type="button"
+          onClick={() => !disabled && setIsOpen(!isOpen)}
+          disabled={disabled}
+          className="w-full flex items-center justify-between border border-gray-300 rounded-lg px-3 py-2 text-sm text-left focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary disabled:opacity-50 disabled:bg-gray-50"
+        >
+          <span className="truncate">
+            {selected.length === 0
+              ? <span className="text-gray-400">{disabledMessage ?? placeholder}</span>
+              : selected.length === 1
+              ? <span className="text-gray-700">{selected[0]}</span>
+              : <span className="text-gray-700">{selected.length} selected</span>}
+          </span>
+          <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 ml-2 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {isOpen && (
+          <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+            {options.length === 0 ? (
+              <p className="px-3 py-2 text-xs text-gray-400">No options available.</p>
+            ) : (
+              options.map(o => (
+                <button key={o.value} type="button" onClick={() => onToggle(o.value)} className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-blue-50 transition-colors text-left">
+                  <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${selected.includes(o.value) ? 'bg-brand-primary border-brand-primary' : 'border-gray-300'}`}>
+                    {selected.includes(o.value) && (
+                      <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </div>
+                  <span className={selected.includes(o.value) ? 'text-brand-primary font-medium' : 'text-gray-700'}>{o.value}</span>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {selected.map(v => (
+            <span key={v} className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5">
+              {v}
+              <button type="button" onClick={() => onToggle(v)} className="text-blue-400 hover:text-blue-600">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ClosedWonDealModal() {
   const ctx = useClosedDealDraft();
   const { isOpen, isMinimized, targetCompanyId, editingDeal, closeDeal, minimizeDeal, setDraftLabel } = ctx;
 
   useHideBottomNav(isOpen && !isMinimized);
 
-  // ── Core form fields ────────────────────────────────────────────────────────
+  // ── Core fields ──────────────────────────────────────────────────────────────
   const [dealName, setDealName] = useState('');
   const [closeDate, setCloseDate] = useState('');
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('USD');
   const [notes, setNotes] = useState('');
 
-  // ── Advanced fields ─────────────────────────────────────────────────────────
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [opportunityId, setOpportunityId] = useState('');
-  const [dealType, setDealType] = useState('');
+  // ── Promoted fields (under deal name) ───────────────────────────────────────
   // Contact / Signor
   const [contactMode, setContactMode] = useState<'attendee' | 'other' | ''>('');
   const [contactAttendeeId, setContactAttendeeId] = useState<number | null>(null);
@@ -73,32 +153,43 @@ export function ClosedWonDealModal() {
   const [contactTitle, setContactTitle] = useState('');
   const [contactFunction, setContactFunction] = useState('');
   const [contactSeniority, setContactSeniority] = useState('');
-  // Attributed conferences (multiselect)
+  // Attributed Rep (multiselect from config_options category=user)
+  const [attributedReps, setAttributedReps] = useState<string[]>([]);
+  const [showRepDropdown, setShowRepDropdown] = useState(false);
+  const repDropdownRef = useRef<HTMLDivElement | null>(null);
+  // Attributed Conferences (multiselect)
   const [attributedConferences, setAttributedConferences] = useState<string[]>([]);
   const [showConferenceDropdown, setShowConferenceDropdown] = useState(false);
-  const confDropdownRef = useRef<HTMLDivElement>(null);
-  const [attributionType, setAttributionType] = useState('');
-  const [attributedRep, setAttributedRep] = useState('');
+  const confDropdownRef = useRef<HTMLDivElement | null>(null);
 
-  // ── Products ────────────────────────────────────────────────────────────────
+  // ── Advanced fields ──────────────────────────────────────────────────────────
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [opportunityId, setOpportunityId] = useState('');
+  const [dealType, setDealType] = useState('');
+  const [attributionType, setAttributionType] = useState('');
+
+  // ── Products ─────────────────────────────────────────────────────────────────
   const [products, setProducts] = useState<DealProduct[]>([]);
   const [configProducts, setConfigProducts] = useState<ConfigOption[]>([]);
   const [configCategories, setConfigCategories] = useState<ConfigOption[]>([]);
 
-  // ── Inline new-product form ─────────────────────────────────────────────────
+  // ── Inline new-product form ──────────────────────────────────────────────────
   const [showNewProductForm, setShowNewProductForm] = useState(false);
   const [newProductName, setNewProductName] = useState('');
   const [newProductCategoryId, setNewProductCategoryId] = useState<number | ''>('');
   const [creatingProduct, setCreatingProduct] = useState(false);
   const [createProductError, setCreateProductError] = useState('');
 
-  // ── Company attendees + conferences ────────────────────────────────────────
-  const [companyAttendees, setCompanyAttendees] = useState<CompanyAttendee[]>([]);
-  const [companyConferences, setCompanyConferences] = useState<CompanyConference[]>([]);
+  // ── Config options ───────────────────────────────────────────────────────────
   const [configFunctions, setConfigFunctions] = useState<ConfigOption[]>([]);
   const [configSeniorities, setConfigSeniorities] = useState<ConfigOption[]>([]);
+  const [configUsers, setConfigUsers] = useState<ConfigOption[]>([]);
 
-  // ── Company search (when no companyId pre-provided) ────────────────────────
+  // ── Company-specific data ────────────────────────────────────────────────────
+  const [companyAttendees, setCompanyAttendees] = useState<CompanyAttendee[]>([]);
+  const [companyConferences, setCompanyConferences] = useState<CompanyConference[]>([]);
+
+  // ── Company search ───────────────────────────────────────────────────────────
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
   const [selectedCompanyName, setSelectedCompanyName] = useState('');
   const [companyQuery, setCompanyQuery] = useState('');
@@ -106,14 +197,14 @@ export function ClosedWonDealModal() {
   const [companySearching, setCompanySearching] = useState(false);
   const companyDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Submission ──────────────────────────────────────────────────────────────
+  // ── Submission ───────────────────────────────────────────────────────────────
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   const isEditing = !!editingDeal;
   const resolvedCompanyId = targetCompanyId ?? selectedCompanyId;
 
-  // ── Load config options on open ─────────────────────────────────────────────
+  // Load static config options on open
   useEffect(() => {
     if (!isOpen) return;
     Promise.all([
@@ -121,15 +212,17 @@ export function ClosedWonDealModal() {
       fetch('/api/config?category=product_category').then(r => r.json()).catch(() => []),
       fetch('/api/config?category=function').then(r => r.json()).catch(() => []),
       fetch('/api/config?category=seniority').then(r => r.json()).catch(() => []),
-    ]).then(([prods, cats, funcs, sens]) => {
+      fetch('/api/config?category=user').then(r => r.json()).catch(() => []),
+    ]).then(([prods, cats, funcs, sens, users]) => {
       setConfigProducts(Array.isArray(prods) ? prods : []);
       setConfigCategories(Array.isArray(cats) ? cats : []);
       setConfigFunctions(Array.isArray(funcs) ? funcs : []);
       setConfigSeniorities(Array.isArray(sens) ? sens : []);
+      setConfigUsers(Array.isArray(users) ? users : []);
     });
   }, [isOpen]);
 
-  // ── Load company-specific data when resolvedCompanyId changes ───────────────
+  // Load company attendees + conferences when company changes
   useEffect(() => {
     if (!isOpen || !resolvedCompanyId) {
       setCompanyAttendees([]);
@@ -145,7 +238,7 @@ export function ClosedWonDealModal() {
     });
   }, [isOpen, resolvedCompanyId]);
 
-  // ── Populate / reset form when modal opens ──────────────────────────────────
+  // Populate / reset form when modal opens or deal changes
   useEffect(() => {
     if (!isOpen || isMinimized) return;
     if (editingDeal) {
@@ -157,8 +250,8 @@ export function ClosedWonDealModal() {
       setOpportunityId(editingDeal.opportunity_id || '');
       setDealType(editingDeal.deal_type || '');
       setAttributionType(editingDeal.attribution_type || '');
-      setAttributedRep(editingDeal.attributed_rep || '');
-      setAttributedConferences(parseAttributedConferences(editingDeal.attributed_conference));
+      setAttributedReps(parseJsonArray(editingDeal.attributed_rep));
+      setAttributedConferences(parseJsonArray(editingDeal.attributed_conference));
       if (editingDeal.contact_signor_attendee_id != null) {
         setContactMode('attendee');
         setContactAttendeeId(editingDeal.contact_signor_attendee_id);
@@ -174,58 +267,35 @@ export function ClosedWonDealModal() {
         setContactFunction(editingDeal.contact_signor_function || '');
         setContactSeniority(editingDeal.contact_signor_seniority || '');
       } else {
-        setContactMode('');
-        setContactAttendeeId(null);
-        setContactName('');
-        setContactTitle('');
-        setContactFunction('');
-        setContactSeniority('');
+        setContactMode(''); setContactAttendeeId(null);
+        setContactName(''); setContactTitle(''); setContactFunction(''); setContactSeniority('');
       }
       setProducts(editingDeal.products.length > 0 ? editingDeal.products.map(p => ({ ...p })) : []);
-      const hasAdv = !!(editingDeal.opportunity_id || editingDeal.deal_type || editingDeal.contact_signor ||
-        editingDeal.attributed_conference || editingDeal.attribution_type || editingDeal.attributed_rep);
-      setShowAdvanced(hasAdv);
+      setShowAdvanced(!!(editingDeal.opportunity_id || editingDeal.deal_type || editingDeal.attribution_type));
     } else {
-      // Fresh new deal
-      setDealName('');
-      setCloseDate('');
-      setAmount('');
-      setCurrency('USD');
-      setNotes('');
-      setOpportunityId('');
-      setDealType('');
-      setContactMode('');
-      setContactAttendeeId(null);
-      setContactName('');
-      setContactTitle('');
-      setContactFunction('');
-      setContactSeniority('');
-      setAttributedConferences([]);
-      setAttributionType('');
-      setAttributedRep('');
-      setProducts([]);
-      setShowAdvanced(false);
+      setDealName(''); setCloseDate(''); setAmount(''); setCurrency('USD'); setNotes('');
+      setOpportunityId(''); setDealType(''); setAttributionType('');
+      setContactMode(''); setContactAttendeeId(null);
+      setContactName(''); setContactTitle(''); setContactFunction(''); setContactSeniority('');
+      setAttributedReps([]); setAttributedConferences([]);
+      setProducts([]); setShowAdvanced(false);
     }
     setError('');
     if (targetCompanyId == null) {
-      setSelectedCompanyId(null);
-      setSelectedCompanyName('');
-      setCompanyQuery('');
-      setCompanyResults([]);
+      setSelectedCompanyId(null); setSelectedCompanyName('');
+      setCompanyQuery(''); setCompanyResults([]);
     }
-    setShowNewProductForm(false);
-    setNewProductName('');
-    setNewProductCategoryId('');
-    setCreateProductError('');
+    setShowNewProductForm(false); setNewProductName('');
+    setNewProductCategoryId(''); setCreateProductError('');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, editingDeal]);
 
-  // ── Sync draft label (for the minimized bar) ────────────────────────────────
+  // Sync draft label
   useEffect(() => {
     setDraftLabel(dealName.trim() || (isEditing ? 'Edit deal' : 'New deal'));
   }, [dealName, isEditing, setDraftLabel]);
 
-  // ── Company search debounce ─────────────────────────────────────────────────
+  // Company search debounce
   useEffect(() => {
     if (targetCompanyId != null) return;
     if (companyQuery.length < 2) { setCompanyResults([]); return; }
@@ -241,13 +311,21 @@ export function ClosedWonDealModal() {
     return () => { if (companyDebounce.current) clearTimeout(companyDebounce.current); };
   }, [companyQuery, targetCompanyId]);
 
-  // ── Close conference dropdown on outside click ──────────────────────────────
+  // Close rep dropdown on outside click
+  useEffect(() => {
+    if (!showRepDropdown) return;
+    const handler = (e: MouseEvent) => {
+      if (repDropdownRef.current && !repDropdownRef.current.contains(e.target as Node)) setShowRepDropdown(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showRepDropdown]);
+
+  // Close conference dropdown on outside click
   useEffect(() => {
     if (!showConferenceDropdown) return;
     const handler = (e: MouseEvent) => {
-      if (confDropdownRef.current && !confDropdownRef.current.contains(e.target as Node)) {
-        setShowConferenceDropdown(false);
-      }
+      if (confDropdownRef.current && !confDropdownRef.current.contains(e.target as Node)) setShowConferenceDropdown(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -255,7 +333,7 @@ export function ClosedWonDealModal() {
 
   if (!isOpen) return null;
 
-  // ── Derived values ──────────────────────────────────────────────────────────
+  // Derived values
   const computedTotal = products.reduce((sum, p) => {
     if (p.unit_price != null && p.quantity != null) return sum + p.unit_price * p.quantity;
     return sum;
@@ -268,15 +346,8 @@ export function ClosedWonDealModal() {
     return configCategories.find(c => c.id === opt.category_id) ?? null;
   };
 
-  // ── Handlers ────────────────────────────────────────────────────────────────
-  const handleAddProduct = () => {
-    setProducts(prev => [...prev, { ...EMPTY_PRODUCT(), sort_order: prev.length }]);
-  };
-
-  const handleRemoveProduct = (idx: number) => {
-    setProducts(prev => prev.filter((_, i) => i !== idx));
-  };
-
+  const handleAddProduct = () => setProducts(prev => [...prev, { ...EMPTY_PRODUCT(), sort_order: prev.length }]);
+  const handleRemoveProduct = (idx: number) => setProducts(prev => prev.filter((_, i) => i !== idx));
   const handleProductChange = (idx: number, field: keyof DealProduct, value: string) => {
     setProducts(prev => prev.map((p, i) => {
       if (i !== idx) return p;
@@ -289,22 +360,13 @@ export function ClosedWonDealModal() {
 
   const handleSelectAttendee = (attendeeId: number) => {
     if (attendeeId === -1) {
-      // "Other" selected
-      setContactMode('other');
-      setContactAttendeeId(null);
-      setContactName('');
-      setContactTitle('');
-      setContactFunction('');
-      setContactSeniority('');
+      setContactMode('other'); setContactAttendeeId(null);
+      setContactName(''); setContactTitle(''); setContactFunction(''); setContactSeniority('');
       return;
     }
     if (attendeeId === 0) {
-      setContactMode('');
-      setContactAttendeeId(null);
-      setContactName('');
-      setContactTitle('');
-      setContactFunction('');
-      setContactSeniority('');
+      setContactMode(''); setContactAttendeeId(null);
+      setContactName(''); setContactTitle(''); setContactFunction(''); setContactSeniority('');
       return;
     }
     const att = companyAttendees.find(a => a.id === attendeeId);
@@ -317,42 +379,21 @@ export function ClosedWonDealModal() {
     setContactSeniority(att.seniority || '');
   };
 
-  const handleToggleConference = (confName: string) => {
-    setAttributedConferences(prev =>
-      prev.includes(confName) ? prev.filter(c => c !== confName) : [...prev, confName]
-    );
-  };
-
   const handleCreateProduct = async () => {
     if (!newProductName.trim()) { setCreateProductError('Product name is required.'); return; }
-    setCreatingProduct(true);
-    setCreateProductError('');
+    setCreatingProduct(true); setCreateProductError('');
     try {
       const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          category: 'products',
-          value: newProductName.trim(),
-          category_id: newProductCategoryId !== '' ? Number(newProductCategoryId) : null,
-        }),
+        body: JSON.stringify({ category: 'products', value: newProductName.trim(), category_id: newProductCategoryId !== '' ? Number(newProductCategoryId) : null }),
       });
       const data = await res.json();
       if (!res.ok) { setCreateProductError(data.error || 'Failed to create product.'); return; }
-      setConfigProducts(prev => [...prev, {
-        id: Number(data.id),
-        value: String(data.value),
-        category_id: data.category_id != null ? Number(data.category_id) : null,
-        color: data.color ? String(data.color) : null,
-      }]);
-      setShowNewProductForm(false);
-      setNewProductName('');
-      setNewProductCategoryId('');
-    } catch {
-      setCreateProductError('Network error. Please try again.');
-    } finally {
-      setCreatingProduct(false);
-    }
+      setConfigProducts(prev => [...prev, { id: Number(data.id), value: String(data.value), category_id: data.category_id != null ? Number(data.category_id) : null, color: data.color ? String(data.color) : null }]);
+      setShowNewProductForm(false); setNewProductName(''); setNewProductCategoryId('');
+    } catch { setCreateProductError('Network error. Please try again.'); }
+    finally { setCreatingProduct(false); }
   };
 
   const handleSubmit = async () => {
@@ -360,14 +401,12 @@ export function ClosedWonDealModal() {
     if (!resolvedCompanyId) { setError('Please select a company.'); return; }
     if (!dealName.trim()) { setError('Deal name is required.'); return; }
     if (!closeDate.trim()) { setError('Close date is required.'); return; }
-
     setIsSubmitting(true);
     try {
-      const effectiveAmount = useComputedAmount ? computedTotal : (amount !== '' ? Number(amount) : null);
       const body = {
         deal_name: dealName.trim(),
         close_date: closeDate.trim(),
-        amount: effectiveAmount,
+        amount: useComputedAmount ? computedTotal : (amount !== '' ? Number(amount) : null),
         currency: currency || 'USD',
         notes: notes.trim() || null,
         opportunity_id: opportunityId.trim() || null,
@@ -379,47 +418,30 @@ export function ClosedWonDealModal() {
         contact_signor_seniority: contactSeniority.trim() || null,
         attributed_conference: attributedConferences.length > 0 ? JSON.stringify(attributedConferences) : null,
         attribution_type: attributionType.trim() || null,
-        attributed_rep: attributedRep.trim() || null,
-        products: products
-          .filter(p => p.product_name.trim())
-          .map((p, i) => ({ ...p, sort_order: i })),
+        attributed_rep: attributedReps.length > 0 ? JSON.stringify(attributedReps) : null,
+        products: products.filter(p => p.product_name.trim()).map((p, i) => ({ ...p, sort_order: i })),
       };
-
       const url = isEditing
         ? `/api/companies/${resolvedCompanyId}/closed-deals/${editingDeal!.id}`
         : `/api/companies/${resolvedCompanyId}/closed-deals`;
-
-      const res = await fetch(url, {
-        method: isEditing ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      const res = await fetch(url, { method: isEditing ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Something went wrong.'); return; }
-
-      window.dispatchEvent(new CustomEvent('closed-deal-saved', {
-        detail: { companyId: resolvedCompanyId, deal: data.deal },
-      }));
+      window.dispatchEvent(new CustomEvent('closed-deal-saved', { detail: { companyId: resolvedCompanyId, deal: data.deal } }));
       closeDeal();
-    } catch {
-      setError('Network error. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
+    } catch { setError('Network error. Please try again.'); }
+    finally { setIsSubmitting(false); }
   };
 
   const inputCls = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary';
   const labelCls = 'block text-xs font-medium text-gray-700 mb-1';
 
-  // Minimized — render nothing (bar is rendered by GlobalClosedDealBar in AppShell)
   if (isMinimized) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={minimizeDeal}>
-      <div
-        className="bg-white rounded-2xl shadow-2xl border border-brand-highlight w-full max-w-lg max-h-[90vh] flex flex-col"
-        onClick={e => e.stopPropagation()}
-      >
+      <div className="bg-white rounded-2xl shadow-2xl border border-brand-highlight w-full max-w-lg max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+
         {/* Header */}
         <div className="flex-shrink-0 flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
           <div>
@@ -465,13 +487,99 @@ export function ClosedWonDealModal() {
             </div>
           )}
 
-          {/* Deal name */}
+          {/* Deal Name */}
           <div>
             <label className={labelCls}>Deal Name <span className="text-red-500">*</span></label>
             <input type="text" value={dealName} onChange={e => setDealName(e.target.value)} placeholder="e.g. Acme Corp — Enterprise License" className={inputCls} />
           </div>
 
-          {/* Close date + Amount */}
+          {/* ── Contact / Signor ────────────────────────────────────────────── */}
+          <div>
+            <label className={labelCls}>Contact / Signor</label>
+            <select
+              value={contactMode === 'attendee' ? String(contactAttendeeId ?? '') : contactMode === 'other' ? '-1' : '0'}
+              onChange={e => handleSelectAttendee(Number(e.target.value))}
+              className={inputCls}
+              disabled={!resolvedCompanyId}
+            >
+              <option value="0">— Select contact —</option>
+              {companyAttendees.map(a => (
+                <option key={a.id} value={a.id}>
+                  {`${a.first_name} ${a.last_name}`.trim()}{a.title ? ` — ${a.title}` : ''}
+                </option>
+              ))}
+              <option value="-1">Other (enter manually)</option>
+            </select>
+            {!resolvedCompanyId && (
+              <p className="text-[10px] text-gray-400 mt-0.5">Select a company first to see contacts</p>
+            )}
+            {/* Attendee metadata badges */}
+            {contactMode === 'attendee' && contactTitle && (
+              <div className="flex items-center gap-2 mt-1.5 pl-0.5">
+                <span className="text-xs text-gray-500">{contactTitle}</span>
+                {contactFunction && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">{contactFunction}</span>}
+                {contactSeniority && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600">{contactSeniority}</span>}
+              </div>
+            )}
+            {/* "Other" custom fields */}
+            {contactMode === 'other' && (
+              <div className="mt-2 space-y-2 pl-1 border-l-2 border-gray-100">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className={labelCls}>Name</label>
+                    <input type="text" value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Full name" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Title</label>
+                    <input type="text" value={contactTitle} onChange={e => setContactTitle(e.target.value)} placeholder="Job title" className={inputCls} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className={labelCls}>Function</label>
+                    <select value={contactFunction} onChange={e => setContactFunction(e.target.value)} className={inputCls}>
+                      <option value="">— Select —</option>
+                      {configFunctions.map(f => <option key={f.id} value={f.value}>{f.value}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Seniority</label>
+                    <select value={contactSeniority} onChange={e => setContactSeniority(e.target.value)} className={inputCls}>
+                      <option value="">— Select —</option>
+                      {configSeniorities.map(s => <option key={s.id} value={s.value}>{s.value}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Attributed Rep (multiselect from config_options category=user) ─ */}
+          <MultiSelectField
+            label="Attributed Rep(s)"
+            options={configUsers}
+            selected={attributedReps}
+            onToggle={v => setAttributedReps(prev => prev.includes(v) ? prev.filter(r => r !== v) : [...prev, v])}
+            placeholder="Select reps…"
+            dropdownRef={repDropdownRef}
+            isOpen={showRepDropdown}
+            setIsOpen={setShowRepDropdown}
+          />
+
+          {/* ── Attributed Conference(s) ─────────────────────────────────────── */}
+          <MultiSelectField
+            label="Attributed Conference(s)"
+            options={companyConferences.map(c => ({ value: c.name }))}
+            selected={attributedConferences}
+            onToggle={v => setAttributedConferences(prev => prev.includes(v) ? prev.filter(c => c !== v) : [...prev, v])}
+            placeholder="Select conferences…"
+            disabledMessage={!resolvedCompanyId ? 'Select a company first' : undefined}
+            dropdownRef={confDropdownRef}
+            isOpen={showConferenceDropdown}
+            setIsOpen={setShowConferenceDropdown}
+          />
+
+          {/* ── Close date + Amount ──────────────────────────────────────────── */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Close Date <span className="text-red-500">*</span></label>
@@ -495,9 +603,7 @@ export function ClosedWonDealModal() {
                   <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary" />
                 </div>
               )}
-              {useComputedAmount && (
-                <p className="text-[10px] text-gray-400 mt-0.5">Calculated from products</p>
-              )}
+              {useComputedAmount && <p className="text-[10px] text-gray-400 mt-0.5">Calculated from products</p>}
             </div>
           </div>
 
@@ -526,10 +632,7 @@ export function ClosedWonDealModal() {
                 {products.map((p, i) => {
                   const cat = getCategoryForProduct(p.product_name);
                   const inConfig = configProducts.some(o => o.value === p.product_name);
-                  const extraOptions = (!inConfig && p.product_name)
-                    ? [{ id: -1, value: p.product_name, category_id: null, color: null }]
-                    : [];
-                  const allOptions = [...configProducts, ...extraOptions];
+                  const allOptions = [...configProducts, ...(!inConfig && p.product_name ? [{ id: -1, value: p.product_name, category_id: null, color: null }] : [])];
                   return (
                     <div key={i} className="space-y-0.5">
                       <div className="grid grid-cols-[1fr_56px_76px_20px] gap-1.5 items-center">
@@ -546,17 +649,12 @@ export function ClosedWonDealModal() {
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                       </div>
-                      {cat && (
-                        <div className="pl-0.5">
-                          <span className="inline-block text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">{cat.value}</span>
-                        </div>
-                      )}
+                      {cat && <div className="pl-0.5"><span className="inline-block text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">{cat.value}</span></div>}
                     </div>
                   );
                 })}
               </div>
             )}
-            {/* Inline new product form */}
             {!showNewProductForm ? (
               <button type="button" onClick={() => setShowNewProductForm(true)} className="mt-2 text-xs text-brand-primary hover:underline font-medium">+ Create new</button>
             ) : (
@@ -578,17 +676,14 @@ export function ClosedWonDealModal() {
             )}
           </div>
 
-          {/* Advanced details collapsible */}
+          {/* Advanced details — Opportunity ID, Deal Type, Attribution Type */}
           <div className="border border-gray-100 rounded-lg overflow-hidden">
             <button type="button" onClick={() => setShowAdvanced(v => !v)} className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors text-left">
               <span className="text-xs font-medium text-gray-600">Advanced details</span>
               <svg className={`w-4 h-4 text-gray-400 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
             </button>
-
             {showAdvanced && (
               <div className="px-4 py-3 space-y-3">
-
-                {/* Opportunity ID + Deal type */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className={labelCls}>Opportunity ID</label>
@@ -602,140 +697,13 @@ export function ClosedWonDealModal() {
                     </select>
                   </div>
                 </div>
-
-                {/* Contact / Signor */}
                 <div>
-                  <label className={labelCls}>Contact / Signor</label>
-                  <select
-                    value={contactMode === 'attendee' ? String(contactAttendeeId ?? '') : contactMode === 'other' ? '-1' : '0'}
-                    onChange={e => handleSelectAttendee(Number(e.target.value))}
-                    className={inputCls}
-                    disabled={!resolvedCompanyId}
-                  >
-                    <option value="0">— Select contact —</option>
-                    {companyAttendees.map(a => (
-                      <option key={a.id} value={a.id}>
-                        {`${a.first_name} ${a.last_name}`.trim()}{a.title ? ` — ${a.title}` : ''}
-                      </option>
-                    ))}
-                    <option value="-1">Other (enter manually)</option>
+                  <label className={labelCls}>Attribution Type</label>
+                  <select value={attributionType} onChange={e => setAttributionType(e.target.value)} className={inputCls}>
+                    <option value="">— Select —</option>
+                    {ATTRIBUTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
-                  {!resolvedCompanyId && (
-                    <p className="text-[10px] text-gray-400 mt-0.5">Select a company first to see contacts</p>
-                  )}
                 </div>
-
-                {/* Attendee selected — show read-only title */}
-                {contactMode === 'attendee' && contactTitle && (
-                  <div className="flex items-center gap-2 pl-1">
-                    <span className="text-xs text-gray-500">Title:</span>
-                    <span className="text-xs font-medium text-gray-700">{contactTitle}</span>
-                    {contactFunction && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">{contactFunction}</span>}
-                    {contactSeniority && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600">{contactSeniority}</span>}
-                  </div>
-                )}
-
-                {/* "Other" — custom fields */}
-                {contactMode === 'other' && (
-                  <div className="space-y-2 pl-1 border-l-2 border-gray-100">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className={labelCls}>Name</label>
-                        <input type="text" value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Full name" className={inputCls} />
-                      </div>
-                      <div>
-                        <label className={labelCls}>Title</label>
-                        <input type="text" value={contactTitle} onChange={e => setContactTitle(e.target.value)} placeholder="Job title" className={inputCls} />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className={labelCls}>Function</label>
-                        <select value={contactFunction} onChange={e => setContactFunction(e.target.value)} className={inputCls}>
-                          <option value="">— Select —</option>
-                          {configFunctions.map(f => <option key={f.id} value={f.value}>{f.value}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className={labelCls}>Seniority</label>
-                        <select value={contactSeniority} onChange={e => setContactSeniority(e.target.value)} className={inputCls}>
-                          <option value="">— Select —</option>
-                          {configSeniorities.map(s => <option key={s.id} value={s.value}>{s.value}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Attributed Conference(s) multiselect */}
-                <div>
-                  <label className={labelCls}>Attributed Conference(s)</label>
-                  <div className="relative" ref={confDropdownRef}>
-                    <button
-                      type="button"
-                      onClick={() => setShowConferenceDropdown(v => !v)}
-                      disabled={!resolvedCompanyId}
-                      className="w-full flex items-center justify-between border border-gray-300 rounded-lg px-3 py-2 text-sm text-left focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary disabled:opacity-50 disabled:bg-gray-50"
-                    >
-                      <span className="truncate text-gray-700">
-                        {attributedConferences.length === 0
-                          ? <span className="text-gray-400">{resolvedCompanyId ? 'Select conferences…' : 'Select a company first'}</span>
-                          : attributedConferences.length === 1
-                          ? attributedConferences[0]
-                          : `${attributedConferences.length} conferences selected`}
-                      </span>
-                      <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 ml-2 transition-transform ${showConferenceDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                    </button>
-                    {showConferenceDropdown && companyConferences.length > 0 && (
-                      <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                        {companyConferences.map(c => (
-                          <button key={c.id} type="button" onClick={() => handleToggleConference(c.name)} className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-blue-50 transition-colors text-left">
-                            <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${attributedConferences.includes(c.name) ? 'bg-brand-primary border-brand-primary' : 'border-gray-300'}`}>
-                              {attributedConferences.includes(c.name) && (
-                                <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                              )}
-                            </div>
-                            <span className={attributedConferences.includes(c.name) ? 'text-brand-primary font-medium' : 'text-gray-700'}>{c.name}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {showConferenceDropdown && companyConferences.length === 0 && (
-                      <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2">
-                        <p className="text-xs text-gray-400">No conferences found for this company.</p>
-                      </div>
-                    )}
-                  </div>
-                  {/* Selected chips */}
-                  {attributedConferences.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {attributedConferences.map(c => (
-                        <span key={c} className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5">
-                          {c}
-                          <button type="button" onClick={() => handleToggleConference(c)} className="text-blue-400 hover:text-blue-600">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Attribution type + Rep */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={labelCls}>Attribution Type</label>
-                    <select value={attributionType} onChange={e => setAttributionType(e.target.value)} className={inputCls}>
-                      <option value="">— Select —</option>
-                      {ATTRIBUTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelCls}>Attributed Rep</label>
-                    <input type="text" value={attributedRep} onChange={e => setAttributedRep(e.target.value)} placeholder="Sales rep name" className={inputCls} />
-                  </div>
-                </div>
-
               </div>
             )}
           </div>
