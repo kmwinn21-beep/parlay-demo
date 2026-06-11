@@ -1313,4 +1313,16 @@ export const migrations: string[] = [
     unit_price REAL,
     sort_order INTEGER DEFAULT 0
   )`,
+  // 459 — closed_deals: external CRM opportunity ID
+  `ALTER TABLE closed_deals ADD COLUMN opportunity_id TEXT`,
+  // 460 — closed_deals: deal type (New Business, Upsell, Renewal, etc.)
+  `ALTER TABLE closed_deals ADD COLUMN deal_type TEXT`,
+  // 461 — closed_deals: contact / signor name
+  `ALTER TABLE closed_deals ADD COLUMN contact_signor TEXT`,
+  // 462 — closed_deals: attributed conference name
+  `ALTER TABLE closed_deals ADD COLUMN attributed_conference TEXT`,
+  // 463 — closed_deals: attribution type (Direct Source, Influenced, etc.)
+  `ALTER TABLE closed_deals ADD COLUMN attribution_type TEXT`,
+  // 464 — closed_deals: attributed sales rep name
+  `ALTER TABLE closed_deals ADD COLUMN attributed_rep TEXT`,
 ];

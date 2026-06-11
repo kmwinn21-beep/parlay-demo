@@ -17,7 +17,9 @@ export async function GET(
 
   const dealsRes = await db.execute({
     sql: `SELECT d.id, d.company_id, d.deal_name, d.close_date, d.amount, d.currency,
-                 d.notes, d.created_by_user_id, d.created_at, d.updated_at,
+                 d.notes, d.opportunity_id, d.deal_type, d.contact_signor,
+                 d.attributed_conference, d.attribution_type, d.attributed_rep,
+                 d.created_by_user_id, d.created_at, d.updated_at,
                  u.display_name as created_by_name
           FROM closed_deals d
           LEFT JOIN users u ON u.id = d.created_by_user_id
@@ -59,6 +61,12 @@ export async function GET(
     amount: r.amount != null ? Number(r.amount) : null,
     currency: String(r.currency ?? 'USD'),
     notes: r.notes ? String(r.notes) : null,
+    opportunity_id: r.opportunity_id ? String(r.opportunity_id) : null,
+    deal_type: r.deal_type ? String(r.deal_type) : null,
+    contact_signor: r.contact_signor ? String(r.contact_signor) : null,
+    attributed_conference: r.attributed_conference ? String(r.attributed_conference) : null,
+    attribution_type: r.attribution_type ? String(r.attribution_type) : null,
+    attributed_rep: r.attributed_rep ? String(r.attributed_rep) : null,
     created_by_user_id: r.created_by_user_id != null ? Number(r.created_by_user_id) : null,
     created_by_name: r.created_by_name ? String(r.created_by_name) : null,
     created_at: String(r.created_at),
@@ -83,14 +91,17 @@ export async function POST(
   if (isNaN(companyId)) return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
 
   const body = await request.json();
-  const { deal_name, close_date, amount, currency, notes, products } = body;
+  const { deal_name, close_date, amount, currency, notes, products,
+          opportunity_id, deal_type, contact_signor, attributed_conference, attribution_type, attributed_rep } = body;
 
   if (!deal_name?.trim()) return NextResponse.json({ error: 'deal_name is required' }, { status: 400 });
   if (!close_date?.trim()) return NextResponse.json({ error: 'close_date is required' }, { status: 400 });
 
   const result = await db.execute({
-    sql: `INSERT INTO closed_deals (company_id, deal_name, close_date, amount, currency, notes, created_by_user_id, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    sql: `INSERT INTO closed_deals (company_id, deal_name, close_date, amount, currency, notes,
+                 opportunity_id, deal_type, contact_signor, attributed_conference, attribution_type, attributed_rep,
+                 created_by_user_id, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
     args: [
       companyId,
       deal_name.trim(),
@@ -98,6 +109,12 @@ export async function POST(
       amount != null ? Number(amount) : null,
       currency?.trim() || 'USD',
       notes?.trim() || null,
+      opportunity_id?.trim() || null,
+      deal_type?.trim() || null,
+      contact_signor?.trim() || null,
+      attributed_conference?.trim() || null,
+      attribution_type?.trim() || null,
+      attributed_rep?.trim() || null,
       authResult.id,
     ],
   });
@@ -138,6 +155,12 @@ export async function POST(
     amount: amount != null ? Number(amount) : null,
     currency: currency?.trim() || 'USD',
     notes: notes?.trim() || null,
+    opportunity_id: opportunity_id?.trim() || null,
+    deal_type: deal_type?.trim() || null,
+    contact_signor: contact_signor?.trim() || null,
+    attributed_conference: attributed_conference?.trim() || null,
+    attribution_type: attribution_type?.trim() || null,
+    attributed_rep: attributed_rep?.trim() || null,
     created_by_user_id: authResult.id,
     created_by_name: null,
     created_at: new Date().toISOString().replace('T', ' ').slice(0, 19),

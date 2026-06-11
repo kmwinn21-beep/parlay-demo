@@ -165,6 +165,28 @@ export function ClosedWonDealsSection({
                     {deal.notes && (
                       <p className="text-xs text-gray-600 mt-2 mb-2 leading-relaxed">{deal.notes}</p>
                     )}
+                    {(deal.deal_type || deal.attributed_conference || deal.attribution_type || deal.attributed_rep || deal.contact_signor || deal.opportunity_id) && (
+                      <div className="mt-2 mb-2 flex flex-wrap gap-x-4 gap-y-1">
+                        {deal.deal_type && (
+                          <span className="text-xs text-gray-500"><span className="text-gray-400">Type:</span> {deal.deal_type}</span>
+                        )}
+                        {deal.attributed_conference && (
+                          <span className="text-xs text-gray-500"><span className="text-gray-400">Conference:</span> {deal.attributed_conference}</span>
+                        )}
+                        {deal.attribution_type && (
+                          <span className="text-xs text-gray-500"><span className="text-gray-400">Attribution:</span> {deal.attribution_type}</span>
+                        )}
+                        {deal.attributed_rep && (
+                          <span className="text-xs text-gray-500"><span className="text-gray-400">Rep:</span> {deal.attributed_rep}</span>
+                        )}
+                        {deal.contact_signor && (
+                          <span className="text-xs text-gray-500"><span className="text-gray-400">Signor:</span> {deal.contact_signor}</span>
+                        )}
+                        {deal.opportunity_id && (
+                          <span className="text-xs text-gray-500"><span className="text-gray-400">Opp ID:</span> {deal.opportunity_id}</span>
+                        )}
+                      </div>
+                    )}
                     {deal.products.length > 0 && (
                       <div className="mt-2 mb-3">
                         <table className="w-full text-xs">

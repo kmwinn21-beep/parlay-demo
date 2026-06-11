@@ -25,14 +25,18 @@ export async function PUT(
   if (!existing.rows[0]) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const body = await request.json();
-  const { deal_name, close_date, amount, currency, notes, products } = body;
+  const { deal_name, close_date, amount, currency, notes, products,
+          opportunity_id, deal_type, contact_signor, attributed_conference, attribution_type, attributed_rep } = body;
 
   if (!deal_name?.trim()) return NextResponse.json({ error: 'deal_name is required' }, { status: 400 });
   if (!close_date?.trim()) return NextResponse.json({ error: 'close_date is required' }, { status: 400 });
 
   await db.execute({
     sql: `UPDATE closed_deals
-          SET deal_name = ?, close_date = ?, amount = ?, currency = ?, notes = ?, updated_at = datetime('now')
+          SET deal_name = ?, close_date = ?, amount = ?, currency = ?, notes = ?,
+              opportunity_id = ?, deal_type = ?, contact_signor = ?,
+              attributed_conference = ?, attribution_type = ?, attributed_rep = ?,
+              updated_at = datetime('now')
           WHERE id = ? AND company_id = ?`,
     args: [
       deal_name.trim(),
@@ -40,6 +44,12 @@ export async function PUT(
       amount != null ? Number(amount) : null,
       currency?.trim() || 'USD',
       notes?.trim() || null,
+      opportunity_id?.trim() || null,
+      deal_type?.trim() || null,
+      contact_signor?.trim() || null,
+      attributed_conference?.trim() || null,
+      attribution_type?.trim() || null,
+      attributed_rep?.trim() || null,
       dealIdNum,
       companyId,
     ],
@@ -85,6 +95,12 @@ export async function PUT(
     amount: amount != null ? Number(amount) : null,
     currency: currency?.trim() || 'USD',
     notes: notes?.trim() || null,
+    opportunity_id: opportunity_id?.trim() || null,
+    deal_type: deal_type?.trim() || null,
+    contact_signor: contact_signor?.trim() || null,
+    attributed_conference: attributed_conference?.trim() || null,
+    attribution_type: attribution_type?.trim() || null,
+    attributed_rep: attributed_rep?.trim() || null,
     updated_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
     products: insertedProducts,
   };
