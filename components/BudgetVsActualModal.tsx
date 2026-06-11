@@ -74,6 +74,10 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose, onS
   const [showAddDropdown, setShowAddDropdown] = useState(false);
   const addDropdownRef = useRef<HTMLDivElement>(null);
 
+  type PostSaveItem = { label: string; decision: 'one-time' | 'add-cost-type' | null };
+  const [postSaveItems, setPostSaveItems] = useState<PostSaveItem[]>([]);
+  const [savingDecision, setSavingDecision] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -163,6 +167,29 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose, onS
     setLabelDraft('');
   };
 
+  const handleDecision = async (label: string, decision: 'one-time' | 'add-cost-type') => {
+    if (decision === 'add-cost-type') {
+      setSavingDecision(label);
+      try {
+        const res = await fetch('/api/config/cost-type', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ value: label }),
+        });
+        if (!res.ok) throw new Error();
+        const created = await res.json();
+        setAvailableCostTypes(prev => prev.includes(created.value) ? prev : [...prev, created.value]);
+        toast.success(`"${label}" added as a Cost Type.`);
+      } catch {
+        toast.error(`Failed to add "${label}" as a Cost Type.`);
+      } finally {
+        setSavingDecision(null);
+      }
+    }
+    setPostSaveItems(prev => prev.map(it => it.label === label ? { ...it, decision } : it));
+  };
+
   const handleSave = async () => {
     const requiredMult = parseDollar(requiredPipelineMultiple);
     if (requiredMult == null || requiredMult <= 0) {
@@ -182,6 +209,24 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose, onS
       });
       if (!res.ok) throw new Error();
       toast.success('Budget saved successfully.');
+
+      // Detect custom labels (not in availableCostTypes, not 'Other')
+      const knownLabels = new Set([...availableCostTypes, 'Other']);
+      const customItems = items.filter(it => it.label && !knownLabels.has(it.label));
+      if (customItems.length > 0) {
+        setPostSaveItems(customItems.map(it => ({ label: it.label, decision: null })));
+        if (onSaved) {
+          const budgetTotal = items.reduce((sum, it) => sum + (parseDollar(it.budget) ?? 0), 0);
+          const returnOnCostNum = parseDollar(returnOnCost) ?? 0;
+          const expectedReturn = returnOnCostNum > 0 ? budgetTotal * returnOnCostNum : 0;
+          const mult = parseDollar(requiredPipelineMultiple) ?? 3.5;
+          const requiredPipelineAmount = expectedReturn > 0 ? expectedReturn * mult : null;
+          onSaved({ line_items: items, return_on_cost: returnOnCost.trim() || null, required_pipeline_amount: requiredPipelineAmount, required_pipeline_multiple: requiredPipelineMultiple.trim() || '3.5' });
+        }
+        setIsSaving(false);
+        return;
+      }
+
       if (onSaved) {
         const budgetTotal = items.reduce((sum, it) => sum + (parseDollar(it.budget) ?? 0), 0);
         const returnOnCostNum = parseDollar(returnOnCost) ?? 0;
@@ -253,7 +298,50 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose, onS
         {/* Body */}
         <fieldset disabled={readOnly} className="contents">
         <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
-          {isLoading ? (
+          {postSaveItems.length > 0 ? (
+            <div className="py-2">
+              <p className="text-sm text-gray-600 mb-4">
+                You added custom line items. How would you like to handle them?
+              </p>
+              {/* Column headers */}
+              <div className="grid grid-cols-[1fr_100px_130px] gap-3 mb-2 px-1">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Line Item</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide text-center">One-time</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide text-center">Add Cost Type</p>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {postSaveItems.map(item => (
+                  <div key={item.label} className="grid grid-cols-[1fr_100px_130px] gap-3 items-center py-3 px-1">
+                    <span className="text-sm font-medium text-gray-800 truncate">{item.label}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleDecision(item.label, 'one-time')}
+                      disabled={savingDecision === item.label}
+                      className={`w-full py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                        item.decision === 'one-time'
+                          ? 'bg-gray-800 text-white border-gray-800'
+                          : 'bg-white text-gray-600 border-gray-300 hover:border-gray-500'
+                      }`}
+                    >
+                      One-time
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDecision(item.label, 'add-cost-type')}
+                      disabled={savingDecision === item.label}
+                      className={`w-full py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                        item.decision === 'add-cost-type'
+                          ? 'bg-brand-secondary text-white border-brand-secondary'
+                          : 'bg-white text-brand-secondary border-brand-secondary hover:bg-blue-50'
+                      } disabled:opacity-50`}
+                    >
+                      {savingDecision === item.label ? 'Saving…' : 'Add Cost Type'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : isLoading ? (
             <div className="flex items-center justify-center py-16">
               <div className="animate-spin w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full" />
             </div>
@@ -546,21 +634,29 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose, onS
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-4 sm:px-6 py-4 border-t border-gray-200 flex-shrink-0">
-          {readOnly && (
-            <span className="text-xs text-gray-500 mr-auto">Read-only — conference is closed.</span>
-          )}
-          <button type="button" onClick={onClose} className="btn-secondary text-sm">
-            {readOnly ? 'Close' : 'Cancel'}
-          </button>
-          {!readOnly && (
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving || isLoading}
-              className="btn-primary text-sm"
-            >
-              {isSaving ? 'Saving…' : 'Save'}
+          {postSaveItems.length > 0 ? (
+            <button type="button" onClick={onClose} className="btn-primary text-sm">
+              Done
             </button>
+          ) : (
+            <>
+              {readOnly && (
+                <span className="text-xs text-gray-500 mr-auto">Read-only — conference is closed.</span>
+              )}
+              <button type="button" onClick={onClose} className="btn-secondary text-sm">
+                {readOnly ? 'Close' : 'Cancel'}
+              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={isSaving || isLoading}
+                  className="btn-primary text-sm"
+                >
+                  {isSaving ? 'Saving…' : 'Save'}
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>

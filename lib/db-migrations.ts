@@ -1287,4 +1287,8 @@ export const migrations: string[] = [
   `ALTER TABLE users ADD COLUMN clerk_id TEXT`,
   // 454 — users: unique index on clerk_id
   `CREATE UNIQUE INDEX IF NOT EXISTS users_clerk_id_idx ON users(clerk_id)`,
+  // 455 — config_options: seed 'Booth' cost type for existing tenants
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('cost_type', 'Booth', 10)`,
+  // 456 — effectiveness_defaults: seed conference_cost_types if not already set
+  `INSERT OR IGNORE INTO effectiveness_defaults (key, value) VALUES ('conference_cost_types', '["Registration","Sponsorship","Swag","Booth","Booth Setup","Travel","Lodging","Entertainment","Meals","Other"]')`,
 ];
