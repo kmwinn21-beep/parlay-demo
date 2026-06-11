@@ -1291,4 +1291,26 @@ export const migrations: string[] = [
   `INSERT OR IGNORE INTO config_options (category, value, sort_order) VALUES ('cost_type', 'Booth', 10)`,
   // 456 — effectiveness_defaults: seed conference_cost_types if not already set
   `INSERT OR IGNORE INTO effectiveness_defaults (key, value) VALUES ('conference_cost_types', '["Registration","Sponsorship","Swag","Booth","Booth Setup","Travel","Lodging","Entertainment","Meals","Other"]')`,
+  // 457 — closed_deals: track closed/won deals linked to companies
+  `CREATE TABLE IF NOT EXISTS closed_deals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    deal_name TEXT NOT NULL,
+    close_date TEXT NOT NULL,
+    amount REAL,
+    currency TEXT DEFAULT 'USD',
+    notes TEXT,
+    created_by_user_id INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  // 458 — closed_deal_products: products/services on each closed deal
+  `CREATE TABLE IF NOT EXISTS closed_deal_products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    deal_id INTEGER NOT NULL REFERENCES closed_deals(id) ON DELETE CASCADE,
+    product_name TEXT NOT NULL,
+    quantity INTEGER DEFAULT 1,
+    unit_price REAL,
+    sort_order INTEGER DEFAULT 0
+  )`,
 ];
