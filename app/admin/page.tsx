@@ -2178,17 +2178,10 @@ export default function AdminPage() {
                 </button>
               </div>
             </div>
-            <div className="flex gap-6">
-              <div className="flex-1 flex flex-col gap-6">
-                {CATEGORIES.filter((_, i) => i % 2 === 0).map(cat => (
-                  <CategorySection key={cat.key} category={cat.key} label={cat.label} options={optionsByCategory[cat.key] || []} onRefresh={fetchAll} categoryOptions={cat.key === 'products' ? (optionsByCategory['product_category'] || []).filter(c => !c.is_system) : []} defaultCategoryLabel={cat.key === 'products' ? ((optionsByCategory['product_category'] || []).find(c => c.is_system)?.value ?? 'General') : 'General'} />
-                ))}
-              </div>
-              <div className="flex-1 flex flex-col gap-6">
-                {CATEGORIES.filter((_, i) => i % 2 === 1).map(cat => (
-                  <CategorySection key={cat.key} category={cat.key} label={cat.label} options={optionsByCategory[cat.key] || []} onRefresh={fetchAll} categoryOptions={cat.key === 'products' ? (optionsByCategory['product_category'] || []).filter(c => !c.is_system) : []} defaultCategoryLabel={cat.key === 'products' ? ((optionsByCategory['product_category'] || []).find(c => c.is_system)?.value ?? 'General') : 'General'} />
-                ))}
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {CATEGORIES.map(cat => (
+                <CategorySection key={cat.key} category={cat.key} label={cat.label} options={optionsByCategory[cat.key] || []} onRefresh={fetchAll} categoryOptions={cat.key === 'products' ? (optionsByCategory['product_category'] || []).filter(c => !c.is_system) : []} defaultCategoryLabel={cat.key === 'products' ? ((optionsByCategory['product_category'] || []).find(c => c.is_system)?.value ?? 'General') : 'General'} />
+              ))}
             </div>
           </div>
         )
