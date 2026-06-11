@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useClosedDealDraft, type ClosedDeal } from '@/lib/ClosedDealDraftContext';
 
 export type { ClosedDeal };
@@ -26,7 +26,7 @@ function formatDate(dateStr: string): string {
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function parseAttributedConferences(raw: string | null): string[] {
+function parseJsonArray(raw: string | null): string[] {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
@@ -35,6 +35,26 @@ function parseAttributedConferences(raw: string | null): string[] {
     return [raw];
   }
 }
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0][0]?.toUpperCase() ?? '?';
+  return ((parts[0][0] ?? '') + (parts[parts.length - 1][0] ?? '')).toUpperCase();
+}
+
+function attributedAmount(deal: ClosedDeal): number {
+  if (deal.amount == null) return 0;
+  if (!deal.attribution_type || deal.attribution_type === 'None') return 0;
+  if (deal.attribution_type === 'Direct Source') return deal.amount;
+  // Influenced / Accelerated
+  return deal.amount * ((deal.attribution_pct ?? 50) / 100);
+}
+
+const ATTRIBUTION_PILL: Record<string, string> = {
+  'Direct Source': 'bg-green-50 text-green-700 border-green-200',
+  'Influenced': 'bg-blue-50 text-blue-700 border-blue-200',
+  'Accelerated': 'bg-yellow-50 text-yellow-700 border-yellow-200',
+};
 
 export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = true }: ClosedWonDealsSectionProps) {
   const { openDeal } = useClosedDealDraft();
@@ -83,9 +103,17 @@ export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = 
     });
   };
 
-  const totalAmount = deals.reduce((sum, d) => d.amount != null ? sum + d.amount : sum, 0);
-  const hasMixedCurrencies = new Set(deals.filter(d => d.amount != null).map(d => d.currency)).size > 1;
-  const primaryCurrency = deals.find(d => d.amount != null)?.currency ?? 'USD';
+  // Summary calculations
+  const dealsWithAmount = deals.filter(d => d.amount != null);
+  const hasMixedCurrencies = new Set(dealsWithAmount.map(d => d.currency)).size > 1;
+  const primaryCurrency = dealsWithAmount[0]?.currency ?? 'USD';
+  const totalAmount = dealsWithAmount.reduce((sum, d) => sum + d.amount!, 0);
+  const totalAttributed = deals.reduce((sum, d) => sum + attributedAmount(d), 0);
+
+  // Unique attributed conference names across all deals
+  const allAttributedConferences = Array.from(
+    new Set(deals.flatMap(d => parseJsonArray(d.attributed_conference)))
+  ).filter(Boolean);
 
   return (
     <>
@@ -103,10 +131,54 @@ export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = 
         )}
       </div>
 
-      {deals.length > 0 && !hasMixedCurrencies && totalAmount > 0 && (
-        <div className="mb-3 px-3 py-2 bg-green-50 border border-green-100 rounded-lg">
-          <p className="text-xs text-gray-500">Total Value</p>
-          <p className="text-sm font-semibold text-gray-800">{formatCurrency(totalAmount, primaryCurrency)}</p>
+      {/* Summary cards row */}
+      {deals.length > 0 && !hasMixedCurrencies && (
+        <div
+          className="flex gap-2 mb-2 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+          style={{ scrollbarWidth: 'none' } as React.CSSProperties}
+        >
+          {/* Deals count */}
+          <div className="flex-shrink-0 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg min-w-[80px]">
+            <p className="text-xs text-gray-500 whitespace-nowrap">Deals</p>
+            <p className="text-sm font-semibold text-gray-800">{deals.length}</p>
+          </div>
+
+          {/* Total Value */}
+          {totalAmount > 0 && (
+            <div className="flex-shrink-0 px-3 py-2 bg-green-50 border border-green-100 rounded-lg min-w-[100px]">
+              <p className="text-xs text-gray-500 whitespace-nowrap">Total Value</p>
+              <p className="text-sm font-semibold text-gray-800">{formatCurrency(totalAmount, primaryCurrency)}</p>
+            </div>
+          )}
+
+          {/* Attributed Value */}
+          {totalAttributed > 0 && (
+            <div
+              className="flex-shrink-0 px-3 py-2 rounded-lg min-w-[110px]"
+              style={{
+                borderWidth: 1,
+                borderStyle: 'solid',
+                borderColor: 'rgb(var(--brand-primary-rgb))',
+                backgroundColor: 'rgb(var(--brand-primary-rgb) / 0.06)',
+              }}
+            >
+              <p className="text-xs text-brand-primary whitespace-nowrap">Attributed Value</p>
+              <p className="text-sm font-semibold text-brand-primary">{formatCurrency(totalAttributed, primaryCurrency)}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Attributed conferences pill row */}
+      {allAttributedConferences.length > 0 && (
+        <div
+          className="flex gap-1.5 flex-wrap mb-3"
+        >
+          {allAttributedConferences.map(conf => (
+            <span key={conf} className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-medium">
+              {conf}
+            </span>
+          ))}
         </div>
       )}
 
@@ -118,7 +190,8 @@ export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = 
             const isExpanded = expandedIds.has(deal.id);
             const isConfirmingDelete = deleteConfirmId === deal.id;
             const isDeleting = deletingId === deal.id;
-            const confList = parseAttributedConferences(deal.attributed_conference);
+            const confList = parseJsonArray(deal.attributed_conference);
+            const repList = parseJsonArray(deal.attributed_rep);
 
             return (
               <div key={deal.id} className="border border-gray-100 rounded-lg overflow-hidden">
@@ -144,22 +217,45 @@ export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = 
                   <div className="px-3 pb-3 border-t border-gray-100 bg-gray-50">
                     {deal.notes && <p className="text-xs text-gray-600 mt-2 mb-2 leading-relaxed">{deal.notes}</p>}
 
-                    {/* Metadata */}
-                    {(deal.deal_type || deal.attribution_type || deal.attributed_rep || deal.contact_signor || deal.opportunity_id) && (
-                      <div className="mt-2 mb-2 flex flex-wrap gap-x-4 gap-y-1">
-                        {deal.deal_type && <span className="text-xs text-gray-500"><span className="text-gray-400">Type:</span> {deal.deal_type}</span>}
-                        {deal.attribution_type && <span className="text-xs text-gray-500"><span className="text-gray-400">Attribution:</span> {deal.attribution_type}</span>}
-                        {deal.attributed_rep && <span className="text-xs text-gray-500"><span className="text-gray-400">Rep:</span> {parseAttributedConferences(deal.attributed_rep).join(', ')}</span>}
+                    {/* Metadata row */}
+                    {(deal.deal_type || deal.attribution_type || repList.length > 0 || deal.contact_signor || deal.opportunity_id) && (
+                      <div className="mt-2 mb-2 flex flex-wrap gap-x-4 gap-y-1.5 items-center">
+                        {deal.deal_type && (
+                          <span className="text-xs text-gray-500"><span className="text-gray-400">Type:</span> {deal.deal_type}</span>
+                        )}
+                        {deal.attribution_type && deal.attribution_type !== 'None' && (() => {
+                          const cls = ATTRIBUTION_PILL[deal.attribution_type] ?? 'bg-gray-50 text-gray-600 border-gray-200';
+                          return (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs font-medium ${cls}`}>
+                              {deal.attribution_type}
+                            </span>
+                          );
+                        })()}
+                        {repList.length > 0 && (
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {repList.map(rep => (
+                              <span key={rep} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-200 text-xs font-medium">
+                                <svg className="w-3 h-3 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                                {getInitials(rep)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         {deal.contact_signor && (
                           <span className="text-xs text-gray-500">
                             <span className="text-gray-400">Signor:</span> {deal.contact_signor}
                             {deal.contact_signor_title && <span className="text-gray-400"> ({deal.contact_signor_title})</span>}
                           </span>
                         )}
-                        {deal.opportunity_id && <span className="text-xs text-gray-500"><span className="text-gray-400">Opp ID:</span> {deal.opportunity_id}</span>}
+                        {deal.opportunity_id && (
+                          <span className="text-xs text-gray-500"><span className="text-gray-400">Opp ID:</span> {deal.opportunity_id}</span>
+                        )}
                       </div>
                     )}
 
+                    {/* Products table */}
                     {deal.products.length > 0 && (
                       <div className="mt-2 mb-3">
                         <table className="w-full text-xs">
@@ -185,8 +281,8 @@ export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = 
                       </div>
                     )}
 
-                    {/* Attribution breakdown */}
-                    {confList.length > 0 && deal.attribution_type && (deal.attribution_type === 'Influenced' || deal.attribution_type === 'Accelerated') && (
+                    {/* Attribution breakdown — Influenced or Accelerated only */}
+                    {confList.length > 0 && deal.attribution_type && deal.attribution_type !== 'None' && deal.attribution_type !== 'Direct Source' && (
                       <div className="mt-2 mb-3">
                         <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide mb-1.5">Attribution</p>
                         <table className="w-full text-xs">
@@ -199,18 +295,18 @@ export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = 
                           </thead>
                           <tbody className="divide-y divide-gray-100">
                             {confList.map((conf, ci) => {
-                              const pct = deal.attribution_pct ?? 50;
-                              const totalAttributed = deal.amount != null ? deal.amount * (pct / 100) : null;
-                              const perConf = totalAttributed != null ? totalAttributed / confList.length : null;
+                              const totalPct = deal.attribution_pct ?? 50;
+                              const perConfPct = totalPct / confList.length;
+                              const perConfAmt = deal.amount != null ? deal.amount * (perConfPct / 100) : null;
                               return (
                                 <tr key={ci} className="text-gray-700">
                                   <td className="py-1 pr-2">
                                     <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-medium">{conf}</span>
                                   </td>
-                                  <td className="py-1 text-right text-gray-500">{pct}%</td>
+                                  <td className="py-1 text-right text-gray-500">{Math.round(perConfPct * 10) / 10}%</td>
                                   <td className="py-1 text-right">
-                                    {perConf != null ? (
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-100 text-[11px] font-medium">{formatCurrency(perConf, deal.currency)}</span>
+                                    {perConfAmt != null ? (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-100 text-[11px] font-medium">{formatCurrency(perConfAmt, deal.currency)}</span>
                                     ) : '—'}
                                   </td>
                                 </tr>
