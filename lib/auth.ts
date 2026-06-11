@@ -134,6 +134,22 @@ export async function verifyToken(token: string): Promise<SessionUser | null> {
 
 /** For middleware and API route handlers — uses the request object */
 export async function getSessionUser(request: NextRequest): Promise<SessionUser | null> {
+  // Try Clerk first when configured (SSO users have no auth_token cookie).
+  if (process.env.CLERK_SECRET_KEY) {
+    try {
+      const { getClerkSessionUser } = await import('./clerkAuth');
+      const clerkUser = await getClerkSessionUser();
+      if (clerkUser) {
+        return {
+          id: clerkUser.id,
+          email: clerkUser.email,
+          role: clerkUser.role as UserRole,
+          emailVerified: Boolean(clerkUser.emailVerified),
+          accountId: clerkUser.accountId,
+        };
+      }
+    } catch { /* fall through to JWT cookie */ }
+  }
   const token = request.cookies.get(COOKIE_NAME)?.value;
   if (!token) return null;
   return verifyToken(token);
