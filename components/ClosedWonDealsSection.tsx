@@ -144,11 +144,10 @@ export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = 
                   <div className="px-3 pb-3 border-t border-gray-100 bg-gray-50">
                     {deal.notes && <p className="text-xs text-gray-600 mt-2 mb-2 leading-relaxed">{deal.notes}</p>}
 
-                    {/* Advanced metadata */}
-                    {(deal.deal_type || deal.attributed_conference || deal.attribution_type || deal.attributed_rep || deal.contact_signor || deal.opportunity_id) && (
+                    {/* Metadata */}
+                    {(deal.deal_type || deal.attribution_type || deal.attributed_rep || deal.contact_signor || deal.opportunity_id) && (
                       <div className="mt-2 mb-2 flex flex-wrap gap-x-4 gap-y-1">
                         {deal.deal_type && <span className="text-xs text-gray-500"><span className="text-gray-400">Type:</span> {deal.deal_type}</span>}
-                        {confList.length > 0 && <span className="text-xs text-gray-500"><span className="text-gray-400">Conference{confList.length > 1 ? 's' : ''}:</span> {confList.join(', ')}</span>}
                         {deal.attribution_type && <span className="text-xs text-gray-500"><span className="text-gray-400">Attribution:</span> {deal.attribution_type}</span>}
                         {deal.attributed_rep && <span className="text-xs text-gray-500"><span className="text-gray-400">Rep:</span> {parseAttributedConferences(deal.attributed_rep).join(', ')}</span>}
                         {deal.contact_signor && (
@@ -181,6 +180,42 @@ export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = 
                                 <td className="py-0.5 text-right font-medium">{p.unit_price != null && p.quantity != null ? formatCurrency(p.unit_price * p.quantity, deal.currency) : '—'}</td>
                               </tr>
                             ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* Attribution breakdown */}
+                    {confList.length > 0 && deal.attribution_type && (deal.attribution_type === 'Influenced' || deal.attribution_type === 'Accelerated') && (
+                      <div className="mt-2 mb-3">
+                        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide mb-1.5">Attribution</p>
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-gray-400">
+                              <th className="text-left font-medium pb-1">Conference</th>
+                              <th className="text-right font-medium pb-1 w-10">%</th>
+                              <th className="text-right font-medium pb-1 w-24">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {confList.map((conf, ci) => {
+                              const pct = deal.attribution_pct ?? 50;
+                              const totalAttributed = deal.amount != null ? deal.amount * (pct / 100) : null;
+                              const perConf = totalAttributed != null ? totalAttributed / confList.length : null;
+                              return (
+                                <tr key={ci} className="text-gray-700">
+                                  <td className="py-1 pr-2">
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-medium">{conf}</span>
+                                  </td>
+                                  <td className="py-1 text-right text-gray-500">{pct}%</td>
+                                  <td className="py-1 text-right">
+                                    {perConf != null ? (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-100 text-[11px] font-medium">{formatCurrency(perConf, deal.currency)}</span>
+                                    ) : '—'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>

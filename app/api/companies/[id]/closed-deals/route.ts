@@ -20,7 +20,7 @@ export async function GET(
                  d.notes, d.opportunity_id, d.deal_type,
                  d.contact_signor, d.contact_signor_attendee_id, d.contact_signor_title,
                  d.contact_signor_function, d.contact_signor_seniority,
-                 d.attributed_conference, d.attribution_type, d.attributed_rep,
+                 d.attributed_conference, d.attribution_type, d.attribution_pct, d.attributed_rep,
                  d.created_by_user_id, d.created_at, d.updated_at,
                  u.display_name as created_by_name
           FROM closed_deals d
@@ -72,6 +72,7 @@ export async function GET(
     contact_signor_seniority: r.contact_signor_seniority ? String(r.contact_signor_seniority) : null,
     attributed_conference: r.attributed_conference ? String(r.attributed_conference) : null,
     attribution_type: r.attribution_type ? String(r.attribution_type) : null,
+    attribution_pct: r.attribution_pct != null ? Number(r.attribution_pct) : null,
     attributed_rep: r.attributed_rep ? String(r.attributed_rep) : null,
     created_by_user_id: r.created_by_user_id != null ? Number(r.created_by_user_id) : null,
     created_by_name: r.created_by_name ? String(r.created_by_name) : null,
@@ -101,7 +102,7 @@ export async function POST(
     deal_name, close_date, amount, currency, notes, products,
     opportunity_id, deal_type,
     contact_signor, contact_signor_attendee_id, contact_signor_title, contact_signor_function, contact_signor_seniority,
-    attributed_conference, attribution_type, attributed_rep,
+    attributed_conference, attribution_type, attribution_pct, attributed_rep,
   } = body;
 
   if (!deal_name?.trim()) return NextResponse.json({ error: 'deal_name is required' }, { status: 400 });
@@ -112,9 +113,9 @@ export async function POST(
             company_id, deal_name, close_date, amount, currency, notes,
             opportunity_id, deal_type,
             contact_signor, contact_signor_attendee_id, contact_signor_title, contact_signor_function, contact_signor_seniority,
-            attributed_conference, attribution_type, attributed_rep,
+            attributed_conference, attribution_type, attribution_pct, attributed_rep,
             created_by_user_id, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
     args: [
       companyId,
       deal_name.trim(),
@@ -131,6 +132,7 @@ export async function POST(
       contact_signor_seniority?.trim() || null,
       attributed_conference || null,
       attribution_type?.trim() || null,
+      attribution_pct != null ? Number(attribution_pct) : null,
       attributed_rep?.trim() || null,
       authResult.id,
     ],
@@ -181,6 +183,7 @@ export async function POST(
     contact_signor_seniority: contact_signor_seniority?.trim() || null,
     attributed_conference: attributed_conference || null,
     attribution_type: attribution_type?.trim() || null,
+    attribution_pct: attribution_pct != null ? Number(attribution_pct) : null,
     attributed_rep: attributed_rep?.trim() || null,
     created_by_user_id: authResult.id,
     created_by_name: null,

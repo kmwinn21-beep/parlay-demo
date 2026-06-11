@@ -162,11 +162,14 @@ export function ClosedWonDealModal() {
   const [showConferenceDropdown, setShowConferenceDropdown] = useState(false);
   const confDropdownRef = useRef<HTMLDivElement | null>(null);
 
+  // ── Attribution type + pct (below conferences) ───────────────────────────────
+  const [attributionType, setAttributionType] = useState('');
+  const [attributionPct, setAttributionPct] = useState<number>(50);
+
   // ── Advanced fields ──────────────────────────────────────────────────────────
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [opportunityId, setOpportunityId] = useState('');
   const [dealType, setDealType] = useState('');
-  const [attributionType, setAttributionType] = useState('');
 
   // ── Products ─────────────────────────────────────────────────────────────────
   const [products, setProducts] = useState<DealProduct[]>([]);
@@ -250,6 +253,7 @@ export function ClosedWonDealModal() {
       setOpportunityId(editingDeal.opportunity_id || '');
       setDealType(editingDeal.deal_type || '');
       setAttributionType(editingDeal.attribution_type || '');
+      setAttributionPct(editingDeal.attribution_pct ?? 50);
       setAttributedReps(parseJsonArray(editingDeal.attributed_rep));
       setAttributedConferences(parseJsonArray(editingDeal.attributed_conference));
       if (editingDeal.contact_signor_attendee_id != null) {
@@ -271,10 +275,10 @@ export function ClosedWonDealModal() {
         setContactName(''); setContactTitle(''); setContactFunction(''); setContactSeniority('');
       }
       setProducts(editingDeal.products.length > 0 ? editingDeal.products.map(p => ({ ...p })) : []);
-      setShowAdvanced(!!(editingDeal.opportunity_id || editingDeal.deal_type || editingDeal.attribution_type));
+      setShowAdvanced(!!(editingDeal.opportunity_id || editingDeal.deal_type));
     } else {
       setDealName(''); setCloseDate(''); setAmount(''); setCurrency('USD'); setNotes('');
-      setOpportunityId(''); setDealType(''); setAttributionType('');
+      setOpportunityId(''); setDealType(''); setAttributionType(''); setAttributionPct(50);
       setContactMode(''); setContactAttendeeId(null);
       setContactName(''); setContactTitle(''); setContactFunction(''); setContactSeniority('');
       setAttributedReps([]); setAttributedConferences([]);
@@ -418,6 +422,7 @@ export function ClosedWonDealModal() {
         contact_signor_seniority: contactSeniority.trim() || null,
         attributed_conference: attributedConferences.length > 0 ? JSON.stringify(attributedConferences) : null,
         attribution_type: attributionType.trim() || null,
+        attribution_pct: (attributionType === 'Influenced' || attributionType === 'Accelerated') ? attributionPct : null,
         attributed_rep: attributedReps.length > 0 ? JSON.stringify(attributedReps) : null,
         products: products.filter(p => p.product_name.trim()).map((p, i) => ({ ...p, sort_order: i })),
       };
@@ -623,7 +628,7 @@ export function ClosedWonDealModal() {
               <p className="text-xs text-gray-400 py-1">No products added.</p>
             ) : (
               <div className="space-y-2">
-                <div className="grid grid-cols-[1fr_56px_76px_20px] gap-1.5 px-0.5">
+                <div className="grid grid-cols-[minmax(0,1fr)_80px_108px_20px] gap-1.5 px-0.5">
                   <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Product</span>
                   <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide text-right">Qty</span>
                   <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide text-right">Unit Price</span>
@@ -635,7 +640,7 @@ export function ClosedWonDealModal() {
                   const allOptions = [...configProducts, ...(!inConfig && p.product_name ? [{ id: -1, value: p.product_name, category_id: null, color: null }] : [])];
                   return (
                     <div key={i} className="space-y-0.5">
-                      <div className="grid grid-cols-[1fr_56px_76px_20px] gap-1.5 items-center">
+                      <div className="grid grid-cols-[minmax(0,1fr)_80px_108px_20px] gap-1.5 items-center">
                         <div className="relative">
                           <select value={p.product_name} onChange={e => handleProductChange(i, 'product_name', e.target.value)} className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-brand-primary/30 focus:border-brand-primary appearance-none pr-6 truncate">
                             <option value="">— Select —</option>
@@ -676,14 +681,51 @@ export function ClosedWonDealModal() {
             )}
           </div>
 
-          {/* Advanced details — Opportunity ID, Deal Type, Attribution Type */}
+          {/* ── Attribution Type + % ─────────────────────────────────────────── */}
+          <div>
+            {(attributionType === 'Influenced' || attributionType === 'Accelerated') ? (
+              <div className="flex items-end gap-2">
+                <div className="flex-1 min-w-0">
+                  <label className={labelCls}>Attribution Type</label>
+                  <select value={attributionType} onChange={e => setAttributionType(e.target.value)} className={inputCls}>
+                    <option value="">— Select —</option>
+                    {ATTRIBUTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div className="w-32 flex-shrink-0">
+                  <label className={labelCls}>Attribution %</label>
+                  <div className="relative flex items-center">
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={attributionPct}
+                      onChange={e => setAttributionPct(Math.min(100, Math.max(1, Number(e.target.value) || 1)))}
+                      className="w-full border border-gray-300 rounded-lg pl-3 pr-7 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+                    />
+                    <span className="pointer-events-none absolute right-3 text-sm text-gray-400">%</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className={labelCls}>Attribution Type</label>
+                <select value={attributionType} onChange={e => setAttributionType(e.target.value)} className={inputCls}>
+                  <option value="">— Select —</option>
+                  {ATTRIBUTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Advanced details — Opportunity ID, Deal Type */}
           <div className="border border-gray-100 rounded-lg overflow-hidden">
             <button type="button" onClick={() => setShowAdvanced(v => !v)} className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors text-left">
               <span className="text-xs font-medium text-gray-600">Advanced details</span>
               <svg className={`w-4 h-4 text-gray-400 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
             </button>
             {showAdvanced && (
-              <div className="px-4 py-3 space-y-3">
+              <div className="px-4 py-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className={labelCls}>Opportunity ID</label>
@@ -696,13 +738,6 @@ export function ClosedWonDealModal() {
                       {DEAL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
-                </div>
-                <div>
-                  <label className={labelCls}>Attribution Type</label>
-                  <select value={attributionType} onChange={e => setAttributionType(e.target.value)} className={inputCls}>
-                    <option value="">— Select —</option>
-                    {ATTRIBUTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
                 </div>
               </div>
             )}

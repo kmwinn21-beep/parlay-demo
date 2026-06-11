@@ -29,7 +29,7 @@ export async function PUT(
     deal_name, close_date, amount, currency, notes, products,
     opportunity_id, deal_type,
     contact_signor, contact_signor_attendee_id, contact_signor_title, contact_signor_function, contact_signor_seniority,
-    attributed_conference, attribution_type, attributed_rep,
+    attributed_conference, attribution_type, attribution_pct, attributed_rep,
   } = body;
 
   if (!deal_name?.trim()) return NextResponse.json({ error: 'deal_name is required' }, { status: 400 });
@@ -41,7 +41,7 @@ export async function PUT(
               opportunity_id = ?, deal_type = ?,
               contact_signor = ?, contact_signor_attendee_id = ?, contact_signor_title = ?,
               contact_signor_function = ?, contact_signor_seniority = ?,
-              attributed_conference = ?, attribution_type = ?, attributed_rep = ?,
+              attributed_conference = ?, attribution_type = ?, attribution_pct = ?, attributed_rep = ?,
               updated_at = datetime('now')
           WHERE id = ? AND company_id = ?`,
     args: [
@@ -59,6 +59,7 @@ export async function PUT(
       contact_signor_seniority?.trim() || null,
       attributed_conference || null,
       attribution_type?.trim() || null,
+      attribution_pct != null ? Number(attribution_pct) : null,
       attributed_rep?.trim() || null,
       dealIdNum,
       companyId,
@@ -114,6 +115,7 @@ export async function PUT(
     contact_signor_seniority: contact_signor_seniority?.trim() || null,
     attributed_conference: attributed_conference || null,
     attribution_type: attribution_type?.trim() || null,
+    attribution_pct: attribution_pct != null ? Number(attribution_pct) : null,
     attributed_rep: attributed_rep?.trim() || null,
     updated_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
     products: insertedProducts,

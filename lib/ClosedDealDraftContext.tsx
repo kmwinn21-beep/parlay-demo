@@ -26,6 +26,7 @@ export interface ClosedDeal {
   contact_signor_seniority: string | null;
   attributed_conference: string | null;
   attribution_type: string | null;
+  attribution_pct: number | null;
   attributed_rep: string | null;
   created_by_user_id: number | null;
   created_by_name: string | null;

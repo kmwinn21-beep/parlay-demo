@@ -1333,4 +1333,6 @@ export const migrations: string[] = [
   `ALTER TABLE closed_deals ADD COLUMN contact_signor_function TEXT`,
   // 468 — closed_deals: contact/signor seniority (from config_options category=seniority)
   `ALTER TABLE closed_deals ADD COLUMN contact_signor_seniority TEXT`,
+  // 469 — closed_deals: attribution percentage (0–100) used to split deal value across attributed conferences
+  `ALTER TABLE closed_deals ADD COLUMN attribution_pct REAL`,
 ];
