@@ -58,16 +58,24 @@ export async function getClerkSessionUser(): Promise<ClerkSessionUser | null> {
   // If parlay_user_id is missing from claims the JWT template may not be set
   // up yet, or the user.created webhook fired after this session token was
   // issued. Fall back to currentUser() which always reads live publicMetadata.
+  // Retry up to 3× with a short delay to handle the webhook race condition on
+  // brand-new SSO signups (user lands on the app before webhook completes).
   if (!claimsParlayUserId) {
-    const user = await currentUser();
-    if (!user) return null;
-    const meta = user.publicMetadata as Record<string, unknown>;
+    let meta: Record<string, unknown> = {};
+    let primaryEmail = claimsEmail;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 800 * attempt));
+      const user = await currentUser();
+      if (!user) return null;
+      meta = user.publicMetadata as Record<string, unknown>;
+      primaryEmail = user.emailAddresses.find(e => e.id === user.primaryEmailAddressId)?.emailAddress ?? claimsEmail;
+      if (meta.parlay_user_id) break;
+    }
     const parlayUserId = meta.parlay_user_id as number | undefined;
     if (!parlayUserId) return null;
-    const primary = user.emailAddresses.find(e => e.id === user.primaryEmailAddressId);
     return {
       id: parlayUserId,
-      email: primary?.emailAddress ?? claimsEmail,
+      email: primaryEmail,
       role: (meta.role as string | undefined) ?? 'user',
       emailVerified: 1,
       accountId: meta.account_id as string | undefined,
@@ -75,15 +83,16 @@ export async function getClerkSessionUser(): Promise<ClerkSessionUser | null> {
     };
   }
 
-  // Happy path: JWT claims already have everything we need.
-  // If the role claim is missing or stale (e.g. admin panel role change after
-  // token issuance), refetch from publicMetadata without a full currentUser() call.
+  // Happy path: JWT claims already have parlay_user_id.
+  // Fetch live publicMetadata if role or account_id are missing from claims —
+  // this happens when the JWT template doesn't include those fields, or when
+  // the token was issued before the webhook wrote the metadata.
   let role = claimsRole;
   let accountId = claimsAccountId;
-  if (!role) {
+  if (!role || !accountId) {
     const user = await currentUser();
     const meta = (user?.publicMetadata ?? {}) as Record<string, unknown>;
-    role = (meta.role as string | undefined) ?? 'user';
+    if (!role) role = (meta.role as string | undefined) ?? 'user';
     if (!accountId) accountId = meta.account_id as string | undefined;
   }
 
