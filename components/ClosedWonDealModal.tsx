@@ -558,7 +558,7 @@ export function ClosedWonDealModal() {
             )}
             {/* Inline new product form */}
             {!showNewProductForm ? (
-              <button type="button" onClick={() => setShowNewProductForm(true)} className="mt-2 text-xs text-gray-400 hover:text-brand-primary transition-colors">Can&apos;t find a product? + Create new</button>
+              <button type="button" onClick={() => setShowNewProductForm(true)} className="mt-2 text-xs text-brand-primary hover:underline font-medium">+ Create new</button>
             ) : (
               <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg space-y-2">
                 <p className="text-xs font-medium text-gray-700">New product</p>
