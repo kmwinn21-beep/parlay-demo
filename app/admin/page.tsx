@@ -256,6 +256,14 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
     setExpandedOptions(prev => new Set(prev).add(opt.id));
   };
 
+  const handleFormVisibilityOnly = (opt: ConfigOption) => {
+    setEditVisibleForms(opt.visible_forms ?? availableForms.map(f => f.key));
+    setEditValue(opt.value); // keeps handleSaveEdit's non-empty check passing; name won't change
+    setFormPickerOpenId(null);
+    setExpandedOptions(prev => new Set(prev).add(opt.id));
+    // intentionally does not set editingId — name field stays locked
+  };
+
   const handleEditProspectInline = (opt: ConfigOption) => {
     setEditingId(opt.id);
     setEditValue(opt.value);
@@ -443,11 +451,21 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
                         </>
                       )}
                       {opt.is_system && category !== 'company_type' && category !== 'products' && category !== 'product_category'
-                        ? <span className="inline-flex items-center gap-1 text-xs text-gray-400 px-2 py-1 italic">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                            System
-                          </span>
-                        : <button type="button" onClick={() => handleEdit(opt)} className="text-brand-secondary hover:text-brand-primary text-xs font-medium px-2 py-1">Edit</button>
+                        ? <div className="flex items-center gap-0.5">
+                            <span className="inline-flex items-center gap-1 text-xs text-gray-400 px-2 py-1 italic">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                              System
+                            </span>
+                            {availableForms.length > 0 && (
+                              <button type="button" onClick={() => handleFormVisibilityOnly(opt)} className="text-brand-secondary hover:text-brand-primary text-xs font-medium px-2 py-1">
+                                Form Visibility
+                              </button>
+                            )}
+                          </div>
+                        : <button type="button" onClick={() => handleEdit(opt)} className="text-brand-secondary hover:text-brand-primary text-xs font-medium px-2 py-1">
+                            <span className="hidden sm:inline">Edit Name / Form Visibility</span>
+                            <span className="sm:hidden">Edit</span>
+                          </button>
                       }
                       {!opt.is_system && (
                         <button type="button" onClick={() => handleDelete(opt.id, opt.value)} className="text-red-400 hover:text-red-600 text-xs font-medium px-2 py-1">Delete</button>
@@ -582,7 +600,7 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
                           </div>
                         )}
                         <div className="flex items-center gap-2">
-                          {(!opt.is_system || category === 'company_type' || category === 'products' || category === 'product_category') && <button type="button" onClick={() => handleSaveEdit(opt.id)} className="btn-primary text-xs px-3 py-1.5">Save</button>}
+                          <button type="button" onClick={() => handleSaveEdit(opt.id)} className="btn-primary text-xs px-3 py-1.5">Save</button>
                           <button
                             type="button"
                             onClick={() => {
