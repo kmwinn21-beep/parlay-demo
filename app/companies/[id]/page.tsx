@@ -30,6 +30,8 @@ import { CompanyDrawer } from '@/components/CompanyDrawer';
 import { ActivityTimelineModal } from '@/components/ActivityTimelineModal';
 import { useCapabilities } from '@/lib/useCapabilities';
 import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
+import { ClosedWonDealsSection } from '@/components/ClosedWonDealsSection';
+import type { ClosedDeal } from '@/components/ClosedWonDealModal';
 
 interface ConferenceItem { id: number; name: string; start_date: string; end_date: string; location: string; }
 
@@ -201,6 +203,8 @@ export default function CompanyDetailPage() {
   const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
   const [relMapOpen, setRelMapOpen] = useState(false);
 
+  const [closedDeals, setClosedDeals] = useState<ClosedDeal[]>([]);
+
   // Intel drawer state
   interface IntelItem {
     conference_id: number;
@@ -337,6 +341,12 @@ export default function CompanyDetailPage() {
           const tpData = await tpRes.json();
           setTouchpointTotal(tpData.total ?? 0);
         }
+      } catch { /* non-fatal */ }
+
+      // Fetch closed deals (non-fatal)
+      try {
+        const dealsRes = await fetch(`/api/companies/${id}/closed-deals`);
+        if (dealsRes.ok) setClosedDeals((await dealsRes.json()).deals ?? []);
       } catch { /* non-fatal */ }
     } catch {
       toast.error('Failed to load company');
@@ -1442,6 +1452,15 @@ export default function CompanyDetailPage() {
                       );
                     })}
                   </div>
+                </div>
+              ),
+              closed_deals: (
+                <div key="closed_deals" className="card">
+                  <ClosedWonDealsSection
+                    companyId={Number(id)}
+                    initialDeals={closedDeals}
+                    canEdit={true}
+                  />
                 </div>
               ),
               conferences: (

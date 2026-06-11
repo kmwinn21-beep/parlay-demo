@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useHideBottomNav } from './BottomNavContext';
 
 interface DealProduct {
@@ -31,10 +31,15 @@ interface Currency {
   label: string;
 }
 
+interface CompanySearchResult {
+  id: number;
+  name: string;
+}
+
 interface ClosedWonDealModalProps {
   isOpen: boolean;
   onClose: () => void;
-  companyId: number;
+  companyId?: number | null;
   deal?: ClosedDeal | null;
   onSuccess: (deal: ClosedDeal) => void;
 }
@@ -65,6 +70,14 @@ export function ClosedWonDealModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  // Company search state (used when companyId prop is not provided)
+  const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
+  const [selectedCompanyName, setSelectedCompanyName] = useState('');
+  const [companyQuery, setCompanyQuery] = useState('');
+  const [companyResults, setCompanyResults] = useState<CompanySearchResult[]>([]);
+  const [companySearching, setCompanySearching] = useState(false);
+  const companyDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const isEditing = !!deal;
 
   useEffect(() => {
@@ -92,7 +105,28 @@ export function ClosedWonDealModal({
       setProducts([]);
     }
     setError('');
+    setSelectedCompanyId(null);
+    setSelectedCompanyName('');
+    setCompanyQuery('');
+    setCompanyResults([]);
   }, [isOpen, deal]);
+
+  useEffect(() => {
+    if (companyId != null) return; // company is pre-provided
+    if (companyQuery.length < 2) { setCompanyResults([]); return; }
+    if (companyDebounce.current) clearTimeout(companyDebounce.current);
+    companyDebounce.current = setTimeout(async () => {
+      setCompanySearching(true);
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(companyQuery)}`);
+        const data = await res.json();
+        setCompanyResults((data.companies ?? []).slice(0, 8) as CompanySearchResult[]);
+      } catch { /* ignore */ } finally {
+        setCompanySearching(false);
+      }
+    }, 300);
+    return () => { if (companyDebounce.current) clearTimeout(companyDebounce.current); };
+  }, [companyQuery, companyId]);
 
   if (!isOpen) return null;
 
@@ -116,6 +150,8 @@ export function ClosedWonDealModal({
 
   const handleSubmit = async () => {
     setError('');
+    const resolvedCompanyId = companyId ?? selectedCompanyId;
+    if (!resolvedCompanyId) { setError('Please select a company.'); return; }
     if (!dealName.trim()) { setError('Deal name is required.'); return; }
     if (!closeDate.trim()) { setError('Close date is required.'); return; }
 
@@ -133,8 +169,8 @@ export function ClosedWonDealModal({
       };
 
       const url = isEditing
-        ? `/api/companies/${companyId}/closed-deals/${deal!.id}`
-        : `/api/companies/${companyId}/closed-deals`;
+        ? `/api/companies/${resolvedCompanyId}/closed-deals/${deal!.id}`
+        : `/api/companies/${resolvedCompanyId}/closed-deals`;
       const method = isEditing ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
@@ -180,6 +216,46 @@ export function ClosedWonDealModal({
 
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {/* Company search (only shown when companyId is not pre-provided) */}
+          {companyId == null && (
+            <div className="relative">
+              <label className="block text-xs font-medium text-gray-700 mb-1">Company <span className="text-red-500">*</span></label>
+              {selectedCompanyId ? (
+                <div className="flex items-center justify-between px-3 py-2 border border-brand-primary rounded-lg bg-blue-50">
+                  <span className="text-sm font-medium text-gray-800 truncate">{selectedCompanyName}</span>
+                  <button type="button" onClick={() => { setSelectedCompanyId(null); setSelectedCompanyName(''); setCompanyQuery(''); }} className="text-gray-400 hover:text-gray-600 ml-2 flex-shrink-0">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    value={companyQuery}
+                    onChange={e => setCompanyQuery(e.target.value)}
+                    placeholder="Search companies…"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+                  />
+                  {(companyResults.length > 0 || companySearching) && (
+                    <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                      {companySearching && <p className="px-3 py-2 text-xs text-gray-400">Searching…</p>}
+                      {companyResults.map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => { setSelectedCompanyId(c.id); setSelectedCompanyName(c.name); setCompanyQuery(''); setCompanyResults([]); }}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
+                        >
+                          {c.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {/* Deal name */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Deal Name <span className="text-red-500">*</span></label>

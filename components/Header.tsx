@@ -10,6 +10,7 @@ import { AssignFollowUpModal } from './AssignFollowUpModal';
 import { NewRelationshipModal } from './NewRelationshipModal';
 import { AgendaUploadModal } from './AgendaUploadModal';
 import { TouchpointQuickModal } from './DashboardActionCard';
+import { ClosedWonDealModal } from './ClosedWonDealModal';
 import { GlobalSearchModal } from './GlobalSearch';
 import { HelpChatDrawer } from './HelpChatDrawer';
 import { NotificationBell } from './NotificationBell';
@@ -100,6 +101,7 @@ export function Header() {
   const [showRelationshipModal, setShowRelationshipModal] = useState(false);
   const [showAgendaModal, setShowAgendaModal] = useState(false);
   const [showTouchpointsModal, setShowTouchpointsModal] = useState(false);
+  const [showClosedDealModal, setShowClosedDealModal] = useState(false);
   const [showAddNew, setShowAddNew] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showHelpChat, setShowHelpChat] = useState(false);
@@ -329,7 +331,7 @@ export function Header() {
                 <button
                   type="button"
                   onClick={() => { setShowAddNew(false); setShowTouchpointsModal(true); }}
-                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3"
+                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3 border-b border-gray-50"
                 >
                   <svg className="w-[18px] h-[18px] text-brand-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
@@ -340,6 +342,16 @@ export function Header() {
                     <line x1="18" y1="12" x2="22" y2="12" />
                   </svg>
                   <span className="text-sm font-medium text-gray-800">Touchpoints</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowAddNew(false); setShowClosedDealModal(true); }}
+                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3"
+                >
+                  <svg className="w-[18px] h-[18px] text-brand-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                  </svg>
+                  <span className="text-sm font-medium text-gray-800">Closed / Won Deal</span>
                 </button>
               </div>
             </div>
@@ -513,6 +525,7 @@ export function Header() {
       <NewRelationshipModal isOpen={showRelationshipModal} onClose={() => setShowRelationshipModal(false)} />
       {showAgendaModal && <AgendaUploadModal onClose={() => setShowAgendaModal(false)} />}
       {showTouchpointsModal && <TouchpointQuickModal onClose={() => setShowTouchpointsModal(false)} />}
+      <ClosedWonDealModal isOpen={showClosedDealModal} onClose={() => setShowClosedDealModal(false)} onSuccess={() => {}} />
       {showSearch && <GlobalSearchModal onClose={() => setShowSearch(false)} />}
       {showHelpChat && (
         <HelpChatDrawer

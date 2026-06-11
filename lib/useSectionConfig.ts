@@ -18,6 +18,7 @@ export const SECTION_DEFS: Record<string, SectionDef[]> = {
   ],
   company: [
     { key: 'status', label: 'Status' },
+    { key: 'closed_deals', label: 'Closed / Won Deals' },
     { key: 'conferences', label: 'Conferences' },
     { key: 'communities', label: 'Communities' },
     { key: 'relationships', label: 'Internal Relationships' },
