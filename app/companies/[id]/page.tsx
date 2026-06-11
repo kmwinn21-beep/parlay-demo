@@ -396,6 +396,22 @@ export default function CompanyDetailPage() {
     return () => window.removeEventListener('meeting-tasks-confirmed', handler);
   }, [id]);
 
+  // Optimistically update company type to Customer when a new deal is logged
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { companyId: savedCompanyId, deal } = (e as CustomEvent).detail as { companyId: number; deal: { id: number } };
+      if (savedCompanyId !== Number(id)) return;
+      const isNew = !closedDeals.some(d => d.id === deal.id);
+      if (!isNew) return;
+      const customerLabel = companyTypeOptions.find(v => v.toLowerCase() === 'customer') ?? 'Customer';
+      setCompany(prev => prev ? { ...prev, company_type: customerLabel } : prev);
+      setEditData(prev => ({ ...prev, company_type: customerLabel }));
+      setClosedDeals(prev => prev.some(d => d.id === deal.id) ? prev : [deal as ClosedDeal, ...prev]);
+    };
+    window.addEventListener('closed-deal-saved', handler);
+    return () => window.removeEventListener('closed-deal-saved', handler);
+  }, [id, closedDeals, companyTypeOptions]);
+
   // Auto-classify ICP when WSE, Company Type, or Services change in edit mode
   useEffect(() => {
     if (!isEditing) return;
