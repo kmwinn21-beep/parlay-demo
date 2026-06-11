@@ -1339,4 +1339,6 @@ export const migrations: string[] = [
   `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system) VALUES ('company_type', 'Customer', 9, 1)`,
   // 471 — company_type: Former Customer (seeded, name locked, form visibility editable)
   `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system) VALUES ('company_type', 'Former Customer', 10, 1)`,
+  // 472 — remove seeded Client status option (replaced by Customer company type)
+  `DELETE FROM config_options WHERE category = 'status' AND value = 'Client' AND is_system = 1`,
 ];
