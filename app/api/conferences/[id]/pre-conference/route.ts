@@ -239,7 +239,7 @@ export async function GET(
         })
       : Promise.resolve({ rows: [] }),
     db.execute({ sql: `SELECT value FROM config_options WHERE category = 'unit_type' LIMIT 1`, args: [] }),
-    db.execute({ sql: `SELECT value, color FROM config_options WHERE category = 'status' AND LOWER(TRIM(value)) LIKE '%client%'`, args: [] }),
+    db.execute({ sql: `SELECT value FROM config_options WHERE category = 'company_type' AND LOWER(TRIM(value)) = 'customer' LIMIT 1`, args: [] }),
     db.execute({ sql: `SELECT id, value FROM config_options WHERE category = 'seniority'`, args: [] }),
     db.execute({ sql: `SELECT color FROM config_options WHERE category = 'company_type' AND LOWER(TRIM(value)) = 'competitor' LIMIT 1`, args: [] }),
     db.execute({ sql: `SELECT value FROM site_settings WHERE key = 'brand_dark_blue' LIMIT 1`, args: [] }).catch(() => ({ rows: [] })),
@@ -442,15 +442,13 @@ export async function GET(
 
   // --- Client companies ---
   const unitTypeLabel = unitTypeRes.rows[0]?.value ? String(unitTypeRes.rows[0].value) : 'Units';
-  const clientStatusSet = new Set(clientStatusRes.rows.map(r => String(r.value).toLowerCase().trim()));
+  const customerTypeLabel = clientStatusRes.rows[0]?.value ? String(clientStatusRes.rows[0].value).toLowerCase().trim() : 'customer';
 
   const clientCompanyMap = new Map<number, { companyId: number; companyName: string; wse: number | null; attendees: { id: number; firstName: string; lastName: string; title: string | null }[] }>();
   for (const a of attendees) {
     const companyId = a.company_id as number | null;
     if (!companyId) continue;
-    const rawStatus = String(a.company_status || '');
-    const hasClientStatus = rawStatus.split(',').some(s => clientStatusSet.has(s.trim().toLowerCase()));
-    if (!hasClientStatus) continue;
+    if (String(a.company_type || '').trim().toLowerCase() !== customerTypeLabel) continue;
     if (!clientCompanyMap.has(companyId)) {
       clientCompanyMap.set(companyId, {
         companyId,

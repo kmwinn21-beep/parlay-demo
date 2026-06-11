@@ -232,7 +232,7 @@ function ActivityCell({
 
   return (
     <td style={style}>
-      <div className="flex flex-wrap gap-[3px]">
+      <div className="flex flex-wrap gap-[3px] justify-center">
         {dots.map((d, i) => (
           <ActivityDot key={i} type={d.type} tooltip={d.tooltip} />
         ))}

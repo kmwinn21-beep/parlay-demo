@@ -1335,4 +1335,10 @@ export const migrations: string[] = [
   `ALTER TABLE closed_deals ADD COLUMN contact_signor_seniority TEXT`,
   // 469 — closed_deals: attribution percentage (0–100) used to split deal value across attributed conferences
   `ALTER TABLE closed_deals ADD COLUMN attribution_pct REAL`,
+  // 470 — company_type: Customer (seeded, name locked, form visibility editable)
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system) VALUES ('company_type', 'Customer', 9, 1)`,
+  // 471 — company_type: Former Customer (seeded, name locked, form visibility editable)
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system) VALUES ('company_type', 'Former Customer', 10, 1)`,
+  // 472 — remove seeded Client status option (replaced by Customer company type)
+  `DELETE FROM config_options WHERE category = 'status' AND value = 'Client' AND is_system = 1`,
 ];
