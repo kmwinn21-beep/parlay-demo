@@ -78,6 +78,47 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose, onS
   const [postSaveItems, setPostSaveItems] = useState<PostSaveItem[]>([]);
   const [savingDecision, setSavingDecision] = useState<string | null>(null);
 
+  // Drag-and-drop reordering
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDragId(id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverId(id);
+  };
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!dragId || dragId === targetId) return;
+    setItems(prev => {
+      const from = prev.findIndex(it => it.id === dragId);
+      const to   = prev.findIndex(it => it.id === targetId);
+      if (from === -1 || to === -1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+    setDragId(null);
+    setDragOverId(null);
+  };
+  const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
+
+  const moveItem = (id: string, dir: 'up' | 'down') => {
+    setItems(prev => {
+      const idx = prev.findIndex(it => it.id === id);
+      const next = dir === 'up' ? idx - 1 : idx + 1;
+      if (idx === -1 || next < 0 || next >= prev.length) return prev;
+      const arr = [...prev];
+      [arr[idx], arr[next]] = [arr[next], arr[idx]];
+      return arr;
+    });
+  };
+
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -101,11 +142,18 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose, onS
       setRequiredPipelineMultiple(budgetData.required_pipeline_multiple ?? '3.5');
 
       if (budgetData.line_items && budgetData.line_items.length > 0) {
-        setItems(budgetData.line_items.map(it => ({
-          ...it,
-          budget: it.budget != null ? String(it.budget) : '',
-          actual: it.actual != null ? String(it.actual) : '',
-        })));
+        const savedLabels = new Set(budgetData.line_items.map((it: LineItem) => it.label));
+        const missingDefaults = defaultTypes
+          .filter(label => !savedLabels.has(label))
+          .map(label => ({ id: genId(), label, budget: '', actual: '' }));
+        setItems([
+          ...budgetData.line_items.map(it => ({
+            ...it,
+            budget: it.budget != null ? String(it.budget) : '',
+            actual: it.actual != null ? String(it.actual) : '',
+          })),
+          ...missingDefaults,
+        ]);
       } else {
         setItems(defaultTypes.map(label => ({ id: genId(), label, budget: '', actual: '' })));
       }
@@ -348,7 +396,8 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose, onS
           ) : (
             <>
               {/* ── Desktop column headers (hidden on mobile) ── */}
-              <div className="hidden sm:grid grid-cols-[1fr_140px_140px_110px_36px] gap-2 mb-2 px-1">
+              <div className="hidden sm:grid grid-cols-[20px_1fr_140px_140px_110px_36px] gap-2 mb-2 px-1">
+                <span />
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Item</p>
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Budget</p>
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Actual</p>
@@ -358,11 +407,36 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose, onS
 
               {/* Line items */}
               <div className="space-y-3 sm:space-y-2">
-                {items.map(item => (
+                {items.map((item, idx) => (
                   <div key={item.id}>
                     {/* ── Mobile card layout ── */}
                     <div className="sm:hidden border border-gray-100 rounded-xl p-3 space-y-2">
                       <div className="flex items-start justify-between gap-2">
+                        {/* Up/down reorder chevrons */}
+                        <div className="flex flex-col gap-0.5 flex-shrink-0 mt-0.5">
+                          <button
+                            type="button"
+                            onClick={() => moveItem(item.id, 'up')}
+                            disabled={idx === 0}
+                            className="w-5 h-5 flex items-center justify-center rounded text-gray-300 hover:text-gray-600 disabled:opacity-20 transition-colors"
+                            title="Move up"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveItem(item.id, 'down')}
+                            disabled={idx === items.length - 1}
+                            className="w-5 h-5 flex items-center justify-center rounded text-gray-300 hover:text-gray-600 disabled:opacity-20 transition-colors"
+                            title="Move down"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+                        </div>
                         <div className="flex-1 min-w-0">
                           {editingLabelId === item.id ? (
                             <input
@@ -419,7 +493,29 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose, onS
                     </div>
 
                     {/* ── Desktop row layout ── */}
-                    <div className="hidden sm:grid grid-cols-[1fr_140px_140px_110px_36px] gap-2 items-center">
+                    <div
+                      className="hidden sm:grid grid-cols-[20px_1fr_140px_140px_110px_36px] gap-2 items-center rounded-lg transition-colors"
+                      style={{
+                        opacity: dragId === item.id ? 0.4 : 1,
+                        background: dragOverId === item.id && dragId !== item.id ? 'rgb(239 246 255)' : undefined,
+                      }}
+                      draggable={!readOnly}
+                      onDragStart={e => handleDragStart(e, item.id)}
+                      onDragOver={e => handleDragOver(e, item.id)}
+                      onDrop={e => handleDrop(e, item.id)}
+                      onDragEnd={handleDragEnd}
+                    >
+                      {/* Drag handle */}
+                      <div
+                        className="flex items-center justify-center text-gray-300 hover:text-gray-500 transition-colors cursor-grab active:cursor-grabbing"
+                        title="Drag to reorder"
+                      >
+                        <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
+                          <circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/>
+                          <circle cx="2" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
+                          <circle cx="2" cy="14" r="1.5"/><circle cx="8" cy="14" r="1.5"/>
+                        </svg>
+                      </div>
                       <div className="min-w-0">
                         {editingLabelId === item.id ? (
                           <input
@@ -531,7 +627,8 @@ export function BudgetVsActualModal({ conferenceId, conferenceName, onClose, onS
                   </div>
 
                   {/* ── Totals: desktop ── */}
-                  <div className="hidden sm:grid grid-cols-[1fr_140px_140px_110px_36px] gap-2 items-center">
+                  <div className="hidden sm:grid grid-cols-[20px_1fr_140px_140px_110px_36px] gap-2 items-center">
+                    <span />
                     <p className="text-sm font-semibold text-gray-700">Totals</p>
                     <p className="text-sm font-semibold text-gray-700 pl-2">
                       {hasBudgetTotals ? fmtDollars(totalBudget) : '—'}
