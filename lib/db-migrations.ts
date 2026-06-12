@@ -1341,4 +1341,18 @@ export const migrations: string[] = [
   `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system) VALUES ('company_type', 'Former Customer', 10, 1)`,
   // 472 — remove seeded Client status option (replaced by Customer company type)
   `DELETE FROM config_options WHERE category = 'status' AND value = 'Client' AND is_system = 1`,
+  // 473 — conference_plans: planning decisions and budget targets per conference per year
+  `CREATE TABLE IF NOT EXISTS conference_plans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+    plan_year INTEGER NOT NULL,
+    decision TEXT CHECK(decision IN ('attend','reduce','cut','evaluating','new')),
+    planned_budget REAL,
+    planned_headcount INTEGER,
+    planned_pipeline_target REAL,
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(conference_id, plan_year)
+  )`,
 ];
