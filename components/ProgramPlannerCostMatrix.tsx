@@ -184,7 +184,10 @@ export function ProgramPlannerCostMatrix({
   const [animatingIntoPanel, setAnimatingIntoPanel] = useState<string[]>([]);
   const [animatingInRows, setAnimatingInRows] = useState<string[]>([]);
 
-  const [confFilterExpanded, setConfFilterExpanded] = useState(false);
+  // Column (conference) remove/add animation state
+  const [animatingOutCols, setAnimatingOutCols] = useState<number[]>([]);
+  const [animatingInCols, setAnimatingInCols] = useState<number[]>([]);
+  const [animatingIntoConfPanel, setAnimatingIntoConfPanel] = useState<number[]>([]);
 
   // On mount: initialize parent state with all conference IDs and all line items
   useEffect(() => {
@@ -202,6 +205,12 @@ export function ProgramPlannerCostMatrix({
   // Active conferences subset, preserving order
   const activeConferences = useMemo(
     () => conferences.filter(c => activeConferenceIds.includes(c.conferenceId)),
+    [conferences, activeConferenceIds]
+  );
+
+  // Removed conferences (not in activeConferenceIds)
+  const removedConferences = useMemo(
+    () => conferences.filter(c => !activeConferenceIds.includes(c.conferenceId)),
     [conferences, activeConferenceIds]
   );
 
@@ -248,12 +257,26 @@ export function ProgramPlannerCostMatrix({
     return total;
   }, [confTotals, activeConferences]);
 
-  // Conference toggle
-  const toggleConference = (id: number) => {
-    const next = activeConferenceIds.includes(id)
-      ? activeConferenceIds.filter(c => c !== id)
-      : [...activeConferenceIds, id];
-    onActiveConferenceIdsChange(next);
+  // ── Conference column remove / add ────────────────────────────────────────
+
+  const removeConference = (confId: number) => {
+    setAnimatingOutCols(prev => prev.includes(confId) ? prev : [...prev, confId]);
+    setTimeout(() => {
+      setAnimatingOutCols(prev => prev.filter(id => id !== confId));
+      onActiveConferenceIdsChange(activeConferenceIds.filter(id => id !== confId));
+      setAnimatingIntoConfPanel(prev => [...prev, confId]);
+      setTimeout(() => setAnimatingIntoConfPanel(prev => prev.filter(id => id !== confId)), 300);
+    }, ANIM_MS);
+  };
+
+  const addConference = (confId: number) => {
+    onActiveConferenceIdsChange([...activeConferenceIds, confId]);
+    setAnimatingInCols(prev => [...prev, confId]);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setAnimatingInCols(prev => prev.filter(id => id !== confId));
+      });
+    });
   };
 
   // ── Line item remove / add ────────────────────────────────────────────────
@@ -317,17 +340,11 @@ export function ProgramPlannerCostMatrix({
   // Derived toggle states
   const allLineItemsActive = removedLineItems.length === 0;
   const noLineItemsActive = removedLineItems.length === ALL_LINE_ITEMS.length;
-  const allConfsActive = activeConferenceIds.length === conferences.length;
-  const noConfsActive = activeConferenceIds.length === 0;
-
-  const CONF_PILL_LIMIT = 8;
-  const visibleConfs = confFilterExpanded ? conferences : conferences.slice(0, CONF_PILL_LIMIT);
-  const hiddenCount = conferences.length - CONF_PILL_LIMIT;
 
   return (
     <div className="card p-0 overflow-hidden">
-      {/* ── Filter strip — conferences only ─────────────────────────────── */}
-      <div className="px-4 pt-3 pb-2 border-b border-gray-100 space-y-2.5">
+      {/* ── Filter strip ────────────────────────────────────────────────── */}
+      <div className="px-4 pt-3 pb-2 border-b border-gray-100">
         {/* Sub-view toggle */}
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-gray-800">FY{year} cost matrix</span>
@@ -339,93 +356,80 @@ export function ProgramPlannerCostMatrix({
             className="w-[180px]"
           />
         </div>
-
-        {/* Conferences filter */}
-        <div className="flex flex-wrap gap-3 items-start">
-          <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Conferences</p>
-            <div className="flex flex-wrap gap-1">
-              {visibleConfs.map(conf => {
-                const active = activeConferenceIds.includes(conf.conferenceId);
-                return (
-                  <button
-                    key={conf.conferenceId}
-                    onClick={() => toggleConference(conf.conferenceId)}
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[12px] font-medium transition-colors ${
-                      active
-                        ? 'bg-blue-50 text-blue-800 border-blue-200'
-                        : 'bg-gray-50 text-gray-400 border-gray-200'
-                    }`}
-                  >
-                    {active && (
-                      <svg className="w-2.5 h-2.5 flex-shrink-0 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                    <span>{conf.name.replace(/\b\d{4}\b/, '').trim()}</span>
-                  </button>
-                );
-              })}
-              {!confFilterExpanded && hiddenCount > 0 && (
-                <button
-                  onClick={() => setConfFilterExpanded(true)}
-                  className="px-2 py-0.5 rounded-lg border border-gray-200 bg-gray-50 text-[12px] text-gray-500 hover:bg-gray-100"
-                >
-                  +{hiddenCount} more
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Conference All / None vertical toggle */}
-          <div className="flex-shrink-0 pt-4">
-            <VerticalToggle
-              allActive={allConfsActive}
-              noneActive={noConfsActive}
-              onAll={() => onActiveConferenceIdsChange(conferences.map(c => c.conferenceId))}
-              onNone={() => onActiveConferenceIdsChange([])}
-              accentClass="bg-brand-accent"
-            />
-          </div>
-        </div>
       </div>
 
       {/* ── Matrix area ─────────────────────────────────────────────────── */}
       <div className="flex">
-        {/* Add Line Items panel — slides in from left; always in DOM for animation */}
+        {/* Add panel — slides in from left; always in DOM for animation */}
         <div
           className="flex-shrink-0 overflow-hidden bg-gray-50"
           style={{
-            maxWidth: removedLineItems.length > 0 ? '180px' : '0px',
+            maxWidth: (removedConferences.length > 0 || removedLineItems.length > 0) ? '180px' : '0px',
             transition: 'max-width 0.3s ease',
           }}
         >
           <div className="border-r border-gray-200 h-full" style={{ width: 180 }}>
-            <div className="px-3 py-2 border-b border-gray-100">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                Add Line Item(s)
-              </p>
-            </div>
-            <div className="py-1.5 space-y-0.5">
-              {removedLineItems.map(label => (
-                <div
-                  key={label}
-                  className="mx-2 flex items-center justify-between px-3 py-1.5 rounded text-[12px] font-medium text-gray-700 bg-white border border-gray-200"
-                  style={{
-                    transition: 'opacity 0.25s ease, transform 0.25s ease',
-                    opacity: animatingIntoPanel.includes(label) ? 0 : 1,
-                    transform: animatingIntoPanel.includes(label) ? 'translateX(-10px)' : 'translateX(0)',
-                  }}
-                >
-                  <span>{label}</span>
-                  <button
-                    onClick={() => addLineItem(label)}
-                    title={`Add ${label} back`}
-                    className="ml-2 w-4 h-4 flex items-center justify-center rounded-full bg-gray-100 hover:bg-brand-accent hover:text-white text-gray-500 transition-colors text-xs font-bold leading-none flex-shrink-0"
-                  >+</button>
+            {/* +/- Conference(s) section */}
+            {removedConferences.length > 0 && (
+              <div className="border-b border-gray-200">
+                <div className="px-3 py-2 border-b border-gray-100">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                    +/- Conference(s)
+                  </p>
                 </div>
-              ))}
-            </div>
+                <div className="py-1.5 space-y-0.5">
+                  {removedConferences.map(conf => (
+                    <div
+                      key={conf.conferenceId}
+                      className="mx-2 flex items-center justify-between px-3 py-1.5 rounded text-[12px] font-medium text-gray-700 bg-white border border-gray-200"
+                      style={{
+                        transition: 'opacity 0.25s ease, transform 0.25s ease',
+                        opacity: animatingIntoConfPanel.includes(conf.conferenceId) ? 0 : 1,
+                        transform: animatingIntoConfPanel.includes(conf.conferenceId) ? 'translateX(-10px)' : 'translateX(0)',
+                      }}
+                    >
+                      <span className="truncate text-[11px]">{conf.name.replace(/\b\d{4}\b/, '').trim()}</span>
+                      <button
+                        onClick={() => addConference(conf.conferenceId)}
+                        title={`Add ${conf.name} back`}
+                        className="ml-2 w-4 h-4 flex items-center justify-center rounded-full bg-gray-100 hover:bg-brand-accent hover:text-white text-gray-500 transition-colors text-xs font-bold leading-none flex-shrink-0"
+                      >+</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* +/- Line Item(s) section */}
+            {removedLineItems.length > 0 && (
+              <div>
+                <div className="px-3 py-2 border-b border-gray-100">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                    +/- Line Item(s)
+                  </p>
+                </div>
+                <div className="py-1.5 space-y-0.5">
+                  {removedLineItems.map(label => (
+                    <div
+                      key={label}
+                      className="mx-2 flex items-center justify-between px-3 py-1.5 rounded text-[12px] font-medium text-gray-700 bg-white border border-gray-200"
+                      style={{
+                        transition: 'opacity 0.25s ease, transform 0.25s ease',
+                        opacity: animatingIntoPanel.includes(label) ? 0 : 1,
+                        transform: animatingIntoPanel.includes(label) ? 'translateX(-10px)' : 'translateX(0)',
+                      }}
+                    >
+                      <span>{label}</span>
+                      <button
+                        onClick={() => addLineItem(label)}
+                        title={`Add ${label} back`}
+                        className="ml-2 w-4 h-4 flex items-center justify-center rounded-full bg-gray-100 hover:bg-brand-accent hover:text-white text-gray-500 transition-colors text-xs font-bold leading-none flex-shrink-0"
+                      >+</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -457,14 +461,30 @@ export function ProgramPlannerCostMatrix({
                     accentClass="bg-brand-accent"
                   />
                 </th>
-                {activeConferences.map(conf => (
-                  <th
-                    key={conf.conferenceId}
-                    className="px-2 py-2 text-center text-[12px] font-semibold text-gray-700 leading-tight"
-                  >
-                    {abbrevConfName(conf.name)}
-                  </th>
-                ))}
+                {activeConferences.map(conf => {
+                  const isAnimatingOut = animatingOutCols.includes(conf.conferenceId);
+                  const isAnimatingIn = animatingInCols.includes(conf.conferenceId);
+                  return (
+                    <th
+                      key={conf.conferenceId}
+                      className="px-2 py-2 text-center text-[12px] font-semibold text-gray-700 leading-tight"
+                      style={{
+                        opacity: isAnimatingOut || isAnimatingIn ? 0 : 1,
+                        transform: isAnimatingOut ? 'translateY(-6px)' : isAnimatingIn ? 'translateY(6px)' : 'none',
+                        transition: `opacity ${ANIM_MS}ms ease, transform ${ANIM_MS}ms ease`,
+                      }}
+                    >
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span>{abbrevConfName(conf.name)}</span>
+                        <button
+                          onClick={() => removeConference(conf.conferenceId)}
+                          title={`Remove ${conf.name}`}
+                          className="w-4 h-4 flex items-center justify-center rounded-full bg-gray-100 hover:bg-red-100 hover:text-red-500 text-gray-400 transition-colors text-xs font-bold leading-none flex-shrink-0"
+                        >−</button>
+                      </div>
+                    </th>
+                  );
+                })}
                 <th
                   className="px-2 py-2 text-right text-[12px] font-semibold text-gray-700"
                   style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
@@ -542,13 +562,19 @@ export function ProgramPlannerCostMatrix({
                         const entry = lineItemByConf.get(conf.conferenceId)?.get(label);
                         const actual = entry?.actual ?? null;
                         const budgeted = entry?.budgeted ?? null;
+                        const isColAnimatingOut = animatingOutCols.includes(conf.conferenceId);
+                        const isColAnimatingIn = animatingInCols.includes(conf.conferenceId);
+                        const colFadeStyle: React.CSSProperties = {
+                          opacity: isColAnimatingOut || isColAnimatingIn ? 0 : 1,
+                          transition: `opacity ${ANIM_MS}ms ease`,
+                        };
 
                         if (actual === null && budgeted === null) {
                           return (
                             <td
                               key={conf.conferenceId}
                               className="p-0 border-b border-gray-50 overflow-hidden"
-                              style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
+                              style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)', ...colFadeStyle }}
                             >
                               <div style={{ ...confInner, display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="text-gray-300">—</div>
                             </td>
@@ -560,7 +586,7 @@ export function ProgramPlannerCostMatrix({
 
                         if (subView === 'actuals') {
                           return (
-                            <td key={conf.conferenceId} className="p-0 border-b border-gray-50 overflow-hidden" style={{ backgroundColor: cellBg }}>
+                            <td key={conf.conferenceId} className="p-0 border-b border-gray-50 overflow-hidden" style={{ backgroundColor: cellBg, ...colFadeStyle }}>
                               <div style={{ ...confInner, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center' }}>
                                 <span className="text-[12px] font-medium" style={{ color: cellColor }}>
                                   {fmtCurrency(actual)}
@@ -576,7 +602,7 @@ export function ProgramPlannerCostMatrix({
                             ? (variance / budgeted) * 100 : null;
 
                         return (
-                          <td key={conf.conferenceId} className="p-0 border-b border-gray-50 overflow-hidden" style={{ backgroundColor: cellBg }}>
+                          <td key={conf.conferenceId} className="p-0 border-b border-gray-50 overflow-hidden" style={{ backgroundColor: cellBg, ...colFadeStyle }}>
                             <div style={{ ...confInner, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center' }}>
                               <span className="text-[12px] font-medium" style={{ color: cellColor }}>
                                 {variance != null ? `${variance > 0 ? '+' : ''}${fmtCurrency(variance)}` : '—'}
@@ -628,10 +654,16 @@ export function ProgramPlannerCostMatrix({
                   const budgeted = totals?.budgeted ?? null;
                   const cellBg = getCellBackground(actual, budgeted);
                   const cellColor = getCellTextColor(actual, budgeted);
+                  const isColAnimatingOut = animatingOutCols.includes(conf.conferenceId);
+                  const isColAnimatingIn = animatingInCols.includes(conf.conferenceId);
+                  const colFadeStyle: React.CSSProperties = {
+                    opacity: isColAnimatingOut || isColAnimatingIn ? 0 : 1,
+                    transition: `opacity ${ANIM_MS}ms ease`,
+                  };
 
                   if (subView === 'actuals') {
                     return (
-                      <td key={conf.conferenceId} className="border-b border-gray-50" style={{ backgroundColor: cellBg }}>
+                      <td key={conf.conferenceId} className="border-b border-gray-50" style={{ backgroundColor: cellBg, ...colFadeStyle }}>
                         <div className="flex flex-col items-end justify-center px-2 py-2">
                           <span className="text-[12px] font-bold" style={{ color: cellColor }}>{fmtCurrency(actual)}</span>
                         </div>
@@ -641,7 +673,7 @@ export function ProgramPlannerCostMatrix({
 
                   const variance = actual != null && budgeted != null ? actual - budgeted : null;
                   return (
-                    <td key={conf.conferenceId} className="border-b border-gray-50" style={{ backgroundColor: getCellBackground(actual, budgeted) }}>
+                    <td key={conf.conferenceId} className="border-b border-gray-50" style={{ backgroundColor: getCellBackground(actual, budgeted), ...colFadeStyle }}>
                       <div className="flex flex-col items-end justify-center px-2 py-2">
                         <span className="text-[12px] font-bold" style={{ color: getCellTextColor(actual, budgeted) }}>
                           {variance != null ? `${variance > 0 ? '+' : ''}${fmtCurrency(variance)}` : '—'}
@@ -668,11 +700,17 @@ export function ProgramPlannerCostMatrix({
                   const actual = totals?.actual ?? null;
                   const budgeted = totals?.budgeted ?? null;
                   const pillColor = PCT_PILL_COLORS[colIdx % PCT_PILL_COLORS.length];
+                  const isColAnimatingOut = animatingOutCols.includes(conf.conferenceId);
+                  const isColAnimatingIn = animatingInCols.includes(conf.conferenceId);
+                  const colFadeStyle: React.CSSProperties = {
+                    opacity: isColAnimatingOut || isColAnimatingIn ? 0 : 1,
+                    transition: `opacity ${ANIM_MS}ms ease`,
+                  };
 
                   if (subView === 'actuals') {
                     const pct = programTotal > 0 && actual != null ? (actual / programTotal) * 100 : null;
                     return (
-                      <td key={conf.conferenceId} className="px-2 py-2 text-center" style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}>
+                      <td key={conf.conferenceId} className="px-2 py-2 text-center" style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)', ...colFadeStyle }}>
                         {pct != null ? (
                           <span
                             className="inline-block px-1.5 py-0.5 rounded text-[12px] font-bold border"
@@ -688,7 +726,7 @@ export function ProgramPlannerCostMatrix({
                   const variancePct = actual != null && budgeted != null && budgeted > 0
                     ? ((actual - budgeted) / budgeted) * 100 : null;
                   return (
-                    <td key={conf.conferenceId} className="px-2 py-2 text-center" style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}>
+                    <td key={conf.conferenceId} className="px-2 py-2 text-center" style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)', ...colFadeStyle }}>
                       {variancePct != null ? (
                         <span
                           className="inline-block px-1.5 py-0.5 rounded text-[12px] font-bold border"
