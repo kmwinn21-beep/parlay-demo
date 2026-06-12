@@ -74,6 +74,7 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
   const [removedLineItems, setRemovedLineItems] = useState<string[]>([]);
   const [animatingOutRows, setAnimatingOutRows] = useState<string[]>([]);
   const [animatingIntoPanel, setAnimatingIntoPanel] = useState<string[]>([]);
+  const [animatingInRows, setAnimatingInRows] = useState<string[]>([]);
 
   const [activeConferenceIds, setActiveConferenceIds] = useState<number[]>(
     () => conferences.map(c => c.conferenceId)
@@ -158,7 +159,14 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
 
   // Add a line item back from the panel into the matrix
   const addLineItem = (label: string) => {
+    setAnimatingInRows(prev => [...prev, label]);
     setRemovedLineItems(prev => prev.filter(l => l !== label));
+    // Double RAF: let the row render at opacity 0 first, then transition to 1
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setAnimatingInRows(prev => prev.filter(l => l !== label));
+      });
+    });
   };
 
   const CONF_PILL_LIMIT = 8;
@@ -198,7 +206,7 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
                   <button
                     key={conf.conferenceId}
                     onClick={() => toggleConference(conf.conferenceId)}
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[12px] font-medium transition-colors max-w-[120px] truncate ${
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[12px] font-medium transition-colors ${
                       active
                         ? 'bg-blue-50 text-blue-800 border-blue-200'
                         : 'bg-gray-50 text-gray-400 border-gray-200'
@@ -209,14 +217,14 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                       </svg>
                     )}
-                    <span className="truncate">{conf.name.length > 14 ? conf.name.slice(0, 13) + '…' : conf.name}</span>
+                    <span>{conf.name.replace(/\b\d{4}\b/, '').trim()}</span>
                   </button>
                 );
               })}
               {!confFilterExpanded && hiddenCount > 0 && (
                 <button
                   onClick={() => setConfFilterExpanded(true)}
-                  className="px-2 py-0.5 rounded-full border border-gray-200 bg-gray-50 text-[12px] text-gray-500 hover:bg-gray-100"
+                  className="px-2 py-0.5 rounded-lg border border-gray-200 bg-gray-50 text-[12px] text-gray-500 hover:bg-gray-100"
                 >
                   +{hiddenCount} more
                 </button>
@@ -244,12 +252,16 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
 
       {/* ── Matrix area ─────────────────────────────────────────────────── */}
       <div className="flex">
-        {/* Add Line Items panel — only shown when items have been removed */}
-        {removedLineItems.length > 0 && (
-          <div
-            className="flex-shrink-0 border-r border-gray-200 bg-gray-50"
-            style={{ minWidth: 140 }}
-          >
+        {/* Add Line Items panel — slides in from left; always in DOM for animation */}
+        <div
+          className="flex-shrink-0 overflow-hidden bg-gray-50"
+          style={{
+            maxWidth: removedLineItems.length > 0 ? '180px' : '0px',
+            transition: 'max-width 0.3s ease',
+          }}
+        >
+          {/* Inner fixed-width container so content doesn't reflow during transition */}
+          <div className="border-r border-gray-200" style={{ width: 180 }}>
             <div className="px-3 py-2 border-b border-gray-100">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
                 Add Line Item(s)
@@ -278,7 +290,7 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
               ))}
             </div>
           </div>
-        )}
+        </div>
 
         {/* Scrollable matrix table */}
         <div style={{ overflowX: 'auto' }} className="flex-1">
@@ -324,6 +336,7 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
                   const isOdd = rowIdx % 2 === 1;
                   const rowBg = isOdd ? 'var(--color-background-secondary, #F9FAFB)' : 'var(--color-background-primary, white)';
                   const isAnimatingOut = animatingOutRows.includes(label);
+                  const isAnimatingIn = animatingInRows.includes(label);
 
                   // Row total across active conferences
                   let rowTotal = 0;
@@ -340,8 +353,8 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
                       key={label}
                       style={{
                         transition: 'opacity 0.22s ease, transform 0.22s ease',
-                        opacity: isAnimatingOut ? 0 : 1,
-                        transform: isAnimatingOut ? 'translateX(-8px)' : 'translateX(0)',
+                        opacity: (isAnimatingOut || isAnimatingIn) ? 0 : 1,
+                        transform: isAnimatingOut ? 'translateX(-8px)' : isAnimatingIn ? 'translateX(8px)' : 'translateX(0)',
                       }}
                     >
                       {/* Label cell with minus button */}

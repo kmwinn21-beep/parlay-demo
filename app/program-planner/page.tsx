@@ -538,9 +538,26 @@ export default function ProgramPlannerPage() {
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                       </svg>
                                       <span className="text-xs font-bold text-gray-700">{s.seriesName}</span>
-                                      <span className="text-[12px] text-gray-400">
-                                        {s.conferenceCount} conference{s.conferenceCount !== 1 ? 's' : ''}{s.totalActualSpend > 0 ? ` · ${fmtCurrency(s.totalActualSpend)}` : ''}{s.totalPipeline > 0 ? ` · ${fmtCurrency(s.totalPipeline)} pipeline` : ''}
-                                      </span>
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                          {s.conferenceCount} {s.conferenceCount !== 1 ? 'confs' : 'conf'}
+                                        </span>
+                                        {s.totalActualSpend > 0 && (
+                                          <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-red-50 text-red-700 border border-red-200">
+                                            {fmtCurrency(s.totalActualSpend)}
+                                          </span>
+                                        )}
+                                        {s.totalPipeline > 0 && (
+                                          <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
+                                            {fmtCurrency(s.totalPipeline)} pipeline
+                                          </span>
+                                        )}
+                                        {s.totalClosedWon > 0 && (
+                                          <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-green-50 text-green-700 border border-green-200">
+                                            {fmtCurrency(s.totalClosedWon)} closed/won
+                                          </span>
+                                        )}
+                                      </div>
                                     </button>
                                   </div>
                                 </td>
