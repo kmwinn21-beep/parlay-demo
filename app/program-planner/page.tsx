@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ProgramPlannerCostMatrix } from '@/components/ProgramPlannerCostMatrix';
+import { ProgramPlannerAnalyticsPanel } from '@/components/ProgramPlannerAnalyticsPanel';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -322,6 +323,10 @@ export default function ProgramPlannerPage() {
     });
   };
 
+  const [activeConferenceIds, setActiveConferenceIds] = useState<number[]>([]);
+  const [activeLineItems, setActiveLineItems] = useState<string[]>([]);
+  const [selectedLineItem, setSelectedLineItem] = useState<string | null>(null);
+
   // All conferences flat for rankings and cost matrix
   const allConfs = confsData?.conferences ?? [];
 
@@ -502,15 +507,25 @@ export default function ProgramPlannerPage() {
                   <ProgramPlannerCostMatrix
                     conferences={flattenedConferences}
                     year={selectedYear}
+                    activeConferenceIds={activeConferenceIds}
+                    onActiveConferenceIdsChange={setActiveConferenceIds}
+                    activeLineItems={activeLineItems}
+                    onActiveLineItemsChange={setActiveLineItems}
+                    selectedLineItem={selectedLineItem}
+                    onLineItemSelect={setSelectedLineItem}
                   />
                 </div>
                 <div className="col-span-2 card overflow-hidden">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 px-4 pt-3 pb-2 border-b border-gray-100">
                     Visual Breakdown
                   </p>
-                  <div className="px-4 py-12 flex items-center justify-center">
-                    <p className="text-sm text-gray-300">Coming soon</p>
-                  </div>
+                  <ProgramPlannerAnalyticsPanel
+                    conferences={flattenedConferences}
+                    activeConferenceIds={activeConferenceIds}
+                    activeLineItems={activeLineItems}
+                    selectedLineItem={selectedLineItem}
+                    onLineItemSelect={setSelectedLineItem}
+                  />
                 </div>
               </div>
             ) : (

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -22,6 +22,12 @@ interface ConferenceRow {
 export type ProgramPlannerCostMatrixProps = {
   conferences: ConferenceRow[];
   year: number;
+  activeConferenceIds: number[];
+  onActiveConferenceIdsChange: (ids: number[]) => void;
+  activeLineItems: string[];
+  onActiveLineItemsChange: (items: string[]) => void;
+  selectedLineItem: string | null;
+  onLineItemSelect: (label: string | null) => void;
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -160,7 +166,16 @@ function innerStyle(collapsed: boolean, px: number): React.CSSProperties {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCostMatrixProps) {
+export function ProgramPlannerCostMatrix({
+  conferences,
+  year,
+  activeConferenceIds,
+  onActiveConferenceIdsChange,
+  activeLineItems,
+  onActiveLineItemsChange,
+  selectedLineItem,
+  onLineItemSelect,
+}: ProgramPlannerCostMatrixProps) {
   const [subView, setSubView] = useState<'actuals' | 'variance'>('actuals');
 
   // Line item remove/add — start with nothing removed
@@ -169,13 +184,17 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
   const [animatingIntoPanel, setAnimatingIntoPanel] = useState<string[]>([]);
   const [animatingInRows, setAnimatingInRows] = useState<string[]>([]);
 
-  const [activeConferenceIds, setActiveConferenceIds] = useState<number[]>(
-    () => conferences.map(c => c.conferenceId)
-  );
   const [confFilterExpanded, setConfFilterExpanded] = useState(false);
 
-  // Active line items = all items NOT removed
-  const activeLineItems = useMemo(
+  // On mount: initialize parent state with all conference IDs and all line items
+  useEffect(() => {
+    onActiveConferenceIdsChange(conferences.map(c => c.conferenceId));
+    onActiveLineItemsChange(ALL_LINE_ITEMS.slice());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally only on mount
+
+  // Internal activeLineItems derived from removedLineItems (for matrix rendering and computation)
+  const internalActiveLineItems = useMemo(
     () => ALL_LINE_ITEMS.filter(li => !removedLineItems.includes(li)),
     [removedLineItems]
   );
@@ -209,7 +228,7 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
         let totalActual = 0;
         let totalBudgeted = 0;
         let hasAny = false;
-        for (const label of activeLineItems) {
+        for (const label of internalActiveLineItems) {
           const entry = inner?.get(label);
           if (entry?.actual != null) { totalActual += entry.actual; hasAny = true; }
           if (entry?.budgeted != null) totalBudgeted += entry.budgeted;
@@ -217,7 +236,7 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
         return [conf.conferenceId, { actual: hasAny ? totalActual : null, budgeted: totalBudgeted || null }];
       })
     );
-  }, [activeConferences, lineItemByConf, activeLineItems]);
+  }, [activeConferences, lineItemByConf, internalActiveLineItems]);
 
   // Program grand total
   const programTotal = useMemo(() => {
@@ -231,9 +250,10 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
 
   // Conference toggle
   const toggleConference = (id: number) => {
-    setActiveConferenceIds(prev =>
-      prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
-    );
+    const next = activeConferenceIds.includes(id)
+      ? activeConferenceIds.filter(c => c !== id)
+      : [...activeConferenceIds, id];
+    onActiveConferenceIdsChange(next);
   };
 
   // ── Line item remove / add ────────────────────────────────────────────────
@@ -242,7 +262,11 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
     setAnimatingOutRows(prev => prev.includes(label) ? prev : [...prev, label]);
     setTimeout(() => {
       setAnimatingOutRows(prev => prev.filter(l => l !== label));
-      setRemovedLineItems(prev => [...prev, label]);
+      setRemovedLineItems(prev => {
+        const next = [...prev, label];
+        onActiveLineItemsChange(ALL_LINE_ITEMS.filter(li => !next.includes(li)));
+        return next;
+      });
       setAnimatingIntoPanel(prev => prev.includes(label) ? prev : [...prev, label]);
       setTimeout(() => {
         setAnimatingIntoPanel(prev => prev.filter(l => l !== label));
@@ -252,7 +276,11 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
 
   const addLineItem = (label: string) => {
     setAnimatingInRows(prev => [...prev, label]);
-    setRemovedLineItems(prev => prev.filter(l => l !== label));
+    setRemovedLineItems(prev => {
+      const next = prev.filter(l => l !== label);
+      onActiveLineItemsChange(ALL_LINE_ITEMS.filter(li => !next.includes(li)));
+      return next;
+    });
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         setAnimatingInRows(prev => prev.filter(l => l !== label));
@@ -267,6 +295,7 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
     setTimeout(() => {
       setAnimatingOutRows([]);
       setRemovedLineItems(ALL_LINE_ITEMS.slice());
+      onActiveLineItemsChange([]);
       setAnimatingIntoPanel(toRemove);
       setTimeout(() => setAnimatingIntoPanel([]), 300);
     }, ANIM_MS);
@@ -277,6 +306,7 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
     if (toAdd.length === 0) return;
     setAnimatingInRows(toAdd);
     setRemovedLineItems([]);
+    onActiveLineItemsChange(ALL_LINE_ITEMS.slice());
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         setAnimatingInRows([]);
@@ -351,8 +381,8 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
             <VerticalToggle
               allActive={allConfsActive}
               noneActive={noConfsActive}
-              onAll={() => setActiveConferenceIds(conferences.map(c => c.conferenceId))}
-              onNone={() => setActiveConferenceIds([])}
+              onAll={() => onActiveConferenceIdsChange(conferences.map(c => c.conferenceId))}
+              onNone={() => onActiveConferenceIdsChange([])}
               accentClass="bg-brand-accent"
             />
           </div>
@@ -480,11 +510,23 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
                       {/* Label cell — padding moved into wrapper for height animation */}
                       <td
                         className="p-0 border-b border-gray-50 overflow-hidden"
-                        style={{ position: 'sticky', left: 0, zIndex: 2, backgroundColor: rowBg }}
+                        style={{
+                          position: 'sticky', left: 0, zIndex: 2, backgroundColor: rowBg,
+                          borderLeft: selectedLineItem === label ? '3px solid var(--color-brand-secondary, #1B76BC)' : '3px solid transparent',
+                        }}
                       >
                         <div style={labelInner}>
                           <div className="flex items-center justify-between gap-1">
-                            <span className="text-[12px] font-medium text-gray-700">{label}</span>
+                            <button
+                              onClick={() => onLineItemSelect(selectedLineItem === label ? null : label)}
+                              className={`text-[12px] font-medium text-left transition-colors ${
+                                selectedLineItem === label
+                                  ? 'text-brand-secondary font-semibold'
+                                  : 'text-gray-700 hover:text-brand-secondary'
+                              }`}
+                            >
+                              {label}
+                            </button>
                             <button
                               onClick={() => removeLineItem(label)}
                               title={`Remove ${label}`}
