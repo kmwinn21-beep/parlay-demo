@@ -7,6 +7,7 @@ import { trackEvent } from '@/lib/trackEvent';
 import { waitUntil } from '@vercel/functions';
 import { sendNotificationEmail } from '@/lib/email';
 import { parseFile, parseFileWithMapping, classifyCompanyType, matchConfigOption, type ColumnMapping } from '@/lib/parsers';
+import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
 import {
   buildCompanyMatcher,
   buildAttendeeMatcher,
@@ -156,11 +157,13 @@ export async function POST(request: NextRequest) {
     let parsedCount = 0;
 
     if (file && file.size > 0) {
-      const [companyTypeOptions, servicesOptions, functionOptions, productOptions] = await Promise.all([
-        getConfigOptionValues('company_type'),
-        getConfigOptionValues('services'),
-        getConfigOptionValues('function'),
-        getConfigOptionValues('products'),
+      const [companyTypeOptions, servicesOptions, functionOptions, productOptions, icpOptions, icpConfig] = await Promise.all([
+        getConfigOptionValues('company_type', db),
+        getConfigOptionValues('services', db),
+        getConfigOptionValues('function', db),
+        getConfigOptionValues('products', db),
+        getConfigOptionValues('icp', db),
+        getIcpConfig(db),
       ]);
 
       const buffer = Buffer.from(await file.arrayBuffer());
@@ -309,6 +312,7 @@ export async function POST(request: NextRequest) {
         const companyWebsiteMap = new Map<string, string>(); // company name -> website from file
         const companyWseMap = new Map<string, number>(); // company name -> wse from file
         const companyServicesMap = new Map<string, string>(); // company name -> services from file
+        const companyIcpMap = new Map<string, string>(); // company name -> icp from file
         const companyNameSet = new Set<string>();
         valid.forEach((p) => {
           if (p.company?.trim()) {
@@ -329,6 +333,9 @@ export async function POST(request: NextRequest) {
             }
             if (p.services?.trim() && !companyServicesMap.has(p.company.trim())) {
               companyServicesMap.set(p.company.trim(), p.services.trim());
+            }
+            if (p.icp?.trim() && !companyIcpMap.has(p.company.trim())) {
+              companyIcpMap.set(p.company.trim(), p.icp.trim());
             }
           }
         });
@@ -414,6 +421,62 @@ export async function POST(request: NextRequest) {
           }
         }
         if (bgJobId) await db.execute({ sql: 'UPDATE upload_jobs SET processed_rows=? WHERE id=?', args: [Math.round(valid.length * 0.2), bgJobId] }).catch(() => {});
+
+        // ── Step 3c: Compute ICP for all companies touched by this upload ──
+        const affectedCompanyIds = Array.from(new Set(
+          Array.from(companyIdCache.values())
+            .filter((id) => id > 0)
+            .concat(Array.from(parentWseUpdates.keys()))
+        ));
+        if (affectedCompanyIds.length > 0) {
+          const placeholders = affectedCompanyIds.map(() => '?').join(',');
+          const freshRows = await db.execute({
+            sql: `SELECT id, company_type, wse, services, profit_type, entity_structure FROM companies WHERE id IN (${placeholders})`,
+            args: affectedCompanyIds,
+          });
+          // Build reverse map: company id -> name for file ICP lookup
+          const idToName = new Map<number, string>();
+          for (const [coName, coId] of Array.from(companyIdCache.entries())) {
+            if (coId > 0) idToName.set(coId, coName);
+          }
+          const falseValue = icpOptions[1] ?? 'No';
+          const icpUpdates: Array<{ id: number; icp: string }> = [];
+          for (const row of freshRows.rows) {
+            const companyId = Number(row.id);
+            const coName = idToName.get(companyId);
+            const fileIcp = coName ? companyIcpMap.get(coName) : undefined;
+            let icp: string;
+            if (fileIcp) {
+              const normalized = fileIcp.toLowerCase();
+              if (normalized === 'yes' || normalized === 'true' || normalized === 'y' || normalized === '1') {
+                icp = icpOptions[0] ?? 'Yes';
+              } else if (normalized === 'no' || normalized === 'false' || normalized === 'n' || normalized === '0') {
+                icp = falseValue;
+              } else {
+                icp = fileIcp;
+              }
+            } else {
+              icp = evaluateIcpRules(
+                {
+                  company_type: row.company_type != null ? String(row.company_type) : null,
+                  services: row.services != null ? String(row.services) : null,
+                  wse: row.wse != null ? String(row.wse) : null,
+                  profit_type: row.profit_type != null ? String(row.profit_type) : null,
+                  entity_structure: row.entity_structure != null ? String(row.entity_structure) : null,
+                },
+                icpConfig,
+                icpOptions,
+              );
+            }
+            icpUpdates.push({ id: companyId, icp });
+          }
+          if (icpUpdates.length > 0) {
+            await batchInsert(db, icpUpdates, (u) => ({
+              sql: 'UPDATE companies SET icp = ? WHERE id = ?',
+              args: [u.icp, u.id],
+            }));
+          }
+        }
 
         // ── Step 4: Build attendee lookup (exact name match + secondary confirmation) ──
         type AtRow = { id: number; full_name: string; email: string | null; website: string | null; company_name: string | null };
