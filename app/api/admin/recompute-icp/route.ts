@@ -24,24 +24,34 @@ export async function POST(request: NextRequest) {
   const icpOptions = icpOptionsResult.rows.map(r => String(r.value));
 
   let updated = 0;
+  let yesCount = 0;
+  const sampleEvals: Array<{ id: number; company_type: string | null; wse: string | null; icp: string }> = [];
   for (const row of companiesResult.rows) {
-    const newIcp = evaluateIcpRules(
-      {
-        company_type: row.company_type ? String(row.company_type) : null,
-        services: row.services ? String(row.services) : null,
-        wse: row.wse ? String(row.wse) : null,
-        profit_type: row.profit_type ? String(row.profit_type) : null,
-        entity_structure: row.entity_structure ? String(row.entity_structure) : null,
-      },
-      icpConfig,
-      icpOptions,
-    );
+    const companyValues = {
+      company_type: row.company_type != null ? String(row.company_type) : null,
+      services: row.services != null ? String(row.services) : null,
+      wse: row.wse != null ? String(row.wse) : null,
+      profit_type: row.profit_type != null ? String(row.profit_type) : null,
+      entity_structure: row.entity_structure != null ? String(row.entity_structure) : null,
+    };
+    const newIcp = evaluateIcpRules(companyValues, icpConfig, icpOptions);
     await db.execute({
       sql: 'UPDATE companies SET icp = ?, updated_at = datetime(\'now\') WHERE id = ?',
       args: [newIcp, Number(row.id)],
     });
     updated++;
+    if (newIcp === (icpOptions[0] ?? 'Yes')) yesCount++;
+    if (sampleEvals.length < 5) {
+      sampleEvals.push({ id: Number(row.id), company_type: companyValues.company_type, wse: companyValues.wse, icp: newIcp });
+    }
   }
 
-  return NextResponse.json({ ok: true, updated });
+  return NextResponse.json({
+    ok: true,
+    updated,
+    yesCount,
+    icpConfig: { rulesCount: icpConfig.rules.length, unitTypeReq: icpConfig.unitTypeReq },
+    icpOptions,
+    sampleEvals,
+  });
 }
