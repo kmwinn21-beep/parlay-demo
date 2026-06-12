@@ -498,6 +498,7 @@ export default function ProgramPlannerPage() {
                 value={view}
                 onChange={v => setView(v as 'program' | 'cost')}
                 activeBg={id => id === 'program' ? 'bg-brand-primary' : 'bg-brand-accent'}
+                className="w-[160px]"
               />
             </div>
 
@@ -541,6 +542,7 @@ export default function ProgramPlannerPage() {
                       value={groupMode}
                       onChange={v => setGroupMode(v as GroupMode)}
                       activeBg="bg-brand-primary"
+                      className="w-[200px]"
                     />
                   </div>
 

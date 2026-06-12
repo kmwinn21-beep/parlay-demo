@@ -336,6 +336,7 @@ export function ProgramPlannerCostMatrix({
             value={subView}
             onChange={v => setSubView(v as 'actuals' | 'variance')}
             activeBg="bg-brand-accent"
+            className="w-[180px]"
           />
         </div>
 
