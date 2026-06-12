@@ -68,9 +68,7 @@ type DecisionValue = 'attend' | 'reduce' | 'cut' | 'evaluating' | null;
 
 function fmtCurrency(v: number | null | undefined): string {
   if (v == null) return '—';
-  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}k`;
-  return `$${Math.round(v).toLocaleString()}`;
+  return '$' + Math.round(v).toLocaleString();
 }
 
 function fmtDate(dateStr: string): string {
@@ -86,6 +84,24 @@ function cesColor(score: number | null): string {
   if (score >= 75) return 'text-blue-600 font-semibold';
   if (score >= 60) return 'text-amber-600 font-semibold';
   return 'text-red-600 font-semibold';
+}
+
+function cesPillStyle(score: number | null): { bg: string; color: string; border: string } {
+  if (score == null) return { bg: '#F3F4F6', color: '#9CA3AF', border: '#D1D5DB' };
+  if (score >= 70) return { bg: '#DCFCE7', color: '#059669', border: '#6EE7B7' };
+  if (score >= 50) return { bg: '#DBEAFE', color: '#1B76BC', border: '#93C5FD' };
+  if (score >= 40) return { bg: '#FEF3C7', color: '#d97706', border: '#FCD34D' };
+  if (score >= 25) return { bg: '#FFEDD5', color: '#f97316', border: '#FDBA74' };
+  return { bg: '#FEE2E2', color: '#dc2626', border: '#FCA5A5' };
+}
+
+function actualCostPillStyle(actual: number | null, budget: number | null): { bg: string; color: string; border: string } {
+  if (actual == null) return { bg: 'transparent', color: '#6B7280', border: 'transparent' };
+  if (budget == null || budget === 0) return { bg: '#EFF6FF', color: '#1B76BC', border: '#BFDBFE' };
+  const ratio = actual / budget;
+  if (ratio <= 0.95) return { bg: '#DCFCE7', color: '#059669', border: '#6EE7B7' };
+  if (ratio >= 1.05) return { bg: '#FEE2E2', color: '#dc2626', border: '#FCA5A5' };
+  return { bg: '#EFF6FF', color: '#1B76BC', border: '#BFDBFE' };
 }
 
 const DECISION_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
@@ -149,7 +165,9 @@ function DecisionPill({
         ref={buttonRef}
         onClick={openDropdown}
         className={`px-2 py-0.5 rounded text-[12px] font-medium cursor-pointer ${
-          cfg ? `${cfg.bg} ${cfg.text}` : 'text-gray-400 hover:text-gray-600'
+          cfg
+            ? `${cfg.bg} ${cfg.text}`
+            : 'bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500'
         }`}
       >
         {cfg ? cfg.label : '—'}
@@ -288,12 +306,12 @@ export default function ProgramPlannerPage() {
   const buildRows = (): TableRow[] => {
     if (!confsData) return [];
     const rows: TableRow[] = [];
-    let rowIndex = 0;
 
     if (groupMode === 'series') {
       for (const s of confsData.series) {
         rows.push({ type: 'series', group: s, key: `series-${s.seriesId}` });
         if (!collapsedSeries.has(s.seriesId)) {
+          let rowIndex = 0;
           for (const c of s.conferences) {
             rows.push({ type: 'conference', conf: c, rowIndex: rowIndex++, key: `conf-${c.conferenceId}` });
           }
@@ -302,6 +320,7 @@ export default function ProgramPlannerPage() {
       if (confsData.standalone.length > 0) {
         rows.push({ type: 'standalone_header', key: 'standalone' });
         if (!collapsedSeries.has('__standalone__')) {
+          let rowIndex = 0;
           for (const c of confsData.standalone) {
             rows.push({ type: 'conference', conf: c, rowIndex: rowIndex++, key: `conf-${c.conferenceId}` });
           }
@@ -309,14 +328,14 @@ export default function ProgramPlannerPage() {
       }
     } else if (groupMode === 'date') {
       const sorted = [...allConfs].sort((a, b) => a.startDate.localeCompare(b.startDate));
-      for (const c of sorted) {
-        rows.push({ type: 'conference', conf: c, rowIndex: rowIndex++, key: `conf-${c.conferenceId}` });
+      for (let i = 0; i < sorted.length; i++) {
+        rows.push({ type: 'conference', conf: sorted[i], rowIndex: i, key: `conf-${sorted[i].conferenceId}` });
       }
     } else {
       // CES sort
       const sorted = [...allConfs].sort((a, b) => (b.ces ?? -1) - (a.ces ?? -1));
-      for (const c of sorted) {
-        rows.push({ type: 'conference', conf: c, rowIndex: rowIndex++, key: `conf-${c.conferenceId}` });
+      for (let i = 0; i < sorted.length; i++) {
+        rows.push({ type: 'conference', conf: sorted[i], rowIndex: i, key: `conf-${sorted[i].conferenceId}` });
       }
     }
 
@@ -511,9 +530,6 @@ export default function ProgramPlannerPage() {
                                         {s.conferenceCount} conference{s.conferenceCount !== 1 ? 's' : ''}{s.totalActualSpend > 0 ? ` · ${fmtCurrency(s.totalActualSpend)}` : ''}{s.totalPipeline > 0 ? ` · ${fmtCurrency(s.totalPipeline)} pipeline` : ''}
                                       </span>
                                     </button>
-                                    <button className="text-[12px] text-brand-secondary hover:text-brand-primary">
-                                      View Kanban →
-                                    </button>
                                   </div>
                                 </td>
                               </tr>
@@ -554,11 +570,33 @@ export default function ProgramPlannerPage() {
                                 </button>
                               </td>
                               <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{fmtDate(c.startDate)}</td>
-                              <td className={`px-3 py-2 ${cesColor(c.ces)}`}>{c.ces != null ? c.ces : '—'}</td>
-                              <td className="px-3 py-2 text-gray-700 tabular-nums">{fmtCurrency(c.actualSpend)}</td>
+                              <td className="px-3 py-2">
+                                {c.ces != null ? (
+                                  <span
+                                    className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border"
+                                    style={{ backgroundColor: cesPillStyle(c.ces).bg, color: cesPillStyle(c.ces).color, borderColor: cesPillStyle(c.ces).border }}
+                                  >
+                                    {c.ces}
+                                  </span>
+                                ) : <span className="text-gray-400">—</span>}
+                              </td>
+                              <td className="px-3 py-2">
+                                {c.actualSpend != null ? (
+                                  <span
+                                    className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border tabular-nums"
+                                    style={{ backgroundColor: actualCostPillStyle(c.actualSpend, c.budgetTotal).bg, color: actualCostPillStyle(c.actualSpend, c.budgetTotal).color, borderColor: actualCostPillStyle(c.actualSpend, c.budgetTotal).border }}
+                                  >
+                                    {fmtCurrency(c.actualSpend)}
+                                  </span>
+                                ) : <span className="text-gray-400 tabular-nums">—</span>}
+                              </td>
                               <td className="px-3 py-2 text-gray-700 tabular-nums">{fmtCurrency(c.pipelineInfluenced)}</td>
-                              <td className={`px-3 py-2 tabular-nums ${(c.closedWon ?? 0) > 0 ? 'text-green-600 font-medium' : 'text-gray-700'}`}>
-                                {fmtCurrency(c.closedWon)}
+                              <td className="px-3 py-2">
+                                {(c.closedWon ?? 0) > 0 ? (
+                                  <span className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border bg-green-50 text-green-700 border-green-200 tabular-nums">
+                                    {fmtCurrency(c.closedWon)}
+                                  </span>
+                                ) : <span className="text-gray-400 tabular-nums">—</span>}
                               </td>
                               <td className="px-3 py-2 text-gray-700">{c.headcount ?? '—'}</td>
                               <td className="px-3 py-2">
@@ -654,9 +692,18 @@ export default function ProgramPlannerPage() {
                             <p className="text-[12px] font-medium text-gray-700 truncate">{c.name}</p>
                             <p className="text-[10px] text-gray-400">{[sub1, sub2].filter(Boolean).join(' · ')}</p>
                           </div>
-                          <span className={`text-[12px] font-semibold flex-shrink-0 ${rankMetric === 'ces' ? cesColor(c.ces) : 'text-gray-700'}`}>
-                            {metricVal}
-                          </span>
+                          {rankMetric === 'ces' && c.ces != null ? (
+                            <span
+                              className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border flex-shrink-0"
+                              style={{ backgroundColor: cesPillStyle(c.ces).bg, color: cesPillStyle(c.ces).color, borderColor: cesPillStyle(c.ces).border }}
+                            >
+                              {metricVal}
+                            </span>
+                          ) : (
+                            <span className="text-[12px] font-semibold flex-shrink-0 text-gray-700">
+                              {metricVal}
+                            </span>
+                          )}
                         </div>
                       );
                     })}

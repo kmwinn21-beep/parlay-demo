@@ -36,18 +36,12 @@ const ALL_LINE_ITEMS = [
 
 function fmtCurrency(v: number | null | undefined): string {
   if (v == null) return '—';
-  if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(0)}k`;
-  return `$${Math.round(v).toLocaleString()}`;
+  return '$' + Math.round(v).toLocaleString();
 }
 
-function abbrevConfName(name: string, year: number): string {
-  // "NIC Spring 2025" → "NIC Spring '25"
-  const shortYear = `'${String(year).slice(2)}`;
-  // Remove the year from the name if present, then append short year
-  const stripped = name.replace(/\b\d{4}\b/, '').trim();
-  const words = stripped.split(/\s+/).slice(0, 2).join(' ');
-  return `${words} ${shortYear}`;
+function abbrevConfName(name: string): string {
+  const words = name.replace(/\b\d{4}\b/, '').trim().split(/\s+/).slice(0, 2).join(' ');
+  return words || name;
 }
 
 function getCellBackground(actual: number | null, budgeted: number | null): string {
@@ -289,7 +283,7 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
                   key={conf.conferenceId}
                   className="px-2 py-2 text-right text-[12px] font-semibold text-gray-700 leading-tight"
                 >
-                  {abbrevConfName(conf.name, year)}
+                  {abbrevConfName(conf.name)}
                 </th>
               ))}
               <th
@@ -397,11 +391,11 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
                     style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
                   >
                     {subView === 'actuals' ? (
-                      <span className="text-[12px] font-medium text-gray-700">
+                      <span className="text-[12px] font-bold text-gray-700">
                         {rowHasData ? fmtCurrency(rowTotal) : '—'}
                       </span>
                     ) : (
-                      <span className="text-[12px] font-medium text-gray-700">
+                      <span className="text-[12px] font-bold text-gray-700">
                         {rowHasData && rowBudgeted > 0
                           ? `${rowTotal - rowBudgeted > 0 ? '+' : ''}${fmtCurrency(rowTotal - rowBudgeted)}`
                           : '—'}
@@ -522,7 +516,7 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
 
       {/* ── Heatmap legend ───────────────────────────────────────────────── */}
       <div className="px-4 py-2.5 border-t border-gray-100 flex items-center gap-3 flex-wrap">
-        <span className="text-[10px] text-gray-400 font-medium mr-1">Heatmap:</span>
+        <span className="text-[12px] text-gray-400 font-medium mr-1">Heatmap:</span>
         {[
           { bg: '#EAF3DE', color: '#27500A', label: '>10% under' },
           { bg: '#F3F8EC', color: '#3B6D11', label: '1–10% under' },
@@ -535,7 +529,7 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
               className="w-3 h-3 rounded-sm border border-gray-200 flex-shrink-0"
               style={{ backgroundColor: bg }}
             />
-            <span className="text-[10px]" style={{ color }}>{label}</span>
+            <span className="text-[12px]" style={{ color }}>{label}</span>
           </div>
         ))}
       </div>
