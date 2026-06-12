@@ -86,20 +86,35 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // closed/won per conference — match by conference name in attributed_conference JSON
+  // closed/won per conference — apply proper attribution math
   const cwRes = await db.execute({
-    sql: `SELECT cd.attributed_conference, cd.amount FROM closed_deals cd WHERE cd.attribution_type IS NOT NULL AND LOWER(TRIM(cd.attribution_type)) != 'none' AND cd.amount IS NOT NULL`,
+    sql: `SELECT cd.attributed_conference, cd.amount, cd.attribution_type, cd.attribution_pct FROM closed_deals cd WHERE cd.attribution_type IS NOT NULL AND LOWER(TRIM(cd.attribution_type)) != 'none' AND cd.amount IS NOT NULL`,
     args: [],
   });
-  // Build per-conference closed/won by name matching
+
+  function parseAttrConfs(raw: unknown): string[] {
+    try {
+      const parsed = JSON.parse(String(raw ?? '[]'));
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch { return []; }
+  }
+
+  // Build per-conference closed/won using attributed amount (not full deal amount)
   const cwByConfId = new Map<number, number>();
   for (const conf of confsRes.rows) {
     const confName = String(conf.name);
     let total = 0;
     for (const r of cwRes.rows) {
-      const attrConf = String(r.attributed_conference ?? '');
-      if (attrConf.includes(confName)) {
-        total += Number(r.amount ?? 0);
+      const attrConfs = parseAttrConfs(r.attributed_conference);
+      if (!attrConfs.includes(confName)) continue;
+      const amount = Number(r.amount ?? 0);
+      const attrType = String(r.attribution_type ?? '').toLowerCase().trim();
+      if (attrType === 'direct source') {
+        total += amount;
+      } else {
+        const pct = Number(r.attribution_pct ?? 50);
+        const perConfPct = pct / attrConfs.length;
+        total += amount * (perConfPct / 100);
       }
     }
     if (total > 0) cwByConfId.set(Number(conf.id), total);
@@ -129,7 +144,7 @@ export async function GET(request: NextRequest) {
       budgetTotal: snap?.budget_total ?? null,
       pipelineInfluenced: snap?.pipeline_influenced ?? null,
       budgetLineItems: snap?.budgetLineItems ?? null,
-      closedWon: cwByConfId.get(confId) ?? null,
+      closedWon: cwByConfId.has(confId) ? Math.round(cwByConfId.get(confId)!) : null,
       headcount,
       decision: plan?.decision ?? null,
       plannedBudget: plan?.planned_budget ?? null,

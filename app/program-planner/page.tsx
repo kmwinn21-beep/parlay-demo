@@ -602,7 +602,7 @@ export default function ProgramPlannerPage() {
                               <td className="px-3 py-2">
                                 {c.ces != null ? (
                                   <span
-                                    className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border"
+                                    className="inline-flex items-center justify-center w-8 h-8 rounded-full text-[12px] font-bold border"
                                     style={{ backgroundColor: cesPillStyle(c.ces).bg, color: cesPillStyle(c.ces).color, borderColor: cesPillStyle(c.ces).border }}
                                   >
                                     {c.ces}
@@ -645,7 +645,7 @@ export default function ProgramPlannerPage() {
 
                   {/* Decision summary strip */}
                   {allConfs.length > 0 && (
-                    <div className="border-t border-gray-100 px-4 py-3 flex gap-3">
+                    <div className="border-t border-gray-100 px-4 py-3 flex items-center gap-3">
                       <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 rounded-lg">
                         <span className="w-2 h-2 rounded-full bg-green-500" />
                         <span className="text-xs font-semibold text-green-700">{decisionCounts.attend}</span>
@@ -666,6 +666,7 @@ export default function ProgramPlannerPage() {
                         <span className="text-xs font-semibold text-gray-600">{decisionCounts.undecided}</span>
                         <span className="text-xs text-gray-500">Undecided</span>
                       </div>
+                      <span className="ml-auto text-[11px] text-gray-400 italic">* Closed/Won figures are attributed totals.</span>
                     </div>
                   )}
                 </div>

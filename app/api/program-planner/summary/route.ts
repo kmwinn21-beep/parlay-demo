@@ -40,16 +40,40 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Closed/won: deals with attribution where close_date in this year
-  const cwRes = await db.execute({
-    sql: `SELECT COALESCE(SUM(amount), 0) as total FROM closed_deals WHERE close_date >= ? AND close_date <= ? AND attribution_type IS NOT NULL AND LOWER(TRIM(attribution_type)) != 'none'`,
-    args: [startDate, endDate],
-  });
-  const totalClosedWon = Number(cwRes.rows[0]?.total ?? 0);
+  // Closed/won: sum attributed amounts for deals referencing conferences in this year
+  const confNames = new Set(confs.map(r => String(r.name)));
+  let totalClosedWon = 0;
+  if (confNames.size > 0) {
+    const cwDealsRes = await db.execute({
+      sql: `SELECT attributed_conference, amount, attribution_type, attribution_pct FROM closed_deals WHERE attribution_type IS NOT NULL AND LOWER(TRIM(attribution_type)) != 'none' AND amount IS NOT NULL`,
+      args: [],
+    });
+    for (const r of cwDealsRes.rows) {
+      let attrConfs: string[] = [];
+      try {
+        const parsed = JSON.parse(String(r.attributed_conference ?? '[]'));
+        attrConfs = Array.isArray(parsed) ? parsed.map(String) : [];
+      } catch { /* skip */ }
+      const matchingConfs = attrConfs.filter(name => confNames.has(name));
+      if (matchingConfs.length === 0) continue;
+      const amount = Number(r.amount ?? 0);
+      const attrType = String(r.attribution_type ?? '').toLowerCase().trim();
+      for (const _confName of matchingConfs) {
+        if (attrType === 'direct source') {
+          totalClosedWon += amount;
+        } else {
+          const pct = Number(r.attribution_pct ?? 50);
+          const perConfPct = pct / attrConfs.length;
+          totalClosedWon += amount * (perConfPct / 100);
+        }
+      }
+    }
+  }
 
   const budgetUtilizationPercent = totalBudget > 0 ? Math.round((totalActualSpend / totalBudget) * 100) : 0;
   const avgCostPerConference = conferencesAttended > 0 ? totalActualSpend / conferencesAttended : 0;
-  const avgClosedWonPerConference = conferencesAttended > 0 ? totalClosedWon / conferencesAttended : 0;
+  totalClosedWon = Math.round(totalClosedWon);
+  const avgClosedWonPerConference = conferencesAttended > 0 ? Math.round(totalClosedWon / conferencesAttended) : 0;
   const avgCES = cesCount > 0 ? Math.round((cesSum / cesCount) * 10) / 10 : null;
 
   return NextResponse.json({
