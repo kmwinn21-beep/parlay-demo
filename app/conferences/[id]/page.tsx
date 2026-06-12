@@ -3140,6 +3140,51 @@ export default function ConferenceDetailPage() {
                   toast.error('Failed to update meeting.');
                 }
               }}
+              onBulkDelete={async (ids) => {
+                try {
+                  await Promise.all(ids.map(id => fetch(`/api/meetings/${id}`, { method: 'DELETE' })));
+                  toast.success(`${ids.length} meeting${ids.length > 1 ? 's' : ''} deleted.`);
+                  fetchConference();
+                } catch {
+                  toast.error('Failed to delete some meetings.');
+                  fetchConference();
+                }
+              }}
+              onBulkUpdate={async (ids, field, value) => {
+                try {
+                  if (field === 'outcome') {
+                    await Promise.all(ids.map(id =>
+                      fetch('/api/meetings', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id, outcome: value }),
+                      })
+                    ));
+                  } else {
+                    await Promise.all(ids.map(async id => {
+                      const meeting = filteredMeetings.find(m => m.id === id);
+                      if (!meeting) return;
+                      await fetch(`/api/meetings/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          meeting_date: meeting.meeting_date,
+                          meeting_time: meeting.meeting_time,
+                          location: meeting.location || '',
+                          additional_attendees: meeting.additional_attendees || '',
+                          meeting_type: field === 'meeting_type' ? value : (meeting.meeting_type || ''),
+                          scheduled_by: field === 'scheduled_by' ? value : (meeting.scheduled_by || ''),
+                        }),
+                      });
+                    }));
+                  }
+                  toast.success(`Updated ${ids.length} meeting${ids.length > 1 ? 's' : ''}.`);
+                  fetchConference();
+                } catch {
+                  toast.error('Failed to update some meetings.');
+                  fetchConference();
+                }
+              }}
             />
           </div>
         );

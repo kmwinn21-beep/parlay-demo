@@ -490,6 +490,8 @@ export function MeetingsTable({
   onDelete,
   onEdit,
   onNotesClick,
+  onBulkDelete,
+  onBulkUpdate,
   userOptions = [],
   hideCompany = false,
   tableName = 'meetings',
@@ -501,6 +503,8 @@ export function MeetingsTable({
   onDelete?: (meetingId: number) => void;
   onEdit?: (meetingId: number, data: EditFormData) => void;
   onNotesClick?: (meetingId: number) => void;
+  onBulkDelete?: (ids: number[]) => void;
+  onBulkUpdate?: (ids: number[], field: 'scheduled_by' | 'meeting_type' | 'outcome', value: string) => void;
   userOptions?: UserOption[];
   hideCompany?: boolean;
   tableName?: string;
@@ -511,7 +515,10 @@ export function MeetingsTable({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
   const [meetingTypeOptions, setMeetingTypeOptions] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkRepIds, setBulkRepIds] = useState<number[]>([]);
   const hasActions = !!onEdit;
+  const hasSelection = !!(onBulkDelete || onBulkUpdate);
 
   useEffect(() => {
     fetch('/api/config?category=meeting_type', { cache: 'no-store' })
@@ -523,6 +530,33 @@ export function MeetingsTable({
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
     else { setSortKey(key); setSortDir('asc'); }
+  };
+
+  const toggleSelect = (id: number) => setSelectedIds(prev => {
+    const s = new Set(prev);
+    if (s.has(id)) s.delete(id); else s.add(id);
+    return s;
+  });
+
+  const handleBulkDelete = () => {
+    const ids = Array.from(selectedIds);
+    if (!ids.length || !onBulkDelete) return;
+    if (!confirm(`Delete ${ids.length} meeting${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
+    onBulkDelete(ids);
+    setSelectedIds(new Set());
+  };
+
+  const handleBulkRepApply = () => {
+    const ids = Array.from(selectedIds);
+    if (!ids.length || !onBulkUpdate) return;
+    onBulkUpdate(ids, 'scheduled_by', bulkRepIds.join(','));
+    setBulkRepIds([]);
+  };
+
+  const handleBulkFieldUpdate = (field: 'meeting_type' | 'outcome', value: string) => {
+    const ids = Array.from(selectedIds);
+    if (!ids.length || !onBulkUpdate) return;
+    onBulkUpdate(ids, field, value);
   };
 
   const sorted = [...meetings].sort((a, b) => {
@@ -558,6 +592,10 @@ export function MeetingsTable({
     return sortDir === 'asc' ? cmp : -cmp;
   });
 
+  const allSelected = sorted.length > 0 && sorted.every(m => selectedIds.has(m.id));
+  const someSelected = !allSelected && sorted.some(m => selectedIds.has(m.id));
+  const toggleAll = () => setSelectedIds(allSelected ? new Set() : new Set(sorted.map(m => m.id)));
+
   const SortHeader = ({ label, col }: { label: string; col: SortKey }) => (
     <th
       className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700"
@@ -589,6 +627,75 @@ export function MeetingsTable({
 
   return (
     <>
+      {/* Bulk action toolbar */}
+      {selectedIds.size > 0 && (onBulkDelete || onBulkUpdate) && (
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg mb-2 text-xs">
+          <span className="font-semibold text-blue-700">{selectedIds.size} selected</span>
+          <button
+            type="button"
+            onClick={() => setSelectedIds(new Set())}
+            className="text-blue-500 hover:text-blue-700 underline"
+          >
+            Clear
+          </button>
+          {onBulkDelete && (
+            <button
+              type="button"
+              onClick={handleBulkDelete}
+              className="px-2.5 py-1 bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100 font-medium ml-1"
+            >
+              Delete
+            </button>
+          )}
+          {onBulkUpdate && (
+            <>
+              <span className="text-gray-300 hidden sm:inline">|</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500 hidden sm:inline">Rep:</span>
+                <div className="w-44">
+                  <RepMultiSelect
+                    options={userOptions}
+                    selectedIds={bulkRepIds}
+                    onChange={setBulkRepIds}
+                    placeholder="Set rep…"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleBulkRepApply}
+                  disabled={bulkRepIds.length === 0}
+                  className="px-2 py-1 bg-gray-100 text-gray-700 border border-gray-300 rounded hover:bg-gray-200 font-medium disabled:opacity-40"
+                >
+                  Apply
+                </button>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500 hidden sm:inline">Type:</span>
+                <select
+                  value=""
+                  onChange={e => { if (e.target.value) handleBulkFieldUpdate('meeting_type', e.target.value); }}
+                  className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white"
+                >
+                  <option value="">Set type…</option>
+                  {meetingTypeOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500 hidden sm:inline">Outcome:</span>
+                <select
+                  value=""
+                  onChange={e => { if (e.target.value) handleBulkFieldUpdate('outcome', e.target.value); }}
+                  className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white"
+                >
+                  <option value="">Set outcome…</option>
+                  {actionOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Mobile card layout */}
       <div className="block lg:hidden divide-y divide-gray-100">
         {sorted.map((m) => (
@@ -605,6 +712,14 @@ export function MeetingsTable({
             ) : (
               <>
                 <div className="flex items-start justify-between gap-3">
+                  {hasSelection && (
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(m.id)}
+                      onChange={() => toggleSelect(m.id)}
+                      className="mt-0.5 flex-shrink-0 h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
+                    />
+                  )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1 group">
                       <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: m.attendee_id, name: `${m.first_name} ${m.last_name}` })} />
@@ -690,6 +805,17 @@ export function MeetingsTable({
         <table className="w-full" style={{ fontSize: '0.7rem' }}>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
+              {hasSelection && (
+                <th className="pl-3 pr-1 py-2 w-8">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={el => { if (el) el.indeterminate = someSelected; }}
+                    onChange={toggleAll}
+                    className="h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
+                  />
+                </th>
+              )}
               {orderedColumns.map(col => {
                 if (!isVisible(col.key)) return null;
                 switch (col.key) {
@@ -717,12 +843,25 @@ export function MeetingsTable({
                   onSave={(id, data) => { onEdit(id, data); setEditingId(null); }}
                   onCancel={() => setEditingId(null)}
                   onDelete={onDelete ? (id) => { onDelete(id); setEditingId(null); } : undefined}
-                  colSpan={(hideCompany ? 8 : 9) + (hasActions ? 1 : 0)}
+                  colSpan={(hideCompany ? 8 : 9) + (hasActions ? 1 : 0) + (hasSelection ? 1 : 0)}
                   userOptions={userOptions}
                   meetingTypeOptions={meetingTypeOptions}
                 />
               ) : (
-                <tr key={m.id} className="transition-colors align-top hover:bg-gray-50">
+                <tr
+                  key={m.id}
+                  className={`transition-colors align-top hover:bg-gray-50 ${selectedIds.has(m.id) ? 'bg-blue-50' : ''}`}
+                >
+                  {hasSelection && (
+                    <td className="pl-3 pr-1 py-2 w-8">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(m.id)}
+                        onChange={() => toggleSelect(m.id)}
+                        className="h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
+                      />
+                    </td>
+                  )}
                   {orderedColumns.map(col => {
                     if (!isVisible(col.key)) return null;
                     switch (col.key) {
