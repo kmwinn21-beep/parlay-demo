@@ -904,6 +904,7 @@ export async function GET(
 
     const totalRepPI = Array.from(repAccMap.values()).reduce((s, r) => s + r.pipelineInfluence, 0);
     const repAttribution = Array.from(repAccMap.entries())
+      .filter(([name]) => internalAttendeeNames.size === 0 || internalAttendeeNames.has(name))
       .sort(([, a], [, b]) => b.pipelineInfluence - a.pipelineInfluence)
       .map(([name, acc]) => {
         const targetEngaged = repToTargetsEngaged.get(name)?.size ?? 0;
