@@ -189,6 +189,9 @@ export function ProgramPlannerCostMatrix({
   const [animatingInCols, setAnimatingInCols] = useState<number[]>([]);
   const [animatingIntoConfPanel, setAnimatingIntoConfPanel] = useState<number[]>([]);
 
+  // Side panel collapse state
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
+
   // On mount: initialize parent state with all conference IDs and all line items
   useEffect(() => {
     onActiveConferenceIdsChange(conferences.map(c => c.conferenceId));
@@ -264,6 +267,9 @@ export function ProgramPlannerCostMatrix({
     setTimeout(() => {
       setAnimatingOutCols(prev => prev.filter(id => id !== confId));
       onActiveConferenceIdsChange(activeConferenceIds.filter(id => id !== confId));
+      // Auto-expand panel when first item is added
+      const willHaveItems = removedConferences.length > 0 || removedLineItems.length > 0;
+      if (!willHaveItems) setPanelCollapsed(false);
       setAnimatingIntoConfPanel(prev => [...prev, confId]);
       setTimeout(() => setAnimatingIntoConfPanel(prev => prev.filter(id => id !== confId)), 300);
     }, ANIM_MS);
@@ -290,6 +296,9 @@ export function ProgramPlannerCostMatrix({
         onActiveLineItemsChange(ALL_LINE_ITEMS.filter(li => !next.includes(li)));
         return next;
       });
+      // Auto-expand panel when first item is added
+      const willHaveItems = removedConferences.length > 0 || removedLineItems.length > 0;
+      if (!willHaveItems) setPanelCollapsed(false);
       setAnimatingIntoPanel(prev => prev.includes(label) ? prev : [...prev, label]);
       setTimeout(() => {
         setAnimatingIntoPanel(prev => prev.filter(l => l !== label));
@@ -361,77 +370,102 @@ export function ProgramPlannerCostMatrix({
       {/* ── Matrix area ─────────────────────────────────────────────────── */}
       <div className="flex">
         {/* Add panel — slides in from left; always in DOM for animation */}
-        <div
-          className="flex-shrink-0 overflow-hidden bg-gray-50"
-          style={{
-            maxWidth: (removedConferences.length > 0 || removedLineItems.length > 0) ? '180px' : '0px',
-            transition: 'max-width 0.3s ease',
-          }}
-        >
-          <div className="border-r border-gray-200 h-full" style={{ width: 180 }}>
-            {/* +/- Conference(s) section */}
-            {removedConferences.length > 0 && (
-              <div className="border-b border-gray-200">
-                <div className="px-3 py-2 border-b border-gray-100">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                    +/- Conference(s)
-                  </p>
-                </div>
-                <div className="py-1.5 space-y-0.5">
-                  {removedConferences.map(conf => (
-                    <div
-                      key={conf.conferenceId}
-                      className="mx-2 flex items-center justify-between px-3 py-1.5 rounded text-[12px] font-medium text-gray-700 bg-white border border-gray-200"
-                      style={{
-                        transition: 'opacity 0.25s ease, transform 0.25s ease',
-                        opacity: animatingIntoConfPanel.includes(conf.conferenceId) ? 0 : 1,
-                        transform: animatingIntoConfPanel.includes(conf.conferenceId) ? 'translateX(-10px)' : 'translateX(0)',
-                      }}
+        {(() => {
+          const panelHasItems = removedConferences.length > 0 || removedLineItems.length > 0;
+          const panelMaxWidth = !panelHasItems ? '0px' : panelCollapsed ? '28px' : '180px';
+          return (
+            <div
+              className="flex-shrink-0 overflow-hidden bg-gray-50"
+              style={{ maxWidth: panelMaxWidth, transition: 'max-width 0.3s ease' }}
+            >
+              <div className="flex border-r border-gray-200 h-full" style={{ width: 180 }}>
+                {/* Collapse/expand strip — always 28px wide, shows chevron when panel has items */}
+                <div className="flex-shrink-0 flex flex-col items-center pt-2" style={{ width: 28 }}>
+                  {panelHasItems && (
+                    <button
+                      onClick={() => setPanelCollapsed(c => !c)}
+                      title={panelCollapsed ? 'Expand panel' : 'Collapse panel'}
+                      className="w-5 h-5 flex items-center justify-center rounded text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition-colors"
                     >
-                      <span className="truncate text-[11px]">{conf.name.replace(/\b\d{4}\b/, '').trim()}</span>
-                      <button
-                        onClick={() => addConference(conf.conferenceId)}
-                        title={`Add ${conf.name} back`}
-                        className="ml-2 w-4 h-4 flex items-center justify-center rounded-full bg-gray-100 hover:bg-brand-accent hover:text-white text-gray-500 transition-colors text-xs font-bold leading-none flex-shrink-0"
-                      >+</button>
-                    </div>
-                  ))}
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        {panelCollapsed ? (
+                          <path d="M3 2L7 5L3 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        ) : (
+                          <path d="M7 2L3 5L7 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        )}
+                      </svg>
+                    </button>
+                  )}
                 </div>
-              </div>
-            )}
 
-            {/* +/- Line Item(s) section */}
-            {removedLineItems.length > 0 && (
-              <div>
-                <div className="px-3 py-2 border-b border-gray-100">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                    +/- Line Item(s)
-                  </p>
-                </div>
-                <div className="py-1.5 space-y-0.5">
-                  {removedLineItems.map(label => (
-                    <div
-                      key={label}
-                      className="mx-2 flex items-center justify-between px-3 py-1.5 rounded text-[12px] font-medium text-gray-700 bg-white border border-gray-200"
-                      style={{
-                        transition: 'opacity 0.25s ease, transform 0.25s ease',
-                        opacity: animatingIntoPanel.includes(label) ? 0 : 1,
-                        transform: animatingIntoPanel.includes(label) ? 'translateX(-10px)' : 'translateX(0)',
-                      }}
-                    >
-                      <span>{label}</span>
-                      <button
-                        onClick={() => addLineItem(label)}
-                        title={`Add ${label} back`}
-                        className="ml-2 w-4 h-4 flex items-center justify-center rounded-full bg-gray-100 hover:bg-brand-accent hover:text-white text-gray-500 transition-colors text-xs font-bold leading-none flex-shrink-0"
-                      >+</button>
+                {/* Panel content — 152px wide (180 - 28) */}
+                <div className="flex-1 overflow-hidden">
+                  {/* +/- Conference(s) section */}
+                  {removedConferences.length > 0 && (
+                    <div className="border-b border-gray-200">
+                      <div className="px-3 py-2 border-b border-gray-100">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                          +/- Conference(s)
+                        </p>
+                      </div>
+                      <div className="py-1.5 space-y-0.5">
+                        {removedConferences.map(conf => (
+                          <div
+                            key={conf.conferenceId}
+                            className="mx-2 flex items-center justify-between px-3 py-1.5 rounded text-[12px] font-medium text-gray-700 bg-white border border-gray-200"
+                            style={{
+                              transition: 'opacity 0.25s ease, transform 0.25s ease',
+                              opacity: animatingIntoConfPanel.includes(conf.conferenceId) ? 0 : 1,
+                              transform: animatingIntoConfPanel.includes(conf.conferenceId) ? 'translateX(-10px)' : 'translateX(0)',
+                            }}
+                          >
+                            <span className="truncate text-[11px]">{conf.name.replace(/\b\d{4}\b/, '').trim()}</span>
+                            <button
+                              onClick={() => addConference(conf.conferenceId)}
+                              title={`Add ${conf.name} back`}
+                              className="ml-2 w-4 h-4 flex items-center justify-center rounded-full bg-gray-100 hover:bg-brand-accent hover:text-white text-gray-500 transition-colors text-xs font-bold leading-none flex-shrink-0"
+                            >+</button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  ))}
+                  )}
+
+                  {/* +/- Line Item(s) section */}
+                  {removedLineItems.length > 0 && (
+                    <div>
+                      <div className="px-3 py-2 border-b border-gray-100">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                          +/- Line Item(s)
+                        </p>
+                      </div>
+                      <div className="py-1.5 space-y-0.5">
+                        {removedLineItems.map(label => (
+                          <div
+                            key={label}
+                            className="mx-2 flex items-center justify-between px-3 py-1.5 rounded text-[12px] font-medium text-gray-700 bg-white border border-gray-200"
+                            style={{
+                              transition: 'opacity 0.25s ease, transform 0.25s ease',
+                              opacity: animatingIntoPanel.includes(label) ? 0 : 1,
+                              transform: animatingIntoPanel.includes(label) ? 'translateX(-10px)' : 'translateX(0)',
+                            }}
+                          >
+                            <span>{label}</span>
+                            <button
+                              onClick={() => addLineItem(label)}
+                              title={`Add ${label} back`}
+                              className="ml-2 w-4 h-4 flex items-center justify-center rounded-full bg-gray-100 hover:bg-brand-accent hover:text-white text-gray-500 transition-colors text-xs font-bold leading-none flex-shrink-0"
+                            >+</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
-          </div>
-        </div>
+            </div>
+          );
+        })()}
 
         {/* Scrollable matrix table */}
         <div style={{ overflowX: 'auto' }} className="flex-1">
