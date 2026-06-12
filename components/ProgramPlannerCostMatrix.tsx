@@ -108,7 +108,7 @@ function AnimatedToggle({
         <button
           key={opt.id}
           onClick={() => onChange(opt.id)}
-          className={`relative z-10 flex-1 flex items-center justify-center px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${
+          className={`relative z-10 flex-1 text-center px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${
             opt.id === value ? 'text-white' : 'text-gray-600 hover:text-gray-800'
           }`}
         >

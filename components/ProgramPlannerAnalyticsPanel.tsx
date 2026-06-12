@@ -39,6 +39,7 @@ const SPEND_CATEGORIES = [
 ];
 
 const EYEBROW = 'text-[10px] font-semibold uppercase tracking-wider text-gray-900';
+const CARD = 'card overflow-hidden !p-3';
 
 export function ProgramPlannerAnalyticsPanel({
   conferences,
@@ -117,8 +118,8 @@ export function ProgramPlannerAnalyticsPanel({
   return (
     <>
       {/* Card 1: Budget summary */}
-      <div className="card overflow-hidden">
-        <div className="px-4 pt-3 pb-2 border-b border-gray-100">
+      <div className={CARD}>
+        <div className="p-1 border-b border-gray-100">
           <p className={EYEBROW}>Budget Summary</p>
         </div>
         <div className="px-4 py-3 space-y-1.5">
@@ -152,8 +153,8 @@ export function ProgramPlannerAnalyticsPanel({
       </div>
 
       {/* Card 2: Spend composition */}
-      <div className="card overflow-hidden">
-        <div className="px-4 pt-3 pb-2 border-b border-gray-100">
+      <div className={CARD}>
+        <div className="p-1 border-b border-gray-100">
           <p className={EYEBROW}>Spend Composition</p>
         </div>
         <div className="px-4 py-4">
@@ -196,8 +197,8 @@ export function ProgramPlannerAnalyticsPanel({
       </div>
 
       {/* Card 3: Line item drill-down */}
-      <div className="card overflow-hidden">
-        <div className="px-4 pt-3 pb-2 border-b border-gray-100">
+      <div className={CARD}>
+        <div className="p-1 border-b border-gray-100">
           <p className={EYEBROW}>Line Item Detail</p>
         </div>
         <div className="px-4 py-3">
