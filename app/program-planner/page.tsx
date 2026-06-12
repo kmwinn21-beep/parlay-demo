@@ -435,16 +435,16 @@ export default function ProgramPlannerPage() {
 
             {/* View toggle */}
             <div className="flex items-center gap-2">
-              <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+              <div className="flex gap-1 bg-white rounded-xl border border-gray-200 p-1">
                 {(['program', 'cost'] as const).map(v => (
                   <button
                     key={v}
                     onClick={() => setView(v)}
-                    className={`px-4 py-1.5 text-sm font-medium transition-colors capitalize ${
-                      view === v
-                        ? 'bg-brand-primary text-white'
-                        : 'bg-white text-gray-600 hover:bg-gray-50'
-                    } ${v === 'cost' ? 'border-l border-gray-300' : ''}`}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
+                      v === 'program'
+                        ? view === v ? 'bg-brand-primary text-white' : 'text-gray-600 hover:bg-gray-100'
+                        : view === v ? 'bg-brand-accent text-white' : 'text-gray-600 hover:bg-gray-100'
+                    }`}
                   >
                     {v === 'program' ? 'Program' : 'Cost'}
                   </button>
@@ -476,14 +476,14 @@ export default function ProgramPlannerPage() {
                   {/* Table header row */}
                   <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                     <span className="text-sm font-semibold text-gray-800">FY{selectedYear} conference program</span>
-                    <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                      {(['series', 'date', 'ces'] as const).map((m, i) => (
+                    <div className="flex gap-1 bg-white rounded-xl border border-gray-200 p-1">
+                      {(['series', 'date', 'ces'] as const).map(m => (
                         <button
                           key={m}
                           onClick={() => setGroupMode(m)}
-                          className={`px-3 py-1 text-xs font-medium transition-colors capitalize ${
-                            groupMode === m ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-                          } ${i > 0 ? 'border-l border-gray-200' : ''}`}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                            groupMode === m ? 'bg-brand-primary text-white' : 'text-gray-500 hover:bg-gray-100'
+                          }`}
                         >
                           {m === 'ces' ? 'CES' : m.charAt(0).toUpperCase() + m.slice(1)}
                         </button>
@@ -675,18 +675,18 @@ export default function ProgramPlannerPage() {
                 <div className="col-span-1 card p-0 overflow-hidden sticky top-6">
                   <div className="px-3 py-2.5 border-b border-gray-100">
                     <p className="text-xs font-semibold text-gray-800 mb-2">Conference rankings</p>
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-1 bg-white rounded-xl border border-gray-200 p-1">
                       {([
                         { id: 'ces', label: 'CES' },
                         { id: 'pipeline', label: 'Pipeline' },
                         { id: 'closedwon', label: 'Closed/won' },
                         { id: 'spend', label: 'Spend' },
-                      ] as const).map((m) => (
+                      ] as const).map(m => (
                         <button
                           key={m.id}
                           onClick={() => setRankMetric(m.id)}
-                          className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                            rankMetric === m.id ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          className={`px-2 py-1 rounded-lg text-[10px] font-medium transition-colors ${
+                            rankMetric === m.id ? 'bg-brand-primary text-white' : 'text-gray-500 hover:bg-gray-100'
                           }`}
                         >
                           {m.label}
