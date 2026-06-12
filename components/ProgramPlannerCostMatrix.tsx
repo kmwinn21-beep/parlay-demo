@@ -78,17 +78,18 @@ function getCellTextColor(actual: number | null, budgeted: number | null): strin
 // ── Animated sliding toggle ───────────────────────────────────────────────────
 
 function AnimatedToggle({
-  options, value, onChange, activeBg,
+  options, value, onChange, activeBg, className = '',
 }: {
   options: { id: string; label: string }[];
   value: string;
   onChange: (v: string) => void;
   activeBg: string;
+  className?: string;
 }) {
   const n = options.length;
   const activeIdx = Math.max(0, options.findIndex(o => o.id === value));
   return (
-    <div className="relative flex w-full bg-white rounded-xl border border-gray-200 p-1">
+    <div className={`relative flex bg-white rounded-xl border border-gray-200 p-1 ${className}`}>
       <div
         className={`absolute top-1 bottom-1 rounded-lg pointer-events-none ${activeBg}`}
         style={{

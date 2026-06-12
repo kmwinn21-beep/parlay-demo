@@ -107,18 +107,19 @@ function actualCostPillStyle(actual: number | null, budget: number | null): { bg
 // ── Animated sliding toggle ───────────────────────────────────────────────────
 
 function AnimatedToggle({
-  options, value, onChange, activeBg,
+  options, value, onChange, activeBg, className = '',
 }: {
   options: { id: string; label: string }[];
   value: string;
   onChange: (v: string) => void;
   activeBg: string | ((id: string) => string);
+  className?: string;
 }) {
   const n = options.length;
   const activeIdx = Math.max(0, options.findIndex(o => o.id === value));
   const pillBg = typeof activeBg === 'function' ? activeBg(value) : activeBg;
   return (
-    <div className="relative flex w-full bg-white rounded-xl border border-gray-200 p-1">
+    <div className={`relative flex bg-white rounded-xl border border-gray-200 p-1 ${className}`}>
       <div
         className={`absolute top-1 bottom-1 rounded-lg pointer-events-none ${pillBg}`}
         style={{
@@ -731,6 +732,7 @@ export default function ProgramPlannerPage() {
                       value={rankMetric}
                       onChange={v => setRankMetric(v as RankMetric)}
                       activeBg="bg-brand-primary"
+                      className="w-full"
                     />
                   </div>
                   <div className="divide-y divide-gray-50">
@@ -761,15 +763,17 @@ export default function ProgramPlannerPage() {
                             <p className="text-[12px] font-medium text-gray-700 truncate">{c.name}</p>
                             <p className="text-[10px] text-gray-400">{[sub1, sub2].filter(Boolean).join(' · ')}</p>
                           </div>
-                          {rankMetric === 'ces' && c.ces != null ? (
+                          {metricVal === '—' ? (
+                            <span className="text-[12px] text-gray-400 flex-shrink-0">—</span>
+                          ) : rankMetric === 'ces' && c.ces != null ? (
                             <span
-                              className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border flex-shrink-0"
+                              className="inline-flex items-center justify-center w-7 h-7 rounded-full text-[11px] font-bold border flex-shrink-0"
                               style={{ backgroundColor: cesPillStyle(c.ces).bg, color: cesPillStyle(c.ces).color, borderColor: cesPillStyle(c.ces).border }}
                             >
                               {metricVal}
                             </span>
                           ) : (
-                            <span className="text-[12px] font-semibold flex-shrink-0 text-gray-700">
+                            <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold border flex-shrink-0 bg-gray-50 text-gray-700 border-gray-200 tabular-nums">
                               {metricVal}
                             </span>
                           )}
