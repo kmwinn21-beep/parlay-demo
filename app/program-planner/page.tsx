@@ -104,6 +104,58 @@ function actualCostPillStyle(actual: number | null, budget: number | null): { bg
   return { bg: '#EFF6FF', color: '#1B76BC', border: '#BFDBFE' };
 }
 
+// ── Animated sliding toggle ───────────────────────────────────────────────────
+
+function AnimatedToggle({
+  options, value, onChange, activeBg,
+}: {
+  options: { id: string; label: string }[];
+  value: string;
+  onChange: (v: string) => void;
+  activeBg: string | ((id: string) => string);
+}) {
+  const n = options.length;
+  const activeIdx = Math.max(0, options.findIndex(o => o.id === value));
+  const pillBg = typeof activeBg === 'function' ? activeBg(value) : activeBg;
+  return (
+    <div className="relative flex w-full bg-white rounded-xl border border-gray-200 p-1">
+      <div
+        className={`absolute top-1 bottom-1 rounded-lg pointer-events-none ${pillBg}`}
+        style={{
+          width: `calc((100% - 8px) / ${n})`,
+          left: `calc(4px + ${activeIdx} * (100% - 8px) / ${n})`,
+          transition: 'left 0.2s cubic-bezier(0.4,0,0.2,1), background-color 0.2s ease',
+        }}
+      />
+      {options.map(opt => (
+        <button
+          key={opt.id}
+          onClick={() => onChange(opt.id)}
+          className={`relative z-10 flex-1 text-center px-3 py-1.5 text-xs font-medium transition-colors duration-150 whitespace-nowrap ${
+            opt.id === value ? 'text-white' : 'text-gray-600 hover:text-gray-800'
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── Tooltip pill ──────────────────────────────────────────────────────────────
+
+function TooltipPill({ label, tooltip, className }: { label: string; tooltip: string; className: string }) {
+  return (
+    <span className={`relative group cursor-default inline-block ${className}`}>
+      {label}
+      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 text-[11px] text-white bg-gray-800 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-[100]">
+        {tooltip}
+        <span className="absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-gray-800" />
+      </span>
+    </span>
+  );
+}
+
 const DECISION_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
   attend:     { label: 'Attend',     bg: 'bg-green-100',  text: 'text-green-700' },
   reduce:     { label: 'Reduce',     bg: 'bg-amber-100',  text: 'text-amber-700' },
@@ -435,21 +487,12 @@ export default function ProgramPlannerPage() {
 
             {/* View toggle */}
             <div className="flex items-center gap-2">
-              <div className="flex gap-1 bg-white rounded-xl border border-gray-200 p-1">
-                {(['program', 'cost'] as const).map(v => (
-                  <button
-                    key={v}
-                    onClick={() => setView(v)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
-                      v === 'program'
-                        ? view === v ? 'bg-brand-primary text-white' : 'text-gray-600 hover:bg-gray-100'
-                        : view === v ? 'bg-brand-accent text-white' : 'text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    {v === 'program' ? 'Program' : 'Cost'}
-                  </button>
-                ))}
-              </div>
+              <AnimatedToggle
+                options={[{ id: 'program', label: 'Program' }, { id: 'cost', label: 'Cost' }]}
+                value={view}
+                onChange={v => setView(v as 'program' | 'cost')}
+                activeBg={id => id === 'program' ? 'bg-brand-primary' : 'bg-brand-accent'}
+              />
             </div>
 
             {view === 'cost' ? (
@@ -476,19 +519,16 @@ export default function ProgramPlannerPage() {
                   {/* Table header row */}
                   <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                     <span className="text-sm font-semibold text-gray-800">FY{selectedYear} conference program</span>
-                    <div className="flex gap-1 bg-white rounded-xl border border-gray-200 p-1">
-                      {(['series', 'date', 'ces'] as const).map(m => (
-                        <button
-                          key={m}
-                          onClick={() => setGroupMode(m)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                            groupMode === m ? 'bg-brand-primary text-white' : 'text-gray-500 hover:bg-gray-100'
-                          }`}
-                        >
-                          {m === 'ces' ? 'CES' : m.charAt(0).toUpperCase() + m.slice(1)}
-                        </button>
-                      ))}
-                    </div>
+                    <AnimatedToggle
+                      options={[
+                        { id: 'series', label: 'Series' },
+                        { id: 'date', label: 'Date' },
+                        { id: 'ces', label: 'CES' },
+                      ]}
+                      value={groupMode}
+                      onChange={v => setGroupMode(v as GroupMode)}
+                      activeBg="bg-brand-primary"
+                    />
                   </div>
 
                   {/* Table */}
@@ -539,23 +579,29 @@ export default function ProgramPlannerPage() {
                                       </svg>
                                       <span className="text-xs font-bold text-gray-700">{s.seriesName}</span>
                                       <div className="flex items-center gap-1.5 flex-wrap">
-                                        <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                        <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                                           {s.conferenceCount} {s.conferenceCount !== 1 ? 'confs' : 'conf'}
                                         </span>
                                         {s.totalActualSpend > 0 && (
-                                          <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-red-50 text-red-700 border border-red-200">
-                                            {fmtCurrency(s.totalActualSpend)}
-                                          </span>
+                                          <TooltipPill
+                                            label={`Cost: ${fmtCurrency(s.totalActualSpend)}`}
+                                            tooltip="Total Actual Cost"
+                                            className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 text-red-700 border border-red-200"
+                                          />
                                         )}
                                         {s.totalPipeline > 0 && (
-                                          <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
-                                            {fmtCurrency(s.totalPipeline)} pipeline
-                                          </span>
+                                          <TooltipPill
+                                            label={`PI: ${fmtCurrency(s.totalPipeline)}`}
+                                            tooltip="Pipeline Influenced"
+                                            className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200"
+                                          />
                                         )}
                                         {s.totalClosedWon > 0 && (
-                                          <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-green-50 text-green-700 border border-green-200">
-                                            {fmtCurrency(s.totalClosedWon)} closed/won
-                                          </span>
+                                          <TooltipPill
+                                            label={`C/W: ${fmtCurrency(s.totalClosedWon)}`}
+                                            tooltip="Closed/Won (attributed)"
+                                            className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700 border border-green-200"
+                                          />
                                         )}
                                       </div>
                                     </button>
@@ -602,7 +648,7 @@ export default function ProgramPlannerPage() {
                               <td className="px-3 py-2">
                                 {c.ces != null ? (
                                   <span
-                                    className="inline-flex items-center justify-center w-8 h-8 rounded-full text-[12px] font-bold border"
+                                    className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold border"
                                     style={{ backgroundColor: cesPillStyle(c.ces).bg, color: cesPillStyle(c.ces).color, borderColor: cesPillStyle(c.ces).border }}
                                   >
                                     {c.ces}
@@ -675,24 +721,17 @@ export default function ProgramPlannerPage() {
                 <div className="col-span-1 card p-0 overflow-hidden sticky top-6">
                   <div className="px-3 py-2.5 border-b border-gray-100">
                     <p className="text-xs font-semibold text-gray-800 mb-2">Conference rankings</p>
-                    <div className="flex flex-wrap gap-1 bg-white rounded-xl border border-gray-200 p-1">
-                      {([
+                    <AnimatedToggle
+                      options={[
                         { id: 'ces', label: 'CES' },
                         { id: 'pipeline', label: 'Pipeline' },
-                        { id: 'closedwon', label: 'Closed/won' },
+                        { id: 'closedwon', label: 'C/Won' },
                         { id: 'spend', label: 'Spend' },
-                      ] as const).map(m => (
-                        <button
-                          key={m.id}
-                          onClick={() => setRankMetric(m.id)}
-                          className={`px-2 py-1 rounded-lg text-[10px] font-medium transition-colors ${
-                            rankMetric === m.id ? 'bg-brand-primary text-white' : 'text-gray-500 hover:bg-gray-100'
-                          }`}
-                        >
-                          {m.label}
-                        </button>
-                      ))}
-                    </div>
+                      ]}
+                      value={rankMetric}
+                      onChange={v => setRankMetric(v as RankMetric)}
+                      activeBg="bg-brand-primary"
+                    />
                   </div>
                   <div className="divide-y divide-gray-50">
                     {ranked.slice(0, 8).map((c, i) => {

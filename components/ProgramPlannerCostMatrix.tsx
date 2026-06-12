@@ -31,6 +31,16 @@ const ALL_LINE_ITEMS = [
   'Travel', 'Lodging', 'Entertainment', 'Meals', 'Other',
 ];
 
+// Cyclic color palette for % pills (6 colors, repeated per conference column)
+const PCT_PILL_COLORS = [
+  { bg: '#EBF2FC', color: '#185FA5', border: '#C8DCF5' },
+  { bg: '#ECFDF5', color: '#059669', border: '#A7F3D0' },
+  { bg: '#F3F2FD', color: '#6D62D4', border: '#DDD9FB' },
+  { bg: '#FFFBEB', color: '#B45309', border: '#FDE68A' },
+  { bg: '#FEF2EE', color: '#C4441F', border: '#FBD0C4' },
+  { bg: '#F0F7EC', color: '#3B6D11', border: '#B8D9A7' },
+];
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtCurrency(v: number | null | undefined): string {
@@ -63,6 +73,43 @@ function getCellTextColor(actual: number | null, budgeted: number | null): strin
   if (pct === 0) return 'var(--color-text-primary, #111827)';
   if (pct <= 10) return '#A32D2D';
   return '#791F1F';
+}
+
+// ── Animated sliding toggle ───────────────────────────────────────────────────
+
+function AnimatedToggle({
+  options, value, onChange, activeBg,
+}: {
+  options: { id: string; label: string }[];
+  value: string;
+  onChange: (v: string) => void;
+  activeBg: string;
+}) {
+  const n = options.length;
+  const activeIdx = Math.max(0, options.findIndex(o => o.id === value));
+  return (
+    <div className="relative flex w-full bg-white rounded-xl border border-gray-200 p-1">
+      <div
+        className={`absolute top-1 bottom-1 rounded-lg pointer-events-none ${activeBg}`}
+        style={{
+          width: `calc((100% - 8px) / ${n})`,
+          left: `calc(4px + ${activeIdx} * (100% - 8px) / ${n})`,
+          transition: 'left 0.2s cubic-bezier(0.4,0,0.2,1), background-color 0.2s ease',
+        }}
+      />
+      {options.map(opt => (
+        <button
+          key={opt.id}
+          onClick={() => onChange(opt.id)}
+          className={`relative z-10 flex-1 text-center px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${
+            opt.id === value ? 'text-white' : 'text-gray-600 hover:text-gray-800'
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 // ── Vertical toggle ───────────────────────────────────────────────────────────
@@ -253,19 +300,12 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
         {/* Sub-view toggle */}
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-gray-800">FY{year} cost matrix</span>
-          <div className="flex gap-1 bg-white rounded-xl border border-gray-200 p-1">
-            {(['actuals', 'variance'] as const).map(v => (
-              <button
-                key={v}
-                onClick={() => setSubView(v)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors capitalize ${
-                  subView === v ? 'bg-brand-accent text-white' : 'text-gray-500 hover:bg-gray-100'
-                }`}
-              >
-                {v.charAt(0).toUpperCase() + v.slice(1)}
-              </button>
-            ))}
-          </div>
+          <AnimatedToggle
+            options={[{ id: 'actuals', label: 'Actuals' }, { id: 'variance', label: 'Variance' }]}
+            value={subView}
+            onChange={v => setSubView(v as 'actuals' | 'variance')}
+            activeBg="bg-brand-accent"
+          />
         </div>
 
         {/* Conferences filter */}
@@ -388,7 +428,7 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
                 {activeConferences.map(conf => (
                   <th
                     key={conf.conferenceId}
-                    className="px-2 py-2 text-right text-[12px] font-semibold text-gray-700 leading-tight"
+                    className="px-2 py-2 text-center text-[12px] font-semibold text-gray-700 leading-tight"
                   >
                     {abbrevConfName(conf.name)}
                   </th>
@@ -574,21 +614,29 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
               {/* % of program / % variance row */}
               <tr>
                 <td
-                  className="px-3 py-2 text-[10px] text-gray-400 italic"
+                  className="px-3 py-2 text-[12px] font-bold text-gray-600"
                   style={{ position: 'sticky', left: 0, zIndex: 2, backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
                 >
                   {subView === 'actuals' ? '% of program' : '% variance'}
                 </td>
-                {activeConferences.map(conf => {
+                {activeConferences.map((conf, colIdx) => {
                   const totals = confTotals.get(conf.conferenceId);
                   const actual = totals?.actual ?? null;
                   const budgeted = totals?.budgeted ?? null;
+                  const pillColor = PCT_PILL_COLORS[colIdx % PCT_PILL_COLORS.length];
 
                   if (subView === 'actuals') {
                     const pct = programTotal > 0 && actual != null ? (actual / programTotal) * 100 : null;
                     return (
-                      <td key={conf.conferenceId} className="px-2 py-2 text-right" style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}>
-                        <span className="text-[10px] text-gray-500">{pct != null ? `${pct.toFixed(1)}%` : '—'}</span>
+                      <td key={conf.conferenceId} className="px-2 py-2 text-center" style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}>
+                        {pct != null ? (
+                          <span
+                            className="inline-block px-1.5 py-0.5 rounded text-[12px] font-bold border"
+                            style={{ backgroundColor: pillColor.bg, color: pillColor.color, borderColor: pillColor.border }}
+                          >
+                            {pct.toFixed(1)}%
+                          </span>
+                        ) : <span className="text-gray-400 text-[12px]">—</span>}
                       </td>
                     );
                   }
@@ -596,10 +644,15 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
                   const variancePct = actual != null && budgeted != null && budgeted > 0
                     ? ((actual - budgeted) / budgeted) * 100 : null;
                   return (
-                    <td key={conf.conferenceId} className="px-2 py-2 text-right" style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}>
-                      <span className="text-[10px] text-gray-500">
-                        {variancePct != null ? `${variancePct > 0 ? '+' : ''}${variancePct.toFixed(1)}%` : '—'}
-                      </span>
+                    <td key={conf.conferenceId} className="px-2 py-2 text-center" style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}>
+                      {variancePct != null ? (
+                        <span
+                          className="inline-block px-1.5 py-0.5 rounded text-[12px] font-bold border"
+                          style={{ backgroundColor: pillColor.bg, color: pillColor.color, borderColor: pillColor.border }}
+                        >
+                          {variancePct > 0 ? '+' : ''}{variancePct.toFixed(1)}%
+                        </span>
+                      ) : <span className="text-gray-400 text-[12px]">—</span>}
                     </td>
                   );
                 })}
