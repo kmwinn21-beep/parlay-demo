@@ -453,10 +453,22 @@ export default function ProgramPlannerPage() {
             </div>
 
             {view === 'cost' ? (
-              <ProgramPlannerCostMatrix
-                conferences={flattenedConferences}
-                year={selectedYear}
-              />
+              <div className="grid grid-cols-6 gap-3 items-start">
+                <div className="col-span-4">
+                  <ProgramPlannerCostMatrix
+                    conferences={flattenedConferences}
+                    year={selectedYear}
+                  />
+                </div>
+                <div className="col-span-2 card overflow-hidden">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 px-4 pt-3 pb-2 border-b border-gray-100">
+                    Visual Breakdown
+                  </p>
+                  <div className="px-4 py-12 flex items-center justify-center">
+                    <p className="text-sm text-gray-300">Coming soon</p>
+                  </div>
+                </div>
+              </div>
             ) : (
               <div className="grid grid-cols-4 gap-3 items-start">
                 {/* Program table */}

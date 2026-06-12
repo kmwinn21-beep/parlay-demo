@@ -26,7 +26,6 @@ export type ProgramPlannerCostMatrixProps = {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-// Canonical order from effectiveness_defaults
 const ALL_LINE_ITEMS = [
   'Registration', 'Sponsorship', 'Swag', 'Booth', 'Booth Setup',
   'Travel', 'Lodging', 'Entertainment', 'Meals', 'Other',
@@ -70,12 +69,22 @@ function getCellTextColor(actual: number | null, budgeted: number | null): strin
 
 export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCostMatrixProps) {
   const [subView, setSubView] = useState<'actuals' | 'variance'>('actuals');
-  const [activeLineItems, setActiveLineItems] = useState<string[]>(ALL_LINE_ITEMS);
+
+  // Line item remove/add — start with nothing removed
+  const [removedLineItems, setRemovedLineItems] = useState<string[]>([]);
+  const [animatingOutRows, setAnimatingOutRows] = useState<string[]>([]);
+  const [animatingIntoPanel, setAnimatingIntoPanel] = useState<string[]>([]);
+
   const [activeConferenceIds, setActiveConferenceIds] = useState<number[]>(
     () => conferences.map(c => c.conferenceId)
   );
   const [confFilterExpanded, setConfFilterExpanded] = useState(false);
-  const [lastFilterGroup, setLastFilterGroup] = useState<'line_items' | 'conferences'>('line_items');
+
+  // Active line items = all items NOT removed
+  const activeLineItems = useMemo(
+    () => ALL_LINE_ITEMS.filter(li => !removedLineItems.includes(li)),
+    [removedLineItems]
+  );
 
   // Active conferences subset, preserving order
   const activeConferences = useMemo(
@@ -97,31 +106,6 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
     }
     return map;
   }, [conferences]);
-
-  // Toggle helpers
-  const toggleLineItem = (label: string) => {
-    setLastFilterGroup('line_items');
-    setActiveLineItems(prev =>
-      prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label]
-    );
-  };
-
-  const toggleConference = (id: number) => {
-    setLastFilterGroup('conferences');
-    setActiveConferenceIds(prev =>
-      prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
-    );
-  };
-
-  const selectAll = () => {
-    if (lastFilterGroup === 'line_items') setActiveLineItems(ALL_LINE_ITEMS);
-    else setActiveConferenceIds(conferences.map(c => c.conferenceId));
-  };
-
-  const clearAll = () => {
-    if (lastFilterGroup === 'line_items') setActiveLineItems([]);
-    else setActiveConferenceIds([]);
-  };
 
   // Per-conference total (actual and budgeted) across active line items
   const confTotals = useMemo(() => {
@@ -151,14 +135,39 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
     return total;
   }, [confTotals, activeConferences]);
 
-  // Conferences filter: show first 5 + expand
-  const CONF_PILL_LIMIT = 5;
+  // Conference toggle helpers
+  const toggleConference = (id: number) => {
+    setActiveConferenceIds(prev =>
+      prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
+    );
+  };
+
+  // Remove a line item from the matrix into the panel
+  const removeLineItem = (label: string) => {
+    setAnimatingOutRows(prev => prev.includes(label) ? prev : [...prev, label]);
+    setTimeout(() => {
+      setAnimatingOutRows(prev => prev.filter(l => l !== label));
+      setRemovedLineItems(prev => [...prev, label]);
+      // Trigger slide-in animation for the panel item
+      setAnimatingIntoPanel(prev => prev.includes(label) ? prev : [...prev, label]);
+      setTimeout(() => {
+        setAnimatingIntoPanel(prev => prev.filter(l => l !== label));
+      }, 300);
+    }, 220);
+  };
+
+  // Add a line item back from the panel into the matrix
+  const addLineItem = (label: string) => {
+    setRemovedLineItems(prev => prev.filter(l => l !== label));
+  };
+
+  const CONF_PILL_LIMIT = 8;
   const visibleConfs = confFilterExpanded ? conferences : conferences.slice(0, CONF_PILL_LIMIT);
   const hiddenCount = conferences.length - CONF_PILL_LIMIT;
 
   return (
     <div className="card p-0 overflow-hidden">
-      {/* ── Sub-view toggle + filter strip ──────────────────────────────── */}
+      {/* ── Filter strip — conferences only ─────────────────────────────── */}
       <div className="px-4 pt-3 pb-2 border-b border-gray-100 space-y-2.5">
         {/* Sub-view toggle */}
         <div className="flex items-center justify-between">
@@ -178,41 +187,9 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
           </div>
         </div>
 
-        {/* Filter strip */}
+        {/* Conferences filter */}
         <div className="flex flex-wrap gap-4 items-start">
-          {/* Line items group */}
-          <div className="flex-1 min-w-0" onClick={() => setLastFilterGroup('line_items')}>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Line items</p>
-            <div className="flex flex-wrap gap-1">
-              {ALL_LINE_ITEMS.map(label => {
-                const active = activeLineItems.includes(label);
-                return (
-                  <button
-                    key={label}
-                    onClick={() => toggleLineItem(label)}
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[12px] font-medium transition-colors ${
-                      active
-                        ? 'bg-blue-50 text-blue-800 border-blue-200'
-                        : 'bg-gray-50 text-gray-400 border-gray-200'
-                    }`}
-                  >
-                    {active && (
-                      <svg className="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Divider */}
-          <div className="w-px bg-gray-200 self-stretch" />
-
-          {/* Conferences group */}
-          <div className="flex-1 min-w-0" onClick={() => setLastFilterGroup('conferences')}>
+          <div className="flex-1 min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Conferences</p>
             <div className="flex flex-wrap gap-1">
               {visibleConfs.map(conf => {
@@ -247,232 +224,313 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
             </div>
           </div>
 
-          {/* Select / Clear all */}
+          {/* Select / Clear all conferences */}
           <div className="flex flex-col gap-1 flex-shrink-0 justify-start pt-4">
-            <button onClick={selectAll} className="text-[12px] text-brand-secondary hover:text-brand-primary whitespace-nowrap">
+            <button
+              onClick={() => setActiveConferenceIds(conferences.map(c => c.conferenceId))}
+              className="text-[12px] text-brand-secondary hover:text-brand-primary whitespace-nowrap"
+            >
               Select all
             </button>
-            <button onClick={clearAll} className="text-[12px] text-gray-400 hover:text-gray-600 whitespace-nowrap">
+            <button
+              onClick={() => setActiveConferenceIds([])}
+              className="text-[12px] text-gray-400 hover:text-gray-600 whitespace-nowrap"
+            >
               Clear all
             </button>
           </div>
         </div>
       </div>
 
-      {/* ── Matrix table ────────────────────────────────────────────────── */}
-      <div style={{ overflowX: 'auto' }}>
-        <table
-          style={{ tableLayout: 'fixed', width: 130 + activeConferences.length * 88 + 88 }}
-          className="border-collapse text-xs"
-        >
-          <colgroup>
-            <col style={{ width: 130 }} />
-            {activeConferences.map(c => <col key={c.conferenceId} style={{ width: 88 }} />)}
-            <col style={{ width: 88 }} />
-          </colgroup>
-
-          {/* Header */}
-          <thead>
-            <tr className="border-b border-gray-200">
-              <th
-                className="px-3 py-2 text-left text-[12px] font-semibold text-gray-700"
-                style={{ position: 'sticky', left: 0, zIndex: 2, backgroundColor: 'var(--color-background-primary, white)' }}
-              />
-              {activeConferences.map(conf => (
-                <th
-                  key={conf.conferenceId}
-                  className="px-2 py-2 text-right text-[12px] font-semibold text-gray-700 leading-tight"
+      {/* ── Matrix area ─────────────────────────────────────────────────── */}
+      <div className="flex">
+        {/* Add Line Items panel — only shown when items have been removed */}
+        {removedLineItems.length > 0 && (
+          <div
+            className="flex-shrink-0 border-r border-gray-200 bg-gray-50"
+            style={{ minWidth: 140 }}
+          >
+            <div className="px-3 py-2 border-b border-gray-100">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                Add Line Item(s)
+              </p>
+            </div>
+            <div className="py-1.5 space-y-0.5">
+              {removedLineItems.map(label => (
+                <div
+                  key={label}
+                  className="mx-2 flex items-center justify-between px-3 py-1.5 rounded text-[12px] font-medium text-gray-700 bg-white border border-gray-200"
+                  style={{
+                    transition: 'opacity 0.25s ease, transform 0.25s ease',
+                    opacity: animatingIntoPanel.includes(label) ? 0 : 1,
+                    transform: animatingIntoPanel.includes(label) ? 'translateX(-10px)' : 'translateX(0)',
+                  }}
                 >
-                  {abbrevConfName(conf.name)}
-                </th>
-              ))}
-              <th
-                className="px-2 py-2 text-right text-[12px] font-semibold text-gray-700"
-                style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
-              >
-                Total
-              </th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {/* Line item rows */}
-            {ALL_LINE_ITEMS.filter(li => activeLineItems.includes(li)).map((label, rowIdx) => {
-              const isOdd = rowIdx % 2 === 1;
-              const rowBg = isOdd ? 'var(--color-background-secondary, #F9FAFB)' : 'var(--color-background-primary, white)';
-
-              // Row total across active conferences
-              let rowTotal = 0;
-              let rowBudgeted = 0;
-              let rowHasData = false;
-              for (const conf of activeConferences) {
-                const entry = lineItemByConf.get(conf.conferenceId)?.get(label);
-                if (entry?.actual != null) { rowTotal += entry.actual; rowHasData = true; }
-                if (entry?.budgeted != null) rowBudgeted += entry.budgeted;
-              }
-
-              return (
-                <tr key={label}>
-                  {/* Label cell */}
-                  <td
-                    className="px-3 py-1.5 text-[12px] font-medium text-gray-700 border-b border-gray-50"
-                    style={{ position: 'sticky', left: 0, zIndex: 2, backgroundColor: rowBg }}
+                  <span>{label}</span>
+                  <button
+                    onClick={() => addLineItem(label)}
+                    title={`Add ${label} back`}
+                    className="ml-2 w-4 h-4 flex items-center justify-center rounded-full bg-gray-100 hover:bg-brand-primary hover:text-white text-gray-500 transition-colors text-xs font-bold leading-none flex-shrink-0"
                   >
-                    {label}
-                  </td>
+                    +
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
-                  {/* Conference cells */}
-                  {activeConferences.map(conf => {
+        {/* Scrollable matrix table */}
+        <div style={{ overflowX: 'auto' }} className="flex-1">
+          <table
+            style={{ tableLayout: 'fixed', width: 130 + activeConferences.length * 88 + 88 }}
+            className="border-collapse text-xs"
+          >
+            <colgroup>
+              <col style={{ width: 130 }} />
+              {activeConferences.map(c => <col key={c.conferenceId} style={{ width: 88 }} />)}
+              <col style={{ width: 88 }} />
+            </colgroup>
+
+            {/* Header */}
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th
+                  className="px-3 py-2 text-left text-[12px] font-semibold text-gray-700"
+                  style={{ position: 'sticky', left: 0, zIndex: 2, backgroundColor: 'var(--color-background-primary, white)' }}
+                />
+                {activeConferences.map(conf => (
+                  <th
+                    key={conf.conferenceId}
+                    className="px-2 py-2 text-right text-[12px] font-semibold text-gray-700 leading-tight"
+                  >
+                    {abbrevConfName(conf.name)}
+                  </th>
+                ))}
+                <th
+                  className="px-2 py-2 text-right text-[12px] font-semibold text-gray-700"
+                  style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
+                >
+                  Total
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {/* Line item rows */}
+              {ALL_LINE_ITEMS
+                .filter(li => !removedLineItems.includes(li))
+                .map((label, rowIdx) => {
+                  const isOdd = rowIdx % 2 === 1;
+                  const rowBg = isOdd ? 'var(--color-background-secondary, #F9FAFB)' : 'var(--color-background-primary, white)';
+                  const isAnimatingOut = animatingOutRows.includes(label);
+
+                  // Row total across active conferences
+                  let rowTotal = 0;
+                  let rowBudgeted = 0;
+                  let rowHasData = false;
+                  for (const conf of activeConferences) {
                     const entry = lineItemByConf.get(conf.conferenceId)?.get(label);
-                    const actual = entry?.actual ?? null;
-                    const budgeted = entry?.budgeted ?? null;
+                    if (entry?.actual != null) { rowTotal += entry.actual; rowHasData = true; }
+                    if (entry?.budgeted != null) rowBudgeted += entry.budgeted;
+                  }
 
-                    if (actual === null && budgeted === null) {
-                      return (
-                        <td
-                          key={conf.conferenceId}
-                          className="px-2 py-1.5 text-center text-gray-300 border-b border-gray-50"
-                          style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
-                        >
-                          —
-                        </td>
-                      );
-                    }
+                  return (
+                    <tr
+                      key={label}
+                      style={{
+                        transition: 'opacity 0.22s ease, transform 0.22s ease',
+                        opacity: isAnimatingOut ? 0 : 1,
+                        transform: isAnimatingOut ? 'translateX(-8px)' : 'translateX(0)',
+                      }}
+                    >
+                      {/* Label cell with minus button */}
+                      <td
+                        className="px-3 py-1.5 border-b border-gray-50"
+                        style={{ position: 'sticky', left: 0, zIndex: 2, backgroundColor: rowBg }}
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-[12px] font-medium text-gray-700">{label}</span>
+                          <button
+                            onClick={() => removeLineItem(label)}
+                            title={`Remove ${label}`}
+                            className="w-4 h-4 flex items-center justify-center rounded-full bg-gray-100 hover:bg-red-100 hover:text-red-500 text-gray-400 transition-colors text-xs font-bold leading-none flex-shrink-0"
+                          >
+                            −
+                          </button>
+                        </div>
+                      </td>
 
-                    const cellBg = getCellBackground(actual, budgeted);
-                    const cellColor = getCellTextColor(actual, budgeted);
+                      {/* Conference cells */}
+                      {activeConferences.map(conf => {
+                        const entry = lineItemByConf.get(conf.conferenceId)?.get(label);
+                        const actual = entry?.actual ?? null;
+                        const budgeted = entry?.budgeted ?? null;
 
-                    if (subView === 'actuals') {
-                      return (
-                        <td
-                          key={conf.conferenceId}
-                          className="border-b border-gray-50"
-                          style={{ backgroundColor: cellBg }}
-                        >
-                          <div className="flex flex-col items-end justify-center px-2 py-1.5 h-full">
-                            <span className="text-[12px] font-medium" style={{ color: cellColor }}>
-                              {fmtCurrency(actual)}
-                            </span>
-                          </div>
-                        </td>
-                      );
-                    }
+                        if (actual === null && budgeted === null) {
+                          return (
+                            <td
+                              key={conf.conferenceId}
+                              className="px-2 py-1.5 text-center text-gray-300 border-b border-gray-50"
+                              style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
+                            >
+                              —
+                            </td>
+                          );
+                        }
 
-                    // Variance mode
-                    const variance = actual != null && budgeted != null ? actual - budgeted : null;
-                    const variancePct =
-                      variance != null && budgeted != null && budgeted !== 0
-                        ? (variance / budgeted) * 100
-                        : null;
+                        const cellBg = getCellBackground(actual, budgeted);
+                        const cellColor = getCellTextColor(actual, budgeted);
 
+                        if (subView === 'actuals') {
+                          return (
+                            <td
+                              key={conf.conferenceId}
+                              className="border-b border-gray-50"
+                              style={{ backgroundColor: cellBg }}
+                            >
+                              <div className="flex flex-col items-end justify-center px-2 py-1.5 h-full">
+                                <span className="text-[12px] font-medium" style={{ color: cellColor }}>
+                                  {fmtCurrency(actual)}
+                                </span>
+                              </div>
+                            </td>
+                          );
+                        }
+
+                        // Variance mode
+                        const variance = actual != null && budgeted != null ? actual - budgeted : null;
+                        const variancePct =
+                          variance != null && budgeted != null && budgeted !== 0
+                            ? (variance / budgeted) * 100
+                            : null;
+
+                        return (
+                          <td
+                            key={conf.conferenceId}
+                            className="border-b border-gray-50"
+                            style={{ backgroundColor: cellBg }}
+                          >
+                            <div className="flex flex-col items-end justify-center px-2 py-1.5 h-full">
+                              <span className="text-[12px] font-medium" style={{ color: cellColor }}>
+                                {variance != null ? `${variance > 0 ? '+' : ''}${fmtCurrency(variance)}` : '—'}
+                              </span>
+                              {variancePct != null && (
+                                <span className="text-[9px] opacity-75" style={{ color: cellColor }}>
+                                  {variancePct > 0 ? '+' : ''}{variancePct.toFixed(1)}%
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        );
+                      })}
+
+                      {/* Total cell */}
+                      <td
+                        className="px-2 py-1.5 text-right border-b border-gray-50"
+                        style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
+                      >
+                        {subView === 'actuals' ? (
+                          <span className="text-[12px] font-bold text-gray-700">
+                            {rowHasData ? fmtCurrency(rowTotal) : '—'}
+                          </span>
+                        ) : (
+                          <span className="text-[12px] font-bold text-gray-700">
+                            {rowHasData && rowBudgeted > 0
+                              ? `${rowTotal - rowBudgeted > 0 ? '+' : ''}${fmtCurrency(rowTotal - rowBudgeted)}`
+                              : '—'}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+
+              {/* Total row */}
+              <tr className="border-t-2 border-gray-200">
+                <td
+                  className="px-3 py-2 text-[12px] font-bold text-gray-800"
+                  style={{ position: 'sticky', left: 0, zIndex: 2, backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
+                >
+                  Total
+                </td>
+                {activeConferences.map(conf => {
+                  const totals = confTotals.get(conf.conferenceId);
+                  const actual = totals?.actual ?? null;
+                  const budgeted = totals?.budgeted ?? null;
+                  const cellBg = getCellBackground(actual, budgeted);
+                  const cellColor = getCellTextColor(actual, budgeted);
+
+                  if (subView === 'actuals') {
                     return (
                       <td
                         key={conf.conferenceId}
                         className="border-b border-gray-50"
                         style={{ backgroundColor: cellBg }}
                       >
-                        <div className="flex flex-col items-end justify-center px-2 py-1.5 h-full">
-                          <span className="text-[12px] font-medium" style={{ color: cellColor }}>
-                            {variance != null ? `${variance > 0 ? '+' : ''}${fmtCurrency(variance)}` : '—'}
+                        <div className="flex flex-col items-end justify-center px-2 py-2">
+                          <span className="text-[12px] font-bold" style={{ color: cellColor }}>
+                            {fmtCurrency(actual)}
                           </span>
-                          {variancePct != null && (
-                            <span className="text-[9px] opacity-75" style={{ color: cellColor }}>
-                              {variancePct > 0 ? '+' : ''}{variancePct.toFixed(1)}%
-                            </span>
-                          )}
                         </div>
                       </td>
                     );
-                  })}
+                  }
 
-                  {/* Total cell */}
-                  <td
-                    className="px-2 py-1.5 text-right border-b border-gray-50"
-                    style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
-                  >
-                    {subView === 'actuals' ? (
-                      <span className="text-[12px] font-bold text-gray-700">
-                        {rowHasData ? fmtCurrency(rowTotal) : '—'}
-                      </span>
-                    ) : (
-                      <span className="text-[12px] font-bold text-gray-700">
-                        {rowHasData && rowBudgeted > 0
-                          ? `${rowTotal - rowBudgeted > 0 ? '+' : ''}${fmtCurrency(rowTotal - rowBudgeted)}`
-                          : '—'}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-
-            {/* Total row */}
-            <tr className="border-t-2 border-gray-200">
-              <td
-                className="px-3 py-2 text-[12px] font-bold text-gray-800"
-                style={{ position: 'sticky', left: 0, zIndex: 2, backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
-              >
-                Total
-              </td>
-              {activeConferences.map(conf => {
-                const totals = confTotals.get(conf.conferenceId);
-                const actual = totals?.actual ?? null;
-                const budgeted = totals?.budgeted ?? null;
-                const cellBg = getCellBackground(actual, budgeted);
-                const cellColor = getCellTextColor(actual, budgeted);
-
-                if (subView === 'actuals') {
+                  const variance = actual != null && budgeted != null ? actual - budgeted : null;
+                  const cellBgV = getCellBackground(actual, budgeted);
+                  const cellColorV = getCellTextColor(actual, budgeted);
                   return (
-                    <td
-                      key={conf.conferenceId}
-                      className="border-b border-gray-50"
-                      style={{ backgroundColor: cellBg }}
-                    >
+                    <td key={conf.conferenceId} className="border-b border-gray-50" style={{ backgroundColor: cellBgV }}>
                       <div className="flex flex-col items-end justify-center px-2 py-2">
-                        <span className="text-[12px] font-bold" style={{ color: cellColor }}>
-                          {fmtCurrency(actual)}
+                        <span className="text-[12px] font-bold" style={{ color: cellColorV }}>
+                          {variance != null ? `${variance > 0 ? '+' : ''}${fmtCurrency(variance)}` : '—'}
                         </span>
                       </div>
                     </td>
                   );
-                }
+                })}
+                <td
+                  className="px-2 py-2 text-right"
+                  style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
+                >
+                  <span className="text-[12px] font-bold text-gray-800">{fmtCurrency(programTotal)}</span>
+                </td>
+              </tr>
 
-                const variance = actual != null && budgeted != null ? actual - budgeted : null;
-                const cellBgV = getCellBackground(actual, budgeted);
-                const cellColorV = getCellTextColor(actual, budgeted);
-                return (
-                  <td key={conf.conferenceId} className="border-b border-gray-50" style={{ backgroundColor: cellBgV }}>
-                    <div className="flex flex-col items-end justify-center px-2 py-2">
-                      <span className="text-[12px] font-bold" style={{ color: cellColorV }}>
-                        {variance != null ? `${variance > 0 ? '+' : ''}${fmtCurrency(variance)}` : '—'}
-                      </span>
-                    </div>
-                  </td>
-                );
-              })}
-              <td
-                className="px-2 py-2 text-right"
-                style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
-              >
-                <span className="text-[12px] font-bold text-gray-800">{fmtCurrency(programTotal)}</span>
-              </td>
-            </tr>
+              {/* % of program row (actuals) or % variance row (variance) */}
+              <tr>
+                <td
+                  className="px-3 py-2 text-[10px] text-gray-400 italic"
+                  style={{ position: 'sticky', left: 0, zIndex: 2, backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
+                >
+                  {subView === 'actuals' ? '% of program' : '% variance'}
+                </td>
+                {activeConferences.map(conf => {
+                  const totals = confTotals.get(conf.conferenceId);
+                  const actual = totals?.actual ?? null;
+                  const budgeted = totals?.budgeted ?? null;
 
-            {/* % of program row (actuals) or % variance row (variance) */}
-            <tr>
-              <td
-                className="px-3 py-2 text-[10px] text-gray-400 italic"
-                style={{ position: 'sticky', left: 0, zIndex: 2, backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
-              >
-                {subView === 'actuals' ? '% of program' : '% variance'}
-              </td>
-              {activeConferences.map(conf => {
-                const totals = confTotals.get(conf.conferenceId);
-                const actual = totals?.actual ?? null;
-                const budgeted = totals?.budgeted ?? null;
+                  if (subView === 'actuals') {
+                    const pct = programTotal > 0 && actual != null ? (actual / programTotal) * 100 : null;
+                    return (
+                      <td
+                        key={conf.conferenceId}
+                        className="px-2 py-2 text-right"
+                        style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
+                      >
+                        <span className="text-[10px] text-gray-500">
+                          {pct != null ? `${pct.toFixed(1)}%` : '—'}
+                        </span>
+                      </td>
+                    );
+                  }
 
-                if (subView === 'actuals') {
-                  const pct = programTotal > 0 && actual != null ? (actual / programTotal) * 100 : null;
+                  // variance mode — % variance vs budget
+                  const variancePct =
+                    actual != null && budgeted != null && budgeted > 0
+                      ? ((actual - budgeted) / budgeted) * 100
+                      : null;
                   return (
                     <td
                       key={conf.conferenceId}
@@ -480,38 +538,21 @@ export function ProgramPlannerCostMatrix({ conferences, year }: ProgramPlannerCo
                       style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
                     >
                       <span className="text-[10px] text-gray-500">
-                        {pct != null ? `${pct.toFixed(1)}%` : '—'}
+                        {variancePct != null
+                          ? `${variancePct > 0 ? '+' : ''}${variancePct.toFixed(1)}%`
+                          : '—'}
                       </span>
                     </td>
                   );
-                }
-
-                // variance mode — % variance vs budget
-                const variancePct =
-                  actual != null && budgeted != null && budgeted > 0
-                    ? ((actual - budgeted) / budgeted) * 100
-                    : null;
-                return (
-                  <td
-                    key={conf.conferenceId}
-                    className="px-2 py-2 text-right"
-                    style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
-                  >
-                    <span className="text-[10px] text-gray-500">
-                      {variancePct != null
-                        ? `${variancePct > 0 ? '+' : ''}${variancePct.toFixed(1)}%`
-                        : '—'}
-                    </span>
-                  </td>
-                );
-              })}
-              <td
-                className="px-2 py-2"
-                style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
-              />
-            </tr>
-          </tbody>
-        </table>
+                })}
+                <td
+                  className="px-2 py-2"
+                  style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }}
+                />
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* ── Heatmap legend ───────────────────────────────────────────────── */}
