@@ -1,8 +1,15 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { ProgramPlannerCostMatrix } from '@/components/ProgramPlannerCostMatrix';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+interface BudgetLineItem {
+  label: string;
+  budgeted: number | null;
+  actual: number | null;
+}
 
 interface ConferenceRow {
   conferenceId: number;
@@ -15,6 +22,7 @@ interface ConferenceRow {
   actualSpend: number | null;
   budgetTotal: number | null;
   pipelineInfluenced: number | null;
+  budgetLineItems: BudgetLineItem[] | null;
   closedWon: number | null;
   headcount: number | null;
   decision: string | null;
@@ -220,8 +228,13 @@ export default function ProgramPlannerPage() {
     });
   };
 
-  // All conferences flat for rankings
+  // All conferences flat for rankings and cost matrix
   const allConfs = confsData?.conferences ?? [];
+
+  const flattenedConferences = useMemo(() => [
+    ...(confsData?.series.flatMap(s => s.conferences) ?? []),
+    ...(confsData?.standalone ?? []),
+  ], [confsData]);
 
   // Rankings
   const ranked = [...allConfs].sort((a, b) => {
@@ -398,9 +411,10 @@ export default function ProgramPlannerPage() {
             </div>
 
             {view === 'cost' ? (
-              <div className="card p-8 text-center text-gray-400 text-sm">
-                Cost matrix coming soon
-              </div>
+              <ProgramPlannerCostMatrix
+                conferences={flattenedConferences}
+                year={selectedYear}
+              />
             ) : (
               <div className="grid grid-cols-[1fr_200px] gap-3 items-start">
                 {/* Program table */}

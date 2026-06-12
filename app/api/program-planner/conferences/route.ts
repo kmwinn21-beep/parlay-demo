@@ -32,16 +32,44 @@ export async function GET(request: NextRequest) {
 
   // Snapshots
   const snapRes = await db.execute({
-    sql: `SELECT conference_id, ces_score, actual_total, budget_total, pipeline_influenced FROM conference_snapshots WHERE conference_id IN (${ph})`,
+    sql: `SELECT conference_id, ces_score, actual_total, budget_total, pipeline_influenced, budget_line_items FROM conference_snapshots WHERE conference_id IN (${ph})`,
     args: confIds,
   });
-  const snapMap = new Map<number, { ces_score: number | null; actual_total: number | null; budget_total: number | null; pipeline_influenced: number | null }>();
+
+  type ParsedLineItem = { label: string; budgeted: number | null; actual: number | null };
+  function parseBudgetLineItems(raw: unknown): ParsedLineItem[] | null {
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(String(raw));
+      if (!Array.isArray(parsed) || parsed.length === 0) return null;
+      const parseDollar = (v: unknown) => {
+        const n = Number(String(v ?? '').replace(/[^0-9.-]/g, ''));
+        return isNaN(n) ? null : n;
+      };
+      return (parsed as unknown[])
+        .filter(item => item && typeof item === 'object')
+        .map(item => {
+          const obj = item as Record<string, unknown>;
+          return {
+            label: String(obj['label'] ?? obj['name'] ?? obj['category'] ?? 'Item'),
+            budgeted: parseDollar(obj['budget']),
+            actual: parseDollar(obj['actual']),
+          };
+        });
+    } catch { return null; }
+  }
+
+  const snapMap = new Map<number, {
+    ces_score: number | null; actual_total: number | null; budget_total: number | null;
+    pipeline_influenced: number | null; budgetLineItems: ParsedLineItem[] | null;
+  }>();
   for (const r of snapRes.rows) {
     snapMap.set(Number(r.conference_id), {
       ces_score: r.ces_score != null ? Number(r.ces_score) : null,
       actual_total: r.actual_total != null ? Number(r.actual_total) : null,
       budget_total: r.budget_total != null ? Number(r.budget_total) : null,
       pipeline_influenced: r.pipeline_influenced != null ? Number(r.pipeline_influenced) : null,
+      budgetLineItems: parseBudgetLineItems(r.budget_line_items),
     });
   }
 
@@ -100,6 +128,7 @@ export async function GET(request: NextRequest) {
       actualSpend: snap?.actual_total ?? null,
       budgetTotal: snap?.budget_total ?? null,
       pipelineInfluenced: snap?.pipeline_influenced ?? null,
+      budgetLineItems: snap?.budgetLineItems ?? null,
       closedWon: cwByConfId.get(confId) ?? null,
       headcount,
       decision: plan?.decision ?? null,
