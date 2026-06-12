@@ -4,11 +4,11 @@ export type Tier = 'Exceptional' | 'Strong' | 'Acceptable' | 'Needs Work' | 'Wea
 type Component = { key: string; score: number | null; weight: number };
 
 export const DEFAULT_SALES_WEIGHTS = {
-  meeting_execution: 0.25,
-  followup_execution: 0.2,
+  meeting_execution: 0.20,
+  followup_execution: 0.15,
   pipeline_influence_execution: 0.25,
-  target_account_execution: 0.15,
-  rep_productivity: 0.15,
+  target_account_execution: 0.10,
+  rep_productivity: 0.30,
 } as const;
 
 export function pct(n: number, d: number): number | null {
