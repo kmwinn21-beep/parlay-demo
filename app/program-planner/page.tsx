@@ -515,10 +515,7 @@ export default function ProgramPlannerPage() {
                     onLineItemSelect={setSelectedLineItem}
                   />
                 </div>
-                <div className="col-span-2 card overflow-hidden">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 px-4 pt-3 pb-2 border-b border-gray-100">
-                    Visual Breakdown
-                  </p>
+                <div className="col-span-2 space-y-3">
                   <ProgramPlannerAnalyticsPanel
                     conferences={flattenedConferences}
                     activeConferenceIds={activeConferenceIds}
