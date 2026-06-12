@@ -102,15 +102,33 @@ function DecisionPill({
   confId, value, year, onUpdated,
 }: { confId: number; value: string | null; year: number; onUpdated: (confId: number, decision: DecisionValue) => void }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const openDropdown = () => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    setDropdownPos({ top: rect.bottom + 4, left: rect.left });
+    setOpen(true);
+  };
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    const close = (e: MouseEvent) => {
+      if (
+        buttonRef.current?.contains(e.target as Node) ||
+        dropdownRef.current?.contains(e.target as Node)
+      ) return;
+      setOpen(false);
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    const closeOnScroll = () => setOpen(false);
+    document.addEventListener('mousedown', close);
+    document.addEventListener('scroll', closeOnScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('scroll', closeOnScroll, true);
+    };
   }, [open]);
 
   const select = async (decision: DecisionValue) => {
@@ -126,17 +144,22 @@ function DecisionPill({
   const cfg = value ? DECISION_CONFIG[value] : null;
 
   return (
-    <div className="relative inline-block" ref={ref}>
+    <>
       <button
-        onClick={() => setOpen(p => !p)}
-        className={`px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer ${
+        ref={buttonRef}
+        onClick={openDropdown}
+        className={`px-2 py-0.5 rounded text-[12px] font-medium cursor-pointer ${
           cfg ? `${cfg.bg} ${cfg.text}` : 'text-gray-400 hover:text-gray-600'
         }`}
       >
         {cfg ? cfg.label : '—'}
       </button>
-      {open && (
-        <div className="absolute z-50 top-full mt-1 left-0 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[110px]">
+      {open && dropdownPos && (
+        <div
+          ref={dropdownRef}
+          className="bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[110px]"
+          style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999 }}
+        >
           {(['attend', 'reduce', 'cut', 'evaluating'] as const).map(d => (
             <button
               key={d}
@@ -154,7 +177,7 @@ function DecisionPill({
           </button>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -339,13 +362,13 @@ export default function ProgramPlannerPage() {
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               {/* Conferences attended */}
               <div className="card text-center">
-                <p className="text-[11px] text-gray-500 uppercase tracking-wide mb-1">Conferences attended</p>
+                <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Conferences attended</p>
                 <p className="text-3xl font-bold text-brand-primary">{summary?.conferencesAttended ?? 0}</p>
               </div>
 
               {/* Total actual spend */}
               <div className="card text-center">
-                <p className="text-[11px] text-gray-500 uppercase tracking-wide mb-1">Total actual spend</p>
+                <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Total actual spend</p>
                 <p className="text-2xl font-bold text-brand-primary">{fmtCurrency(summary?.totalActualSpend)}</p>
                 {summary && summary.totalBudget > 0 && (
                   <>
@@ -362,26 +385,26 @@ export default function ProgramPlannerPage() {
 
               {/* Avg cost */}
               <div className="card text-center">
-                <p className="text-[11px] text-gray-500 uppercase tracking-wide mb-1">Avg cost per conference</p>
+                <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Avg cost per conference</p>
                 <p className="text-2xl font-bold text-brand-primary">{fmtCurrency(summary?.avgCostPerConference)}</p>
               </div>
 
               {/* Total closed/won */}
               <div className="card text-center">
-                <p className="text-[11px] text-gray-500 uppercase tracking-wide mb-1">Total closed/won</p>
+                <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Total closed/won</p>
                 <p className="text-2xl font-bold text-green-600">{fmtCurrency(summary?.totalClosedWon)}</p>
                 <p className="text-[10px] text-gray-400 mt-0.5">Conference attributed</p>
               </div>
 
               {/* Avg closed/won */}
               <div className="card text-center">
-                <p className="text-[11px] text-gray-500 uppercase tracking-wide mb-1">Avg closed/won per conf</p>
+                <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Avg closed/won per conf</p>
                 <p className="text-2xl font-bold text-green-600">{fmtCurrency(summary?.avgClosedWonPerConference)}</p>
               </div>
 
               {/* Avg CES */}
               <div className="card text-center">
-                <p className="text-[11px] text-gray-500 uppercase tracking-wide mb-1">Avg CES score</p>
+                <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Avg CES score</p>
                 <p className={`text-3xl font-bold ${cesColor(summary?.avgCES ?? null)}`}>
                   {summary?.avgCES != null ? summary.avgCES : '—'}
                 </p>
@@ -416,9 +439,9 @@ export default function ProgramPlannerPage() {
                 year={selectedYear}
               />
             ) : (
-              <div className="grid grid-cols-[1fr_200px] gap-3 items-start">
+              <div className="grid grid-cols-4 gap-3 items-start">
                 {/* Program table */}
-                <div className="card p-0 overflow-hidden">
+                <div className="col-span-3 card p-0 overflow-hidden">
                   {/* Table header row */}
                   <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                     <span className="text-sm font-semibold text-gray-800">FY{selectedYear} conference program</span>
@@ -453,7 +476,7 @@ export default function ProgramPlannerPage() {
                       <thead>
                         <tr className="border-b border-gray-100">
                           {['Conference', 'Dates', 'CES', 'Actual cost', 'Pipeline inf.', 'Closed/won', 'Heads', 'Decision'].map(h => (
-                            <th key={h} className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                            <th key={h} className="px-3 py-2 text-left text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
                               {h}
                             </th>
                           ))}
@@ -484,11 +507,11 @@ export default function ProgramPlannerPage() {
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                       </svg>
                                       <span className="text-xs font-bold text-gray-700">{s.seriesName}</span>
-                                      <span className="text-[11px] text-gray-400">
+                                      <span className="text-[12px] text-gray-400">
                                         {s.conferenceCount} conference{s.conferenceCount !== 1 ? 's' : ''}{s.totalActualSpend > 0 ? ` · ${fmtCurrency(s.totalActualSpend)}` : ''}{s.totalPipeline > 0 ? ` · ${fmtCurrency(s.totalPipeline)} pipeline` : ''}
                                       </span>
                                     </button>
-                                    <button className="text-[11px] text-brand-secondary hover:text-brand-primary">
+                                    <button className="text-[12px] text-brand-secondary hover:text-brand-primary">
                                       View Kanban →
                                     </button>
                                   </div>
@@ -509,7 +532,7 @@ export default function ProgramPlannerPage() {
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                     </svg>
                                     <span className="text-xs font-bold text-gray-500">Standalone</span>
-                                    <span className="text-[11px] text-gray-400">{confsData?.standalone.length} conference{(confsData?.standalone.length ?? 0) !== 1 ? 's' : ''}</span>
+                                    <span className="text-[12px] text-gray-400">{confsData?.standalone.length} conference{(confsData?.standalone.length ?? 0) !== 1 ? 's' : ''}</span>
                                   </button>
                                 </td>
                               </tr>
@@ -581,7 +604,7 @@ export default function ProgramPlannerPage() {
                 </div>
 
                 {/* Rankings panel */}
-                <div className="card p-0 overflow-hidden sticky top-6">
+                <div className="col-span-1 card p-0 overflow-hidden sticky top-6">
                   <div className="px-3 py-2.5 border-b border-gray-100">
                     <p className="text-xs font-semibold text-gray-800 mb-2">Conference rankings</p>
                     <div className="flex flex-wrap gap-1">
@@ -628,10 +651,10 @@ export default function ProgramPlannerPage() {
                         <div key={c.conferenceId} className="px-3 py-2 flex items-center gap-2">
                           <span className="text-[10px] font-bold text-gray-400 w-4 flex-shrink-0">{i + 1}</span>
                           <div className="flex-1 min-w-0">
-                            <p className="text-[11px] font-medium text-gray-700 truncate">{c.name}</p>
+                            <p className="text-[12px] font-medium text-gray-700 truncate">{c.name}</p>
                             <p className="text-[10px] text-gray-400">{[sub1, sub2].filter(Boolean).join(' · ')}</p>
                           </div>
-                          <span className={`text-[11px] font-semibold flex-shrink-0 ${rankMetric === 'ces' ? cesColor(c.ces) : 'text-gray-700'}`}>
+                          <span className={`text-[12px] font-semibold flex-shrink-0 ${rankMetric === 'ces' ? cesColor(c.ces) : 'text-gray-700'}`}>
                             {metricVal}
                           </span>
                         </div>
@@ -640,7 +663,7 @@ export default function ProgramPlannerPage() {
                   </div>
                   {allConfs.length > 8 && (
                     <div className="px-3 py-2 border-t border-gray-100">
-                      <button className="text-[11px] text-brand-secondary hover:text-brand-primary w-full text-center">
+                      <button className="text-[12px] text-brand-secondary hover:text-brand-primary w-full text-center">
                         View all {allConfs.length} conferences
                       </button>
                     </div>
