@@ -26,6 +26,9 @@ export async function GET(
 
   const seriesName = String(seriesRes.rows[0].series_name);
   const confNames = seriesRes.rows.map(r => String(r.name));
+  const confStartDateByName = new Map<string, string>(
+    seriesRes.rows.map(r => [String(r.name), String(r.start_date)])
+  );
   const startDates = seriesRes.rows.map(r => String(r.start_date)).filter(Boolean);
   const endDates = seriesRes.rows.map(r => String(r.end_date)).filter(Boolean);
   const earliestStart = startDates.sort()[0] ?? null;
@@ -117,7 +120,18 @@ export async function GET(
       amount,
       currency: String(r.currency ?? 'USD'),
       attributed_amount: attributedAmount,
-      days_to_close: null as number | null,
+      days_to_close: (() => {
+        const attrConfs = parseAttrConfs(r.attributed_conference);
+        const matchingStart = attrConfs
+          .map(c => confStartDateByName.get(c))
+          .filter((d): d is string => !!d)
+          .sort()[0];
+        if (!matchingStart) return null;
+        const closeMs = new Date(String(r.close_date)).getTime();
+        const startMs = new Date(matchingStart).getTime();
+        if (isNaN(closeMs) || isNaN(startMs)) return null;
+        return Math.round((closeMs - startMs) / 86400000);
+      })(),
       notes: r.notes ? String(r.notes) : null,
       opportunity_id: r.opportunity_id ? String(r.opportunity_id) : null,
       deal_type: r.deal_type ? String(r.deal_type) : null,
@@ -139,6 +153,10 @@ export async function GET(
   return NextResponse.json({
     series: { id: seriesId, name: seriesName, start_date: earliestStart, end_date: latestEnd },
     deals,
-    summary: { total_amount: totalAmount, total_attributed: totalAttributed, avg_days_to_close: null },
+    summary: (() => {
+      const daysArr = deals.map(d => d.days_to_close).filter((d): d is number => d != null && d >= 0);
+      const avgDaysToClose = daysArr.length ? Math.round(daysArr.reduce((s, d) => s + d, 0) / daysArr.length) : null;
+      return { total_amount: totalAmount, total_attributed: totalAttributed, avg_days_to_close: avgDaysToClose };
+    })(),
   });
 }
