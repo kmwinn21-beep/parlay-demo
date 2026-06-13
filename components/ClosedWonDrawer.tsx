@@ -180,13 +180,8 @@ function DealCard({ deal }: { deal: Deal }) {
         </MetaField>
       </div>
 
-      {/* Attribution % · Attribution Type · Days to Close */}
-      <div className="px-4 py-3 grid grid-cols-3 gap-3 border-b border-gray-50">
-        <MetaField label="Attribution (%)">
-          {showAttrPct ? (
-            <span>{perConfPct}%</span>
-          ) : <span className="text-gray-400">—</span>}
-        </MetaField>
+      {/* Attribution Type · Days to Close */}
+      <div className="px-4 py-3 grid grid-cols-2 gap-3 border-b border-gray-50">
         <MetaField label="Attribution Type">
           {deal.attribution_type ? (
             <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold border" style={{ background: attrPillStyle.bg, color: attrPillStyle.text, borderColor: attrPillStyle.border }}>
@@ -209,7 +204,7 @@ function DealCard({ deal }: { deal: Deal }) {
               {attrConfs.map(c => (
                 <span
                   key={c}
-                  className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium border"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border"
                   style={{
                     borderColor: 'rgb(var(--brand-secondary-rgb))',
                     background: 'rgb(var(--brand-secondary-rgb) / 0.1)',
@@ -217,6 +212,12 @@ function DealCard({ deal }: { deal: Deal }) {
                   }}
                 >
                   {c}
+                  {showAttrPct && (
+                    <>
+                      <span className="opacity-40 select-none">|</span>
+                      <span>{perConfPct}%</span>
+                    </>
+                  )}
                 </span>
               ))}
             </div>
