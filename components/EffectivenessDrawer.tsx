@@ -8,7 +8,6 @@ import { AudienceMessagingTab } from './effectiveness/AudienceMessagingTab';
 import { OperationalROITab } from './effectiveness/OperationalROITab';
 import { DefinitionsTab } from './effectiveness/DefinitionsTab';
 import { useSectionConfig } from '@/lib/useSectionConfig';
-import { useFloatingNavHidden } from '@/components/FloatingNavHiddenContext';
 import type { EffectivenessData } from './ConferenceEffectivenessModal';
 
 const HEADER_BG = 'rgb(var(--brand-accent-rgb))';
@@ -66,7 +65,6 @@ export function EffectivenessDrawer({ conferenceId, conferenceName, onClose }: P
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('summary');
   const [statsOpen, setStatsOpen] = useState(false);
-  const { setNavHidden } = useFloatingNavHidden();
   const { orderedKeys, isVisible, getLabel } = useSectionConfig('effectiveness_modal');
 
   const visibleTabs = (orderedKeys.length > 0 ? orderedKeys : ['summary', 'sales', 'audience', 'roi', 'definitions'])
@@ -75,9 +73,7 @@ export function EffectivenessDrawer({ conferenceId, conferenceName, onClose }: P
 
   useEffect(() => {
     setMounted(true);
-    setNavHidden(true);
-    return () => setNavHidden(false);
-  }, [setNavHidden]);
+  }, []);
 
   useEffect(() => {
     fetch(`/api/conferences/${conferenceId}/effectiveness`)
@@ -111,7 +107,7 @@ export function EffectivenessDrawer({ conferenceId, conferenceName, onClose }: P
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
       {/* Panel */}
-      <div className="drawer-mobile-responsive relative flex flex-col bg-white w-full sm:w-[400px] h-[90vh] sm:h-full shadow-2xl rounded-t-2xl sm:rounded-none overflow-hidden">
+      <div className="drawer-mobile-responsive relative flex flex-col bg-white w-full sm:w-[calc((100vw-16rem)/2-1rem)] h-[90vh] sm:h-full shadow-2xl rounded-t-2xl sm:rounded-none overflow-hidden">
 
         {/* Header */}
         <div className="flex-shrink-0 px-4 py-3" style={{ backgroundColor: HEADER_BG }}>
