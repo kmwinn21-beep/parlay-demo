@@ -125,7 +125,7 @@ export function EffectivenessDrawer({ conferenceId, conferenceName, onClose }: P
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
       {/* Panel */}
-      <div className="drawer-mobile-responsive relative flex flex-col bg-white w-full sm:w-[calc((100vw-16rem)/2-1rem)] h-[90vh] sm:h-full shadow-2xl rounded-t-2xl sm:rounded-none overflow-hidden">
+      <div className="drawer-mobile-responsive relative flex flex-col bg-white w-full sm:w-[500px] h-[90vh] sm:h-full shadow-2xl rounded-t-2xl sm:rounded-none overflow-hidden">
 
         {/* Header */}
         <div className="flex-shrink-0 px-4 py-3" style={{ backgroundColor: HEADER_BG }}>
