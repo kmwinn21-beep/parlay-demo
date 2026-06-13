@@ -257,7 +257,7 @@ export function EffectivenessDrawer({ conferenceId, conferenceName, onClose }: P
               <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-y-auto scrollbar-hide effectiveness-drawer-narrow">
                 {activeTab === 'summary'     && <SummaryTab data={data} conferenceId={conferenceId} />}
                 {activeTab === 'sales'       && <SalesExecutionTab data={data} />}
-                {activeTab === 'audience'    && <AudienceMessagingTab data={data} />}
+                {activeTab === 'audience'    && <AudienceMessagingTab data={data} narrow={true} />}
                 {activeTab === 'roi'         && <OperationalROITab data={data} />}
                 {activeTab === 'definitions' && <DefinitionsTab />}
               </div>
