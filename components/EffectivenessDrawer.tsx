@@ -58,6 +58,14 @@ interface Props {
   onClose: () => void;
 }
 
+const LOADING_STEPS = [
+  'Calculating Conference Effectiveness Score',
+  'Calculating Sales Execution Score',
+  'Calculating Marketing Coverage Score',
+  'Calculating Cost Efficiency Score',
+  'Finalizing',
+];
+
 export function EffectivenessDrawer({ conferenceId, conferenceName, onClose }: Props) {
   const [mounted, setMounted] = useState(false);
   const [data, setData] = useState<EffectivenessData | null>(null);
@@ -65,6 +73,7 @@ export function EffectivenessDrawer({ conferenceId, conferenceName, onClose }: P
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('summary');
   const [statsOpen, setStatsOpen] = useState(false);
+  const [loadingStep, setLoadingStep] = useState(0);
   const { orderedKeys, isVisible, getLabel } = useSectionConfig('effectiveness_modal');
 
   const visibleTabs = (orderedKeys.length > 0 ? orderedKeys : ['summary', 'sales', 'audience', 'roi', 'definitions'])
@@ -81,6 +90,14 @@ export function EffectivenessDrawer({ conferenceId, conferenceName, onClose }: P
       .then((d: EffectivenessData) => { setData(d); setLoading(false); })
       .catch(e => { setError(String(e)); setLoading(false); });
   }, [conferenceId]);
+
+  useEffect(() => {
+    if (!loading) return;
+    const last = LOADING_STEPS.length - 1;
+    if (loadingStep >= last) return;
+    const t = setTimeout(() => setLoadingStep(s => Math.min(s + 1, last)), 7000);
+    return () => clearTimeout(t);
+  }, [loading, loadingStep]);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -103,6 +120,7 @@ export function EffectivenessDrawer({ conferenceId, conferenceName, onClose }: P
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-stretch sm:justify-end">
+      <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }`}</style>
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
@@ -168,11 +186,18 @@ export function EffectivenessDrawer({ conferenceId, conferenceName, onClose }: P
 
         {/* Loading / error */}
         {loading && (
-          <div className="flex-1 flex items-center justify-center">
-            <svg className="w-6 h-6 animate-spin text-brand-secondary" fill="none" viewBox="0 0 24 24">
+          <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6">
+            <svg className="w-7 h-7 animate-spin text-brand-secondary flex-shrink-0" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
             </svg>
+            <p
+              key={loadingStep}
+              className="text-sm text-gray-500 text-center"
+              style={{ animation: 'fadeUp 0.4s ease-out' }}
+            >
+              {LOADING_STEPS[loadingStep]}
+            </p>
           </div>
         )}
         {error && (
