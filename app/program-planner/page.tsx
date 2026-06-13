@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { ProgramPlannerCostMatrix } from '@/components/ProgramPlannerCostMatrix';
 import { ProgramPlannerAnalyticsPanel } from '@/components/ProgramPlannerAnalyticsPanel';
 import { EffectivenessDrawer } from '@/components/EffectivenessDrawer';
+import { ClosedWonDrawer } from '@/components/ClosedWonDrawer';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -283,6 +284,8 @@ export default function ProgramPlannerPage() {
   const [rankMetric, setRankMetric] = useState<RankMetric>('ces');
   const [collapsedSeries, setCollapsedSeries] = useState<Set<string>>(new Set());
   const [effectivenessDrawer, setEffectivenessDrawer] = useState<{ conferenceId: number; conferenceName: string } | null>(null);
+  type CWTarget = { type: 'conference'; conferenceId: number; conferenceName: string } | { type: 'series'; seriesId: string; seriesName: string };
+  const [closedWonDrawer, setClosedWonDrawer] = useState<CWTarget | null>(null);
 
   const fetchData = useCallback(async (year: number) => {
     setLoading(true);
@@ -615,11 +618,13 @@ export default function ProgramPlannerPage() {
                                           />
                                         )}
                                         {s.totalClosedWon > 0 && (
-                                          <TooltipPill
-                                            label={`C/W: ${fmtCurrency(s.totalClosedWon)}`}
-                                            tooltip="Closed/Won (attributed)"
-                                            className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700 border border-green-200"
-                                          />
+                                          <button
+                                            type="button"
+                                            onClick={e => { e.stopPropagation(); setClosedWonDrawer({ type: 'series', seriesId: s.seriesId, seriesName: s.seriesName }); }}
+                                            className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors cursor-pointer"
+                                          >
+                                            {`C/W: ${fmtCurrency(s.totalClosedWon)}`}
+                                          </button>
                                         )}
                                       </div>
                                     </button>
@@ -689,9 +694,13 @@ export default function ProgramPlannerPage() {
                               <td className="px-3 py-2 text-gray-700 tabular-nums">{fmtCurrency(c.pipelineInfluenced)}</td>
                               <td className="px-3 py-2">
                                 {(c.closedWon ?? 0) > 0 ? (
-                                  <span className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border bg-green-50 text-green-700 border-green-200 tabular-nums">
+                                  <button
+                                    type="button"
+                                    onClick={() => setClosedWonDrawer({ type: 'conference', conferenceId: c.conferenceId, conferenceName: c.name })}
+                                    className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border bg-green-50 text-green-700 border-green-200 tabular-nums hover:bg-green-100 transition-colors cursor-pointer"
+                                  >
                                     {fmtCurrency(c.closedWon)}
-                                  </span>
+                                  </button>
                                 ) : <span className="text-gray-400 tabular-nums">—</span>}
                               </td>
                               <td className="px-3 py-2 text-gray-700">{c.headcount ?? '—'}</td>
@@ -824,6 +833,12 @@ export default function ProgramPlannerPage() {
         conferenceId={effectivenessDrawer.conferenceId}
         conferenceName={effectivenessDrawer.conferenceName}
         onClose={() => setEffectivenessDrawer(null)}
+      />
+    )}
+    {closedWonDrawer && (
+      <ClosedWonDrawer
+        target={closedWonDrawer}
+        onClose={() => setClosedWonDrawer(null)}
       />
     )}
     </>
