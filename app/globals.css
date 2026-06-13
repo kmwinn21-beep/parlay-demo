@@ -125,6 +125,10 @@ h1, h2, h3 {
   }
 }
 
+/* Hide scrollbar utility */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
 /* Force single-column layout inside the effectiveness drawer (overrides viewport-based Tailwind breakpoints) */
 .effectiveness-drawer-narrow [class*="sm:grid-cols-"],
 .effectiveness-drawer-narrow [class*="md:grid-cols-"],

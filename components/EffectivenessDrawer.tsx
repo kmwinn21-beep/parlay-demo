@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { SummaryTab } from './effectiveness/SummaryTab';
 import { SalesExecutionTab } from './effectiveness/SalesExecutionTab';
@@ -74,6 +74,8 @@ export function EffectivenessDrawer({ conferenceId, conferenceName, onClose }: P
   const [activeTab, setActiveTab] = useState<TabKey>('summary');
   const [statsOpen, setStatsOpen] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
+  const [atBottom, setAtBottom] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const { orderedKeys, isVisible, getLabel } = useSectionConfig('effectiveness_modal');
 
   const visibleTabs = (orderedKeys.length > 0 ? orderedKeys : ['summary', 'sales', 'audience', 'roi', 'definitions'])
@@ -104,6 +106,30 @@ export function EffectivenessDrawer({ conferenceId, conferenceName, onClose }: P
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
   }, [onClose]);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setAtBottom(el.scrollTop + el.clientHeight >= el.scrollHeight - 8);
+  }, []);
+
+  const handleChevronClick = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (atBottom) {
+      el.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      el.scrollBy({ top: el.clientHeight * 0.75, behavior: 'smooth' });
+    }
+  }, [atBottom]);
+
+  // Reset scroll position and atBottom when tab changes
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = 0;
+    setAtBottom(false);
+  }, [activeTab]);
 
   if (!mounted) return null;
 
@@ -227,12 +253,30 @@ export function EffectivenessDrawer({ conferenceId, conferenceName, onClose }: P
             </div>
 
             {/* Tab content */}
-            <div className="flex-1 overflow-y-auto effectiveness-drawer-narrow">
-              {activeTab === 'summary'     && <SummaryTab data={data} conferenceId={conferenceId} />}
-              {activeTab === 'sales'       && <SalesExecutionTab data={data} />}
-              {activeTab === 'audience'    && <AudienceMessagingTab data={data} />}
-              {activeTab === 'roi'         && <OperationalROITab data={data} />}
-              {activeTab === 'definitions' && <DefinitionsTab />}
+            <div className="relative flex-1 min-h-0">
+              <div ref={scrollRef} onScroll={handleScroll} className="h-full overflow-y-auto scrollbar-hide effectiveness-drawer-narrow">
+                {activeTab === 'summary'     && <SummaryTab data={data} conferenceId={conferenceId} />}
+                {activeTab === 'sales'       && <SalesExecutionTab data={data} />}
+                {activeTab === 'audience'    && <AudienceMessagingTab data={data} />}
+                {activeTab === 'roi'         && <OperationalROITab data={data} />}
+                {activeTab === 'definitions' && <DefinitionsTab />}
+              </div>
+              {/* Scroll chevron */}
+              <button
+                type="button"
+                onClick={handleChevronClick}
+                className="absolute bottom-0 left-0 right-0 flex flex-col items-center pb-2 pt-6 transition-opacity hover:opacity-80"
+                style={{ background: 'linear-gradient(to bottom, transparent, white 60%)' }}
+                aria-label={atBottom ? 'Scroll to top' : 'Scroll down'}
+              >
+                <svg
+                  className="w-5 h-5 text-gray-400 transition-transform duration-300"
+                  style={{ transform: atBottom ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
             </div>
           </>
         )}
