@@ -166,8 +166,8 @@ function DealCard({ deal }: { deal: Deal }) {
         </MetaField>
       </div>
 
-      {/* Contact / Signor row */}
-      <div className="px-4 py-3 border-b border-gray-50">
+      {/* Contact / Signor · Days to Close */}
+      <div className="px-4 py-3 grid grid-cols-2 gap-3 border-b border-gray-50">
         <MetaField label="Contact / Signor">
           {deal.contact_signor ? (
             <div>
@@ -178,9 +178,14 @@ function DealCard({ deal }: { deal: Deal }) {
             </div>
           ) : <span className="text-gray-400">—</span>}
         </MetaField>
+        <MetaField label="Days to Close">
+          {deal.days_to_close != null && deal.days_to_close >= 0
+            ? <span>{deal.days_to_close} days</span>
+            : <span className="text-gray-400">—</span>}
+        </MetaField>
       </div>
 
-      {/* Attribution Type · Days to Close */}
+      {/* Attribution Type · Attributed Conference(s) */}
       <div className="px-4 py-3 grid grid-cols-2 gap-3 border-b border-gray-50">
         <MetaField label="Attribution Type">
           {deal.attribution_type ? (
@@ -189,15 +194,6 @@ function DealCard({ deal }: { deal: Deal }) {
             </span>
           ) : <span className="text-gray-400">—</span>}
         </MetaField>
-        <MetaField label="Days to Close">
-          {deal.days_to_close != null && deal.days_to_close >= 0
-            ? <span>{deal.days_to_close} days</span>
-            : <span className="text-gray-400">—</span>}
-        </MetaField>
-      </div>
-
-      {/* Attributed Conference(s) */}
-      <div className="px-4 py-3 border-b border-gray-50">
         <MetaField label="Attributed Conference(s)">
           {attrConfs.length > 0 ? (
             <div className="flex flex-wrap gap-1.5 mt-0.5">
