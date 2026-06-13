@@ -124,3 +124,11 @@ h1, h2, h3 {
     animation: slideInRight 0.25s ease-out;
   }
 }
+
+/* Force single-column layout inside the effectiveness drawer (overrides viewport-based Tailwind breakpoints) */
+.effectiveness-drawer-narrow [class*="sm:grid-cols-"],
+.effectiveness-drawer-narrow [class*="md:grid-cols-"],
+.effectiveness-drawer-narrow [class*="lg:grid-cols-"],
+.effectiveness-drawer-narrow [class*="lg:[grid-template-columns"] {
+  grid-template-columns: 1fr !important;
+}
