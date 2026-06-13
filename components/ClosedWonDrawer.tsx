@@ -93,17 +93,21 @@ const ATTR_PILL: Record<string, { bg: string; text: string; border: string }> = 
 function MetaField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400">{label}</div>
-      <div className="text-xs text-gray-700 font-medium">{children}</div>
+      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{label}</div>
+      <div className="text-[12px] text-gray-700 font-medium leading-snug">{children}</div>
     </div>
   );
 }
 
 function DealCard({ deal }: { deal: Deal }) {
-  const [open, setOpen] = useState(false);
   const reps = parseJson(deal.attributed_rep);
   const attrConfs = parseJson(deal.attributed_conference);
   const attrPillStyle = deal.attribution_type ? (ATTR_PILL[deal.attribution_type] ?? ATTR_PILL['Influenced']) : ATTR_PILL['Influenced'];
+
+  // Attribution % per conference for this deal
+  const attrPct = deal.attribution_pct ?? (deal.attribution_type === 'Direct Source' ? 100 : 50);
+  const perConfPct = attrConfs.length > 1 ? Math.round(attrPct / attrConfs.length) : attrPct;
+  const showAttrPct = deal.attribution_type && deal.attribution_type !== 'None';
 
   return (
     <div className="card p-0 overflow-hidden">
@@ -138,7 +142,7 @@ function DealCard({ deal }: { deal: Deal }) {
         </div>
       </div>
 
-      {/* Primary meta row */}
+      {/* Primary meta row: Opp ID · Close Date · Attributed Rep */}
       <div className="px-4 py-3 grid grid-cols-3 gap-3 border-b border-gray-50">
         <MetaField label="Deal / Opp ID">
           {deal.opportunity_id ?? <span className="text-gray-400">—</span>}
@@ -150,11 +154,11 @@ function DealCard({ deal }: { deal: Deal }) {
           {reps.length > 0 ? (
             <div className="flex flex-wrap gap-1">
               {reps.map(rep => (
-                <span key={rep} className="inline-flex items-center gap-1">
-                  <span className="w-4 h-4 rounded-full bg-brand-secondary text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">
-                    {getInitials(rep)}
-                  </span>
-                  <span className="text-xs">{rep}</span>
+                <span key={rep} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-200 text-[11px] font-medium">
+                  <svg className="w-3 h-3 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  {getInitials(rep)}
                 </span>
               ))}
             </div>
@@ -162,27 +166,32 @@ function DealCard({ deal }: { deal: Deal }) {
         </MetaField>
       </div>
 
-      {/* Secondary meta row */}
-      <div className="px-4 py-3 grid grid-cols-2 gap-3 border-b border-gray-50">
+      {/* Contact / Signor row */}
+      <div className="px-4 py-3 border-b border-gray-50">
         <MetaField label="Contact / Signor">
-          {deal.contact_signor ?? <span className="text-gray-400">—</span>}
+          {deal.contact_signor ? (
+            <div>
+              <span>{deal.contact_signor}</span>
+              {deal.contact_signor_title && (
+                <div className="text-[10px] text-gray-400 mt-0.5">{deal.contact_signor_title}</div>
+              )}
+            </div>
+          ) : <span className="text-gray-400">—</span>}
+        </MetaField>
+      </div>
+
+      {/* Attribution % · Attribution Type · Days to Close */}
+      <div className="px-4 py-3 grid grid-cols-3 gap-3 border-b border-gray-50">
+        <MetaField label="Attribution (%)">
+          {showAttrPct ? (
+            <span>{perConfPct}%</span>
+          ) : <span className="text-gray-400">—</span>}
         </MetaField>
         <MetaField label="Attribution Type">
           {deal.attribution_type ? (
             <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold border" style={{ background: attrPillStyle.bg, color: attrPillStyle.text, borderColor: attrPillStyle.border }}>
               {deal.attribution_type}
             </span>
-          ) : <span className="text-gray-400">—</span>}
-        </MetaField>
-      </div>
-
-      {/* Attributed conference + days to close row */}
-      <div className="px-4 py-3 grid grid-cols-2 gap-3 border-b border-gray-50">
-        <MetaField label="Attributed Conference(s)">
-          {attrConfs.length > 0 ? (
-            <div className="flex flex-col gap-0.5">
-              {attrConfs.map(c => <span key={c} className="text-brand-secondary text-xs">{c}</span>)}
-            </div>
           ) : <span className="text-gray-400">—</span>}
         </MetaField>
         <MetaField label="Days to Close">
@@ -192,10 +201,33 @@ function DealCard({ deal }: { deal: Deal }) {
         </MetaField>
       </div>
 
+      {/* Attributed Conference(s) */}
+      <div className="px-4 py-3 border-b border-gray-50">
+        <MetaField label="Attributed Conference(s)">
+          {attrConfs.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5 mt-0.5">
+              {attrConfs.map(c => (
+                <span
+                  key={c}
+                  className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium border"
+                  style={{
+                    borderColor: 'rgb(var(--brand-secondary-rgb))',
+                    background: 'rgb(var(--brand-secondary-rgb) / 0.1)',
+                    color: 'rgb(var(--brand-secondary-rgb))',
+                  }}
+                >
+                  {c}
+                </span>
+              ))}
+            </div>
+          ) : <span className="text-gray-400">—</span>}
+        </MetaField>
+      </div>
+
       {/* Products */}
       {deal.products.length > 0 && (
         <div className="px-4 py-3">
-          <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Products</div>
+          <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Products</div>
           <div className="flex flex-wrap gap-1.5">
             {deal.products.map(p => (
               <span key={p.id} className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-[11px] font-medium border border-gray-200">
@@ -329,7 +361,7 @@ export function ClosedWonDrawer({ target, onClose }: Props) {
               ].map(({ label, value }) => (
                 <div key={label} className="rounded-xl border-2 p-2 flex flex-col items-center gap-0.5 min-w-0" style={{ borderColor: 'rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.12)' }}>
                   <div className="text-sm font-bold leading-tight text-white truncate w-full text-center">{value}</div>
-                  <div className="text-[9px] font-semibold text-center leading-tight" style={{ color: 'rgba(255,255,255,0.65)' }}>{label}</div>
+                  <div className="text-[10px] font-semibold text-center leading-tight" style={{ color: 'rgba(255,255,255,0.65)' }}>{label}</div>
                 </div>
               ))}
             </div>
