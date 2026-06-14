@@ -529,6 +529,7 @@ export default function ProgramPlannerPage() {
                     activeLineItems={activeLineItems}
                     selectedLineItem={selectedLineItem}
                     onLineItemSelect={setSelectedLineItem}
+                    year={selectedYear}
                   />
                 </div>
               </div>
