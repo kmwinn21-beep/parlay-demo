@@ -220,14 +220,14 @@ export function LineItemCostDrawer({
               <p className="text-xs text-gray-300 text-center py-4">No spend data</p>
             ) : (
               <div className="flex items-center gap-4">
-                <div style={{ width: 100, height: 100, flexShrink: 0 }}>
-                  <PieChart width={100} height={100}>
+                <div style={{ width: 140, height: 140, flexShrink: 0 }}>
+                  <PieChart width={140} height={140}>
                     <Pie
                       data={donutData}
-                      cx={46}
-                      cy={46}
-                      innerRadius={22}
-                      outerRadius={46}
+                      cx={66}
+                      cy={66}
+                      innerRadius={30}
+                      outerRadius={64}
                       dataKey="total"
                       strokeWidth={0}
                     >
