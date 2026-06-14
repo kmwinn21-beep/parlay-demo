@@ -126,14 +126,14 @@ export function ProgramPlannerAnalyticsPanel({
             <p className="text-xs text-gray-300 text-center py-4">No spend data</p>
           ) : (
             <div className="flex items-center gap-6">
-              <div style={{ width: 120, height: 120, flexShrink: 0 }}>
-                <PieChart width={120} height={120}>
+              <div style={{ width: 140, height: 140, flexShrink: 0 }}>
+                <PieChart width={140} height={140}>
                   <Pie
                     data={donutData}
-                    cx={56}
-                    cy={56}
-                    innerRadius={28}
-                    outerRadius={54}
+                    cx={66}
+                    cy={66}
+                    innerRadius={30}
+                    outerRadius={64}
                     dataKey="total"
                     strokeWidth={0}
                   >

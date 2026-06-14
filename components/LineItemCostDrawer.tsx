@@ -215,7 +215,7 @@ export function LineItemCostDrawer({
 
           {/* Spend composition by conference */}
           <div className="px-4 pt-3 pb-5">
-            <p className={`${EYEBROW} mb-3`}>Spend by Conference</p>
+            <p className={`${EYEBROW} mb-3`}>{selectedLineItem} Spend by Conference</p>
             {donutData.length === 0 ? (
               <p className="text-xs text-gray-300 text-center py-4">No spend data</p>
             ) : (
