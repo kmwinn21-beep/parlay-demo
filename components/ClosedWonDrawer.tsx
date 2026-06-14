@@ -109,6 +109,20 @@ function DealCard({ deal }: { deal: Deal }) {
   const perConfPct = attrConfs.length > 1 ? Math.round(attrPct / attrConfs.length) : attrPct;
   const showAttrPct = deal.attribution_type && deal.attribution_type !== 'None';
 
+  const [showTotal, setShowTotal] = useState(false);
+  const totalPopupRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showTotal) return;
+    const handler = (e: MouseEvent) => {
+      if (totalPopupRef.current && !totalPopupRef.current.contains(e.target as Node)) {
+        setShowTotal(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showTotal]);
+
   return (
     <div className="card p-0 overflow-hidden">
       {/* Card header */}
@@ -121,11 +135,24 @@ function DealCard({ deal }: { deal: Deal }) {
             )}
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            {deal.amount != null && (
-              <span className="text-sm font-bold text-green-700 bg-green-50 border border-green-200 px-2.5 py-0.5 rounded-full whitespace-nowrap">
-                {fmt$(deal.amount)}
-              </span>
-            )}
+            {/* Attributed amount pill — click to reveal total */}
+            <div ref={totalPopupRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setShowTotal(v => !v)}
+                className="text-sm font-bold text-green-700 bg-green-50 border border-green-200 px-2.5 py-0.5 rounded-full whitespace-nowrap hover:bg-green-100 transition-colors"
+              >
+                {fmt$(deal.attributed_amount)}
+              </button>
+              {showTotal && deal.amount != null && (
+                <div className="absolute right-0 top-full mt-1.5 z-20 bg-white rounded-xl shadow-xl border border-gray-200 p-3 min-w-[190px]">
+                  <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Total Closed/Won Amount</div>
+                  <span className="inline-block px-2.5 py-0.5 rounded-full text-sm font-bold text-green-700 bg-green-50 border border-green-200 whitespace-nowrap">
+                    {fmt$(deal.amount)}
+                  </span>
+                </div>
+              )}
+            </div>
             {deal.company_id && (
               <a
                 href={`/companies/${deal.company_id}?tab=deals`}
