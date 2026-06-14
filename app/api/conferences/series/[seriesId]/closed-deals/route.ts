@@ -104,11 +104,10 @@ export async function GET(
         attributedAmount = amount;
       } else {
         const attrConfs = parseAttrConfs(r.attributed_conference);
-        // Count only confs within this series for attribution split
+        // Each attributed conference in this series contributes pct% independently
         const seriesAttrConfs = attrConfs.filter(c => confNameSet.has(c));
-        const totalAttrConfs = attrConfs.length;
         const pct = attrPct ?? 50;
-        attributedAmount = amount * (pct / 100) * (seriesAttrConfs.length / Math.max(totalAttrConfs, 1));
+        attributedAmount = amount * (pct / 100) * seriesAttrConfs.length;
       }
     }
     return {

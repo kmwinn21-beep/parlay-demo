@@ -85,9 +85,8 @@ export async function GET(
       if (attrType.toLowerCase() === 'direct source') {
         attributedAmount = amount;
       } else {
-        const attrConfs = parseAttrConfs(r.attributed_conference);
         const pct = attrPct ?? 50;
-        attributedAmount = amount * ((pct / attrConfs.length) / 100);
+        attributedAmount = amount * (pct / 100);
       }
     }
     const closeDate = String(r.close_date);
