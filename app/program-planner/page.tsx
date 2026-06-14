@@ -5,6 +5,7 @@ import { ProgramPlannerCostMatrix } from '@/components/ProgramPlannerCostMatrix'
 import { ProgramPlannerAnalyticsPanel } from '@/components/ProgramPlannerAnalyticsPanel';
 import { EffectivenessDrawer } from '@/components/EffectivenessDrawer';
 import { ClosedWonDrawer } from '@/components/ClosedWonDrawer';
+import { LineItemCostDrawer } from '@/components/LineItemCostDrawer';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -527,9 +528,6 @@ export default function ProgramPlannerPage() {
                     conferences={flattenedConferences}
                     activeConferenceIds={activeConferenceIds}
                     activeLineItems={activeLineItems}
-                    selectedLineItem={selectedLineItem}
-                    onLineItemSelect={setSelectedLineItem}
-                    year={selectedYear}
                   />
                 </div>
               </div>
@@ -840,6 +838,16 @@ export default function ProgramPlannerPage() {
       <ClosedWonDrawer
         target={closedWonDrawer}
         onClose={() => setClosedWonDrawer(null)}
+      />
+    )}
+    {selectedLineItem && (
+      <LineItemCostDrawer
+        conferences={flattenedConferences}
+        activeConferenceIds={activeConferenceIds}
+        activeLineItems={activeLineItems}
+        selectedLineItem={selectedLineItem}
+        year={selectedYear}
+        onClose={() => setSelectedLineItem(null)}
       />
     )}
     </>
