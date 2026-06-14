@@ -6,6 +6,7 @@ import { ProgramPlannerAnalyticsPanel } from '@/components/ProgramPlannerAnalyti
 import { EffectivenessDrawer } from '@/components/EffectivenessDrawer';
 import { ClosedWonDrawer } from '@/components/ClosedWonDrawer';
 import { LineItemCostDrawer } from '@/components/LineItemCostDrawer';
+import { ConferenceBudgetDrawer } from '@/components/ConferenceBudgetDrawer';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -287,6 +288,7 @@ export default function ProgramPlannerPage() {
   const [effectivenessDrawer, setEffectivenessDrawer] = useState<{ conferenceId: number; conferenceName: string } | null>(null);
   type CWTarget = { type: 'conference'; conferenceId: number; conferenceName: string } | { type: 'series'; seriesId: string; seriesName: string };
   const [closedWonDrawer, setClosedWonDrawer] = useState<CWTarget | null>(null);
+  const [budgetDrawer, setBudgetDrawer] = useState<ConferenceRow | null>(null);
 
   const fetchData = useCallback(async (year: number) => {
     setLoading(true);
@@ -682,12 +684,14 @@ export default function ProgramPlannerPage() {
                               </td>
                               <td className="px-3 py-2">
                                 {c.actualSpend != null ? (
-                                  <span
-                                    className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border tabular-nums"
+                                  <button
+                                    type="button"
+                                    onClick={() => setBudgetDrawer(c)}
+                                    className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border tabular-nums cursor-pointer hover:opacity-80 transition-opacity"
                                     style={{ backgroundColor: actualCostPillStyle(c.actualSpend, c.budgetTotal).bg, color: actualCostPillStyle(c.actualSpend, c.budgetTotal).color, borderColor: actualCostPillStyle(c.actualSpend, c.budgetTotal).border }}
                                   >
                                     {fmtCurrency(c.actualSpend)}
-                                  </span>
+                                  </button>
                                 ) : <span className="text-gray-400 tabular-nums">—</span>}
                               </td>
                               <td className="px-3 py-2 text-gray-700 tabular-nums">{fmtCurrency(c.pipelineInfluenced)}</td>
@@ -838,6 +842,12 @@ export default function ProgramPlannerPage() {
       <ClosedWonDrawer
         target={closedWonDrawer}
         onClose={() => setClosedWonDrawer(null)}
+      />
+    )}
+    {budgetDrawer && (
+      <ConferenceBudgetDrawer
+        conference={budgetDrawer}
+        onClose={() => setBudgetDrawer(null)}
       />
     )}
     {selectedLineItem && (
