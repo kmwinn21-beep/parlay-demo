@@ -98,8 +98,16 @@ export function LineItemCostDrawer({
 
     const avgPerConf = confsWithData.length > 0 ? lineItemTotal / confsWithData.length : null;
 
-    const totalHeadcount = confsWithData.reduce((s, c) => s + (c.headcount ?? 0), 0);
-    const avgPerAttendee = totalHeadcount > 0 ? lineItemTotal / totalHeadcount : null;
+    // Per-conference actual / headcount, then average those ratios
+    const perConfCostPerAttendee = confsWithData
+      .filter(c => (c.headcount ?? 0) > 0)
+      .map(c => {
+        const actual = c.budgetLineItems?.find(li => li.label === selectedLineItem)?.actual ?? 0;
+        return actual / c.headcount!;
+      });
+    const avgPerAttendee = perConfCostPerAttendee.length > 0
+      ? perConfCostPerAttendee.reduce((s, v) => s + v, 0) / perConfCostPerAttendee.length
+      : null;
 
     const totalProgramActual = activeConfs.reduce((s, c) => s + (c.actualSpend ?? 0), 0);
     const pctOfTotal = totalProgramActual > 0 ? (lineItemTotal / totalProgramActual) * 100 : null;
@@ -193,7 +201,7 @@ export function LineItemCostDrawer({
                 value={fmtCurrency(metrics.avgPerConf)}
               />
               <MetricCard
-                label="Avg Cost / Attendee"
+                label="Avg Cost / Int. Attendee"
                 value={fmtCurrency(metrics.avgPerAttendee)}
               />
               <MetricCard
@@ -207,14 +215,8 @@ export function LineItemCostDrawer({
             </div>
           </div>
 
-          {/* Placeholder for line-item-specific metrics */}
-          <div className="px-4 pt-3 pb-3 border-b border-gray-100">
-            <p className={`${EYEBROW} mb-2`}>{selectedLineItem} Specific Cost Metrics</p>
-            <p className="text-[11px] text-gray-400 italic">More metrics coming soon.</p>
-          </div>
-
           {/* Spend composition by conference */}
-          <div className="px-4 pt-3 pb-5">
+          <div className="px-4 pt-3 pb-4 border-b border-gray-100">
             <p className={`${EYEBROW} mb-3`}>{selectedLineItem} Spend by Conference</p>
             {donutData.length === 0 ? (
               <p className="text-xs text-gray-300 text-center py-4">No spend data</p>
@@ -252,6 +254,12 @@ export function LineItemCostDrawer({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Placeholder for line-item-specific metrics */}
+          <div className="px-4 pt-3 pb-5">
+            <p className={`${EYEBROW} mb-2`}>{selectedLineItem} Specific Cost Metrics</p>
+            <p className="text-[11px] text-gray-400 italic">More metrics coming soon.</p>
           </div>
 
         </div>
