@@ -32,7 +32,19 @@ function DetailRow({ label, value, valueColor }: { label: string; value: string 
   );
 }
 
-export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      className="w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform duration-200"
+      style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
+      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    </svg>
+  );
+}
+
+export function AudienceMessagingTab({ data, narrow }: { data: EffectivenessData; narrow?: boolean }) {
   const m = (data as any).marketing_audience;
   const strategyLabel = (data as any).conference_strategy?.display_name || 'Not set';
   const [showRankings, setShowRankings] = useState(false);
@@ -41,6 +53,15 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
   const [cardRank, setCardRank] = useState<number | null>(m?.audience_quality_rank ?? null);
   const [cardTotal, setCardTotal] = useState<number | null>(m?.audience_quality_rank_total ?? null);
   const [rankLoading, setRankLoading] = useState(true);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  function toggleCard(key: string) {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -108,8 +129,8 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
 
   return (
     <div className="p-6 space-y-6">
-      {/* ── Top row: 4 columns ─────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:[grid-template-columns:1fr_0.5fr_0.5fr_0.5fr] gap-3">
+      {/* ── Top row ─────────────────────────────────────────────────────── */}
+      <div className={`grid grid-cols-1 ${narrow ? '' : 'sm:grid-cols-2 lg:[grid-template-columns:1fr_0.5fr_0.5fr_0.5fr]'} gap-3`}>
         {/* Score card */}
         {(() => {
           const cardColor = overallScore >= 70 ? '#059669' : overallScore >= 40 ? '#d97706' : '#dc2626';
@@ -208,7 +229,7 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
       </div>
 
       {/* ── KPI tiles ─────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className={`grid grid-cols-1 ${narrow ? '' : 'sm:grid-cols-2 lg:grid-cols-4'} gap-3`}>
         <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
           <div className="text-xs text-gray-500">ICP companies engaged</div>
           <div className="text-lg font-bold text-brand-secondary">{fmtNum(m.kpis?.icp_companies_engaged)} / {fmtNum(m.kpis?.icp_companies_attending)}</div>
@@ -236,49 +257,61 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
         </div>
       </div>
 
-      {/* ── Component cards: 3-col row 1, then Market Intel + Engagement Momentum ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* ── Component cards ──────────────────────────────────────────────── */}
+      <div className={`grid grid-cols-1 ${narrow ? '' : 'lg:grid-cols-3'} gap-4`}>
+
         {/* ICP Coverage Rate */}
         {(() => {
           const comp = comps.icp_coverage_rate as any ?? {};
           const sc = Number(comp.score ?? 0);
           const det = m.icp_coverage_detail ?? {};
+          const open = !narrow || expanded.has('icp_coverage_rate');
           return (
             <div className="card p-4">
-              <div className="flex justify-between items-start mb-1">
+              <div
+                className={`flex justify-between items-start mb-1 ${narrow ? 'cursor-pointer select-none' : ''}`}
+                onClick={narrow ? () => toggleCard('icp_coverage_rate') : undefined}
+              >
                 <h3 className="text-sm font-semibold text-brand-primary">ICP Coverage Rate</h3>
-                <span className="text-xs font-semibold" style={{ color: compScoreColor(sc) }}>{sc} · {comp.tier ?? '—'}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold" style={{ color: compScoreColor(sc) }}>{sc} · {comp.tier ?? '—'}</span>
+                  {narrow && <Chevron open={open} />}
+                </div>
               </div>
               <ProgressBar score={sc} color={compScoreColor(sc)} />
-              <DetailRow label="ICP companies attending" value={fmtNum(det.icp_attending)} />
-              <DetailRow label="ICP companies engaged" value={fmtNum(det.icp_engaged)} />
-              <DetailRow label="Coverage rate" value={fmtPct(det.coverage_rate)} valueColor={compScoreColor(sc)} />
-              <div className="flex justify-between text-xs py-1 border-b border-gray-50">
-                <span className="text-gray-500 flex items-center gap-1">
-                  Rep-adjusted benchmark
-                  {det.benchmark_is_rep_adjusted && (
-                    <span
-                      className="text-gray-400 cursor-help"
-                      title={`Benchmark adjusted for ${det.reps_count} rep${det.reps_count !== 1 ? 's' : ''} over ${det.days_count} day${det.days_count !== 1 ? 's' : ''} covering ${det.icp_attending} ICP companies. Industry average is 30% but rep bandwidth limits realistic coverage to ${Math.round(det.rep_adjusted_benchmark ?? 30)}%.`}
-                    >
-                      <svg className="w-3 h-3 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
+              {open && (
+                <>
+                  <DetailRow label="ICP companies attending" value={fmtNum(det.icp_attending)} />
+                  <DetailRow label="ICP companies engaged" value={fmtNum(det.icp_engaged)} />
+                  <DetailRow label="Coverage rate" value={fmtPct(det.coverage_rate)} valueColor={compScoreColor(sc)} />
+                  <div className="flex justify-between text-xs py-1 border-b border-gray-50">
+                    <span className="text-gray-500 flex items-center gap-1">
+                      Rep-adjusted benchmark
+                      {det.benchmark_is_rep_adjusted && (
+                        <span
+                          className="text-gray-400 cursor-help"
+                          title={`Benchmark adjusted for ${det.reps_count} rep${det.reps_count !== 1 ? 's' : ''} over ${det.days_count} day${det.days_count !== 1 ? 's' : ''} covering ${det.icp_attending} ICP companies. Industry average is 30% but rep bandwidth limits realistic coverage to ${Math.round(det.rep_adjusted_benchmark ?? 30)}%.`}
+                        >
+                          <svg className="w-3 h-3 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </span>
+                      )}
                     </span>
-                  )}
-                </span>
-                <span className="font-medium">
-                  {det.benchmark_is_rep_adjusted
-                    ? `~${Math.round(det.rep_adjusted_benchmark ?? 30)}% (rep-adjusted)`
-                    : '~30% avg (industry)'}
-                </span>
-              </div>
-              <DetailRow
-                label="Coverage vs benchmark"
-                value={det.coverage_ratio != null ? `${Math.round(det.coverage_ratio)}% of benchmark` : '—'}
-                valueColor={(det.coverage_ratio ?? 0) >= 100 ? '#059669' : '#d97706'}
-              />
-              <DetailRow label="ICP companies missed" value={fmtNum(det.icp_missed)} valueColor="#dc2626" />
+                    <span className="font-medium">
+                      {det.benchmark_is_rep_adjusted
+                        ? `~${Math.round(det.rep_adjusted_benchmark ?? 30)}% (rep-adjusted)`
+                        : '~30% avg (industry)'}
+                    </span>
+                  </div>
+                  <DetailRow
+                    label="Coverage vs benchmark"
+                    value={det.coverage_ratio != null ? `${Math.round(det.coverage_ratio)}% of benchmark` : '—'}
+                    valueColor={(det.coverage_ratio ?? 0) >= 100 ? '#059669' : '#d97706'}
+                  />
+                  <DetailRow label="ICP companies missed" value={fmtNum(det.icp_missed)} valueColor="#dc2626" />
+                </>
+              )}
             </div>
           );
         })()}
@@ -288,17 +321,28 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
           const comp = comps.buyer_access_quality as any ?? {};
           const sc = Number(comp.score ?? 0);
           const det = m.buyer_access_detail ?? {};
+          const open = !narrow || expanded.has('buyer_access_quality');
           return (
             <div className="card p-4">
-              <div className="flex justify-between items-start mb-1">
+              <div
+                className={`flex justify-between items-start mb-1 ${narrow ? 'cursor-pointer select-none' : ''}`}
+                onClick={narrow ? () => toggleCard('buyer_access_quality') : undefined}
+              >
                 <h3 className="text-sm font-semibold text-brand-primary">Buyer Access Quality</h3>
-                <span className="text-xs font-semibold" style={{ color: compScoreColor(sc) }}>{sc} · {comp.tier ?? '—'}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold" style={{ color: compScoreColor(sc) }}>{sc} · {comp.tier ?? '—'}</span>
+                  {narrow && <Chevron open={open} />}
+                </div>
               </div>
               <ProgressBar score={sc} color={compScoreColor(sc)} />
-              <DetailRow label="Decision makers via meeting" value={fmtNum(det.dm_via_meeting)} />
-              <DetailRow label="Decision makers via touchpoint" value={fmtNum(det.dm_via_touchpoint)} />
-              <DetailRow label="Influencers reached" value={fmtNum(det.influencers_reached)} />
-              <DetailRow label="ICP companies with no DM access" value={fmtNum(det.icp_companies_no_dm)} valueColor="#dc2626" />
+              {open && (
+                <>
+                  <DetailRow label="Decision makers via meeting" value={fmtNum(det.dm_via_meeting)} />
+                  <DetailRow label="Decision makers via touchpoint" value={fmtNum(det.dm_via_touchpoint)} />
+                  <DetailRow label="Influencers reached" value={fmtNum(det.influencers_reached)} />
+                  <DetailRow label="ICP companies with no DM access" value={fmtNum(det.icp_companies_no_dm)} valueColor="#dc2626" />
+                </>
+              )}
             </div>
           );
         })()}
@@ -309,19 +353,30 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
           const sc = Number(comp.score ?? 0);
           const det = m.conversation_quality_detail ?? {};
           const noData = !insightsAvailable;
+          const open = !narrow || expanded.has('conversation_quality_signal');
           return (
-            <div className={`card p-4`} style={noData ? { background: '#FAEEDA', border: '1px solid #FCD34D' } : undefined}>
-              <div className="flex justify-between items-start mb-1">
+            <div className="card p-4" style={noData ? { background: '#FAEEDA', border: '1px solid #FCD34D' } : undefined}>
+              <div
+                className={`flex justify-between items-start mb-1 ${narrow ? 'cursor-pointer select-none' : ''}`}
+                onClick={narrow ? () => toggleCard('conversation_quality_signal') : undefined}
+              >
                 <h3 className="text-sm font-semibold" style={{ color: noData ? '#92400E' : undefined }}>Conversation Quality Signal</h3>
-                <span className="text-xs font-semibold" style={{ color: noData ? '#d97706' : compScoreColor(sc) }}>
-                  {sc} · {noData ? 'Neutral — no insight data yet' : (comp.tier ?? '—')}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold" style={{ color: noData ? '#d97706' : compScoreColor(sc) }}>
+                    {sc} · {noData ? 'Neutral — no insight data yet' : (comp.tier ?? '—')}
+                  </span>
+                  {narrow && <Chevron open={open} />}
+                </div>
               </div>
               <ProgressBar score={sc} color={noData ? '#FCD34D' : compScoreColor(sc)} />
-              <DetailRow label="Buying signals per meeting" value={noData ? '— no data' : String(det.buying_signals_per_meeting ?? '—')} />
-              <DetailRow label="Meetings with pain points logged" value={noData ? '— no data' : `${fmtNum(det.meetings_with_pain_points)} / ${fmtNum(det.meetings_held)}`} />
-              <DetailRow label="Booth sentiment (positive %)" value={noData ? '— no data' : (det.booth_sentiment_pct != null ? fmtPct(det.booth_sentiment_pct) : '—')} />
-              {noData && <div className="mt-2 text-[10px]" style={{ color: '#92400E' }}>Use the meeting notetaker to log pain points and buying signals to activate this component.</div>}
+              {open && (
+                <>
+                  <DetailRow label="Buying signals per meeting" value={noData ? '— no data' : String(det.buying_signals_per_meeting ?? '—')} />
+                  <DetailRow label="Meetings with pain points logged" value={noData ? '— no data' : `${fmtNum(det.meetings_with_pain_points)} / ${fmtNum(det.meetings_held)}`} />
+                  <DetailRow label="Booth sentiment (positive %)" value={noData ? '— no data' : (det.booth_sentiment_pct != null ? fmtPct(det.booth_sentiment_pct) : '—')} />
+                  {noData && <div className="mt-2 text-[10px]" style={{ color: '#92400E' }}>Use the meeting notetaker to log pain points and buying signals to activate this component.</div>}
+                </>
+              )}
             </div>
           );
         })()}
@@ -332,53 +387,75 @@ export function AudienceMessagingTab({ data }: { data: EffectivenessData }) {
           const sc = Number(comp.score ?? 0);
           const det = m.market_intelligence_detail ?? {};
           const noData = !painPointsAvailable;
+          const open = !narrow || expanded.has('market_intelligence_yield');
           return (
             <div className="card p-4" style={noData ? { background: '#FAEEDA', border: '1px solid #FCD34D' } : undefined}>
-              <div className="flex justify-between items-start mb-1">
+              <div
+                className={`flex justify-between items-start mb-1 ${narrow ? 'cursor-pointer select-none' : ''}`}
+                onClick={narrow ? () => toggleCard('market_intelligence_yield') : undefined}
+              >
                 <h3 className="text-sm font-semibold" style={{ color: noData ? '#92400E' : undefined }}>Market Intelligence Yield</h3>
-                <span className="text-xs font-semibold" style={{ color: noData ? '#d97706' : compScoreColor(sc) }}>
-                  {sc} · {noData ? 'Neutral — no insight data yet' : (comp.tier ?? '—')}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold" style={{ color: noData ? '#d97706' : compScoreColor(sc) }}>
+                    {sc} · {noData ? 'Neutral — no insight data yet' : (comp.tier ?? '—')}
+                  </span>
+                  {narrow && <Chevron open={open} />}
+                </div>
               </div>
               <ProgressBar score={sc} color={noData ? '#FCD34D' : compScoreColor(sc)} />
-              <DetailRow label="Distinct pain point themes" value={noData ? '— no data' : fmtNum(det.distinct_pain_point_themes)} />
-              <DetailRow label="Meetings with pain points" value={noData ? '— no data' : `${fmtNum(det.meetings_with_pain_points)} / ${fmtNum(det.meetings_held)}`} />
-              <DetailRow label="Top theme concentration" value={noData ? '— no data' : fmtPct(det.top_theme_concentration_pct)} />
-              {noData && <div className="mt-2 text-[10px]" style={{ color: '#92400E' }}>Log pain points in the meeting notetaker to activate market intelligence scoring.</div>}
+              {open && (
+                <>
+                  <DetailRow label="Distinct pain point themes" value={noData ? '— no data' : fmtNum(det.distinct_pain_point_themes)} />
+                  <DetailRow label="Meetings with pain points" value={noData ? '— no data' : `${fmtNum(det.meetings_with_pain_points)} / ${fmtNum(det.meetings_held)}`} />
+                  <DetailRow label="Top theme concentration" value={noData ? '— no data' : fmtPct(det.top_theme_concentration_pct)} />
+                  {noData && <div className="mt-2 text-[10px]" style={{ color: '#92400E' }}>Log pain points in the meeting notetaker to activate market intelligence scoring.</div>}
+                </>
+              )}
             </div>
           );
         })()}
 
-        {/* Engagement Momentum — spans 2 columns in the 3-col grid */}
+        {/* Engagement Momentum */}
         {(() => {
           const comp = comps.engagement_momentum as any ?? {};
           const sc = Number(comp.score ?? 0);
+          const open = !narrow || expanded.has('engagement_momentum');
           return (
-            <div className="card p-4 lg:col-span-2">
-              <div className="flex justify-between items-start mb-1">
+            <div className={`card p-4 ${narrow ? '' : 'lg:col-span-2'}`}>
+              <div
+                className={`flex justify-between items-start mb-1 ${narrow ? 'cursor-pointer select-none' : ''}`}
+                onClick={narrow ? () => toggleCard('engagement_momentum') : undefined}
+              >
                 <h3 className="text-sm font-semibold text-brand-primary">Engagement Momentum</h3>
-                <span className="text-xs font-semibold" style={{ color: compScoreColor(sc) }}>{sc} · {comp.tier ?? '—'}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold" style={{ color: compScoreColor(sc) }}>{sc} · {comp.tier ?? '—'}</span>
+                  {narrow && <Chevron open={open} />}
+                </div>
               </div>
               <ProgressBar score={sc} color={compScoreColor(sc)} />
-              {comp.completion_window_open && (
-                <div className="text-[11px] rounded px-2 py-1 mb-2" style={{ background: '#FEF3C7', color: '#92400E' }}>
-                  Follow-up completion window still open — conference ended less than 7 days ago.
-                </div>
+              {open && (
+                <>
+                  {comp.completion_window_open && (
+                    <div className="text-[11px] rounded px-2 py-1 mb-2" style={{ background: '#FEF3C7', color: '#92400E' }}>
+                      Follow-up completion window still open — conference ended less than 7 days ago.
+                    </div>
+                  )}
+                  <div className={`grid grid-cols-1 ${narrow ? '' : 'sm:grid-cols-2'} gap-4 mt-2`}>
+                    <div>
+                      <div className="text-xs font-medium text-gray-600 mb-1">Follow-up Creation</div>
+                      <DetailRow label="ICP companies engaged" value={fmtNum(mom.icp_companies_engaged)} />
+                      <DetailRow label="ICP companies with follow-up" value={fmtNum(mom.icp_companies_with_followup)} />
+                      <DetailRow label="Creation rate" value={fmtPct(mom.followup_creation_rate)} valueColor={compScoreColor(sc)} />
+                    </div>
+                    <div>
+                      <div className="text-xs font-medium text-gray-600 mb-1">Follow-up Completion</div>
+                      <DetailRow label="Total follow-ups" value={fmtNum(mom.followups_total)} />
+                      <DetailRow label="Completed" value={fmtNum(mom.followups_completed)} />
+                      <DetailRow label="Completion rate" value={fmtPct(mom.followup_completion_rate)} valueColor={compScoreColor(sc)} />
+                    </div>
+                  </div>
+                </>
               )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
-                <div>
-                  <div className="text-xs font-medium text-gray-600 mb-1">Follow-up Creation</div>
-                  <DetailRow label="ICP companies engaged" value={fmtNum(mom.icp_companies_engaged)} />
-                  <DetailRow label="ICP companies with follow-up" value={fmtNum(mom.icp_companies_with_followup)} />
-                  <DetailRow label="Creation rate" value={fmtPct(mom.followup_creation_rate)} valueColor={compScoreColor(sc)} />
-                </div>
-                <div>
-                  <div className="text-xs font-medium text-gray-600 mb-1">Follow-up Completion</div>
-                  <DetailRow label="Total follow-ups" value={fmtNum(mom.followups_total)} />
-                  <DetailRow label="Completed" value={fmtNum(mom.followups_completed)} />
-                  <DetailRow label="Completion rate" value={fmtPct(mom.followup_completion_rate)} valueColor={compScoreColor(sc)} />
-                </div>
-              </div>
             </div>
           );
         })()}

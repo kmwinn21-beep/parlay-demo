@@ -3,6 +3,10 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ProgramPlannerCostMatrix } from '@/components/ProgramPlannerCostMatrix';
 import { ProgramPlannerAnalyticsPanel } from '@/components/ProgramPlannerAnalyticsPanel';
+import { EffectivenessDrawer } from '@/components/EffectivenessDrawer';
+import { ClosedWonDrawer } from '@/components/ClosedWonDrawer';
+import { LineItemCostDrawer } from '@/components/LineItemCostDrawer';
+import { ConferenceBudgetDrawer } from '@/components/ConferenceBudgetDrawer';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -281,6 +285,10 @@ export default function ProgramPlannerPage() {
   const [groupMode, setGroupMode] = useState<GroupMode>('series');
   const [rankMetric, setRankMetric] = useState<RankMetric>('ces');
   const [collapsedSeries, setCollapsedSeries] = useState<Set<string>>(new Set());
+  const [effectivenessDrawer, setEffectivenessDrawer] = useState<{ conferenceId: number; conferenceName: string } | null>(null);
+  type CWTarget = { type: 'conference'; conferenceId: number; conferenceName: string } | { type: 'series'; seriesId: string; seriesName: string };
+  const [closedWonDrawer, setClosedWonDrawer] = useState<CWTarget | null>(null);
+  const [budgetDrawer, setBudgetDrawer] = useState<ConferenceRow | null>(null);
 
   const fetchData = useCallback(async (year: number) => {
     setLoading(true);
@@ -405,6 +413,7 @@ export default function ProgramPlannerPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
+    <>
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
@@ -521,8 +530,6 @@ export default function ProgramPlannerPage() {
                     conferences={flattenedConferences}
                     activeConferenceIds={activeConferenceIds}
                     activeLineItems={activeLineItems}
-                    selectedLineItem={selectedLineItem}
-                    onLineItemSelect={setSelectedLineItem}
                   />
                 </div>
               </div>
@@ -612,11 +619,13 @@ export default function ProgramPlannerPage() {
                                           />
                                         )}
                                         {s.totalClosedWon > 0 && (
-                                          <TooltipPill
-                                            label={`C/W: ${fmtCurrency(s.totalClosedWon)}`}
-                                            tooltip="Closed/Won (attributed)"
-                                            className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700 border border-green-200"
-                                          />
+                                          <button
+                                            type="button"
+                                            onClick={e => { e.stopPropagation(); setClosedWonDrawer({ type: 'series', seriesId: s.seriesId, seriesName: s.seriesName }); }}
+                                            className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors cursor-pointer"
+                                          >
+                                            {`C/W: ${fmtCurrency(s.totalClosedWon)}`}
+                                          </button>
                                         )}
                                       </div>
                                     </button>
@@ -662,30 +671,39 @@ export default function ProgramPlannerPage() {
                               <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{fmtDate(c.startDate)}</td>
                               <td className="px-3 py-2">
                                 {c.ces != null ? (
-                                  <span
-                                    className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold border"
+                                  <button
+                                    type="button"
+                                    onClick={() => setEffectivenessDrawer({ conferenceId: c.conferenceId, conferenceName: c.name })}
+                                    className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold border transition-opacity hover:opacity-75 cursor-pointer"
                                     style={{ backgroundColor: cesPillStyle(c.ces).bg, color: cesPillStyle(c.ces).color, borderColor: cesPillStyle(c.ces).border }}
+                                    title="View effectiveness"
                                   >
                                     {c.ces}
-                                  </span>
+                                  </button>
                                 ) : <span className="text-gray-400">—</span>}
                               </td>
                               <td className="px-3 py-2">
                                 {c.actualSpend != null ? (
-                                  <span
-                                    className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border tabular-nums"
+                                  <button
+                                    type="button"
+                                    onClick={() => setBudgetDrawer(c)}
+                                    className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border tabular-nums cursor-pointer hover:opacity-80 transition-opacity"
                                     style={{ backgroundColor: actualCostPillStyle(c.actualSpend, c.budgetTotal).bg, color: actualCostPillStyle(c.actualSpend, c.budgetTotal).color, borderColor: actualCostPillStyle(c.actualSpend, c.budgetTotal).border }}
                                   >
                                     {fmtCurrency(c.actualSpend)}
-                                  </span>
+                                  </button>
                                 ) : <span className="text-gray-400 tabular-nums">—</span>}
                               </td>
                               <td className="px-3 py-2 text-gray-700 tabular-nums">{fmtCurrency(c.pipelineInfluenced)}</td>
                               <td className="px-3 py-2">
                                 {(c.closedWon ?? 0) > 0 ? (
-                                  <span className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border bg-green-50 text-green-700 border-green-200 tabular-nums">
+                                  <button
+                                    type="button"
+                                    onClick={() => setClosedWonDrawer({ type: 'conference', conferenceId: c.conferenceId, conferenceName: c.name })}
+                                    className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border bg-green-50 text-green-700 border-green-200 tabular-nums hover:bg-green-100 transition-colors cursor-pointer"
+                                  >
                                     {fmtCurrency(c.closedWon)}
-                                  </span>
+                                  </button>
                                 ) : <span className="text-gray-400 tabular-nums">—</span>}
                               </td>
                               <td className="px-3 py-2 text-gray-700">{c.headcount ?? '—'}</td>
@@ -780,12 +798,15 @@ export default function ProgramPlannerPage() {
                           {metricVal === '—' ? (
                             <span className="text-[12px] text-gray-400 flex-shrink-0">—</span>
                           ) : rankMetric === 'ces' && c.ces != null ? (
-                            <span
-                              className="inline-flex items-center justify-center w-7 h-7 rounded-full text-[11px] font-bold border flex-shrink-0"
+                            <button
+                              type="button"
+                              onClick={() => setEffectivenessDrawer({ conferenceId: c.conferenceId, conferenceName: c.name })}
+                              className="inline-flex items-center justify-center w-7 h-7 rounded-full text-[11px] font-bold border flex-shrink-0 transition-opacity hover:opacity-75 cursor-pointer"
                               style={{ backgroundColor: cesPillStyle(c.ces).bg, color: cesPillStyle(c.ces).color, borderColor: cesPillStyle(c.ces).border }}
+                              title="View effectiveness"
                             >
                               {metricVal}
-                            </span>
+                            </button>
                           ) : (
                             <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold border flex-shrink-0 bg-gray-50 text-gray-700 border-gray-200 tabular-nums">
                               {metricVal}
@@ -809,5 +830,36 @@ export default function ProgramPlannerPage() {
         )}
       </div>
     </div>
+
+    {effectivenessDrawer && (
+      <EffectivenessDrawer
+        conferenceId={effectivenessDrawer.conferenceId}
+        conferenceName={effectivenessDrawer.conferenceName}
+        onClose={() => setEffectivenessDrawer(null)}
+      />
+    )}
+    {closedWonDrawer && (
+      <ClosedWonDrawer
+        target={closedWonDrawer}
+        onClose={() => setClosedWonDrawer(null)}
+      />
+    )}
+    {budgetDrawer && (
+      <ConferenceBudgetDrawer
+        conference={budgetDrawer}
+        onClose={() => setBudgetDrawer(null)}
+      />
+    )}
+    {selectedLineItem && (
+      <LineItemCostDrawer
+        conferences={flattenedConferences}
+        activeConferenceIds={activeConferenceIds}
+        activeLineItems={activeLineItems}
+        selectedLineItem={selectedLineItem}
+        year={selectedYear}
+        onClose={() => setSelectedLineItem(null)}
+      />
+    )}
+    </>
   );
 }

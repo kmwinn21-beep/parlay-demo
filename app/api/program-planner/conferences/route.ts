@@ -113,8 +113,7 @@ export async function GET(request: NextRequest) {
         total += amount;
       } else {
         const pct = Number(r.attribution_pct ?? 50);
-        const perConfPct = pct / attrConfs.length;
-        total += amount * (perConfPct / 100);
+        total += amount * (pct / 100);
       }
     }
     if (total > 0) cwByConfId.set(Number(conf.id), total);

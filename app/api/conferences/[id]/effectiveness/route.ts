@@ -904,6 +904,7 @@ export async function GET(
 
     const totalRepPI = Array.from(repAccMap.values()).reduce((s, r) => s + r.pipelineInfluence, 0);
     const repAttribution = Array.from(repAccMap.entries())
+      .filter(([name]) => internalAttendeeNames.size === 0 || internalAttendeeNames.has(name))
       .sort(([, a], [, b]) => b.pipelineInfluence - a.pipelineInfluence)
       .map(([name, acc]) => {
         const targetEngaged = repToTargetsEngaged.get(name)?.size ?? 0;
@@ -1064,9 +1065,9 @@ export async function GET(
     // Weighted raw score (handle unavailable metrics by redistributing weights)
     let rawWeight = 0;
     let rawScore = 0;
-    if (pipelineScore != null) { rawScore += pipelineScore.score * 0.50; rawWeight += 0.50; }
-    if (companyScore != null)  { rawScore += companyScore.score * 0.30;  rawWeight += 0.30; }
-    if (meetingScore != null)  { rawScore += meetingScore.score * 0.20;  rawWeight += 0.20; }
+    if (pipelineScore != null) { rawScore += pipelineScore.score * (1/3); rawWeight += (1/3); }
+    if (companyScore != null)  { rawScore += companyScore.score * (1/3);  rawWeight += (1/3); }
+    if (meetingScore != null)  { rawScore += meetingScore.score * (1/3);  rawWeight += (1/3); }
 
     const costEfficiencyScoreRaw = rawWeight > 0 ? Math.round(rawScore / rawWeight) : 0;
     const calculationConfidence = rawWeight >= 1.0 ? 'full' : rawWeight >= 0.5 ? 'partial' : 'low';
@@ -1145,9 +1146,9 @@ export async function GET(
         : null;
 
       let rW = 0, rS = 0;
-      if (repPipelineScore != null) { rS += repPipelineScore.score * 0.50; rW += 0.50; }
-      if (repCompanyScore != null)  { rS += repCompanyScore.score  * 0.30; rW += 0.30; }
-      if (repMeetingScore != null)  { rS += repMeetingScore.score  * 0.20; rW += 0.20; }
+      if (repPipelineScore != null) { rS += repPipelineScore.score * (1/3); rW += (1/3); }
+      if (repCompanyScore != null)  { rS += repCompanyScore.score  * (1/3); rW += (1/3); }
+      if (repMeetingScore != null)  { rS += repMeetingScore.score  * (1/3); rW += (1/3); }
       const repRawScore = rW > 0 ? Math.max(0, Math.min(100, Math.round(rS / rW))) : 0;
 
       const repAccForCost = repAccMap.get(String(rep.rep ?? ''));

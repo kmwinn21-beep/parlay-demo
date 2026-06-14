@@ -22,8 +22,6 @@ type ProgramPlannerAnalyticsPanelProps = {
   conferences: ConferenceRow[];
   activeConferenceIds: number[];
   activeLineItems: string[];
-  selectedLineItem: string | null;
-  onLineItemSelect: (label: string | null) => void;
 };
 
 function fmtCurrency(v: number | null | undefined): string {
@@ -45,15 +43,13 @@ export function ProgramPlannerAnalyticsPanel({
   conferences,
   activeConferenceIds,
   activeLineItems,
-  selectedLineItem,
-  onLineItemSelect,
 }: ProgramPlannerAnalyticsPanelProps) {
   const activeConfs = useMemo(
     () => conferences.filter(c => activeConferenceIds.includes(c.conferenceId)),
     [conferences, activeConferenceIds]
   );
 
-  // Budget summary
+  // Aggregate budget summary across all active line items
   const { totalBudgeted, totalActual, variance, variancePct } = useMemo(() => {
     const totalBudgeted = activeConfs.reduce((sum, c) => {
       const items = c.budgetLineItems?.filter(li => activeLineItems.includes(li.label)) ?? [];
@@ -68,7 +64,7 @@ export function ProgramPlannerAnalyticsPanel({
     return { totalBudgeted, totalActual, variance, variancePct };
   }, [activeConfs, activeLineItems]);
 
-  // Donut data
+  // Category donut
   const donutData = useMemo(() => {
     return SPEND_CATEGORIES.map(cat => {
       const relevantItems = cat.items.filter(item => activeLineItems.includes(item));
@@ -81,43 +77,11 @@ export function ProgramPlannerAnalyticsPanel({
   }, [activeConfs, activeLineItems]);
 
   const donutTotal = donutData.reduce((s, d) => s + d.total, 0);
-
-  // Drill-down data
-  const drillData = useMemo(() => {
-    if (!selectedLineItem) return [];
-    return activeConfs.map(c => {
-      const item = c.budgetLineItems?.find(li => li.label === selectedLineItem);
-      return {
-        conferenceId: c.conferenceId,
-        name: c.name,
-        actual: item?.actual ?? null,
-        budgeted: item?.budgeted ?? null,
-      };
-    }).sort((a, b) => (b.actual ?? 0) - (a.actual ?? 0));
-  }, [activeConfs, selectedLineItem]);
-
-  const maxActual = drillData.reduce((m, d) => Math.max(m, d.actual ?? 0), 0);
-
-  const getCellBg = (actual: number | null, budgeted: number | null): string => {
-    if (actual === null || budgeted === null || budgeted === 0) return '#F9FAFB';
-    const pct = ((actual - budgeted) / budgeted) * 100;
-    if (pct < -10) return '#EAF3DE';
-    if (pct < 0) return '#F3F8EC';
-    if (pct === 0) return '#F9FAFB';
-    if (pct <= 10) return '#FEF4F4';
-    return '#FCEBEB';
-  };
-
-  const getVariancePctDisplay = (actual: number | null, budgeted: number | null) => {
-    if (actual == null || budgeted == null || budgeted === 0) return null;
-    return ((actual - budgeted) / budgeted) * 100;
-  };
-
   const hasData = activeConfs.length > 0 && activeLineItems.length > 0;
 
   return (
     <>
-      {/* Card 1: Budget summary */}
+      {/* Budget summary */}
       <div className={CARD}>
         <div className="p-1 border-b border-gray-100">
           <p className={EYEBROW}>Budget Summary</p>
@@ -152,7 +116,7 @@ export function ProgramPlannerAnalyticsPanel({
         </div>
       </div>
 
-      {/* Card 2: Spend composition */}
+      {/* Spend composition */}
       <div className={CARD}>
         <div className="p-1 border-b border-gray-100">
           <p className={EYEBROW}>Spend Composition</p>
@@ -161,15 +125,15 @@ export function ProgramPlannerAnalyticsPanel({
           {donutData.length === 0 ? (
             <p className="text-xs text-gray-300 text-center py-4">No spend data</p>
           ) : (
-            <div className="flex items-center gap-8">
-              <div style={{ width: 120, height: 120, flexShrink: 0 }}>
-                <PieChart width={120} height={120}>
+            <div className="flex items-center gap-6">
+              <div style={{ width: 140, height: 140, flexShrink: 0 }}>
+                <PieChart width={140} height={140}>
                   <Pie
                     data={donutData}
-                    cx={56}
-                    cy={56}
-                    innerRadius={28}
-                    outerRadius={54}
+                    cx={66}
+                    cy={66}
+                    innerRadius={30}
+                    outerRadius={64}
                     dataKey="total"
                     strokeWidth={0}
                   >
@@ -179,87 +143,18 @@ export function ProgramPlannerAnalyticsPanel({
                   </Pie>
                 </PieChart>
               </div>
-              <div className="flex-1 min-w-0 space-y-2">
+              <div className="flex-1 min-w-0 space-y-1.5 overflow-y-auto" style={{ maxHeight: 140 }}>
                 {donutData.map(cat => {
                   const pct = donutTotal > 0 ? (cat.total / donutTotal) * 100 : 0;
                   return (
                     <div key={cat.label} className="flex items-center gap-2">
-                      <span className="w-2 h-2 flex-shrink-0" style={{ backgroundColor: cat.color, borderRadius: 2 }} />
+                      <span className="w-2 h-2 flex-shrink-0 rounded-sm" style={{ backgroundColor: cat.color }} />
                       <span className="text-[11px] text-gray-600 flex-1 truncate">{cat.label}</span>
                       <span className="text-[11px] font-semibold text-gray-700 tabular-nums">{pct.toFixed(0)}%</span>
                     </div>
                   );
                 })}
               </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Card 3: Line item drill-down */}
-      <div className={CARD}>
-        <div className="p-1 border-b border-gray-100">
-          <p className={EYEBROW}>Line Item Detail</p>
-        </div>
-        <div className="px-4 py-3">
-          {selectedLineItem == null ? (
-            <div className="py-4 text-center">
-              <i className="ti ti-hand-click text-gray-200 text-2xl block mb-1" />
-              <p className="text-xs text-gray-400">Click any line item row to drill in</p>
-            </div>
-          ) : (
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-[12px] font-semibold text-brand-secondary">{selectedLineItem}</span>
-                <button
-                  onClick={() => onLineItemSelect(null)}
-                  className="text-[11px] text-gray-400 hover:text-gray-600 transition-colors ml-2"
-                >
-                  ×
-                </button>
-              </div>
-              <div className="space-y-1.5">
-                {drillData.map(row => {
-                  const barWidth = maxActual > 0 && row.actual != null
-                    ? Math.max(4, (row.actual / maxActual) * 100)
-                    : 4;
-                  const vPct = getVariancePctDisplay(row.actual, row.budgeted);
-                  const barBg = getCellBg(row.actual, row.budgeted);
-                  return (
-                    <div key={row.conferenceId} className="flex items-center gap-2">
-                      <span className="text-[11px] text-gray-600 truncate flex-shrink-0" style={{ width: 70 }}>
-                        {row.name.replace(/\b\d{4}\b/, '').trim()}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        {row.actual != null ? (
-                          <div
-                            style={{
-                              width: `${barWidth}%`,
-                              height: 16,
-                              borderRadius: 2,
-                              backgroundColor: barBg,
-                              border: '1px solid rgba(0,0,0,0.06)',
-                            }}
-                          />
-                        ) : (
-                          <span className="text-[11px] text-gray-300">—</span>
-                        )}
-                      </div>
-                      {vPct != null ? (
-                        <span
-                          className="text-[11px] font-medium tabular-nums flex-shrink-0"
-                          style={{ color: vPct < 0 ? '#059669' : vPct > 0 ? '#dc2626' : '#6B7280' }}
-                        >
-                          {vPct > 0 ? '+' : ''}{vPct.toFixed(0)}%
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-gray-300 flex-shrink-0">—</span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="text-[10px] text-gray-400 mt-2">Budget reference line shown relative to bar width</p>
             </div>
           )}
         </div>

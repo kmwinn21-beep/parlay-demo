@@ -603,11 +603,11 @@ export async function POST(
         } else {
           icp = evaluateIcpRules(
             {
-              company_type: row.company_type ? String(row.company_type) : null,
-              services: row.services ? String(row.services) : null,
-              wse: row.wse ? String(row.wse) : null,
-              profit_type: row.profit_type ? String(row.profit_type) : null,
-              entity_structure: row.entity_structure ? String(row.entity_structure) : null,
+              company_type: row.company_type != null ? String(row.company_type) : null,
+              services: row.services != null ? String(row.services) : null,
+              wse: row.wse != null ? String(row.wse) : null,
+              profit_type: row.profit_type != null ? String(row.profit_type) : null,
+              entity_structure: row.entity_structure != null ? String(row.entity_structure) : null,
             },
             icpConfig,
             icpOptions,
