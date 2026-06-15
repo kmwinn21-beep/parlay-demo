@@ -372,7 +372,7 @@ export default function CalendarIntelligencePage() {
 
           {/* My Decision section */}
           <div className="pt-5 border-t">
-            <DecisionTag conferenceId={row.conferenceId} isAdmin={isAdmin} syncKey={syncKey} onDecisionChanged={onDecisionChanged} />
+            <DecisionTag conferenceId={row.conferenceId} syncKey={syncKey} onDecisionChanged={onDecisionChanged} />
           </div>
         </div>
       </div>
@@ -541,7 +541,7 @@ export default function CalendarIntelligencePage() {
 
         {/* Decision Tag */}
         <div className="mt-5 pt-5 border-t">
-          <DecisionTag conferenceId={row.conferenceId} isAdmin={user?.role === 'administrator'} syncKey={decisionSyncKey} onDecisionChanged={bumpDecisionSync} />
+          <DecisionTag conferenceId={row.conferenceId} syncKey={decisionSyncKey} onDecisionChanged={bumpDecisionSync} />
         </div>
       </div>
     );

@@ -2,27 +2,26 @@
 
 import { useState, useEffect } from 'react';
 
-type Decision = 'confirmed' | 'watching' | 'passed' | 'pending_approval';
+type Decision = 'confirmed' | 'attend_but_reduce' | 'watching' | 'passed' | 'pending_approval';
 
 interface Props {
   conferenceId: number;
-  isAdmin: boolean;
   syncKey?: number;
   onDecisionChanged?: () => void;
 }
 
-const DECISIONS: { value: Decision; label: string; color: string; activeCls: string }[] = [
-  { value: 'pending_approval', label: 'Evaluating',      color: 'blue',    activeCls: 'bg-blue-600 text-white border-blue-600' },
-  { value: 'watching',         label: 'On the Fence',    color: 'amber',   activeCls: 'bg-amber-500 text-white border-amber-500' },
-  { value: 'passed',           label: "Don't Attend",    color: 'red',     activeCls: 'bg-red-600 text-white border-red-600' },
-  { value: 'confirmed',        label: 'Attend',          color: 'emerald', activeCls: 'bg-emerald-600 text-white border-emerald-600' },
+const DECISIONS: { value: Decision; label: string; activeCls: string }[] = [
+  { value: 'pending_approval',  label: 'Evaluating',       activeCls: 'bg-blue-600 text-white border-blue-600' },
+  { value: 'watching',          label: 'On the Fence',     activeCls: 'bg-amber-500 text-white border-amber-500' },
+  { value: 'attend_but_reduce', label: 'Attend (Reduced)', activeCls: 'bg-teal-600 text-white border-teal-600' },
+  { value: 'confirmed',         label: 'Attend',           activeCls: 'bg-emerald-600 text-white border-emerald-600' },
+  { value: 'passed',            label: "Don't Attend",     activeCls: 'bg-red-600 text-white border-red-600' },
 ];
 
 const ghostCls = 'bg-white text-gray-600 border-gray-200 hover:border-gray-400';
 
-export function DecisionTag({ conferenceId, isAdmin, syncKey, onDecisionChanged }: Props) {
+export function DecisionTag({ conferenceId, syncKey, onDecisionChanged }: Props) {
   const [userDecision, setUserDecision] = useState<Decision | null>(null);
-  const [accountDecision, setAccountDecision] = useState<Decision | null>(null);
   const [noteText, setNoteText] = useState('');
   const [posting, setPosting] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -31,11 +30,8 @@ export function DecisionTag({ conferenceId, isAdmin, syncKey, onDecisionChanged 
     setLoading(true);
     fetch(`/api/calendar-intelligence/decisions?conferenceId=${conferenceId}`)
       .then(r => r.ok ? r.json() : null)
-      .then((data: { user?: { decision: string } | null; account?: { decision: string } | null } | null) => {
-        if (data) {
-          setUserDecision((data.user?.decision as Decision) ?? null);
-          setAccountDecision((data.account?.decision as Decision) ?? null);
-        }
+      .then((data: { user?: { decision: string } | null } | null) => {
+        if (data) setUserDecision((data.user?.decision as Decision) ?? null);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -62,26 +58,6 @@ export function DecisionTag({ conferenceId, isAdmin, syncKey, onDecisionChanged 
     onDecisionChanged?.();
   };
 
-  const selectAccountDecision = async (d: Decision) => {
-    const newVal = accountDecision === d ? null : d;
-    setAccountDecision(newVal);
-    if (!newVal) {
-      await fetch('/api/calendar-intelligence/decisions', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conferenceId, level: 'account' }),
-      });
-      onDecisionChanged?.();
-      return;
-    }
-    await fetch('/api/calendar-intelligence/decisions', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conferenceId, decision: newVal, level: 'account' }),
-    });
-    onDecisionChanged?.();
-  };
-
   const handlePostNote = async () => {
     if (!noteText.trim()) return;
     setPosting(true);
@@ -101,7 +77,6 @@ export function DecisionTag({ conferenceId, isAdmin, syncKey, onDecisionChanged 
 
   return (
     <div className="space-y-3">
-      {/* My Decision */}
       <div>
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">My Decision</p>
         <div className="flex flex-wrap gap-1.5">
@@ -117,13 +92,12 @@ export function DecisionTag({ conferenceId, isAdmin, syncKey, onDecisionChanged 
         </div>
       </div>
 
-      {/* Note input */}
       {userDecision && (
         <div className="space-y-1.5">
           <textarea
             rows={2}
             value={noteText}
-            onChange={(e) => setNoteText(e.target.value)}
+            onChange={e => setNoteText(e.target.value)}
             placeholder="Add a note about this decision…"
             className="input-field text-sm w-full resize-none"
           />
@@ -134,24 +108,6 @@ export function DecisionTag({ conferenceId, isAdmin, syncKey, onDecisionChanged 
           >
             {posting ? 'Posting…' : 'Post Note'}
           </button>
-        </div>
-      )}
-
-      {/* Account-level decision — admins only */}
-      {isAdmin && (
-        <div className="pt-3 border-t">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Team Decision</p>
-          <div className="flex flex-wrap gap-1.5">
-            {DECISIONS.map(d => (
-              <button
-                key={d.value}
-                onClick={() => selectAccountDecision(d.value)}
-                className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${accountDecision === d.value ? d.activeCls : ghostCls}`}
-              >
-                {d.label}
-              </button>
-            ))}
-          </div>
         </div>
       )}
     </div>
