@@ -322,35 +322,28 @@ export default function ProgramPlannerPage() {
 
   useEffect(() => {
     if (!confsData || allConfs.length === 0 || calIntelLoading) return;
-    const conferenceIds = allConfs.map(c => c.conferenceId);
     setCalIntelLoading(true);
-    setCalIntelProgress({ completed: 0, total: conferenceIds.length });
+    setCalIntelProgress({ completed: 0, total: allConfs.length });
     setCalIntelScores(new Map());
-    let completed = 0;
-    const scores = new Map<number, { score: number; tier: string; confidence: string }>();
-    const scoreSequentially = async () => {
-      for (const id of conferenceIds) {
-        try {
-          const res = await fetch(`/api/program-intelligence/calendar-intelligence/${id}`);
-          if (res.ok) {
-            const data = await res.json();
-            const conf = data.conference;
-            if (conf) {
-              scores.set(id, {
-                score: conf.calendarRecommendationScore ?? 0,
-                tier: conf.recommendationTier ?? '',
-                confidence: conf.confidenceLevel ?? '',
-              });
-              setCalIntelScores(new Map(scores));
-            }
+    (async () => {
+      try {
+        const res = await fetch('/api/program-intelligence/calendar-intelligence', { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json() as { conferences: Array<{ conferenceId: number; calendarRecommendationScore: number | null; recommendationTier: string; confidenceLevel: string }> };
+          const scores = new Map<number, { score: number; tier: string; confidence: string }>();
+          for (const conf of data.conferences ?? []) {
+            scores.set(conf.conferenceId, {
+              score: conf.calendarRecommendationScore ?? 0,
+              tier: conf.recommendationTier ?? '',
+              confidence: conf.confidenceLevel ?? '',
+            });
           }
-        } catch { /* silently skip */ }
-        completed++;
-        setCalIntelProgress({ completed, total: conferenceIds.length });
-      }
+          setCalIntelScores(scores);
+          setCalIntelProgress({ completed: allConfs.length, total: allConfs.length });
+        }
+      } catch { /* silently skip */ }
       setCalIntelLoading(false);
-    };
-    scoreSequentially();
+    })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [confsData]);
 
