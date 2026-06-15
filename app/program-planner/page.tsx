@@ -8,6 +8,7 @@ import { ClosedWonDrawer } from '@/components/ClosedWonDrawer';
 import { LineItemCostDrawer } from '@/components/LineItemCostDrawer';
 import { ConferenceBudgetDrawer } from '@/components/ConferenceBudgetDrawer';
 import { CalendarIntelligenceDrawer } from '@/components/CalendarIntelligenceDrawer';
+import { ConferenceInputPanel } from '@/components/ConferenceInputPanel';
 import { getCalendarStore, subscribeCalendarStore, startCalendarScoring } from '@/lib/calendarIntelligenceStore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -301,6 +302,7 @@ export default function ProgramPlannerPage() {
   const [closedWonDrawer, setClosedWonDrawer] = useState<CWTarget | null>(null);
   const [budgetDrawer, setBudgetDrawer] = useState<ConferenceRow | null>(null);
   const [calDrawer, setCalDrawer] = useState<{ conferenceId: number; conferenceName: string; basicScore: { score: number; tier: string; confidence: string } } | null>(null);
+  const [inputPanelConference, setInputPanelConference] = useState<{ conferenceId: number; conferenceName: string } | null>(null);
 
   // Calendar Intelligence scoring state
   const [calIntelScores, setCalIntelScores] = useState<Map<number, { score: number; tier: string; confidence: string }>>(new Map());
@@ -760,9 +762,21 @@ export default function ProgramPlannerPage() {
                               className="hover:bg-blue-50/30 transition-colors"
                             >
                               <td className="px-3 py-2">
-                                <button className="text-brand-secondary hover:text-brand-primary text-left font-medium truncate max-w-[155px]">
-                                  {c.name}
-                                </button>
+                                <div className="flex items-center gap-1.5">
+                                  <button className="text-brand-secondary hover:text-brand-primary text-left font-medium truncate max-w-[135px]">
+                                    {c.name}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setInputPanelConference({ conferenceId: c.conferenceId, conferenceName: c.name })}
+                                    className="flex-shrink-0 text-gray-300 hover:text-gray-500 transition-colors"
+                                    title="View team input"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                  </button>
+                                </div>
                               </td>
                               <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{fmtDate(c.startDate)}</td>
                               <td className="px-3 py-2">
@@ -1024,6 +1038,13 @@ export default function ProgramPlannerPage() {
         conferenceName={calDrawer.conferenceName}
         basicScore={calDrawer.basicScore}
         onClose={() => setCalDrawer(null)}
+      />
+    )}
+    {inputPanelConference && (
+      <ConferenceInputPanel
+        conferenceId={inputPanelConference.conferenceId}
+        conferenceName={inputPanelConference.conferenceName}
+        onClose={() => setInputPanelConference(null)}
       />
     )}
     {selectedLineItem && (
