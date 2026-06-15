@@ -559,7 +559,7 @@ export default function CalendarIntelligencePage() {
       <div className="flex gap-1 mb-6 bg-white rounded-xl border border-gray-200 p-1 w-full md:w-fit">
         {([
           { id: 'scoring' as CITab, label: 'Scoring Table', mobileLabel: 'Scoring' },
-          { id: 'decisions' as CITab, label: 'Decisions Board', mobileLabel: 'Decisions' },
+          { id: 'decisions' as CITab, label: 'Input Board', mobileLabel: 'Input' },
           { id: 'budget' as CITab, label: 'Budget Planner', mobileLabel: 'Budget', soon: true },
         ]).map(tab => (
           <button
@@ -777,7 +777,7 @@ export default function CalendarIntelligencePage() {
         </div>
       )}
 
-      {/* ── Tab: Decisions Board ───────────────────────────────────────────── */}
+      {/* ── Tab: Input Board ───────────────────────────────────────────────── */}
       {activeTab === 'decisions' && (
         <DecisionsBoard
           onOpenDrawer={(confId) => { const r = calendarRows.find(x => x.conferenceId === confId); if (r) setSelectedCalendarRow(r); }}
