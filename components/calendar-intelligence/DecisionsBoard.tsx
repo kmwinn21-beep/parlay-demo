@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { CalendarNotesPanel } from './CalendarNotesPanel';
+import { type CalendarConferenceRow } from '@/lib/calendarIntelligenceStore';
 
 type DecisionKey = 'confirmed' | 'attend_but_reduce' | 'watching' | 'passed' | 'pending_approval';
 
@@ -22,38 +23,34 @@ interface BoardConference {
   opinionsByDecision: Record<DecisionKey, UserOpinion[]>;
 }
 
-interface ScoreData {
-  conferenceId: number;
-  calendarRecommendationScore: number | null;
-  recommendationTier: string;
-  componentScores?: {
-    audienceFit: number | null;
-    targetOpportunity: number | null;
-    commercialPotential: number | null;
-    costJustification: number | null;
-  };
-}
-
 interface Props {
   onOpenDrawer?: (conferenceId: number) => void;
   refreshKey?: number;
-  scoredRows?: ScoreData[];
+  scoredRows?: CalendarConferenceRow[];
 }
 
 const COLUMNS: { id: DecisionKey; label: string; headerCls: string; borderCls: string }[] = [
-  { id: 'confirmed',         label: 'Attend',              headerCls: 'text-emerald-700 bg-emerald-50', borderCls: 'border-emerald-200' },
-  { id: 'attend_but_reduce', label: 'Attend (Reduced)',    headerCls: 'text-teal-700 bg-teal-50',       borderCls: 'border-teal-200' },
-  { id: 'watching',          label: 'On the Fence',        headerCls: 'text-amber-700 bg-amber-50',     borderCls: 'border-amber-200' },
-  { id: 'passed',            label: "Don't Attend",        headerCls: 'text-red-700 bg-red-50',         borderCls: 'border-red-200' },
-  { id: 'pending_approval',  label: 'Actively Evaluating', headerCls: 'text-blue-700 bg-blue-50',       borderCls: 'border-blue-200' },
+  { id: 'confirmed',         label: 'Attend',              headerCls: 'text-emerald-700 bg-emerald-50',        borderCls: 'border-emerald-200' },
+  { id: 'attend_but_reduce', label: 'Attend (Reduced)',    headerCls: 'text-brand-primary bg-brand-primary/10', borderCls: 'border-brand-primary' },
+  { id: 'watching',          label: 'On the Fence',        headerCls: 'text-amber-700 bg-amber-50',            borderCls: 'border-amber-200' },
+  { id: 'passed',            label: "Don't Attend",        headerCls: 'text-red-700 bg-red-50',                borderCls: 'border-red-200' },
+  { id: 'pending_approval',  label: 'Actively Evaluating', headerCls: 'text-blue-700 bg-blue-50',              borderCls: 'border-blue-200' },
 ];
 
 const DECISION_PILL: Record<DecisionKey, string> = {
   confirmed:         'bg-emerald-50 text-emerald-700 border-emerald-200',
-  attend_but_reduce: 'bg-teal-50 text-teal-700 border-teal-200',
+  attend_but_reduce: 'bg-brand-primary/10 text-brand-primary border-brand-primary/30',
   watching:          'bg-amber-50 text-amber-700 border-amber-200',
   passed:            'bg-red-50 text-red-700 border-red-200',
   pending_approval:  'bg-blue-50 text-blue-700 border-blue-200',
+};
+
+const DECISION_SHORT: Record<DecisionKey, string> = {
+  confirmed:         'Attend',
+  attend_but_reduce: 'Reduced',
+  watching:          'On Fence',
+  passed:            'Pass',
+  pending_approval:  'Eval.',
 };
 
 const TIER_INFO: Record<string, { label: string; cls: string }> = {
@@ -65,8 +62,35 @@ const TIER_INFO: Record<string, { label: string; cls: string }> = {
   remove_from_calendar:       { label: 'Remove',            cls: 'bg-red-50 text-red-700 border-red-200' },
 };
 
+const TIER_LABELS: Record<string, string> = {
+  attend_invest_more:         'Attend & Invest More',
+  attend_maintain:            'Attend & Maintain',
+  attend_reconsider_format:   'Reconsider Format',
+  evaluate_before_committing: 'Evaluate First',
+  do_not_prioritize:          'Do Not Prioritize',
+  remove_from_calendar:       'Remove from Calendar',
+};
+
+const TIER_PILL: Record<string, string> = {
+  attend_invest_more:         'bg-emerald-50 text-emerald-700 border-emerald-200',
+  attend_maintain:            'bg-emerald-50 text-emerald-600 border-emerald-100',
+  attend_reconsider_format:   'bg-amber-50 text-amber-700 border-amber-200',
+  evaluate_before_committing: 'bg-amber-50 text-amber-700 border-amber-200',
+  remove_from_calendar:       'bg-red-50 text-red-700 border-red-200',
+  do_not_prioritize:          'bg-red-50 text-red-600 border-red-100',
+};
+
 function tierInfo(tier: string) {
   return TIER_INFO[tier] ?? { label: tier.replace(/_/g, ' '), cls: 'bg-gray-50 text-gray-600 border-gray-200' };
+}
+
+function calScoreColor(score: number | null): string {
+  if (score == null) return '#9ca3af';
+  if (score >= 85) return '#059669';
+  if (score >= 70) return '#0d9488';
+  if (score >= 55) return '#d97706';
+  if (score >= 40) return '#f97316';
+  return '#dc2626';
 }
 
 function ScoreChip({ label, value }: { label: string; value: number | null | undefined }) {
@@ -88,15 +112,84 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(d / 30)}mo ago`;
 }
 
+function buildComponentList(row: CalendarConferenceRow) {
+  const cs = row.componentScores;
+  const d = row.diagnostics ?? {};
+  const te = d.targetingEngine;
+  const cp = d.commercialPotential;
+  const bud = d.budget;
+  const W = { audienceFit: 30, targetOpportunity: 24, commercialPotential: 18, costJustification: 18, strategicValue: 10 };
+  const projPipeline = Number(cp?.projected_pipeline ?? 0);
+  const realPipeline = Number(cp?.realistic_pipeline ?? 0);
+  const reqPipeline = Number(bud?.required_pipeline_amount ?? 0);
+  const reqMultiple = Number(bud?.required_pipeline_multiple ?? 5);
+  const teBench = te != null ? (te.isLargeConference ? { must: '15%', high: '30%', worth: '25%' } : { must: '10%', high: '20%', worth: '20%' }) : null;
+  const teRate = te != null && te.totalScoredCompanies > 0 ? (te.actionableCount / te.totalScoredCompanies * 100).toFixed(0) + '%' : null;
+
+  return [
+    {
+      key: 'Audience Fit', score: cs?.audienceFit ?? null, weight: W.audienceFit,
+      bullets: [
+        `${row.icpCompanies} ICP / ${row.totalCompanies} total (${row.icpDensityPct.toFixed(1)}% density)`,
+        ...(te != null ? [`Avg buyer access: ${te.avgBuyerAccessScore.toFixed(0)}/100`] : []),
+      ],
+    },
+    {
+      key: 'Target Opportunity', score: cs?.targetOpportunity ?? null, weight: W.targetOpportunity,
+      bullets: te != null ? [
+        `${te.totalScoredCompanies} companies scored`,
+        `Must Target: ${te.mustTargetCount} (bench ${teBench!.must})`,
+        `High Priority: ${te.highPriorityCount} (bench ${teBench!.high})`,
+        `Worth Engaging: ${te.worthEngagingCount} (bench ${teBench!.worth})`,
+        `Actionable rate: ${teRate}`,
+      ] : ['Target scoring not run.'],
+    },
+    {
+      key: 'Commercial Potential', score: cs?.commercialPotential ?? null, weight: W.commercialPotential,
+      bullets: cp != null ? [
+        `Available pipeline: $${projPipeline.toLocaleString()}`,
+        ...(realPipeline > 0 ? [`Realistic: $${realPipeline.toLocaleString()}`] : []),
+        ...(reqPipeline > 0 ? [`Required: $${reqPipeline.toLocaleString()}`, `Coverage: ${((projPipeline / reqPipeline) * 100).toFixed(0)}%`] : ['No budget entered.']),
+      ] : ['No pipeline data available.'],
+    },
+    {
+      key: 'Cost Justification', score: cs?.costJustification ?? null, weight: W.costJustification,
+      bullets: bud != null ? [
+        `Required pipeline: $${reqPipeline.toLocaleString()}`,
+        `Required ROI: ${reqMultiple}x`,
+        ...(cp != null && reqPipeline > 0 ? [`Attainable: $${(realPipeline > 0 ? realPipeline : projPipeline).toLocaleString()} (${(((realPipeline > 0 ? realPipeline : projPipeline) / reqPipeline) * 100).toFixed(0)}%)`] : []),
+      ] : ['Budget not entered.'],
+    },
+    {
+      key: 'Strategic Value', score: cs?.strategicValue ?? null, weight: W.strategicValue,
+      bullets: (() => {
+        const sv = d.strategicValue;
+        if (!sv) return ['Prospect company type not configured.'];
+        return [
+          `Avg relationship leverage: ${sv.base_score}/100 (${sv.total_scored} companies)`,
+          `Internal relationships: ${sv.internal_rel_count}`,
+          `Prior engagement: ${sv.prior_engagement_count}`,
+          `Known prospects: ${sv.known_prospect_count}`,
+          sv.has_competitor ? `Competitor presence: Yes (+${sv.competitor_bonus} pts)` : 'Competitor presence: No',
+        ];
+      })(),
+    },
+  ];
+}
+
 export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) {
   const [allConferences, setAllConferences] = useState<BoardConference[]>([]);
   const [selectedConferenceId, setSelectedConferenceId] = useState<number | null>(null);
   const [filteredConference, setFilteredConference] = useState<BoardConference | null>(null);
   const [loading, setLoading] = useState(true);
   const [notesConferenceId, setNotesConferenceId] = useState<number | null>(null);
+  // Card expansion state: key = `${conferenceId}-${colId}` (default view)
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  // Component card expansion: key = component name (filtered view)
+  const [expandedComponents, setExpandedComponents] = useState<Set<string>>(new Set());
 
   const scoreMap = useMemo(() => {
-    const map = new Map<number, ScoreData>();
+    const map = new Map<number, CalendarConferenceRow>();
     for (const r of scoredRows ?? []) map.set(r.conferenceId, r);
     return map;
   }, [scoredRows]);
@@ -115,11 +208,28 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
   useEffect(() => {
     if (selectedConferenceId == null) { setFilteredConference(null); return; }
     setFilteredConference(null);
+    setExpandedComponents(new Set());
     fetch(`/api/calendar-intelligence/decisions/board?conferenceId=${selectedConferenceId}`)
       .then(r => r.ok ? r.json() : { conferences: [] })
       .then((data: { conferences: BoardConference[] }) => setFilteredConference(data.conferences[0] ?? null))
       .catch(() => {});
   }, [selectedConferenceId]);
+
+  function toggleCard(key: string) {
+    setExpandedCards(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleComponent(key: string) {
+    setExpandedComponents(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
 
   if (loading) {
     return (
@@ -129,22 +239,46 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
     );
   }
 
+  // ── Conference card (default view) ──────────────────────────────────────────
   function ConferenceCard({ conf, colId }: { conf: BoardConference; colId: DecisionKey }) {
     const sd = scoreMap.get(conf.conferenceId);
     const ti = sd ? tierInfo(sd.recommendationTier) : null;
     const colOpinions = conf.opinionsByDecision[colId];
+    const cardKey = `${conf.conferenceId}-${colId}`;
+    const isExpanded = expandedCards.has(cardKey);
+    const hasComponentScores = sd?.componentScores != null;
 
     return (
       <div className="rounded-lg border border-gray-100 bg-white shadow-sm overflow-hidden">
         <div className="p-3 space-y-2">
-          <div>
-            <p
-              className={`font-semibold text-sm text-gray-900 leading-tight ${onOpenDrawer ? 'cursor-pointer hover:underline' : ''}`}
-              onClick={() => onOpenDrawer?.(conf.conferenceId)}
-            >{conf.name}</p>
-            <p className="text-xs text-gray-400 mt-0.5">{conf.year} · {conf.attendeeCount} attendees</p>
+          {/* Top row: name (left) + rep opinions (right) */}
+          <div className="flex items-start gap-2">
+            <div className="flex-1 min-w-0">
+              <p
+                className={`font-semibold text-sm text-gray-900 leading-tight ${onOpenDrawer ? 'cursor-pointer hover:underline' : ''}`}
+                onClick={() => onOpenDrawer?.(conf.conferenceId)}
+              >{conf.name}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{conf.year} · {conf.attendeeCount} attendees</p>
+            </div>
+
+            {colOpinions.length > 0 && (
+              <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                {colOpinions.map(op => (
+                  <div key={op.userId} className="flex items-center gap-1">
+                    <div className="w-4 h-4 rounded-full bg-gray-200 flex items-center justify-center text-[8px] font-bold text-gray-500 flex-shrink-0">
+                      {op.displayName.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-[10px] text-gray-600 max-w-[64px] truncate">{op.displayName}</span>
+                    <span className={`flex-shrink-0 px-1 py-px rounded text-[8px] font-semibold border ${DECISION_PILL[colId]}`}>
+                      {DECISION_SHORT[colId]}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
+          {/* Score + tier */}
           {sd && (
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-2xl font-bold text-gray-900">
@@ -161,31 +295,30 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
             </div>
           )}
 
-          {sd?.componentScores && (
-            <div className="flex flex-wrap gap-1">
-              <ScoreChip label="Aud. Fit" value={sd.componentScores.audienceFit} />
-              <ScoreChip label="Target Opp" value={sd.componentScores.targetOpportunity} />
-              <ScoreChip label="Cost Just." value={sd.componentScores.costJustification} />
-              <ScoreChip label="Commercial" value={sd.componentScores.commercialPotential} />
-            </div>
-          )}
-
-          {colOpinions.length > 0 && (
-            <div className="space-y-1">
-              {colOpinions.map(op => (
-                <div key={op.userId} className="flex items-center gap-1.5 text-xs">
-                  <div className="w-4 h-4 rounded-full bg-gray-200 flex items-center justify-center text-[9px] font-bold text-gray-500 flex-shrink-0">
-                    {op.displayName.charAt(0).toUpperCase()}
-                  </div>
-                  <span className="text-gray-600 truncate flex-1">{op.displayName}</span>
-                  {op.note && (
-                    <span className="text-gray-400 truncate max-w-[80px] text-[10px]" title={op.note}>
-                      &ldquo;{op.note}&rdquo;
-                    </span>
+          {/* Expand toggle + component chips */}
+          {hasComponentScores && (
+            <>
+              <button
+                onClick={() => toggleCard(cardKey)}
+                className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+                {isExpanded ? 'Hide scores' : 'Component scores'}
+              </button>
+              {isExpanded && (
+                <div className="flex flex-wrap gap-1 pt-0.5">
+                  <ScoreChip label="Aud. Fit"    value={sd!.componentScores!.audienceFit} />
+                  <ScoreChip label="Target Opp"  value={sd!.componentScores!.targetOpportunity} />
+                  <ScoreChip label="Cost Just."  value={sd!.componentScores!.costJustification} />
+                  <ScoreChip label="Commercial"  value={sd!.componentScores!.commercialPotential} />
+                  {sd!.componentScores!.strategicValue != null && (
+                    <ScoreChip label="Strategic"   value={sd!.componentScores!.strategicValue} />
                   )}
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
 
@@ -204,6 +337,7 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
     );
   }
 
+  // ── Stakeholder card (filtered view) ────────────────────────────────────────
   function StakeholderCard({ opinion, colId }: { opinion: UserOpinion; colId: DecisionKey }) {
     return (
       <div className="rounded-lg border border-gray-100 bg-white shadow-sm p-3 space-y-1.5">
@@ -216,16 +350,20 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
             <p className="text-[10px] text-gray-400 truncate">{opinion.email}</p>
           </div>
           <span className={`flex-shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-semibold border ${DECISION_PILL[colId]}`}>
-            {colId === 'attend_but_reduce' ? 'Reduced' : colId === 'pending_approval' ? 'Evaluating' : colId === 'confirmed' ? 'Attend' : colId === 'watching' ? 'Fence' : "Don't Attend"}
+            {DECISION_SHORT[colId]}
           </span>
         </div>
         {opinion.note && (
-          <p className="text-xs text-gray-600 italic">&ldquo;{opinion.note}&rdquo;</p>
+          <p className="text-xs text-gray-600 italic pl-9">&ldquo;{opinion.note}&rdquo;</p>
         )}
-        <p className="text-[10px] text-gray-400">{timeAgo(opinion.updatedAt)}</p>
+        <p className="text-[10px] text-gray-400 pl-9">{timeAgo(opinion.updatedAt)}</p>
       </div>
     );
   }
+
+  // ── Filtered view: Cal Intel score header ────────────────────────────────────
+  const selectedRow = selectedConferenceId != null ? scoreMap.get(selectedConferenceId) : null;
+  const components = selectedRow ? buildComponentList(selectedRow) : [];
 
   const activeConference = selectedConferenceId != null ? filteredConference : null;
 
@@ -267,6 +405,90 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
           </>
         )}
       </div>
+
+      {/* ── Filtered view: Cal Intel score + component cards above kanban ── */}
+      {selectedConferenceId != null && selectedRow && (
+        <div className="flex items-start gap-3 overflow-x-auto pb-1">
+          {/* Main score card */}
+          {(() => {
+            const score = selectedRow.calendarRecommendationScore;
+            const color = calScoreColor(score);
+            const tierLabel = TIER_LABELS[selectedRow.recommendationTier] ?? selectedRow.recommendationTier;
+            const tierCls = TIER_PILL[selectedRow.recommendationTier] ?? 'bg-gray-50 text-gray-600 border-gray-200';
+            return (
+              <div
+                className="rounded-xl p-4 flex-shrink-0 min-w-[170px]"
+                style={{ backgroundColor: color + '15', borderLeft: `4px solid ${color}` }}
+              >
+                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 mb-1">Calendar Score</p>
+                <div className="flex items-end gap-1.5 mb-1.5">
+                  <span className="text-4xl font-bold leading-tight" style={{ color }}>
+                    {score != null ? Math.round(score) : '—'}
+                  </span>
+                  <span className="text-sm text-gray-400 mb-0.5">/100</span>
+                </div>
+                <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border ${tierCls}`}>
+                  {tierLabel}
+                </span>
+                <p className="text-[11px] text-gray-400 mt-1.5">Confidence: {selectedRow.confidenceLevel}</p>
+                {selectedRow.availableComponentCount != null && (
+                  <p className="text-[11px] text-gray-400">
+                    {selectedRow.availableComponentCount} of 5 components · max {selectedRow.maxPossibleScore ?? '—'}/100
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Component score cards — independently collapsible, items-start so heights are independent */}
+          {components.map(comp => {
+            const expanded = expandedComponents.has(comp.key);
+            const color = calScoreColor(comp.score);
+            return (
+              <div
+                key={comp.key}
+                className="flex-shrink-0 w-48 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"
+              >
+                <button
+                  className="w-full px-3 py-2.5 text-left"
+                  onClick={() => toggleComponent(comp.key)}
+                >
+                  <div className="flex items-center justify-between gap-1 mb-1.5">
+                    <p className="text-[11px] font-semibold text-gray-800 leading-tight">{comp.key}</p>
+                    <svg
+                      className={`w-3 h-3 text-gray-400 flex-shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                  <div className="flex items-end gap-1 mb-1.5">
+                    <span className="text-xl font-bold" style={{ color }}>
+                      {comp.score != null ? Math.round(comp.score) : '—'}
+                    </span>
+                    <span className="text-[10px] text-gray-400 mb-0.5">/100 · {comp.weight}%</span>
+                  </div>
+                  <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${comp.score ?? 0}%`, backgroundColor: color }} />
+                  </div>
+                </button>
+                {expanded && (
+                  <div className="px-3 pb-3 border-t border-gray-100 pt-2">
+                    <ul className="space-y-1">
+                      {comp.bullets.map((b, i) => (
+                        <li key={i} className="flex gap-1.5 text-[11px] text-gray-500 leading-snug">
+                          <span className="flex-shrink-0 w-1 h-1 rounded-full bg-gray-300 mt-1.5" />
+                          <span>{b}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Desktop Kanban */}
       <div className="hidden md:flex gap-3 h-[calc(100vh-320px)] relative">
