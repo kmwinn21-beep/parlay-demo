@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { CalendarNotesPanel } from './CalendarNotesPanel';
 import { type CalendarConferenceRow } from '@/lib/calendarIntelligenceStore';
 
@@ -27,14 +28,17 @@ interface Props {
   onOpenDrawer?: (conferenceId: number) => void;
   refreshKey?: number;
   scoredRows?: CalendarConferenceRow[];
+  selectedConferenceId: number | null;
+  onSelectedConferenceChange: (id: number | null) => void;
+  onConferencesLoaded?: (list: Array<{ conferenceId: number; name: string; year: number }>) => void;
 }
 
 const COLUMNS: { id: DecisionKey; label: string; headerCls: string; borderCls: string }[] = [
-  { id: 'confirmed',         label: 'Attend',              headerCls: 'text-emerald-700 bg-emerald-50',        borderCls: 'border-emerald-200' },
+  { id: 'confirmed',         label: 'Attend',              headerCls: 'text-emerald-700 bg-emerald-50',         borderCls: 'border-emerald-200' },
   { id: 'attend_but_reduce', label: 'Attend (Reduced)',    headerCls: 'text-brand-primary bg-brand-primary/10', borderCls: 'border-brand-primary' },
-  { id: 'watching',          label: 'On the Fence',        headerCls: 'text-amber-700 bg-amber-50',            borderCls: 'border-amber-200' },
-  { id: 'passed',            label: "Don't Attend",        headerCls: 'text-red-700 bg-red-50',                borderCls: 'border-red-200' },
-  { id: 'pending_approval',  label: 'Actively Evaluating', headerCls: 'text-blue-700 bg-blue-50',              borderCls: 'border-blue-200' },
+  { id: 'watching',          label: 'On the Fence',        headerCls: 'text-amber-700 bg-amber-50',             borderCls: 'border-amber-200' },
+  { id: 'passed',            label: "Don't Attend",        headerCls: 'text-red-700 bg-red-50',                 borderCls: 'border-red-200' },
+  { id: 'pending_approval',  label: 'Actively Evaluating', headerCls: 'text-blue-700 bg-blue-50',               borderCls: 'border-blue-200' },
 ];
 
 const DECISION_PILL: Record<DecisionKey, string> = {
@@ -177,16 +181,25 @@ function buildComponentList(row: CalendarConferenceRow) {
   ];
 }
 
-export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) {
+export function DecisionsBoard({
+  onOpenDrawer,
+  refreshKey,
+  scoredRows,
+  selectedConferenceId,
+  onSelectedConferenceChange,
+  onConferencesLoaded,
+}: Props) {
   const [allConferences, setAllConferences] = useState<BoardConference[]>([]);
-  const [selectedConferenceId, setSelectedConferenceId] = useState<number | null>(null);
   const [filteredConference, setFilteredConference] = useState<BoardConference | null>(null);
   const [loading, setLoading] = useState(true);
-  const [notesConferenceId, setNotesConferenceId] = useState<number | null>(null);
-  // Card expansion state: key = `${conferenceId}-${colId}` (default view)
+  const [notesDrawerOpen, setNotesDrawerOpen] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
-  // Component card expansion: key = component name (filtered view)
   const [expandedComponents, setExpandedComponents] = useState<Set<string>>(new Set());
+  const [showComponents, setShowComponents] = useState(false);
+  const [componentsExiting, setComponentsExiting] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
 
   const scoreMap = useMemo(() => {
     const map = new Map<number, CalendarConferenceRow>();
@@ -198,17 +211,30 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
     setLoading(true);
     fetch('/api/calendar-intelligence/decisions/board')
       .then(r => r.ok ? r.json() : { conferences: [] })
-      .then((data: { conferences: BoardConference[] }) => setAllConferences(data.conferences ?? []))
+      .then((data: { conferences: BoardConference[] }) => {
+        const confs = data.conferences ?? [];
+        setAllConferences(confs);
+        onConferencesLoaded?.(confs.map(c => ({ conferenceId: c.conferenceId, name: c.name, year: c.year })));
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [onConferencesLoaded]);
 
   useEffect(() => { loadAll(); }, [loadAll, refreshKey]);
 
   useEffect(() => {
-    if (selectedConferenceId == null) { setFilteredConference(null); return; }
+    if (selectedConferenceId == null) {
+      setFilteredConference(null);
+      setNotesDrawerOpen(false);
+      setShowComponents(false);
+      setComponentsExiting(false);
+      setExpandedComponents(new Set());
+      return;
+    }
     setFilteredConference(null);
     setExpandedComponents(new Set());
+    setShowComponents(false);
+    setComponentsExiting(false);
     fetch(`/api/calendar-intelligence/decisions/board?conferenceId=${selectedConferenceId}`)
       .then(r => r.ok ? r.json() : { conferences: [] })
       .then((data: { conferences: BoardConference[] }) => setFilteredConference(data.conferences[0] ?? null))
@@ -229,6 +255,25 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
+  }
+
+  const COMPONENT_COUNT = 5;
+  const ENTER_DURATION = 200;
+  const ENTER_STAGGER = 60;
+  const EXIT_DURATION = 150;
+  const EXIT_STAGGER = 40;
+
+  function toggleComponents() {
+    if (showComponents) {
+      setComponentsExiting(true);
+      const totalMs = EXIT_DURATION + (COMPONENT_COUNT - 1) * EXIT_STAGGER + 50;
+      setTimeout(() => {
+        setShowComponents(false);
+        setComponentsExiting(false);
+      }, totalMs);
+    } else {
+      setShowComponents(true);
+    }
   }
 
   if (loading) {
@@ -260,7 +305,6 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
               >{conf.name}</p>
               <p className="text-xs text-gray-400 mt-0.5">{conf.year} · {conf.attendeeCount} attendees</p>
             </div>
-
             {colOpinions.length > 0 && (
               <div className="flex-shrink-0 flex flex-col items-end gap-1">
                 {colOpinions.map(op => (
@@ -309,12 +353,12 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
               </button>
               {isExpanded && (
                 <div className="flex flex-wrap gap-1 pt-0.5">
-                  <ScoreChip label="Aud. Fit"    value={sd!.componentScores!.audienceFit} />
-                  <ScoreChip label="Target Opp"  value={sd!.componentScores!.targetOpportunity} />
+                  <ScoreChip label="Aud. Fit"   value={sd!.componentScores!.audienceFit} />
+                  <ScoreChip label="Target Opp" value={sd!.componentScores!.targetOpportunity} />
                   <ScoreChip label="Cost Just."  value={sd!.componentScores!.costJustification} />
                   <ScoreChip label="Commercial"  value={sd!.componentScores!.commercialPotential} />
                   {sd!.componentScores!.strategicValue != null && (
-                    <ScoreChip label="Strategic"   value={sd!.componentScores!.strategicValue} />
+                    <ScoreChip label="Strategic"  value={sd!.componentScores!.strategicValue} />
                   )}
                 </div>
               )}
@@ -324,10 +368,7 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
 
         <div className="px-3 py-2 border-t border-gray-50 flex justify-end">
           <button
-            onClick={() => {
-              setSelectedConferenceId(conf.conferenceId);
-              setNotesConferenceId(conf.conferenceId);
-            }}
+            onClick={() => onSelectedConferenceChange(conf.conferenceId)}
             className="text-[10px] font-semibold text-gray-400 hover:text-gray-600 transition-colors"
           >
             View details →
@@ -361,234 +402,229 @@ export function DecisionsBoard({ onOpenDrawer, refreshKey, scoredRows }: Props) 
     );
   }
 
-  // ── Filtered view: Cal Intel score header ────────────────────────────────────
   const selectedRow = selectedConferenceId != null ? scoreMap.get(selectedConferenceId) : null;
   const components = selectedRow ? buildComponentList(selectedRow) : [];
-
+  const scoreColor = calScoreColor(selectedRow?.calendarRecommendationScore ?? null);
   const activeConference = selectedConferenceId != null ? filteredConference : null;
 
   return (
-    <div className="flex flex-col gap-4 relative">
-      {/* Conference selector + notes toggle */}
-      <div className="flex items-center gap-3">
-        <select
-          value={selectedConferenceId ?? ''}
-          onChange={e => {
-            const val = e.target.value;
-            setSelectedConferenceId(val ? Number(val) : null);
-            setNotesConferenceId(null);
-          }}
-          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-secondary/30 max-w-sm"
-        >
-          <option value="">All conferences</option>
-          {allConferences.map(c => (
-            <option key={c.conferenceId} value={c.conferenceId}>
-              {c.name} ({c.year})
-            </option>
-          ))}
-        </select>
+    <>
+      <style>{`
+        @keyframes slideInFromLeft  { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes slideOutToLeft   { from { opacity: 1; transform: translateX(0); }    to { opacity: 0; transform: translateX(-16px); } }
+        @keyframes slideInFromRight { from { transform: translateX(100%); }              to { transform: translateX(0); } }
+      `}</style>
 
-        {selectedConferenceId != null && (
-          <>
-            <button
-              onClick={() => setNotesConferenceId(notesConferenceId === selectedConferenceId ? null : selectedConferenceId)}
-              className={`text-sm font-semibold transition-colors whitespace-nowrap ${notesConferenceId === selectedConferenceId ? 'text-brand-secondary' : 'text-gray-400 hover:text-gray-600'}`}
-            >
-              {activeConference?.noteCount ? `Notes (${activeConference.noteCount})` : 'Notes'} →
-            </button>
-            <button
-              onClick={() => { setSelectedConferenceId(null); setNotesConferenceId(null); }}
-              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              ✕ Clear
-            </button>
-          </>
-        )}
-      </div>
-
-      {/* ── Filtered view: Cal Intel score + component cards above kanban ── */}
-      {selectedConferenceId != null && selectedRow && (
-        <div className="flex items-start gap-3 overflow-x-auto pb-1">
-          {/* Main score card */}
-          {(() => {
-            const score = selectedRow.calendarRecommendationScore;
-            const color = calScoreColor(score);
-            const tierLabel = TIER_LABELS[selectedRow.recommendationTier] ?? selectedRow.recommendationTier;
-            const tierCls = TIER_PILL[selectedRow.recommendationTier] ?? 'bg-gray-50 text-gray-600 border-gray-200';
-            return (
-              <div
-                className="rounded-xl p-4 flex-shrink-0 min-w-[170px]"
-                style={{ backgroundColor: color + '15', borderLeft: `4px solid ${color}` }}
-              >
-                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 mb-1">Calendar Score</p>
-                <div className="flex items-end gap-1.5 mb-1.5">
-                  <span className="text-4xl font-bold leading-tight" style={{ color }}>
-                    {score != null ? Math.round(score) : '—'}
-                  </span>
-                  <span className="text-sm text-gray-400 mb-0.5">/100</span>
-                </div>
-                <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border ${tierCls}`}>
-                  {tierLabel}
-                </span>
-                <p className="text-[11px] text-gray-400 mt-1.5">Confidence: {selectedRow.confidenceLevel}</p>
-                {selectedRow.availableComponentCount != null && (
-                  <p className="text-[11px] text-gray-400">
-                    {selectedRow.availableComponentCount} of 5 components · max {selectedRow.maxPossibleScore ?? '—'}/100
-                  </p>
-                )}
-              </div>
-            );
-          })()}
-
-          {/* Component score cards — independently collapsible, items-start so heights are independent */}
-          {components.map(comp => {
-            const expanded = expandedComponents.has(comp.key);
-            const color = calScoreColor(comp.score);
-            return (
-              <div
-                key={comp.key}
-                className="flex-shrink-0 w-48 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"
-              >
-                <button
-                  className="w-full px-3 py-2.5 text-left"
-                  onClick={() => toggleComponent(comp.key)}
+      <div className="flex flex-col gap-4 relative">
+        {/* ── Filtered view: score card + component cards above kanban ── */}
+        {selectedConferenceId != null && selectedRow && (
+          <div className="flex items-start gap-3 overflow-x-auto pb-1">
+            {/* Score card — same min-width as kanban columns */}
+            {(() => {
+              const score = selectedRow.calendarRecommendationScore;
+              const color = scoreColor;
+              const tierLabel = TIER_LABELS[selectedRow.recommendationTier] ?? selectedRow.recommendationTier;
+              const tierCls = TIER_PILL[selectedRow.recommendationTier] ?? 'bg-gray-50 text-gray-600 border-gray-200';
+              const noteCount = activeConference?.noteCount ?? 0;
+              return (
+                <div
+                  className="rounded-xl p-4 flex-shrink-0 min-w-[170px] max-w-[220px] flex-1"
+                  style={{ backgroundColor: color + '15', borderLeft: `4px solid ${color}` }}
                 >
-                  <div className="flex items-center justify-between gap-1 mb-1.5">
-                    <p className="text-[11px] font-semibold text-gray-800 leading-tight">{comp.key}</p>
-                    <svg
-                      className={`w-3 h-3 text-gray-400 flex-shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
-                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
+                  {/* Eyebrow row: label + info icon + notes button */}
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">Calendar Score</p>
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      {/* Info icon — toggles component cards */}
+                      <button
+                        onClick={toggleComponents}
+                        className="text-gray-400 hover:text-gray-600 transition-colors"
+                        title={showComponents ? 'Hide component scores' : 'Show component scores'}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </button>
+                      {/* Notes button */}
+                      <button
+                        onClick={() => setNotesDrawerOpen(true)}
+                        className="text-xs font-semibold transition-colors hover:opacity-75"
+                        style={{ color }}
+                      >
+                        {noteCount > 0 ? `Notes (${noteCount})` : 'Notes'} →
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-end gap-1 mb-1.5">
-                    <span className="text-xl font-bold" style={{ color }}>
-                      {comp.score != null ? Math.round(comp.score) : '—'}
+
+                  <div className="flex items-end gap-1.5 mb-1.5">
+                    <span className="text-4xl font-bold leading-tight" style={{ color }}>
+                      {score != null ? Math.round(score) : '—'}
                     </span>
-                    <span className="text-[10px] text-gray-400 mb-0.5">/100 · {comp.weight}%</span>
+                    <span className="text-sm text-gray-400 mb-0.5">/100</span>
                   </div>
-                  <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${comp.score ?? 0}%`, backgroundColor: color }} />
-                  </div>
-                </button>
-                {expanded && (
-                  <div className="px-3 pb-3 border-t border-gray-100 pt-2">
-                    <ul className="space-y-1">
-                      {comp.bullets.map((b, i) => (
-                        <li key={i} className="flex gap-1.5 text-[11px] text-gray-500 leading-snug">
-                          <span className="flex-shrink-0 w-1 h-1 rounded-full bg-gray-300 mt-1.5" />
-                          <span>{b}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                  <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border ${tierCls}`}>
+                    {tierLabel}
+                  </span>
+                  <p className="text-[11px] text-gray-400 mt-1.5">Confidence: {selectedRow.confidenceLevel}</p>
+                  {selectedRow.availableComponentCount != null && (
+                    <p className="text-[11px] text-gray-400">
+                      {selectedRow.availableComponentCount} of 5 · max {selectedRow.maxPossibleScore ?? '—'}/100
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Component cards — animated in/out */}
+            {showComponents && (
+              <div className="flex items-start gap-3 flex-shrink-0">
+                {components.map((comp, i) => {
+                  const enterDelay = `${i * ENTER_STAGGER}ms`;
+                  const exitDelay = `${(COMPONENT_COUNT - 1 - i) * EXIT_STAGGER}ms`;
+                  const anim = componentsExiting
+                    ? `slideOutToLeft ${EXIT_DURATION}ms ease-in ${exitDelay} both`
+                    : `slideInFromLeft ${ENTER_DURATION}ms ease-out ${enterDelay} both`;
+                  const expanded = expandedComponents.has(comp.key);
+                  const color = calScoreColor(comp.score);
+                  return (
+                    <div
+                      key={comp.key}
+                      className="flex-shrink-0 w-48 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"
+                      style={{ animation: anim }}
+                    >
+                      <button className="w-full px-3 py-2.5 text-left" onClick={() => toggleComponent(comp.key)}>
+                        <div className="flex items-center justify-between gap-1 mb-1.5">
+                          <p className="text-[11px] font-semibold text-gray-800 leading-tight">{comp.key}</p>
+                          <svg
+                            className={`w-3 h-3 text-gray-400 flex-shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
+                            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                        <div className="flex items-end gap-1 mb-1.5">
+                          <span className="text-xl font-bold" style={{ color }}>
+                            {comp.score != null ? Math.round(comp.score) : '—'}
+                          </span>
+                          <span className="text-[10px] text-gray-400 mb-0.5">/100 · {comp.weight}%</span>
+                        </div>
+                        <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${comp.score ?? 0}%`, backgroundColor: color }} />
+                        </div>
+                      </button>
+                      {expanded && (
+                        <div className="px-3 pb-3 border-t border-gray-100 pt-2">
+                          <ul className="space-y-1">
+                            {comp.bullets.map((b, bi) => (
+                              <li key={bi} className="flex gap-1.5 text-[11px] text-gray-500 leading-snug">
+                                <span className="flex-shrink-0 w-1 h-1 rounded-full bg-gray-300 mt-1.5" />
+                                <span>{b}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Desktop Kanban */}
+        <div className="hidden md:flex gap-3 h-[calc(100vh-320px)] relative">
+          {COLUMNS.map(col => {
+            const colCount = selectedConferenceId != null
+              ? (filteredConference?.opinionsByDecision[col.id].length ?? 0)
+              : allConferences.filter(c => c.opinionsByDecision[col.id].length > 0).length;
+
+            return (
+              <div
+                key={col.id}
+                className={`flex flex-col flex-1 min-w-[170px] rounded-xl border ${col.borderCls} bg-white overflow-hidden`}
+              >
+                <div className={`px-3 py-2.5 flex items-center justify-between border-b ${col.borderCls} ${col.headerCls}`}>
+                  <span className="font-semibold text-xs">{col.label}</span>
+                  <span className="text-xs font-bold opacity-60">{colCount}</span>
+                </div>
+                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                  {selectedConferenceId != null ? (
+                    filteredConference == null ? (
+                      <p className="text-xs text-gray-300 text-center py-6">Loading…</p>
+                    ) : filteredConference.opinionsByDecision[col.id].length === 0 ? (
+                      <p className="text-xs text-gray-300 text-center py-6">No opinions</p>
+                    ) : (
+                      filteredConference.opinionsByDecision[col.id].map(op => (
+                        <StakeholderCard key={op.userId} opinion={op} colId={col.id} />
+                      ))
+                    )
+                  ) : (
+                    (() => {
+                      const colConfs = allConferences.filter(c => c.opinionsByDecision[col.id].length > 0);
+                      return colConfs.length === 0
+                        ? <p className="text-xs text-gray-300 text-center py-6">No conferences</p>
+                        : colConfs.map(conf => <ConferenceCard key={conf.conferenceId} conf={conf} colId={col.id} />);
+                    })()
+                  )}
+                </div>
               </div>
             );
           })}
         </div>
-      )}
 
-      {/* Desktop Kanban */}
-      <div className="hidden md:flex gap-3 h-[calc(100vh-320px)] relative">
-        {COLUMNS.map(col => {
-          const colCount = selectedConferenceId != null
-            ? (filteredConference?.opinionsByDecision[col.id].length ?? 0)
-            : allConferences.filter(c => c.opinionsByDecision[col.id].length > 0).length;
-
-          return (
-            <div
-              key={col.id}
-              className={`flex flex-col flex-1 min-w-[170px] rounded-xl border ${col.borderCls} bg-white overflow-hidden`}
-            >
-              <div className={`px-3 py-2.5 flex items-center justify-between border-b ${col.borderCls} ${col.headerCls}`}>
-                <span className="font-semibold text-xs">{col.label}</span>
-                <span className="text-xs font-bold opacity-60">{colCount}</span>
-              </div>
-              <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                {selectedConferenceId != null ? (
-                  filteredConference == null ? (
-                    <p className="text-xs text-gray-300 text-center py-6">Loading…</p>
-                  ) : filteredConference.opinionsByDecision[col.id].length === 0 ? (
-                    <p className="text-xs text-gray-300 text-center py-6">No opinions</p>
-                  ) : (
-                    filteredConference.opinionsByDecision[col.id].map(op => (
-                      <StakeholderCard key={op.userId} opinion={op} colId={col.id} />
-                    ))
-                  )
-                ) : (
-                  (() => {
-                    const colConfs = allConferences.filter(c => c.opinionsByDecision[col.id].length > 0);
-                    return colConfs.length === 0
-                      ? <p className="text-xs text-gray-300 text-center py-6">No conferences</p>
-                      : colConfs.map(conf => <ConferenceCard key={conf.conferenceId} conf={conf} colId={col.id} />);
-                  })()
-                )}
-              </div>
-            </div>
-          );
-        })}
-
-        {notesConferenceId != null && (
-          <div className="flex-shrink-0 self-stretch overflow-hidden rounded-xl border border-gray-200 shadow-lg">
-            <CalendarNotesPanel
-              conferenceId={notesConferenceId}
-              onClose={() => setNotesConferenceId(null)}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Mobile grouped list */}
-      <div className="md:hidden space-y-4">
-        {COLUMNS.map(col => {
-          if (selectedConferenceId != null) {
-            const opinions = filteredConference?.opinionsByDecision[col.id] ?? [];
-            if (opinions.length === 0) return null;
+        {/* Mobile grouped list */}
+        <div className="md:hidden space-y-4">
+          {COLUMNS.map(col => {
+            if (selectedConferenceId != null) {
+              const opinions = filteredConference?.opinionsByDecision[col.id] ?? [];
+              if (opinions.length === 0) return null;
+              return (
+                <div key={col.id}>
+                  <div className="flex items-center gap-2 mb-2 px-1">
+                    <span className={`inline-flex px-3 py-1 rounded-lg text-sm font-semibold ${col.headerCls}`}>{col.label}</span>
+                    <span className="text-xs font-bold text-gray-400">{opinions.length}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {opinions.map(op => <StakeholderCard key={op.userId} opinion={op} colId={col.id} />)}
+                  </div>
+                </div>
+              );
+            }
+            const colConfs = allConferences.filter(c => c.opinionsByDecision[col.id].length > 0);
+            if (colConfs.length === 0) return null;
             return (
               <div key={col.id}>
                 <div className="flex items-center gap-2 mb-2 px-1">
                   <span className={`inline-flex px-3 py-1 rounded-lg text-sm font-semibold ${col.headerCls}`}>{col.label}</span>
-                  <span className="text-xs font-bold text-gray-400">{opinions.length}</span>
+                  <span className="text-xs font-bold text-gray-400">{colConfs.length}</span>
                 </div>
                 <div className="space-y-2">
-                  {opinions.map(op => <StakeholderCard key={op.userId} opinion={op} colId={col.id} />)}
+                  {colConfs.map(conf => <ConferenceCard key={conf.conferenceId} conf={conf} colId={col.id} />)}
                 </div>
               </div>
             );
-          }
-
-          const colConfs = allConferences.filter(c => c.opinionsByDecision[col.id].length > 0);
-          if (colConfs.length === 0) return null;
-          return (
-            <div key={col.id}>
-              <div className="flex items-center gap-2 mb-2 px-1">
-                <span className={`inline-flex px-3 py-1 rounded-lg text-sm font-semibold ${col.headerCls}`}>{col.label}</span>
-                <span className="text-xs font-bold text-gray-400">{colConfs.length}</span>
-              </div>
-              <div className="space-y-2">
-                {colConfs.map(conf => <ConferenceCard key={conf.conferenceId} conf={conf} colId={col.id} />)}
-              </div>
-            </div>
-          );
-        })}
+          })}
+        </div>
       </div>
 
-      {/* Mobile notes bottom sheet */}
-      {notesConferenceId != null && (
-        <div className="md:hidden fixed inset-0 z-50 bg-black/50" onClick={() => setNotesConferenceId(null)}>
+      {/* Notes drawer — portal, slides in from right */}
+      {mounted && notesDrawerOpen && selectedConferenceId != null && createPortal(
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setNotesDrawerOpen(false)} />
           <div
-            className="absolute bottom-0 left-0 right-0 max-h-[90vh] bg-white rounded-t-2xl flex flex-col"
+            className="relative flex flex-col h-full w-[360px] bg-white rounded-tl-xl shadow-xl overflow-hidden"
+            style={{ animation: 'slideInFromRight 200ms ease-out' }}
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
-              <div className="w-10 h-1 rounded-full bg-gray-300" />
-            </div>
-            <CalendarNotesPanel conferenceId={notesConferenceId} onClose={() => setNotesConferenceId(null)} variant="sheet" />
+            <CalendarNotesPanel
+              conferenceId={selectedConferenceId}
+              onClose={() => setNotesDrawerOpen(false)}
+            />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }

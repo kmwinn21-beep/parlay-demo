@@ -218,6 +218,10 @@ export default function CalendarIntelligencePage() {
   // Board refresh
   const [boardRefreshKey, setBoardRefreshKey] = useState(0);
 
+  // Input Board: conference list (loaded from board API via callback) + selected conference
+  const [boardConferences, setBoardConferences] = useState<Array<{ conferenceId: number; name: string; year: number }>>([]);
+  const [selectedBoardConferenceId, setSelectedBoardConferenceId] = useState<number | null>(null);
+
   const drawerExpanded = pathToTierOpen || executionComparisonOpen;
   const canUseTools = user?.capabilities?.use_calendar_tools ?? false;
 
@@ -555,31 +559,57 @@ export default function CalendarIntelligencePage() {
         <p className="text-gray-500 text-sm mt-1">Data-driven conference prioritization and portfolio decisions.</p>
       </div>
 
-      {/* Tab bar */}
-      <div className="flex gap-1 mb-6 bg-white rounded-xl border border-gray-200 p-1 w-full md:w-fit">
-        {([
-          { id: 'scoring' as CITab, label: 'Scoring Table', mobileLabel: 'Scoring' },
-          { id: 'decisions' as CITab, label: 'Input Board', mobileLabel: 'Input' },
-          { id: 'budget' as CITab, label: 'Budget Planner', mobileLabel: 'Budget', soon: true },
-        ]).map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 md:px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === tab.id
-                ? 'bg-brand-secondary text-white'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            <span className="md:hidden">{tab.mobileLabel}</span>
-            <span className="hidden md:inline">{tab.label}</span>
-            {tab.soon && (
-              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none ${activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>
-                Soon
-              </span>
+      {/* Tab bar row — includes Input Board conference selector inline */}
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
+        <div className="flex gap-1 bg-white rounded-xl border border-gray-200 p-1 w-full md:w-fit">
+          {([
+            { id: 'scoring' as CITab, label: 'Scoring Table', mobileLabel: 'Scoring' },
+            { id: 'decisions' as CITab, label: 'Input Board', mobileLabel: 'Input' },
+            { id: 'budget' as CITab, label: 'Budget Planner', mobileLabel: 'Budget', soon: true },
+          ]).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 md:px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === tab.id
+                  ? 'bg-brand-secondary text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <span className="md:hidden">{tab.mobileLabel}</span>
+              <span className="hidden md:inline">{tab.label}</span>
+              {tab.soon && (
+                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none ${activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                  Soon
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Conference selector — only shown on Input Board tab */}
+        {activeTab === 'decisions' && boardConferences.length > 0 && (
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedBoardConferenceId ?? ''}
+              onChange={e => setSelectedBoardConferenceId(e.target.value ? Number(e.target.value) : null)}
+              className="border border-gray-200 rounded-xl px-3 h-10 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-secondary/30"
+            >
+              <option value="">All conferences</option>
+              {boardConferences.map(c => (
+                <option key={c.conferenceId} value={c.conferenceId}>{c.name} ({c.year})</option>
+              ))}
+            </select>
+            {selectedBoardConferenceId != null && (
+              <button
+                onClick={() => setSelectedBoardConferenceId(null)}
+                className="text-xs text-gray-400 hover:text-gray-600 transition-colors whitespace-nowrap"
+              >
+                ✕ Clear
+              </button>
             )}
-          </button>
-        ))}
+          </div>
+        )}
       </div>
 
       {/* ── Tab: Scoring Table ─────────────────────────────────────────────── */}
@@ -783,6 +813,9 @@ export default function CalendarIntelligencePage() {
           onOpenDrawer={(confId) => { const r = calendarRows.find(x => x.conferenceId === confId); if (r) setSelectedCalendarRow(r); }}
           refreshKey={boardRefreshKey}
           scoredRows={calendarRows}
+          selectedConferenceId={selectedBoardConferenceId}
+          onSelectedConferenceChange={setSelectedBoardConferenceId}
+          onConferencesLoaded={setBoardConferences}
         />
       )}
 
