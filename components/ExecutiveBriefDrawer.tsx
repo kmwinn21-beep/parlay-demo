@@ -1059,14 +1059,15 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                   )}
                 </section>
 
-                {/* ── 05 Year-over-year ────────────────────────────── */}
+                {/* ── 05 YoY / Series Comparison ───────────────────────── */}
                 {hasYoY && (
                   <section>
-                    <SectionEyebrow num="05" label="Year-over-year" />
+                    <SectionEyebrow num="05" label="YoY / Series Comparison" />
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs">
                         <thead>
                           <tr className="border-b border-gray-200">
+                            <th className="text-left font-medium text-gray-500 pb-2 pr-3">Conference</th>
                             <th className="text-left font-medium text-gray-500 pb-2 pr-4">Year</th>
                             <th className="text-right font-medium text-gray-500 pb-2 px-3">Cost</th>
                             <th className="text-right font-medium text-gray-500 pb-2 px-3">CES</th>
@@ -1085,6 +1086,9 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
                             const isCurrent = row.conferenceId === snapshot.conference_id;
                             return (
                               <tr key={row.conferenceId} className={isCurrent ? 'bg-blue-50/50' : i % 2 === 0 ? 'bg-gray-50/30' : ''}>
+                                <td className="py-1.5 pr-3 text-gray-700 max-w-[120px]">
+                                  <span className="block truncate" title={row.conferenceName}>{row.conferenceName || '—'}</span>
+                                </td>
                                 <td className="py-1.5 pr-4 font-medium text-gray-800">{row.year || '—'}</td>
                                 <td className="py-1.5 px-3 text-right text-gray-600">{formatCurrency(row.totalCost)}</td>
                                 <td className={`py-1.5 px-3 text-right font-medium ${getCesTier(row.cesScore).textClass}`}>
