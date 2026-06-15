@@ -7,6 +7,7 @@ import { EffectivenessDrawer } from '@/components/EffectivenessDrawer';
 import { ClosedWonDrawer } from '@/components/ClosedWonDrawer';
 import { LineItemCostDrawer } from '@/components/LineItemCostDrawer';
 import { ConferenceBudgetDrawer } from '@/components/ConferenceBudgetDrawer';
+import { CalendarIntelligenceDrawer } from '@/components/CalendarIntelligenceDrawer';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -298,6 +299,7 @@ export default function ProgramPlannerPage() {
   type CWTarget = { type: 'conference'; conferenceId: number; conferenceName: string } | { type: 'series'; seriesId: string; seriesName: string };
   const [closedWonDrawer, setClosedWonDrawer] = useState<CWTarget | null>(null);
   const [budgetDrawer, setBudgetDrawer] = useState<ConferenceRow | null>(null);
+  const [calDrawer, setCalDrawer] = useState<{ conferenceId: number; conferenceName: string; basicScore: { score: number; tier: string; confidence: string } } | null>(null);
 
   // Calendar Intelligence scoring state
   const [calIntelScores, setCalIntelScores] = useState<Map<number, { score: number; tier: string; confidence: string }>>(new Map());
@@ -781,7 +783,7 @@ export default function ProgramPlannerPage() {
                                   return (
                                     <button
                                       type="button"
-                                      onClick={() => {/* Cal. Intel. drawer — placeholder, wired in next build */}}
+                                      onClick={() => setCalDrawer({ conferenceId: c.conferenceId, conferenceName: c.name, basicScore: { score: ci.score, tier: ci.tier, confidence: ci.confidence } })}
                                       className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border whitespace-nowrap hover:opacity-80 transition-opacity cursor-pointer"
                                       style={{ background: cfg.bg, color: cfg.text, borderColor: cfg.border }}
                                       title={`Cal. Intel.: ${cfg.label}${ci.confidence ? ` (${ci.confidence} confidence)` : ''}`}
@@ -807,7 +809,7 @@ export default function ProgramPlannerPage() {
                                   return (
                                     <button
                                       type="button"
-                                      onClick={() => {/* Cal. Intel. drawer — placeholder */}}
+                                      onClick={() => setCalDrawer({ conferenceId: c.conferenceId, conferenceName: c.name, basicScore: { score: ci.score, tier: ci.tier, confidence: ci.confidence } })}
                                       className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-medium border hover:opacity-80 transition-opacity cursor-pointer"
                                       style={{ background: cfg?.bg ?? '#F3F4F6', color: cfg?.text ?? '#6B7280', borderColor: cfg?.border ?? '#D1D5DB' }}
                                       title={`Cal. Intel. score: ${ci.score}`}
@@ -1000,6 +1002,14 @@ export default function ProgramPlannerPage() {
       <ConferenceBudgetDrawer
         conference={budgetDrawer}
         onClose={() => setBudgetDrawer(null)}
+      />
+    )}
+    {calDrawer && (
+      <CalendarIntelligenceDrawer
+        conferenceId={calDrawer.conferenceId}
+        conferenceName={calDrawer.conferenceName}
+        basicScore={calDrawer.basicScore}
+        onClose={() => setCalDrawer(null)}
       />
     )}
     {selectedLineItem && (
