@@ -66,9 +66,12 @@ export type CalendarStore = {
   status: CalendarScoringStatus;
   rows: CalendarConferenceRow[];
   scoringProgress: { completed: number; total: number } | null;
+  // Which conferenceIds have completed per-conference deep scoring (success or failure).
+  // Only these should be shown in the program planner — others still show loading dots.
+  fullyScored: Set<number>;
 };
 
-let _calendarStore: CalendarStore = { status: 'idle', rows: [], scoringProgress: null };
+let _calendarStore: CalendarStore = { status: 'idle', rows: [], scoringProgress: null, fullyScored: new Set() };
 const _calendarListeners = new Set<() => void>();
 
 export function getCalendarStore(): CalendarStore { return _calendarStore; }
@@ -91,7 +94,7 @@ export function startCalendarScoring(force = false) {
   if (_calendarScoringPromise && !force) return;
 
   _calendarScoringPromise = (async () => {
-    setCalendarStore({ status: 'loading_basic', rows: [], scoringProgress: null });
+    setCalendarStore({ status: 'loading_basic', rows: [], scoringProgress: null, fullyScored: new Set() });
     try {
       const res = await fetch('/api/program-intelligence/calendar-intelligence', { cache: 'no-store' });
       if (!res.ok) { setCalendarStore({ status: 'idle' }); return; }
@@ -103,15 +106,23 @@ export function startCalendarScoring(force = false) {
       setCalendarStore({ status: 'scoring', scoringProgress: { completed: 0, total: basicRows.length } });
       let completed = 0;
       for (const row of basicRows) {
+        let updatedRows = _calendarStore.rows;
         try {
           const r = await fetch(`/api/program-intelligence/calendar-intelligence/${row.conferenceId}`, { cache: 'no-store' });
           if (r.ok) {
             const scored = ((await r.json()) as { conference: CalendarConferenceRow }).conference;
-            setCalendarStore({ rows: _calendarStore.rows.map(x => x.conferenceId === scored.conferenceId ? scored : x) });
+            updatedRows = _calendarStore.rows.map(x => x.conferenceId === scored.conferenceId ? scored : x);
           }
         } catch { /* skip */ }
         completed++;
-        setCalendarStore({ scoringProgress: { completed, total: basicRows.length } });
+        // Mark this conference as fully scored (whether the deep fetch succeeded or not)
+        const newFullyScored = new Set(_calendarStore.fullyScored);
+        newFullyScored.add(row.conferenceId);
+        setCalendarStore({
+          rows: updatedRows,
+          scoringProgress: { completed, total: basicRows.length },
+          fullyScored: newFullyScored,
+        });
       }
       setCalendarStore({ status: 'ready', scoringProgress: null });
     } catch {
@@ -125,7 +136,12 @@ export async function refreshConferenceScore(conferenceId: number) {
     const r = await fetch(`/api/program-intelligence/calendar-intelligence/${conferenceId}`, { cache: 'no-store' });
     if (r.ok) {
       const scored = ((await r.json()) as { conference: CalendarConferenceRow }).conference;
-      setCalendarStore({ rows: _calendarStore.rows.map(x => x.conferenceId === scored.conferenceId ? scored : x) });
+      const newFullyScored = new Set(_calendarStore.fullyScored);
+      newFullyScored.add(conferenceId);
+      setCalendarStore({
+        rows: _calendarStore.rows.map(x => x.conferenceId === scored.conferenceId ? scored : x),
+        fullyScored: newFullyScored,
+      });
     }
   } catch { /* non-fatal */ }
 }

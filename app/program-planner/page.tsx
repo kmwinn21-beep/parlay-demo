@@ -328,13 +328,28 @@ export default function ProgramPlannerPage() {
     function syncFromStore() {
       const store = getCalendarStore();
       const scores = new Map<number, { score: number; tier: string; confidence: string }>();
-      for (const row of store.rows) {
-        if (row.calendarRecommendationScore != null) {
-          scores.set(row.conferenceId, {
-            score: row.calendarRecommendationScore,
-            tier: row.recommendationTier,
-            confidence: row.confidenceLevel,
-          });
+      if (store.status === 'ready') {
+        // All scoring done — show every conference that has a score
+        for (const row of store.rows) {
+          if (row.calendarRecommendationScore != null) {
+            scores.set(row.conferenceId, {
+              score: row.calendarRecommendationScore,
+              tier: row.recommendationTier,
+              confidence: row.confidenceLevel,
+            });
+          }
+        }
+      } else {
+        // Still scoring — only show conferences that have completed per-conference scoring
+        for (const id of Array.from(store.fullyScored)) {
+          const row = store.rows.find(r => r.conferenceId === id);
+          if (row?.calendarRecommendationScore != null) {
+            scores.set(row.conferenceId, {
+              score: row.calendarRecommendationScore,
+              tier: row.recommendationTier,
+              confidence: row.confidenceLevel,
+            });
+          }
         }
       }
       setCalIntelScores(scores);
