@@ -109,6 +109,15 @@ function actualCostPillStyle(actual: number | null, budget: number | null): { bg
   return { bg: '#EFF6FF', color: '#1B76BC', border: '#BFDBFE' };
 }
 
+const TIER_CONFIG: Record<string, { label: string; bg: string; text: string; border: string; icon: string }> = {
+  attend_invest_more:       { label: 'Invest more',       bg: '#EAF3DE', text: '#27500A', border: '#C0DD97', icon: 'ti-trending-up' },
+  attend_maintain:          { label: 'Maintain',           bg: '#E6F1FB', text: '#0C447C', border: '#B5D4F4', icon: 'ti-minus' },
+  attend_reconsider_format: { label: 'Reconsider',         bg: '#FAEEDA', text: '#633806', border: '#FAC775', icon: 'ti-refresh' },
+  evaluate_before_committing: { label: 'Evaluate first',  bg: '#FAEEDA', text: '#633806', border: '#FAC775', icon: 'ti-help' },
+  do_not_prioritize:        { label: 'Do not prioritize', bg: '#FCEBEB', text: '#791F1F', border: '#F7C1C1', icon: 'ti-ban' },
+  remove_from_calendar:     { label: 'Remove',            bg: '#FCEBEB', text: '#791F1F', border: '#F7C1C1', icon: 'ti-trash' },
+};
+
 // ── Animated sliding toggle ───────────────────────────────────────────────────
 
 function AnimatedToggle({
@@ -290,6 +299,11 @@ export default function ProgramPlannerPage() {
   const [closedWonDrawer, setClosedWonDrawer] = useState<CWTarget | null>(null);
   const [budgetDrawer, setBudgetDrawer] = useState<ConferenceRow | null>(null);
 
+  // Calendar Intelligence scoring state
+  const [calIntelScores, setCalIntelScores] = useState<Map<number, { score: number; tier: string; confidence: string }>>(new Map());
+  const [calIntelProgress, setCalIntelProgress] = useState<{ completed: number; total: number } | null>(null);
+  const [calIntelLoading, setCalIntelLoading] = useState(false);
+
   const fetchData = useCallback(async (year: number) => {
     setLoading(true);
     try {
@@ -305,6 +319,40 @@ export default function ProgramPlannerPage() {
   }, []);
 
   useEffect(() => { fetchData(selectedYear); }, [selectedYear, fetchData]);
+
+  useEffect(() => {
+    if (!confsData || allConfs.length === 0 || calIntelLoading) return;
+    const conferenceIds = allConfs.map(c => c.conferenceId);
+    setCalIntelLoading(true);
+    setCalIntelProgress({ completed: 0, total: conferenceIds.length });
+    setCalIntelScores(new Map());
+    let completed = 0;
+    const scores = new Map<number, { score: number; tier: string; confidence: string }>();
+    const scoreSequentially = async () => {
+      for (const id of conferenceIds) {
+        try {
+          const res = await fetch(`/api/program-intelligence/calendar-intelligence/${id}`);
+          if (res.ok) {
+            const data = await res.json();
+            const conf = data.conference;
+            if (conf) {
+              scores.set(id, {
+                score: conf.calendarRecommendationScore ?? 0,
+                tier: conf.recommendationTier ?? '',
+                confidence: conf.confidenceLevel ?? '',
+              });
+              setCalIntelScores(new Map(scores));
+            }
+          }
+        } catch { /* silently skip */ }
+        completed++;
+        setCalIntelProgress({ completed, total: conferenceIds.length });
+      }
+      setCalIntelLoading(false);
+    };
+    scoreSequentially();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [confsData]);
 
   const handleYearChange = (year: number) => {
     setSelectedYear(year);
@@ -539,7 +587,27 @@ export default function ProgramPlannerPage() {
                 <div className="col-span-3 card p-0 overflow-hidden">
                   {/* Table header row */}
                   <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                    <span className="text-sm font-semibold text-gray-800">FY{selectedYear} conference program</span>
+                    <div className="flex items-center gap-4">
+                      <span className="text-sm font-semibold text-gray-800">FY{selectedYear} conference program</span>
+                      {(calIntelLoading || (calIntelProgress && calIntelProgress.completed < calIntelProgress.total)) && (
+                        <div className="flex items-center gap-2">
+                          <div className="flex gap-0.5">
+                            {[0, 1, 2].map(i => (
+                              <span key={i} className="w-1.5 h-1.5 rounded-full bg-blue-300 animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />
+                            ))}
+                          </div>
+                          <div className="h-1 bg-gray-100 rounded-full overflow-hidden w-20">
+                            <div
+                              className="h-full bg-brand-secondary rounded-full transition-all duration-300"
+                              style={{ width: `${calIntelProgress ? Math.round(calIntelProgress.completed / calIntelProgress.total * 100) : 0}%` }}
+                            />
+                          </div>
+                          <span className="text-[11px] text-gray-400">
+                            Scoring {calIntelProgress?.completed ?? 0} of {calIntelProgress?.total ?? 0}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                     <AnimatedToggle
                       options={[
                         { id: 'series', label: 'Series' },
@@ -560,6 +628,8 @@ export default function ProgramPlannerPage() {
                         <col style={{ minWidth: 160 }} />
                         <col style={{ width: 64 }} />
                         <col style={{ width: 50 }} />
+                        <col style={{ width: 100 }} />
+                        <col style={{ width: 46 }} />
                         <col style={{ width: 90 }} />
                         <col style={{ width: 90 }} />
                         <col style={{ width: 90 }} />
@@ -568,7 +638,24 @@ export default function ProgramPlannerPage() {
                       </colgroup>
                       <thead>
                         <tr className="border-b border-gray-100">
-                          {['Conference', 'Dates', 'CES', 'Actual cost', 'Pipeline inf.', 'Closed/won', 'Heads', 'Decision'].map(h => (
+                          {['Conference', 'Dates', 'CES'].map(h => (
+                            <th key={h} className="px-3 py-2 text-left text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                              {h}
+                            </th>
+                          ))}
+                          <th className="px-3 py-2 text-left text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                            <div className="flex items-center gap-1">
+                              <i className="ti ti-calendar-stats text-[11px] text-purple-600" aria-hidden="true" />
+                              <span>Cal. intel. tier</span>
+                            </div>
+                          </th>
+                          <th className="px-3 py-2 text-left text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                            <div className="flex items-center gap-1">
+                              <i className="ti ti-calendar-stats text-[11px] text-purple-600" aria-hidden="true" />
+                              <span>Score</span>
+                            </div>
+                          </th>
+                          {['Actual cost', 'Pipeline inf.', 'Closed/won', 'Heads', 'Decision'].map(h => (
                             <th key={h} className="px-3 py-2 text-left text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
                               {h}
                             </th>
@@ -578,7 +665,7 @@ export default function ProgramPlannerPage() {
                       <tbody>
                         {tableRows.length === 0 && (
                           <tr>
-                            <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">
+                            <td colSpan={10} className="px-4 py-8 text-center text-gray-400 text-sm">
                               No conferences found for {selectedYear}
                             </td>
                           </tr>
@@ -590,7 +677,7 @@ export default function ProgramPlannerPage() {
                             const collapsed = collapsedSeries.has(s.seriesId);
                             return (
                               <tr key={row.key} style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }} className="border-y border-gray-200">
-                                <td colSpan={8} className="px-3 py-2">
+                                <td colSpan={10} className="px-3 py-2">
                                   <div className="flex items-center justify-between">
                                     <button
                                       onClick={() => toggleSeries(s.seriesId)}
@@ -638,7 +725,7 @@ export default function ProgramPlannerPage() {
                           if (row.type === 'standalone_header') {
                             return (
                               <tr key={row.key} style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }} className="border-y border-gray-200">
-                                <td colSpan={8} className="px-3 py-2">
+                                <td colSpan={10} className="px-3 py-2">
                                   <button
                                     onClick={() => toggleSeries('__standalone__')}
                                     className="flex items-center gap-2"
@@ -681,6 +768,61 @@ export default function ProgramPlannerPage() {
                                     {c.ces}
                                   </button>
                                 ) : <span className="text-gray-400">—</span>}
+                              </td>
+                              <td className="px-3 py-2">
+                                {(() => {
+                                  const ci = calIntelScores.get(c.conferenceId);
+                                  if (!ci && calIntelLoading) {
+                                    return (
+                                      <div className="flex items-center gap-1.5">
+                                        <div className="flex gap-0.5">
+                                          {[0, 1, 2].map(i => <span key={i} className="w-1 h-1 rounded-full bg-blue-200 animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />)}
+                                        </div>
+                                        <span className="text-[10px] text-gray-400">Scoring...</span>
+                                      </div>
+                                    );
+                                  }
+                                  if (!ci) return <span className="text-gray-400">—</span>;
+                                  const cfg = TIER_CONFIG[ci.tier];
+                                  if (!cfg) return <span className="text-[11px] text-gray-500">{ci.tier}</span>;
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => {/* Cal. Intel. drawer — placeholder, wired in next build */}}
+                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border whitespace-nowrap hover:opacity-80 transition-opacity cursor-pointer"
+                                      style={{ background: cfg.bg, color: cfg.text, borderColor: cfg.border }}
+                                      title={`Cal. Intel.: ${cfg.label}${ci.confidence ? ` (${ci.confidence} confidence)` : ''}`}
+                                    >
+                                      <i className={`ti ${cfg.icon} text-[9px]`} aria-hidden="true" />
+                                      {cfg.label}
+                                    </button>
+                                  );
+                                })()}
+                              </td>
+                              <td className="px-3 py-2">
+                                {(() => {
+                                  const ci = calIntelScores.get(c.conferenceId);
+                                  if (!ci && calIntelLoading) {
+                                    return (
+                                      <div className="flex gap-0.5">
+                                        {[0, 1, 2].map(i => <span key={i} className="w-1 h-1 rounded-full bg-blue-200 animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />)}
+                                      </div>
+                                    );
+                                  }
+                                  if (!ci) return <span className="text-gray-400">—</span>;
+                                  const cfg = TIER_CONFIG[ci.tier];
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => {/* Cal. Intel. drawer — placeholder */}}
+                                      className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-medium border hover:opacity-80 transition-opacity cursor-pointer"
+                                      style={{ background: cfg?.bg ?? '#F3F4F6', color: cfg?.text ?? '#6B7280', borderColor: cfg?.border ?? '#D1D5DB' }}
+                                      title={`Cal. Intel. score: ${ci.score}`}
+                                    >
+                                      {Math.round(ci.score)}
+                                    </button>
+                                  );
+                                })()}
                               </td>
                               <td className="px-3 py-2">
                                 {c.actualSpend != null ? (
@@ -745,7 +887,24 @@ export default function ProgramPlannerPage() {
                         <span className="text-xs font-semibold text-gray-600">{decisionCounts.undecided}</span>
                         <span className="text-xs text-gray-500">Undecided</span>
                       </div>
-                      <span className="ml-auto text-[11px] text-gray-400 italic">* Closed/Won figures are attributed totals.</span>
+                      <div className="ml-auto flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] text-gray-300">|</span>
+                        <span className="text-[10px] text-gray-400">Cal. intel.:</span>
+                        {[
+                          { label: 'Invest more', color: '#27500A' },
+                          { label: 'Maintain', color: '#0C447C' },
+                          { label: 'Reconsider', color: '#633806' },
+                          { label: 'Evaluate first', color: '#633806' },
+                          { label: 'Do not prioritize', color: '#791F1F' },
+                        ].map(t => (
+                          <div key={t.label} className="flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: t.color }} />
+                            <span className="text-[10px] text-gray-400">{t.label}</span>
+                          </div>
+                        ))}
+                        <span className="text-[10px] text-gray-300 ml-2">|</span>
+                        <span className="text-[11px] text-gray-400 italic">* Closed/Won figures are attributed totals.</span>
+                      </div>
                     </div>
                   )}
                 </div>
