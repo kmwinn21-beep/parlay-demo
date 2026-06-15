@@ -74,20 +74,21 @@ export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basic
     fetch(`/api/program-intelligence/calendar-intelligence/${conferenceId}`, { cache: 'no-store' })
       .then(r => r.ok ? r.json() : null)
       .then((data) => {
-        if (data) {
+        // Per-conference endpoint returns { conference: CalendarConferenceRow }
+        const conf = data?.conference ?? null;
+        if (conf) {
           setDeepScore({
-            conferenceId: data.conferenceId ?? conferenceId,
-            conferenceName: data.conferenceName ?? conferenceName,
-            recommendationTier: data.recommendationTier ?? basicScore.tier,
-            calendarRecommendationScore: data.calendarRecommendationScore ?? basicScore.score,
-            confidenceLevel: data.confidenceLevel ?? basicScore.confidence,
-            componentScores: data.componentScores ?? null,
-            confidenceMultiplier: data.confidenceMultiplier,
-            availableComponentCount: data.availableComponentCount,
-            maxPossibleScore: data.maxPossibleScore,
+            conferenceId: conf.conferenceId ?? conferenceId,
+            conferenceName: conf.conferenceName ?? conferenceName,
+            recommendationTier: conf.recommendationTier ?? basicScore.tier,
+            calendarRecommendationScore: conf.calendarRecommendationScore ?? basicScore.score,
+            confidenceLevel: conf.confidenceLevel ?? basicScore.confidence,
+            componentScores: conf.componentScores ?? null,
+            confidenceMultiplier: conf.confidenceMultiplier,
+            availableComponentCount: conf.availableComponentCount,
+            maxPossibleScore: conf.maxPossibleScore,
           });
         } else {
-          // Fallback to basic score if deep fetch fails
           setDeepScore({
             conferenceId,
             conferenceName,
@@ -112,14 +113,18 @@ export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basic
   }, [conferenceId]);
 
   const isExpanded = pathToTierOpen || executionCompOpen;
-  const scoreColor = calendarScoreColor(basicScore.score);
-  const tierLabel = TIER_LABELS[basicScore.tier] ?? basicScore.tier;
-  const tierClasses = TIER_PILL_CLASSES[basicScore.tier] ?? 'bg-gray-50 text-gray-600 border-gray-200';
+  // Use the deep score once loaded so the scorecard reflects the correct per-conference score
+  const displayScore = deepScore?.calendarRecommendationScore ?? basicScore.score;
+  const displayTier = deepScore?.recommendationTier ?? basicScore.tier;
+  const displayConfidence = deepScore?.confidenceLevel ?? basicScore.confidence;
+  const scoreColor = calendarScoreColor(displayScore);
+  const tierLabel = TIER_LABELS[displayTier] ?? displayTier;
+  const tierClasses = TIER_PILL_CLASSES[displayTier] ?? 'bg-gray-50 text-gray-600 border-gray-200';
 
   if (!mounted) return null;
 
   const mainPanel = (
-    <div ref={panelRef} className="flex flex-col h-full w-full max-w-[520px] bg-white overflow-hidden" onClick={e => e.stopPropagation()}>
+    <div ref={panelRef} className="flex flex-col h-full w-full max-w-[520px] bg-white overflow-hidden rounded-xl" onClick={e => e.stopPropagation()}>
       {/* Header */}
       <div
         className="flex-shrink-0 px-5 py-4 flex items-start justify-between gap-3"
@@ -145,11 +150,13 @@ export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basic
         <div className="rounded-xl p-4" style={{ backgroundColor: scoreColor + '15', borderLeft: `4px solid ${scoreColor}` }}>
           <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 mb-1">Calendar Score</p>
           <div className="flex items-end gap-2 mb-1">
-            <span className="text-4xl font-bold leading-tight" style={{ color: scoreColor }}>{Math.round(basicScore.score)}</span>
+            <span className="text-4xl font-bold leading-tight" style={{ color: scoreColor }}>
+              {loading ? '…' : Math.round(displayScore)}
+            </span>
             <span className="text-sm text-gray-400 mb-0.5">/100</span>
           </div>
           <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border ${tierClasses}`}>{tierLabel}</span>
-          <p className="text-[11px] text-gray-400 mt-1.5">Confidence: {basicScore.confidence}</p>
+          <p className="text-[11px] text-gray-400 mt-1.5">Confidence: {displayConfidence}</p>
           {deepScore && deepScore.availableComponentCount != null && (
             <p className="text-[11px] text-gray-400">Based on {deepScore.availableComponentCount} of 5 components · max possible {deepScore.maxPossibleScore ?? '—'}/100</p>
           )}
@@ -280,7 +287,7 @@ export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basic
             {sidePanelContent}
           </div>
         )}
-        <div className="h-full w-[520px] flex-shrink-0 overflow-hidden shadow-xl">
+        <div className="h-full w-[520px] flex-shrink-0 overflow-hidden shadow-xl rounded-xl">
           {mainPanel}
         </div>
       </div>

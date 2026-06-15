@@ -8,6 +8,7 @@ import { ClosedWonDrawer } from '@/components/ClosedWonDrawer';
 import { LineItemCostDrawer } from '@/components/LineItemCostDrawer';
 import { ConferenceBudgetDrawer } from '@/components/ConferenceBudgetDrawer';
 import { CalendarIntelligenceDrawer } from '@/components/CalendarIntelligenceDrawer';
+import { getCalendarStore, subscribeCalendarStore, startCalendarScoring } from '@/lib/calendarIntelligenceStore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -322,32 +323,30 @@ export default function ProgramPlannerPage() {
 
   useEffect(() => { fetchData(selectedYear); }, [selectedYear, fetchData]);
 
+  // Subscribe to shared calendar intelligence store (same scores as Cal Intel page)
   useEffect(() => {
-    if (!confsData || allConfs.length === 0 || calIntelLoading) return;
-    setCalIntelLoading(true);
-    setCalIntelProgress({ completed: 0, total: allConfs.length });
-    setCalIntelScores(new Map());
-    (async () => {
-      try {
-        const res = await fetch('/api/program-intelligence/calendar-intelligence', { cache: 'no-store' });
-        if (res.ok) {
-          const data = await res.json() as { conferences: Array<{ conferenceId: number; calendarRecommendationScore: number | null; recommendationTier: string; confidenceLevel: string }> };
-          const scores = new Map<number, { score: number; tier: string; confidence: string }>();
-          for (const conf of data.conferences ?? []) {
-            scores.set(conf.conferenceId, {
-              score: conf.calendarRecommendationScore ?? 0,
-              tier: conf.recommendationTier ?? '',
-              confidence: conf.confidenceLevel ?? '',
-            });
-          }
-          setCalIntelScores(scores);
-          setCalIntelProgress({ completed: allConfs.length, total: allConfs.length });
+    function syncFromStore() {
+      const store = getCalendarStore();
+      const scores = new Map<number, { score: number; tier: string; confidence: string }>();
+      for (const row of store.rows) {
+        if (row.calendarRecommendationScore != null) {
+          scores.set(row.conferenceId, {
+            score: row.calendarRecommendationScore,
+            tier: row.recommendationTier,
+            confidence: row.confidenceLevel,
+          });
         }
-      } catch { /* silently skip */ }
-      setCalIntelLoading(false);
-    })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [confsData]);
+      }
+      setCalIntelScores(scores);
+      const isActive = store.status === 'loading_basic' || store.status === 'scoring';
+      setCalIntelLoading(isActive);
+      setCalIntelProgress(store.scoringProgress);
+    }
+    syncFromStore();
+    const unsub = subscribeCalendarStore(syncFromStore);
+    startCalendarScoring();
+    return unsub;
+  }, []);
 
   const handleYearChange = (year: number) => {
     setSelectedYear(year);
