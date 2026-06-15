@@ -416,26 +416,28 @@ export function DecisionsBoard({
       `}</style>
 
       <div className="flex flex-col gap-4 relative">
-        {/* ── Filtered view: score card + component cards above kanban ── */}
-        {selectedConferenceId != null && selectedRow && (
-          <div className="flex items-start gap-3 overflow-x-auto pb-1">
-            {/* Score card — same min-width as kanban columns */}
-            {(() => {
-              const score = selectedRow.calendarRecommendationScore;
-              const color = scoreColor;
-              const tierLabel = TIER_LABELS[selectedRow.recommendationTier] ?? selectedRow.recommendationTier;
-              const tierCls = TIER_PILL[selectedRow.recommendationTier] ?? 'bg-gray-50 text-gray-600 border-gray-200';
-              const noteCount = activeConference?.noteCount ?? 0;
-              return (
+        {/* ── Desktop: unified grid layout — score card and kanban share the same column widths ── */}
+        <div className="hidden md:flex flex-col gap-3 h-[calc(100vh-320px)]">
+          {/* Header row: score card (col 1) + component cards (cols 2–5) */}
+          {selectedConferenceId != null && selectedRow && (() => {
+            const score = selectedRow.calendarRecommendationScore;
+            const color = scoreColor;
+            const tierLabel = TIER_LABELS[selectedRow.recommendationTier] ?? selectedRow.recommendationTier;
+            const tierCls = TIER_PILL[selectedRow.recommendationTier] ?? 'bg-gray-50 text-gray-600 border-gray-200';
+            const noteCount = activeConference?.noteCount ?? 0;
+            return (
+              <div
+                className="flex-shrink-0 grid gap-3"
+                style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}
+              >
+                {/* Score card — col 1, same width as first kanban column */}
                 <div
-                  className="rounded-xl p-4 flex-shrink-0 min-w-[170px] max-w-[220px] flex-1"
+                  className="rounded-xl p-4"
                   style={{ backgroundColor: color + '15', borderLeft: `4px solid ${color}` }}
                 >
-                  {/* Eyebrow row: label + info icon + notes button */}
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">Calendar Score</p>
                     <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      {/* Info icon — toggles component cards */}
                       <button
                         onClick={toggleComponents}
                         className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -445,17 +447,15 @@ export function DecisionsBoard({
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                       </button>
-                      {/* Notes button */}
                       <button
                         onClick={() => setNotesDrawerOpen(true)}
                         className="text-xs font-semibold transition-colors hover:opacity-75"
                         style={{ color }}
                       >
-                        {noteCount > 0 ? `Notes (${noteCount})` : 'Notes'} →
+                        {noteCount > 0 ? `Notes (${noteCount})` : 'Notes'}
                       </button>
                     </div>
                   </div>
-
                   <div className="flex items-end gap-1.5 mb-1.5">
                     <span className="text-4xl font-bold leading-tight" style={{ color }}>
                       {score != null ? Math.round(score) : '—'}
@@ -472,105 +472,108 @@ export function DecisionsBoard({
                     </p>
                   )}
                 </div>
-              );
-            })()}
 
-            {/* Component cards — animated in/out */}
-            {showComponents && (
-              <div className="flex items-start gap-3 flex-shrink-0">
-                {components.map((comp, i) => {
-                  const enterDelay = `${i * ENTER_STAGGER}ms`;
-                  const exitDelay = `${(COMPONENT_COUNT - 1 - i) * EXIT_STAGGER}ms`;
-                  const anim = componentsExiting
-                    ? `slideOutToLeft ${EXIT_DURATION}ms ease-in ${exitDelay} both`
-                    : `slideInFromLeft ${ENTER_DURATION}ms ease-out ${enterDelay} both`;
-                  const expanded = expandedComponents.has(comp.key);
-                  const color = calScoreColor(comp.score);
-                  return (
-                    <div
-                      key={comp.key}
-                      className="flex-shrink-0 w-48 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"
-                      style={{ animation: anim }}
-                    >
-                      <button className="w-full px-3 py-2.5 text-left" onClick={() => toggleComponent(comp.key)}>
-                        <div className="flex items-center justify-between gap-1 mb-1.5">
-                          <p className="text-[11px] font-semibold text-gray-800 leading-tight">{comp.key}</p>
-                          <svg
-                            className={`w-3 h-3 text-gray-400 flex-shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
-                            fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
+                {/* Component cards span cols 2–5 — animated in/out */}
+                {showComponents && (
+                  <div className="col-span-4 flex items-start gap-3 overflow-x-auto">
+                    {components.map((comp, i) => {
+                      const enterDelay = `${i * ENTER_STAGGER}ms`;
+                      const exitDelay = `${(COMPONENT_COUNT - 1 - i) * EXIT_STAGGER}ms`;
+                      const anim = componentsExiting
+                        ? `slideOutToLeft ${EXIT_DURATION}ms ease-in ${exitDelay} both`
+                        : `slideInFromLeft ${ENTER_DURATION}ms ease-out ${enterDelay} both`;
+                      const expanded = expandedComponents.has(comp.key);
+                      const compColor = calScoreColor(comp.score);
+                      return (
+                        <div
+                          key={comp.key}
+                          className="flex-shrink-0 w-48 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"
+                          style={{ animation: anim }}
+                        >
+                          <button className="w-full px-3 py-2.5 text-left" onClick={() => toggleComponent(comp.key)}>
+                            <div className="flex items-center justify-between gap-1 mb-1.5">
+                              <p className="text-[11px] font-semibold text-gray-800 leading-tight">{comp.key}</p>
+                              <svg
+                                className={`w-3 h-3 text-gray-400 flex-shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
+                                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </div>
+                            <div className="flex items-end gap-1 mb-1.5">
+                              <span className="text-xl font-bold" style={{ color: compColor }}>
+                                {comp.score != null ? Math.round(comp.score) : '—'}
+                              </span>
+                              <span className="text-[10px] text-gray-400 mb-0.5">/100 · {comp.weight}%</span>
+                            </div>
+                            <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
+                              <div className="h-full rounded-full" style={{ width: `${comp.score ?? 0}%`, backgroundColor: compColor }} />
+                            </div>
+                          </button>
+                          {expanded && (
+                            <div className="px-3 pb-3 border-t border-gray-100 pt-2">
+                              <ul className="space-y-1">
+                                {comp.bullets.map((b, bi) => (
+                                  <li key={bi} className="flex gap-1.5 text-[11px] text-gray-500 leading-snug">
+                                    <span className="flex-shrink-0 w-1 h-1 rounded-full bg-gray-300 mt-1.5" />
+                                    <span>{b}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
                         </div>
-                        <div className="flex items-end gap-1 mb-1.5">
-                          <span className="text-xl font-bold" style={{ color }}>
-                            {comp.score != null ? Math.round(comp.score) : '—'}
-                          </span>
-                          <span className="text-[10px] text-gray-400 mb-0.5">/100 · {comp.weight}%</span>
-                        </div>
-                        <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
-                          <div className="h-full rounded-full" style={{ width: `${comp.score ?? 0}%`, backgroundColor: color }} />
-                        </div>
-                      </button>
-                      {expanded && (
-                        <div className="px-3 pb-3 border-t border-gray-100 pt-2">
-                          <ul className="space-y-1">
-                            {comp.bullets.map((b, bi) => (
-                              <li key={bi} className="flex gap-1.5 text-[11px] text-gray-500 leading-snug">
-                                <span className="flex-shrink-0 w-1 h-1 rounded-full bg-gray-300 mt-1.5" />
-                                <span>{b}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Desktop Kanban */}
-        <div className="hidden md:flex gap-3 h-[calc(100vh-320px)] relative">
-          {COLUMNS.map(col => {
-            const colCount = selectedConferenceId != null
-              ? (filteredConference?.opinionsByDecision[col.id].length ?? 0)
-              : allConferences.filter(c => c.opinionsByDecision[col.id].length > 0).length;
-
-            return (
-              <div
-                key={col.id}
-                className={`flex flex-col flex-1 min-w-[170px] rounded-xl border ${col.borderCls} bg-white overflow-hidden`}
-              >
-                <div className={`px-3 py-2.5 flex items-center justify-between border-b ${col.borderCls} ${col.headerCls}`}>
-                  <span className="font-semibold text-xs">{col.label}</span>
-                  <span className="text-xs font-bold opacity-60">{colCount}</span>
-                </div>
-                <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                  {selectedConferenceId != null ? (
-                    filteredConference == null ? (
-                      <p className="text-xs text-gray-300 text-center py-6">Loading…</p>
-                    ) : filteredConference.opinionsByDecision[col.id].length === 0 ? (
-                      <p className="text-xs text-gray-300 text-center py-6">No opinions</p>
-                    ) : (
-                      filteredConference.opinionsByDecision[col.id].map(op => (
-                        <StakeholderCard key={op.userId} opinion={op} colId={col.id} />
-                      ))
-                    )
-                  ) : (
-                    (() => {
-                      const colConfs = allConferences.filter(c => c.opinionsByDecision[col.id].length > 0);
-                      return colConfs.length === 0
-                        ? <p className="text-xs text-gray-300 text-center py-6">No conferences</p>
-                        : colConfs.map(conf => <ConferenceCard key={conf.conferenceId} conf={conf} colId={col.id} />);
-                    })()
-                  )}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
-          })}
+          })()}
+
+          {/* Kanban — same 5-column grid, flex-1 to fill remaining height */}
+          <div
+            className="flex-1 min-h-0 grid gap-3"
+            style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}
+          >
+            {COLUMNS.map(col => {
+              const colCount = selectedConferenceId != null
+                ? (filteredConference?.opinionsByDecision[col.id].length ?? 0)
+                : allConferences.filter(c => c.opinionsByDecision[col.id].length > 0).length;
+
+              return (
+                <div
+                  key={col.id}
+                  className={`flex flex-col rounded-xl border ${col.borderCls} bg-white overflow-hidden`}
+                >
+                  <div className={`px-3 py-2.5 flex items-center justify-between border-b ${col.borderCls} ${col.headerCls}`}>
+                    <span className="font-semibold text-xs">{col.label}</span>
+                    <span className="text-xs font-bold opacity-60">{colCount}</span>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                    {selectedConferenceId != null ? (
+                      filteredConference == null ? (
+                        <p className="text-xs text-gray-300 text-center py-6">Loading…</p>
+                      ) : filteredConference.opinionsByDecision[col.id].length === 0 ? (
+                        <p className="text-xs text-gray-300 text-center py-6">No opinions</p>
+                      ) : (
+                        filteredConference.opinionsByDecision[col.id].map(op => (
+                          <StakeholderCard key={op.userId} opinion={op} colId={col.id} />
+                        ))
+                      )
+                    ) : (
+                      (() => {
+                        const colConfs = allConferences.filter(c => c.opinionsByDecision[col.id].length > 0);
+                        return colConfs.length === 0
+                          ? <p className="text-xs text-gray-300 text-center py-6">No conferences</p>
+                          : colConfs.map(conf => <ConferenceCard key={conf.conferenceId} conf={conf} colId={col.id} />);
+                      })()
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Mobile grouped list */}
