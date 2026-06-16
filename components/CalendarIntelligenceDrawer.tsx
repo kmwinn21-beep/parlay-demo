@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { PathToTier } from '@/components/calendar-intelligence/PathToTier';
 import { ExecutionComparison } from '@/components/calendar-intelligence/ExecutionComparison';
+import { TeamInputPanel } from '@/components/calendar-intelligence/TeamInputPanel';
 import { type CalendarConferenceRow } from '@/lib/calendarIntelligenceStore';
 
 interface Props {
@@ -171,6 +172,7 @@ export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basic
   const [loading, setLoading] = useState(true);
   const [pathToTierOpen, setPathToTierOpen] = useState(false);
   const [executionCompOpen, setExecutionCompOpen] = useState(false);
+  const [teamInputOpen, setTeamInputOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
@@ -193,7 +195,7 @@ export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basic
   const scoreColor = calendarScoreColor(displayScore);
   const tierLabel = TIER_LABELS[displayTier] ?? displayTier;
   const tierClasses = TIER_PILL_CLASSES[displayTier] ?? 'bg-gray-50 text-gray-600 border-gray-200';
-  const anyToolOpen = pathToTierOpen || executionCompOpen;
+  const anyToolOpen = pathToTierOpen || executionCompOpen || teamInputOpen;
 
   if (!mounted) return null;
 
@@ -240,8 +242,8 @@ export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basic
         </div>
       </div>
 
-      {/* Tool toggle buttons — both independently togglable */}
-      <div className="flex-shrink-0 px-5 pb-3 flex gap-2">
+      {/* Tool toggle buttons — independently togglable */}
+      <div className="flex-shrink-0 px-5 pb-3 flex gap-2 flex-wrap">
         <button
           onClick={() => setPathToTierOpen(v => !v)}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
@@ -266,7 +268,18 @@ export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basic
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
           </svg>
-          Execution Comparison
+          Execution
+        </button>
+        <button
+          onClick={() => setTeamInputOpen(v => !v)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+            teamInputOpen
+              ? 'bg-violet-600 text-white border-violet-600'
+              : 'border-gray-200 text-gray-600 hover:border-violet-600 hover:text-violet-600'
+          }`}
+        >
+          <i className="ti ti-users text-[13px]" aria-hidden="true" />
+          Team input
         </button>
       </div>
 
@@ -318,11 +331,11 @@ export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basic
           </OverlayPanel>
         )}
 
-        {/* Execution Comparison panel */}
+        {/* Execution panel */}
         {executionCompOpen && deepRow && (
           <OverlayPanel className="w-[420px] flex-shrink-0">
             <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
-              <h3 className="font-semibold text-gray-900 text-sm">Execution Comparison</h3>
+              <h3 className="font-semibold text-gray-900 text-sm">Execution</h3>
               <button onClick={() => setExecutionCompOpen(false)} className="text-gray-400 hover:text-gray-600">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -330,6 +343,23 @@ export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basic
               </button>
             </div>
             <ExecutionComparison score={deepRow} conferenceId={conferenceId} />
+          </OverlayPanel>
+        )}
+
+        {/* Team input panel */}
+        {teamInputOpen && (
+          <OverlayPanel className="w-[420px] flex-shrink-0 flex flex-col">
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10 flex-shrink-0">
+              <h3 className="font-semibold text-gray-900 text-sm">Team input</h3>
+              <button onClick={() => setTeamInputOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <TeamInputPanel conferenceId={conferenceId} conferenceName={conferenceName} />
+            </div>
           </OverlayPanel>
         )}
       </div>
