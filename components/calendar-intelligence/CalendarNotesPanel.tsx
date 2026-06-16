@@ -23,11 +23,20 @@ interface Props {
   variant?: 'sidebar' | 'sheet';
 }
 
+const DECISION_LABELS: Record<string, string> = {
+  confirmed:         'Attend',
+  attend_but_reduce: 'Attend (Reduced)',
+  watching:          'On the Fence',
+  passed:            "Don't Attend",
+  pending_approval:  'Evaluating',
+};
+
 const DECISION_COLORS: Record<string, string> = {
-  confirmed:        'bg-emerald-50 text-emerald-700 border-emerald-200',
-  watching:         'bg-amber-50 text-amber-700 border-amber-200',
-  passed:           'bg-red-50 text-red-700 border-red-200',
-  pending_approval: 'bg-blue-50 text-blue-700 border-blue-200',
+  confirmed:         'bg-emerald-50 text-emerald-700 border-emerald-200',
+  attend_but_reduce: 'bg-emerald-50 text-emerald-800 border-emerald-300',
+  watching:          'bg-amber-50 text-amber-700 border-amber-200',
+  passed:            'bg-red-50 text-red-700 border-red-200',
+  pending_approval:  'bg-blue-50 text-blue-700 border-blue-200',
 };
 
 function timeAgo(iso: string): string {
@@ -90,11 +99,9 @@ export function CalendarNotesPanel({ conferenceId, onClose, variant = 'sidebar' 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-0.5">
             <span className="text-sm font-semibold text-gray-900">{note.authorName}</span>
-            {note.decisionState && (
-              <span className={`inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-semibold border ${DECISION_COLORS[note.decisionState] ?? 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                {note.decisionState.replace(/_/g, ' ')}
-              </span>
-            )}
+            <span className={`inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-semibold border ${note.decisionState ? (DECISION_COLORS[note.decisionState] ?? 'bg-gray-50 text-gray-600 border-gray-200') : 'bg-gray-50 text-gray-400 border-gray-200'}`}>
+              {note.decisionState ? (DECISION_LABELS[note.decisionState] ?? note.decisionState.replace(/_/g, ' ')) : 'Input Not Recorded'}
+            </span>
             <span className="text-xs text-gray-400">{timeAgo(note.createdAt)}</span>
           </div>
           <p className="text-sm text-gray-700 whitespace-pre-wrap">{note.content}</p>
