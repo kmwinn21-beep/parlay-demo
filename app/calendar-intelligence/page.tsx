@@ -247,6 +247,8 @@ export default function CalendarIntelligencePage() {
   const calendarRows = calendarState.rows;
   const calendarLoading = calendarState.status === 'loading_basic';
   const calendarScoringProgress = calendarState.scoringProgress;
+  const calendarIsScoring = calendarState.status === 'scoring';
+  const calendarFullyScored = calendarState.fullyScored;
 
   // Keep drawer in sync when a scored row updates
   useEffect(() => {
@@ -727,6 +729,14 @@ export default function CalendarIntelligencePage() {
                       {calendarRowsFiltered.map((r) => {
                         const ti = calendarTierInfo(r.recommendationTier);
                         const isSelected = selectedCalendarRow?.conferenceId === r.conferenceId;
+                        const isLoadingScore = calendarIsScoring && !calendarFullyScored.has(r.conferenceId);
+                        const mobileDots = (
+                          <div className="flex gap-0.5 items-center">
+                            {[0, 1, 2].map(i => (
+                              <span key={i} className="w-1 h-1 rounded-full bg-blue-200 animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />
+                            ))}
+                          </div>
+                        );
                         return (
                           <div
                             key={r.conferenceId}
@@ -740,12 +750,18 @@ export default function CalendarIntelligencePage() {
                                   <p className="text-xs text-gray-500 mt-0.5">{r.conferenceYear} · {r.conferenceType === 'historical' ? 'Historical' : 'Active'} · {r.attendeeCount} attendees</p>
                                 </div>
                                 <div className="flex-shrink-0 text-right">
-                                  <span className="text-3xl font-bold leading-none tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? '—'}</span>
-                                  {r.calendarRecommendationScore != null && <span className="text-xs text-gray-400">/100</span>}
+                                  {isLoadingScore ? mobileDots : (
+                                    <>
+                                      <span className="text-3xl font-bold leading-none tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? '—'}</span>
+                                      {r.calendarRecommendationScore != null && <span className="text-xs text-gray-400">/100</span>}
+                                    </>
+                                  )}
                                 </div>
                               </div>
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${ti.classes}`}>{ti.label}</span>
+                                {isLoadingScore ? mobileDots : (
+                                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${ti.classes}`}>{ti.label}</span>
+                                )}
                                 {r.conferenceType !== 'historical' && (
                                   <div onClick={(e) => e.stopPropagation()}>
                                     <BudgetStatusCell row={r} onOpenModal={() => setBudgetModalConf({ id: r.conferenceId, name: r.conferenceName })} />
@@ -754,7 +770,9 @@ export default function CalendarIntelligencePage() {
                               </div>
                             </div>
                             <div className="px-4 py-2 border-t border-gray-50 flex items-center gap-3">
-                              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${confidencePillClasses(r.confidenceLevel)}`}>{r.confidenceLevel.charAt(0).toUpperCase() + r.confidenceLevel.slice(1)}</span>
+                              {isLoadingScore ? mobileDots : (
+                                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${confidencePillClasses(r.confidenceLevel)}`}>{r.confidenceLevel.charAt(0).toUpperCase() + r.confidenceLevel.slice(1)}</span>
+                              )}
                               <span className={`text-xs ${dataAgeColorClass(r.dataAge)}`}>{formatDataAge(r.dataAge)}</span>
                             </div>
                           </div>
@@ -781,6 +799,14 @@ export default function CalendarIntelligencePage() {
                           {calendarRowsFiltered.map((r) => {
                             const tierInfo = calendarTierInfo(r.recommendationTier);
                             const isSelected = selectedCalendarRow?.conferenceId === r.conferenceId;
+                            const isLoadingScore = calendarIsScoring && !calendarFullyScored.has(r.conferenceId);
+                            const loadingDots = (
+                              <div className="flex gap-0.5">
+                                {[0, 1, 2].map(i => (
+                                  <span key={i} className="w-1 h-1 rounded-full bg-blue-200 animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />
+                                ))}
+                              </div>
+                            );
                             return (
                               <tr key={r.conferenceId} className={`border-t cursor-pointer transition-colors ${isSelected ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-gray-50'}`} onClick={() => setSelectedCalendarRow(r)}>
                                 <td className="p-2 text-brand-secondary font-medium">{r.conferenceName}</td>
@@ -789,9 +815,23 @@ export default function CalendarIntelligencePage() {
                                 <td className="p-2 text-gray-600">{r.attendeeCount}</td>
                                 <td className="p-2 text-center"><span title={`${r.icpCompanies} ICP / ${r.totalCompanies} total`} className={`inline-flex items-center justify-center w-10 h-10 rounded-full text-xs font-semibold border ${icpDensityPillClasses(r.icpDensityPct)}`}>{r.icpDensityPct.toFixed(0)}%</span></td>
                                 <td className="p-2 text-center" onClick={(e) => e.stopPropagation()}><BudgetStatusCell row={r} onOpenModal={() => setBudgetModalConf({ id: r.conferenceId, name: r.conferenceName })} /></td>
-                                <td className="p-2 font-semibold tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? <span className="text-gray-400 font-normal">—</span>}</td>
-                                <td className="p-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${tierInfo.classes}`}>{tierInfo.label}</span></td>
-                                <td className="p-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${confidencePillClasses(r.confidenceLevel)}`}>{r.confidenceLevel.charAt(0).toUpperCase() + r.confidenceLevel.slice(1)}</span></td>
+                                <td className="p-2 font-semibold tabular-nums">
+                                  {isLoadingScore ? loadingDots : (
+                                    <span style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>
+                                      {r.calendarRecommendationScore ?? <span className="text-gray-400 font-normal">—</span>}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-2">
+                                  {isLoadingScore ? loadingDots : (
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${tierInfo.classes}`}>{tierInfo.label}</span>
+                                  )}
+                                </td>
+                                <td className="p-2">
+                                  {isLoadingScore ? loadingDots : (
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${confidencePillClasses(r.confidenceLevel)}`}>{r.confidenceLevel.charAt(0).toUpperCase() + r.confidenceLevel.slice(1)}</span>
+                                  )}
+                                </td>
                                 <td className={`p-2 ${dataAgeColorClass(r.dataAge)}`}>{formatDataAge(r.dataAge)}</td>
                               </tr>
                             );
