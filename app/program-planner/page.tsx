@@ -7,6 +7,9 @@ import { EffectivenessDrawer } from '@/components/EffectivenessDrawer';
 import { ClosedWonDrawer } from '@/components/ClosedWonDrawer';
 import { LineItemCostDrawer } from '@/components/LineItemCostDrawer';
 import { ConferenceBudgetDrawer } from '@/components/ConferenceBudgetDrawer';
+import { CalendarIntelligenceDrawer } from '@/components/CalendarIntelligenceDrawer';
+import { ConferenceInputPanel } from '@/components/ConferenceInputPanel';
+import { getCalendarStore, subscribeCalendarStore, startCalendarScoring } from '@/lib/calendarIntelligenceStore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -108,6 +111,15 @@ function actualCostPillStyle(actual: number | null, budget: number | null): { bg
   if (ratio >= 1.05) return { bg: '#FEE2E2', color: '#dc2626', border: '#FCA5A5' };
   return { bg: '#EFF6FF', color: '#1B76BC', border: '#BFDBFE' };
 }
+
+const TIER_CONFIG: Record<string, { label: string; bg: string; text: string; border: string; icon: string }> = {
+  attend_invest_more:       { label: 'Invest more',       bg: '#EAF3DE', text: '#27500A', border: '#C0DD97', icon: 'ti-trending-up' },
+  attend_maintain:          { label: 'Maintain',           bg: '#E6F1FB', text: '#0C447C', border: '#B5D4F4', icon: 'ti-minus' },
+  attend_reconsider_format: { label: 'Reconsider',         bg: '#FAEEDA', text: '#633806', border: '#FAC775', icon: 'ti-refresh' },
+  evaluate_before_committing: { label: 'Evaluate first',  bg: '#FAEEDA', text: '#633806', border: '#FAC775', icon: 'ti-help' },
+  do_not_prioritize:        { label: 'Do not prioritize', bg: '#FCEBEB', text: '#791F1F', border: '#F7C1C1', icon: 'ti-ban' },
+  remove_from_calendar:     { label: 'Remove',            bg: '#FCEBEB', text: '#791F1F', border: '#F7C1C1', icon: 'ti-trash' },
+};
 
 // ── Animated sliding toggle ───────────────────────────────────────────────────
 
@@ -289,6 +301,14 @@ export default function ProgramPlannerPage() {
   type CWTarget = { type: 'conference'; conferenceId: number; conferenceName: string } | { type: 'series'; seriesId: string; seriesName: string };
   const [closedWonDrawer, setClosedWonDrawer] = useState<CWTarget | null>(null);
   const [budgetDrawer, setBudgetDrawer] = useState<ConferenceRow | null>(null);
+  const [calDrawer, setCalDrawer] = useState<{ conferenceId: number; conferenceName: string; basicScore: { score: number; tier: string; confidence: string } } | null>(null);
+  const [inputPanelConference, setInputPanelConference] = useState<{ conferenceId: number; conferenceName: string } | null>(null);
+  const [teamInputMap, setTeamInputMap] = useState<Map<number, { hasInput: boolean; hasComments: boolean }>>(new Map());
+
+  // Calendar Intelligence scoring state
+  const [calIntelScores, setCalIntelScores] = useState<Map<number, { score: number; tier: string; confidence: string }>>(new Map());
+  const [calIntelProgress, setCalIntelProgress] = useState<{ completed: number; total: number } | null>(null);
+  const [calIntelLoading, setCalIntelLoading] = useState(false);
 
   const fetchData = useCallback(async (year: number) => {
     setLoading(true);
@@ -305,6 +325,61 @@ export default function ProgramPlannerPage() {
   }, []);
 
   useEffect(() => { fetchData(selectedYear); }, [selectedYear, fetchData]);
+
+  // Fetch team input / comment presence for the Input column
+  useEffect(() => {
+    fetch('/api/calendar-intelligence/decisions/board')
+      .then(r => r.ok ? r.json() : { conferences: [] })
+      .then((data: { conferences: Array<{ conferenceId: number; noteCount: number; opinionsByDecision: Record<string, unknown[]> }> }) => {
+        const map = new Map<number, { hasInput: boolean; hasComments: boolean }>();
+        for (const conf of data.conferences) {
+          const hasInput = Object.values(conf.opinionsByDecision).some(arr => arr.length > 0);
+          map.set(conf.conferenceId, { hasInput, hasComments: (conf.noteCount ?? 0) > 0 });
+        }
+        setTeamInputMap(map);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Subscribe to shared calendar intelligence store (same scores as Cal Intel page)
+  useEffect(() => {
+    function syncFromStore() {
+      const store = getCalendarStore();
+      const scores = new Map<number, { score: number; tier: string; confidence: string }>();
+      if (store.status === 'ready') {
+        // All scoring done — show every conference that has a score
+        for (const row of store.rows) {
+          if (row.calendarRecommendationScore != null) {
+            scores.set(row.conferenceId, {
+              score: row.calendarRecommendationScore,
+              tier: row.recommendationTier,
+              confidence: row.confidenceLevel,
+            });
+          }
+        }
+      } else {
+        // Still scoring — only show conferences that have completed per-conference scoring
+        for (const id of Array.from(store.fullyScored)) {
+          const row = store.rows.find(r => r.conferenceId === id);
+          if (row?.calendarRecommendationScore != null) {
+            scores.set(row.conferenceId, {
+              score: row.calendarRecommendationScore,
+              tier: row.recommendationTier,
+              confidence: row.confidenceLevel,
+            });
+          }
+        }
+      }
+      setCalIntelScores(scores);
+      const isActive = store.status === 'loading_basic' || store.status === 'scoring';
+      setCalIntelLoading(isActive);
+      setCalIntelProgress(store.scoringProgress);
+    }
+    syncFromStore();
+    const unsub = subscribeCalendarStore(syncFromStore);
+    startCalendarScoring();
+    return unsub;
+  }, []);
 
   const handleYearChange = (year: number) => {
     setSelectedYear(year);
@@ -539,7 +614,27 @@ export default function ProgramPlannerPage() {
                 <div className="col-span-3 card p-0 overflow-hidden">
                   {/* Table header row */}
                   <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                    <span className="text-sm font-semibold text-gray-800">FY{selectedYear} conference program</span>
+                    <div className="flex items-center gap-4">
+                      <span className="text-sm font-semibold text-gray-800">FY{selectedYear} conference program</span>
+                      {(calIntelLoading || (calIntelProgress && calIntelProgress.completed < calIntelProgress.total)) && (
+                        <div className="flex items-center gap-2">
+                          <div className="flex gap-0.5">
+                            {[0, 1, 2].map(i => (
+                              <span key={i} className="w-1.5 h-1.5 rounded-full bg-blue-300 animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />
+                            ))}
+                          </div>
+                          <div className="h-1 bg-gray-100 rounded-full overflow-hidden w-20">
+                            <div
+                              className="h-full bg-brand-secondary rounded-full transition-all duration-300"
+                              style={{ width: `${calIntelProgress ? Math.round(calIntelProgress.completed / calIntelProgress.total * 100) : 0}%` }}
+                            />
+                          </div>
+                          <span className="text-[11px] text-gray-400">
+                            Scoring {calIntelProgress?.completed ?? 0} of {calIntelProgress?.total ?? 0}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                     <AnimatedToggle
                       options={[
                         { id: 'series', label: 'Series' },
@@ -563,22 +658,40 @@ export default function ProgramPlannerPage() {
                         <col style={{ width: 90 }} />
                         <col style={{ width: 90 }} />
                         <col style={{ width: 90 }} />
+                        <col style={{ width: 100 }} />
+                        <col style={{ width: 46 }} />
                         <col style={{ width: 52 }} />
+                        <col style={{ width: 44 }} />
                         <col style={{ width: 90 }} />
                       </colgroup>
                       <thead>
                         <tr className="border-b border-gray-100">
-                          {['Conference', 'Dates', 'CES', 'Actual cost', 'Pipeline inf.', 'Closed/won', 'Heads', 'Decision'].map(h => (
-                            <th key={h} className="px-3 py-2 text-left text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
-                              {h}
-                            </th>
-                          ))}
+                          <th className="px-3 py-2 text-left text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Conference</th>
+                          <th className="px-3 py-2 text-center text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Dates</th>
+                          <th className="px-3 py-2 text-center text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">CES</th>
+                          <th className="px-3 py-2 text-center text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Actual cost</th>
+                          <th className="px-3 py-2 text-center text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Pipeline inf.</th>
+                          <th className="px-3 py-2 text-center text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Closed/won</th>
+                          <th className="px-3 py-2 text-left text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                            <div className="flex items-center gap-1">
+                              <i className="ti ti-calendar-stats text-[11px] text-purple-600" aria-hidden="true" />
+                              <span>Recommendation</span>
+                            </div>
+                          </th>
+                          <th className="px-3 py-2 text-center text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1">
+                              <i className="ti ti-calendar-stats text-[11px] text-purple-600" aria-hidden="true" />
+                              <span>List Score</span>
+                            </div>
+                          </th>
+                          <th className="px-3 py-2 text-center text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Input</th>
+                          <th className="px-3 py-2 text-left text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Decision</th>
                         </tr>
                       </thead>
                       <tbody>
                         {tableRows.length === 0 && (
                           <tr>
-                            <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">
+                            <td colSpan={10} className="px-4 py-8 text-center text-gray-400 text-sm">
                               No conferences found for {selectedYear}
                             </td>
                           </tr>
@@ -590,7 +703,7 @@ export default function ProgramPlannerPage() {
                             const collapsed = collapsedSeries.has(s.seriesId);
                             return (
                               <tr key={row.key} style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }} className="border-y border-gray-200">
-                                <td colSpan={8} className="px-3 py-2">
+                                <td colSpan={10} className="px-3 py-2">
                                   <div className="flex items-center justify-between">
                                     <button
                                       onClick={() => toggleSeries(s.seriesId)}
@@ -638,7 +751,7 @@ export default function ProgramPlannerPage() {
                           if (row.type === 'standalone_header') {
                             return (
                               <tr key={row.key} style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }} className="border-y border-gray-200">
-                                <td colSpan={8} className="px-3 py-2">
+                                <td colSpan={10} className="px-3 py-2">
                                   <button
                                     onClick={() => toggleSeries('__standalone__')}
                                     className="flex items-center gap-2"
@@ -663,18 +776,21 @@ export default function ProgramPlannerPage() {
                               style={isOdd ? { backgroundColor: 'var(--color-background-secondary, #F9FAFB)' } : {}}
                               className="hover:bg-blue-50/30 transition-colors"
                             >
+                              {/* Conference name */}
                               <td className="px-3 py-2">
-                                <button className="text-brand-secondary hover:text-brand-primary text-left font-medium truncate max-w-[155px]">
+                                <button className="text-brand-secondary hover:text-brand-primary text-left font-medium truncate max-w-[150px] block">
                                   {c.name}
                                 </button>
                               </td>
-                              <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{fmtDate(c.startDate)}</td>
-                              <td className="px-3 py-2">
+                              {/* Dates */}
+                              <td className="px-3 py-2 text-center text-gray-500 whitespace-nowrap">{fmtDate(c.startDate)}</td>
+                              {/* CES */}
+                              <td className="px-3 py-2 text-center">
                                 {c.ces != null ? (
                                   <button
                                     type="button"
                                     onClick={() => setEffectivenessDrawer({ conferenceId: c.conferenceId, conferenceName: c.name })}
-                                    className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold border transition-opacity hover:opacity-75 cursor-pointer"
+                                    className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold border transition-opacity hover:opacity-75 cursor-pointer mx-auto"
                                     style={{ backgroundColor: cesPillStyle(c.ces).bg, color: cesPillStyle(c.ces).color, borderColor: cesPillStyle(c.ces).border }}
                                     title="View effectiveness"
                                   >
@@ -682,31 +798,122 @@ export default function ProgramPlannerPage() {
                                   </button>
                                 ) : <span className="text-gray-400">—</span>}
                               </td>
-                              <td className="px-3 py-2">
+                              {/* Actual cost */}
+                              <td className="px-3 py-2 text-center">
                                 {c.actualSpend != null ? (
                                   <button
                                     type="button"
                                     onClick={() => setBudgetDrawer(c)}
-                                    className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border tabular-nums cursor-pointer hover:opacity-80 transition-opacity"
+                                    className="inline-flex items-center justify-center min-w-[80px] px-1.5 py-0.5 rounded text-[12px] font-semibold border tabular-nums cursor-pointer hover:opacity-80 transition-opacity"
                                     style={{ backgroundColor: actualCostPillStyle(c.actualSpend, c.budgetTotal).bg, color: actualCostPillStyle(c.actualSpend, c.budgetTotal).color, borderColor: actualCostPillStyle(c.actualSpend, c.budgetTotal).border }}
                                   >
                                     {fmtCurrency(c.actualSpend)}
                                   </button>
                                 ) : <span className="text-gray-400 tabular-nums">—</span>}
                               </td>
-                              <td className="px-3 py-2 text-gray-700 tabular-nums">{fmtCurrency(c.pipelineInfluenced)}</td>
-                              <td className="px-3 py-2">
+                              {/* Pipeline */}
+                              <td className="px-3 py-2 text-center text-gray-700 tabular-nums">{fmtCurrency(c.pipelineInfluenced)}</td>
+                              {/* Closed/won */}
+                              <td className="px-3 py-2 text-center">
                                 {(c.closedWon ?? 0) > 0 ? (
                                   <button
                                     type="button"
                                     onClick={() => setClosedWonDrawer({ type: 'conference', conferenceId: c.conferenceId, conferenceName: c.name })}
-                                    className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border bg-green-50 text-green-700 border-green-200 tabular-nums hover:bg-green-100 transition-colors cursor-pointer"
+                                    className="inline-flex items-center justify-center min-w-[80px] px-1.5 py-0.5 rounded text-[12px] font-semibold border bg-green-50 text-green-700 border-green-200 tabular-nums hover:bg-green-100 transition-colors cursor-pointer"
                                   >
                                     {fmtCurrency(c.closedWon)}
                                   </button>
                                 ) : <span className="text-gray-400 tabular-nums">—</span>}
                               </td>
-                              <td className="px-3 py-2 text-gray-700">{c.headcount ?? '—'}</td>
+                              {/* Recommendation */}
+                              <td className="px-3 py-2">
+                                {(() => {
+                                  const ci = calIntelScores.get(c.conferenceId);
+                                  if (!ci && calIntelLoading) {
+                                    return (
+                                      <div className="flex items-center gap-1.5">
+                                        <div className="flex gap-0.5">
+                                          {[0, 1, 2].map(i => <span key={i} className="w-1 h-1 rounded-full bg-blue-200 animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />)}
+                                        </div>
+                                        <span className="text-[10px] text-gray-400">Scoring...</span>
+                                      </div>
+                                    );
+                                  }
+                                  if (!ci) return <span className="text-gray-400">—</span>;
+                                  const cfg = TIER_CONFIG[ci.tier];
+                                  if (!cfg) return <span className="text-[11px] text-gray-500">{ci.tier}</span>;
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => setCalDrawer({ conferenceId: c.conferenceId, conferenceName: c.name, basicScore: { score: ci.score, tier: ci.tier, confidence: ci.confidence } })}
+                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border whitespace-nowrap hover:opacity-80 transition-opacity cursor-pointer"
+                                      style={{ background: cfg.bg, color: cfg.text, borderColor: cfg.border }}
+                                      title={`Cal. Intel.: ${cfg.label}${ci.confidence ? ` (${ci.confidence} confidence)` : ''}`}
+                                    >
+                                      <i className={`ti ${cfg.icon} text-[9px]`} aria-hidden="true" />
+                                      {cfg.label}
+                                      <svg className="w-2.5 h-2.5 opacity-60 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                                      </svg>
+                                    </button>
+                                  );
+                                })()}
+                              </td>
+                              {/* List Score */}
+                              <td className="px-3 py-2 text-center">
+                                {(() => {
+                                  const ci = calIntelScores.get(c.conferenceId);
+                                  if (!ci && calIntelLoading) {
+                                    return (
+                                      <div className="flex justify-center gap-0.5">
+                                        {[0, 1, 2].map(i => <span key={i} className="w-1 h-1 rounded-full bg-blue-200 animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />)}
+                                      </div>
+                                    );
+                                  }
+                                  if (!ci) return <span className="text-gray-400">—</span>;
+                                  const cfg = TIER_CONFIG[ci.tier];
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => setCalDrawer({ conferenceId: c.conferenceId, conferenceName: c.name, basicScore: { score: ci.score, tier: ci.tier, confidence: ci.confidence } })}
+                                      className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-medium border hover:opacity-80 transition-opacity cursor-pointer mx-auto"
+                                      style={{ background: cfg?.bg ?? '#F3F4F6', color: cfg?.text ?? '#6B7280', borderColor: cfg?.border ?? '#D1D5DB' }}
+                                      title={`Cal. Intel. score: ${ci.score}`}
+                                    >
+                                      {Math.round(ci.score)}
+                                    </button>
+                                  );
+                                })()}
+                              </td>
+                              {/* Input */}
+                              <td className="px-3 py-2 text-center">
+                                {(() => {
+                                  const info = teamInputMap.get(c.conferenceId);
+                                  const hasInput = info?.hasInput ?? false;
+                                  const hasComments = info?.hasComments ?? false;
+                                  return (
+                                    <div className="flex items-center justify-center">
+                                      <button
+                                        type="button"
+                                        onClick={() => setInputPanelConference({ conferenceId: c.conferenceId, conferenceName: c.name })}
+                                        className={`relative p-1.5 rounded-full transition-all hover:opacity-75 ${hasInput ? 'bg-brand-primary/10' : ''}`}
+                                        title="View team input"
+                                      >
+                                        <svg
+                                          className="w-3.5 h-3.5"
+                                          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                          style={{ color: hasInput ? 'rgb(var(--brand-primary-rgb))' : '#B0B7C3' }}
+                                        >
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        </svg>
+                                        {hasComments && (
+                                          <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-red-500 rounded-full" />
+                                        )}
+                                      </button>
+                                    </div>
+                                  );
+                                })()}
+                              </td>
                               <td className="px-3 py-2">
                                 <DecisionPill
                                   confId={c.conferenceId}
@@ -745,7 +952,24 @@ export default function ProgramPlannerPage() {
                         <span className="text-xs font-semibold text-gray-600">{decisionCounts.undecided}</span>
                         <span className="text-xs text-gray-500">Undecided</span>
                       </div>
-                      <span className="ml-auto text-[11px] text-gray-400 italic">* Closed/Won figures are attributed totals.</span>
+                      <div className="ml-auto flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] text-gray-300">|</span>
+                        <span className="text-[10px] text-gray-400">Cal. intel.:</span>
+                        {[
+                          { label: 'Invest more', color: '#27500A' },
+                          { label: 'Maintain', color: '#0C447C' },
+                          { label: 'Reconsider', color: '#633806' },
+                          { label: 'Evaluate first', color: '#633806' },
+                          { label: 'Do not prioritize', color: '#791F1F' },
+                        ].map(t => (
+                          <div key={t.label} className="flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: t.color }} />
+                            <span className="text-[10px] text-gray-400">{t.label}</span>
+                          </div>
+                        ))}
+                        <span className="text-[10px] text-gray-300 ml-2">|</span>
+                        <span className="text-[11px] text-gray-400 italic">* Closed/Won figures are attributed totals.</span>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -848,6 +1072,21 @@ export default function ProgramPlannerPage() {
       <ConferenceBudgetDrawer
         conference={budgetDrawer}
         onClose={() => setBudgetDrawer(null)}
+      />
+    )}
+    {calDrawer && (
+      <CalendarIntelligenceDrawer
+        conferenceId={calDrawer.conferenceId}
+        conferenceName={calDrawer.conferenceName}
+        basicScore={calDrawer.basicScore}
+        onClose={() => setCalDrawer(null)}
+      />
+    )}
+    {inputPanelConference && (
+      <ConferenceInputPanel
+        conferenceId={inputPanelConference.conferenceId}
+        conferenceName={inputPanelConference.conferenceName}
+        onClose={() => setInputPanelConference(null)}
       />
     )}
     {selectedLineItem && (

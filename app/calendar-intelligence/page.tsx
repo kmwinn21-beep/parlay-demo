@@ -11,68 +11,19 @@ import { ExecutionComparison } from '@/components/calendar-intelligence/Executio
 import { DecisionsBoard } from '@/components/calendar-intelligence/DecisionsBoard';
 import { CalendarNotesPanel } from '@/components/calendar-intelligence/CalendarNotesPanel';
 import { DecisionTag } from '@/components/calendar-intelligence/DecisionTag';
+import {
+  type CalendarConferenceRow,
+  type CalendarStore,
+  getCalendarStore,
+  setCalendarStore,
+  subscribeCalendarStore,
+  startCalendarScoring,
+  refreshConferenceScore,
+} from '@/lib/calendarIntelligenceStore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type CITab = 'scoring' | 'decisions' | 'budget';
-
-interface CalendarConferenceRow {
-  conferenceId: number;
-  conferenceName: string;
-  conferenceYear: number;
-  conferenceType: 'historical' | 'active';
-  attendeeCount: number;
-  totalCompanies: number;
-  icpCompanies: number;
-  icpDensityPct: number;
-  calendarRecommendationScore: number | null;
-  componentScores?: {
-    audienceFit: number | null;
-    targetOpportunity: number | null;
-    commercialPotential: number | null;
-    costJustification: number | null;
-    strategicValue: number | null;
-  };
-  confidenceMultiplier?: number;
-  availableComponentCount?: number;
-  totalComponentCount?: number;
-  maxPossibleScore?: number;
-  recommendationTier: string;
-  confidenceLevel: 'high' | 'medium' | 'low';
-  dataAge: number;
-  recommendationReason?: string[];
-  confidenceFactors?: string[];
-  tierProbabilityFactors?: { must: number; high: number; worth: number };
-  targetingScored?: boolean;
-  diagnostics?: {
-    targetingEngine?: {
-      mustTargetCount: number;
-      highPriorityCount: number;
-      worthEngagingCount: number;
-      monitorCount: number;
-      lowPriorityCount: number;
-      needsTitleReviewCount: number;
-      totalScoredCompanies: number;
-      avgTargetPriorityScore: number;
-      avgBuyerAccessScore: number;
-      avgRelationshipLeverageScore: number;
-      actionableCount: number;
-      isLargeConference: boolean;
-    } | null;
-    budget?: { line_items?: unknown; return_on_cost?: string | null; required_pipeline_amount?: number; required_pipeline_multiple?: number } | null;
-    commercialPotential?: { projected_pipeline?: number; realistic_pipeline?: number; must_wse?: number; high_wse?: number; worth_wse?: number; avg_cost_per_unit?: number } | null;
-    strategicValue?: {
-      base_score: number;
-      competitor_bonus: number;
-      has_competitor: boolean;
-      internal_rel_count: number;
-      prior_engagement_count: number;
-      known_prospect_count: number;
-      client_count: number;
-      total_scored: number;
-    } | null;
-  };
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -124,75 +75,6 @@ function icpDensityPillClasses(pct: number): string {
 
 function tierLabel(tier: string): string {
   return tier.replaceAll('_', ' ').replace(/\b\w/g, (m) => m.toUpperCase());
-}
-
-// ── Module-level scoring store (survives navigation) ──────────────────────────
-
-type CalendarScoringStatus = 'idle' | 'loading_basic' | 'scoring' | 'ready';
-type CalendarStore = {
-  status: CalendarScoringStatus;
-  rows: CalendarConferenceRow[];
-  scoringProgress: { completed: number; total: number } | null;
-};
-
-let _calendarStore: CalendarStore = { status: 'idle', rows: [], scoringProgress: null };
-const _calendarListeners = new Set<() => void>();
-
-function getCalendarStore(): CalendarStore { return _calendarStore; }
-function setCalendarStore(update: Partial<CalendarStore>) {
-  _calendarStore = { ..._calendarStore, ...update };
-  _calendarListeners.forEach(l => l());
-}
-function subscribeCalendarStore(listener: () => void): () => void {
-  _calendarListeners.add(listener);
-  return () => _calendarListeners.delete(listener);
-}
-
-let _calendarScoringPromise: Promise<void> | null = null;
-
-function startCalendarScoring(force = false) {
-  const status = _calendarStore.status;
-  if (!force && (status === 'loading_basic' || status === 'scoring' || status === 'ready')) return;
-  if (_calendarScoringPromise && !force) return;
-
-  _calendarScoringPromise = (async () => {
-    setCalendarStore({ status: 'loading_basic', rows: [], scoringProgress: null });
-    try {
-      const res = await fetch('/api/program-intelligence/calendar-intelligence', { cache: 'no-store' });
-      if (!res.ok) { setCalendarStore({ status: 'idle' }); return; }
-      const data = await res.json() as { conferences: CalendarConferenceRow[] };
-      const basicRows = data.conferences ?? [];
-      setCalendarStore({ rows: basicRows });
-      if (basicRows.length === 0) { setCalendarStore({ status: 'ready' }); return; }
-
-      setCalendarStore({ status: 'scoring', scoringProgress: { completed: 0, total: basicRows.length } });
-      let completed = 0;
-      for (const row of basicRows) {
-        try {
-          const r = await fetch(`/api/program-intelligence/calendar-intelligence/${row.conferenceId}`, { cache: 'no-store' });
-          if (r.ok) {
-            const scored = ((await r.json()) as { conference: CalendarConferenceRow }).conference;
-            setCalendarStore({ rows: _calendarStore.rows.map(x => x.conferenceId === scored.conferenceId ? scored : x) });
-          }
-        } catch { /* skip */ }
-        completed++;
-        setCalendarStore({ scoringProgress: { completed, total: basicRows.length } });
-      }
-      setCalendarStore({ status: 'ready', scoringProgress: null });
-    } catch {
-      setCalendarStore({ status: 'idle' });
-    }
-  })().finally(() => { _calendarScoringPromise = null; });
-}
-
-async function refreshConferenceScore(conferenceId: number) {
-  try {
-    const r = await fetch(`/api/program-intelligence/calendar-intelligence/${conferenceId}`, { cache: 'no-store' });
-    if (r.ok) {
-      const scored = ((await r.json()) as { conference: CalendarConferenceRow }).conference;
-      setCalendarStore({ rows: _calendarStore.rows.map(x => x.conferenceId === scored.conferenceId ? scored : x) });
-    }
-  } catch { /* non-fatal */ }
 }
 
 // ── Budget Status Cell ────────────────────────────────────────────────────────
@@ -336,6 +218,10 @@ export default function CalendarIntelligencePage() {
   // Board refresh
   const [boardRefreshKey, setBoardRefreshKey] = useState(0);
 
+  // Input Board: conference list (loaded from board API via callback) + selected conference
+  const [boardConferences, setBoardConferences] = useState<Array<{ conferenceId: number; name: string; year: number }>>([]);
+  const [selectedBoardConferenceId, setSelectedBoardConferenceId] = useState<number | null>(null);
+
   const drawerExpanded = pathToTierOpen || executionComparisonOpen;
   const canUseTools = user?.capabilities?.use_calendar_tools ?? false;
 
@@ -347,7 +233,7 @@ export default function CalendarIntelligencePage() {
 
   // Trigger scoring on mount
   useEffect(() => {
-    if (_calendarStore.status === 'idle') startCalendarScoring();
+    if (getCalendarStore().status === 'idle') startCalendarScoring();
   }, []);
 
   // Onboarding tracking
@@ -361,6 +247,8 @@ export default function CalendarIntelligencePage() {
   const calendarRows = calendarState.rows;
   const calendarLoading = calendarState.status === 'loading_basic';
   const calendarScoringProgress = calendarState.scoringProgress;
+  const calendarIsScoring = calendarState.status === 'scoring';
+  const calendarFullyScored = calendarState.fullyScored;
 
   // Keep drawer in sync when a scored row updates
   useEffect(() => {
@@ -490,7 +378,7 @@ export default function CalendarIntelligencePage() {
 
           {/* My Decision section */}
           <div className="pt-5 border-t">
-            <DecisionTag conferenceId={row.conferenceId} isAdmin={isAdmin} syncKey={syncKey} onDecisionChanged={onDecisionChanged} />
+            <DecisionTag conferenceId={row.conferenceId} syncKey={syncKey} onDecisionChanged={onDecisionChanged} />
           </div>
         </div>
       </div>
@@ -616,7 +504,7 @@ export default function CalendarIntelligencePage() {
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${pathToTierOpen ? 'bg-brand-secondary text-white border-brand-secondary' : 'border-gray-200 text-gray-600 hover:border-brand-secondary hover:text-brand-secondary'}`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
-              Path to Tier
+              Gap Analysis
             </button>
             {cesConferenceIds.has(row.conferenceId) && (
               <button
@@ -659,7 +547,7 @@ export default function CalendarIntelligencePage() {
 
         {/* Decision Tag */}
         <div className="mt-5 pt-5 border-t">
-          <DecisionTag conferenceId={row.conferenceId} isAdmin={user?.role === 'administrator'} syncKey={decisionSyncKey} onDecisionChanged={bumpDecisionSync} />
+          <DecisionTag conferenceId={row.conferenceId} syncKey={decisionSyncKey} onDecisionChanged={bumpDecisionSync} />
         </div>
       </div>
     );
@@ -673,31 +561,57 @@ export default function CalendarIntelligencePage() {
         <p className="text-gray-500 text-sm mt-1">Data-driven conference prioritization and portfolio decisions.</p>
       </div>
 
-      {/* Tab bar */}
-      <div className="flex gap-1 mb-6 bg-white rounded-xl border border-gray-200 p-1 w-full md:w-fit">
-        {([
-          { id: 'scoring' as CITab, label: 'Scoring Table', mobileLabel: 'Scoring' },
-          { id: 'decisions' as CITab, label: 'Decisions Board', mobileLabel: 'Decisions' },
-          { id: 'budget' as CITab, label: 'Budget Planner', mobileLabel: 'Budget', soon: true },
-        ]).map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 md:px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === tab.id
-                ? 'bg-brand-secondary text-white'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            <span className="md:hidden">{tab.mobileLabel}</span>
-            <span className="hidden md:inline">{tab.label}</span>
-            {tab.soon && (
-              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none ${activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>
-                Soon
-              </span>
+      {/* Tab bar row — includes Input Board conference selector inline */}
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
+        <div className="flex gap-1 bg-white rounded-xl border border-gray-200 p-1 w-full md:w-fit">
+          {([
+            { id: 'scoring' as CITab, label: 'Scoring Table', mobileLabel: 'Scoring' },
+            { id: 'decisions' as CITab, label: 'Input Board', mobileLabel: 'Input' },
+            { id: 'budget' as CITab, label: 'Budget Planner', mobileLabel: 'Budget', soon: true },
+          ]).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 md:px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === tab.id
+                  ? 'bg-brand-secondary text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <span className="md:hidden">{tab.mobileLabel}</span>
+              <span className="hidden md:inline">{tab.label}</span>
+              {tab.soon && (
+                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none ${activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                  Soon
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Conference selector — only shown on Input Board tab */}
+        {activeTab === 'decisions' && boardConferences.length > 0 && (
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedBoardConferenceId ?? ''}
+              onChange={e => setSelectedBoardConferenceId(e.target.value ? Number(e.target.value) : null)}
+              className="border border-gray-200 rounded-xl px-3 h-10 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-secondary/30"
+            >
+              <option value="">All conferences</option>
+              {boardConferences.map(c => (
+                <option key={c.conferenceId} value={c.conferenceId}>{c.name} ({c.year})</option>
+              ))}
+            </select>
+            {selectedBoardConferenceId != null && (
+              <button
+                onClick={() => setSelectedBoardConferenceId(null)}
+                className="text-xs text-gray-400 hover:text-gray-600 transition-colors whitespace-nowrap"
+              >
+                ✕ Clear
+              </button>
             )}
-          </button>
-        ))}
+          </div>
+        )}
       </div>
 
       {/* ── Tab: Scoring Table ─────────────────────────────────────────────── */}
@@ -815,6 +729,14 @@ export default function CalendarIntelligencePage() {
                       {calendarRowsFiltered.map((r) => {
                         const ti = calendarTierInfo(r.recommendationTier);
                         const isSelected = selectedCalendarRow?.conferenceId === r.conferenceId;
+                        const isLoadingScore = calendarIsScoring && !calendarFullyScored.has(r.conferenceId);
+                        const mobileDots = (
+                          <div className="flex gap-0.5 items-center">
+                            {[0, 1, 2].map(i => (
+                              <span key={i} className="w-1 h-1 rounded-full bg-blue-200 animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />
+                            ))}
+                          </div>
+                        );
                         return (
                           <div
                             key={r.conferenceId}
@@ -828,12 +750,18 @@ export default function CalendarIntelligencePage() {
                                   <p className="text-xs text-gray-500 mt-0.5">{r.conferenceYear} · {r.conferenceType === 'historical' ? 'Historical' : 'Active'} · {r.attendeeCount} attendees</p>
                                 </div>
                                 <div className="flex-shrink-0 text-right">
-                                  <span className="text-3xl font-bold leading-none tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? '—'}</span>
-                                  {r.calendarRecommendationScore != null && <span className="text-xs text-gray-400">/100</span>}
+                                  {isLoadingScore ? mobileDots : (
+                                    <>
+                                      <span className="text-3xl font-bold leading-none tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? '—'}</span>
+                                      {r.calendarRecommendationScore != null && <span className="text-xs text-gray-400">/100</span>}
+                                    </>
+                                  )}
                                 </div>
                               </div>
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${ti.classes}`}>{ti.label}</span>
+                                {isLoadingScore ? mobileDots : (
+                                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${ti.classes}`}>{ti.label}</span>
+                                )}
                                 {r.conferenceType !== 'historical' && (
                                   <div onClick={(e) => e.stopPropagation()}>
                                     <BudgetStatusCell row={r} onOpenModal={() => setBudgetModalConf({ id: r.conferenceId, name: r.conferenceName })} />
@@ -842,7 +770,9 @@ export default function CalendarIntelligencePage() {
                               </div>
                             </div>
                             <div className="px-4 py-2 border-t border-gray-50 flex items-center gap-3">
-                              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${confidencePillClasses(r.confidenceLevel)}`}>{r.confidenceLevel.charAt(0).toUpperCase() + r.confidenceLevel.slice(1)}</span>
+                              {isLoadingScore ? mobileDots : (
+                                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${confidencePillClasses(r.confidenceLevel)}`}>{r.confidenceLevel.charAt(0).toUpperCase() + r.confidenceLevel.slice(1)}</span>
+                              )}
                               <span className={`text-xs ${dataAgeColorClass(r.dataAge)}`}>{formatDataAge(r.dataAge)}</span>
                             </div>
                           </div>
@@ -859,7 +789,7 @@ export default function CalendarIntelligencePage() {
                             <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('attendeeCount')}>Attendees</th>
                             <th className="p-2 text-center cursor-pointer" onClick={() => setCalendarSort('icpCompanies')}>ICP Companies</th>
                             <th className="p-2 text-center">Budget Set?</th>
-                            <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('score' as keyof CalendarConferenceRow)}>Score</th>
+                            <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('score' as keyof CalendarConferenceRow)}>List Score</th>
                             <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('recommendationTier')}>Recommendation</th>
                             <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('confidenceLevel')}>Confidence</th>
                             <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('dataAge')}>Data Age</th>
@@ -869,6 +799,14 @@ export default function CalendarIntelligencePage() {
                           {calendarRowsFiltered.map((r) => {
                             const tierInfo = calendarTierInfo(r.recommendationTier);
                             const isSelected = selectedCalendarRow?.conferenceId === r.conferenceId;
+                            const isLoadingScore = calendarIsScoring && !calendarFullyScored.has(r.conferenceId);
+                            const loadingDots = (
+                              <div className="flex gap-0.5">
+                                {[0, 1, 2].map(i => (
+                                  <span key={i} className="w-1 h-1 rounded-full bg-blue-200 animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />
+                                ))}
+                              </div>
+                            );
                             return (
                               <tr key={r.conferenceId} className={`border-t cursor-pointer transition-colors ${isSelected ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-gray-50'}`} onClick={() => setSelectedCalendarRow(r)}>
                                 <td className="p-2 text-brand-secondary font-medium">{r.conferenceName}</td>
@@ -877,9 +815,23 @@ export default function CalendarIntelligencePage() {
                                 <td className="p-2 text-gray-600">{r.attendeeCount}</td>
                                 <td className="p-2 text-center"><span title={`${r.icpCompanies} ICP / ${r.totalCompanies} total`} className={`inline-flex items-center justify-center w-10 h-10 rounded-full text-xs font-semibold border ${icpDensityPillClasses(r.icpDensityPct)}`}>{r.icpDensityPct.toFixed(0)}%</span></td>
                                 <td className="p-2 text-center" onClick={(e) => e.stopPropagation()}><BudgetStatusCell row={r} onOpenModal={() => setBudgetModalConf({ id: r.conferenceId, name: r.conferenceName })} /></td>
-                                <td className="p-2 font-semibold tabular-nums" style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>{r.calendarRecommendationScore ?? <span className="text-gray-400 font-normal">—</span>}</td>
-                                <td className="p-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${tierInfo.classes}`}>{tierInfo.label}</span></td>
-                                <td className="p-2"><span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${confidencePillClasses(r.confidenceLevel)}`}>{r.confidenceLevel.charAt(0).toUpperCase() + r.confidenceLevel.slice(1)}</span></td>
+                                <td className="p-2 font-semibold tabular-nums">
+                                  {isLoadingScore ? loadingDots : (
+                                    <span style={{ color: calendarScoreColor(r.calendarRecommendationScore) }}>
+                                      {r.calendarRecommendationScore ?? <span className="text-gray-400 font-normal">—</span>}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-2">
+                                  {isLoadingScore ? loadingDots : (
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${tierInfo.classes}`}>{tierInfo.label}</span>
+                                  )}
+                                </td>
+                                <td className="p-2">
+                                  {isLoadingScore ? loadingDots : (
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${confidencePillClasses(r.confidenceLevel)}`}>{r.confidenceLevel.charAt(0).toUpperCase() + r.confidenceLevel.slice(1)}</span>
+                                  )}
+                                </td>
                                 <td className={`p-2 ${dataAgeColorClass(r.dataAge)}`}>{formatDataAge(r.dataAge)}</td>
                               </tr>
                             );
@@ -895,12 +847,15 @@ export default function CalendarIntelligencePage() {
         </div>
       )}
 
-      {/* ── Tab: Decisions Board ───────────────────────────────────────────── */}
+      {/* ── Tab: Input Board ───────────────────────────────────────────────── */}
       {activeTab === 'decisions' && (
         <DecisionsBoard
           onOpenDrawer={(confId) => { const r = calendarRows.find(x => x.conferenceId === confId); if (r) setSelectedCalendarRow(r); }}
           refreshKey={boardRefreshKey}
           scoredRows={calendarRows}
+          selectedConferenceId={selectedBoardConferenceId}
+          onSelectedConferenceChange={setSelectedBoardConferenceId}
+          onConferencesLoaded={setBoardConferences}
         />
       )}
 
@@ -935,7 +890,7 @@ export default function CalendarIntelligencePage() {
                   {pathToTierOpen && (
                     <div className="border-t border-gray-100">
                       <div className="p-5 flex items-center justify-between">
-                        <h3 className="font-semibold text-gray-900">Path to Tier</h3>
+                        <h3 className="font-semibold text-gray-900">Gap Analysis</h3>
                         <button onClick={() => setPathToTierOpen(false)} className="text-gray-400 hover:text-gray-600">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
                         </button>
@@ -976,7 +931,7 @@ export default function CalendarIntelligencePage() {
                   {pathToTierOpen && (
                     <OverlayPanel className="w-[420px] flex-shrink-0">
                       <div className="p-5 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
-                        <h3 className="font-semibold text-gray-900">Path to Tier</h3>
+                        <h3 className="font-semibold text-gray-900">Gap Analysis</h3>
                         <button onClick={() => setPathToTierOpen(false)} className="text-gray-400 hover:text-gray-600">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
                         </button>

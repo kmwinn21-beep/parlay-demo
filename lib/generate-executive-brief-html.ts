@@ -733,7 +733,8 @@ export function generateExecutiveBriefHTML(data: {
           : `<span style="color:#A32D2D;font-weight:600">↓ ${cesDiff} pts</span>`;
       }
       return `<tr style="background:${rowBg}">
-        <td style="padding:5px 6px 5px 8px;font-size:9px;font-weight:600;color:#1E293B">${escHtml(row.year || '—')}</td>
+        <td style="padding:5px 6px 5px 8px;font-size:9px;color:#334155;max-width:100px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${escHtml(row.conferenceName || '—')}</td>
+        <td style="padding:5px 6px;font-size:9px;font-weight:600;color:#1E293B">${escHtml(row.year || '—')}</td>
         <td style="padding:5px 6px;text-align:right;font-size:9px;color:#475569">${fmt$(row.totalCost)}</td>
         <td style="padding:5px 6px;text-align:right;font-size:9px;font-weight:600;color:${cesTierRow.c}">${row.cesScore ?? '—'}</td>
         <td style="padding:5px 6px;text-align:right;font-size:9px;color:#475569">${fmt$(row.pipelineInfluenced)}</td>
@@ -745,11 +746,12 @@ export function generateExecutiveBriefHTML(data: {
     }).join('');
 
     yoyHtml = `
-  ${eyebrow('05', 'Year-over-year')}
+  ${eyebrow('05', 'YoY / Series Comparison')}
   <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
     <thead>
       <tr style="border-bottom:1px solid #E2E8F0">
-        <th style="text-align:left;font-size:8px;font-weight:600;color:#64748B;padding:0 6px 5px 8px">Year</th>
+        <th style="text-align:left;font-size:8px;font-weight:600;color:#64748B;padding:0 6px 5px 8px">Conference</th>
+        <th style="text-align:left;font-size:8px;font-weight:600;color:#64748B;padding:0 6px 5px">Year</th>
         <th style="text-align:right;font-size:8px;font-weight:600;color:#64748B;padding:0 6px 5px">Cost</th>
         <th style="text-align:right;font-size:8px;font-weight:600;color:#64748B;padding:0 6px 5px">CES</th>
         <th style="text-align:right;font-size:8px;font-weight:600;color:#64748B;padding:0 6px 5px">Pipeline</th>
