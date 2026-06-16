@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { CalendarNotesPanel } from './CalendarNotesPanel';
+import { DecisionTag } from './DecisionTag';
 import { type CalendarConferenceRow } from '@/lib/calendarIntelligenceStore';
 
 type DecisionKey = 'confirmed' | 'attend_but_reduce' | 'watching' | 'passed' | 'pending_approval';
@@ -195,7 +196,7 @@ export function DecisionsBoard({
   const [notesDrawerOpen, setNotesDrawerOpen] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [expandedComponents, setExpandedComponents] = useState<Set<string>>(new Set());
-  const [showComponents, setShowComponents] = useState(false);
+  const [showComponents, setShowComponents] = useState(true);
   const [componentsExiting, setComponentsExiting] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -226,14 +227,14 @@ export function DecisionsBoard({
     if (selectedConferenceId == null) {
       setFilteredConference(null);
       setNotesDrawerOpen(false);
-      setShowComponents(false);
+      setShowComponents(true);
       setComponentsExiting(false);
       setExpandedComponents(new Set());
       return;
     }
     setFilteredConference(null);
     setExpandedComponents(new Set());
-    setShowComponents(false);
+    setShowComponents(true);
     setComponentsExiting(false);
     fetch(`/api/calendar-intelligence/decisions/board?conferenceId=${selectedConferenceId}`)
       .then(r => r.ok ? r.json() : { conferences: [] })
@@ -418,7 +419,7 @@ export function DecisionsBoard({
       <div className="flex flex-col gap-4 relative">
         {/* ── Desktop: unified grid layout — score card and kanban share the same column widths ── */}
         <div className="hidden md:flex flex-col gap-3 h-[calc(100vh-320px)]">
-          {/* Score strip + component cards (when a conference is selected) */}
+          {/* Top row: score card (col-span-3) + My Decision (col-span-2) */}
           {selectedConferenceId != null && selectedRow && (() => {
             const score = selectedRow.calendarRecommendationScore;
             const color = scoreColor;
@@ -427,47 +428,68 @@ export function DecisionsBoard({
             const noteCount = activeConference?.noteCount ?? 0;
             return (
               <>
-                {/* Compact horizontal score strip */}
                 <div
-                  className="flex-shrink-0 flex items-center gap-4 px-4 py-3 rounded-xl"
-                  style={{ backgroundColor: color + '15', borderLeft: `4px solid ${color}` }}
+                  className="flex-shrink-0 grid gap-3"
+                  style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}
                 >
-                  <div className="flex items-end gap-1.5">
-                    <span className="text-3xl font-bold leading-tight" style={{ color }}>
-                      {score != null ? Math.round(score) : '—'}
-                    </span>
-                    <span className="text-sm text-gray-400 mb-0.5">/100</span>
+                  {/* Score card — spans 3 of 5 columns */}
+                  <div
+                    className="col-span-3 rounded-xl p-4"
+                    style={{ backgroundColor: color + '15', borderLeft: `4px solid ${color}` }}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 mb-1">Calendar Score</p>
+                        <div className="flex items-end gap-1.5">
+                          <span className="text-4xl font-bold leading-tight" style={{ color }}>
+                            {score != null ? Math.round(score) : '—'}
+                          </span>
+                          <span className="text-sm text-gray-400 mb-0.5">/100</span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => setNotesDrawerOpen(true)}
+                          className="text-xs font-semibold transition-colors hover:opacity-75"
+                          style={{ color }}
+                        >
+                          {noteCount > 0 ? `Comments (${noteCount})` : 'Comments'}
+                        </button>
+                        <button
+                          onClick={toggleComponents}
+                          className="text-xs font-semibold text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap"
+                        >
+                          {showComponents ? 'Hide Components' : 'Show Components'}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border ${tierCls}`}>
+                        {tierLabel}
+                      </span>
+                      <span className="text-[11px] text-gray-400">Confidence: {selectedRow.confidenceLevel}</span>
+                      {selectedRow.availableComponentCount != null && (
+                        <span className="text-[11px] text-gray-400">{selectedRow.availableComponentCount} of 5 · max {selectedRow.maxPossibleScore ?? '—'}/100</span>
+                      )}
+                    </div>
                   </div>
-                  <span className={`flex-shrink-0 inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border ${tierCls}`}>
-                    {tierLabel}
-                  </span>
-                  <div className="flex items-center gap-3 text-[11px] text-gray-400">
-                    <span>Confidence: {selectedRow.confidenceLevel}</span>
-                    {selectedRow.availableComponentCount != null && (
-                      <span>{selectedRow.availableComponentCount} of 5 components · max {selectedRow.maxPossibleScore ?? '—'}/100</span>
-                    )}
-                  </div>
-                  <div className="ml-auto flex items-center gap-3 flex-shrink-0">
-                    <button
-                      onClick={() => setNotesDrawerOpen(true)}
-                      className="text-xs font-semibold transition-colors hover:opacity-75"
-                      style={{ color }}
-                    >
-                      {noteCount > 0 ? `Notes (${noteCount})` : 'Notes'}
-                    </button>
-                    <button
-                      onClick={toggleComponents}
-                      className="text-gray-400 hover:text-gray-600 transition-colors"
-                      title={showComponents ? 'Hide component scores' : 'Show component scores'}
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </button>
+
+                  {/* My Decision — spans remaining 2 columns */}
+                  <div className="col-span-2 rounded-xl border border-gray-200 bg-white p-4 overflow-y-auto">
+                    <DecisionTag
+                      conferenceId={selectedConferenceId}
+                      syncKey={activeConference?.conferenceId}
+                      onDecisionChanged={() => {
+                        fetch(`/api/calendar-intelligence/decisions/board?conferenceId=${selectedConferenceId}`)
+                          .then(r => r.ok ? r.json() : { conferences: [] })
+                          .then((data: { conferences: typeof filteredConference[] }) => setFilteredConference((data.conferences[0] as typeof filteredConference) ?? null))
+                          .catch(() => {});
+                      }}
+                    />
                   </div>
                 </div>
 
-                {/* Component cards — own 5-column grid, aligns exactly with kanban columns */}
+                {/* Component cards row — own 5-column grid, aligns exactly with kanban columns */}
                 {showComponents && (
                   <div
                     className="flex-shrink-0 grid gap-3"
