@@ -952,22 +952,7 @@ export default function ProgramPlannerPage() {
                         <span className="text-xs font-semibold text-gray-600">{decisionCounts.undecided}</span>
                         <span className="text-xs text-gray-500">Undecided</span>
                       </div>
-                      <div className="ml-auto flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] text-gray-300">|</span>
-                        <span className="text-[10px] text-gray-400">Cal. intel.:</span>
-                        {[
-                          { label: 'Invest more', color: '#27500A' },
-                          { label: 'Maintain', color: '#0C447C' },
-                          { label: 'Reconsider', color: '#633806' },
-                          { label: 'Evaluate first', color: '#633806' },
-                          { label: 'Do not prioritize', color: '#791F1F' },
-                        ].map(t => (
-                          <div key={t.label} className="flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: t.color }} />
-                            <span className="text-[10px] text-gray-400">{t.label}</span>
-                          </div>
-                        ))}
-                        <span className="text-[10px] text-gray-300 ml-2">|</span>
+                      <div className="ml-auto flex items-center gap-2">
                         <span className="text-[11px] text-gray-400 italic">* Closed/Won figures are attributed totals.</span>
                       </div>
                     </div>
