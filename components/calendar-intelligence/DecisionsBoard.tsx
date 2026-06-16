@@ -418,7 +418,7 @@ export function DecisionsBoard({
       <div className="flex flex-col gap-4 relative">
         {/* ── Desktop: unified grid layout — score card and kanban share the same column widths ── */}
         <div className="hidden md:flex flex-col gap-3 h-[calc(100vh-320px)]">
-          {/* Header row: score card (col 1) + component cards (cols 2–5) */}
+          {/* Score strip + component cards (when a conference is selected) */}
           {selectedConferenceId != null && selectedRow && (() => {
             const score = selectedRow.calendarRecommendationScore;
             const color = scoreColor;
@@ -426,56 +426,53 @@ export function DecisionsBoard({
             const tierCls = TIER_PILL[selectedRow.recommendationTier] ?? 'bg-gray-50 text-gray-600 border-gray-200';
             const noteCount = activeConference?.noteCount ?? 0;
             return (
-              <div
-                className="flex-shrink-0 grid gap-3"
-                style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}
-              >
-                {/* Score card — col 1, same width as first kanban column */}
+              <>
+                {/* Compact horizontal score strip */}
                 <div
-                  className="rounded-xl p-4"
+                  className="flex-shrink-0 flex items-center gap-4 px-4 py-3 rounded-xl"
                   style={{ backgroundColor: color + '15', borderLeft: `4px solid ${color}` }}
                 >
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">Calendar Score</p>
-                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      <button
-                        onClick={toggleComponents}
-                        className="text-gray-400 hover:text-gray-600 transition-colors"
-                        title={showComponents ? 'Hide component scores' : 'Show component scores'}
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => setNotesDrawerOpen(true)}
-                        className="text-xs font-semibold transition-colors hover:opacity-75"
-                        style={{ color }}
-                      >
-                        {noteCount > 0 ? `Notes (${noteCount})` : 'Notes'}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex items-end gap-1.5 mb-1.5">
-                    <span className="text-4xl font-bold leading-tight" style={{ color }}>
+                  <div className="flex items-end gap-1.5">
+                    <span className="text-3xl font-bold leading-tight" style={{ color }}>
                       {score != null ? Math.round(score) : '—'}
                     </span>
                     <span className="text-sm text-gray-400 mb-0.5">/100</span>
                   </div>
-                  <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border ${tierCls}`}>
+                  <span className={`flex-shrink-0 inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border ${tierCls}`}>
                     {tierLabel}
                   </span>
-                  <p className="text-[11px] text-gray-400 mt-1.5">Confidence: {selectedRow.confidenceLevel}</p>
-                  {selectedRow.availableComponentCount != null && (
-                    <p className="text-[11px] text-gray-400">
-                      {selectedRow.availableComponentCount} of 5 · max {selectedRow.maxPossibleScore ?? '—'}/100
-                    </p>
-                  )}
+                  <div className="flex items-center gap-3 text-[11px] text-gray-400">
+                    <span>Confidence: {selectedRow.confidenceLevel}</span>
+                    {selectedRow.availableComponentCount != null && (
+                      <span>{selectedRow.availableComponentCount} of 5 components · max {selectedRow.maxPossibleScore ?? '—'}/100</span>
+                    )}
+                  </div>
+                  <div className="ml-auto flex items-center gap-3 flex-shrink-0">
+                    <button
+                      onClick={() => setNotesDrawerOpen(true)}
+                      className="text-xs font-semibold transition-colors hover:opacity-75"
+                      style={{ color }}
+                    >
+                      {noteCount > 0 ? `Notes (${noteCount})` : 'Notes'}
+                    </button>
+                    <button
+                      onClick={toggleComponents}
+                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                      title={showComponents ? 'Hide component scores' : 'Show component scores'}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
 
-                {/* Component cards span cols 2–5 — animated in/out */}
+                {/* Component cards — own 5-column grid, aligns exactly with kanban columns */}
                 {showComponents && (
-                  <div className="col-span-4 flex items-start gap-3 overflow-x-auto">
+                  <div
+                    className="flex-shrink-0 grid gap-3"
+                    style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}
+                  >
                     {components.map((comp, i) => {
                       const enterDelay = `${i * ENTER_STAGGER}ms`;
                       const exitDelay = `${(COMPONENT_COUNT - 1 - i) * EXIT_STAGGER}ms`;
@@ -487,7 +484,7 @@ export function DecisionsBoard({
                       return (
                         <div
                           key={comp.key}
-                          className="flex-shrink-0 w-48 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"
+                          className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"
                           style={{ animation: anim }}
                         >
                           <button className="w-full px-3 py-2.5 text-left" onClick={() => toggleComponent(comp.key)}>
@@ -527,7 +524,7 @@ export function DecisionsBoard({
                     })}
                   </div>
                 )}
-              </div>
+              </>
             );
           })()}
 
