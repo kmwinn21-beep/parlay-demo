@@ -27,7 +27,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid decision value' }, { status: 400 });
   }
 
-  const db = await getDb(aid).catch(() => null);
+  // 'master' sentinel means the requester was on the master DB (no tenant accountId)
+  const db = await getDb(aid === 'master' ? undefined : aid).catch(() => null);
   if (!db) return NextResponse.json({ error: 'Account not found' }, { status: 404 });
 
   // Look up token

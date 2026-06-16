@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         token,
-        String(authResult.accountId),
+        authResult.accountId ?? 'master',
         conferenceId,
         authResult.id,
         recipientUserId,
@@ -135,17 +135,17 @@ export async function POST(request: NextRequest) {
       }).catch(() => {}); // best-effort
     }
 
+    // Encode account — undefined means master DB; use sentinel 'master' so it round-trips cleanly
+    const aidParam = authResult.accountId ?? 'master';
+
     // Build one-click decision links
-    const decisions = ['confirmed', 'attend_but_reduce', 'watching', 'passed', 'pending_approval'];
-    const decisionLabels = ['attend', 'attend-reduced', 'fence', 'pass', 'evaluating'];
     const tokenLinks = {
-      attend:        `${BASE_URL}/input/respond?token=${token}&decision=confirmed&aid=${authResult.accountId}`,
-      attendReduced: `${BASE_URL}/input/respond?token=${token}&decision=attend_but_reduce&aid=${authResult.accountId}`,
-      onTheFence:    `${BASE_URL}/input/respond?token=${token}&decision=watching&aid=${authResult.accountId}`,
-      dontAttend:    `${BASE_URL}/input/respond?token=${token}&decision=passed&aid=${authResult.accountId}`,
-      evaluating:    `${BASE_URL}/input/respond?token=${token}&decision=pending_approval&aid=${authResult.accountId}`,
+      attend:        `${BASE_URL}/input/respond?token=${token}&decision=confirmed&aid=${aidParam}`,
+      attendReduced: `${BASE_URL}/input/respond?token=${token}&decision=attend_but_reduce&aid=${aidParam}`,
+      onTheFence:    `${BASE_URL}/input/respond?token=${token}&decision=watching&aid=${aidParam}`,
+      dontAttend:    `${BASE_URL}/input/respond?token=${token}&decision=passed&aid=${aidParam}`,
+      evaluating:    `${BASE_URL}/input/respond?token=${token}&decision=pending_approval&aid=${aidParam}`,
     };
-    void decisions; void decisionLabels; // suppress unused warning
 
     // Send email (best-effort)
     await sendInputRequestEmail({
