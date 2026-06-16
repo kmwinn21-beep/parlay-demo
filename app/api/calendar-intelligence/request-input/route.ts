@@ -36,25 +36,28 @@ export async function POST(request: NextRequest) {
 
   // Look up conference name + cal score for email
   const confRes = await db.execute({
-    sql: `SELECT c.name,
-                 cs.calendar_recommendation_score,
-                 cs.recommendation_tier,
-                 cs.confidence_level,
-                 date(c.end_date) AS end_date
+    sql: `SELECT c.name, date(c.end_date) AS end_date, cis.score_payload
           FROM conferences c
-          LEFT JOIN conference_snapshots cs ON cs.conference_id = c.id
-          WHERE c.id = ?
-          ORDER BY cs.created_at DESC
-          LIMIT 1`,
+          LEFT JOIN calendar_intelligence_scores cis ON cis.conference_id = c.id
+          WHERE c.id = ?`,
     args: [conferenceId],
   });
   const conf = confRes.rows[0] as Row | undefined;
   if (!conf) return NextResponse.json({ error: 'Conference not found' }, { status: 404 });
 
   const conferenceName = String(conf.name ?? '');
-  const calScore = conf.calendar_recommendation_score != null ? Number(conf.calendar_recommendation_score) : null;
-  const calTier = conf.recommendation_tier ? String(conf.recommendation_tier) : null;
   const conferenceYear = conf.end_date ? new Date(String(conf.end_date)).getUTCFullYear() : new Date().getUTCFullYear();
+
+  // Parse cached score payload (may be absent if scoring hasn't run yet)
+  let calScore: number | null = null;
+  let calTier: string | null = null;
+  if (conf.score_payload) {
+    try {
+      const payload = JSON.parse(String(conf.score_payload)) as Record<string, unknown>;
+      calScore = payload.calendarRecommendationScore != null ? Number(payload.calendarRecommendationScore) : null;
+      calTier = payload.recommendationTier ? String(payload.recommendationTier) : null;
+    } catch { /* ignore malformed payload */ }
+  }
 
   // Requester display name
   const requesterRes = await db.execute({
