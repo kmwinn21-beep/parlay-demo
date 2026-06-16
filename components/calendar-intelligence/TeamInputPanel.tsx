@@ -347,13 +347,18 @@ export function TeamInputPanel({
       opacity: formOpen ? 1 : 0,
       transition: 'max-height 250ms ease, opacity 180ms ease',
     }}>
+      <p style={{
+        fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase',
+        color: 'rgb(var(--brand-secondary-rgb, 27 118 188))', marginBottom: 6, marginTop: 2,
+      }}>
+        Request Input
+      </p>
       <div style={{
-        borderBottom: '0.5px solid var(--color-border-tertiary, #e5e7eb)',
-        paddingBottom: 14, marginBottom: 4,
-        background: 'rgb(var(--brand-secondary-rgb, 27 118 188) / 0.04)',
+        background: 'rgb(var(--brand-secondary-rgb, 27 118 188) / 0.05)',
         padding: '4px 12px 14px',
         borderRadius: 8,
-        marginTop: 4,
+        marginBottom: 8,
+        border: '0.5px solid rgb(var(--brand-secondary-rgb, 27 118 188) / 0.15)',
       }}>
         <RequestInputForm
           conferenceId={conferenceId}

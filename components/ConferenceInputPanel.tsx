@@ -27,7 +27,7 @@ export function ConferenceInputPanel({ conferenceId, conferenceName, onClose }: 
 
       {/* Drawer */}
       <div
-        className="relative flex flex-col w-full max-w-[400px] h-full bg-white shadow-2xl overflow-hidden"
+        className="relative flex flex-col w-full max-w-[400px] h-full bg-white shadow-2xl overflow-hidden rounded-tl-2xl"
         style={{ animation: 'slideInFromRight 220ms ease-out' }}
       >
         {/* Header — matches Cal Intel drawer style */}
