@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { CalendarNotesPanel } from './CalendarNotesPanel';
+import { RequestInputDropdown } from '@/components/RequestInputDropdown';
 
 type DecisionKey = 'confirmed' | 'attend_but_reduce' | 'watching' | 'passed' | 'pending_approval';
 
@@ -55,7 +56,7 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(d / 30)}mo ago`;
 }
 
-export function TeamInputPanel({ conferenceId }: ConferenceInputPanelProps) {
+export function TeamInputPanel({ conferenceId, conferenceName }: ConferenceInputPanelProps) {
   const [data, setData] = useState<ConferenceData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -87,7 +88,9 @@ export function TeamInputPanel({ conferenceId }: ConferenceInputPanelProps) {
     return (
       <>
         <div style={{ padding: '24px 0', textAlign: 'center' }}>
-          <i className="ti ti-users" style={{ fontSize: 28, color: 'var(--color-text-tertiary, #9ca3af)' }} />
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block' }}>
+            <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm-7 4a3 3 0 100-6 3 3 0 000 6z" />
+          </svg>
           <p style={{ fontSize: 12, color: 'var(--color-text-tertiary, #9ca3af)', marginTop: 8 }}>
             No team input yet.
           </p>
@@ -97,6 +100,9 @@ export function TeamInputPanel({ conferenceId }: ConferenceInputPanelProps) {
         </div>
         <div className="border-t border-gray-100">
           <CalendarNotesPanel conferenceId={conferenceId} onClose={() => {}} variant="sheet" />
+        </div>
+        <div style={{ borderTop: '0.5px solid var(--color-border-tertiary, #e5e7eb)', paddingTop: 12, marginTop: 8 }}>
+          <RequestInputDropdown conferenceId={conferenceId} conferenceName={conferenceName} />
         </div>
       </>
     );
@@ -179,6 +185,11 @@ export function TeamInputPanel({ conferenceId }: ConferenceInputPanelProps) {
       {/* Discussion thread */}
       <div className="border-t border-gray-100 mt-2">
         <CalendarNotesPanel conferenceId={conferenceId} onClose={() => {}} variant="sheet" />
+      </div>
+
+      {/* Request input */}
+      <div style={{ borderTop: '0.5px solid var(--color-border-tertiary, #e5e7eb)', paddingTop: 12, marginTop: 8 }}>
+        <RequestInputDropdown conferenceId={conferenceId} conferenceName={conferenceName} />
       </div>
     </div>
   );
