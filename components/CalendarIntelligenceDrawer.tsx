@@ -253,7 +253,7 @@ export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basic
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
           </svg>
-          Path to Tier
+          Gap Analysis
         </button>
         <button
           onClick={() => setExecutionCompOpen(v => !v)}
@@ -300,11 +300,11 @@ export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basic
           {mainPanelContent}
         </OverlayPanel>
 
-        {/* Path to Tier panel */}
+        {/* Gap Analysis panel */}
         {pathToTierOpen && deepRow && (
           <OverlayPanel className="w-[420px] flex-shrink-0">
             <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
-              <h3 className="font-semibold text-gray-900 text-sm">Path to Tier</h3>
+              <h3 className="font-semibold text-gray-900 text-sm">Gap Analysis</h3>
               <button onClick={() => setPathToTierOpen(false)} className="text-gray-400 hover:text-gray-600">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

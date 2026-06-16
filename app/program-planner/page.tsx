@@ -654,19 +654,24 @@ export default function ProgramPlannerPage() {
                               {h}
                             </th>
                           ))}
+                          {['Actual cost', 'Pipeline inf.', 'Closed/won'].map(h => (
+                            <th key={h} className="px-3 py-2 text-left text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                              {h}
+                            </th>
+                          ))}
                           <th className="px-3 py-2 text-left text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
                             <div className="flex items-center gap-1">
                               <i className="ti ti-calendar-stats text-[11px] text-purple-600" aria-hidden="true" />
-                              <span>Cal. intel. tier</span>
+                              <span>Recommendation</span>
                             </div>
                           </th>
                           <th className="px-3 py-2 text-left text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
                             <div className="flex items-center gap-1">
                               <i className="ti ti-calendar-stats text-[11px] text-purple-600" aria-hidden="true" />
-                              <span>Score</span>
+                              <span>List Score</span>
                             </div>
                           </th>
-                          {['Actual cost', 'Pipeline inf.', 'Closed/won', 'Heads', 'Decision'].map(h => (
+                          {['Decision'].map(h => (
                             <th key={h} className="px-3 py-2 text-left text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
                               {h}
                             </th>
@@ -676,7 +681,7 @@ export default function ProgramPlannerPage() {
                       <tbody>
                         {tableRows.length === 0 && (
                           <tr>
-                            <td colSpan={10} className="px-4 py-8 text-center text-gray-400 text-sm">
+                            <td colSpan={9} className="px-4 py-8 text-center text-gray-400 text-sm">
                               No conferences found for {selectedYear}
                             </td>
                           </tr>
@@ -688,7 +693,7 @@ export default function ProgramPlannerPage() {
                             const collapsed = collapsedSeries.has(s.seriesId);
                             return (
                               <tr key={row.key} style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }} className="border-y border-gray-200">
-                                <td colSpan={10} className="px-3 py-2">
+                                <td colSpan={9} className="px-3 py-2">
                                   <div className="flex items-center justify-between">
                                     <button
                                       onClick={() => toggleSeries(s.seriesId)}
@@ -736,7 +741,7 @@ export default function ProgramPlannerPage() {
                           if (row.type === 'standalone_header') {
                             return (
                               <tr key={row.key} style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }} className="border-y border-gray-200">
-                                <td colSpan={10} className="px-3 py-2">
+                                <td colSpan={9} className="px-3 py-2">
                                   <button
                                     onClick={() => toggleSeries('__standalone__')}
                                     className="flex items-center gap-2"
@@ -793,6 +798,30 @@ export default function ProgramPlannerPage() {
                                 ) : <span className="text-gray-400">—</span>}
                               </td>
                               <td className="px-3 py-2">
+                                {c.actualSpend != null ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setBudgetDrawer(c)}
+                                    className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border tabular-nums cursor-pointer hover:opacity-80 transition-opacity"
+                                    style={{ backgroundColor: actualCostPillStyle(c.actualSpend, c.budgetTotal).bg, color: actualCostPillStyle(c.actualSpend, c.budgetTotal).color, borderColor: actualCostPillStyle(c.actualSpend, c.budgetTotal).border }}
+                                  >
+                                    {fmtCurrency(c.actualSpend)}
+                                  </button>
+                                ) : <span className="text-gray-400 tabular-nums">—</span>}
+                              </td>
+                              <td className="px-3 py-2 text-gray-700 tabular-nums">{fmtCurrency(c.pipelineInfluenced)}</td>
+                              <td className="px-3 py-2">
+                                {(c.closedWon ?? 0) > 0 ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setClosedWonDrawer({ type: 'conference', conferenceId: c.conferenceId, conferenceName: c.name })}
+                                    className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border bg-green-50 text-green-700 border-green-200 tabular-nums hover:bg-green-100 transition-colors cursor-pointer"
+                                  >
+                                    {fmtCurrency(c.closedWon)}
+                                  </button>
+                                ) : <span className="text-gray-400 tabular-nums">—</span>}
+                              </td>
+                              <td className="px-3 py-2">
                                 {(() => {
                                   const ci = calIntelScores.get(c.conferenceId);
                                   if (!ci && calIntelLoading) {
@@ -818,6 +847,9 @@ export default function ProgramPlannerPage() {
                                     >
                                       <i className={`ti ${cfg.icon} text-[9px]`} aria-hidden="true" />
                                       {cfg.label}
+                                      <svg className="w-2.5 h-2.5 opacity-60 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                                      </svg>
                                     </button>
                                   );
                                 })()}
@@ -847,31 +879,6 @@ export default function ProgramPlannerPage() {
                                   );
                                 })()}
                               </td>
-                              <td className="px-3 py-2">
-                                {c.actualSpend != null ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => setBudgetDrawer(c)}
-                                    className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border tabular-nums cursor-pointer hover:opacity-80 transition-opacity"
-                                    style={{ backgroundColor: actualCostPillStyle(c.actualSpend, c.budgetTotal).bg, color: actualCostPillStyle(c.actualSpend, c.budgetTotal).color, borderColor: actualCostPillStyle(c.actualSpend, c.budgetTotal).border }}
-                                  >
-                                    {fmtCurrency(c.actualSpend)}
-                                  </button>
-                                ) : <span className="text-gray-400 tabular-nums">—</span>}
-                              </td>
-                              <td className="px-3 py-2 text-gray-700 tabular-nums">{fmtCurrency(c.pipelineInfluenced)}</td>
-                              <td className="px-3 py-2">
-                                {(c.closedWon ?? 0) > 0 ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => setClosedWonDrawer({ type: 'conference', conferenceId: c.conferenceId, conferenceName: c.name })}
-                                    className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border bg-green-50 text-green-700 border-green-200 tabular-nums hover:bg-green-100 transition-colors cursor-pointer"
-                                  >
-                                    {fmtCurrency(c.closedWon)}
-                                  </button>
-                                ) : <span className="text-gray-400 tabular-nums">—</span>}
-                              </td>
-                              <td className="px-3 py-2 text-gray-700">{c.headcount ?? '—'}</td>
                               <td className="px-3 py-2">
                                 <DecisionPill
                                   confId={c.conferenceId}

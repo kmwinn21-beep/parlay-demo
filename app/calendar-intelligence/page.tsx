@@ -504,7 +504,7 @@ export default function CalendarIntelligencePage() {
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${pathToTierOpen ? 'bg-brand-secondary text-white border-brand-secondary' : 'border-gray-200 text-gray-600 hover:border-brand-secondary hover:text-brand-secondary'}`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
-              Path to Tier
+              Gap Analysis
             </button>
             {cesConferenceIds.has(row.conferenceId) && (
               <button
@@ -789,7 +789,7 @@ export default function CalendarIntelligencePage() {
                             <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('attendeeCount')}>Attendees</th>
                             <th className="p-2 text-center cursor-pointer" onClick={() => setCalendarSort('icpCompanies')}>ICP Companies</th>
                             <th className="p-2 text-center">Budget Set?</th>
-                            <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('score' as keyof CalendarConferenceRow)}>Score</th>
+                            <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('score' as keyof CalendarConferenceRow)}>List Score</th>
                             <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('recommendationTier')}>Recommendation</th>
                             <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('confidenceLevel')}>Confidence</th>
                             <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('dataAge')}>Data Age</th>
@@ -890,7 +890,7 @@ export default function CalendarIntelligencePage() {
                   {pathToTierOpen && (
                     <div className="border-t border-gray-100">
                       <div className="p-5 flex items-center justify-between">
-                        <h3 className="font-semibold text-gray-900">Path to Tier</h3>
+                        <h3 className="font-semibold text-gray-900">Gap Analysis</h3>
                         <button onClick={() => setPathToTierOpen(false)} className="text-gray-400 hover:text-gray-600">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
                         </button>
@@ -931,7 +931,7 @@ export default function CalendarIntelligencePage() {
                   {pathToTierOpen && (
                     <OverlayPanel className="w-[420px] flex-shrink-0">
                       <div className="p-5 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
-                        <h3 className="font-semibold text-gray-900">Path to Tier</h3>
+                        <h3 className="font-semibold text-gray-900">Gap Analysis</h3>
                         <button onClick={() => setPathToTierOpen(false)} className="text-gray-400 hover:text-gray-600">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
                         </button>
