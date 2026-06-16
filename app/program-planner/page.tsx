@@ -303,6 +303,7 @@ export default function ProgramPlannerPage() {
   const [budgetDrawer, setBudgetDrawer] = useState<ConferenceRow | null>(null);
   const [calDrawer, setCalDrawer] = useState<{ conferenceId: number; conferenceName: string; basicScore: { score: number; tier: string; confidence: string } } | null>(null);
   const [inputPanelConference, setInputPanelConference] = useState<{ conferenceId: number; conferenceName: string } | null>(null);
+  const [teamInputMap, setTeamInputMap] = useState<Map<number, { hasInput: boolean; hasComments: boolean }>>(new Map());
 
   // Calendar Intelligence scoring state
   const [calIntelScores, setCalIntelScores] = useState<Map<number, { score: number; tier: string; confidence: string }>>(new Map());
@@ -324,6 +325,21 @@ export default function ProgramPlannerPage() {
   }, []);
 
   useEffect(() => { fetchData(selectedYear); }, [selectedYear, fetchData]);
+
+  // Fetch team input / comment presence for the Input column
+  useEffect(() => {
+    fetch('/api/calendar-intelligence/decisions/board')
+      .then(r => r.ok ? r.json() : { conferences: [] })
+      .then((data: { conferences: Array<{ conferenceId: number; noteCount: number; opinionsByDecision: Record<string, unknown[]> }> }) => {
+        const map = new Map<number, { hasInput: boolean; hasComments: boolean }>();
+        for (const conf of data.conferences) {
+          const hasInput = Object.values(conf.opinionsByDecision).some(arr => arr.length > 0);
+          map.set(conf.conferenceId, { hasInput, hasComments: (conf.noteCount ?? 0) > 0 });
+        }
+        setTeamInputMap(map);
+      })
+      .catch(() => {});
+  }, []);
 
   // Subscribe to shared calendar intelligence store (same scores as Cal Intel page)
   useEffect(() => {
@@ -639,49 +655,43 @@ export default function ProgramPlannerPage() {
                         <col style={{ minWidth: 160 }} />
                         <col style={{ width: 64 }} />
                         <col style={{ width: 50 }} />
+                        <col style={{ width: 90 }} />
+                        <col style={{ width: 90 }} />
+                        <col style={{ width: 90 }} />
                         <col style={{ width: 100 }} />
                         <col style={{ width: 46 }} />
-                        <col style={{ width: 90 }} />
-                        <col style={{ width: 90 }} />
-                        <col style={{ width: 90 }} />
                         <col style={{ width: 52 }} />
+                        <col style={{ width: 44 }} />
                         <col style={{ width: 90 }} />
                       </colgroup>
                       <thead>
                         <tr className="border-b border-gray-100">
-                          {['Conference', 'Dates', 'CES'].map(h => (
-                            <th key={h} className="px-3 py-2 text-left text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
-                              {h}
-                            </th>
-                          ))}
-                          {['Actual cost', 'Pipeline inf.', 'Closed/won'].map(h => (
-                            <th key={h} className="px-3 py-2 text-left text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
-                              {h}
-                            </th>
-                          ))}
+                          <th className="px-3 py-2 text-left text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Conference</th>
+                          <th className="px-3 py-2 text-center text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Dates</th>
+                          <th className="px-3 py-2 text-center text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">CES</th>
+                          <th className="px-3 py-2 text-center text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Actual cost</th>
+                          <th className="px-3 py-2 text-center text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Pipeline inf.</th>
+                          <th className="px-3 py-2 text-center text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Closed/won</th>
                           <th className="px-3 py-2 text-left text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
                             <div className="flex items-center gap-1">
                               <i className="ti ti-calendar-stats text-[11px] text-purple-600" aria-hidden="true" />
                               <span>Recommendation</span>
                             </div>
                           </th>
-                          <th className="px-3 py-2 text-left text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
-                            <div className="flex items-center gap-1">
+                          <th className="px-3 py-2 text-center text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1">
                               <i className="ti ti-calendar-stats text-[11px] text-purple-600" aria-hidden="true" />
                               <span>List Score</span>
                             </div>
                           </th>
-                          {['Decision'].map(h => (
-                            <th key={h} className="px-3 py-2 text-left text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
-                              {h}
-                            </th>
-                          ))}
+                          <th className="px-3 py-2 text-center text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Input</th>
+                          <th className="px-3 py-2 text-left text-[12px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Decision</th>
                         </tr>
                       </thead>
                       <tbody>
                         {tableRows.length === 0 && (
                           <tr>
-                            <td colSpan={9} className="px-4 py-8 text-center text-gray-400 text-sm">
+                            <td colSpan={10} className="px-4 py-8 text-center text-gray-400 text-sm">
                               No conferences found for {selectedYear}
                             </td>
                           </tr>
@@ -693,7 +703,7 @@ export default function ProgramPlannerPage() {
                             const collapsed = collapsedSeries.has(s.seriesId);
                             return (
                               <tr key={row.key} style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }} className="border-y border-gray-200">
-                                <td colSpan={9} className="px-3 py-2">
+                                <td colSpan={10} className="px-3 py-2">
                                   <div className="flex items-center justify-between">
                                     <button
                                       onClick={() => toggleSeries(s.seriesId)}
@@ -741,7 +751,7 @@ export default function ProgramPlannerPage() {
                           if (row.type === 'standalone_header') {
                             return (
                               <tr key={row.key} style={{ backgroundColor: 'var(--color-background-secondary, #F9FAFB)' }} className="border-y border-gray-200">
-                                <td colSpan={9} className="px-3 py-2">
+                                <td colSpan={10} className="px-3 py-2">
                                   <button
                                     onClick={() => toggleSeries('__standalone__')}
                                     className="flex items-center gap-2"
@@ -766,30 +776,21 @@ export default function ProgramPlannerPage() {
                               style={isOdd ? { backgroundColor: 'var(--color-background-secondary, #F9FAFB)' } : {}}
                               className="hover:bg-blue-50/30 transition-colors"
                             >
+                              {/* Conference name */}
                               <td className="px-3 py-2">
-                                <div className="flex items-center gap-1.5">
-                                  <button className="text-brand-secondary hover:text-brand-primary text-left font-medium truncate max-w-[135px]">
-                                    {c.name}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setInputPanelConference({ conferenceId: c.conferenceId, conferenceName: c.name })}
-                                    className="flex-shrink-0 text-gray-300 hover:text-gray-500 transition-colors"
-                                    title="View team input"
-                                  >
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    </svg>
-                                  </button>
-                                </div>
+                                <button className="text-brand-secondary hover:text-brand-primary text-left font-medium truncate max-w-[150px] block">
+                                  {c.name}
+                                </button>
                               </td>
-                              <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{fmtDate(c.startDate)}</td>
-                              <td className="px-3 py-2">
+                              {/* Dates */}
+                              <td className="px-3 py-2 text-center text-gray-500 whitespace-nowrap">{fmtDate(c.startDate)}</td>
+                              {/* CES */}
+                              <td className="px-3 py-2 text-center">
                                 {c.ces != null ? (
                                   <button
                                     type="button"
                                     onClick={() => setEffectivenessDrawer({ conferenceId: c.conferenceId, conferenceName: c.name })}
-                                    className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold border transition-opacity hover:opacity-75 cursor-pointer"
+                                    className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold border transition-opacity hover:opacity-75 cursor-pointer mx-auto"
                                     style={{ backgroundColor: cesPillStyle(c.ces).bg, color: cesPillStyle(c.ces).color, borderColor: cesPillStyle(c.ces).border }}
                                     title="View effectiveness"
                                   >
@@ -797,30 +798,34 @@ export default function ProgramPlannerPage() {
                                   </button>
                                 ) : <span className="text-gray-400">—</span>}
                               </td>
-                              <td className="px-3 py-2">
+                              {/* Actual cost */}
+                              <td className="px-3 py-2 text-center">
                                 {c.actualSpend != null ? (
                                   <button
                                     type="button"
                                     onClick={() => setBudgetDrawer(c)}
-                                    className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border tabular-nums cursor-pointer hover:opacity-80 transition-opacity"
+                                    className="inline-flex items-center justify-center min-w-[80px] px-1.5 py-0.5 rounded text-[12px] font-semibold border tabular-nums cursor-pointer hover:opacity-80 transition-opacity"
                                     style={{ backgroundColor: actualCostPillStyle(c.actualSpend, c.budgetTotal).bg, color: actualCostPillStyle(c.actualSpend, c.budgetTotal).color, borderColor: actualCostPillStyle(c.actualSpend, c.budgetTotal).border }}
                                   >
                                     {fmtCurrency(c.actualSpend)}
                                   </button>
                                 ) : <span className="text-gray-400 tabular-nums">—</span>}
                               </td>
-                              <td className="px-3 py-2 text-gray-700 tabular-nums">{fmtCurrency(c.pipelineInfluenced)}</td>
-                              <td className="px-3 py-2">
+                              {/* Pipeline */}
+                              <td className="px-3 py-2 text-center text-gray-700 tabular-nums">{fmtCurrency(c.pipelineInfluenced)}</td>
+                              {/* Closed/won */}
+                              <td className="px-3 py-2 text-center">
                                 {(c.closedWon ?? 0) > 0 ? (
                                   <button
                                     type="button"
                                     onClick={() => setClosedWonDrawer({ type: 'conference', conferenceId: c.conferenceId, conferenceName: c.name })}
-                                    className="inline-block px-1.5 py-0.5 rounded text-[12px] font-semibold border bg-green-50 text-green-700 border-green-200 tabular-nums hover:bg-green-100 transition-colors cursor-pointer"
+                                    className="inline-flex items-center justify-center min-w-[80px] px-1.5 py-0.5 rounded text-[12px] font-semibold border bg-green-50 text-green-700 border-green-200 tabular-nums hover:bg-green-100 transition-colors cursor-pointer"
                                   >
                                     {fmtCurrency(c.closedWon)}
                                   </button>
                                 ) : <span className="text-gray-400 tabular-nums">—</span>}
                               </td>
+                              {/* Recommendation */}
                               <td className="px-3 py-2">
                                 {(() => {
                                   const ci = calIntelScores.get(c.conferenceId);
@@ -854,12 +859,13 @@ export default function ProgramPlannerPage() {
                                   );
                                 })()}
                               </td>
-                              <td className="px-3 py-2">
+                              {/* List Score */}
+                              <td className="px-3 py-2 text-center">
                                 {(() => {
                                   const ci = calIntelScores.get(c.conferenceId);
                                   if (!ci && calIntelLoading) {
                                     return (
-                                      <div className="flex gap-0.5">
+                                      <div className="flex justify-center gap-0.5">
                                         {[0, 1, 2].map(i => <span key={i} className="w-1 h-1 rounded-full bg-blue-200 animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />)}
                                       </div>
                                     );
@@ -870,12 +876,41 @@ export default function ProgramPlannerPage() {
                                     <button
                                       type="button"
                                       onClick={() => setCalDrawer({ conferenceId: c.conferenceId, conferenceName: c.name, basicScore: { score: ci.score, tier: ci.tier, confidence: ci.confidence } })}
-                                      className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-medium border hover:opacity-80 transition-opacity cursor-pointer"
+                                      className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-medium border hover:opacity-80 transition-opacity cursor-pointer mx-auto"
                                       style={{ background: cfg?.bg ?? '#F3F4F6', color: cfg?.text ?? '#6B7280', borderColor: cfg?.border ?? '#D1D5DB' }}
                                       title={`Cal. Intel. score: ${ci.score}`}
                                     >
                                       {Math.round(ci.score)}
                                     </button>
+                                  );
+                                })()}
+                              </td>
+                              {/* Input */}
+                              <td className="px-3 py-2 text-center">
+                                {(() => {
+                                  const info = teamInputMap.get(c.conferenceId);
+                                  const hasInput = info?.hasInput ?? false;
+                                  const hasComments = info?.hasComments ?? false;
+                                  return (
+                                    <div className="flex items-center justify-center">
+                                      <button
+                                        type="button"
+                                        onClick={() => setInputPanelConference({ conferenceId: c.conferenceId, conferenceName: c.name })}
+                                        className="relative transition-colors hover:opacity-75"
+                                        title="View team input"
+                                      >
+                                        <svg
+                                          className="w-3.5 h-3.5"
+                                          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                          style={{ color: hasInput ? 'rgb(var(--brand-primary-rgb))' : '#6B7280' }}
+                                        >
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        </svg>
+                                        {hasComments && (
+                                          <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-red-500 rounded-full" />
+                                        )}
+                                      </button>
+                                    </div>
                                   );
                                 })()}
                               </td>

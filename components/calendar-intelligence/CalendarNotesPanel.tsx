@@ -107,7 +107,7 @@ export function CalendarNotesPanel({ conferenceId, onClose, variant = 'sidebar' 
     <div className={`flex flex-col h-full bg-white ${variant === 'sheet' ? 'w-full' : 'w-[360px] border-l'}`}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b">
-        <h3 className="font-semibold text-gray-900 text-sm">Notes</h3>
+        <h3 className="font-semibold text-gray-900 text-sm">Comments</h3>
         <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
@@ -119,8 +119,8 @@ export function CalendarNotesPanel({ conferenceId, onClose, variant = 'sidebar' 
           <div className="text-center py-8 text-gray-400 text-sm">Loading…</div>
         ) : notes.length === 0 ? (
           <div className="text-center py-8">
-            <p className="text-gray-400 text-sm">No notes yet.</p>
-            <p className="text-xs text-gray-300 mt-1">Add the first note below.</p>
+            <p className="text-gray-400 text-sm">No comments yet.</p>
+            <p className="text-xs text-gray-300 mt-1">Add the first comment below.</p>
           </div>
         ) : (
           notes.map(note => (
@@ -160,11 +160,11 @@ export function CalendarNotesPanel({ conferenceId, onClose, variant = 'sidebar' 
           rows={3}
           value={newNote}
           onChange={(e) => setNewNote(e.target.value)}
-          placeholder="Add a note…"
+          placeholder="Add a comment…"
           className="input-field text-sm w-full resize-none"
         />
         <button onClick={() => postNote(newNote)} disabled={posting || !newNote.trim()} className="btn-primary text-sm w-full disabled:opacity-50">
-          {posting ? 'Posting…' : 'Post Note'}
+          {posting ? 'Posting…' : 'Post Comment'}
         </button>
       </div>
     </div>

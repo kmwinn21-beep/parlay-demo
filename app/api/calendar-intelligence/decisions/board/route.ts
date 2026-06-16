@@ -110,8 +110,8 @@ export async function GET(request: NextRequest) {
   const conferences = (confsRes.rows as Row[])
     .filter(r => {
       if (filterConferenceId) return true; // always return the requested conference
-      // Default view: only conferences with at least one user opinion
-      return opinionsByConf.has(Number(r.id));
+      // Default view: conferences with at least one user opinion OR at least one note
+      return opinionsByConf.has(Number(r.id)) || (noteCountMap.get(Number(r.id)) ?? 0) > 0;
     })
     .map(r => {
       const cid = Number(r.id);
