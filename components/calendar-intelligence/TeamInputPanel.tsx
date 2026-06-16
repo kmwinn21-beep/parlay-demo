@@ -477,7 +477,7 @@ export function TeamInputPanel({
                         </div>
                         <p className="text-[10px] text-gray-400">{timeAgo(op.updatedAt)}</p>
                       </div>
-                      {/* Edit button for current user's opinion */}
+                      {/* Edit button for current user's opinion — left of the pill */}
                       {isCurrentUser && (
                         <button
                           type="button"
@@ -496,14 +496,12 @@ export function TeamInputPanel({
                           Edit
                         </button>
                       )}
-                      {!isCurrentUser && (
-                        <span
-                          className="flex-shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-semibold text-white"
-                          style={{ backgroundColor: color }}
-                        >
-                          {DECISION_LABEL[k]}
-                        </span>
-                      )}
+                      <span
+                        className="flex-shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-semibold text-white"
+                        style={{ backgroundColor: color }}
+                      >
+                        {DECISION_LABEL[k]}
+                      </span>
                     </div>
                     {op.note && (
                       <p className="text-xs text-gray-500 italic mt-1.5 bg-gray-50 rounded px-2 py-1.5">

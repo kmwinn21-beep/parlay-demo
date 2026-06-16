@@ -46,11 +46,9 @@ export function ConferenceInputPanel({ conferenceId, conferenceName, onClose }: 
               onClick={() => setRequestFormOpen(v => !v)}
               className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors"
               style={{
-                color: requestFormOpen ? '#fff' : 'rgb(var(--brand-secondary-rgb, 27 118 188))',
-                border: '1px solid rgb(var(--brand-secondary-rgb, 27 118 188))',
-                background: requestFormOpen
-                  ? 'rgb(var(--brand-secondary-rgb, 27 118 188))'
-                  : 'rgb(var(--brand-secondary-rgb, 27 118 188) / 0.15)',
+                color: '#fff',
+                border: '1px solid rgba(255,255,255,0.75)',
+                background: requestFormOpen ? 'rgba(255,255,255,0.15)' : 'transparent',
               }}
             >
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
