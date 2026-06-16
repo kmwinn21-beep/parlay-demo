@@ -269,6 +269,7 @@ interface InputRequestEmailOpts {
   };
   parlayLink: string;
   expiresAt: string;
+  expiryDays?: number;
   pdfAttachmentBase64?: string;
 }
 
@@ -276,7 +277,7 @@ export async function sendInputRequestEmail(opts: InputRequestEmailOpts): Promis
   const {
     to, recipientName, conferenceName, conferenceYear,
     requesterName, calScore, calTier,
-    tokenLinks, parlayLink, expiresAt, pdfAttachmentBase64,
+    tokenLinks, parlayLink, expiresAt, expiryDays, pdfAttachmentBase64,
   } = opts;
 
   const tierLabel = calTier ? (TIER_LABELS[calTier] ?? calTier) : null;
@@ -316,6 +317,7 @@ export async function sendInputRequestEmail(opts: InputRequestEmailOpts): Promis
       <p style="margin:0 0 16px;font-size:15px;color:#1a1a1a">
         Hi ${recipientName}, <strong>${requesterName}</strong> has requested your input on
         <strong>${conferenceName}</strong> for ${conferenceYear}.
+        Please respond by ${expiresAt}${expiryDays != null ? ` (${expiryDays} Days)` : ''}.
       </p>
 
       ${scoreBlock}

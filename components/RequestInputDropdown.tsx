@@ -5,15 +5,6 @@ import { useUser } from '@/components/UserContext';
 
 type Recipient = { id?: number; email: string; name: string };
 type SystemUser = { id: number; email: string; displayName: string | null };
-type PendingRequest = {
-  id: number;
-  recipientEmail: string;
-  recipientName: string;
-  recipientTitle: string | null;
-  recipientUserId: number | null;
-  status: 'pending' | 'responded' | 'expired';
-  createdAt: string;
-};
 type SendState = 'idle' | 'sending' | 'sent' | 'error';
 
 type Props = {
@@ -38,7 +29,7 @@ export function RequestInputDropdown({ conferenceId, conferenceName }: Props) {
   const [otherEmail, setOtherEmail] = useState('');
   const [otherEmailError, setOtherEmailError] = useState('');
   const [sendState, setSendState] = useState<SendState>('idle');
-  const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
+  const [expiryDays, setExpiryDays] = useState(7);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -47,16 +38,8 @@ export function RequestInputDropdown({ conferenceId, conferenceName }: Props) {
       .then(r => r.ok ? r.json() : [])
       .then((data: SystemUser[]) => setSystemUsers(data))
       .catch(() => {});
-    loadPendingRequests();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, conferenceId]);
-
-  const loadPendingRequests = () => {
-    fetch(`/api/calendar-intelligence/request-input?conferenceId=${conferenceId}`)
-      .then(r => r.ok ? r.json() : { requests: [] })
-      .then((data: { requests: PendingRequest[] }) => setPendingRequests(data.requests ?? []))
-      .catch(() => {});
-  };
 
   const filteredUsers = systemUsers.filter(u => {
     if (recipients.some(r => r.email === u.email)) return false;
@@ -103,12 +86,12 @@ export function RequestInputDropdown({ conferenceId, conferenceName }: Props) {
         body: JSON.stringify({
           conferenceId,
           recipients: toSend.map(r => ({ userId: r.id, email: r.email, name: r.name })),
+          expiryDays,
         }),
       });
       if (!res.ok) throw new Error('Failed');
       setSendState('sent');
       if (!overrideRecipients) setRecipients([]);
-      loadPendingRequests();
       setTimeout(() => setSendState('idle'), 3000);
     } catch {
       setSendState('error');
@@ -335,6 +318,23 @@ export function RequestInputDropdown({ conferenceId, conferenceName }: Props) {
             </div>
           )}
 
+          {/* Days to respond */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+            <label style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}>Days to respond:</label>
+            <input
+              type="number"
+              min={1}
+              max={90}
+              value={expiryDays}
+              onChange={e => setExpiryDays(Math.min(90, Math.max(1, Number(e.target.value) || 7)))}
+              style={{
+                width: 52, padding: '4px 6px', borderRadius: 5, fontSize: 11,
+                border: '1px solid var(--color-border, #e5e7eb)', outline: 'none',
+                textAlign: 'right', color: '#1a1a1a',
+              }}
+            />
+          </div>
+
           {/* Send request button */}
           <button
             type="button"
@@ -382,45 +382,6 @@ export function RequestInputDropdown({ conferenceId, conferenceName }: Props) {
             </button>
           )}
 
-          {/* Pending requests */}
-          {pendingRequests.length > 0 && (
-            <div style={{ marginTop: 12, borderTop: '0.5px solid var(--color-border-tertiary, #e5e7eb)', paddingTop: 10 }}>
-              <p style={{
-                fontSize: 10, color: 'var(--color-text-tertiary, #9ca3af)',
-                textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6, fontWeight: 600,
-              }}>
-                Awaiting input
-              </p>
-              {pendingRequests.map(r => (
-                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <div style={{
-                    width: 22, height: 22, borderRadius: '50%',
-                    background: 'rgb(var(--brand-primary-rgb, 11 60 98))',
-                    color: '#fff', fontSize: 10, fontWeight: 700,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                  }}>
-                    {r.recipientName.charAt(0).toUpperCase()}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 11, margin: 0, color: '#1a1a1a', fontWeight: 500 }}>{r.recipientName}</p>
-                    {r.recipientTitle && (
-                      <p style={{ fontSize: 10, color: 'var(--color-text-tertiary, #9ca3af)', margin: 0 }}>{r.recipientTitle}</p>
-                    )}
-                  </div>
-                  <span style={{
-                    fontSize: 9, fontWeight: 600, padding: '2px 7px', borderRadius: 20,
-                    ...(r.status === 'responded'
-                      ? { background: '#d1fae5', color: '#065f46' }
-                      : r.status === 'expired'
-                      ? { background: '#f3f4f6', color: '#6b7280' }
-                      : { background: '#fef3c7', color: '#92400e' }),
-                  }}>
-                    {r.status === 'responded' ? 'Responded' : r.status === 'expired' ? 'Expired' : 'Pending'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 

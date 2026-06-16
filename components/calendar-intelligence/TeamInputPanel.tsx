@@ -12,6 +12,7 @@ interface UserOpinion {
   email: string;
   note: string | null;
   updatedAt: string;
+  isGuest?: boolean;
 }
 
 interface ConferenceData {
@@ -21,6 +22,17 @@ interface ConferenceData {
   attendeeCount: number;
   noteCount: number;
   opinionsByDecision: Record<DecisionKey, UserOpinion[]>;
+}
+
+interface PendingRequest {
+  id: number;
+  recipientEmail: string;
+  recipientName: string;
+  recipientTitle: string | null;
+  recipientUserId: number | null;
+  status: 'pending' | 'responded' | 'expired';
+  createdAt: string;
+  expiresAt: string | null;
 }
 
 export type ConferenceInputPanelProps = {
@@ -46,6 +58,73 @@ const DECISION_COLOR: Record<DecisionKey, string> = {
   pending_approval:  '#185FA5',
 };
 
+function daysRemaining(expiresAt: string | null): number | null {
+  if (!expiresAt) return null;
+  const diff = new Date(expiresAt).getTime() - Date.now();
+  return Math.ceil(diff / 86400000);
+}
+
+function fmtDate(dateStr: string): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dy = String(d.getUTCDate()).padStart(2, '0');
+  const yr = String(d.getUTCFullYear()).slice(-2);
+  return `${mo}/${dy}/${yr}`;
+}
+
+function AwaitingInputSection({ pendingRequests }: { pendingRequests: PendingRequest[] }) {
+  const pending = pendingRequests.filter(r => r.status === 'pending');
+  if (pending.length === 0) return null;
+
+  return (
+    <div style={{ borderTop: '0.5px solid var(--color-border-tertiary, #e5e7eb)', paddingTop: 10, marginTop: 8, marginBottom: 4 }}>
+      <p style={{
+        fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
+        letterSpacing: '.06em', color: '#9ca3af', marginBottom: 8,
+      }}>
+        Awaiting Input · {pending.length}
+      </p>
+      {pending.map(r => {
+        const days = daysRemaining(r.expiresAt);
+        const pillColor = days == null ? '#9ca3af'
+          : days >= 5 ? '#059669'
+          : days >= 3 ? '#d97706'
+          : '#dc2626';
+        const pillBg = days == null ? '#f3f4f6'
+          : days >= 5 ? '#d1fae5'
+          : days >= 3 ? '#fef3c7'
+          : '#fee2e2';
+        return (
+          <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7 }}>
+            <div style={{
+              width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+              background: '#e5e7eb', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#6b7280',
+            }}>
+              {r.recipientName.charAt(0).toUpperCase()}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 11, margin: 0, fontWeight: 500, color: '#1a1a1a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {r.recipientName}
+              </p>
+              <p style={{ fontSize: 10, margin: 0, color: '#9ca3af' }}>Sent {fmtDate(r.createdAt)}</p>
+            </div>
+            {days != null && (
+              <span style={{
+                fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 20,
+                background: pillBg, color: pillColor, flexShrink: 0, whiteSpace: 'nowrap',
+              }}>
+                {days <= 0 ? 'Due today' : `${days}d left`}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function timeAgo(dateStr: string): string {
   if (!dateStr) return '';
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -59,15 +138,24 @@ function timeAgo(dateStr: string): string {
 export function TeamInputPanel({ conferenceId, conferenceName }: ConferenceInputPanelProps) {
   const [data, setData] = useState<ConferenceData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
 
   useEffect(() => {
     setLoading(true);
     setData(null);
-    fetch(`/api/calendar-intelligence/decisions/board?conferenceId=${conferenceId}`)
-      .then(r => r.ok ? r.json() : { conferences: [] })
-      .then((res: { conferences: ConferenceData[] }) => setData(res.conferences[0] ?? null))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    Promise.all([
+      fetch(`/api/calendar-intelligence/decisions/board?conferenceId=${conferenceId}`)
+        .then(r => r.ok ? r.json() : { conferences: [] })
+        .then((res: { conferences: ConferenceData[] }) => res.conferences[0] ?? null)
+        .catch(() => null),
+      fetch(`/api/calendar-intelligence/request-input?conferenceId=${conferenceId}`)
+        .then(r => r.ok ? r.json() : { requests: [] })
+        .then((res: { requests: PendingRequest[] }) => res.requests ?? [])
+        .catch(() => [] as PendingRequest[]),
+    ]).then(([boardData, requests]) => {
+      setData(boardData);
+      setPendingRequests(requests);
+    }).finally(() => setLoading(false));
   }, [conferenceId]);
 
   if (loading) {
@@ -98,6 +186,7 @@ export function TeamInputPanel({ conferenceId, conferenceName }: ConferenceInput
             Team members can log opinions in Calendar Intelligence.
           </p>
         </div>
+        <AwaitingInputSection pendingRequests={pendingRequests} />
         <div className="border-t border-gray-100">
           <CalendarNotesPanel conferenceId={conferenceId} onClose={() => {}} variant="sheet" />
         </div>
@@ -160,7 +249,14 @@ export function TeamInputPanel({ conferenceId, conferenceName }: ConferenceInput
                       {op.displayName.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 leading-tight truncate">{op.displayName}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <p className="text-sm font-medium text-gray-800 leading-tight truncate">{op.displayName}</p>
+                        {op.isGuest && (
+                          <span style={{ fontSize: 9, fontWeight: 600, color: '#6b7280', background: '#f3f4f6', borderRadius: 4, padding: '1px 4px', flexShrink: 0 }}>
+                            External
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[10px] text-gray-400">{timeAgo(op.updatedAt)}</p>
                     </div>
                     <span
@@ -181,6 +277,9 @@ export function TeamInputPanel({ conferenceId, conferenceName }: ConferenceInput
           );
         })}
       </div>
+
+      {/* Awaiting input */}
+      <AwaitingInputSection pendingRequests={pendingRequests} />
 
       {/* Discussion thread */}
       <div className="border-t border-gray-100 mt-2">

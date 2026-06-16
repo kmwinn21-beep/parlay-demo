@@ -27,8 +27,9 @@ export async function POST(request: NextRequest) {
   const body = await request.json() as {
     conferenceId: number;
     recipients: Recipient[];
+    expiryDays?: number;
   };
-  const { conferenceId, recipients } = body;
+  const { conferenceId, recipients, expiryDays = 7 } = body;
 
   if (!conferenceId || !Array.isArray(recipients) || recipients.length === 0) {
     return NextResponse.json({ error: 'conferenceId and at least one recipient are required' }, { status: 400 });
@@ -70,7 +71,8 @@ export async function POST(request: NextRequest) {
     : [reqRow?.first_name, reqRow?.last_name].filter(Boolean).join(' ') || authResult.email;
 
   const parlayLink = `${BASE_URL}/calendar-intelligence?conference=${conferenceId}`;
-  const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+  const clampedDays = Math.max(1, Math.min(90, Number(expiryDays) || 7));
+  const expiresAt = new Date(Date.now() + clampedDays * 24 * 60 * 60 * 1000);
 
   let requestsSent = 0;
 
@@ -159,6 +161,7 @@ export async function POST(request: NextRequest) {
       tokenLinks,
       parlayLink,
       expiresAt: expiresAt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+      expiryDays: clampedDays,
     }).catch(() => {});
 
     requestsSent++;
@@ -177,10 +180,15 @@ export async function GET(request: NextRequest) {
   if (!conferenceId) return NextResponse.json({ error: 'conferenceId required' }, { status: 400 });
 
   const res = await db.execute({
-    sql: `SELECT id, recipient_email, recipient_name, recipient_title, recipient_user_id, status, created_at
-          FROM input_requests
-          WHERE conference_id = ?
-          ORDER BY created_at DESC`,
+    sql: `SELECT ir.id, ir.recipient_email, ir.recipient_name, ir.recipient_title,
+                 ir.recipient_user_id, ir.status, ir.created_at,
+                 (SELECT irt.expires_at FROM input_request_tokens irt
+                  WHERE irt.conference_id = ir.conference_id
+                    AND irt.recipient_email = ir.recipient_email
+                  ORDER BY irt.created_at DESC LIMIT 1) AS expires_at
+          FROM input_requests ir
+          WHERE ir.conference_id = ?
+          ORDER BY ir.created_at DESC`,
     args: [conferenceId],
   });
 
@@ -192,6 +200,7 @@ export async function GET(request: NextRequest) {
     recipientUserId: r.recipient_user_id != null ? Number(r.recipient_user_id) : null,
     status: String(r.status) as 'pending' | 'responded' | 'expired',
     createdAt: String(r.created_at ?? ''),
+    expiresAt: r.expires_at ? String(r.expires_at) : null,
   }));
 
   return NextResponse.json({ requests });
