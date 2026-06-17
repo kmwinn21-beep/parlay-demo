@@ -108,29 +108,44 @@ function AwaitingInputSection({ pendingRequests }: { pendingRequests: PendingReq
           : days >= 5 ? '#d1fae5'
           : days >= 3 ? '#fef3c7'
           : '#fee2e2';
+        const isExternal = r.recipientUserId == null;
+        const subtitleParts = isExternal
+          ? [r.recipientTitle, r.recipientEmail].filter(Boolean).join(' · ')
+          : null;
         return (
-          <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7 }}>
-            <div style={{
-              width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-              background: '#e5e7eb', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#6b7280',
-            }}>
-              {r.recipientName.charAt(0).toUpperCase()}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: 11, margin: 0, fontWeight: 500, color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {r.recipientName}
-              </p>
-              <p style={{ fontSize: 10, margin: 0, color: '#9ca3af' }}>Sent {fmtDate(r.createdAt)}</p>
-            </div>
-            {days != null && (
-              <span style={{
-                fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 20,
-                background: pillBg, color: pillColor, flexShrink: 0, whiteSpace: 'nowrap',
+          <div key={r.id} style={{ marginBottom: 7 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <div style={{
+                width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                background: '#e5e7eb', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#6b7280',
               }}>
-                {days <= 0 ? 'Due today' : `${days}d left`}
-              </span>
-            )}
+                {r.recipientName.charAt(0).toUpperCase()}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 11, margin: 0, fontWeight: 500, color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {r.recipientName}
+                </p>
+                {subtitleParts && (
+                  <p style={{ fontSize: 10, margin: 0, color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {subtitleParts}
+                  </p>
+                )}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                <span style={{ fontSize: 9, color: '#b0b7c3', whiteSpace: 'nowrap' }}>
+                  {fmtDate(r.createdAt)}
+                </span>
+                {days != null && (
+                  <span style={{
+                    fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 20,
+                    background: pillBg, color: pillColor, whiteSpace: 'nowrap',
+                  }}>
+                    {days <= 0 ? 'Due today' : `${days}d left`}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
         );
       })}
