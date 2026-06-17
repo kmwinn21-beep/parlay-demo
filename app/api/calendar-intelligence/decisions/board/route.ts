@@ -10,6 +10,7 @@ type UserOpinion = {
   email: string;
   note: string | null;
   updatedAt: string;
+  isGuest?: boolean;
 };
 
 const DECISION_KEYS = ['confirmed', 'attend_but_reduce', 'watching', 'passed', 'pending_approval'] as const;
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
   const conferenceIdParam = request.nextUrl.searchParams.get('conferenceId');
   const filterConferenceId = conferenceIdParam ? Number(conferenceIdParam) : null;
 
-  const [confsRes, userDecisionsRes, noteCountsRes] = await Promise.all([
+  const [confsRes, userDecisionsRes, noteCountsRes, guestResponsesRes] = await Promise.all([
     filterConferenceId
       ? db.execute({
           // Filtered view: any conference (no end_date restriction — supports active/upcoming too)
@@ -75,6 +76,22 @@ export async function GET(request: NextRequest) {
           sql: `SELECT conference_id, COUNT(*) as note_count FROM calendar_notes GROUP BY conference_id`,
           args: [],
         }),
+    // Guest responses (external users who clicked a token link)
+    filterConferenceId
+      ? db.execute({
+          sql: `SELECT id, conference_id, recipient_email, recipient_name, decision_logged, used_at
+                FROM input_request_tokens
+                WHERE conference_id = ? AND decision_logged IS NOT NULL AND used_at IS NOT NULL
+                  AND recipient_user_id IS NULL`,
+          args: [filterConferenceId],
+        })
+      : db.execute({
+          sql: `SELECT id, conference_id, recipient_email, recipient_name, decision_logged, used_at
+                FROM input_request_tokens
+                WHERE decision_logged IS NOT NULL AND used_at IS NOT NULL
+                  AND recipient_user_id IS NULL`,
+          args: [],
+        }),
   ]);
 
   // Group opinions by conference, then by decision value
@@ -98,6 +115,27 @@ export async function GET(request: NextRequest) {
       groups[dec].push(opinion);
     } else {
       // Unknown decision value — add it anyway under a cast so nothing is silently lost
+      (groups as Record<string, UserOpinion[]>)[dec] = [...((groups as Record<string, UserOpinion[]>)[dec] ?? []), opinion];
+    }
+  }
+
+  // Merge guest (external) responses — use negative token ID as synthetic userId sentinel
+  for (const row of guestResponsesRes.rows as Row[]) {
+    const cid = Number(row.conference_id);
+    if (!opinionsByConf.has(cid)) opinionsByConf.set(cid, emptyOpinions());
+    const dec = String(row.decision_logged) as DecisionKey;
+    const groups = opinionsByConf.get(cid)!;
+    const opinion: UserOpinion = {
+      userId: -Number(row.id),
+      displayName: String(row.recipient_name ?? row.recipient_email),
+      email: String(row.recipient_email),
+      note: null,
+      updatedAt: String(row.used_at ?? ''),
+      isGuest: true,
+    };
+    if (Object.prototype.hasOwnProperty.call(groups, dec)) {
+      groups[dec].push(opinion);
+    } else {
       (groups as Record<string, UserOpinion[]>)[dec] = [...((groups as Record<string, UserOpinion[]>)[dec] ?? []), opinion];
     }
   }

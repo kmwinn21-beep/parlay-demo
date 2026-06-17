@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
+import { getDb } from '@/lib/getDb';
 import { getMicrosoftCredentials } from '@/lib/oauthCredentials';
 
 export async function GET(request: NextRequest) {
@@ -24,4 +25,15 @@ export async function GET(request: NextRequest) {
   });
 
   return NextResponse.redirect(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize?${params}`);
+}
+
+export async function DELETE(request: NextRequest) {
+  const user = await requireAuth(request);
+  if (user instanceof NextResponse) return user;
+  const db = await getDb(user.accountId);
+  await db.execute({
+    sql: 'DELETE FROM oauth_connections WHERE user_id = ? AND provider = ?',
+    args: [user.id, 'microsoft'],
+  });
+  return NextResponse.json({ ok: true });
 }

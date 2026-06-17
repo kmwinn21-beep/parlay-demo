@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { CalendarNotesPanel } from './CalendarNotesPanel';
 import { DecisionTag } from './DecisionTag';
 import { type CalendarConferenceRow } from '@/lib/calendarIntelligenceStore';
+import { useUser } from '@/components/UserContext';
 
 type DecisionKey = 'confirmed' | 'attend_but_reduce' | 'watching' | 'passed' | 'pending_approval';
 
@@ -190,6 +191,18 @@ export function DecisionsBoard({
   onSelectedConferenceChange,
   onConferencesLoaded,
 }: Props) {
+  const { user } = useUser();
+  const [pendingRequestConferenceIds, setPendingRequestConferenceIds] = useState<number[]>([]);
+
+  useEffect(() => {
+    fetch('/api/calendar-intelligence/my-input-status')
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { pendingConferenceIds?: number[] } | null) => {
+        if (data?.pendingConferenceIds) setPendingRequestConferenceIds(data.pendingConferenceIds);
+      })
+      .catch(() => {});
+  }, []);
+
   const [allConferences, setAllConferences] = useState<BoardConference[]>([]);
   const [filteredConference, setFilteredConference] = useState<BoardConference | null>(null);
   const [loading, setLoading] = useState(true);
@@ -485,6 +498,10 @@ export function DecisionsBoard({
                           .then((data: { conferences: typeof filteredConference[] }) => setFilteredConference((data.conferences[0] as typeof filteredConference) ?? null))
                           .catch(() => {});
                       }}
+                      disabled={
+                        !(user?.capabilities?.record_input_without_invitation) &&
+                        !pendingRequestConferenceIds.includes(selectedConferenceId)
+                      }
                     />
                   </div>
                 </div>

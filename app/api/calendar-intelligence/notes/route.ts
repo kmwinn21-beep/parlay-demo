@@ -16,9 +16,12 @@ export async function GET(request: NextRequest) {
 
   const notesRes = await db.execute({
     sql: `SELECT cn.id, cn.conference_id, cn.author_user_id, cn.content, cn.decision_state, cn.parent_note_id, cn.created_at,
-                 u.first_name, u.last_name, u.email, u.display_name
+                 u.first_name, u.last_name, u.email, u.display_name,
+                 ucd.decision AS current_decision
           FROM calendar_notes cn
           JOIN users u ON u.id = cn.author_user_id
+          LEFT JOIN user_conference_decisions ucd
+            ON ucd.user_id = cn.author_user_id AND ucd.conference_id = cn.conference_id
           WHERE cn.conference_id = ?
           ORDER BY cn.created_at ASC`,
     args: [conferenceId],
@@ -45,7 +48,7 @@ export async function GET(request: NextRequest) {
     authorName: n.display_name ? String(n.display_name) : [n.first_name, n.last_name].filter(Boolean).join(' ') || String(n.email),
     authorEmail: String(n.email),
     content: String(n.content),
-    decisionState: n.decision_state ? String(n.decision_state) : null,
+    decisionState: n.current_decision ? String(n.current_decision) : (n.decision_state ? String(n.decision_state) : null),
     parentNoteId: n.parent_note_id != null ? Number(n.parent_note_id) : null,
     createdAt: String(n.created_at ?? ''),
   });

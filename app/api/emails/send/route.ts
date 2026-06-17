@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const accessToken = await getValidToken(user.id, provider);
+    const accessToken = await getValidToken(db, user.id, provider);
 
     if (provider === 'google') {
       // Get provider email for From header

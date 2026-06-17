@@ -56,6 +56,15 @@ const ATTRIBUTION_PILL: Record<string, string> = {
   'Accelerated': 'bg-yellow-50 text-yellow-700 border-yellow-200',
 };
 
+const DEAL_TYPE_PILL: Record<string, string> = {
+  'New Business': 'bg-green-50 text-green-700 border-green-200',
+  'Upsell':       'bg-blue-50 text-blue-700 border-blue-200',
+  'Renewal':      'bg-orange-50 text-orange-700 border-orange-200',
+  'Expansion':    'bg-purple-50 text-purple-700 border-purple-200',
+  'Partnership':  'bg-yellow-50 text-yellow-700 border-yellow-200',
+  'Other':        'bg-gray-900 text-gray-50 border-gray-700',
+};
+
 export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = true }: ClosedWonDealsSectionProps) {
   const { openDeal } = useClosedDealDraft();
   const [deals, setDeals] = useState<ClosedDeal[]>(initialDeals);
@@ -224,6 +233,19 @@ export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = 
                         );
                       })()}
 
+                      {/* Deal type */}
+                      {deal.deal_type && (() => {
+                        const cls = DEAL_TYPE_PILL[deal.deal_type] ?? 'bg-gray-50 text-gray-600 border-gray-200';
+                        return (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-400 flex-shrink-0">Type:</span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs font-medium ${cls}`}>
+                              {deal.deal_type}
+                            </span>
+                          </div>
+                        );
+                      })()}
+
                       {/* Rep pills */}
                       {repList.length > 0 && (
                         <div className="flex items-center gap-1.5 flex-wrap">
@@ -247,11 +269,11 @@ export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = 
                         </div>
                       )}
 
-                      {/* Other metadata */}
-                      {(deal.deal_type || deal.opportunity_id) && (
-                        <div className="flex flex-wrap gap-x-4 gap-y-1">
-                          {deal.deal_type && <span className="text-xs text-gray-500"><span className="text-gray-400">Type:</span> {deal.deal_type}</span>}
-                          {deal.opportunity_id && <span className="text-xs text-gray-500"><span className="text-gray-400">Opp ID:</span> {deal.opportunity_id}</span>}
+                      {/* Opp ID */}
+                      {deal.opportunity_id && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-gray-400">Opp ID:</span>
+                          <span className="text-xs text-gray-600">{deal.opportunity_id}</span>
                         </div>
                       )}
                     </div>

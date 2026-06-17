@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useUser } from '@/components/UserContext';
 import { useOnboarding } from '@/lib/OnboardingContext';
@@ -23,7 +24,7 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type CITab = 'scoring' | 'decisions' | 'budget';
+type CITab = 'scoring' | 'decisions';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -53,18 +54,6 @@ function confidencePillClasses(level: string): string {
   if (level === 'high') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
   if (level === 'medium') return 'bg-amber-50 text-amber-700 border-amber-200';
   return 'bg-red-50 text-red-700 border-red-200';
-}
-
-function formatDataAge(dataAge: number): string {
-  if (dataAge < 1) return '< 1 year';
-  const years = Math.round(dataAge);
-  return years === 1 ? '1 year' : `${years} years`;
-}
-
-function dataAgeColorClass(dataAge: number): string {
-  if (dataAge > 4) return 'text-red-600';
-  if (dataAge > 2) return 'text-amber-600';
-  return '';
 }
 
 function icpDensityPillClasses(pct: number): string {
@@ -176,6 +165,156 @@ function BudgetStatusCell({ row, onOpenModal }: { row: CalendarConferenceRow; on
   );
 }
 
+// ── Your Input Cell ───────────────────────────────────────────────────────────
+
+type InputDecision = 'confirmed' | 'attend_but_reduce' | 'watching' | 'passed' | 'pending_approval';
+
+const CI_DECISION_CONFIG: Record<InputDecision, { label: string; bg: string; text: string; border: string }> = {
+  confirmed:         { label: 'Attend',           bg: 'bg-emerald-100', text: 'text-emerald-700', border: 'border-emerald-200' },
+  attend_but_reduce: { label: 'Attend (Reduced)', bg: 'bg-teal-100',    text: 'text-teal-700',    border: 'border-teal-200' },
+  watching:          { label: 'On the Fence',     bg: 'bg-amber-100',   text: 'text-amber-700',   border: 'border-amber-200' },
+  passed:            { label: "Don't Attend",     bg: 'bg-red-100',     text: 'text-red-700',     border: 'border-red-200' },
+  pending_approval:  { label: 'Evaluating',       bg: 'bg-blue-100',    text: 'text-blue-700',    border: 'border-blue-200' },
+};
+
+function InputDropdown({
+  dropdownRef,
+  pos,
+  onSelect,
+  current,
+}: {
+  dropdownRef: React.RefObject<HTMLDivElement>;
+  pos: { top: number; left: number };
+  onSelect: (d: InputDecision | null) => void;
+  current: string | null;
+}) {
+  return createPortal(
+    <div
+      ref={dropdownRef}
+      className="bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[150px]"
+      style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999 }}
+    >
+      {(Object.entries(CI_DECISION_CONFIG) as [InputDecision, typeof CI_DECISION_CONFIG[InputDecision]][]).map(([key, cfg]) => (
+        <button
+          key={key}
+          onClick={() => onSelect(key)}
+          className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 ${cfg.text} ${current === key ? 'font-semibold' : ''}`}
+        >
+          {cfg.label}
+        </button>
+      ))}
+      <button
+        onClick={() => onSelect(null)}
+        className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:bg-gray-50 border-t border-gray-100"
+      >
+        Clear
+      </button>
+    </div>,
+    document.body
+  );
+}
+
+function YourInputCell({
+  conferenceId,
+  decision,
+  hasPendingRequest,
+  canEdit,
+  onChanged,
+}: {
+  conferenceId: number;
+  decision: string | null;
+  hasPendingRequest: boolean;
+  canEdit: boolean;
+  onChanged: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (buttonRef.current?.contains(e.target as Node)) return;
+      if (dropdownRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    const closeOnScroll = () => setOpen(false);
+    document.addEventListener('mousedown', close);
+    document.addEventListener('scroll', closeOnScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('scroll', closeOnScroll, true);
+    };
+  }, [open]);
+
+  const openDropdown = () => {
+    if (!canEdit || !buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    setDropdownPos({ top: rect.bottom + 4, left: rect.left });
+    setOpen(true);
+  };
+
+  const select = async (d: InputDecision | null) => {
+    setOpen(false);
+    if (d === null) {
+      await fetch('/api/calendar-intelligence/decisions', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conferenceId, level: 'user' }),
+      }).catch(() => {});
+    } else {
+      await fetch('/api/calendar-intelligence/decisions', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conferenceId, decision: d, level: 'user' }),
+      }).catch(() => {});
+    }
+    onChanged();
+  };
+
+  const cfg = decision ? CI_DECISION_CONFIG[decision as InputDecision] : null;
+
+  if (hasPendingRequest && !decision) {
+    return (
+      <>
+        <button
+          ref={buttonRef}
+          onClick={openDropdown}
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border bg-red-50 text-red-700 border-red-200 ${canEdit ? 'cursor-pointer hover:bg-red-100' : 'cursor-default'}`}
+        >
+          <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.86A1 1 0 003.58 20h16.84a1 1 0 00.87-1.5L13.71 3.86a1 1 0 00-1.42 0z"/>
+          </svg>
+          INPUT REQUESTED
+        </button>
+        {open && dropdownPos && (
+          <InputDropdown dropdownRef={dropdownRef} pos={dropdownPos} onSelect={select} current={null} />
+        )}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        onClick={openDropdown}
+        className={`px-2 py-0.5 rounded text-[12px] font-medium border ${
+          cfg
+            ? `${cfg.bg} ${cfg.text} ${cfg.border} ${canEdit ? 'cursor-pointer' : 'cursor-default'}`
+            : `bg-gray-50 text-gray-400 border-dashed border-gray-300 ${canEdit ? 'hover:border-gray-400 hover:text-gray-500 cursor-pointer' : 'cursor-default'}`
+        }`}
+      >
+        {cfg ? cfg.label : '—'}
+      </button>
+      {open && dropdownPos && (
+        <InputDropdown dropdownRef={dropdownRef} pos={dropdownPos} onSelect={select} current={decision} />
+      )}
+    </>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function CalendarIntelligencePage() {
@@ -222,6 +361,21 @@ export default function CalendarIntelligencePage() {
   const [boardConferences, setBoardConferences] = useState<Array<{ conferenceId: number; name: string; year: number }>>([]);
   const [selectedBoardConferenceId, setSelectedBoardConferenceId] = useState<number | null>(null);
 
+  // Logged-in user's input decisions + pending input requests across all conferences
+  const [myInputStatus, setMyInputStatus] = useState<{
+    decisions: Record<number, string>;
+    pendingConferenceIds: number[];
+  } | null>(null);
+
+  const reloadMyInputStatus = useCallback(() => {
+    fetch('/api/calendar-intelligence/my-input-status')
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { decisions: Record<number, string>; pendingConferenceIds: number[] } | null) => {
+        if (data) setMyInputStatus(data);
+      })
+      .catch(() => {});
+  }, []);
+
   const drawerExpanded = pathToTierOpen || executionComparisonOpen;
   const canUseTools = user?.capabilities?.use_calendar_tools ?? false;
 
@@ -236,6 +390,11 @@ export default function CalendarIntelligencePage() {
     if (getCalendarStore().status === 'idle') startCalendarScoring();
   }, []);
 
+  // Load user's input status (decisions + pending requests); refresh on decision sync
+  useEffect(() => {
+    reloadMyInputStatus();
+  }, [reloadMyInputStatus, decisionSyncKey]);
+
   // Onboarding tracking
   useEffect(() => {
     if (onboardingTrack !== 'track_b' || !onboardingProgress) return;
@@ -243,6 +402,18 @@ export default function CalendarIntelligencePage() {
       markStepComplete('calendar_intel_visited');
     }
   }, [onboardingTrack, onboardingProgress, markStepComplete]);
+
+  useEffect(() => {
+    const load = () => {
+      fetch('/api/calendar-intelligence/my-input-status')
+        .then(r => r.ok ? r.json() : null)
+        .then((data: { decisions: Record<number, string>; pendingConferenceIds: number[] } | null) => {
+          if (data) setMyInputStatus(data);
+        })
+        .catch(() => {});
+    };
+    load();
+  }, [decisionSyncKey]);
 
   const calendarRows = calendarState.rows;
   const calendarLoading = calendarState.status === 'loading_basic';
@@ -547,7 +718,15 @@ export default function CalendarIntelligencePage() {
 
         {/* Decision Tag */}
         <div className="mt-5 pt-5 border-t">
-          <DecisionTag conferenceId={row.conferenceId} syncKey={decisionSyncKey} onDecisionChanged={bumpDecisionSync} />
+          <DecisionTag
+            conferenceId={row.conferenceId}
+            syncKey={decisionSyncKey}
+            onDecisionChanged={bumpDecisionSync}
+            disabled={
+              !(user?.capabilities?.record_input_without_invitation) &&
+              !(myInputStatus?.pendingConferenceIds.includes(row.conferenceId))
+            }
+          />
         </div>
       </div>
     );
@@ -567,7 +746,6 @@ export default function CalendarIntelligencePage() {
           {([
             { id: 'scoring' as CITab, label: 'Scoring Table', mobileLabel: 'Scoring' },
             { id: 'decisions' as CITab, label: 'Input Board', mobileLabel: 'Input' },
-            { id: 'budget' as CITab, label: 'Budget Planner', mobileLabel: 'Budget', soon: true },
           ]).map(tab => (
             <button
               key={tab.id}
@@ -580,17 +758,12 @@ export default function CalendarIntelligencePage() {
             >
               <span className="md:hidden">{tab.mobileLabel}</span>
               <span className="hidden md:inline">{tab.label}</span>
-              {tab.soon && (
-                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none ${activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>
-                  Soon
-                </span>
-              )}
             </button>
           ))}
         </div>
 
         {/* Conference selector — only shown on Input Board tab */}
-        {activeTab === 'decisions' && boardConferences.length > 0 && (
+        {activeTab === 'decisions' && calendarRows.length > 0 && (
           <div className="flex items-center gap-2">
             <select
               value={selectedBoardConferenceId ?? ''}
@@ -598,8 +771,8 @@ export default function CalendarIntelligencePage() {
               className="border border-gray-200 rounded-xl px-3 h-10 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-secondary/30"
             >
               <option value="">All conferences</option>
-              {boardConferences.map(c => (
-                <option key={c.conferenceId} value={c.conferenceId}>{c.name} ({c.year})</option>
+              {calendarRows.map(c => (
+                <option key={c.conferenceId} value={c.conferenceId}>{c.conferenceName} ({c.conferenceYear})</option>
               ))}
             </select>
             {selectedBoardConferenceId != null && (
@@ -773,7 +946,6 @@ export default function CalendarIntelligencePage() {
                               {isLoadingScore ? mobileDots : (
                                 <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${confidencePillClasses(r.confidenceLevel)}`}>{r.confidenceLevel.charAt(0).toUpperCase() + r.confidenceLevel.slice(1)}</span>
                               )}
-                              <span className={`text-xs ${dataAgeColorClass(r.dataAge)}`}>{formatDataAge(r.dataAge)}</span>
                             </div>
                           </div>
                         );
@@ -792,7 +964,7 @@ export default function CalendarIntelligencePage() {
                             <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('score' as keyof CalendarConferenceRow)}>List Score</th>
                             <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('recommendationTier')}>Recommendation</th>
                             <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('confidenceLevel')}>Confidence</th>
-                            <th className="p-2 cursor-pointer" onClick={() => setCalendarSort('dataAge')}>Data Age</th>
+                            <th className="p-2">Your Input</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -832,7 +1004,18 @@ export default function CalendarIntelligencePage() {
                                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${confidencePillClasses(r.confidenceLevel)}`}>{r.confidenceLevel.charAt(0).toUpperCase() + r.confidenceLevel.slice(1)}</span>
                                   )}
                                 </td>
-                                <td className={`p-2 ${dataAgeColorClass(r.dataAge)}`}>{formatDataAge(r.dataAge)}</td>
+                                <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                                  <YourInputCell
+                                    conferenceId={r.conferenceId}
+                                    decision={myInputStatus?.decisions[r.conferenceId] ?? null}
+                                    hasPendingRequest={myInputStatus?.pendingConferenceIds.includes(r.conferenceId) ?? false}
+                                    canEdit={
+                                      !!(user?.capabilities?.record_input_without_invitation) ||
+                                      (myInputStatus?.pendingConferenceIds.includes(r.conferenceId) ?? false)
+                                    }
+                                    onChanged={() => { bumpDecisionSync(); reloadMyInputStatus(); }}
+                                  />
+                                </td>
                               </tr>
                             );
                           })}
@@ -857,19 +1040,6 @@ export default function CalendarIntelligencePage() {
           onSelectedConferenceChange={setSelectedBoardConferenceId}
           onConferencesLoaded={setBoardConferences}
         />
-      )}
-
-      {/* ── Tab: Budget Planner ────────────────────────────────────────────── */}
-      {activeTab === 'budget' && (
-        <div className="flex flex-col items-center justify-center py-24 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
-            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 11h.01M12 11h.01M15 11h.01M4 19h16a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-            </svg>
-          </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Budget Planner</h3>
-          <p className="text-gray-500 text-sm max-w-sm">Coming soon — build conference budgets with projected pipeline and ROI targets all in one place.</p>
-        </div>
       )}
 
       {/* ── Score Drawer ───────────────────────────────────────────────────── */}

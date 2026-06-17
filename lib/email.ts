@@ -232,6 +232,173 @@ export async function sendWelcomeEmail({
   });
 }
 
+// ── Input request email ───────────────────────────────────────────────────────
+
+const TIER_LABELS: Record<string, string> = {
+  attend_invest_more:         'Attend & Invest More',
+  attend_maintain:            'Attend & Maintain',
+  attend_reconsider_format:   'Reconsider Format',
+  evaluate_before_committing: 'Evaluate First',
+  do_not_prioritize:          'Do Not Prioritize',
+  remove_from_calendar:       'Remove from Calendar',
+};
+
+const TIER_COLORS: Record<string, string> = {
+  attend_invest_more:         '#059669',
+  attend_maintain:            '#0d9488',
+  attend_reconsider_format:   '#d97706',
+  evaluate_before_committing: '#f97316',
+  do_not_prioritize:          '#dc2626',
+  remove_from_calendar:       '#dc2626',
+};
+
+// Used in email links and logo src
+const EMAIL_BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://work.useparlay.app';
+
+interface InputRequestEmailOpts {
+  to: string;
+  recipientName: string;
+  conferenceName: string;
+  conferenceYear: number;
+  requesterName: string;
+  calScore: number | null;
+  calTier: string | null;
+  tokenLinks: {
+    attend: string;
+    attendReduced: string;
+    onTheFence: string;
+    dontAttend: string;
+    evaluating: string;
+  };
+  parlayLink: string;
+  expiresAt: string;
+  expiryDays?: number;
+  isReminder?: boolean;
+  pdfAttachmentBase64?: string;
+}
+
+export function buildInputRequestEmailHtml(opts: InputRequestEmailOpts): string {
+  const {
+    recipientName, conferenceName, conferenceYear,
+    requesterName, calScore, calTier,
+    tokenLinks, parlayLink, expiresAt, expiryDays,
+  } = opts;
+
+  const tierLabel = calTier ? (TIER_LABELS[calTier] ?? calTier) : null;
+  const tierColor = calTier ? (TIER_COLORS[calTier] ?? '#6b7280') : '#6b7280';
+  const scoreDisplay = calScore != null ? Math.round(calScore) : null;
+
+  const scoreBlock = scoreDisplay != null ? `
+    <div style="border-left:4px solid ${tierColor};padding:12px 16px;background:${tierColor}18;border-radius:0 6px 6px 0;margin:20px 0">
+      <p style="margin:0 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;font-weight:600">Cal. Intel. Score</p>
+      <p style="margin:0 0 6px;font-size:36px;font-weight:700;line-height:1;color:${tierColor}">${scoreDisplay}<span style="font-size:14px;color:#9ca3af;font-weight:400"> /100</span></p>
+      ${tierLabel ? `<span style="display:inline-block;padding:3px 10px;border-radius:20px;background:white;border:1px solid ${tierColor};color:${tierColor};font-size:11px;font-weight:600">${tierLabel}</span>` : ''}
+    </div>` : `
+    <div style="border-left:4px solid #e5e7eb;padding:12px 16px;background:#f9fafb;border-radius:0 6px 6px 0;margin:20px 0">
+      <p style="margin:0;font-size:13px;color:#9ca3af">Scoring in progress — check back in Parlay for the full report.</p>
+    </div>`;
+
+  const decisionBtn = (bg: string, href: string, label: string) => {
+    const safeHref = href.replace(/&/g, '&amp;');
+    return `
+    <tr>
+      <td align="center" style="padding:4px 0">
+        <a href="${safeHref}"
+           style="display:inline-block;width:300px;padding:12px 20px;background:${bg};color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;text-align:center;font-family:Arial,sans-serif"
+        >${label}</a>
+      </td>
+    </tr>`;
+  };
+
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif">
+  <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;margin-top:20px;margin-bottom:20px">
+
+    <!-- Header -->
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#0B3C62">
+      <tr>
+        <td style="padding:14px 24px;vertical-align:middle">
+          <img src="${EMAIL_BASE_URL}/ParlayLogoWhite_New.png" alt="Parlay" style="height:26px;width:auto;display:block" />
+        </td>
+        <td style="padding:14px 24px;vertical-align:middle;text-align:right">
+          <span style="color:rgba(255,255,255,.85);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;line-height:1.4;display:block">INPUT REQUEST FOR<br>${conferenceName.toUpperCase()} &mdash; ${conferenceYear + 1}</span>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Body -->
+    <div style="padding:28px 28px 20px">
+      <p style="margin:0 0 16px;font-size:15px;color:#1a1a1a">
+        Hi ${recipientName}, <strong>${requesterName}</strong> has requested your input on
+        <strong>${conferenceName}</strong> for ${conferenceYear}.
+        Please respond by ${expiresAt}${expiryDays != null ? ` (${expiryDays} Days)` : ''}.
+      </p>
+
+      ${scoreBlock}
+
+      <p style="margin:20px 0 10px;font-size:13px;font-weight:600;color:#374151">Select your recommendation:</p>
+
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto">
+        ${decisionBtn('#1D9E75', tokenLinks.attend,        '✓ Attend')}
+        ${decisionBtn('#085041', tokenLinks.attendReduced, '↓ Attend (Reduced)')}
+        ${decisionBtn('#EF9F27', tokenLinks.onTheFence,    '~ On the Fence')}
+        ${decisionBtn('#E24B4A', tokenLinks.dontAttend,    '✗ Don\'t Attend')}
+        ${decisionBtn('#185FA5', tokenLinks.evaluating,    '? Evaluating')}
+      </table>
+
+      <p style="margin:22px 0 6px;font-size:13px;color:#4b5563">
+        Or <a href="${parlayLink}" style="color:#1B76BC;font-weight:600">open ${conferenceName} in Parlay</a>
+        to review the full report and leave a note with your input →
+      </p>
+
+      <p style="margin:16px 0 0;font-size:11px;color:#9ca3af">These links expire on ${expiresAt}.</p>
+    </div>
+
+    <!-- Footer -->
+    <div style="padding:14px 28px;background:#f9fafb;border-top:1px solid #e5e7eb">
+      <p style="margin:0;font-size:11px;color:#9ca3af">
+        Sent via Parlay · work.useparlay.app ·
+        You received this because ${requesterName} requested your input.
+      </p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+export async function sendInputRequestEmail(opts: InputRequestEmailOpts): Promise<{ devLink?: string }> {
+  const { to, isReminder, pdfAttachmentBase64, conferenceName, conferenceYear, requesterName, tokenLinks } = opts;
+
+  const html = buildInputRequestEmailHtml(opts);
+
+  const transport = createTransport();
+  if (!transport) {
+    const devLink = tokenLinks.attend;
+    console.log(
+      `\n📧 [DEV EMAIL — configure SMTP_HOST to send real emails]\n` +
+      `  To: ${to}\n  Subject: Your input on ${conferenceName} — Parlay\n` +
+      `  Attend link: ${devLink}\n`
+    );
+    return { devLink };
+  }
+
+  await transport.sendMail({
+    from: process.env.SMTP_FROM ?? `"Parlay" <noreply@useparlay.app>`,
+    to,
+    subject: `${isReminder ? 'REMINDER: ' : ''}${requesterName} wants your input on ${conferenceName}`,
+    html,
+    attachments: pdfAttachmentBase64 ? [{
+      filename: `${conferenceName}-cal-intel-${conferenceYear}.pdf`,
+      content: pdfAttachmentBase64,
+      encoding: 'base64' as const,
+    }] : undefined,
+  });
+  return {};
+}
+
 export async function sendTrialReminderEmail(
   to: string,
   firstName: string,

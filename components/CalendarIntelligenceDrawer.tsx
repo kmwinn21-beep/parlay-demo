@@ -192,6 +192,7 @@ export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basic
   const [pathToTierOpen, setPathToTierOpen] = useState(false);
   const [executionCompOpen, setExecutionCompOpen] = useState(false);
   const [teamInputOpen, setTeamInputOpen] = useState(false);
+  const [teamInputRequestFormOpen, setTeamInputRequestFormOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
@@ -390,14 +391,38 @@ export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basic
           >
             <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10 flex-shrink-0">
               <h3 className="font-semibold text-gray-900 text-sm">Team input</h3>
-              <button onClick={() => setTeamInputOpen(false)} className="text-gray-400 hover:text-gray-600">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setTeamInputRequestFormOpen(v => !v)}
+                  className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors"
+                  style={{
+                    color: 'rgb(var(--brand-secondary-rgb, 27 118 188))',
+                    border: '1px solid rgb(var(--brand-secondary-rgb, 27 118 188))',
+                    background: teamInputRequestFormOpen
+                      ? 'rgb(var(--brand-secondary-rgb, 27 118 188))'
+                      : 'rgb(var(--brand-secondary-rgb, 27 118 188) / 0.1)',
+                    ...(teamInputRequestFormOpen ? { color: '#fff' } : {}),
+                  }}
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Request Input
+                </button>
+                <button onClick={() => setTeamInputOpen(false)} className="text-gray-400 hover:text-gray-600">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
-              <TeamInputPanel conferenceId={conferenceId} conferenceName={conferenceName} />
+              <TeamInputPanel
+                conferenceId={conferenceId}
+                conferenceName={conferenceName}
+                requestFormOpen={teamInputRequestFormOpen}
+                onRequestFormChange={setTeamInputRequestFormOpen}
+              />
             </div>
           </OverlayPanel>
         )}

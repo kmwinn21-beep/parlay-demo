@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { CalendarNotesPanel } from './CalendarNotesPanel';
+import { RequestInputForm } from '@/components/RequestInputDropdown';
+import { useUser } from '@/components/UserContext';
 
 type DecisionKey = 'confirmed' | 'attend_but_reduce' | 'watching' | 'passed' | 'pending_approval';
 
@@ -11,6 +13,7 @@ interface UserOpinion {
   email: string;
   note: string | null;
   updatedAt: string;
+  isGuest?: boolean;
 }
 
 interface ConferenceData {
@@ -22,9 +25,23 @@ interface ConferenceData {
   opinionsByDecision: Record<DecisionKey, UserOpinion[]>;
 }
 
+interface PendingRequest {
+  id: number;
+  recipientEmail: string;
+  recipientName: string;
+  recipientTitle: string | null;
+  recipientUserId: number | null;
+  status: 'pending' | 'responded' | 'expired';
+  createdAt: string;
+  expiresAt: string | null;
+  reminders: string[];
+}
+
 export type ConferenceInputPanelProps = {
   conferenceId: number;
   conferenceName: string;
+  requestFormOpen?: boolean;
+  onRequestFormChange?: (open: boolean) => void;
 };
 
 const DECISION_KEYS: DecisionKey[] = ['confirmed', 'attend_but_reduce', 'watching', 'passed', 'pending_approval'];
@@ -45,6 +62,21 @@ const DECISION_COLOR: Record<DecisionKey, string> = {
   pending_approval:  '#185FA5',
 };
 
+function daysRemaining(expiresAt: string | null): number | null {
+  if (!expiresAt) return null;
+  const diff = new Date(expiresAt).getTime() - Date.now();
+  return Math.ceil(diff / 86400000);
+}
+
+function fmtDate(dateStr: string): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dy = String(d.getUTCDate()).padStart(2, '0');
+  const yr = String(d.getUTCFullYear()).slice(-2);
+  return `${mo}/${dy}/${yr}`;
+}
+
 function timeAgo(dateStr: string): string {
   if (!dateStr) return '';
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -55,19 +87,401 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(d / 30)}mo ago`;
 }
 
-export function TeamInputPanel({ conferenceId }: ConferenceInputPanelProps) {
+function AwaitingRow({
+  r,
+  conferenceId,
+}: {
+  r: PendingRequest;
+  conferenceId: number;
+}) {
+  const days = daysRemaining(r.expiresAt);
+  const pillColor = days == null ? '#9ca3af' : days >= 5 ? '#059669' : days >= 3 ? '#d97706' : '#dc2626';
+  const pillBg   = days == null ? '#f3f4f6' : days >= 5 ? '#d1fae5' : days >= 3 ? '#fef3c7' : '#fee2e2';
+  const isExternal = r.recipientUserId == null;
+  const subtitleParts = isExternal ? [r.recipientTitle, r.recipientEmail].filter(Boolean).join(' · ') : null;
+
+  const [localReminders, setLocalReminders] = useState<string[]>([]);
+  const [isSending, setIsSending] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const expandRef = useRef<HTMLDivElement>(null);
+
+  // All date rows: original send + persisted reminders + local optimistic reminders
+  const allReminders = [...(r.reminders ?? []), ...localReminders];
+  const dateRows = [
+    { type: 'sent' as const, date: r.createdAt },
+    ...allReminders.map(ts => ({ type: 'bell' as const, date: ts })),
+  ];
+  const showMoreBtn = dateRows.length > 3;
+  const visibleRows = expanded ? dateRows : dateRows.slice(0, 3);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const handler = (e: MouseEvent) => {
+      if (expandRef.current && !expandRef.current.contains(e.target as Node)) {
+        setExpanded(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [expanded]);
+
+  const handleRemind = async () => {
+    if (isSending) return;
+    setIsSending(true);
+    try {
+      const res = await fetch('/api/calendar-intelligence/request-input/remind', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conferenceId, recipientEmail: r.recipientEmail }),
+      });
+      if (res.ok) setLocalReminders(prev => [...prev, new Date().toISOString()]);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  // SVG: paper-plane for original send
+  const sendIcon = (
+    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#b0b7c3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="22" y1="2" x2="11" y2="13" />
+      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+    </svg>
+  );
+
+  // SVG: bell for reminders
+  const bellIconSm = (
+    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#b0b7c3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  );
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
+        {/* Avatar */}
+        <div style={{
+          width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+          background: '#e5e7eb', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#6b7280', marginTop: 1,
+        }}>
+          {r.recipientName.charAt(0).toUpperCase()}
+        </div>
+
+        {/* Name + subtitle */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <p style={{ fontSize: 11, margin: 0, fontWeight: 500, color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {r.recipientName}
+            </p>
+            {isExternal && (
+              <span style={{ fontSize: 9, fontWeight: 600, color: '#6b7280', background: '#f3f4f6', borderRadius: 4, padding: '1px 4px', flexShrink: 0 }}>
+                External
+              </span>
+            )}
+          </div>
+          {subtitleParts && (
+            <p style={{ fontSize: 10, margin: 0, color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {subtitleParts}
+            </p>
+          )}
+        </div>
+
+        {/* Right column: pill + bell, then date history */}
+        <div ref={expandRef} style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+          {/* Row 1: days pill + bell */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {days != null && (
+              <span style={{ fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 20, background: pillBg, color: pillColor, whiteSpace: 'nowrap' }}>
+                {days <= 0 ? 'Due today' : `${days}d left`}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={handleRemind}
+              disabled={isSending}
+              title="Send reminder email"
+              style={{ background: 'none', border: 'none', padding: 2, cursor: isSending ? 'not-allowed' : 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', opacity: isSending ? 0.4 : 1 }}
+            >
+              {isSending ? (
+                <span style={{ display: 'inline-block', width: 11, height: 11, border: '1.5px solid #d1d5db', borderTopColor: '#6b7280', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+              ) : (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+              )}
+            </button>
+          </div>
+
+          {/* Date history rows */}
+          {visibleRows.map((row, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              {row.type === 'sent' ? sendIcon : bellIconSm}
+              <span style={{ fontSize: 9, color: '#b0b7c3', whiteSpace: 'nowrap' }}>{fmtDate(row.date)}</span>
+            </div>
+          ))}
+
+          {/* More / Less toggle */}
+          {showMoreBtn && (
+            <button
+              type="button"
+              onClick={() => setExpanded(v => !v)}
+              style={{ background: 'none', border: 'none', padding: 0, fontSize: 9, color: '#9ca3af', cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              {expanded ? 'Less' : `${dateRows.length - 3} more`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AwaitingInputSection({ pendingRequests, conferenceId }: { pendingRequests: PendingRequest[]; conferenceId: number }) {
+  const pending = pendingRequests.filter(r => r.status === 'pending');
+  if (pending.length === 0) return null;
+
+  return (
+    <div style={{ borderTop: '0.5px solid var(--color-border-tertiary, #e5e7eb)', paddingTop: 10, marginTop: 8, marginBottom: 4 }}>
+      <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', color: '#9ca3af', marginBottom: 8 }}>
+        Awaiting Input · {pending.length}
+      </p>
+      {pending.map(r => <AwaitingRow key={r.id} r={r} conferenceId={conferenceId} />)}
+    </div>
+  );
+}
+
+interface EditModalProps {
+  fromKey: DecisionKey;
+  fromOpinion: UserOpinion;
+  conferenceId: number;
+  onSave: (newKey: DecisionKey) => Promise<void>;
+  onClose: () => void;
+}
+
+function EditDecisionModal({ fromKey, fromOpinion, conferenceId, onSave, onClose }: EditModalProps) {
+  const [selected, setSelected] = useState<DecisionKey>(fromKey);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
+    await onSave(selected);
+    setSaving(false);
+  };
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'rgba(0,0,0,0.45)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '16px',
+      }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{
+        background: '#fff', borderRadius: 12, width: '100%', maxWidth: 360,
+        boxShadow: '0 8px 40px rgba(0,0,0,.2)', overflow: 'hidden',
+      }}>
+        {/* Header */}
+        <div style={{ background: 'rgb(var(--brand-primary-rgb, 11 60 98))', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <p style={{ margin: 0, fontSize: 10, color: 'rgba(255,255,255,.6)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em' }}>Update Input</p>
+            <p style={{ margin: '2px 0 0', fontSize: 13, color: '#fff', fontWeight: 600 }}>{fromOpinion.displayName}</p>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,.7)', cursor: 'pointer', padding: 4 }}>
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div style={{ padding: '16px 20px 20px' }}>
+          <p style={{ margin: '0 0 12px', fontSize: 12, color: '#6b7280' }}>
+            Currently: <strong style={{ color: DECISION_COLOR[fromKey] }}>{DECISION_LABEL[fromKey]}</strong>. Select your new recommendation:
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {DECISION_KEYS.map(k => {
+              const isSelected = selected === k;
+              const color = DECISION_COLOR[k];
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setSelected(k)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '9px 14px', borderRadius: 7, border: `1.5px solid ${color}`,
+                    background: isSelected ? color : color + '12',
+                    color: isSelected ? '#fff' : color,
+                    fontWeight: 600, fontSize: 12, cursor: 'pointer',
+                    transition: 'background .1s ease, color .1s ease',
+                    textAlign: 'left',
+                  }}
+                >
+                  {isSelected && (
+                    <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <polyline points="20 6 9 17 4 12" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                  {!isSelected && <span style={{ width: 13, display: 'inline-block' }} />}
+                  {DECISION_LABEL[k]}
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || selected === fromKey}
+              style={{
+                flex: 1, padding: '8px 16px', borderRadius: 7,
+                background: selected !== fromKey ? DECISION_COLOR[selected] : '#e5e7eb',
+                color: selected !== fromKey ? '#fff' : '#9ca3af',
+                border: 'none', fontWeight: 600, fontSize: 12, cursor: selected !== fromKey && !saving ? 'pointer' : 'not-allowed',
+                transition: 'background .15s',
+              }}
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                padding: '8px 16px', borderRadius: 7,
+                background: 'none', border: '1px solid #e5e7eb',
+                color: '#6b7280', fontSize: 12, cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function TeamInputPanel({
+  conferenceId,
+  conferenceName,
+  requestFormOpen: requestFormOpenProp,
+  onRequestFormChange,
+}: ConferenceInputPanelProps) {
+  const { user } = useUser();
+  const currentUserEmail = user?.email ?? '';
+
   const [data, setData] = useState<ConferenceData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
+  // Form open state — controlled externally if prop provided, otherwise internal
+  const [formOpenInternal, setFormOpenInternal] = useState(false);
+  const formOpen = requestFormOpenProp ?? formOpenInternal;
+  const setFormOpen = (v: boolean) => {
+    if (onRequestFormChange) onRequestFormChange(v);
+    else setFormOpenInternal(v);
+  };
+
+  // Edit decision state
+  const [editTarget, setEditTarget] = useState<{ fromKey: DecisionKey; op: UserOpinion } | null>(null);
 
   useEffect(() => {
     setLoading(true);
     setData(null);
-    fetch(`/api/calendar-intelligence/decisions/board?conferenceId=${conferenceId}`)
-      .then(r => r.ok ? r.json() : { conferences: [] })
-      .then((res: { conferences: ConferenceData[] }) => setData(res.conferences[0] ?? null))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    Promise.all([
+      fetch(`/api/calendar-intelligence/decisions/board?conferenceId=${conferenceId}`)
+        .then(r => r.ok ? r.json() : { conferences: [] })
+        .then((res: { conferences: ConferenceData[] }) => res.conferences[0] ?? null)
+        .catch(() => null),
+      fetch(`/api/calendar-intelligence/request-input?conferenceId=${conferenceId}`)
+        .then(r => r.ok ? r.json() : { requests: [] })
+        .then((res: { requests: PendingRequest[] }) => res.requests ?? [])
+        .catch(() => [] as PendingRequest[]),
+    ]).then(([boardData, requests]) => {
+      setData(boardData);
+      setPendingRequests(requests);
+    }).finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conferenceId]);
+
+  // Re-fetch pending requests when form is sent
+  const handleSent = () => {
+    fetch(`/api/calendar-intelligence/request-input?conferenceId=${conferenceId}`)
+      .then(r => r.ok ? r.json() : { requests: [] })
+      .then((res: { requests: PendingRequest[] }) => setPendingRequests(res.requests ?? []))
+      .catch(() => {});
+  };
+
+  const handleEditSave = async (newKey: DecisionKey) => {
+    if (!editTarget) return;
+    const { fromKey, op } = editTarget;
+    if (newKey === fromKey) { setEditTarget(null); return; }
+
+    // Optimistically update UI
+    setData(prev => {
+      if (!prev) return prev;
+      const next = { ...prev, opinionsByDecision: { ...prev.opinionsByDecision } };
+      // Remove from old bucket
+      next.opinionsByDecision[fromKey] = next.opinionsByDecision[fromKey].filter(o => o.userId !== op.userId);
+      // Add to new bucket with fresh timestamp
+      next.opinionsByDecision[newKey] = [
+        ...next.opinionsByDecision[newKey],
+        { ...op, updatedAt: new Date().toISOString() },
+      ];
+      return next;
+    });
+
+    setEditTarget(null);
+
+    // Persist
+    await fetch('/api/calendar-intelligence/decisions', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conferenceId, decision: newKey, level: 'user' }),
+    }).catch(() => {});
+
+    // Auto-comment
+    const msg = `Changed input from ${DECISION_LABEL[fromKey]} to ${DECISION_LABEL[newKey]} (system generated)`;
+    await fetch('/api/calendar-intelligence/notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conferenceId, content: msg }),
+    }).catch(() => {});
+  };
+
+  const requestFormSection = (
+    <div style={{
+      overflow: 'hidden',
+      maxHeight: formOpen ? 600 : 0,
+      opacity: formOpen ? 1 : 0,
+      transition: 'max-height 250ms ease, opacity 180ms ease',
+    }}>
+      <p style={{
+        fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase',
+        color: 'rgb(var(--brand-secondary-rgb, 27 118 188))', marginBottom: 6, marginTop: 2,
+      }}>
+        Request Input
+      </p>
+      <div style={{
+        background: 'rgb(var(--brand-secondary-rgb, 27 118 188) / 0.05)',
+        padding: '4px 12px 14px',
+        borderRadius: 8,
+        marginBottom: 8,
+        border: '0.5px solid rgb(var(--brand-secondary-rgb, 27 118 188) / 0.15)',
+      }}>
+        <RequestInputForm
+          conferenceId={conferenceId}
+          conferenceName={conferenceName}
+          onSent={() => { handleSent(); setFormOpen(false); }}
+        />
+      </div>
+    </div>
+  );
 
   if (loading) {
     return (
@@ -86,8 +500,11 @@ export function TeamInputPanel({ conferenceId }: ConferenceInputPanelProps) {
   if (allOpinions.length === 0) {
     return (
       <>
+        {requestFormSection}
         <div style={{ padding: '24px 0', textAlign: 'center' }}>
-          <i className="ti ti-users" style={{ fontSize: 28, color: 'var(--color-text-tertiary, #9ca3af)' }} />
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block' }}>
+            <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm-7 4a3 3 0 100-6 3 3 0 000 6z" />
+          </svg>
           <p style={{ fontSize: 12, color: 'var(--color-text-tertiary, #9ca3af)', marginTop: 8 }}>
             No team input yet.
           </p>
@@ -95,9 +512,19 @@ export function TeamInputPanel({ conferenceId }: ConferenceInputPanelProps) {
             Team members can log opinions in Calendar Intelligence.
           </p>
         </div>
+        <AwaitingInputSection pendingRequests={pendingRequests} conferenceId={conferenceId} />
         <div className="border-t border-gray-100">
           <CalendarNotesPanel conferenceId={conferenceId} onClose={() => {}} variant="sheet" />
         </div>
+        {editTarget && (
+          <EditDecisionModal
+            fromKey={editTarget.fromKey}
+            fromOpinion={editTarget.op}
+            conferenceId={conferenceId}
+            onSave={handleEditSave}
+            onClose={() => setEditTarget(null)}
+          />
+        )}
       </>
     );
   }
@@ -108,6 +535,9 @@ export function TeamInputPanel({ conferenceId }: ConferenceInputPanelProps) {
 
   return (
     <div>
+      {/* Inline request form — animates open/closed */}
+      {requestFormSection}
+
       {/* Proportional bar */}
       <div className="flex rounded-full overflow-hidden h-2 mb-3">
         {DECISION_KEYS.filter(k => groupCounts[k] > 0).map(k => (
@@ -144,42 +574,85 @@ export function TeamInputPanel({ conferenceId }: ConferenceInputPanelProps) {
               <p className="text-[10px] font-bold uppercase tracking-wide mb-2" style={{ color }}>
                 {DECISION_LABEL[k]} · {opinions.length}
               </p>
-              {opinions.map(op => (
-                <div
-                  key={op.userId}
-                  style={{ borderLeft: `2px solid ${color}`, paddingLeft: 10, marginBottom: 8 }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-500 flex-shrink-0">
-                      {op.displayName.charAt(0).toUpperCase()}
+              {opinions.map(op => {
+                const isCurrentUser = !op.isGuest && op.email === currentUserEmail;
+                return (
+                  <div
+                    key={op.userId}
+                    style={{ borderLeft: `2px solid ${color}`, paddingLeft: 10, marginBottom: 8 }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-500 flex-shrink-0">
+                        {op.displayName.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <p className="text-sm font-medium text-gray-800 leading-tight truncate">{op.displayName}</p>
+                          {op.isGuest && (
+                            <span style={{ fontSize: 9, fontWeight: 600, color: '#6b7280', background: '#f3f4f6', borderRadius: 4, padding: '1px 4px', flexShrink: 0 }}>
+                              External
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-gray-400">{timeAgo(op.updatedAt)}</p>
+                      </div>
+                      {/* Edit button for current user's opinion — left of the pill */}
+                      {isCurrentUser && (
+                        <button
+                          type="button"
+                          onClick={() => setEditTarget({ fromKey: k, op })}
+                          title="Change your input"
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 3,
+                            padding: '2px 6px', borderRadius: 5, fontSize: 9, fontWeight: 600,
+                            border: `1px solid ${color}`, background: color + '18',
+                            color, cursor: 'pointer', flexShrink: 0,
+                          }}
+                        >
+                          <svg width="9" height="9" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          Edit
+                        </button>
+                      )}
+                      <span
+                        className="flex-shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-semibold text-white"
+                        style={{ backgroundColor: color }}
+                      >
+                        {DECISION_LABEL[k]}
+                      </span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 leading-tight truncate">{op.displayName}</p>
-                      <p className="text-[10px] text-gray-400">{timeAgo(op.updatedAt)}</p>
-                    </div>
-                    <span
-                      className="flex-shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-semibold text-white"
-                      style={{ backgroundColor: color }}
-                    >
-                      {DECISION_LABEL[k]}
-                    </span>
+                    {op.note && (
+                      <p className="text-xs text-gray-500 italic mt-1.5 bg-gray-50 rounded px-2 py-1.5">
+                        &ldquo;{op.note}&rdquo;
+                      </p>
+                    )}
                   </div>
-                  {op.note && (
-                    <p className="text-xs text-gray-500 italic mt-1.5 bg-gray-50 rounded px-2 py-1.5">
-                      &ldquo;{op.note}&rdquo;
-                    </p>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           );
         })}
       </div>
 
+      {/* Awaiting input */}
+      <AwaitingInputSection pendingRequests={pendingRequests} conferenceId={conferenceId} />
+
       {/* Discussion thread */}
       <div className="border-t border-gray-100 mt-2">
         <CalendarNotesPanel conferenceId={conferenceId} onClose={() => {}} variant="sheet" />
       </div>
+
+      {/* Edit decision modal */}
+      {editTarget && (
+        <EditDecisionModal
+          fromKey={editTarget.fromKey}
+          fromOpinion={editTarget.op}
+          conferenceId={conferenceId}
+          onSave={handleEditSave}
+          onClose={() => setEditTarget(null)}
+        />
+      )}
     </div>
   );
 }

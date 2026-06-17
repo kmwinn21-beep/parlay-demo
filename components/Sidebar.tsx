@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { useUser } from './UserContext';
 import { useUnreadNotificationCount } from '@/lib/useUnreadNotificationCount';
 import { useNeedsAttentionCount } from '@/lib/useNeedsAttentionCount';
+import { usePendingInputRequestCount } from '@/lib/usePendingInputRequestCount';
 import { useAppName } from '@/lib/useAppName';
 import { useTagline } from '@/lib/useTagline';
 import { LogoImage } from './LogoImage';
@@ -106,6 +107,7 @@ export function Sidebar() {
   const { user } = useUser();
   const unreadCount = useUnreadNotificationCount();
   const needsAttentionCount = useNeedsAttentionCount();
+  const pendingInputCount = usePendingInputRequestCount();
   const appName = useAppName();
   const tagline = useTagline();
   const { faviconUrl } = useLogoConfig();
@@ -190,7 +192,14 @@ export function Sidebar() {
               )}
               {hasCalendarIntelligence && (
                 <Link href={calendarIntelligenceItem.href} className={navLinkClass(calendarIntelligenceItem.href)}>
-                  {calendarIntelligenceItem.icon}
+                  {pendingInputCount > 0 ? (
+                    <span className="relative flex-shrink-0">
+                      {calendarIntelligenceItem.icon}
+                      <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                        {pendingInputCount > 99 ? '99+' : pendingInputCount}
+                      </span>
+                    </span>
+                  ) : calendarIntelligenceItem.icon}
                   {calendarIntelligenceItem.label}
                 </Link>
               )}

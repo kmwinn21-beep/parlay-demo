@@ -1355,4 +1355,41 @@ export const migrations: string[] = [
     updated_at TEXT DEFAULT (datetime('now')),
     UNIQUE(conference_id, plan_year)
   )`,
+  // 474 — input_request_tokens: one-time tokenised links sent in input-request emails
+  `CREATE TABLE IF NOT EXISTS input_request_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT NOT NULL UNIQUE,
+    account_id TEXT NOT NULL,
+    conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+    requester_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recipient_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    recipient_email TEXT NOT NULL,
+    recipient_name TEXT NOT NULL,
+    recipient_title TEXT,
+    expires_at TEXT NOT NULL,
+    used_at TEXT,
+    decision_logged TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`,
+  // 475 — input_requests: tracks outstanding/responded requests per conference + recipient
+  `CREATE TABLE IF NOT EXISTS input_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+    requester_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recipient_email TEXT NOT NULL,
+    recipient_name TEXT NOT NULL,
+    recipient_title TEXT,
+    recipient_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','responded','expired')),
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(conference_id, recipient_email)
+  )`,
+  // 476 — input_request_reminders: log of reminder emails sent per request
+  `CREATE TABLE IF NOT EXISTS input_request_reminders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id TEXT NOT NULL,
+    conference_id INTEGER NOT NULL,
+    recipient_email TEXT NOT NULL,
+    sent_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
 ];
