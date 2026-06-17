@@ -8,6 +8,7 @@ interface Props {
   conferenceId: number;
   syncKey?: number;
   onDecisionChanged?: () => void;
+  disabled?: boolean;
 }
 
 const DECISIONS: { value: Decision; label: string; activeCls: string }[] = [
@@ -20,7 +21,7 @@ const DECISIONS: { value: Decision; label: string; activeCls: string }[] = [
 
 const ghostCls = 'bg-white text-gray-600 border-gray-200 hover:border-gray-400';
 
-export function DecisionTag({ conferenceId, syncKey, onDecisionChanged }: Props) {
+export function DecisionTag({ conferenceId, syncKey, onDecisionChanged, disabled = false }: Props) {
   const [userDecision, setUserDecision] = useState<Decision | null>(null);
   const [noteText, setNoteText] = useState('');
   const [posting, setPosting] = useState(false);
@@ -39,6 +40,7 @@ export function DecisionTag({ conferenceId, syncKey, onDecisionChanged }: Props)
   }, [conferenceId, syncKey]);
 
   const selectUserDecision = async (d: Decision) => {
+    if (disabled) return;
     const newVal = userDecision === d ? null : d;
     setUserDecision(newVal);
     if (!newVal) {
@@ -79,7 +81,7 @@ export function DecisionTag({ conferenceId, syncKey, onDecisionChanged }: Props)
     <div className="space-y-3">
       <div>
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">My Decision</p>
-        <div className="flex flex-wrap gap-1.5">
+        <div className={`flex flex-wrap gap-1.5 ${disabled ? 'opacity-60 pointer-events-none' : ''}`}>
           {DECISIONS.map(d => (
             <button
               key={d.value}
@@ -92,7 +94,7 @@ export function DecisionTag({ conferenceId, syncKey, onDecisionChanged }: Props)
         </div>
       </div>
 
-      {userDecision && (
+      {userDecision && !disabled && (
         <div className="space-y-1.5">
           <textarea
             rows={2}
