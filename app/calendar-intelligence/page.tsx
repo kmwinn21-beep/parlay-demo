@@ -763,7 +763,7 @@ export default function CalendarIntelligencePage() {
         </div>
 
         {/* Conference selector — only shown on Input Board tab */}
-        {activeTab === 'decisions' && boardConferences.length > 0 && (
+        {activeTab === 'decisions' && calendarRows.length > 0 && (
           <div className="flex items-center gap-2">
             <select
               value={selectedBoardConferenceId ?? ''}
@@ -771,8 +771,8 @@ export default function CalendarIntelligencePage() {
               className="border border-gray-200 rounded-xl px-3 h-10 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-secondary/30"
             >
               <option value="">All conferences</option>
-              {boardConferences.map(c => (
-                <option key={c.conferenceId} value={c.conferenceId}>{c.name} ({c.year})</option>
+              {calendarRows.map(c => (
+                <option key={c.conferenceId} value={c.conferenceId}>{c.conferenceName} ({c.conferenceYear})</option>
               ))}
             </select>
             {selectedBoardConferenceId != null && (
