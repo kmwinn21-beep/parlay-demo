@@ -1,6 +1,23 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+
+// Module-level subscriber registry so all CalendarNotesPanel instances for the
+// same conferenceId reload when any one of them posts a note or reply.
+const noteChangeListeners = new Map<number, Set<() => void>>();
+
+function subscribeNoteChange(conferenceId: number, cb: () => void) {
+  if (!noteChangeListeners.has(conferenceId)) noteChangeListeners.set(conferenceId, new Set());
+  noteChangeListeners.get(conferenceId)!.add(cb);
+}
+
+function unsubscribeNoteChange(conferenceId: number, cb: () => void) {
+  noteChangeListeners.get(conferenceId)?.delete(cb);
+}
+
+function notifyNoteChange(conferenceId: number) {
+  noteChangeListeners.get(conferenceId)?.forEach(cb => cb());
+}
 
 type Decision = string;
 
@@ -67,18 +84,24 @@ export function CalendarNotesPanel({ conferenceId, onClose, variant = 'sidebar' 
   const [addingComment, setAddingComment] = useState(false);
 
   const isSheet = variant === 'sheet';
+  const conferenceIdRef = useRef(conferenceId);
+  conferenceIdRef.current = conferenceId;
 
-  const loadNotes = () => {
+  const loadNotes = useCallback(() => {
     setLoading(true);
-    fetch(`/api/calendar-intelligence/notes?conferenceId=${conferenceId}`)
+    fetch(`/api/calendar-intelligence/notes?conferenceId=${conferenceIdRef.current}`)
       .then(r => r.ok ? r.json() : { notes: [] })
       .then((data: { notes: Note[] }) => setNotes(data.notes ?? []))
       .catch(() => {})
       .finally(() => setLoading(false));
-  };
+  }, []);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadNotes(); }, [conferenceId]);
+  // Subscribe so that when any other panel for this conference posts, we reload too.
+  useEffect(() => {
+    loadNotes();
+    subscribeNoteChange(conferenceId, loadNotes);
+    return () => unsubscribeNoteChange(conferenceId, loadNotes);
+  }, [conferenceId, loadNotes]);
 
   const postNote = async (content: string, parentNoteId?: number) => {
     if (!content.trim()) return;
@@ -89,7 +112,8 @@ export function CalendarNotesPanel({ conferenceId, onClose, variant = 'sidebar' 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ conferenceId, content: content.trim(), parentNoteId }),
       });
-      loadNotes();
+      // Notify all panels for this conference (including ourselves) to reload.
+      notifyNoteChange(conferenceId);
       if (parentNoteId) { setReplyText(''); setReplyingTo(null); }
       else setNewNote('');
     } finally {
