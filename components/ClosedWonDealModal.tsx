@@ -588,39 +588,57 @@ export function ClosedWonDealModal() {
             setIsOpen={setShowConferenceDropdown}
           />
 
-          {/* ── Attribution Type + % ─────────────────────────────────────────── */}
+          {/* ── Attribution Type + Deal Type (+ % when Influenced/Accelerated) ── */}
           <div>
             {(attributionType === 'Influenced' || attributionType === 'Accelerated') ? (
-              <div className="flex items-end gap-2">
-                <div className="flex-1 min-w-0">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-end gap-2">
+                  <div className="flex-1 min-w-0">
+                    <label className={labelCls}>Attribution Type</label>
+                    <select value={attributionType} onChange={e => setAttributionType(e.target.value)} className={inputCls}>
+                      <option value="">— Select —</option>
+                      {ATTRIBUTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div className="w-20 flex-shrink-0">
+                    <label className={labelCls}>%</label>
+                    <div className="relative flex items-center">
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={attributionPct}
+                        onChange={e => setAttributionPct(Math.min(100, Math.max(1, Number(e.target.value) || 1)))}
+                        className="w-full border border-gray-300 rounded-lg pl-3 pr-6 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+                      />
+                      <span className="pointer-events-none absolute right-2.5 text-sm text-gray-400">%</span>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Deal Type</label>
+                  <select value={dealType} onChange={e => setDealType(e.target.value)} className={inputCls}>
+                    <option value="">— Select —</option>
+                    {DEAL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
                   <label className={labelCls}>Attribution Type</label>
                   <select value={attributionType} onChange={e => setAttributionType(e.target.value)} className={inputCls}>
                     <option value="">— Select —</option>
                     {ATTRIBUTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
-                <div className="w-32 flex-shrink-0">
-                  <label className={labelCls}>Attribution %</label>
-                  <div className="relative flex items-center">
-                    <input
-                      type="number"
-                      min={1}
-                      max={100}
-                      value={attributionPct}
-                      onChange={e => setAttributionPct(Math.min(100, Math.max(1, Number(e.target.value) || 1)))}
-                      className="w-full border border-gray-300 rounded-lg pl-3 pr-7 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
-                    />
-                    <span className="pointer-events-none absolute right-3 text-sm text-gray-400">%</span>
-                  </div>
+                <div>
+                  <label className={labelCls}>Deal Type</label>
+                  <select value={dealType} onChange={e => setDealType(e.target.value)} className={inputCls}>
+                    <option value="">— Select —</option>
+                    {DEAL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
                 </div>
-              </div>
-            ) : (
-              <div>
-                <label className={labelCls}>Attribution Type</label>
-                <select value={attributionType} onChange={e => setAttributionType(e.target.value)} className={inputCls}>
-                  <option value="">— Select —</option>
-                  {ATTRIBUTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
               </div>
             )}
           </div>
@@ -740,7 +758,7 @@ export function ClosedWonDealModal() {
             </div>
           )}
 
-          {/* Advanced details — Opportunity ID, Deal Type */}
+          {/* Advanced details — Opportunity ID */}
           <div className="border border-gray-100 rounded-lg overflow-hidden">
             <button type="button" onClick={() => setShowAdvanced(v => !v)} className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors text-left">
               <span className="text-xs font-medium text-gray-600">Advanced details</span>
@@ -748,18 +766,9 @@ export function ClosedWonDealModal() {
             </button>
             {showAdvanced && (
               <div className="px-4 py-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={labelCls}>Opportunity ID</label>
-                    <input type="text" value={opportunityId} onChange={e => setOpportunityId(e.target.value)} placeholder="CRM reference" className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Deal Type</label>
-                    <select value={dealType} onChange={e => setDealType(e.target.value)} className={inputCls}>
-                      <option value="">— Select —</option>
-                      {DEAL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
+                <div>
+                  <label className={labelCls}>Opportunity ID</label>
+                  <input type="text" value={opportunityId} onChange={e => setOpportunityId(e.target.value)} placeholder="CRM reference" className={inputCls} />
                 </div>
               </div>
             )}

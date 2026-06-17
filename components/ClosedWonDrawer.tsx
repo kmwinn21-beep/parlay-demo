@@ -90,6 +90,15 @@ const ATTR_PILL: Record<string, { bg: string; text: string; border: string }> = 
   'Accelerated':   { bg: '#fefce8', text: '#a16207', border: '#fef08a' },
 };
 
+const DEAL_TYPE_PILL: Record<string, { bg: string; text: string; border: string }> = {
+  'New Business': { bg: '#f0fdf4', text: '#15803d', border: '#bbf7d0' },
+  'Upsell':       { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' },
+  'Renewal':      { bg: '#fff7ed', text: '#c2410c', border: '#fed7aa' },
+  'Expansion':    { bg: '#faf5ff', text: '#7e22ce', border: '#e9d5ff' },
+  'Partnership':  { bg: '#fefce8', text: '#a16207', border: '#fef08a' },
+  'Other':        { bg: '#111827', text: '#f9fafb', border: '#374151' },
+};
+
 function MetaField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5">
@@ -169,10 +178,17 @@ function DealCard({ deal }: { deal: Deal }) {
         </div>
       </div>
 
-      {/* Primary meta row: Opp ID · Close Date · Attributed Rep */}
+      {/* Primary meta row: Deal Type · Close Date · Attributed Rep */}
       <div className="px-4 py-3 grid grid-cols-3 gap-3 border-b border-gray-50">
-        <MetaField label="Deal / Opp ID">
-          {deal.opportunity_id ?? <span className="text-gray-400">—</span>}
+        <MetaField label="Deal Type">
+          {deal.deal_type ? (() => {
+            const s = DEAL_TYPE_PILL[deal.deal_type] ?? { bg: '#f9fafb', text: '#374151', border: '#e5e7eb' };
+            return (
+              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold border" style={{ background: s.bg, color: s.text, borderColor: s.border }}>
+                {deal.deal_type}
+              </span>
+            );
+          })() : <span className="text-gray-400">—</span>}
         </MetaField>
         <MetaField label="Closed/Won Date">
           {deal.close_date ? fmtDate(deal.close_date) : <span className="text-gray-400">—</span>}
@@ -248,17 +264,23 @@ function DealCard({ deal }: { deal: Deal }) {
         </MetaField>
       </div>
 
-      {/* Products */}
-      {deal.products.length > 0 && (
-        <div className="px-4 py-3">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Products</div>
-          <div className="flex flex-wrap gap-1.5">
-            {deal.products.map(p => (
-              <span key={p.id} className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-[11px] font-medium border border-gray-200">
-                {p.product_name}
-              </span>
-            ))}
-          </div>
+      {/* Products · Deal / Opp ID */}
+      {(deal.products.length > 0 || deal.opportunity_id) && (
+        <div className="px-4 py-3 grid grid-cols-2 gap-3">
+          {deal.products.length > 0 ? (
+            <MetaField label="Products">
+              <div className="flex flex-wrap gap-1 mt-0.5">
+                {deal.products.map(p => (
+                  <span key={p.id} className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-[11px] font-medium border border-gray-200">
+                    {p.product_name}
+                  </span>
+                ))}
+              </div>
+            </MetaField>
+          ) : <div />}
+          <MetaField label="Deal / Opp ID">
+            {deal.opportunity_id ?? <span className="text-gray-400">—</span>}
+          </MetaField>
         </div>
       )}
     </div>
