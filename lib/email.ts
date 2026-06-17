@@ -298,10 +298,17 @@ export async function sendInputRequestEmail(opts: InputRequestEmailOpts): Promis
       <p style="margin:0;font-size:13px;color:#9ca3af">Scoring in progress — check back in Parlay for the full report.</p>
     </div>`;
 
-  const decisionBtnStyle = (bg: string) =>
-    `display:block;width:100%;max-width:340px;margin:6px auto;padding:12px 20px;` +
-    `background:${bg};color:#ffffff;text-decoration:none;border-radius:6px;` +
-    `font-weight:600;font-size:14px;text-align:center;box-sizing:border-box`;
+  const decisionBtn = (bg: string, href: string, label: string) => {
+    const safeHref = href.replace(/&/g, '&amp;');
+    return `
+    <tr>
+      <td align="center" style="padding:4px 0">
+        <a href="${safeHref}"
+           style="display:inline-block;width:300px;padding:12px 20px;background:${bg};color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;text-align:center;font-family:Arial,sans-serif"
+        >${label}</a>
+      </td>
+    </tr>`;
+  };
 
   const html = `
 <!DOCTYPE html>
@@ -334,11 +341,13 @@ export async function sendInputRequestEmail(opts: InputRequestEmailOpts): Promis
 
       <p style="margin:20px 0 10px;font-size:13px;font-weight:600;color:#374151">Select your recommendation:</p>
 
-      <a href="${tokenLinks.attend}" style="${decisionBtnStyle('#1D9E75')}">✓ Attend</a>
-      <a href="${tokenLinks.attendReduced}" style="${decisionBtnStyle('#085041')}">↓ Attend (Reduced)</a>
-      <a href="${tokenLinks.onTheFence}" style="${decisionBtnStyle('#EF9F27')}">~ On the Fence</a>
-      <a href="${tokenLinks.dontAttend}" style="${decisionBtnStyle('#E24B4A')}">✗ Don't Attend</a>
-      <a href="${tokenLinks.evaluating}" style="${decisionBtnStyle('#185FA5')}">? Evaluating</a>
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto">
+        ${decisionBtn('#1D9E75', tokenLinks.attend,        '✓ Attend')}
+        ${decisionBtn('#085041', tokenLinks.attendReduced, '↓ Attend (Reduced)')}
+        ${decisionBtn('#EF9F27', tokenLinks.onTheFence,    '~ On the Fence')}
+        ${decisionBtn('#E24B4A', tokenLinks.dontAttend,    '✗ Don\'t Attend')}
+        ${decisionBtn('#185FA5', tokenLinks.evaluating,    '? Evaluating')}
+      </table>
 
       <p style="margin:22px 0 6px;font-size:13px;color:#4b5563">
         Or <a href="${parlayLink}" style="color:#1B76BC;font-weight:600">open ${conferenceName} in Parlay</a>
