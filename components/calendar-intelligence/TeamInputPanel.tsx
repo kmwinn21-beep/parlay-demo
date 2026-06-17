@@ -123,9 +123,16 @@ function AwaitingInputSection({ pendingRequests }: { pendingRequests: PendingReq
                 {r.recipientName.charAt(0).toUpperCase()}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 11, margin: 0, fontWeight: 500, color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {r.recipientName}
-                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <p style={{ fontSize: 11, margin: 0, fontWeight: 500, color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {r.recipientName}
+                  </p>
+                  {isExternal && (
+                    <span style={{ fontSize: 9, fontWeight: 600, color: '#6b7280', background: '#f3f4f6', borderRadius: 4, padding: '1px 4px', flexShrink: 0 }}>
+                      External
+                    </span>
+                  )}
+                </div>
                 {subtitleParts && (
                   <p style={{ fontSize: 10, margin: 0, color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {subtitleParts}
