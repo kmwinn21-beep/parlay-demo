@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { CalendarNotesPanel } from './CalendarNotesPanel';
 import { RequestInputForm } from '@/components/RequestInputDropdown';
 import { useUser } from '@/components/UserContext';
@@ -34,6 +34,7 @@ interface PendingRequest {
   status: 'pending' | 'responded' | 'expired';
   createdAt: string;
   expiresAt: string | null;
+  reminders: string[];
 }
 
 export type ConferenceInputPanelProps = {
@@ -86,76 +87,167 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(d / 30)}mo ago`;
 }
 
-function AwaitingInputSection({ pendingRequests }: { pendingRequests: PendingRequest[] }) {
+function AwaitingRow({
+  r,
+  conferenceId,
+}: {
+  r: PendingRequest;
+  conferenceId: number;
+}) {
+  const days = daysRemaining(r.expiresAt);
+  const pillColor = days == null ? '#9ca3af' : days >= 5 ? '#059669' : days >= 3 ? '#d97706' : '#dc2626';
+  const pillBg   = days == null ? '#f3f4f6' : days >= 5 ? '#d1fae5' : days >= 3 ? '#fef3c7' : '#fee2e2';
+  const isExternal = r.recipientUserId == null;
+  const subtitleParts = isExternal ? [r.recipientTitle, r.recipientEmail].filter(Boolean).join(' · ') : null;
+
+  const [localReminders, setLocalReminders] = useState<string[]>([]);
+  const [isSending, setIsSending] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const expandRef = useRef<HTMLDivElement>(null);
+
+  // All date rows: original send + persisted reminders + local optimistic reminders
+  const allReminders = [...(r.reminders ?? []), ...localReminders];
+  const dateRows = [
+    { type: 'sent' as const, date: r.createdAt },
+    ...allReminders.map(ts => ({ type: 'bell' as const, date: ts })),
+  ];
+  const showMoreBtn = dateRows.length > 3;
+  const visibleRows = expanded ? dateRows : dateRows.slice(0, 3);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const handler = (e: MouseEvent) => {
+      if (expandRef.current && !expandRef.current.contains(e.target as Node)) {
+        setExpanded(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [expanded]);
+
+  const handleRemind = async () => {
+    if (isSending) return;
+    setIsSending(true);
+    try {
+      const res = await fetch('/api/calendar-intelligence/request-input/remind', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conferenceId, recipientEmail: r.recipientEmail }),
+      });
+      if (res.ok) setLocalReminders(prev => [...prev, new Date().toISOString()]);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  // SVG: paper-plane for original send
+  const sendIcon = (
+    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#b0b7c3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="22" y1="2" x2="11" y2="13" />
+      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+    </svg>
+  );
+
+  // SVG: bell for reminders
+  const bellIconSm = (
+    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#b0b7c3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  );
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
+        {/* Avatar */}
+        <div style={{
+          width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+          background: '#e5e7eb', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#6b7280', marginTop: 1,
+        }}>
+          {r.recipientName.charAt(0).toUpperCase()}
+        </div>
+
+        {/* Name + subtitle */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <p style={{ fontSize: 11, margin: 0, fontWeight: 500, color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {r.recipientName}
+            </p>
+            {isExternal && (
+              <span style={{ fontSize: 9, fontWeight: 600, color: '#6b7280', background: '#f3f4f6', borderRadius: 4, padding: '1px 4px', flexShrink: 0 }}>
+                External
+              </span>
+            )}
+          </div>
+          {subtitleParts && (
+            <p style={{ fontSize: 10, margin: 0, color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {subtitleParts}
+            </p>
+          )}
+        </div>
+
+        {/* Right column: pill + bell, then date history */}
+        <div ref={expandRef} style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+          {/* Row 1: days pill + bell */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {days != null && (
+              <span style={{ fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 20, background: pillBg, color: pillColor, whiteSpace: 'nowrap' }}>
+                {days <= 0 ? 'Due today' : `${days}d left`}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={handleRemind}
+              disabled={isSending}
+              title="Send reminder email"
+              style={{ background: 'none', border: 'none', padding: 2, cursor: isSending ? 'not-allowed' : 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', opacity: isSending ? 0.4 : 1 }}
+            >
+              {isSending ? (
+                <span style={{ display: 'inline-block', width: 11, height: 11, border: '1.5px solid #d1d5db', borderTopColor: '#6b7280', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+              ) : (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+              )}
+            </button>
+          </div>
+
+          {/* Date history rows */}
+          {visibleRows.map((row, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              {row.type === 'sent' ? sendIcon : bellIconSm}
+              <span style={{ fontSize: 9, color: '#b0b7c3', whiteSpace: 'nowrap' }}>{fmtDate(row.date)}</span>
+            </div>
+          ))}
+
+          {/* More / Less toggle */}
+          {showMoreBtn && (
+            <button
+              type="button"
+              onClick={() => setExpanded(v => !v)}
+              style={{ background: 'none', border: 'none', padding: 0, fontSize: 9, color: '#9ca3af', cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              {expanded ? 'Less' : `${dateRows.length - 3} more`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AwaitingInputSection({ pendingRequests, conferenceId }: { pendingRequests: PendingRequest[]; conferenceId: number }) {
   const pending = pendingRequests.filter(r => r.status === 'pending');
   if (pending.length === 0) return null;
 
   return (
     <div style={{ borderTop: '0.5px solid var(--color-border-tertiary, #e5e7eb)', paddingTop: 10, marginTop: 8, marginBottom: 4 }}>
-      <p style={{
-        fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
-        letterSpacing: '.06em', color: '#9ca3af', marginBottom: 8,
-      }}>
+      <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', color: '#9ca3af', marginBottom: 8 }}>
         Awaiting Input · {pending.length}
       </p>
-      {pending.map(r => {
-        const days = daysRemaining(r.expiresAt);
-        const pillColor = days == null ? '#9ca3af'
-          : days >= 5 ? '#059669'
-          : days >= 3 ? '#d97706'
-          : '#dc2626';
-        const pillBg = days == null ? '#f3f4f6'
-          : days >= 5 ? '#d1fae5'
-          : days >= 3 ? '#fef3c7'
-          : '#fee2e2';
-        const isExternal = r.recipientUserId == null;
-        const subtitleParts = isExternal
-          ? [r.recipientTitle, r.recipientEmail].filter(Boolean).join(' · ')
-          : null;
-        return (
-          <div key={r.id} style={{ marginBottom: 7 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <div style={{
-                width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-                background: '#e5e7eb', display: 'flex', alignItems: 'center',
-                justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#6b7280',
-              }}>
-                {r.recipientName.charAt(0).toUpperCase()}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <p style={{ fontSize: 11, margin: 0, fontWeight: 500, color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {r.recipientName}
-                  </p>
-                  {isExternal && (
-                    <span style={{ fontSize: 9, fontWeight: 600, color: '#6b7280', background: '#f3f4f6', borderRadius: 4, padding: '1px 4px', flexShrink: 0 }}>
-                      External
-                    </span>
-                  )}
-                </div>
-                {subtitleParts && (
-                  <p style={{ fontSize: 10, margin: 0, color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {subtitleParts}
-                  </p>
-                )}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                <span style={{ fontSize: 9, color: '#b0b7c3', whiteSpace: 'nowrap' }}>
-                  {fmtDate(r.createdAt)}
-                </span>
-                {days != null && (
-                  <span style={{
-                    fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 20,
-                    background: pillBg, color: pillColor, whiteSpace: 'nowrap',
-                  }}>
-                    {days <= 0 ? 'Due today' : `${days}d left`}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })}
+      {pending.map(r => <AwaitingRow key={r.id} r={r} conferenceId={conferenceId} />)}
     </div>
   );
 }
@@ -420,7 +512,7 @@ export function TeamInputPanel({
             Team members can log opinions in Calendar Intelligence.
           </p>
         </div>
-        <AwaitingInputSection pendingRequests={pendingRequests} />
+        <AwaitingInputSection pendingRequests={pendingRequests} conferenceId={conferenceId} />
         <div className="border-t border-gray-100">
           <CalendarNotesPanel conferenceId={conferenceId} onClose={() => {}} variant="sheet" />
         </div>
@@ -544,7 +636,7 @@ export function TeamInputPanel({
       </div>
 
       {/* Awaiting input */}
-      <AwaitingInputSection pendingRequests={pendingRequests} />
+      <AwaitingInputSection pendingRequests={pendingRequests} conferenceId={conferenceId} />
 
       {/* Discussion thread */}
       <div className="border-t border-gray-100 mt-2">

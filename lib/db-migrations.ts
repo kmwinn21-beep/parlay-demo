@@ -1384,4 +1384,12 @@ export const migrations: string[] = [
     created_at TEXT DEFAULT (datetime('now')),
     UNIQUE(conference_id, recipient_email)
   )`,
+  // 476 — input_request_reminders: log of reminder emails sent per request
+  `CREATE TABLE IF NOT EXISTS input_request_reminders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id TEXT NOT NULL,
+    conference_id INTEGER NOT NULL,
+    recipient_email TEXT NOT NULL,
+    sent_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
 ];

@@ -252,6 +252,9 @@ const TIER_COLORS: Record<string, string> = {
   remove_from_calendar:       '#dc2626',
 };
 
+// Used in email links and logo src
+const EMAIL_BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://work.useparlay.app';
+
 interface InputRequestEmailOpts {
   to: string;
   recipientName: string;
@@ -270,6 +273,7 @@ interface InputRequestEmailOpts {
   parlayLink: string;
   expiresAt: string;
   expiryDays?: number;
+  isReminder?: boolean;
   pdfAttachmentBase64?: string;
 }
 
@@ -277,7 +281,7 @@ export async function sendInputRequestEmail(opts: InputRequestEmailOpts): Promis
   const {
     to, recipientName, conferenceName, conferenceYear,
     requesterName, calScore, calTier,
-    tokenLinks, parlayLink, expiresAt, expiryDays, pdfAttachmentBase64,
+    tokenLinks, parlayLink, expiresAt, expiryDays, isReminder, pdfAttachmentBase64,
   } = opts;
 
   const tierLabel = calTier ? (TIER_LABELS[calTier] ?? calTier) : null;
@@ -307,9 +311,9 @@ export async function sendInputRequestEmail(opts: InputRequestEmailOpts): Promis
   <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;margin-top:20px;margin-bottom:20px">
 
     <!-- Header -->
-    <div style="background:#0B3C62;padding:18px 24px;display:flex;align-items:center;justify-content:space-between">
-      <span style="color:#ffffff;font-size:18px;font-weight:700;letter-spacing:-.3px">Parlay</span>
-      <span style="color:rgba(255,255,255,.6);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em">Calendar Intelligence</span>
+    <div style="background:#0B3C62;padding:14px 24px;display:flex;align-items:center;justify-content:space-between">
+      <img src="${EMAIL_BASE_URL}/ParlayLogoWhite_New.png" alt="Parlay" style="height:26px;width:auto;display:block" />
+      <span style="color:rgba(255,255,255,.85);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;text-align:right;line-height:1.4">INPUT REQUEST FOR<br>${conferenceName.toUpperCase()} &mdash; ${conferenceYear + 1}</span>
     </div>
 
     <!-- Body -->
@@ -363,7 +367,7 @@ export async function sendInputRequestEmail(opts: InputRequestEmailOpts): Promis
   await transport.sendMail({
     from: process.env.SMTP_FROM ?? `"Parlay" <noreply@useparlay.app>`,
     to,
-    subject: `${requesterName} wants your input on ${conferenceName}`,
+    subject: `${isReminder ? 'REMINDER: ' : ''}${requesterName} wants your input on ${conferenceName}`,
     html,
     attachments: pdfAttachmentBase64 ? [{
       filename: `${conferenceName}-cal-intel-${conferenceYear}.pdf`,

@@ -179,18 +179,31 @@ export async function GET(request: NextRequest) {
   const conferenceId = Number(request.nextUrl.searchParams.get('conferenceId'));
   if (!conferenceId) return NextResponse.json({ error: 'conferenceId required' }, { status: 400 });
 
-  const res = await db.execute({
-    sql: `SELECT ir.id, ir.recipient_email, ir.recipient_name, ir.recipient_title,
-                 ir.recipient_user_id, ir.status, ir.created_at,
-                 (SELECT irt.expires_at FROM input_request_tokens irt
-                  WHERE irt.conference_id = ir.conference_id
-                    AND irt.recipient_email = ir.recipient_email
-                  ORDER BY irt.created_at DESC LIMIT 1) AS expires_at
-          FROM input_requests ir
-          WHERE ir.conference_id = ?
-          ORDER BY ir.created_at DESC`,
-    args: [conferenceId],
-  });
+  const [res, remRes] = await Promise.all([
+    db.execute({
+      sql: `SELECT ir.id, ir.recipient_email, ir.recipient_name, ir.recipient_title,
+                   ir.recipient_user_id, ir.status, ir.created_at,
+                   (SELECT irt.expires_at FROM input_request_tokens irt
+                    WHERE irt.conference_id = ir.conference_id
+                      AND irt.recipient_email = ir.recipient_email
+                    ORDER BY irt.created_at DESC LIMIT 1) AS expires_at
+            FROM input_requests ir
+            WHERE ir.conference_id = ?
+            ORDER BY ir.created_at DESC`,
+      args: [conferenceId],
+    }),
+    db.execute({
+      sql: `SELECT recipient_email, sent_at FROM input_request_reminders WHERE conference_id = ? ORDER BY sent_at ASC`,
+      args: [conferenceId],
+    }).catch(() => ({ rows: [] })),
+  ]);
+
+  const remindersByEmail = new Map<string, string[]>();
+  for (const row of remRes.rows as Row[]) {
+    const email = String(row.recipient_email);
+    if (!remindersByEmail.has(email)) remindersByEmail.set(email, []);
+    remindersByEmail.get(email)!.push(String(row.sent_at));
+  }
 
   const requests = (res.rows as Row[]).map(r => ({
     id: Number(r.id),
@@ -201,6 +214,7 @@ export async function GET(request: NextRequest) {
     status: String(r.status) as 'pending' | 'responded' | 'expired',
     createdAt: String(r.created_at ?? ''),
     expiresAt: r.expires_at ? String(r.expires_at) : null,
+    reminders: remindersByEmail.get(String(r.recipient_email)) ?? [],
   }));
 
   return NextResponse.json({ requests });
