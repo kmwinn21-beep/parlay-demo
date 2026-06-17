@@ -311,10 +311,16 @@ export async function sendInputRequestEmail(opts: InputRequestEmailOpts): Promis
   <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;margin-top:20px;margin-bottom:20px">
 
     <!-- Header -->
-    <div style="background:#0B3C62;padding:14px 24px;display:flex;align-items:center;justify-content:space-between">
-      <img src="${EMAIL_BASE_URL}/ParlayLogoWhite_New.png" alt="Parlay" style="height:26px;width:auto;display:block" />
-      <span style="color:rgba(255,255,255,.85);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;text-align:right;line-height:1.4">INPUT REQUEST FOR<br>${conferenceName.toUpperCase()} &mdash; ${conferenceYear + 1}</span>
-    </div>
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#0B3C62">
+      <tr>
+        <td style="padding:14px 24px;vertical-align:middle">
+          <img src="${EMAIL_BASE_URL}/ParlayLogoWhite_New.png" alt="Parlay" style="height:26px;width:auto;display:block" />
+        </td>
+        <td style="padding:14px 24px;vertical-align:middle;text-align:right">
+          <span style="color:rgba(255,255,255,.85);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;line-height:1.4;display:block">INPUT REQUEST FOR<br>${conferenceName.toUpperCase()} &mdash; ${conferenceYear + 1}</span>
+        </td>
+      </tr>
+    </table>
 
     <!-- Body -->
     <div style="padding:28px 28px 20px">
