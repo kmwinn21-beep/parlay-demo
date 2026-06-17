@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
-import { sendInputRequestEmail } from '@/lib/email';
+import { buildInputRequestEmailHtml, sendInputRequestEmail } from '@/lib/email';
+import { getValidToken, sendViaGoogle, sendViaMicrosoft, type OAuthProvider } from '@/lib/oauthEmail';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
 
   const parlayLink = `${BASE_URL}/calendar-intelligence?conference=${conferenceId}`;
 
-  await sendInputRequestEmail({
+  const emailOpts = {
     to: recipientEmail,
     recipientName,
     conferenceName,
@@ -92,7 +93,30 @@ export async function POST(request: NextRequest) {
     parlayLink,
     expiresAt: expiresAt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
     isReminder: true,
-  }).catch(() => {});
+  };
+
+  // Use requester's OAuth connection if available, otherwise fall back to SMTP
+  const oauthRow = await db.execute({
+    sql: 'SELECT provider, provider_email FROM oauth_connections WHERE user_id = ? LIMIT 1',
+    args: [authResult.id],
+  }).catch(() => ({ rows: [] }));
+  const oauthConn = oauthRow.rows[0] as unknown as { provider: string; provider_email: string | null } | undefined;
+
+  if (oauthConn) {
+    await (async () => {
+      const accessToken = await getValidToken(db, authResult.id, oauthConn.provider as OAuthProvider);
+      const html = buildInputRequestEmailHtml(emailOpts);
+      const subject = `REMINDER: ${requesterName} wants your input on ${conferenceName}`;
+      const fromEmail = oauthConn.provider_email ?? authResult.email;
+      if (oauthConn.provider === 'google') {
+        await sendViaGoogle({ accessToken, from: fromEmail, to: recipientEmail, subject, htmlBody: html, attachments: [] });
+      } else {
+        await sendViaMicrosoft({ accessToken, to: recipientEmail, subject, htmlBody: html, attachments: [] });
+      }
+    })().catch(() => sendInputRequestEmail(emailOpts).catch(() => {}));
+  } else {
+    await sendInputRequestEmail(emailOpts).catch(() => {});
+  }
 
   // Log reminder
   await db.execute({

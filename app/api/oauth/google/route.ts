@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
+import { getDb } from '@/lib/getDb';
 import { getGoogleCredentials } from '@/lib/oauthCredentials';
 
 export async function GET(request: NextRequest) {
@@ -25,4 +26,15 @@ export async function GET(request: NextRequest) {
   });
 
   return NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+}
+
+export async function DELETE(request: NextRequest) {
+  const user = await requireAuth(request);
+  if (user instanceof NextResponse) return user;
+  const db = await getDb(user.accountId);
+  await db.execute({
+    sql: 'DELETE FROM oauth_connections WHERE user_id = ? AND provider = ?',
+    args: [user.id, 'google'],
+  });
+  return NextResponse.json({ ok: true });
 }

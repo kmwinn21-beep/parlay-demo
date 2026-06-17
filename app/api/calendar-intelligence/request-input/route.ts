@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
-import { sendInputRequestEmail } from '@/lib/email';
+import { buildInputRequestEmailHtml, sendInputRequestEmail } from '@/lib/email';
+import { getValidToken, sendViaGoogle, sendViaMicrosoft, type OAuthProvider } from '@/lib/oauthEmail';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,6 +74,13 @@ export async function POST(request: NextRequest) {
   const parlayLink = `${BASE_URL}/calendar-intelligence?conference=${conferenceId}`;
   const clampedDays = Math.max(1, Math.min(90, Number(expiryDays) || 7));
   const expiresAt = new Date(Date.now() + clampedDays * 24 * 60 * 60 * 1000);
+
+  // Check if requester has a connected OAuth account for sending from their own email
+  const oauthRow = await db.execute({
+    sql: 'SELECT provider, provider_email FROM oauth_connections WHERE user_id = ? LIMIT 1',
+    args: [authResult.id],
+  }).catch(() => ({ rows: [] }));
+  const oauthConn = oauthRow.rows[0] as unknown as { provider: string; provider_email: string | null } | undefined;
 
   let requestsSent = 0;
 
@@ -149,8 +157,8 @@ export async function POST(request: NextRequest) {
       evaluating:    `${BASE_URL}/input/respond?token=${token}&decision=pending_approval&aid=${aidParam}`,
     };
 
-    // Send email (best-effort)
-    await sendInputRequestEmail({
+    // Send email — use requester's OAuth connection if available, otherwise fall back to SMTP
+    const emailOpts = {
       to: email,
       recipientName: name,
       conferenceName,
@@ -162,7 +170,22 @@ export async function POST(request: NextRequest) {
       parlayLink,
       expiresAt: expiresAt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
       expiryDays: clampedDays,
-    }).catch(() => {});
+    };
+    if (oauthConn) {
+      await (async () => {
+        const accessToken = await getValidToken(db, authResult.id, oauthConn.provider as OAuthProvider);
+        const html = buildInputRequestEmailHtml(emailOpts);
+        const subject = `${requesterName} wants your input on ${conferenceName}`;
+        const fromEmail = oauthConn.provider_email ?? authResult.email;
+        if (oauthConn.provider === 'google') {
+          await sendViaGoogle({ accessToken, from: fromEmail, to: email, subject, htmlBody: html, attachments: [] });
+        } else {
+          await sendViaMicrosoft({ accessToken, to: email, subject, htmlBody: html, attachments: [] });
+        }
+      })().catch(() => sendInputRequestEmail(emailOpts).catch(() => {}));
+    } else {
+      await sendInputRequestEmail(emailOpts).catch(() => {});
+    }
 
     requestsSent++;
   }

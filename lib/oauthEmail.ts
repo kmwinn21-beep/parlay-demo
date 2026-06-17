@@ -1,4 +1,4 @@
-import { db, dbReady } from './db';
+import type { Client } from '@libsql/client';
 import { getGoogleCredentials, getMicrosoftCredentials } from './oauthCredentials';
 
 export type OAuthProvider = 'google' | 'microsoft';
@@ -15,7 +15,7 @@ export interface OAuthConnection {
 
 // ── Token management ──────────────────────────────────────────────────────────
 
-async function refreshGoogle(conn: OAuthConnection): Promise<string> {
+async function refreshGoogle(db: Client, conn: OAuthConnection): Promise<string> {
   if (!conn.refresh_token) throw new Error('No refresh token available. Reconnect your Google account.');
   const { clientId, clientSecret } = await getGoogleCredentials();
   const res = await fetch('https://oauth2.googleapis.com/token', {
@@ -38,7 +38,7 @@ async function refreshGoogle(conn: OAuthConnection): Promise<string> {
   return data.access_token as string;
 }
 
-async function refreshMicrosoft(conn: OAuthConnection): Promise<string> {
+async function refreshMicrosoft(db: Client, conn: OAuthConnection): Promise<string> {
   if (!conn.refresh_token) throw new Error('No refresh token available. Reconnect your Microsoft account.');
   const { clientId, clientSecret, tenantId } = await getMicrosoftCredentials();
   const res = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
@@ -62,8 +62,7 @@ async function refreshMicrosoft(conn: OAuthConnection): Promise<string> {
   return data.access_token as string;
 }
 
-export async function getValidToken(userId: number, provider: OAuthProvider): Promise<string> {
-  await dbReady;
+export async function getValidToken(db: Client, userId: number, provider: OAuthProvider): Promise<string> {
   const row = await db.execute({
     sql: 'SELECT * FROM oauth_connections WHERE user_id = ? AND provider = ?',
     args: [userId, provider],
@@ -74,7 +73,7 @@ export async function getValidToken(userId: number, provider: OAuthProvider): Pr
   // Refresh proactively if expiry is within 60 s
   const expiresAt = conn.token_expires_at ? Number(conn.token_expires_at) : null;
   if (!expiresAt || expiresAt < Date.now() + 60_000) {
-    return provider === 'google' ? refreshGoogle(conn) : refreshMicrosoft(conn);
+    return provider === 'google' ? refreshGoogle(db, conn) : refreshMicrosoft(db, conn);
   }
   return conn.access_token;
 }

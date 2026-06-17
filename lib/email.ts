@@ -277,11 +277,11 @@ interface InputRequestEmailOpts {
   pdfAttachmentBase64?: string;
 }
 
-export async function sendInputRequestEmail(opts: InputRequestEmailOpts): Promise<{ devLink?: string }> {
+export function buildInputRequestEmailHtml(opts: InputRequestEmailOpts): string {
   const {
-    to, recipientName, conferenceName, conferenceYear,
+    recipientName, conferenceName, conferenceYear,
     requesterName, calScore, calTier,
-    tokenLinks, parlayLink, expiresAt, expiryDays, isReminder, pdfAttachmentBase64,
+    tokenLinks, parlayLink, expiresAt, expiryDays,
   } = opts;
 
   const tierLabel = calTier ? (TIER_LABELS[calTier] ?? calTier) : null;
@@ -310,7 +310,7 @@ export async function sendInputRequestEmail(opts: InputRequestEmailOpts): Promis
     </tr>`;
   };
 
-  const html = `
+  return `
 <!DOCTYPE html>
 <html>
 <head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -367,6 +367,12 @@ export async function sendInputRequestEmail(opts: InputRequestEmailOpts): Promis
   </div>
 </body>
 </html>`;
+}
+
+export async function sendInputRequestEmail(opts: InputRequestEmailOpts): Promise<{ devLink?: string }> {
+  const { to, isReminder, pdfAttachmentBase64, conferenceName, conferenceYear, requesterName, tokenLinks } = opts;
+
+  const html = buildInputRequestEmailHtml(opts);
 
   const transport = createTransport();
   if (!transport) {
