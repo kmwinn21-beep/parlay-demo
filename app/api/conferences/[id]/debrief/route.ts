@@ -81,10 +81,14 @@ export async function GET(
       db.execute({
         sql: `SELECT fu.id, fu.attendee_id, fu.next_steps, fu.next_steps_notes, fu.completed,
                      fu.assigned_rep, fu.meeting_id,
-                     a.first_name, a.last_name, a.company_id, c.name as company_name
+                     a.first_name, a.last_name, a.company_id, c.name as company_name,
+                     COALESCE(ns_opt.value, fu.next_steps) AS next_steps_display
               FROM follow_ups fu
               JOIN attendees a ON fu.attendee_id = a.id
               LEFT JOIN companies c ON a.company_id = c.id
+              LEFT JOIN config_options ns_opt
+                ON ns_opt.id = CAST(fu.next_steps AS INTEGER)
+               AND ns_opt.category = 'next_steps'
               WHERE fu.conference_id = ? AND ${csvContains('fu.assigned_rep')}`,
         args: [conferenceId, cidStr],
       }),
@@ -318,8 +322,8 @@ export async function GET(
           id: Number(fu.id),
           attendeeId: fu.attendee_id != null ? Number(fu.attendee_id) : null,
           attendeeName: fu.first_name ? `${String(fu.first_name)} ${String(fu.last_name ?? '')}`.trim() : null,
-          taskText: fu.next_steps_notes ? String(fu.next_steps_notes) : String(fu.next_steps ?? ''),
-          nextSteps: String(fu.next_steps ?? ''),
+          taskText: fu.next_steps_notes ? String(fu.next_steps_notes) : String(fu.next_steps_display ?? fu.next_steps ?? ''),
+          nextSteps: String(fu.next_steps_display ?? fu.next_steps ?? ''),
           completed: Boolean(fu.completed),
           meetingId: fu.meeting_id != null ? Number(fu.meeting_id) : null,
           source: fu.meeting_id ? 'From meeting notes' : 'Manual',
