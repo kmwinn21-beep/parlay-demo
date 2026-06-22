@@ -33,7 +33,7 @@ export function QuickViewDrawer({ target, onClose }: Props) {
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       {/* Panel */}
       <div
-        className="drawer-mobile-responsive relative flex flex-col bg-white w-full sm:w-[480px] h-[90vh] sm:h-full shadow-2xl rounded-t-2xl sm:rounded-none"
+        className="drawer-mobile-responsive relative flex flex-col bg-white w-full sm:w-[480px] h-[90vh] sm:h-full shadow-2xl rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none"
       >
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 flex-shrink-0">
