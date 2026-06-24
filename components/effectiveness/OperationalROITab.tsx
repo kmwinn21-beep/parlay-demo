@@ -235,6 +235,10 @@ function ScatterPlot({
 
 // ── Benchmark KPI tile ────────────────────────────────────────────────────────
 
+const TIER_COLOR: Record<string, string> = {
+  Elite: '#059669', Strong: '#1B76BC', Healthy: '#d97706', Weak: '#f97316', Poor: '#dc2626',
+};
+
 function BenchmarkTile({
   label,
   value,
@@ -242,6 +246,7 @@ function BenchmarkTile({
   benchmarkMin,
   benchmarkMax,
   lowerIsBetter = true,
+  tier,
 }: {
   label: string;
   value: number | null;
@@ -249,25 +254,24 @@ function BenchmarkTile({
   benchmarkMin?: number;
   benchmarkMax?: number;
   lowerIsBetter?: boolean;
+  tier?: string;
 }) {
   const numericFmt = value == null ? '—' : fmt$(value);
 
   let benchmarkStatus: 'good' | 'bad' | 'neutral' = 'neutral';
-  let benchmarkLabel = '';
 
   if (value != null && benchmarkMin != null && benchmarkMax != null) {
     if (lowerIsBetter) {
-      if (value <= benchmarkMin) { benchmarkStatus = 'good'; benchmarkLabel = 'Below benchmark'; }
-      else if (value <= benchmarkMax) { benchmarkStatus = 'neutral'; benchmarkLabel = 'Within range'; }
-      else { benchmarkStatus = 'bad'; benchmarkLabel = 'Above benchmark'; }
+      if (value <= benchmarkMin) benchmarkStatus = 'good';
+      else if (value > benchmarkMax) benchmarkStatus = 'bad';
     } else {
-      if (value >= benchmarkMax) { benchmarkStatus = 'good'; benchmarkLabel = 'Above benchmark'; }
-      else if (value >= benchmarkMin) { benchmarkStatus = 'neutral'; benchmarkLabel = 'Within range'; }
-      else { benchmarkStatus = 'bad'; benchmarkLabel = 'Below benchmark'; }
+      if (value >= benchmarkMax) benchmarkStatus = 'good';
+      else if (value < benchmarkMin) benchmarkStatus = 'bad';
     }
   }
 
-  const statusColor = benchmarkStatus === 'good' ? '#059669' : benchmarkStatus === 'bad' ? '#dc2626' : '#9ca3af';
+  const tierLabel = tier && tier in TIER_COLOR ? tier : '';
+  const tierColor = tierLabel ? TIER_COLOR[tierLabel] : '#9ca3af';
   const valueColor = !lowerIsBetter && benchmarkStatus === 'good' ? '#059669' : '#1B76BC';
 
   return (
@@ -275,8 +279,8 @@ function BenchmarkTile({
       <div className="text-xs text-gray-500 mb-1">{label}</div>
       <div className="text-lg font-bold" style={{ color: valueColor }}>{numericFmt}</div>
       <div className="text-xs text-gray-400 mt-0.5">{secondaryText}</div>
-      {benchmarkLabel && (
-        <div className="text-xs font-medium mt-1" style={{ color: statusColor }}>{benchmarkLabel}</div>
+      {tierLabel && (
+        <div className="text-xs font-medium mt-1" style={{ color: tierColor }}>{tierLabel}</div>
       )}
     </div>
   );
@@ -571,6 +575,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
             benchmarkMin={cpcBmMin}
             benchmarkMax={cpcBmMax}
             lowerIsBetter={true}
+            tier={companyTier}
           />
           <BenchmarkTile
             label="Cost per meeting held"
@@ -579,6 +584,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
             benchmarkMin={cpmBmMin}
             benchmarkMax={cpmBmMax}
             lowerIsBetter={true}
+            tier={meetingTier}
           />
           <BenchmarkTile
             label="Pipeline per $1k spent"
@@ -587,6 +593,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
             benchmarkMin={pipBmMin}
             benchmarkMax={pipBmMax}
             lowerIsBetter={false}
+            tier={pipelineTier}
           />
         </div>
 
