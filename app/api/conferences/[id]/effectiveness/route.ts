@@ -1113,6 +1113,8 @@ export async function GET(
       strategy_modifier_applied: true,
       original_weights: getPreset('cost_efficiency', 'pipeline_generation'),
       effective_weights: getPreset('cost_efficiency', strategyKey),
+      // Expose thresholds so the UI can render dynamic benchmark labels
+      ces_benchmarks: cesBenchmarks,
     };
 
     // dim7: use adjusted score

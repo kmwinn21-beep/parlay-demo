@@ -331,6 +331,19 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
   const costPerMeeting = costs.cost_per_meeting_held != null ? Number(costs.cost_per_meeting_held) : null;
   const pipelinePer1k = costs.pipeline_influence_per_1k_spent != null ? Number(costs.pipeline_influence_per_1k_spent) : null;
 
+  // Benchmark thresholds from admin settings (fall back to legacy hardcoded values)
+  const cesBm = costs.ces_benchmarks as {
+    cost_per_company?: { strong_max?: number; healthy_max?: number };
+    cost_per_meeting?: { strong_max?: number; healthy_max?: number };
+    pipeline_per_1k?: { healthy_min?: number; strong_min?: number };
+  } | undefined;
+  const cpcBmMin = cesBm?.cost_per_company?.strong_max ?? 800;
+  const cpcBmMax = cesBm?.cost_per_company?.healthy_max ?? 1200;
+  const cpmBmMin = cesBm?.cost_per_meeting?.strong_max ?? 1500;
+  const cpmBmMax = cesBm?.cost_per_meeting?.healthy_max ?? 2000;
+  const pipBmMin = cesBm?.pipeline_per_1k?.healthy_min ?? 5000;
+  const pipBmMax = cesBm?.pipeline_per_1k?.strong_min ?? 8000;
+
   // Budget breakdown (totals only — line items rendered individually)
   const budget = lineItems.length > 0 ? categorizeBudget(lineItems) : null;
   const budgetVariance = budget ? budget.totalBudget - budget.totalActual : 0;
@@ -554,25 +567,25 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
           <BenchmarkTile
             label="Cost per ICP company engaged"
             value={costPerIcp}
-            secondaryText="Benchmark: $800–$1,200"
-            benchmarkMin={800}
-            benchmarkMax={1200}
+            secondaryText={`Benchmark: $${cpcBmMin.toLocaleString()}–$${cpcBmMax.toLocaleString()}`}
+            benchmarkMin={cpcBmMin}
+            benchmarkMax={cpcBmMax}
             lowerIsBetter={true}
           />
           <BenchmarkTile
             label="Cost per meeting held"
             value={costPerMeeting}
-            secondaryText="Benchmark: $1,500–$2,000"
-            benchmarkMin={1500}
-            benchmarkMax={2000}
+            secondaryText={`Benchmark: $${cpmBmMin.toLocaleString()}–$${cpmBmMax.toLocaleString()}`}
+            benchmarkMin={cpmBmMin}
+            benchmarkMax={cpmBmMax}
             lowerIsBetter={true}
           />
           <BenchmarkTile
             label="Pipeline per $1k spent"
             value={pipelinePer1k}
-            secondaryText="Benchmark: $5,000–$8,000"
-            benchmarkMin={5000}
-            benchmarkMax={8000}
+            secondaryText={`Benchmark: $${pipBmMin.toLocaleString()}–$${pipBmMax.toLocaleString()}`}
+            benchmarkMin={pipBmMin}
+            benchmarkMax={pipBmMax}
             lowerIsBetter={false}
           />
         </div>
