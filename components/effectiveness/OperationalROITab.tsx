@@ -273,7 +273,7 @@ function BenchmarkTile({
   }
 
   const tierLabel = tier && tier in TIER_COLOR ? tier : '';
-  const valueColor = !lowerIsBetter && benchmarkStatus === 'good' ? '#059669' : '#1B76BC';
+  const valueColor = tierLabel ? TIER_COLOR[tierLabel] : '#1B76BC';
 
   return (
     <div className="rounded-lg bg-gray-50 p-3">
@@ -487,7 +487,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
               {/* Line items — collapses/expands with smooth animation */}
               <div
                 className="overflow-hidden transition-[max-height] duration-300 ease-in-out"
-                style={{ maxHeight: budgetExpanded ? `${lineItems.length * 28 + 8}px` : '160px' }}
+                style={{ maxHeight: budgetExpanded ? `${lineItems.length * 28 + 8}px` : '108px' }}
               >
                 {lineItems.map((item, i) => {
                   const itemLabel = String(item.label ?? '');
@@ -535,8 +535,8 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
                 </button>
               )}
 
-              {/* Static summary */}
-              <div className="pt-2 space-y-0.5" style={{ borderTop: '1px solid #f3f4f6' }}>
+              {/* Summary — only visible when expanded */}
+              {budgetExpanded && <div className="pt-2 space-y-0.5" style={{ borderTop: '1px solid #f3f4f6' }}>
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-400">Budgeted</span>
                   <span className="text-gray-600">{fmt$(budget?.totalBudget ?? 0)}</span>
@@ -558,7 +558,7 @@ export function OperationalROITab({ data }: { data: EffectivenessData }) {
                     </span>
                   </div>
                 )}
-              </div>
+              </div>}
             </>
           )}
         </div>
