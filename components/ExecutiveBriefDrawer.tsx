@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useDrawerResize } from '@/lib/useDrawerResize';
 import type { SeriesYoYData, ConferenceYoYRow } from '@/lib/get-series-yoy-data';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -387,6 +388,7 @@ function CountCard({ label, value }: { label: string; value: string | number }) 
 export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seriesYoY, snapshot }: Props) {
   const [mounted, setMounted] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const { panelStyle, handleResizeStart } = useDrawerResize(1100, 600, 1400);
   useEffect(() => { setMounted(true); }, []);
 
   const handleSavePdf = async () => {
@@ -495,7 +497,12 @@ export default function ExecutiveBriefDrawer({ isOpen, onClose, conference, seri
       <div className="absolute inset-0 sm:left-64 sm:flex sm:items-center sm:justify-center sm:p-5 pointer-events-none">
         <div
           className="exec-brief-panel executive-brief-drawer-root pointer-events-auto relative w-full h-full sm:h-[90vh] sm:max-w-[1100px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden"
+          style={panelStyle}
         >
+          {/* Left-edge resize handle */}
+          <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={handleResizeStart}>
+            <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-secondary/0 group-hover/rh:bg-brand-secondary/40 transition-colors" />
+          </div>
           {/* ── Header ──────────────────────────────────────────────── */}
           <div className="flex-shrink-0 flex items-center justify-between px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-100 bg-white no-print">
             <div className="flex items-center gap-3 min-w-0">

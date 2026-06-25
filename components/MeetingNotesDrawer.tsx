@@ -53,6 +53,27 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
     window.addEventListener('mouseup', onMouseUp);
   }, [modalWidth]);
 
+  const handleLeftResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startWidth = modalWidth;
+    const onMove = (ev: MouseEvent) => {
+      const delta = startX - ev.clientX; // drag left = wider
+      setModalWidth(Math.max(400, Math.min(1200, startWidth + delta)));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [modalWidth]);
+
   if (!mounted || !meetingId) return null;
 
   return createPortal(
@@ -73,6 +94,10 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
           style={{ width: Math.min(modalWidth, window.innerWidth - 24) }}
           onClick={e => e.stopPropagation()}
         >
+          {/* Left-edge resize handle */}
+          <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={handleLeftResizeMouseDown}>
+            <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-secondary/0 group-hover/rh:bg-brand-secondary/40 transition-colors" />
+          </div>
           <MeetingNotetaker
             meetingId={meetingId}
             onClose={handleClose}

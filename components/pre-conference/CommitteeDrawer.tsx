@@ -2,6 +2,7 @@
 
 import { createPortal } from 'react-dom';
 import { useState, useCallback } from 'react';
+import { useDrawerResize } from '@/lib/useDrawerResize';
 import toast from 'react-hot-toast';
 import type { AttendeeRef, CompanyCommittee } from '@/app/api/conferences/[id]/buying-committee-coverage/route';
 
@@ -110,6 +111,7 @@ export function CommitteeDrawer({
   conferenceId,
   onTargeted,
 }: CommitteeDrawerProps) {
+  const { panelStyle, handleResizeStart } = useDrawerResize(480, 300, 900);
   const [targeting, setTargeting] = useState<Set<number>>(new Set());
   const [targetedCompanies, setTargetedCompanies] = useState<Set<number>>(new Set());
 
@@ -158,7 +160,7 @@ export function CommitteeDrawer({
         @media (min-width: 640px) {
           .committee-drawer-panel {
             top: 0; right: 0; bottom: auto; left: auto;
-            height: 100vh; border-radius: 0;
+            height: 100vh; border-radius: 1rem 0 0 1rem;
             width: calc((100vw - 16rem) / 2);
             animation: committeeSlideIn 0.25s ease-out;
           }
@@ -174,8 +176,13 @@ export function CommitteeDrawer({
 
       {/* Drawer panel */}
       <div
-        className="committee-drawer-panel bg-white border-t sm:border-t-0 sm:border-l border-gray-200 shadow-2xl z-[60] flex flex-col overflow-hidden"
+        className="committee-drawer-panel relative bg-white border-t sm:border-t-0 sm:border-l border-gray-200 shadow-2xl z-[60] flex flex-col overflow-hidden"
+        style={panelStyle}
       >
+        {/* Left-edge resize handle */}
+        <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={handleResizeStart}>
+          <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-secondary/0 group-hover/rh:bg-brand-secondary/40 transition-colors" />
+        </div>
         {/* Header */}
         <div className="flex items-start justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
           <div>
