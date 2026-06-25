@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
 import type { DashboardConference } from './RecentSection';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
+import { useDrawerResize } from '@/lib/useDrawerResize';
 
 interface TargetEntry {
   attendeeId: number;
@@ -173,6 +174,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
   const [meetingAttendeeIds, setMeetingAttendeeIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
   const [selectedTiers, setSelectedTiers] = useState<Set<string>>(new Set(['1']));
+  const { panelStyle: attendeePanelStyle, handleResizeStart: attendeeResizeStart } = useDrawerResize(600);
   const [drawerAttendeeId, setDrawerAttendeeId] = useState<number | null>(null);
   const [drawerAttendeeName, setDrawerAttendeeName] = useState<string>('');
 
@@ -356,8 +358,12 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
           <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
           <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setDrawerAttendeeId(null)} />
           <div
-            className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[600px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-none z-50"
+            className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[600px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none z-50"
+            style={attendeePanelStyle}
           >
+            <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={attendeeResizeStart}>
+              <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-secondary/0 group-hover/rh:bg-brand-secondary/40 transition-colors" />
+            </div>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
               <div className="flex items-center gap-3">
                 <div>

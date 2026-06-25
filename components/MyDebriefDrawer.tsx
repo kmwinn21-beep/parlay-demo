@@ -551,6 +551,7 @@ interface Props {
 
 export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
   const { panelStyle, handleResizeStart } = useDrawerResize(1200, 700, 1440);
+  const { panelStyle: recordPanelStyle, handleResizeStart: recordResizeStart } = useDrawerResize(400, 280, 800);
   const [data, setData] = useState<DebriefData | null>(null);
   const [effData, setEffData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1518,13 +1519,18 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
       <div
         className={`fixed z-[60] flex flex-col overflow-hidden bg-white shadow-2xl border-gray-200
           inset-x-0 bottom-0 h-[90vh] rounded-t-2xl border-t
-          sm:top-0 sm:bottom-auto sm:right-0 sm:left-auto sm:h-screen sm:rounded-none sm:border-t-0 sm:border-l
+          sm:top-0 sm:bottom-auto sm:right-0 sm:left-auto sm:h-screen sm:rounded-tl-2xl sm:rounded-tr-none sm:border-t-0 sm:border-l
           transition-all ease-out
           ${recordDrawer != null ? 'translate-y-0 sm:translate-y-0 sm:w-[400px]' : 'translate-y-full sm:translate-y-0 sm:w-0'}
         `}
-        style={{ transitionDuration: '200ms' }}
+        style={{ transitionDuration: '200ms', ...(recordDrawer != null && recordPanelStyle ? recordPanelStyle : {}) }}
         onClick={e => e.stopPropagation()}
       >
+        {recordDrawer != null && (
+          <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={recordResizeStart}>
+            <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-secondary/0 group-hover/rh:bg-brand-secondary/40 transition-colors" />
+          </div>
+        )}
         {recordDrawer != null && (
           <>
             <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 flex-shrink-0 bg-white">

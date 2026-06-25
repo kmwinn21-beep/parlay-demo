@@ -8,6 +8,7 @@ import { ParentChildModal } from './ParentChildModal';
 import { OperatorCapitalModal } from './OperatorCapitalModal';
 import { InternalRelationshipModal } from './InternalRelationshipsSection';
 import { CompanyRelationshipsPopup } from './CompanyRelationshipsPopup';
+import { useDrawerResize } from '@/lib/useDrawerResize';
 import { AddToConferenceModal } from './AddToConferenceModal';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
@@ -211,6 +212,8 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const userOptionsFull = useUserOptions();
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
   const customColumns = useCustomColumns(tableName);
+
+  const { panelStyle: qvPanelStyle, handleResizeStart: qvResizeStart } = useDrawerResize(600);
 
   // Local copy for optimistic updates — syncs whenever the parent re-fetches
   const [localCompanies, setLocalCompanies] = useState<Company[]>(companies);
@@ -1280,8 +1283,12 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
           <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
           <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setQuickViewId(null)} />
           <div
-            className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[600px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-none z-50"
+            className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[600px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none z-50"
+            style={qvPanelStyle}
           >
+            <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={qvResizeStart}>
+              <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-secondary/0 group-hover/rh:bg-brand-secondary/40 transition-colors" />
+            </div>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
               <a
                 href={`/companies/${quickViewId}`}

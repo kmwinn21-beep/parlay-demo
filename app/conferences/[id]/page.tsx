@@ -52,6 +52,7 @@ import { MyDebriefDrawer } from '@/components/MyDebriefDrawer';
 import ExecutiveBriefDrawer, { type ConferenceSnapshot } from '@/components/ExecutiveBriefDrawer';
 import type { SeriesYoYData } from '@/lib/get-series-yoy-data';
 import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
+import { useDrawerResize } from '@/lib/useDrawerResize';
 
 interface Attendee {
   id: number;
@@ -346,6 +347,7 @@ export default function ConferenceDetailPage() {
   const [filterConfCounts, setFilterConfCounts] = useState<Set<string>>(new Set());
   const [showConfFilter, setShowConfFilter] = useState(false);
   const [filterUpdatedWithin, setFilterUpdatedWithin] = useState('');
+  const { panelStyle: qvPanelStyle, handleResizeStart: qvResizeStart } = useDrawerResize(600);
   const [quickViewId, setQuickViewId] = useState<number | null>(null);
   const [quickViewType, setQuickViewType] = useState<'attendee' | 'company'>('attendee');
   const [attendeeFiltersOpen, setAttendeeFiltersOpen] = useState(false);
@@ -3454,8 +3456,12 @@ export default function ConferenceDetailPage() {
           <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
           <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setQuickViewId(null)} />
           <div
-            className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[600px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-none z-50"
+            className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[600px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none z-50"
+            style={qvPanelStyle}
           >
+            <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={qvResizeStart}>
+              <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-secondary/0 group-hover/rh:bg-brand-secondary/40 transition-colors" />
+            </div>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
               <a
                 href={`/${quickViewType === 'attendee' ? 'attendees' : 'companies'}/${quickViewId}`}
