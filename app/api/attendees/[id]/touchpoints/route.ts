@@ -112,8 +112,8 @@ export async function POST(
   const assignedRep: string | null = userRow.rows[0]?.config_id ? String(userRow.rows[0].config_id) : null;
 
   const insertRes = await db.execute({
-    sql: `INSERT INTO attendee_touchpoints (attendee_id, conference_id, option_id) VALUES (?, ?, ?) RETURNING id`,
-    args: [attendeeId, conference_id, option_id],
+    sql: `INSERT INTO attendee_touchpoints (attendee_id, conference_id, option_id, logged_by) VALUES (?, ?, ?, ?) RETURNING id`,
+    args: [attendeeId, conference_id, option_id, assignedRep],
   });
   const touchpointId = Number(insertRes.rows[0].id);
 
