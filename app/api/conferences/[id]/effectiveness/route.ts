@@ -462,14 +462,24 @@ export async function GET(
     );
 
     // ── Rep name resolution ─────────────────────────────────────────────────
-    const userConfigRows = await runQuery(db, 
-      `SELECT co.id, COALESCE(u.display_name, co.value) AS display_name
+    const userConfigRows = await runQuery(db,
+      `SELECT co.id, co.value AS config_value, COALESCE(u.display_name, co.value) AS display_name
        FROM config_options co
        LEFT JOIN users u ON u.config_id = co.id
        WHERE co.category = 'user'`
     );
+    // repNameMap: config_option ID → resolved display name (used by resolveRep for scheduled_by lookups)
     const repNameMap = new Map<string, string>();
-    for (const r of userConfigRows) repNameMap.set(String(r.id), String(r.display_name ?? r.id));
+    // repValueMap: config_option value (lowercase) → resolved display name
+    // Used only to resolve internalAttendeeNames when internal_attendees stores co.value strings
+    // rather than IDs (which is what the conference form saves).
+    const repValueMap = new Map<string, string>();
+    for (const r of userConfigRows) {
+      const resolved = String(r.display_name ?? r.id);
+      repNameMap.set(String(r.id), resolved);
+      const cv = String(r.config_value ?? '').toLowerCase();
+      if (cv && !repValueMap.has(cv)) repValueMap.set(cv, resolved);
+    }
     const resolveRep = (raw: unknown): string[] =>
       String(raw ?? '').split(',').map(s => s.trim()).filter(Boolean)
         .map(id => repNameMap.get(id) ?? id);
@@ -677,9 +687,12 @@ export async function GET(
       compEngByCompany.get(compId)!.push(row);
     }
 
-    // Resolved internal attendee names
+    // Resolved internal attendee names.
+    // internal_attendees may store config_option IDs (repNameMap) or co.value strings (repValueMap).
     const internalAttendeeNames = new Set<string>(
-      Array.from(internalAttendeeIds).map(id => repNameMap.get(id) ?? id)
+      Array.from(internalAttendeeIds).map(id =>
+        repNameMap.get(id) ?? repValueMap.get(id.toLowerCase()) ?? id
+      )
     );
 
     for (const pi of companyPipeline) {
