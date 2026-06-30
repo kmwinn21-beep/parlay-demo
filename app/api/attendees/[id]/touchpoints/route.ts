@@ -129,9 +129,9 @@ export async function POST(
     if (autoFu === 1) {
       const optValue = String(opt.value);
       const fuRes = await db.execute({
-        sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, assigned_rep, completed)
-              VALUES (?, ?, ?, ?, ?, 0) RETURNING id`,
-        args: [attendeeId, conference_id, optValue, `Auto-created from touchpoint: ${optValue}`, assignedRep],
+        sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, assigned_rep, completed, touchpoint_id)
+              VALUES (?, ?, ?, ?, ?, 0, ?) RETURNING id`,
+        args: [attendeeId, conference_id, optValue, `Auto-created from touchpoint: ${optValue}`, assignedRep, touchpointId],
       });
       followUpId = Number(fuRes.rows[0].id);
     }

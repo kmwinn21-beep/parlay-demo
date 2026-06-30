@@ -193,6 +193,9 @@ export async function GET(
     args: [confId],
   });
 
+  // touchpointId -> { repIds, day, isApproximate } for follow-up linkage
+  const touchpointById = new Map<number, { repIds: string[]; day: number; isApproximate: boolean }>();
+
   let touchpointsCount = 0;
   for (const t of touchpointRows.rows) {
     touchpointsCount++;
@@ -210,6 +213,8 @@ export async function GET(
     const attributedRepIds = loggedByIds.length > 0
       ? loggedByIds
       : Array.from(companyId != null ? (companyRepIds.get(companyId) ?? new Set<string>()) : new Set<string>());
+
+    touchpointById.set(tpId, { repIds: attributedRepIds, day, isApproximate });
 
     const baseActivity = {
       id: `touchpoint-${tpId}`,
@@ -230,14 +235,13 @@ export async function GET(
   }
 
   // ── Follow-ups ───────────────────────────────────────────────────────────
-  // The schema only links a follow-up back to its originating MEETING
-  // (follow_ups.meeting_id) — there is no equivalent link to an originating
-  // touchpoint. When meeting_id is set, position the follow-up dot on the
-  // same day as that meeting and record linkedActivityId. Otherwise, fall
-  // back to the follow-up's own created_at with the same day-clamping used
-  // for touchpoints.
+  // Position a follow-up's dot under whichever activity created it:
+  // follow_ups.touchpoint_id (most common path — auto-created when logging a
+  // touchpoint) takes priority, falling back to follow_ups.meeting_id. Only
+  // follow-ups created neither way fall back to their own created_at, clamped
+  // the same way as touchpoints.
   const followUpRows = await db.execute({
-    sql: `SELECT fu.id, fu.attendee_id, fu.assigned_rep, fu.created_at, fu.meeting_id,
+    sql: `SELECT fu.id, fu.attendee_id, fu.assigned_rep, fu.created_at, fu.meeting_id, fu.touchpoint_id,
                  a.company_id, c.name AS company_name, a.first_name, a.last_name, a.title
           FROM follow_ups fu
           JOIN attendees a ON fu.attendee_id = a.id
@@ -253,14 +257,21 @@ export async function GET(
     const companyId = f.company_id != null ? Number(f.company_id) : null;
     const createdAt = String(f.created_at ?? confStart);
     const meetingId = f.meeting_id != null ? Number(f.meeting_id) : null;
-    const linkedMeeting = meetingId != null ? meetingDayById.get(meetingId) : undefined;
+    const touchpointId = f.touchpoint_id != null ? Number(f.touchpoint_id) : null;
+    const linkedTouchpoint = touchpointId != null ? touchpointById.get(touchpointId) : undefined;
+    const linkedMeeting = !linkedTouchpoint && meetingId != null ? meetingDayById.get(meetingId) : undefined;
 
     let day: number;
     let isApproximate: boolean;
     let linkedActivityId: string | undefined;
     let repIds = splitIds(f.assigned_rep);
 
-    if (linkedMeeting) {
+    if (linkedTouchpoint) {
+      day = linkedTouchpoint.day;
+      isApproximate = linkedTouchpoint.isApproximate;
+      linkedActivityId = `touchpoint-${touchpointId}`;
+      if (repIds.length === 0) repIds = linkedTouchpoint.repIds;
+    } else if (linkedMeeting) {
       day = linkedMeeting.day;
       isApproximate = false;
       linkedActivityId = `meeting-${meetingId}`;

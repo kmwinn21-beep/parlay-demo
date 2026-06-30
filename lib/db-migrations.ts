@@ -1396,4 +1396,7 @@ export const migrations: string[] = [
   // (same format as meetings.scheduled_by / follow_ups.assigned_rep). Historical and simulated
   // rows predate this column and remain NULL.
   `ALTER TABLE attendee_touchpoints ADD COLUMN logged_by TEXT`,
+  // 478 — follow_ups.touchpoint_id: links a follow-up back to the touchpoint that auto-created it,
+  // mirroring the existing follow_ups.meeting_id link for meeting-originated follow-ups.
+  `ALTER TABLE follow_ups ADD COLUMN touchpoint_id INTEGER REFERENCES attendee_touchpoints(id)`,
 ];
