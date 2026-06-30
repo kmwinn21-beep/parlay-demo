@@ -56,6 +56,7 @@ export interface StrategyAssessmentInput {
   internalRelationshipCount: number;
   scheduledMeetingCount: number;
   internalRepCount: number;
+  totalCompanyReps: number;
   conferenceStrategyType: string | null;
   budgetTotal: number;
   requiredPipeline: number | null;
@@ -103,6 +104,11 @@ export interface StrategyAssessment {
 
   recommendedRepMin: number;
   recommendedRepMax: number;
+  idealizedRepMin: number;
+  idealizedRepMax: number;
+  isStaffingConstrained: boolean;
+  totalCompanyReps: number;
+  alreadyCommittedReps: number;
   currentRepCount: number;
 }
 
@@ -598,10 +604,18 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
   else if (sponsorshipFitScore >= 40) sponsorshipRecommendation = 'Limited sponsorship; prioritize meetings';
   else sponsorshipRecommendation = 'Do not sponsor';
 
-  // Staffing
+  // Staffing — diminishing returns curve (sqrt) so large conferences don't produce unreachable numbers
   const staffingBase = mustProxy * 0.5 + highProxy * 0.25 + input.scheduledMeetingCount * 0.5;
-  const recommendedRepMin = Math.max(1, Math.ceil(staffingBase / 10));
-  const recommendedRepMax = recommendedRepMin + 1;
+  const idealizedRepMin = Math.max(1, Math.ceil(Math.sqrt(staffingBase / 2)));
+  const idealizedRepMax = idealizedRepMin + 1;
+
+  // Company-wide ceiling: cap the headline recommendation at total company headcount
+  const totalCompanyReps = Math.max(input.totalCompanyReps, 0);
+  const alreadyCommittedReps = input.internalRepCount;
+  const maxTotalReps = totalCompanyReps > 0 ? totalCompanyReps : Infinity;
+  const recommendedRepMin = Math.min(idealizedRepMin, maxTotalReps);
+  const recommendedRepMax = Math.min(idealizedRepMax, maxTotalReps);
+  const isStaffingConstrained = totalCompanyReps > 0 && idealizedRepMax > totalCompanyReps;
 
   return {
     strategyFitScore,
@@ -629,6 +643,11 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
     sponsorshipFitScore: Math.round(sponsorshipFitScore),
     recommendedRepMin,
     recommendedRepMax,
+    idealizedRepMin,
+    idealizedRepMax,
+    isStaffingConstrained,
+    totalCompanyReps,
+    alreadyCommittedReps,
     currentRepCount: input.internalRepCount,
   };
 }

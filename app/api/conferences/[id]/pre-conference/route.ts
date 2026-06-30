@@ -832,6 +832,7 @@ export async function GET(
     internalRelationshipCount,
     scheduledMeetingCount: meetingCount,
     internalRepCount: reps.length,
+    totalCompanyReps: allUserOptsRes.rows.length,
     conferenceStrategyType,
     budgetTotal,
     requiredPipeline,

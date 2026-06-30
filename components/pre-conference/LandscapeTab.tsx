@@ -207,6 +207,7 @@ function FitScorePill({ score }: { score: number }) {
 
 function ActionsPanel({ sa }: { sa: StrategyAssessment }) {
   const [showChart, setShowChart] = useState(false);
+  const [showStaffingPopover, setShowStaffingPopover] = useState(false);
   const isCovered = sa.currentRepCount >= sa.recommendedRepMin;
 
   return (
@@ -276,8 +277,35 @@ function ActionsPanel({ sa }: { sa: StrategyAssessment }) {
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-0.5">Staffing</div>
-          <div className="text-xs font-semibold text-gray-800">
-            {sa.recommendedRepMin}–{sa.recommendedRepMax} reps recommended
+          <div className="flex items-center gap-1.5">
+            <div className="text-xs font-semibold text-gray-800">
+              {sa.recommendedRepMin}–{sa.recommendedRepMax} reps recommended
+            </div>
+            {sa.isStaffingConstrained && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowStaffingPopover(v => !v)}
+                  className="text-amber-400 hover:text-amber-600 transition-colors flex-shrink-0"
+                  title="Recommendation is capped by team size"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </button>
+                {showStaffingPopover && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowStaffingPopover(false)} />
+                    <div className="absolute left-0 top-5 z-50 w-64 rounded-lg border border-gray-200 bg-white shadow-lg p-3 text-xs text-gray-700 space-y-1.5">
+                      <p className="font-semibold text-gray-900">True recommendation: {sa.idealizedRepMin}–{sa.idealizedRepMax} reps</p>
+                      <p>Your team has {sa.totalCompanyReps} total rep{sa.totalCompanyReps !== 1 ? 's' : ''} company-wide ({sa.alreadyCommittedReps} already assigned to this conference).</p>
+                      <p>The recommendation above is capped at your available headcount.</p>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
           <div className="text-xs text-gray-400">Current: {sa.currentRepCount} rep{sa.currentRepCount !== 1 ? 's' : ''}</div>
           {!isCovered && (

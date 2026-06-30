@@ -178,6 +178,7 @@ export async function POST(req: NextRequest) {
     internalRelationshipCount: 0,
     scheduledMeetingCount: 0,
     internalRepCount: 0,
+    totalCompanyReps: 0,
     conferenceStrategyType: null,
     budgetTotal: 0,
     requiredPipeline: null,
