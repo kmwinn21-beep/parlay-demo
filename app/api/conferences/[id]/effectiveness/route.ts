@@ -462,24 +462,18 @@ export async function GET(
     );
 
     // ── Rep name resolution ─────────────────────────────────────────────────
+    // Use co.value as the canonical display name — consistent with what the conference
+    // form stores in internal_attendees and what the Meetings tab renders via useUserOptions.
+    // Trusting u.display_name instead causes mismatches when a user's display_name differs
+    // from their config_option value (e.g. linked to the wrong config_option).
     const userConfigRows = await runQuery(db,
-      `SELECT co.id, co.value AS config_value, COALESCE(u.display_name, co.value) AS display_name
+      `SELECT co.id, co.value AS display_name
        FROM config_options co
-       LEFT JOIN users u ON u.config_id = co.id
        WHERE co.category = 'user'`
     );
-    // repNameMap: config_option ID → resolved display name (used by resolveRep for scheduled_by lookups)
+    // repNameMap: config_option ID (string) → co.value display name
     const repNameMap = new Map<string, string>();
-    // repValueMap: config_option value (lowercase) → resolved display name
-    // Used only to resolve internalAttendeeNames when internal_attendees stores co.value strings
-    // rather than IDs (which is what the conference form saves).
-    const repValueMap = new Map<string, string>();
-    for (const r of userConfigRows) {
-      const resolved = String(r.display_name ?? r.id);
-      repNameMap.set(String(r.id), resolved);
-      const cv = String(r.config_value ?? '').toLowerCase();
-      if (cv && !repValueMap.has(cv)) repValueMap.set(cv, resolved);
-    }
+    for (const r of userConfigRows) repNameMap.set(String(r.id), String(r.display_name ?? r.id));
     const resolveRep = (raw: unknown): string[] =>
       String(raw ?? '').split(',').map(s => s.trim()).filter(Boolean)
         .map(id => repNameMap.get(id) ?? id);
@@ -688,11 +682,10 @@ export async function GET(
     }
 
     // Resolved internal attendee names.
-    // internal_attendees may store config_option IDs (repNameMap) or co.value strings (repValueMap).
+    // internal_attendees may store config_option IDs or co.value strings directly.
+    // Both now resolve consistently because repNameMap uses co.value (not COALESCE with u.display_name).
     const internalAttendeeNames = new Set<string>(
-      Array.from(internalAttendeeIds).map(id =>
-        repNameMap.get(id) ?? repValueMap.get(id.toLowerCase()) ?? id
-      )
+      Array.from(internalAttendeeIds).map(id => repNameMap.get(id) ?? id)
     );
 
     for (const pi of companyPipeline) {
