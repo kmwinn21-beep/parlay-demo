@@ -147,13 +147,13 @@ function RepLaneRow({
   }
 
   return (
-    <div className="grid grid-cols-[120px_1fr] border-b border-gray-100">
+    <div className="grid grid-cols-[168px_1fr] border-b border-gray-100">
       <div className="px-3 py-2.5 flex items-center gap-2 bg-gray-50">
         <div className="w-7 h-7 rounded-full bg-brand-secondary/15 text-brand-secondary text-[11px] font-semibold flex items-center justify-center flex-shrink-0">
           {rep.initials}
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-medium text-gray-800 truncate">{rep.displayName}</p>
+          <p className="text-xs font-medium text-gray-800 leading-snug">{rep.displayName}</p>
           <p className="text-[10px] text-gray-400">{rep.meetingCount} meeting{rep.meetingCount !== 1 ? 's' : ''}</p>
         </div>
       </div>
