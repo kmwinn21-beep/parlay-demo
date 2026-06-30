@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useDrawerResize } from '@/lib/useDrawerResize';
 
@@ -67,6 +67,9 @@ const DOT_LABELS: Record<ActivityType, string> = {
   first_contact: 'First contact',
 };
 
+const REP_COL_WIDTH = 168;
+const DAY_COL_WIDTH = 96;
+
 function formatTimestamp(ts: string): string {
   const d = new Date(ts);
   if (isNaN(d.getTime())) return ts;
@@ -117,6 +120,28 @@ function ActivityDot({
   );
 }
 
+// ─── Day header row ───────────────────────────────────────────────────────────
+
+function DayHeaderRow({ totalDays }: { totalDays: number }) {
+  return (
+    <div className="flex sticky top-0 z-20 bg-white border-b border-gray-100">
+      <div
+        className="sticky left-0 z-30 bg-white flex-shrink-0"
+        style={{ width: REP_COL_WIDTH }}
+      />
+      {Array.from({ length: totalDays }, (_, i) => i + 1).map(day => (
+        <div
+          key={day}
+          className="flex-shrink-0 text-center py-2 text-[11px] font-medium text-gray-500"
+          style={{ width: DAY_COL_WIDTH }}
+        >
+          Day {day}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Rep lane ─────────────────────────────────────────────────────────────────
 
 function RepLaneRow({
@@ -135,9 +160,8 @@ function RepLaneRow({
   const visibleActivities = dayFilter === 'all'
     ? rep.activities
     : rep.activities.filter(a => a.day === dayFilter);
-  const dayCount = dayFilter === 'all' ? totalDays : 1;
 
-  // group by day to compute jitter for overlapping same-day-same-row dots
+  // group by day+row to compute jitter for overlapping dots
   const byDaySlot = new Map<string, Activity[]>();
   for (const a of visibleActivities) {
     const row = a.type === 'follow_up' ? 'bottom' : 'top';
@@ -147,8 +171,11 @@ function RepLaneRow({
   }
 
   return (
-    <div className="grid grid-cols-[168px_1fr] border-b border-gray-100">
-      <div className="px-3 py-2.5 flex items-center gap-2 bg-gray-50">
+    <div className="flex border-b border-gray-100">
+      <div
+        className="sticky left-0 z-10 flex-shrink-0 px-3 py-2.5 flex items-center gap-2 bg-gray-50"
+        style={{ width: REP_COL_WIDTH }}
+      >
         <div className="w-7 h-7 rounded-full bg-brand-secondary/15 text-brand-secondary text-[11px] font-semibold flex items-center justify-center flex-shrink-0">
           {rep.initials}
         </div>
@@ -158,27 +185,26 @@ function RepLaneRow({
         </div>
       </div>
       <div
-        className="relative px-3 py-3.5 min-h-[48px]"
+        className="relative px-0 py-3.5 min-h-[48px] flex-shrink-0"
         style={{
-          backgroundImage: `repeating-linear-gradient(to right, #F3F4F6 0, #F3F4F6 1px, transparent 1px, transparent calc(100% / ${dayCount}))`,
+          width: totalDays * DAY_COL_WIDTH,
+          backgroundImage: `repeating-linear-gradient(to right, #F3F4F6 0, #F3F4F6 1px, transparent 1px, transparent ${DAY_COL_WIDTH}px)`,
         }}
       >
         {rep.activities.length === 0 ? (
-          <span className="text-[11px] text-gray-300 italic">No logged activity</span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-300 italic">No logged activity</span>
         ) : visibleActivities.length === 0 ? (
-          <span className="text-[11px] text-gray-300 italic">No activity on this day</span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-300 italic">No activity on this day</span>
         ) : (
-          Array.from(byDaySlot.entries()).map(([key, acts]) =>
+          Array.from(byDaySlot.values()).map(acts =>
             acts.map((a, i) => {
-              const dayIdx = dayFilter === 'all' ? a.day - 1 : 0;
-              const segmentWidthPct = 100 / dayCount;
-              const leftPct = segmentWidthPct * dayIdx + segmentWidthPct / 2;
+              const centerPx = (a.day - 1) * DAY_COL_WIDTH + DAY_COL_WIDTH / 2;
               const jitter = acts.length > 1 ? (i - (acts.length - 1) / 2) * 14 : 0;
               return (
                 <div
                   key={a.id}
                   className="absolute"
-                  style={{ left: `${leftPct}%`, top: 0, height: '100%' }}
+                  style={{ left: centerPx, top: 0, height: '100%' }}
                 >
                   <ActivityDot
                     activity={a}
@@ -200,7 +226,10 @@ function RepLaneRow({
 
 function ActivityDetailPanel({ activity, onClose }: { activity: Activity; onClose: () => void }) {
   return (
-    <div className="flex-shrink-0 border-t border-gray-200 bg-gray-50 px-5 py-3.5">
+    <div
+      key={activity.id}
+      className="activity-map-detail flex-shrink-0 border-t border-gray-200 bg-gray-50 px-5 py-3.5 overflow-hidden"
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-1">
@@ -264,6 +293,10 @@ export function ConferenceActivityMapDrawer({
   const [error, setError] = useState<string | null>(null);
   const [dayFilter, setDayFilter] = useState<number | 'all'>('all');
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -291,6 +324,24 @@ export function ConferenceActivityMapDrawer({
     }
   }, [isOpen]);
 
+  const updateScrollState = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 1);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen || !data) return;
+    updateScrollState();
+  }, [isOpen, data, updateScrollState]);
+
+  const scrollByPage = (direction: -1 | 1) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: direction * (el.clientWidth - DAY_COL_WIDTH), behavior: 'smooth' });
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -299,7 +350,9 @@ export function ConferenceActivityMapDrawer({
         @keyframes activityMapFadeIn  { from { opacity: 0; }              to { opacity: 1; } }
         @keyframes activityMapSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         @keyframes activityMapSlideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes activityMapDetailSlideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         .activity-map-panel { animation: activityMapSlideUp 0.25s ease-out; }
+        .activity-map-detail { animation: activityMapDetailSlideIn 0.22s ease-out; }
         @media (min-width: 640px) { .activity-map-panel { animation: activityMapSlideIn 0.25s ease-out; } }
       `}</style>
 
@@ -373,7 +426,7 @@ export function ConferenceActivityMapDrawer({
               ))}
             </div>
 
-            {/* ── Legend + day filter ── */}
+            {/* ── Legend + day filter + horizontal nav ── */}
             <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-gray-100 flex-shrink-0 flex-wrap">
               <div className="flex items-center gap-3 flex-wrap">
                 {(Object.keys(DOT_COLORS) as ActivityType[]).map(type => (
@@ -383,52 +436,85 @@ export function ConferenceActivityMapDrawer({
                   </div>
                 ))}
               </div>
-              <div className="flex items-center gap-1 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => setDayFilter('all')}
-                  className={`text-[11px] px-2 py-1 rounded-full transition-colors ${
-                    dayFilter === 'all'
-                      ? 'bg-brand-secondary text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  All
-                </button>
-                {Array.from({ length: data.totalDays }, (_, i) => i + 1).map(day => (
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1 flex-wrap">
                   <button
-                    key={day}
                     type="button"
-                    onClick={() => setDayFilter(day)}
+                    onClick={() => setDayFilter('all')}
                     className={`text-[11px] px-2 py-1 rounded-full transition-colors ${
-                      dayFilter === day
+                      dayFilter === 'all'
                         ? 'bg-brand-secondary text-white'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                   >
-                    Day {day}
+                    All
                   </button>
-                ))}
+                  {Array.from({ length: data.totalDays }, (_, i) => i + 1).map(day => (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => setDayFilter(day)}
+                      className={`text-[11px] px-2 py-1 rounded-full transition-colors ${
+                        dayFilter === day
+                          ? 'bg-brand-secondary text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      Day {day}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1 ml-1 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => scrollByPage(-1)}
+                    disabled={!canScrollLeft}
+                    aria-label="Scroll to earlier days"
+                    className="p-1 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollByPage(1)}
+                    disabled={!canScrollRight}
+                    aria-label="Scroll to later days"
+                    className="p-1 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
 
             {/* ── Rep swimlanes ── */}
-            <div className="flex-1 overflow-y-auto">
+            <div
+              ref={scrollRef}
+              onScroll={updateScrollState}
+              className="flex-1 overflow-auto hide-scrollbar"
+            >
               {data.reps.length === 0 ? (
                 <div className="flex items-center justify-center h-32">
                   <p className="text-sm text-gray-400">No internal reps assigned to this conference.</p>
                 </div>
               ) : (
-                data.reps.map(rep => (
-                  <RepLaneRow
-                    key={rep.userId}
-                    rep={rep}
-                    totalDays={data.totalDays}
-                    dayFilter={dayFilter}
-                    selectedId={selectedActivity?.id ?? null}
-                    onSelectActivity={a => setSelectedActivity(a)}
-                  />
-                ))
+                <div style={{ width: REP_COL_WIDTH + data.totalDays * DAY_COL_WIDTH }}>
+                  <DayHeaderRow totalDays={data.totalDays} />
+                  {data.reps.map(rep => (
+                    <RepLaneRow
+                      key={rep.userId}
+                      rep={rep}
+                      totalDays={data.totalDays}
+                      dayFilter={dayFilter}
+                      selectedId={selectedActivity?.id ?? null}
+                      onSelectActivity={a => setSelectedActivity(a)}
+                    />
+                  ))}
+                </div>
               )}
             </div>
 
