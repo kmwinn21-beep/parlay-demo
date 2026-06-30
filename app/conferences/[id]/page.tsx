@@ -50,6 +50,7 @@ import { MergeModal } from '@/components/MergeModal';
 import { SeriesSeasonCombobox, type SeriesOption } from '@/components/SeriesSeasonCombobox';
 import { MyDebriefDrawer } from '@/components/MyDebriefDrawer';
 import ExecutiveBriefDrawer, { type ConferenceSnapshot } from '@/components/ExecutiveBriefDrawer';
+import { ConferenceActivityMapDrawer } from '@/components/ConferenceActivityMapDrawer';
 import type { SeriesYoYData } from '@/lib/get-series-yoy-data';
 import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 import { useDrawerResize } from '@/lib/useDrawerResize';
@@ -417,6 +418,7 @@ export default function ConferenceDetailPage() {
   const [showBatchScan, setShowBatchScan] = useState(false);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [showDebrief, setShowDebrief] = useState(false);
+  const [activityMapOpen, setActivityMapOpen] = useState(false);
   const [executiveBriefOpen, setExecutiveBriefOpen] = useState(false);
   const [executiveBriefSnapshot, setExecutiveBriefSnapshot] = useState<ConferenceSnapshot | null>(null);
   const [executiveBriefYoY, setExecutiveBriefYoY] = useState<SeriesYoYData | null>(null);
@@ -1902,6 +1904,16 @@ export default function ConferenceDetailPage() {
                       </svg>
                       Field Report
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setActivityMapOpen(true)}
+                      className="flex items-center gap-1.5 text-sm font-medium text-brand-accent hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
+                    >
+                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 12h4l2 -6l4 12l2 -6h6" />
+                      </svg>
+                      Activity map
+                    </button>
                     {capabilities?.planCapabilities?.revenue_intelligence?.executive_brief && (
                     <button
                       type="button"
@@ -3371,6 +3383,15 @@ export default function ConferenceDetailPage() {
         isOpen={showDebrief}
         onClose={() => setShowDebrief(false)}
       />
+
+      {conference && (
+        <ConferenceActivityMapDrawer
+          conferenceId={conference.id}
+          conferenceName={conference.name}
+          isOpen={activityMapOpen}
+          onClose={() => setActivityMapOpen(false)}
+        />
+      )}
 
       {conference && (
         <ExecutiveBriefDrawer
