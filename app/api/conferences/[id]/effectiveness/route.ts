@@ -462,14 +462,24 @@ export async function GET(
     );
 
     // ── Rep name resolution ─────────────────────────────────────────────────
-    const userConfigRows = await runQuery(db, 
-      `SELECT co.id, COALESCE(u.display_name, co.value) AS display_name
+    const userConfigRows = await runQuery(db,
+      `SELECT co.id, co.value AS config_value, COALESCE(u.display_name, co.value) AS display_name
        FROM config_options co
        LEFT JOIN users u ON u.config_id = co.id
        WHERE co.category = 'user'`
     );
     const repNameMap = new Map<string, string>();
-    for (const r of userConfigRows) repNameMap.set(String(r.id), String(r.display_name ?? r.id));
+    for (const r of userConfigRows) {
+      const resolvedName = String(r.display_name ?? r.id);
+      // Map by config_option ID (primary key used in meetings.scheduled_by)
+      repNameMap.set(String(r.id), resolvedName);
+      // Also map by co.value (what conferences.internal_attendees stores via the conference form)
+      // so that name resolution is consistent regardless of which format a field uses.
+      const configVal = String(r.config_value ?? '');
+      if (configVal && !repNameMap.has(configVal)) {
+        repNameMap.set(configVal, resolvedName);
+      }
+    }
     const resolveRep = (raw: unknown): string[] =>
       String(raw ?? '').split(',').map(s => s.trim()).filter(Boolean)
         .map(id => repNameMap.get(id) ?? id);
