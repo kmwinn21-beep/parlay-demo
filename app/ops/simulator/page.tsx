@@ -404,7 +404,9 @@ export default function SimulatorPage() {
         setPreflightError(data.error ?? 'Preflight check failed');
         return;
       }
-      setPreflightResult(data as PreflightResult);
+      const result = data as PreflightResult;
+      setPreflightResult(result);
+      setIcpAttendeeCount(result.checks.icpAttendees.count);
     } catch (e) {
       setPreflightError(e instanceof Error ? e.message : 'Preflight check failed');
     } finally {
