@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useDrawerResize } from '@/lib/useDrawerResize';
 import { createPortal } from 'react-dom';
 import { PathToTier } from '@/components/calendar-intelligence/PathToTier';
 import { ExecutionComparison } from '@/components/calendar-intelligence/ExecutionComparison';
@@ -187,6 +188,7 @@ const DRAWER_KEYFRAMES = `
 `;
 
 export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basicScore, onClose }: Props) {
+  const { panelStyle, handleResizeStart } = useDrawerResize(480);
   const [deepRow, setDeepRow] = useState<CalendarConferenceRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [pathToTierOpen, setPathToTierOpen] = useState(false);
@@ -442,10 +444,13 @@ export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basic
 
       {/* Desktop: slide in from right */}
       <div
-        className="hidden md:flex flex-col h-full w-[480px] bg-white rounded-l-xl overflow-hidden shadow-xl"
-        style={{ animation: 'slideInFromRight 220ms ease-out' }}
+        className="relative hidden md:flex flex-col h-full w-[480px] bg-white rounded-l-xl overflow-hidden shadow-xl"
+        style={{ animation: 'slideInFromRight 220ms ease-out', ...panelStyle }}
         onClick={e => e.stopPropagation()}
       >
+        <div className="absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={handleResizeStart}>
+          <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-secondary/0 group-hover/rh:bg-brand-secondary/40 transition-colors" />
+        </div>
         {mainPanelContent}
       </div>
     </div>

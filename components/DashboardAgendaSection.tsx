@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { MeetingNotesDrawer } from '@/components/MeetingNotesDrawer';
+import { useDrawerResize } from '@/lib/useDrawerResize';
 
 interface AgendaItem {
   id: number;
@@ -173,6 +174,8 @@ function ExpandableItemText({ children }: { children: ReactNode }) {
 }
 
 export function DashboardAgendaSection({ conferenceId, conferenceName, view, onViewChange }: { conferenceId: number; conferenceName: string; view: 'my' | 'full'; onViewChange: (v: 'my' | 'full') => void }) {
+  const { panelStyle: notePanelStyle, handleResizeStart: noteResizeStart } = useDrawerResize(560);
+
   const [days, setDays] = useState<AgendaDay[]>([]);
   const [myItems, setMyItems] = useState<MyItem[]>([]);
   const [meetings, setMeetings] = useState<MeetingRow[]>([]);
@@ -575,8 +578,12 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
           }
         }} />
         <div
-          className="drawer-mobile-responsive relative flex flex-col bg-white w-full sm:w-[560px] h-[90vh] sm:h-full shadow-2xl rounded-t-2xl sm:rounded-none"
+          className="drawer-mobile-responsive relative flex flex-col bg-white w-full sm:w-[560px] h-[90vh] sm:h-full shadow-2xl rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none"
+          style={notePanelStyle}
         >
+          <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={noteResizeStart}>
+            <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-secondary/0 group-hover/rh:bg-brand-secondary/40 transition-colors" />
+          </div>
           {/* Header */}
           <div className="flex items-start gap-3 px-4 py-3 border-b border-gray-100 flex-shrink-0">
             <div className="flex-1 min-w-0">

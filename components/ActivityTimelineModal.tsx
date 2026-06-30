@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useDrawerResize } from '@/lib/useDrawerResize';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -271,6 +272,8 @@ export function ActivityTimelineModal({
   companyName,
   currentConferenceId,
 }: ActivityTimelineModalProps) {
+  const { panelStyle: timelinePanelStyle, handleResizeStart: timelineResizeStart } = useDrawerResize(1000, 640, 1400);
+
   const [data, setData] = useState<TimelineData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -327,8 +330,12 @@ export function ActivityTimelineModal({
 
       {/* Panel */}
       <div
-        className="timeline-panel relative w-full sm:max-w-5xl h-[92vh] sm:h-full bg-white shadow-2xl flex flex-col border-t sm:border-t-0 sm:border-l border-gray-200 overflow-hidden rounded-t-2xl sm:rounded-none"
+        className="timeline-panel relative w-full sm:w-[1000px] h-[92vh] sm:h-full bg-white shadow-2xl flex flex-col border-t sm:border-t-0 sm:border-l border-gray-200 overflow-hidden rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none"
+        style={timelinePanelStyle}
       >
+        <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={timelineResizeStart}>
+          <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-secondary/0 group-hover/rh:bg-brand-secondary/40 transition-colors" />
+        </div>
         {/* ── Header ── */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center gap-2 min-w-0">

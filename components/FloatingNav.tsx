@@ -278,6 +278,20 @@ export function FloatingNav() {
     });
   }, [badgeScanRelevance]);
 
+  const handleSignOut = useCallback(async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      const clerkSignOut = (window as Window & { Clerk?: { signOut: (o: { redirectUrl: string }) => Promise<void> } }).Clerk?.signOut;
+      if (clerkSignOut) {
+        await clerkSignOut({ redirectUrl: '/auth/login' });
+      } else {
+        window.location.href = '/auth/login';
+      }
+    } catch {
+      toast.error('Sign out failed.');
+    }
+  }, []);
+
   if (!pos || hidden || navHidden) return null;
 
   const vw = window.innerWidth;
@@ -509,25 +523,34 @@ export function FloatingNav() {
         })}
       </div>
 
-      {/* Hide button — appears to the left of FAB when menu is open */}
+      {/* Hide / Sign out buttons — appear to the left of FAB when menu is open */}
       {open && (
-        <button
-          type="button"
+        <div
           style={{
             position: 'fixed',
-            left: Math.max(PAD, pos.x - 68),
+            right: vw - pos.x + 8,
             top: pos.y + Math.round((BTN - 28) / 2),
             zIndex: 62,
+            display: 'flex',
+            gap: 6,
             whiteSpace: 'nowrap',
           }}
-          onClick={() => {
-            setOpen(false);
-            setNavHidden(true);
-          }}
-          className="text-xs font-medium text-white/75 hover:text-white bg-brand-primary/80 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20 shadow-lg transition-colors"
         >
-          Hide
-        </button>
+          <button
+            type="button"
+            onClick={() => { setOpen(false); void handleSignOut(); }}
+            className="text-xs font-medium text-white/75 hover:text-white bg-brand-primary/80 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20 shadow-lg transition-colors"
+          >
+            Sign out
+          </button>
+          <button
+            type="button"
+            onClick={() => { setOpen(false); setNavHidden(true); }}
+            className="text-xs font-medium text-white/75 hover:text-white bg-brand-primary/80 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20 shadow-lg transition-colors"
+          >
+            Hide
+          </button>
+        </div>
       )}
 
       {/* FAB button */}

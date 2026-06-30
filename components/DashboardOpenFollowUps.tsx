@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import type { BannerData } from '@/components/DashboardConferenceBanner';
+import { useDrawerResize } from '@/lib/useDrawerResize';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -158,6 +159,9 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
   followUps: OpenFollowUp[];
   bannerData: BannerData;
 }) {
+  const { panelStyle: companyPanelStyle, handleResizeStart: companyResizeStart } = useDrawerResize(600);
+  const { panelStyle: confPanelStyle, handleResizeStart: confResizeStart } = useDrawerResize(520);
+
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === 'undefined') return true;
     const stored = localStorage.getItem('parlay_followups_collapsed');
@@ -296,8 +300,12 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
             onClick={() => setCompanyDrawerId(null)}
           />
           <div
-            className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[600px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-none z-50"
+            className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[600px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none z-50"
+            style={companyPanelStyle}
           >
+            <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={companyResizeStart}>
+              <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-secondary/0 group-hover/rh:bg-brand-secondary/40 transition-colors" />
+            </div>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
               <div className="flex items-center gap-3">
                 <div>
@@ -340,8 +348,12 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
           />
           {/* Drawer */}
           <div
-            className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[520px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-none z-50"
+            className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[520px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none z-50"
+            style={confPanelStyle}
           >
+            <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={confResizeStart}>
+              <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-secondary/0 group-hover/rh:bg-brand-secondary/40 transition-colors" />
+            </div>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
               <div className="flex items-center gap-3">
                 <div>

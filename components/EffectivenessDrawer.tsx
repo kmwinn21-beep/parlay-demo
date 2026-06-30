@@ -8,6 +8,7 @@ import { AudienceMessagingTab } from './effectiveness/AudienceMessagingTab';
 import { OperationalROITab } from './effectiveness/OperationalROITab';
 import { DefinitionsTab } from './effectiveness/DefinitionsTab';
 import { useSectionConfig } from '@/lib/useSectionConfig';
+import { useDrawerResize } from '@/lib/useDrawerResize';
 import type { EffectivenessData } from './ConferenceEffectivenessModal';
 
 const HEADER_BG = 'rgb(var(--brand-accent-rgb))';
@@ -131,6 +132,8 @@ export function EffectivenessDrawer({ conferenceId, conferenceName, onClose }: P
     setAtBottom(false);
   }, [activeTab]);
 
+  const { panelStyle, handleResizeStart } = useDrawerResize(500);
+
   if (!mounted) return null;
 
   const conf = data?.conference;
@@ -151,7 +154,10 @@ export function EffectivenessDrawer({ conferenceId, conferenceName, onClose }: P
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
       {/* Panel */}
-      <div className="drawer-mobile-responsive relative flex flex-col bg-white w-full sm:w-[500px] h-[90vh] sm:h-full shadow-2xl rounded-t-2xl sm:rounded-tl-2xl sm:rounded-bl-2xl sm:rounded-tr-none sm:rounded-br-none overflow-hidden">
+      <div className="drawer-mobile-responsive relative flex flex-col bg-white w-full sm:w-[500px] h-[90vh] sm:h-full shadow-2xl rounded-t-2xl sm:rounded-tl-2xl sm:rounded-bl-2xl sm:rounded-tr-none sm:rounded-br-none overflow-hidden" style={panelStyle}>
+        <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={handleResizeStart}>
+          <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-secondary/0 group-hover/rh:bg-brand-secondary/40 transition-colors" />
+        </div>
 
         {/* Header */}
         <div className="flex-shrink-0 px-4 py-3" style={{ backgroundColor: HEADER_BG }}>

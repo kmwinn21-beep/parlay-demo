@@ -61,6 +61,14 @@ export async function PUT(request: NextRequest) {
             ON CONFLICT(user_id, conference_id) DO UPDATE SET decision = excluded.decision, note = excluded.note, updated_at = excluded.updated_at`,
       args: [authResult.id, conferenceId, decision, note ?? null],
     });
+    await db.execute({
+      sql: `UPDATE input_requests SET status = 'responded'
+            WHERE conference_id = ? AND (
+              recipient_user_id = ?
+              OR recipient_email = (SELECT email FROM users WHERE id = ?)
+            )`,
+      args: [conferenceId, authResult.id, authResult.id],
+    }).catch(() => {});
   }
 
   return NextResponse.json({ ok: true });

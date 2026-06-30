@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useDrawerResize } from '@/lib/useDrawerResize';
 
 const HEADER_BG = 'rgb(var(--brand-primary-rgb))';
 const HEADER_TEXT = '#ffffff';
@@ -295,6 +296,7 @@ export function ClosedWonDrawer({ target, onClose }: Props) {
   const [statsOpen, setStatsOpen] = useState(false);
   const [atBottom, setAtBottom] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { panelStyle, handleResizeStart } = useDrawerResize(500);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -355,7 +357,11 @@ export function ClosedWonDrawer({ target, onClose }: Props) {
       <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }`}</style>
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
-      <div className="drawer-mobile-responsive relative flex flex-col bg-white w-full sm:w-[500px] h-[90vh] sm:h-full shadow-2xl rounded-t-2xl sm:rounded-tl-2xl sm:rounded-bl-2xl sm:rounded-tr-none sm:rounded-br-none overflow-hidden">
+      <div className="drawer-mobile-responsive relative flex flex-col bg-white w-full sm:w-[500px] h-[90vh] sm:h-full shadow-2xl rounded-t-2xl sm:rounded-tl-2xl sm:rounded-bl-2xl sm:rounded-tr-none sm:rounded-br-none overflow-hidden" style={panelStyle}>
+        {/* Resize handle */}
+        <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={handleResizeStart}>
+          <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-secondary/0 group-hover/rh:bg-brand-secondary/40 transition-colors" />
+        </div>
 
         {/* Header */}
         <div className="flex-shrink-0 px-4 py-3" style={{ backgroundColor: HEADER_BG }}>
