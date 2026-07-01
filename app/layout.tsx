@@ -34,10 +34,22 @@ async function getFaviconUrl(db: Client): Promise<string> {
   }
 }
 
+async function resolveTenantDb(): Promise<Client | null> {
+  try {
+    const user = await getServerSessionUser();
+    return await getDb(user?.accountId);
+  } catch {
+    // DB unavailable / transient provisioning issue — callers fall back to
+    // defaults rather than crashing the root layout over branding metadata.
+    return null;
+  }
+}
+
 export async function generateMetadata(): Promise<Metadata> {
-  const user = await getServerSessionUser();
-  const db = await getDb(user?.accountId);
-  const [appName, faviconUrl] = await Promise.all([getAppName(db), getFaviconUrl(db)]);
+  const db = await resolveTenantDb();
+  const [appName, faviconUrl] = db
+    ? await Promise.all([getAppName(db), getFaviconUrl(db)])
+    : [DEFAULT_APP_NAME, ''];
   return {
     title: appName,
     description: `Track and manage conference attendees — ${appName}.`,
@@ -61,9 +73,8 @@ async function getFontKey(db: Client): Promise<string> {
 }
 
 async function FontStyles() {
-  const user = await getServerSessionUser();
-  const db = await getDb(user?.accountId);
-  const fontKey = await getFontKey(db);
+  const db = await resolveTenantDb();
+  const fontKey = db ? await getFontKey(db) : DEFAULT_FONT_KEY;
   const font = FONT_OPTIONS.find(f => f.key === fontKey) ?? FONT_OPTIONS[0];
   const vars = `:root{--font-heading:${font.headingFamily};--font-body:${font.bodyFamily}}`;
   return (
@@ -80,9 +91,9 @@ async function FontStyles() {
 }
 
 async function BrandStyles() {
+  const db = await resolveTenantDb();
+  if (!db) return null;
   try {
-    const user = await getServerSessionUser();
-    const db = await getDb(user?.accountId);
     const rows = await db.execute({
       sql: "SELECT key, value FROM site_settings WHERE key LIKE 'brand_%'",
       args: [],
