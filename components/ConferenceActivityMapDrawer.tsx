@@ -442,7 +442,7 @@ function RecordPanel({
       {record != null && (
         <>
           <div className="flex items-center gap-3 px-4 py-3 bg-brand-accent flex-shrink-0">
-            <span className="text-xs text-brand-primary truncate flex-1 min-w-0 capitalize">
+            <span className="text-sm font-medium text-brand-primary truncate flex-1 min-w-0 capitalize">
               {record.type} record
             </span>
             <a
