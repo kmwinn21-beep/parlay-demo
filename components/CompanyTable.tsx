@@ -625,7 +625,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
             {type === 'Customer' ? 'Customers' : type === 'Competitor' ? 'Competitors' : type}
           </button>
         ))}
-        {currentUser?.firstName && (
+        {currentUser && (
           <button
             type="button"
             onClick={() => setQuickFilterMyAccounts(v => !v)}
@@ -635,7 +635,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
             }`}
           >
-            {currentUser.firstName}&apos;s Accounts
+            My Accounts
           </button>
         )}
 
