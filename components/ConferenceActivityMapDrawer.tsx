@@ -427,13 +427,9 @@ function ActivityDetailPanel({
 
 function RecordPanel({
   record,
-  panelStyle,
-  onResizeStart,
   onClose,
 }: {
   record: RecordRef | null;
-  panelStyle: React.CSSProperties | undefined;
-  onResizeStart: (e: React.MouseEvent) => void;
   onClose: () => void;
 }) {
   return (
@@ -441,13 +437,10 @@ function RecordPanel({
       className={`relative flex flex-col overflow-hidden bg-white border-l border-gray-200 flex-shrink-0 transition-all duration-200 ease-out ${
         record != null ? '' : 'w-0'
       }`}
-      style={record != null ? panelStyle ?? { width: 480 } : undefined}
+      style={record != null ? { width: 480 } : undefined}
     >
       {record != null && (
         <>
-          <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={onResizeStart}>
-            <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-secondary/0 group-hover/rh:bg-brand-secondary/40 transition-colors" />
-          </div>
           <div className="flex items-center gap-3 px-4 py-3 bg-brand-accent flex-shrink-0">
             <span className="text-xs text-brand-primary truncate flex-1 min-w-0 capitalize">
               {record.type} record
@@ -490,7 +483,6 @@ export function ConferenceActivityMapDrawer({
   onClose,
 }: ConferenceActivityMapDrawerProps) {
   const { panelStyle: mapPanelStyle, handleResizeStart: mapResizeStart } = useDrawerResize(1400, 640, 1400);
-  const { panelStyle: recordPanelStyle, handleResizeStart: recordResizeStart } = useDrawerResize(480, 280, 800);
   const avgCostPerUnit = useAvgCostPerUnit();
 
   const [data, setData] = useState<ActivityMapData | null>(null);
@@ -790,8 +782,6 @@ export function ConferenceActivityMapDrawer({
 
           <RecordPanel
             record={recordPanel}
-            panelStyle={recordPanelStyle}
-            onResizeStart={recordResizeStart}
             onClose={() => setRecordPanel(null)}
           />
         </div>
