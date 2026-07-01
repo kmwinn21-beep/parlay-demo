@@ -1813,7 +1813,7 @@ export default function ConferenceDetailPage() {
                     {editInternalAttendees.map((user) => (
                       <span
                         key={user}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-200"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-[#3A506B] border border-blue-200"
                       >
                         {user}
                         <button
@@ -2028,7 +2028,7 @@ export default function ConferenceDetailPage() {
                   return (
                     <span
                       key={user}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-200"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-[#3A506B] border border-blue-200"
                       title={user.trim()}
                     >
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
