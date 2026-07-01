@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
 import { useDrawerResize } from '@/lib/useDrawerResize';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -69,6 +70,7 @@ const DOT_LABELS: Record<ActivityType, string> = {
 
 const REP_COL_WIDTH = 168;
 const DAY_COL_WIDTH = 96;
+const UNKNOWN_COL_WIDTH = 200;
 
 function formatTimestamp(ts: string): string {
   const d = new Date(ts);
@@ -81,7 +83,46 @@ function formatTimestamp(ts: string): string {
   });
 }
 
-// ─── Activity dot ─────────────────────────────────────────────────────────────
+// Pure UTC calendar-date arithmetic — mirrors the server's correction logic so
+// the optimistic client-side date matches what gets persisted.
+function dayDateLabel(startDate: string, dayIndex1Based: number): string {
+  const [y, m, d] = startDate.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + (dayIndex1Based - 1)));
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getUTCDate()).padStart(2, '0');
+  const yy = String(dt.getUTCFullYear()).slice(-2);
+  return `${mm}/${dd}/${yy}`;
+}
+
+function computeCorrectedTimestamp(startDate: string, day: number, originalTimestamp: string): string {
+  const [y, m, d] = startDate.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + (day - 1)));
+  const newDateStr = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
+  const timePart = originalTimestamp.split(/[ T]/)[1] ?? '00:00:00';
+  return `${newDateStr}T${timePart}`;
+}
+
+// ─── Dot visual style (shared by the absolute-positioned and wrapped dots) ────
+
+function dotVisualStyle(activity: Activity, selected: boolean): React.CSSProperties {
+  const color = DOT_COLORS[activity.type];
+  return {
+    width: 12,
+    height: 12,
+    backgroundColor: activity.isApproximate ? 'transparent' : color,
+    border: activity.isApproximate ? `1.5px dashed ${color}` : selected ? '2px solid white' : 'none',
+    boxShadow: selected ? `0 0 0 2px ${color}` : '0 0 0 1px rgba(255,255,255,0.6)',
+  };
+}
+
+function dotTooltip(activity: Activity): string {
+  return (
+    `${DOT_LABELS[activity.type]} · ${activity.companyName}` +
+    (activity.isApproximate ? ' — Approximate — logged outside conference dates' : '')
+  );
+}
+
+// ─── Activity dot (day-column, absolutely positioned) ─────────────────────────
 
 function ActivityDot({
   activity,
@@ -94,25 +135,17 @@ function ActivityDot({
   onClick: () => void;
   jitter: number;
 }) {
-  const color = DOT_COLORS[activity.type];
   return (
     <button
       type="button"
       onClick={onClick}
-      title={
-        `${DOT_LABELS[activity.type]} · ${activity.companyName}` +
-        (activity.isApproximate ? ' — Approximate — logged outside conference dates' : '')
-      }
+      title={dotTooltip(activity)}
       className="absolute flex items-center justify-center rounded-full transition-transform hover:scale-125"
       style={{
-        width: 12,
-        height: 12,
+        ...dotVisualStyle(activity, selected),
         left: `calc(50% + ${jitter}px)`,
         transform: 'translateX(-50%)',
         top: activity.type === 'follow_up' ? 24 : 4,
-        backgroundColor: activity.isApproximate ? 'transparent' : color,
-        border: activity.isApproximate ? `1.5px dashed ${color}` : selected ? '2px solid white' : 'none',
-        boxShadow: selected ? `0 0 0 2px ${color}` : '0 0 0 1px rgba(255,255,255,0.6)',
         zIndex: selected ? 2 : 1,
       }}
       aria-label={`${DOT_LABELS[activity.type]} at ${activity.companyName}`}
@@ -120,9 +153,32 @@ function ActivityDot({
   );
 }
 
+// ─── Wrapped activity dot (Unknown Day column, flows in normal document flow) ─
+
+function WrappedActivityDot({
+  activity,
+  selected,
+  onClick,
+}: {
+  activity: Activity;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={dotTooltip(activity)}
+      className="relative flex-shrink-0 rounded-full transition-transform hover:scale-125"
+      style={dotVisualStyle(activity, selected)}
+      aria-label={`${DOT_LABELS[activity.type]} at ${activity.companyName}`}
+    />
+  );
+}
+
 // ─── Day header row ───────────────────────────────────────────────────────────
 
-function DayHeaderRow({ totalDays }: { totalDays: number }) {
+function DayHeaderRow({ totalDays, startDate }: { totalDays: number; startDate: string }) {
   return (
     <div className="flex sticky top-0 z-20 bg-white border-b border-gray-100">
       <div
@@ -135,9 +191,16 @@ function DayHeaderRow({ totalDays }: { totalDays: number }) {
           className="flex-shrink-0 text-center py-2 text-[11px] font-medium text-gray-500"
           style={{ width: DAY_COL_WIDTH }}
         >
-          Day {day}
+          <p>Day {day}</p>
+          <p className="text-[10px] text-gray-400 font-normal">({dayDateLabel(startDate, day)})</p>
         </div>
       ))}
+      <div
+        className="flex-shrink-0 text-center py-2 text-[11px] font-medium text-gray-500 border-l border-gray-100"
+        style={{ width: UNKNOWN_COL_WIDTH }}
+      >
+        <p>Unknown Day</p>
+      </div>
     </div>
   );
 }
@@ -161,9 +224,15 @@ function RepLaneRow({
     ? rep.activities
     : rep.activities.filter(a => a.day === dayFilter);
 
-  // group by day+row to compute jitter for overlapping dots
+  const normalActivities = visibleActivities.filter(a => !a.isApproximate);
+  // Unknown Day only makes sense in the "All" view — a specific day filter
+  // is asking "what happened on day N", and approximate activities don't
+  // have a known real day, so they're excluded from single-day filtering.
+  const unknownActivities = dayFilter === 'all' ? visibleActivities.filter(a => a.isApproximate) : [];
+
+  // group by day+row to compute jitter for overlapping dots within a day column
   const byDaySlot = new Map<string, Activity[]>();
-  for (const a of visibleActivities) {
+  for (const a of normalActivities) {
     const row = a.type === 'follow_up' ? 'bottom' : 'top';
     const key = `${a.day}-${row}`;
     if (!byDaySlot.has(key)) byDaySlot.set(key, []);
@@ -218,20 +287,43 @@ function RepLaneRow({
           )
         )}
       </div>
+      <div
+        className="flex flex-wrap content-start gap-1.5 px-2.5 py-3.5 min-h-[48px] flex-shrink-0 border-l border-gray-100 bg-gray-50/40"
+        style={{ width: UNKNOWN_COL_WIDTH }}
+      >
+        {unknownActivities.map(a => (
+          <WrappedActivityDot
+            key={a.id}
+            activity={a}
+            selected={selectedId === a.id}
+            onClick={() => onSelectActivity(a)}
+          />
+        ))}
+      </div>
     </div>
   );
 }
 
 // ─── Detail panel ─────────────────────────────────────────────────────────────
 
-function ActivityDetailPanel({ activity, onClose }: { activity: Activity; onClose: () => void }) {
+function ActivityDetailPanel({
+  activity,
+  totalDays,
+  onClose,
+  onCorrectDay,
+}: {
+  activity: Activity;
+  totalDays: number;
+  onClose: () => void;
+  onCorrectDay: (day: number) => void;
+}) {
   return (
     <div
       key={activity.id}
       className="activity-map-detail flex-shrink-0 border-t border-gray-200 bg-gray-50 px-5 py-3.5 overflow-hidden"
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1">
             <div
               className="w-2.5 h-2.5 rounded-full flex-shrink-0"
@@ -258,9 +350,23 @@ function ActivityDetailPanel({ activity, onClose }: { activity: Activity; onClos
           )}
           <p className="text-[11px] text-gray-400 mt-1">{formatTimestamp(activity.timestamp)}</p>
           {activity.isApproximate && (
-            <p className="text-[11px] text-amber-600 mt-1">
-              Approximate — logged outside conference dates, shown on the nearest boundary day.
-            </p>
+            <div className="flex items-center gap-2 flex-wrap mt-1.5">
+              <p className="text-[11px] text-amber-600 whitespace-nowrap">
+                Approximate — logged outside conference dates.
+              </p>
+              <div className="flex items-center gap-1 flex-wrap">
+                {Array.from({ length: totalDays }, (_, i) => i + 1).map(day => (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => onCorrectDay(day)}
+                    className="text-[10px] px-1.5 py-0.5 rounded-full bg-white border border-amber-300 text-amber-700 hover:bg-amber-100 transition-colors"
+                  >
+                    Day {day}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </div>
         <button
@@ -340,6 +446,41 @@ export function ConferenceActivityMapDrawer({
     const el = scrollRef.current;
     if (!el) return;
     el.scrollBy({ left: direction * (el.clientWidth - DAY_COL_WIDTH), behavior: 'smooth' });
+  };
+
+  const handleCorrectDay = async (activity: Activity, day: number) => {
+    if (!data) return;
+    const newTimestamp = computeCorrectedTimestamp(data.startDate, day, activity.timestamp);
+    const corrected: Activity = { ...activity, day, isApproximate: false, timestamp: newTimestamp };
+
+    // Snapshot for rollback on failure
+    const prevData = data;
+    const prevSelected = selectedActivity;
+
+    // Optimistic update — replace every occurrence of this activity id across
+    // all rep lanes (an inferred-attribution touchpoint can appear in more
+    // than one rep's lane).
+    setData({
+      ...data,
+      reps: data.reps.map(rep => ({
+        ...rep,
+        activities: rep.activities.map(a => (a.id === activity.id ? corrected : a)),
+      })),
+    });
+    setSelectedActivity(corrected);
+
+    try {
+      const res = await fetch(`/api/conferences/${conferenceId}/activity-map/correct-date`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activityId: activity.id, day }),
+      });
+      if (!res.ok) throw new Error(`Failed to update date (${res.status})`);
+    } catch (e) {
+      setData(prevData);
+      setSelectedActivity(prevSelected);
+      toast.error(e instanceof Error ? e.message : 'Failed to update activity date');
+    }
   };
 
   if (!isOpen) return null;
@@ -502,8 +643,8 @@ export function ConferenceActivityMapDrawer({
                   <p className="text-sm text-gray-400">No internal reps assigned to this conference.</p>
                 </div>
               ) : (
-                <div style={{ width: REP_COL_WIDTH + data.totalDays * DAY_COL_WIDTH }}>
-                  <DayHeaderRow totalDays={data.totalDays} />
+                <div style={{ width: REP_COL_WIDTH + data.totalDays * DAY_COL_WIDTH + UNKNOWN_COL_WIDTH }}>
+                  <DayHeaderRow totalDays={data.totalDays} startDate={data.startDate} />
                   {data.reps.map(rep => (
                     <RepLaneRow
                       key={rep.userId}
@@ -520,7 +661,12 @@ export function ConferenceActivityMapDrawer({
 
             {/* ── Detail panel ── */}
             {selectedActivity && (
-              <ActivityDetailPanel activity={selectedActivity} onClose={() => setSelectedActivity(null)} />
+              <ActivityDetailPanel
+                activity={selectedActivity}
+                totalDays={data.totalDays}
+                onClose={() => setSelectedActivity(null)}
+                onCorrectDay={day => handleCorrectDay(selectedActivity, day)}
+              />
             )}
           </>
         )}
