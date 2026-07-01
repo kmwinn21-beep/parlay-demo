@@ -45,6 +45,8 @@ interface RawActivity {
   isApproximate: boolean;
   companyId: number;
   companyName: string;
+  companyWse: number | null;
+  attendeeId: number | null;
   contactName: string | null;
   contactTitle: string | null;
   timestamp: string;
@@ -114,7 +116,7 @@ export async function GET(
   // ── Meetings ─────────────────────────────────────────────────────────────
   const meetingRows = await db.execute({
     sql: `SELECT m.id, m.attendee_id, m.scheduled_by, m.meeting_date, m.meeting_time, m.outcome, m.created_at,
-                 a.company_id, c.name AS company_name, a.first_name, a.last_name, a.title
+                 a.company_id, c.name AS company_name, c.wse, a.first_name, a.last_name, a.title
           FROM meetings m
           JOIN attendees a ON m.attendee_id = a.id
           LEFT JOIN companies c ON a.company_id = c.id
@@ -179,6 +181,8 @@ export async function GET(
       const baseMeetingActivity = {
         companyId: companyId ?? 0,
         companyName: m.company_name ? String(m.company_name) : 'Unknown company',
+        companyWse: m.wse != null ? Number(m.wse) : null,
+        attendeeId: m.attendee_id != null ? Number(m.attendee_id) : null,
         contactName: `${m.first_name ?? ''} ${m.last_name ?? ''}`.trim() || null,
         contactTitle: m.title ? String(m.title) : null,
       };
@@ -212,7 +216,7 @@ export async function GET(
   // ── Touchpoints ──────────────────────────────────────────────────────────
   const touchpointRows = await db.execute({
     sql: `SELECT atp.id, atp.attendee_id, atp.created_at, atp.logged_by,
-                 a.company_id, c.name AS company_name, a.first_name, a.last_name, a.title
+                 a.company_id, c.name AS company_name, c.wse, a.first_name, a.last_name, a.title
           FROM attendee_touchpoints atp
           JOIN attendees a ON atp.attendee_id = a.id
           LEFT JOIN companies c ON a.company_id = c.id
@@ -250,6 +254,8 @@ export async function GET(
       isApproximate,
       companyId: companyId ?? 0,
       companyName: t.company_name ? String(t.company_name) : 'Unknown company',
+      companyWse: t.wse != null ? Number(t.wse) : null,
+      attendeeId: t.attendee_id != null ? Number(t.attendee_id) : null,
       contactName: `${t.first_name ?? ''} ${t.last_name ?? ''}`.trim() || null,
       contactTitle: t.title ? String(t.title) : null,
       timestamp: createdAt,
@@ -269,7 +275,7 @@ export async function GET(
   // the same way as touchpoints.
   const followUpRows = await db.execute({
     sql: `SELECT fu.id, fu.attendee_id, fu.assigned_rep, fu.created_at, fu.meeting_id, fu.touchpoint_id,
-                 a.company_id, c.name AS company_name, a.first_name, a.last_name, a.title
+                 a.company_id, c.name AS company_name, c.wse, a.first_name, a.last_name, a.title
           FROM follow_ups fu
           JOIN attendees a ON fu.attendee_id = a.id
           LEFT JOIN companies c ON a.company_id = c.id
@@ -318,6 +324,8 @@ export async function GET(
         isApproximate,
         companyId: companyId ?? 0,
         companyName: f.company_name ? String(f.company_name) : 'Unknown company',
+        companyWse: f.wse != null ? Number(f.wse) : null,
+        attendeeId: f.attendee_id != null ? Number(f.attendee_id) : null,
         contactName: `${f.first_name ?? ''} ${f.last_name ?? ''}`.trim() || null,
         contactTitle: f.title ? String(f.title) : null,
         timestamp: createdAt,
@@ -335,7 +343,7 @@ export async function GET(
   // hosted event", not a per-attendee count.
   const hostedEventRows = await db.execute({
     sql: `SELECT se.id AS event_id, se.event_name, se.event_date,
-                 a.company_id, c.name AS company_name, a.first_name, a.last_name, a.title,
+                 a.id AS attendee_id, a.company_id, c.name AS company_name, c.wse, a.first_name, a.last_name, a.title,
                  r.rsvp_status
           FROM social_events se
           JOIN social_event_rsvps r ON r.social_event_id = se.id
@@ -372,6 +380,8 @@ export async function GET(
         isApproximate,
         companyId,
         companyName: h.company_name ? String(h.company_name) : 'Unknown company',
+        companyWse: h.wse != null ? Number(h.wse) : null,
+        attendeeId: h.attendee_id != null ? Number(h.attendee_id) : null,
         contactName: `${h.first_name ?? ''} ${h.last_name ?? ''}`.trim() || null,
         contactTitle: h.title ? String(h.title) : null,
         timestamp: eventDate,

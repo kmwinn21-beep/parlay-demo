@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { useDrawerResize } from '@/lib/useDrawerResize';
+import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,11 +16,15 @@ interface Activity {
   isApproximate: boolean;
   companyId: number;
   companyName: string;
+  companyWse: number | null;
+  attendeeId: number | null;
   contactName: string | null;
   contactTitle: string | null;
   timestamp: string;
   linkedActivityId?: string;
 }
+
+type RecordRef = { type: 'attendee' | 'company'; id: number };
 
 interface RepLane {
   userId: number;
@@ -109,14 +113,18 @@ function computeCorrectedTimestamp(startDate: string, day: number, originalTimes
 
 // ─── Dot visual style (shared by the absolute-positioned and wrapped dots) ────
 
-function dotVisualStyle(activity: Activity, selected: boolean): React.CSSProperties {
-  const color = DOT_COLORS[activity.type];
+const DIMMED_COLOR = '#D1D5DB'; // gray-300
+
+function dotVisualStyle(activity: Activity, selected: boolean, dimmed: boolean): React.CSSProperties {
+  const color = dimmed ? DIMMED_COLOR : DOT_COLORS[activity.type];
+  const size = selected ? 18 : 12;
   return {
-    width: 12,
-    height: 12,
+    width: size,
+    height: size,
     backgroundColor: activity.isApproximate ? 'transparent' : color,
     border: activity.isApproximate ? `1.5px dashed ${color}` : selected ? '2px solid white' : 'none',
     boxShadow: selected ? `0 0 0 2px ${color}` : '0 0 0 1px rgba(255,255,255,0.6)',
+    transition: 'width 0.15s ease-out, height 0.15s ease-out, background-color 0.15s ease-out, border-color 0.15s ease-out',
   };
 }
 
@@ -132,10 +140,12 @@ function dotTooltip(activity: Activity): string {
 function WrappedActivityDot({
   activity,
   selected,
+  dimmed,
   onClick,
 }: {
   activity: Activity;
   selected: boolean;
+  dimmed: boolean;
   onClick: () => void;
 }) {
   return (
@@ -144,7 +154,7 @@ function WrappedActivityDot({
       onClick={onClick}
       title={dotTooltip(activity)}
       className="relative flex-shrink-0 rounded-full transition-transform hover:scale-125"
-      style={dotVisualStyle(activity, selected)}
+      style={dotVisualStyle(activity, selected, dimmed)}
       aria-label={`${DOT_LABELS[activity.type]} at ${activity.companyName}`}
     />
   );
@@ -226,6 +236,13 @@ function RepLaneRow({
 
   const showEmptyMessage = rep.activities.length === 0 || visibleActivities.length === 0;
 
+  // Selection isolation: once any dot is selected, mute every other dot and
+  // every rep row that doesn't contain the selected activity, so the
+  // selected dot + its rep row read as the sole focus.
+  const hasSelection = selectedId != null;
+  const isRepSelected = hasSelection && rep.activities.some(a => a.id === selectedId);
+  const repTextDimmed = hasSelection && !isRepSelected;
+
   return (
     <div className="flex border-b border-gray-100 relative">
       <div
@@ -236,8 +253,8 @@ function RepLaneRow({
           {rep.initials}
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-medium text-gray-800 leading-snug">{rep.displayName}</p>
-          <p className="text-[10px] text-gray-400">{rep.meetingCount} meeting{rep.meetingCount !== 1 ? 's' : ''}</p>
+          <p className={`text-xs font-medium leading-snug ${repTextDimmed ? 'text-gray-300' : 'text-gray-800'}`}>{rep.displayName}</p>
+          <p className={`text-[10px] ${repTextDimmed ? 'text-gray-300' : 'text-gray-400'}`}>{rep.meetingCount} meeting{rep.meetingCount !== 1 ? 's' : ''}</p>
         </div>
       </div>
 
@@ -250,6 +267,7 @@ function RepLaneRow({
             key={a.id}
             activity={a}
             selected={selectedId === a.id}
+            dimmed={hasSelection && selectedId !== a.id}
             onClick={() => onSelectActivity(a)}
           />
         ))}
@@ -266,6 +284,7 @@ function RepLaneRow({
               key={a.id}
               activity={a}
               selected={selectedId === a.id}
+              dimmed={hasSelection && selectedId !== a.id}
               onClick={() => onSelectActivity(a)}
             />
           ))}
@@ -281,6 +300,7 @@ function RepLaneRow({
             key={a.id}
             activity={a}
             selected={selectedId === a.id}
+            dimmed={hasSelection && selectedId !== a.id}
             onClick={() => onSelectActivity(a)}
           />
         ))}
@@ -303,14 +323,20 @@ function RepLaneRow({
 function ActivityDetailPanel({
   activity,
   totalDays,
+  avgCostPerUnit,
   onClose,
   onCorrectDay,
+  onOpenRecord,
 }: {
   activity: Activity;
   totalDays: number;
+  avgCostPerUnit: number;
   onClose: () => void;
   onCorrectDay: (day: number) => void;
+  onOpenRecord: (ref: RecordRef) => void;
 }) {
+  const valuePill = formatValuePill(activity.companyWse, avgCostPerUnit);
+
   return (
     <div
       key={activity.id}
@@ -330,15 +356,33 @@ function ActivityDetailPanel({
               </span>
             )}
           </div>
-          <Link
-            href={`/companies/${activity.companyId}`}
-            className="text-sm font-medium text-brand-secondary hover:underline"
-          >
-            {activity.companyName}
-          </Link>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => onOpenRecord({ type: 'company', id: activity.companyId })}
+              className="text-sm font-medium text-brand-secondary hover:underline"
+            >
+              {activity.companyName}
+            </button>
+            {valuePill && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
+                {valuePill}
+              </span>
+            )}
+          </div>
           {activity.contactName && (
             <p className="text-xs text-gray-600 mt-0.5">
-              {activity.contactName}
+              {activity.attendeeId != null ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenRecord({ type: 'attendee', id: activity.attendeeId as number })}
+                  className="hover:underline hover:text-gray-800"
+                >
+                  {activity.contactName}
+                </button>
+              ) : (
+                activity.contactName
+              )}
               {activity.contactTitle && <span className="text-gray-400"> · {activity.contactTitle}</span>}
             </p>
           )}
@@ -346,7 +390,7 @@ function ActivityDetailPanel({
           {activity.isApproximate && (
             <div className="flex items-center gap-2 flex-wrap mt-1.5">
               <p className="text-[11px] text-amber-600 whitespace-nowrap">
-                Approximate — logged outside conference dates.
+                Approximate — logged outside conference dates. Select Activity Day:
               </p>
               <div className="flex items-center gap-1 flex-wrap">
                 {Array.from({ length: totalDays }, (_, i) => i + 1).map(day => (
@@ -378,6 +422,64 @@ function ActivityDetailPanel({
   );
 }
 
+// ─── Nested record panel (company/attendee iframe, condenses main content) ────
+
+function RecordPanel({
+  record,
+  panelStyle,
+  onResizeStart,
+  onClose,
+}: {
+  record: RecordRef | null;
+  panelStyle: React.CSSProperties | undefined;
+  onResizeStart: (e: React.MouseEvent) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className={`relative flex flex-col overflow-hidden bg-white border-l border-gray-200 flex-shrink-0 transition-all duration-200 ease-out ${
+        record != null ? '' : 'w-0'
+      }`}
+      style={record != null ? panelStyle ?? { width: 400 } : undefined}
+    >
+      {record != null && (
+        <>
+          <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={onResizeStart}>
+            <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-secondary/0 group-hover/rh:bg-brand-secondary/40 transition-colors" />
+          </div>
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 flex-shrink-0 bg-white">
+            <span className="text-xs text-gray-400 truncate flex-1 min-w-0 capitalize">
+              {record.type} record
+            </span>
+            <a
+              href={`/${record.type === 'attendee' ? 'attendees' : 'companies'}/${record.id}`}
+              className="text-xs text-brand-secondary hover:underline whitespace-nowrap flex-shrink-0"
+            >
+              Go to record →
+            </a>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="flex-shrink-0 text-gray-400 hover:text-gray-700 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <iframe
+            key={`${record.type}-${record.id}`}
+            src={`/${record.type === 'attendee' ? 'attendees' : 'companies'}/${record.id}?embed=true`}
+            className="flex-1 border-0 w-full"
+            title={`${record.type} record`}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function ConferenceActivityMapDrawer({
@@ -387,12 +489,15 @@ export function ConferenceActivityMapDrawer({
   onClose,
 }: ConferenceActivityMapDrawerProps) {
   const { panelStyle: mapPanelStyle, handleResizeStart: mapResizeStart } = useDrawerResize(1000, 640, 1400);
+  const { panelStyle: recordPanelStyle, handleResizeStart: recordResizeStart } = useDrawerResize(400, 280, 800);
+  const avgCostPerUnit = useAvgCostPerUnit();
 
   const [data, setData] = useState<ActivityMapData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dayFilter, setDayFilter] = useState<number | 'all'>('all');
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  const [recordPanel, setRecordPanel] = useState<RecordRef | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
@@ -421,6 +526,7 @@ export function ConferenceActivityMapDrawer({
     if (!isOpen) {
       setDayFilter('all');
       setSelectedActivity(null);
+      setRecordPanel(null);
     }
   }, [isOpen]);
 
@@ -440,6 +546,13 @@ export function ConferenceActivityMapDrawer({
     const el = scrollRef.current;
     if (!el) return;
     el.scrollBy({ left: direction * (el.clientWidth - DAY_COL_WIDTH), behavior: 'smooth' });
+  };
+
+  const handleSelectActivity = (activity: Activity) => {
+    setSelectedActivity(activity);
+    // A different dot may belong to a different company/attendee — close any
+    // open record panel rather than leaving it showing a stale record.
+    setRecordPanel(null);
   };
 
   const handleCorrectDay = async (activity: Activity, day: number) => {
@@ -507,22 +620,25 @@ export function ConferenceActivityMapDrawer({
           <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-secondary/0 group-hover/rh:bg-brand-secondary/40 transition-colors" />
         </div>
 
-        {/* ── Header ── */}
-        <div className="flex items-center justify-between px-4 py-3 bg-brand-primary flex-shrink-0">
-          <p className="text-sm font-medium text-white truncate">{conferenceName} · Activity map</p>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="flex-shrink-0 ml-4 p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+        {/* Main content + nested record panel — the record panel condenses this column when open */}
+        <div className="flex-1 flex overflow-hidden min-h-0">
+          <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+            {/* ── Header ── */}
+            <div className="flex items-center justify-between px-4 py-3 bg-brand-primary flex-shrink-0">
+              <p className="text-sm font-medium text-white truncate">{conferenceName} · Activity map</p>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close"
+                className="flex-shrink-0 ml-4 p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
 
-        {loading && (
+            {loading && (
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             <div className="flex gap-2">
               {[0, 1, 2, 3].map(i => (
@@ -646,7 +762,7 @@ export function ConferenceActivityMapDrawer({
                       totalDays={data.totalDays}
                       dayFilter={dayFilter}
                       selectedId={selectedActivity?.id ?? null}
-                      onSelectActivity={a => setSelectedActivity(a)}
+                      onSelectActivity={handleSelectActivity}
                     />
                   ))}
                 </div>
@@ -658,12 +774,23 @@ export function ConferenceActivityMapDrawer({
               <ActivityDetailPanel
                 activity={selectedActivity}
                 totalDays={data.totalDays}
+                avgCostPerUnit={avgCostPerUnit}
                 onClose={() => setSelectedActivity(null)}
                 onCorrectDay={day => handleCorrectDay(selectedActivity, day)}
+                onOpenRecord={ref => setRecordPanel(ref)}
               />
             )}
           </>
         )}
+          </div>
+
+          <RecordPanel
+            record={recordPanel}
+            panelStyle={recordPanelStyle}
+            onResizeStart={recordResizeStart}
+            onClose={() => setRecordPanel(null)}
+          />
+        </div>
       </div>
     </div>
   );
