@@ -39,9 +39,15 @@ export async function getDb(accountId: string | undefined): Promise<Client> {
     });
     await migrateTenantDb(client);
     tenantCache.set(accountId, client);
-    tenantPending.delete(accountId);
     return client;
-  })();
+  })().finally(() => {
+    // Runs on both success and failure. A transient failure (timeout,
+    // migration hiccup, etc.) must not leave a rejected promise cached
+    // forever — every subsequent call for this account would otherwise
+    // immediately re-reject with the same stale error for the lifetime of
+    // this server instance, even after the underlying issue has cleared.
+    tenantPending.delete(accountId);
+  });
 
   tenantPending.set(accountId, init);
   return init;
