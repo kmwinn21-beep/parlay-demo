@@ -141,7 +141,7 @@ export function Sidebar() {
     `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
       isActive(href)
         ? 'bg-brand-highlight text-brand-primary'
-        : 'text-white/70 hover:bg-white/10 hover:text-white'
+        : 'text-sidebar-font/70 hover:bg-white/10 hover:text-sidebar-font'
     }`;
 
   return (
@@ -152,7 +152,7 @@ export function Sidebar() {
         <div className="flex items-center gap-3">
           <LogoImage variant="sidebar" width={140} height={42} className="object-contain" alt="Logo" />
         </div>
-        <p className="text-white/60 text-xs mt-2 italic">{tagline}</p>
+        <p className="text-sidebar-font/60 text-xs mt-2 italic">{tagline}</p>
       </div>
 
       {/* Navigation */}
@@ -160,7 +160,7 @@ export function Sidebar() {
         {/* Operations section — only visible to non-stakeholders */}
         {!isStakeholder && (
           <>
-            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest px-4 pt-2 pb-1">Operations</p>
+            <p className="text-sidebar-font/40 text-[10px] font-bold uppercase tracking-widest px-4 pt-2 pb-1">Operations</p>
             <div className="space-y-1 mb-2">
               {operationsItems.map((item) => (
                 <Link key={item.href} href={item.href} className={navLinkClass(item.href)}>
@@ -182,7 +182,7 @@ export function Sidebar() {
         {/* Intelligence section */}
         {showIntelligenceSection && (
           <>
-            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest px-4 pt-4 pb-1">Intelligence</p>
+            <p className="text-sidebar-font/40 text-[10px] font-bold uppercase tracking-widest px-4 pt-4 pb-1">Intelligence</p>
             <div className="space-y-1">
               {!isStakeholder && hasProgramIntelligence && (
                 <Link href={programIntelligenceItem.href} className={navLinkClass(programIntelligenceItem.href)}>
@@ -231,7 +231,7 @@ export function Sidebar() {
         )}
         <button
           onClick={handleLogout}
-          className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors text-xs"
+          className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-sidebar-font/60 hover:text-sidebar-font hover:bg-white/10 transition-colors text-xs"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -242,8 +242,8 @@ export function Sidebar() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={faviconUrl || '/WhiteLetterMarkParlay.png'} alt="App emblem" width={24} height={24} className="object-contain opacity-60" />
           <div>
-            <p className="text-white/60 text-xs">{appName}</p>
-            <p className="text-white/50 text-xs">v1.0</p>
+            <p className="text-sidebar-font/60 text-xs">{appName}</p>
+            <p className="text-sidebar-font/50 text-xs">v1.0</p>
           </div>
         </div>
       </div>

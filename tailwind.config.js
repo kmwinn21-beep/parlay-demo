@@ -14,6 +14,7 @@ module.exports = {
         'brand-secondary': 'rgb(var(--brand-secondary-rgb) / <alpha-value>)',
         'brand-accent':    'rgb(var(--brand-accent-rgb)    / <alpha-value>)',
         'brand-highlight': 'rgb(var(--brand-highlight-rgb) / <alpha-value>)',
+        'sidebar-font':    'rgb(var(--sidebar-font-rgb)    / <alpha-value>)',
       },
       fontFamily: {
         serif: ['var(--font-heading)', 'serif'],
