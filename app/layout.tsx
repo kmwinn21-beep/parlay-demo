@@ -8,14 +8,15 @@ export const dynamic = 'force-dynamic';
 import { AppShell } from '@/components/AppShell';
 import { ToastProvider } from '@/components/Toast';
 import { DemoBanner } from '@/components/DemoBanner';
-import { db, dbReady } from '@/lib/db';
+import { getServerSessionUser } from '@/lib/auth';
+import { getDb } from '@/lib/getDb';
 import { BRAND_COLOR_DEFAULTS, BRAND_CSS_VARS, hexToRgbChannels, FONT_OPTIONS, DEFAULT_FONT_KEY, type BrandColorKey } from '@/lib/brand';
+import type { Client } from '@libsql/client';
 
 const DEFAULT_APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub';
 
-async function getAppName(): Promise<string> {
+async function getAppName(db: Client): Promise<string> {
   try {
-    await dbReady;
     const row = await db.execute({ sql: "SELECT value FROM site_settings WHERE key = 'app_name'", args: [] });
     const name = row.rows[0] ? String(row.rows[0].value).trim() : '';
     return name || DEFAULT_APP_NAME;
@@ -24,9 +25,8 @@ async function getAppName(): Promise<string> {
   }
 }
 
-async function getFaviconUrl(): Promise<string> {
+async function getFaviconUrl(db: Client): Promise<string> {
   try {
-    await dbReady;
     const row = await db.execute({ sql: "SELECT value FROM site_settings WHERE key = 'favicon_url'", args: [] });
     return row.rows[0] ? String(row.rows[0].value).trim() : '';
   } catch {
@@ -35,7 +35,9 @@ async function getFaviconUrl(): Promise<string> {
 }
 
 export async function generateMetadata(): Promise<Metadata> {
-  const [appName, faviconUrl] = await Promise.all([getAppName(), getFaviconUrl()]);
+  const user = await getServerSessionUser();
+  const db = await getDb(user?.accountId);
+  const [appName, faviconUrl] = await Promise.all([getAppName(db), getFaviconUrl(db)]);
   return {
     title: appName,
     description: `Track and manage conference attendees — ${appName}.`,
@@ -49,9 +51,8 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
-async function getFontKey(): Promise<string> {
+async function getFontKey(db: Client): Promise<string> {
   try {
-    await dbReady;
     const row = await db.execute({ sql: "SELECT value FROM site_settings WHERE key = 'font_key'", args: [] });
     return row.rows[0] ? String(row.rows[0].value).trim() : DEFAULT_FONT_KEY;
   } catch {
@@ -60,7 +61,9 @@ async function getFontKey(): Promise<string> {
 }
 
 async function FontStyles() {
-  const fontKey = await getFontKey();
+  const user = await getServerSessionUser();
+  const db = await getDb(user?.accountId);
+  const fontKey = await getFontKey(db);
   const font = FONT_OPTIONS.find(f => f.key === fontKey) ?? FONT_OPTIONS[0];
   const vars = `:root{--font-heading:${font.headingFamily};--font-body:${font.bodyFamily}}`;
   return (
@@ -78,7 +81,8 @@ async function FontStyles() {
 
 async function BrandStyles() {
   try {
-    await dbReady;
+    const user = await getServerSessionUser();
+    const db = await getDb(user?.accountId);
     const rows = await db.execute({
       sql: "SELECT key, value FROM site_settings WHERE key LIKE 'brand_%'",
       args: [],
