@@ -599,7 +599,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         <button
           type="button"
           onClick={() => setQuickFilterIcp(v => !v)}
-          className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+          className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
             quickFilterIcp
               ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
               : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
@@ -612,7 +612,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
             key={type}
             type="button"
             onClick={() => toggleQuickFilterType(type)}
-            className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
               quickFilterTypes.has(type)
                 ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
                 : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
