@@ -151,7 +151,7 @@ function WrappedActivityDot({
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={e => { e.stopPropagation(); onClick(); }}
       title={dotTooltip(activity)}
       className="relative flex-shrink-0 rounded-full transition-transform hover:scale-125"
       style={dotVisualStyle(activity, selected, dimmed)}
@@ -341,6 +341,7 @@ function ActivityDetailPanel({
     <div
       key={activity.id}
       className="activity-map-detail flex-shrink-0 border-t border-gray-200 bg-gray-50 px-5 py-3.5 overflow-hidden"
+      onClick={e => e.stopPropagation()}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -440,20 +441,20 @@ function RecordPanel({
       className={`relative flex flex-col overflow-hidden bg-white border-l border-gray-200 flex-shrink-0 transition-all duration-200 ease-out ${
         record != null ? '' : 'w-0'
       }`}
-      style={record != null ? panelStyle ?? { width: 400 } : undefined}
+      style={record != null ? panelStyle ?? { width: 480 } : undefined}
     >
       {record != null && (
         <>
           <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={onResizeStart}>
             <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-secondary/0 group-hover/rh:bg-brand-secondary/40 transition-colors" />
           </div>
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 flex-shrink-0 bg-white">
-            <span className="text-xs text-gray-400 truncate flex-1 min-w-0 capitalize">
+          <div className="flex items-center gap-3 px-4 py-3 bg-brand-accent flex-shrink-0">
+            <span className="text-xs text-brand-primary truncate flex-1 min-w-0 capitalize">
               {record.type} record
             </span>
             <a
               href={`/${record.type === 'attendee' ? 'attendees' : 'companies'}/${record.id}`}
-              className="text-xs text-brand-secondary hover:underline whitespace-nowrap flex-shrink-0"
+              className="text-xs text-brand-primary hover:underline whitespace-nowrap flex-shrink-0"
             >
               Go to record →
             </a>
@@ -461,7 +462,7 @@ function RecordPanel({
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="flex-shrink-0 text-gray-400 hover:text-gray-700 transition-colors"
+              className="flex-shrink-0 p-1.5 rounded-lg text-brand-primary hover:bg-black/5 transition-colors"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -488,8 +489,8 @@ export function ConferenceActivityMapDrawer({
   isOpen,
   onClose,
 }: ConferenceActivityMapDrawerProps) {
-  const { panelStyle: mapPanelStyle, handleResizeStart: mapResizeStart } = useDrawerResize(1000, 640, 1400);
-  const { panelStyle: recordPanelStyle, handleResizeStart: recordResizeStart } = useDrawerResize(400, 280, 800);
+  const { panelStyle: mapPanelStyle, handleResizeStart: mapResizeStart } = useDrawerResize(1400, 640, 1400);
+  const { panelStyle: recordPanelStyle, handleResizeStart: recordResizeStart } = useDrawerResize(480, 280, 800);
   const avgCostPerUnit = useAvgCostPerUnit();
 
   const [data, setData] = useState<ActivityMapData | null>(null);
@@ -549,11 +550,14 @@ export function ConferenceActivityMapDrawer({
   };
 
   const handleSelectActivity = (activity: Activity) => {
-    setSelectedActivity(activity);
+    // Clicking the already-selected dot again toggles it off.
+    setSelectedActivity(prev => (prev?.id === activity.id ? null : activity));
     // A different dot may belong to a different company/attendee — close any
     // open record panel rather than leaving it showing a stale record.
     setRecordPanel(null);
   };
+
+  const handleDeselect = () => setSelectedActivity(null);
 
   const handleCorrectDay = async (activity: Activity, day: number) => {
     if (!data) return;
@@ -613,7 +617,7 @@ export function ConferenceActivityMapDrawer({
 
       {/* Panel */}
       <div
-        className="activity-map-panel relative w-full sm:w-[1000px] h-[90vh] sm:h-full bg-white shadow-2xl flex flex-col border-t sm:border-t-0 sm:border-l border-gray-200 overflow-hidden rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none"
+        className="activity-map-panel relative w-full sm:w-[1400px] h-[90vh] sm:h-full bg-white shadow-2xl flex flex-col border-t sm:border-t-0 sm:border-l border-gray-200 overflow-hidden rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none"
         style={mapPanelStyle}
       >
         <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={mapResizeStart}>
@@ -622,7 +626,7 @@ export function ConferenceActivityMapDrawer({
 
         {/* Main content + nested record panel — the record panel condenses this column when open */}
         <div className="flex-1 flex overflow-hidden min-h-0">
-          <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          <div className="flex-1 min-w-0 flex flex-col overflow-hidden" onClick={handleDeselect}>
             {/* ── Header ── */}
             <div className="flex items-center justify-between px-4 py-3 bg-brand-primary flex-shrink-0">
               <p className="text-sm font-medium text-white truncate">{conferenceName} · Activity map</p>
