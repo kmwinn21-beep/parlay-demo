@@ -1,24 +1,27 @@
 export const BRAND_COLOR_DEFAULTS = {
-  brand_dark_blue:   '#0B3C62',
-  brand_bright_blue: '#1B76BC',
-  brand_beige:       '#E7DED9',
-  brand_gold:        '#FFCB3F',
+  brand_dark_blue:    '#223A5E',
+  brand_bright_blue:  '#3A506B',
+  brand_beige:        '#34D399',
+  brand_gold:         '#6EE7B7',
+  brand_sidebar_font: '#FFFFFF',
 } as const;
 
 export type BrandColorKey = keyof typeof BRAND_COLOR_DEFAULTS;
 
 export const BRAND_CSS_VARS: Record<BrandColorKey, string> = {
-  brand_dark_blue:   '--brand-primary-rgb',
-  brand_bright_blue: '--brand-secondary-rgb',
-  brand_beige:       '--brand-accent-rgb',
-  brand_gold:        '--brand-highlight-rgb',
+  brand_dark_blue:    '--brand-primary-rgb',
+  brand_bright_blue:  '--brand-secondary-rgb',
+  brand_beige:        '--brand-accent-rgb',
+  brand_gold:         '--brand-highlight-rgb',
+  brand_sidebar_font: '--sidebar-font-rgb',
 };
 
 export const BRAND_COLOR_META: Record<BrandColorKey, { label: string; description: string }> = {
-  brand_dark_blue:   { label: 'Primary #1',  description: 'Headings, navigation, secondary button borders' },
-  brand_bright_blue: { label: 'Primary #2',  description: 'Buttons, links, active states, focus rings' },
-  brand_beige:       { label: 'Accent #1',   description: 'Secondary button hover, subtle fill backgrounds' },
-  brand_gold:        { label: 'Accent #2',   description: 'Gold buttons and highlight accents' },
+  brand_dark_blue:    { label: 'Primary #1',        description: 'Headings, navigation, secondary button borders' },
+  brand_bright_blue:  { label: 'Primary #2',        description: 'Buttons, links, active states, focus rings' },
+  brand_beige:        { label: 'Accent #1',         description: 'Secondary button hover, subtle fill backgrounds' },
+  brand_gold:         { label: 'Accent #2',         description: 'Gold buttons and highlight accents' },
+  brand_sidebar_font: { label: 'Sidebar Font Color', description: 'Text color for sidebar navigation links and labels' },
 };
 
 export function hexToRgbChannels(hex: string): string {

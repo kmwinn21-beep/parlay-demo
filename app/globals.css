@@ -4,10 +4,11 @@
 
 :root {
   /* RGB channels for brand colors — overridden at runtime via server-injected <style> */
-  --brand-primary-rgb:   11  60  98;   /* default #0B3C62 */
-  --brand-secondary-rgb: 27 118 188;   /* default #1B76BC */
-  --brand-accent-rgb:   231 222 217;   /* default #E7DED9 */
-  --brand-highlight-rgb: 255 203  63;  /* default #FFCB3F */
+  --brand-primary-rgb:    34  58  94;  /* default #223A5E */
+  --brand-secondary-rgb:  58  80 107;  /* default #3A506B */
+  --brand-accent-rgb:     52 211 153;  /* default #34D399 */
+  --brand-highlight-rgb: 110 231 183;  /* default #6EE7B7 */
+  --sidebar-font-rgb:    255 255 255;  /* default #FFFFFF */
 
   /* Font families — overridden at runtime via server-injected <style> */
   --font-heading: "DM Serif Display";
