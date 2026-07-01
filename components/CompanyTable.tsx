@@ -249,6 +249,33 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const [filterConference, setFilterConference] = useState('');
   const [filterICP, setFilterICP] = useState('');
   const icpOptions = configOptions.icp ?? [];
+
+  // Quick-filter badges (between search bar and Filters button) — separate
+  // from the advanced Filters pane's single-select dropdowns since these
+  // support multi-select toggling.
+  const [quickFilterIcp, setQuickFilterIcp] = useState(false);
+  const [quickFilterTypes, setQuickFilterTypes] = useState<Set<string>>(new Set());
+  const [icpCompanyTypeOptions, setIcpCompanyTypeOptions] = useState<string[]>([]);
+  useEffect(() => {
+    fetch('/api/admin/icp-rules', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then((data: { rules?: { category: string; conditions: { option_value: string }[] }[] } | null) => {
+        const rule = data?.rules?.find(r => r.category === 'company_type');
+        if (rule) setIcpCompanyTypeOptions(rule.conditions.map(c => c.option_value));
+      })
+      .catch(() => {});
+  }, []);
+  const quickFilterTypeButtons = useMemo(() => {
+    const dynamicTypes = icpCompanyTypeOptions.filter(t => t !== 'Customer' && t !== 'Competitor');
+    return [...dynamicTypes, 'Customer', 'Competitor'];
+  }, [icpCompanyTypeOptions]);
+  const toggleQuickFilterType = (type: string) => {
+    setQuickFilterTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type); else next.add(type);
+      return next;
+    });
+  };
   const [filterUpdatedWithin, setFilterUpdatedWithin] = useState('');
   // 'parent' = no parent_company_id (standalone or explicit parent)
   // 'child'  = has parent_company_id set
@@ -296,7 +323,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
 
   useEffect(() => {
     setPage(1);
-  }, [search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, wseMin, wseMax]);
+  }, [search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, wseMin, wseMax, quickFilterIcp, quickFilterTypes]);
 
   const allConferenceNames = useMemo(() => {
     const names = new Set<string>();
@@ -362,7 +389,9 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
       const matchHierarchy = !filterHierarchy
         || (filterHierarchy === 'parent' && !c.parent_company_id)
         || (filterHierarchy === 'child' && !!c.parent_company_id);
-      return matchSearch && matchSFOwner && matchType && matchStatus && matchConf && matchConference && matchICP && matchWSE && matchUpdatedWithin && matchHierarchy;
+      const matchQuickIcp = !quickFilterIcp || c.icp === 'Yes';
+      const matchQuickTypes = quickFilterTypes.size === 0 || quickFilterTypes.has(c.company_type || '');
+      return matchSearch && matchSFOwner && matchType && matchStatus && matchConf && matchConference && matchICP && matchWSE && matchUpdatedWithin && matchHierarchy && matchQuickIcp && matchQuickTypes;
     });
     list.sort((a, b) => {
       let aVal: string | number, bVal: string | number;
@@ -374,7 +403,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
     });
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localCompanies, search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, filterHierarchy, wseFilterActive, effectiveWseMin, effectiveWseMax, sortKey, sortDir, userScopedStatusMap]);
+  }, [localCompanies, search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, filterHierarchy, wseFilterActive, effectiveWseMin, effectiveWseMax, sortKey, sortDir, userScopedStatusMap, quickFilterIcp, quickFilterTypes]);
 
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -565,6 +594,34 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
           <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search companies..." className="input-field pl-9" />
         </div>
+
+        {/* Quick-filter badges — common one-click filters, multi-select */}
+        <button
+          type="button"
+          onClick={() => setQuickFilterIcp(v => !v)}
+          className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+            quickFilterIcp
+              ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+              : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+          }`}
+        >
+          ICP
+        </button>
+        {quickFilterTypeButtons.map(type => (
+          <button
+            key={type}
+            type="button"
+            onClick={() => toggleQuickFilterType(type)}
+            className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+              quickFilterTypes.has(type)
+                ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+                : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+            }`}
+          >
+            {type === 'Customer' ? 'Customers' : type === 'Competitor' ? 'Competitors' : type}
+          </button>
+        ))}
+
         <button
           type="button"
           onClick={() => setFiltersOpen(o => !o)}
