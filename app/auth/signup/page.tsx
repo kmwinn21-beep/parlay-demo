@@ -14,6 +14,7 @@ function ClerkSignUpInner() {
   const afterUrl = searchParams.get('welcome') ? '/?welcome=true' : '/';
   return (
     <SignUp
+      routing="virtual"
       initialValues={email ? { emailAddress: email } : undefined}
       fallbackRedirectUrl={afterUrl}
     />

@@ -80,6 +80,7 @@ function ClerkLoginPage() {
       <div className="relative z-10 flex flex-col items-center">
         <p className="text-white/60 text-sm tracking-wide mb-6 text-center">The Conference Operating System for Revenue Teams</p>
         <SignIn
+          routing="virtual"
           signUpUrl="https://www.useparlay.app/?trial=true"
           appearance={{ elements: { headerTitle: 'hidden', headerSubtitle: 'hidden' } }}
         />
