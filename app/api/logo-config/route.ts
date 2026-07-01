@@ -1,12 +1,15 @@
-import { NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import { NextRequest, NextResponse } from 'next/server';
+import { getSessionUser } from '@/lib/auth';
+import { getDb } from '@/lib/getDb';
 
 // Never cache — logo config must always reflect the latest DB values
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+// Same pre-auth/authenticated dual-use pattern as /api/app-name.
+export async function GET(request: NextRequest) {
   try {
-    await dbReady;
+    const user = await getSessionUser(request);
+    const db = await getDb(user?.accountId);
     const rows = await db.execute({
       sql: "SELECT key, value FROM site_settings WHERE key IN ('logo_white_url', 'logo_dark_url', 'favicon_url', 'logo_sidebar_url')",
       args: [],

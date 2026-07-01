@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Auto-detect company type if not explicitly provided; validate against live admin options
-    const companyTypeOptions = await getConfigOptionValues('company_type');
+    const companyTypeOptions = await getConfigOptionValues('company_type', db);
     const resolvedType = company_type || classifyCompanyType(name, companyTypeOptions) || null;
 
     const result = await db.execute({
