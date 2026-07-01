@@ -40,7 +40,7 @@ function getRepInitials(name: string): string {
 
 interface RawActivity {
   id: string;
-  type: 'meeting' | 'touchpoint' | 'follow_up';
+  type: 'meeting' | 'preset_meeting' | 'touchpoint' | 'follow_up' | 'hosted_event';
   day: number;
   isApproximate: boolean;
   companyId: number;
@@ -113,7 +113,7 @@ export async function GET(
 
   // ── Meetings ─────────────────────────────────────────────────────────────
   const meetingRows = await db.execute({
-    sql: `SELECT m.id, m.attendee_id, m.scheduled_by, m.meeting_date, m.meeting_time, m.outcome,
+    sql: `SELECT m.id, m.attendee_id, m.scheduled_by, m.meeting_date, m.meeting_time, m.outcome, m.created_at,
                  a.company_id, c.name AS company_name, a.first_name, a.last_name, a.title
           FROM meetings m
           JOIN attendees a ON m.attendee_id = a.id
@@ -166,19 +166,46 @@ export async function GET(
 
     meetingDayById.set(meetingId, { repIds, day });
 
+    const meetingCreatedAt = m.created_at ? String(m.created_at) : null;
+    // "Pre-set" = the meeting record was created in the system before the
+    // conference started (booked ahead of time), independent of whether it
+    // was ultimately held. Compared against confStart at midnight so a
+    // same-day booking on day 1 doesn't count as pre-set.
+    const isPreset = meetingCreatedAt != null
+      && new Date(meetingCreatedAt).getTime() < new Date(confStart + 'T00:00:00').getTime();
+
     for (const repId of repIds) {
       if (!repByConfigId.has(repId)) continue;
-      pushActivity(repId, {
-        id: `meeting-${meetingId}`,
-        type: 'meeting',
-        day,
-        isApproximate: false,
+      const baseMeetingActivity = {
         companyId: companyId ?? 0,
         companyName: m.company_name ? String(m.company_name) : 'Unknown company',
         contactName: `${m.first_name ?? ''} ${m.last_name ?? ''}`.trim() || null,
         contactTitle: m.title ? String(m.title) : null,
-        timestamp,
-      });
+      };
+      // "Meeting Held" dot — only for meetings with a held outcome, on their
+      // actual conference day.
+      if (isHeld) {
+        pushActivity(repId, {
+          id: `meeting-${meetingId}`,
+          type: 'meeting',
+          day,
+          isApproximate: false,
+          timestamp,
+          ...baseMeetingActivity,
+        });
+      }
+      // "Pre-set Meeting" dot — a second, independent fact about the same
+      // meeting record: it was booked before the conference started.
+      if (isPreset) {
+        pushActivity(repId, {
+          id: `preset_meeting-${meetingId}`,
+          type: 'preset_meeting',
+          day,
+          isApproximate: false,
+          timestamp: meetingCreatedAt as string,
+          ...baseMeetingActivity,
+        });
+      }
     }
   }
 
@@ -295,6 +322,59 @@ export async function GET(
         contactTitle: f.title ? String(f.title) : null,
         timestamp: createdAt,
         ...(linkedActivityId ? { linkedActivityId } : {}),
+      });
+    }
+  }
+
+  // ── Hosted events ────────────────────────────────────────────────────────
+  // Company Hosted social events with at least one attendee marked "attended".
+  // Neither social_events nor social_event_rsvps capture rep identity, so —
+  // same as touchpoints — attribution falls back to whichever reps had a
+  // meeting with that company at this conference. Deduped to one dot per
+  // (event, company): the dot represents "this company engaged with this
+  // hosted event", not a per-attendee count.
+  const hostedEventRows = await db.execute({
+    sql: `SELECT se.id AS event_id, se.event_name, se.event_date,
+                 a.company_id, c.name AS company_name, a.first_name, a.last_name, a.title,
+                 r.rsvp_status
+          FROM social_events se
+          JOIN social_event_rsvps r ON r.social_event_id = se.id
+          JOIN attendees a ON r.attendee_id = a.id
+          LEFT JOIN companies c ON a.company_id = c.id
+          WHERE se.conference_id = ? AND se.event_type = 'Company Hosted'`,
+    args: [confId],
+  });
+
+  const seenHostedEventCompany = new Set<string>();
+  for (const h of hostedEventRows.rows) {
+    const attended = String(h.rsvp_status ?? '').split(',').map(s => s.trim().toLowerCase()).includes('attended');
+    if (!attended) continue;
+
+    const companyId = h.company_id != null ? Number(h.company_id) : null;
+    if (companyId == null) continue;
+    const eventId = Number(h.event_id);
+    const dedupeKey = `${eventId}-${companyId}`;
+    if (seenHostedEventCompany.has(dedupeKey)) continue;
+    seenHostedEventCompany.add(dedupeKey);
+
+    engagedCompanyIds.add(companyId);
+
+    const eventDate = h.event_date ? String(h.event_date) : confStart;
+    const { day, isApproximate } = resolveActivityDay(eventDate, confStart, confEnd);
+
+    const attributedRepIds = Array.from(companyRepIds.get(companyId) ?? new Set<string>());
+    for (const repId of attributedRepIds) {
+      if (!repByConfigId.has(repId)) continue;
+      pushActivity(repId, {
+        id: `hosted_event-${eventId}-${companyId}`,
+        type: 'hosted_event',
+        day,
+        isApproximate,
+        companyId,
+        companyName: h.company_name ? String(h.company_name) : 'Unknown company',
+        contactName: `${h.first_name ?? ''} ${h.last_name ?? ''}`.trim() || null,
+        contactTitle: h.title ? String(h.title) : null,
+        timestamp: eventDate,
       });
     }
   }

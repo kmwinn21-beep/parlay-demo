@@ -7,7 +7,7 @@ import { useDrawerResize } from '@/lib/useDrawerResize';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type ActivityType = 'meeting' | 'touchpoint' | 'follow_up' | 'first_contact';
+type ActivityType = 'preset_meeting' | 'meeting' | 'touchpoint' | 'hosted_event' | 'follow_up' | 'first_contact';
 
 interface Activity {
   id: string;
@@ -55,20 +55,25 @@ export type ConferenceActivityMapDrawerProps = {
 // ─── Visual constants ───────────────────────────────────────────────────────
 
 const DOT_COLORS: Record<ActivityType, string> = {
-  meeting: '#185FA5',
-  touchpoint: '#1D9E75',
+  preset_meeting: '#0B3C62', // brand-primary #1
+  meeting: '#86efac', // green-300
+  touchpoint: '#fca5a5', // red-300
+  hosted_event: '#E7DED9', // brand-accent #1
   follow_up: '#7F77DD',
   first_contact: '#EF9F27',
 };
 
 const DOT_LABELS: Record<ActivityType, string> = {
-  meeting: 'Meeting',
+  preset_meeting: 'Pre-set Meeting',
+  meeting: 'Meeting Held',
   touchpoint: 'Touchpoint',
+  hosted_event: 'Hosted Event',
   follow_up: 'Follow-up created',
   first_contact: 'First contact',
 };
 
 const REP_COL_WIDTH = 168;
+const PRESET_COL_WIDTH = 200;
 const DAY_COL_WIDTH = 200;
 const UNKNOWN_COL_WIDTH = 200;
 
@@ -154,6 +159,12 @@ function DayHeaderRow({ totalDays, startDate }: { totalDays: number; startDate: 
         className="sticky left-0 z-30 bg-white flex-shrink-0"
         style={{ width: REP_COL_WIDTH }}
       />
+      <div
+        className="flex-shrink-0 text-center py-2 text-[11px] font-medium text-gray-500 border-l border-gray-100"
+        style={{ width: PRESET_COL_WIDTH }}
+      >
+        <p>Pre-set Meetings</p>
+      </div>
       {Array.from({ length: totalDays }, (_, i) => i + 1).map(day => (
         <div
           key={day}
@@ -193,7 +204,10 @@ function RepLaneRow({
     ? rep.activities
     : rep.activities.filter(a => a.day === dayFilter);
 
-  const normalActivities = visibleActivities.filter(a => !a.isApproximate);
+  // Pre-set meetings have their own dedicated column, independent of the
+  // day-column grid, so they're pulled out before the normal/unknown split.
+  const presetActivities = visibleActivities.filter(a => a.type === 'preset_meeting');
+  const normalActivities = visibleActivities.filter(a => !a.isApproximate && a.type !== 'preset_meeting');
   // Unknown Day only makes sense in the "All" view — a specific day filter
   // is asking "what happened on day N", and approximate activities don't
   // have a known real day, so they're excluded from single-day filtering.
@@ -225,6 +239,20 @@ function RepLaneRow({
           <p className="text-xs font-medium text-gray-800 leading-snug">{rep.displayName}</p>
           <p className="text-[10px] text-gray-400">{rep.meetingCount} meeting{rep.meetingCount !== 1 ? 's' : ''}</p>
         </div>
+      </div>
+
+      <div
+        className="flex flex-wrap content-start gap-1.5 px-2.5 py-3.5 min-h-[48px] flex-shrink-0 border-l border-gray-100 bg-gray-50/40"
+        style={{ width: PRESET_COL_WIDTH }}
+      >
+        {presetActivities.map(a => (
+          <WrappedActivityDot
+            key={a.id}
+            activity={a}
+            selected={selectedId === a.id}
+            onClick={() => onSelectActivity(a)}
+          />
+        ))}
       </div>
 
       {Array.from({ length: totalDays }, (_, i) => i + 1).map(day => (
@@ -472,7 +500,7 @@ export function ConferenceActivityMapDrawer({
 
       {/* Panel */}
       <div
-        className="activity-map-panel relative w-full sm:w-[1000px] h-[92vh] sm:h-full bg-white shadow-2xl flex flex-col border-t sm:border-t-0 sm:border-l border-gray-200 overflow-hidden rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none"
+        className="activity-map-panel relative w-full sm:w-[1000px] h-[90vh] sm:h-full bg-white shadow-2xl flex flex-col border-t sm:border-t-0 sm:border-l border-gray-200 overflow-hidden rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none"
         style={mapPanelStyle}
       >
         <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={mapResizeStart}>
@@ -480,13 +508,13 @@ export function ConferenceActivityMapDrawer({
         </div>
 
         {/* ── Header ── */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
-          <p className="text-sm font-medium text-gray-900 truncate">{conferenceName} · Activity map</p>
+        <div className="flex items-center justify-between px-4 py-3 bg-brand-primary flex-shrink-0">
+          <p className="text-sm font-medium text-white truncate">{conferenceName} · Activity map</p>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="flex-shrink-0 ml-4 p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 transition-colors"
+            className="flex-shrink-0 ml-4 p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -539,7 +567,7 @@ export function ConferenceActivityMapDrawer({
                 {(Object.keys(DOT_COLORS) as ActivityType[]).map(type => (
                   <div key={type} className="flex items-center gap-1.5">
                     <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: DOT_COLORS[type] }} />
-                    <span className="text-[10px] text-gray-500">{DOT_LABELS[type]}</span>
+                    <span className="text-[12px] text-gray-500">{DOT_LABELS[type]}</span>
                   </div>
                 ))}
               </div>
@@ -609,7 +637,7 @@ export function ConferenceActivityMapDrawer({
                   <p className="text-sm text-gray-400">No internal reps assigned to this conference.</p>
                 </div>
               ) : (
-                <div style={{ width: REP_COL_WIDTH + data.totalDays * DAY_COL_WIDTH + UNKNOWN_COL_WIDTH }}>
+                <div style={{ width: REP_COL_WIDTH + PRESET_COL_WIDTH + data.totalDays * DAY_COL_WIDTH + UNKNOWN_COL_WIDTH }}>
                   <DayHeaderRow totalDays={data.totalDays} startDate={data.startDate} />
                   {data.reps.map(rep => (
                     <RepLaneRow
