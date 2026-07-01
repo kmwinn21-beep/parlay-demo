@@ -96,6 +96,25 @@ export async function getSessionUser(request: NextRequest): Promise<SessionUser 
 
 /** For Server Components — uses next/headers cookies() */
 export async function getServerSessionUser(): Promise<SessionUser | null> {
+  // Try Clerk first when configured — mirrors getSessionUser(). Without this,
+  // Clerk-authenticated users (no auth_token cookie) resolve to a null session
+  // in Server Components, and getDb(undefined) silently falls back to the
+  // master DB instead of throwing/redirecting — surfacing master DB data on
+  // any page built with Server Components (e.g. the dashboard) while
+  // client-fetched API routes correctly resolve the real tenant DB.
+  if (process.env.CLERK_SECRET_KEY) {
+    const { getClerkSessionUser } = await import('./clerkAuth');
+    const clerkUser = await getClerkSessionUser();
+    if (clerkUser) {
+      return {
+        id: clerkUser.id,
+        email: clerkUser.email,
+        role: clerkUser.role as UserRole,
+        emailVerified: Boolean(clerkUser.emailVerified),
+        accountId: clerkUser.accountId,
+      };
+    }
+  }
   const { cookies } = await import('next/headers');
   const cookieStore = cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
