@@ -1813,7 +1813,7 @@ export default function ConferenceDetailPage() {
                     {editInternalAttendees.map((user) => (
                       <span
                         key={user}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-200"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-[#3A506B] border border-blue-200"
                       >
                         {user}
                         <button
@@ -1846,9 +1846,9 @@ export default function ConferenceDetailPage() {
         ) : (
           <div>
             {/* Top row: report nav (scrollable) + Field Report pinned at right */}
-            <div className="flex items-center relative">
-              {/* Scrollable buttons */}
-              <div className="flex items-center gap-5 overflow-x-auto flex-nowrap hide-scrollbar flex-1 min-w-0 pr-2">
+            <div className="flex items-start relative">
+              {/* Scrollable buttons — right padding reserves space for the absolutely-positioned button stack */}
+              <div className="flex items-center gap-5 overflow-x-auto flex-nowrap hide-scrollbar flex-1 min-w-0 pr-44">
               <PreConferenceReview
                 conferenceId={conference.id}
                 conferenceName={conference.name}
@@ -1872,24 +1872,14 @@ export default function ConferenceDetailPage() {
                 </svg>
                 Budget vs. Actual
               </button>
-              {capabilities?.capabilities?.crm_export && (
-                <button
-                  type="button"
-                  onClick={() => setShowCrmExport(true)}
-                  className="flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-brand-accent cursor-pointer transition-colors flex-shrink-0"
-                >
-                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  Export CRM Files
-                </button>
-              )}
               </div>
-              {/* Pinned right: divider + stacked Field Report / Executive Brief */}
+              {/* Pinned right: divider + stacked Field Report / Activity map / Executive brief / Export CRM Files.
+                  Absolutely positioned so its height (now 4 rows tall) doesn't force the whole
+                  top row — and the gap below it — to grow with it. */}
               {isInternalAttendee && (
-                <div className="flex items-stretch gap-3 flex-shrink-0 bg-white pl-2">
+                <div className="absolute top-0 right-0 flex items-stretch gap-3 flex-shrink-0 bg-white pl-2">
                   <div className="self-stretch w-px bg-gray-200" />
-                  <div className="flex flex-col gap-1.5 justify-center">
+                  <div className="flex flex-col gap-3 justify-center">
                     <button
                       type="button"
                       onClick={() => setShowDebrief(true)}
@@ -1931,6 +1921,18 @@ export default function ConferenceDetailPage() {
                       </svg>
                       Executive brief
                     </button>
+                    )}
+                    {capabilities?.capabilities?.crm_export && (
+                      <button
+                        type="button"
+                        onClick={() => setShowCrmExport(true)}
+                        className="flex items-center gap-1.5 text-sm font-medium text-brand-accent hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
+                      >
+                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        Export CRM Files
+                      </button>
                     )}
                   </div>
                 </div>
@@ -2028,7 +2030,7 @@ export default function ConferenceDetailPage() {
                   return (
                     <span
                       key={user}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-200"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-[#3A506B] border border-blue-200"
                       title={user.trim()}
                     >
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

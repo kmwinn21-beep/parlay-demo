@@ -204,12 +204,12 @@ function InternalAttendeePill({ internalAttendees }: { internalAttendees: string
   };
   return (
     <div ref={ref} className="relative inline-block" onMouseEnter={handleMouseEnter} onMouseLeave={() => setPos(null)}>
-      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 cursor-pointer">{names.length}</span>
+      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-[#3A506B] cursor-pointer">{names.length}</span>
       {pos && (
         <div style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999, transform: pos.above ? 'translateY(-100%)' : 'translateY(0)' }}>
           <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2.5">
             <p className="font-semibold mb-1.5 text-gray-300 uppercase tracking-wide text-[10px]">Internal Attendees</p>
-            <ul className="space-y-1">{names.map((n, i) => <li key={i} className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />{n}</li>)}</ul>
+            <ul className="space-y-1">{names.map((n, i) => <li key={i} className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#3A506B] flex-shrink-0" />{n}</li>)}</ul>
           </div>
         </div>
       )}
