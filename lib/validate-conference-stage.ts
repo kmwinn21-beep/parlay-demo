@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, dbReady } from '@/lib/db';
+import type { Client } from '@libsql/client';
+import { getDb } from '@/lib/getDb';
 import { getSessionUser } from '@/lib/auth';
 import { computeConferenceStage } from '@/lib/conference-stage';
 import { getConferencePermissions } from '@/lib/conference-permissions';
@@ -15,7 +16,7 @@ interface ConferenceRow {
   is_historical: number;
 }
 
-async function fetchConferenceRow(conferenceId: number): Promise<ConferenceRow | null> {
+async function fetchConferenceRow(db: Client, conferenceId: number): Promise<ConferenceRow | null> {
   const result = await db.execute({
     sql: `SELECT start_date, end_date, post_conference_days, stage_override, is_historical
           FROM conferences WHERE id = ?`,
@@ -37,8 +38,13 @@ export async function validateConferenceStage(
   conferenceId: number,
   permissionKey: PermissionKey,
 ): Promise<NextResponse | null> {
-  await dbReady;
-  const conf = await fetchConferenceRow(conferenceId);
+  // conferences.id is only unique within a tenant DB — this must resolve the
+  // requesting user's own tenant DB rather than the master DB, otherwise a
+  // colliding conference ID in another tenant (or the master DB) could be
+  // read instead of the actual conference this request is about.
+  const user = await getSessionUser(request);
+  const db = await getDb(user?.accountId);
+  const conf = await fetchConferenceRow(db, conferenceId);
   if (!conf) return null; // let the route handler return 404
 
   // Historical conferences have no stage restrictions
@@ -51,7 +57,6 @@ export async function validateConferenceStage(
     return null;
   }
 
-  const user = await getSessionUser(request);
   const isAdmin = user?.role === 'administrator';
   const permissions = getConferencePermissions(stage, isAdmin);
 

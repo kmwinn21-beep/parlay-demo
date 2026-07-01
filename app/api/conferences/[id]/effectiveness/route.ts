@@ -462,12 +462,16 @@ export async function GET(
     );
 
     // ── Rep name resolution ─────────────────────────────────────────────────
-    const userConfigRows = await runQuery(db, 
-      `SELECT co.id, COALESCE(u.display_name, co.value) AS display_name
+    // Use co.value as the canonical display name — consistent with what the conference
+    // form stores in internal_attendees and what the Meetings tab renders via useUserOptions.
+    // Trusting u.display_name instead causes mismatches when a user's display_name differs
+    // from their config_option value (e.g. linked to the wrong config_option).
+    const userConfigRows = await runQuery(db,
+      `SELECT co.id, co.value AS display_name
        FROM config_options co
-       LEFT JOIN users u ON u.config_id = co.id
        WHERE co.category = 'user'`
     );
+    // repNameMap: config_option ID (string) → co.value display name
     const repNameMap = new Map<string, string>();
     for (const r of userConfigRows) repNameMap.set(String(r.id), String(r.display_name ?? r.id));
     const resolveRep = (raw: unknown): string[] =>
@@ -677,7 +681,9 @@ export async function GET(
       compEngByCompany.get(compId)!.push(row);
     }
 
-    // Resolved internal attendee names
+    // Resolved internal attendee names.
+    // internal_attendees may store config_option IDs or co.value strings directly.
+    // Both now resolve consistently because repNameMap uses co.value (not COALESCE with u.display_name).
     const internalAttendeeNames = new Set<string>(
       Array.from(internalAttendeeIds).map(id => repNameMap.get(id) ?? id)
     );
