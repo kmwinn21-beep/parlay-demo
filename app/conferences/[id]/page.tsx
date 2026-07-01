@@ -1846,7 +1846,7 @@ export default function ConferenceDetailPage() {
         ) : (
           <div>
             {/* Top row: report nav (scrollable) + Field Report pinned at right */}
-            <div className="flex items-center relative">
+            <div className="flex items-start relative">
               {/* Scrollable buttons */}
               <div className="flex items-center gap-5 overflow-x-auto flex-nowrap hide-scrollbar flex-1 min-w-0 pr-2">
               <PreConferenceReview
