@@ -240,7 +240,7 @@ export function Sidebar() {
         </button>
         <div className="flex items-center gap-2 pt-1">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={faviconUrl || '/emblem.png'} alt="App emblem" width={24} height={24} className="object-contain opacity-60" />
+          <img src={faviconUrl || '/WhiteLetterMarkParlay.png'} alt="App emblem" width={24} height={24} className="object-contain opacity-60" />
           <div>
             <p className="text-white/60 text-xs">{appName}</p>
             <p className="text-white/50 text-xs">v1.0</p>

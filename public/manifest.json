@@ -6,7 +6,7 @@
   "background_color": "#0B3C62",
   "theme_color": "#0B3C62",
   "icons": [
-    { "src": "/emblem.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/emblem.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "/WhiteLetterMarkParlay.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/WhiteLetterMarkParlay.png", "sizes": "512x512", "type": "image/png" }
   ]
 }
