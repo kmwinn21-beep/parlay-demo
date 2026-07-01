@@ -19,6 +19,7 @@ import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConf
 import { CustomColumnCell } from './CustomColumnCell';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
+import { useUser } from './UserContext';
 
 interface Company {
   id: number;
@@ -276,6 +277,8 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
       return next;
     });
   };
+  const { user: currentUser } = useUser();
+  const [quickFilterMyAccounts, setQuickFilterMyAccounts] = useState(false);
   const [filterUpdatedWithin, setFilterUpdatedWithin] = useState('');
   // 'parent' = no parent_company_id (standalone or explicit parent)
   // 'child'  = has parent_company_id set
@@ -323,7 +326,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
 
   useEffect(() => {
     setPage(1);
-  }, [search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, wseMin, wseMax, quickFilterIcp, quickFilterTypes]);
+  }, [search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, wseMin, wseMax, quickFilterIcp, quickFilterTypes, quickFilterMyAccounts]);
 
   const allConferenceNames = useMemo(() => {
     const names = new Set<string>();
@@ -391,7 +394,8 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         || (filterHierarchy === 'child' && !!c.parent_company_id);
       const matchQuickIcp = !quickFilterIcp || c.icp === 'Yes';
       const matchQuickTypes = quickFilterTypes.size === 0 || quickFilterTypes.has(c.company_type || '');
-      return matchSearch && matchSFOwner && matchType && matchStatus && matchConf && matchConference && matchICP && matchWSE && matchUpdatedWithin && matchHierarchy && matchQuickIcp && matchQuickTypes;
+      const matchQuickMyAccounts = !quickFilterMyAccounts || (currentUser?.configId != null && parseRepIds(c.assigned_user).includes(currentUser.configId));
+      return matchSearch && matchSFOwner && matchType && matchStatus && matchConf && matchConference && matchICP && matchWSE && matchUpdatedWithin && matchHierarchy && matchQuickIcp && matchQuickTypes && matchQuickMyAccounts;
     });
     list.sort((a, b) => {
       let aVal: string | number, bVal: string | number;
@@ -403,7 +407,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
     });
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localCompanies, search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, filterHierarchy, wseFilterActive, effectiveWseMin, effectiveWseMax, sortKey, sortDir, userScopedStatusMap, quickFilterIcp, quickFilterTypes]);
+  }, [localCompanies, search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, filterHierarchy, wseFilterActive, effectiveWseMin, effectiveWseMax, sortKey, sortDir, userScopedStatusMap, quickFilterIcp, quickFilterTypes, quickFilterMyAccounts]);
 
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -621,6 +625,19 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
             {type === 'Customer' ? 'Customers' : type === 'Competitor' ? 'Competitors' : type}
           </button>
         ))}
+        {currentUser?.firstName && (
+          <button
+            type="button"
+            onClick={() => setQuickFilterMyAccounts(v => !v)}
+            className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+              quickFilterMyAccounts
+                ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+                : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+            }`}
+          >
+            {currentUser.firstName}&apos;s Accounts
+          </button>
+        )}
 
         <button
           type="button"
