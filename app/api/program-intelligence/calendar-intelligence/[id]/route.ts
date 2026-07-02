@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import type { InValue, Client } from '@libsql/client';
-import { assembleFinalScore } from '@/lib/scoring/calendar-intelligence';
+import { assembleFinalScore, computeCalendarStrategyScores, buildStrategyRationale } from '@/lib/scoring/calendar-intelligence';
 import type { ComponentScores } from '@/lib/scoring/calendar-intelligence';
 import { getIcpConfig } from '@/lib/icpRules';
 import { buildDefaultTierConfig, type TierThresholdConfig } from '@/lib/strategyAssessment';
@@ -54,6 +54,12 @@ function normalizeFunctionProductMap(raw: Record<string, string[]>, labels: Map<
   return out;
 }
 
+function formatCurrency(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `$${Math.round(n / 1000)}K`;
+  return `$${Math.round(n).toLocaleString('en-US')}`;
+}
+
 function rowDateIsRecent(raw: unknown): boolean {
   if (!raw) return false;
   const t = new Date(String(raw)).getTime();
@@ -99,6 +105,8 @@ export interface TargetingAggregation {
   svPriorEngagementCount: number;
   svKnownProspectCount: number;
   svClientCount: number;
+  // Total meetings scheduled at this conference across all scored companies
+  totalScheduledMeetings: number;
   // First 5 scored companies for debug logging
   debugSample: Array<{ companyName: string; wse: number | null; tier: string }>;
 }
@@ -246,6 +254,7 @@ async function runTargetingForConference(
   let mustTargetIcpCount = 0, highPriorityIcpCount = 0, worthEngagingIcpCount = 0;
   // Strategic Value Layer 1: new per-company formula (internal 45%, prior 30%, known 15%, client 10%)
   let sumSvScore = 0, svInternalRelCount = 0, svPriorEngagementCount = 0, svKnownProspectCount = 0, svClientCount = 0;
+  let totalScheduledMeetings = 0;
   const debugSample: Array<{ companyName: string; wse: number | null; tier: string }> = [];
 
   for (const s of scores) {
@@ -280,6 +289,7 @@ async function runTargetingForConference(
     if (svPrior) svPriorEngagementCount++;
     if (svKnown) svKnownProspectCount++;
     if (svClient) svClientCount++;
+    totalScheduledMeetings += sig.scheduled_meeting_count ?? 0;
   }
 
   // Only ICP-flagged companies are eligible for realistic pipeline — mirrors the pre-conference modal formula
@@ -316,6 +326,7 @@ async function runTargetingForConference(
     svPriorEngagementCount,
     svKnownProspectCount,
     svClientCount,
+    totalScheduledMeetings,
     debugSample,
   };
 }
@@ -419,10 +430,12 @@ export async function GET(
             SELECT c.id, c.name, c.end_date, COALESCE(c.is_historical, 0) AS is_historical,
                    COUNT(ca.attendee_id) AS attendee_count,
                    COALESCE(cmp.total_companies, 0) AS total_companies,
-                   COALESCE(cmp.icp_companies, 0) AS icp_companies
+                   COALESCE(cmp.icp_companies, 0) AS icp_companies,
+                   cst.value AS conference_strategy_type
             FROM conferences c
             LEFT JOIN conference_attendees ca ON ca.conference_id = c.id
             LEFT JOIN cmp ON cmp.conference_id = c.id
+            LEFT JOIN config_options cst ON cst.id = c.conference_strategy_type_id
             WHERE c.id = ? AND date(c.end_date) <= date('now')
             GROUP BY c.id`,
       args: [conferenceId, conferenceId],
@@ -603,6 +616,85 @@ export async function GET(
     strategicValue: strategicValueScore,
   };
 
+  // --- Component detail bullets — generated from the same values that feed the scores above ---
+  const densityPct = totalCompanies > 0 ? (icpCompanies / totalCompanies) * 100 : 0;
+  const densityDiff = densityPct - 15;
+  const avgBuyerScoreRounded = targetingAgg != null ? Math.round(targetingAgg.avgBuyerAccessScore) : null;
+
+  const audienceFitDetails: string[] = totalCompanies > 0 ? [
+    `${icpCompanies} of ${totalCompanies} attending companies match your ICP (${densityPct.toFixed(1)}% density — benchmark 15%)`,
+    ...(avgBuyerScoreRounded != null ? [`Avg buyer access score: ${avgBuyerScoreRounded}/100 across ICP companies`] : []),
+    `ICP density is ${densityDiff >= 0 ? 'above' : 'below'} benchmark by ${Math.abs(densityDiff).toFixed(1)} percentage points`,
+  ] : [];
+
+  const actionablePct = targetingAgg != null && targetingAgg.totalScoredCompanies > 0
+    ? Math.round((targetingAgg.actionableCount / targetingAgg.totalScoredCompanies) * 100)
+    : null;
+  const targetOpportunityDetails: string[] = targetingAgg != null ? [
+    `${targetingAgg.mustTargetCount} Must Target, ${targetingAgg.highPriorityCount} High Priority, ${targetingAgg.worthEngagingCount} Worth Engaging companies attending`,
+    ...(actionablePct != null ? [`Actionable company rate: ${actionablePct}% of ICP attendees`] : []),
+    `Avg priority score across ICP companies: ${Math.round(targetingAgg.avgTargetPriorityScore)}/100`,
+  ] : [];
+
+  const commercialCoveragePct = realisticPipeline != null && reqPipeline > 0
+    ? Math.round((realisticPipeline / reqPipeline) * 100)
+    : null;
+  const roiMultiple = budgetRow?.required_pipeline_multiple != null ? Number(budgetRow.required_pipeline_multiple) : null;
+  const commercialPotentialDetails: string[] = projectedPipeline != null ? [
+    `Available pipeline: ${formatCurrency(projectedPipeline)}`,
+    ...(realisticPipeline != null ? [`Realistic pipeline (adjusted for conversion): ${formatCurrency(realisticPipeline)}`] : []),
+    ...(reqPipeline > 0 ? [`Required pipeline at ${roiMultiple ?? 5}× ROI: ${formatCurrency(reqPipeline)} — coverage ${commercialCoveragePct ?? 0}%`] : []),
+  ] : [];
+
+  // Same budget-total parsing pattern used by the pre-conference route (sums line_items[].budget)
+  const budgetTotal = (() => {
+    if (!budgetRow?.line_items) return 0;
+    try {
+      const items = JSON.parse(String(budgetRow.line_items)) as Array<{ budget?: string }>;
+      return items.reduce((sum, item) => {
+        const n = Number(String(item?.budget ?? '').replace(/[^0-9.]/g, ''));
+        return sum + (Number.isFinite(n) ? n : 0);
+      }, 0);
+    } catch { return 0; }
+  })();
+  const costPerIcp = icpCompanies > 0 && budgetTotal > 0 ? budgetTotal / icpCompanies : null;
+  const costJustificationDetails: string[] = budgetRow != null ? [
+    ...(costPerIcp != null ? [`Cost per ICP attendee: ${formatCurrency(costPerIcp)}`] : []),
+    ...(commercialCoveragePct != null ? [`Required pipeline vs. realistic pipeline: ${commercialCoveragePct}% covered`] : []),
+    `Conference budget: ${formatCurrency(budgetTotal)}`,
+  ] : [];
+
+  const clientRate = targetingAgg != null && targetingAgg.totalScoredCompanies > 0
+    ? Math.round((targetingAgg.svClientCount / targetingAgg.totalScoredCompanies) * 100)
+    : null;
+  const strategicValueDetails: string[] = targetingAgg != null ? [
+    `${targetingAgg.svInternalRelCount} internal relationships with ICP accounts`,
+    `${targetingAgg.svClientCount} existing client companies attending${clientRate != null ? ` (${clientRate}% of ICP)` : ''}`,
+    `${targetingAgg.totalScheduledMeetings} meetings already scheduled`,
+    `Competitor presence: ${hasCompetitor ? 'Yes' : 'No'}`,
+  ] : [];
+
+  const componentDetails = {
+    audienceFit: audienceFitDetails,
+    targetOpportunity: targetOpportunityDetails,
+    commercialPotential: commercialPotentialDetails,
+    costJustification: costJustificationDetails,
+    strategicValue: strategicValueDetails,
+  };
+
+  // --- Strategy fit ---
+  const strategyScores = computeCalendarStrategyScores(componentScores);
+  const recommendedStrategy = strategyScores[0]?.strategy ?? '';
+  const strategyRationale = recommendedStrategy
+    ? buildStrategyRationale(recommendedStrategy, {
+        audienceFit: componentScores.audienceFit ?? 0,
+        targetOpportunity: componentScores.targetOpportunity ?? 0,
+        commercialPotential: componentScores.commercialPotential ?? 0,
+        costJustification: componentScores.costJustification ?? 0,
+        strategicValue: componentScores.strategicValue ?? 0,
+      })
+    : '';
+
   const { score: finalScore, confidenceMultiplier, availableComponentCount, totalComponentCount, maxPossibleScore } =
     assembleFinalScore(componentScores);
 
@@ -624,6 +716,11 @@ export async function GET(
     icpDensityPct: totalCompanies > 0 ? (icpCompanies / totalCompanies) * 100 : 0,
     calendarRecommendationScore: finalScore,
     componentScores,
+    componentDetails,
+    strategyScores,
+    recommendedStrategy,
+    strategyRationale,
+    conferenceStrategyType: r.conference_strategy_type ? String(r.conference_strategy_type) : null,
     confidenceMultiplier,
     availableComponentCount,
     totalComponentCount,
