@@ -6,6 +6,8 @@ import { useRecordDrawer } from './RecordDrawerContext';
 import type { LandscapeData, TargetEntry, ClientCompanyEntry, ByRepEntry, IcpCompany, RelationshipRow } from '../PreConferenceReview';
 import type { StrategyAssessment } from '@/lib/strategyAssessment';
 import { useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
+import { StrategyAlignmentDrawer } from '../StrategyAlignmentDrawer';
+import toast from 'react-hot-toast';
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -69,6 +71,45 @@ function PipelineBarChart({ realistic, required }: { realistic: number; required
 
 // ─── Score Fit Card (mirrors Sales Effectiveness Score card) ───────────────────
 
+const STRATEGY_PILL_TONE_CLASSES: Record<'green' | 'gold' | 'red', string> = {
+  green: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  gold: 'bg-amber-50 text-amber-700 border border-amber-200',
+  red: 'bg-red-50 text-red-700 border border-red-200',
+};
+
+function normalizeStrategyLabel(v: string | null | undefined): string | null {
+  const t = (v ?? '').trim().toLowerCase();
+  return t.length > 0 ? t : null;
+}
+
+function SelectedStrategyPill({ sa }: { sa: StrategyAssessment }) {
+  if (!sa.selectedStrategy) return null;
+
+  const selected = normalizeStrategyLabel(sa.selectedStrategy);
+  const recommended = normalizeStrategyLabel(sa.recommendedStrategy);
+  const secondary = normalizeStrategyLabel(sa.secondaryStrategy);
+
+  const tone: 'green' | 'gold' | 'red' =
+    selected && recommended && selected === recommended ? 'green'
+    : selected && secondary && selected === secondary ? 'gold'
+    : 'red';
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${STRATEGY_PILL_TONE_CLASSES[tone]}`}>
+      {tone === 'red' ? (
+        <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+        </svg>
+      ) : (
+        <svg className="w-2 h-2 flex-shrink-0" viewBox="0 0 8 8" fill="currentColor">
+          <circle cx="4" cy="4" r="4" />
+        </svg>
+      )}
+      {sa.selectedStrategy}
+    </span>
+  );
+}
+
 function StrategyFitScoreCard({ sa }: { sa: StrategyAssessment }) {
   const color = scoreColor(sa.strategyFitScore);
   const components: [string, number, string][] = [
@@ -87,13 +128,16 @@ function StrategyFitScoreCard({ sa }: { sa: StrategyAssessment }) {
       style={{ backgroundColor: color + '15', borderLeft: `4px solid ${color}` }}
     >
       <div className="text-xs font-bold uppercase tracking-wide text-gray-500">
-        Pre-Conference Strategy Score
+        Pre-Conf. Strategy Score
       </div>
       <div className="flex items-end gap-1 mt-1">
         <div className="text-4xl font-bold" style={{ color }}>{sa.strategyFitScore}</div>
         <div className="text-sm text-gray-400 mb-0.5">/100</div>
       </div>
-      <div className="text-xs font-semibold mb-3" style={{ color }}>{sa.strategyFitInterpretation}</div>
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="text-xs font-semibold" style={{ color }}>{sa.strategyFitInterpretation}</div>
+        <SelectedStrategyPill sa={sa} />
+      </div>
 
       <div className="mt-auto pt-3 border-t space-y-1.5" style={{ borderColor: color + '33' }}>
         {components.map(([label, score, weight]) => (
@@ -333,11 +377,174 @@ function ActionsPanel({ sa }: { sa: StrategyAssessment }) {
   );
 }
 
+// ─── Strategy alignment bar ──────────────────────────────────────────────────────
+
+const ALIGNMENT_PARTIAL_MESSAGE = "Your selected conference strategy partially aligns with Parlay's recommended conference strategy.";
+const ALIGNMENT_MISALIGNED_MESSAGE = "Your selected conference strategy and Parlay's recommended conference strategies are misaligned.";
+
+async function resolveStrategyOptionId(label: string): Promise<number | null> {
+  const res = await fetch('/api/config?category=conference_strategy_type');
+  if (!res.ok) return null;
+  const opts = await res.json() as Array<{ id: number; value: string }>;
+  return opts.find(o => o.value === label)?.id ?? null;
+}
+
+function StrategyAlignmentRow({
+  sa,
+  conferenceId,
+  conferenceName,
+  onStrategyUpdated,
+}: {
+  sa: StrategyAssessment;
+  conferenceId: number;
+  conferenceName: string;
+  onStrategyUpdated: () => void;
+}) {
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [updatingTarget, setUpdatingTarget] = useState<'recommended' | 'secondary' | null>(null);
+
+  const applyStrategyUpdate = async (targetStrategy: string, which: 'recommended' | 'secondary') => {
+    setUpdatingTarget(which);
+    try {
+      const optionId = await resolveStrategyOptionId(targetStrategy);
+      if (optionId == null) throw new Error('Strategy option not found');
+      const confRes = await fetch(`/api/conferences/${conferenceId}`);
+      if (!confRes.ok) throw new Error('Failed to load conference');
+      const conf = await confRes.json();
+      const putRes = await fetch(`/api/conferences/${conferenceId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...conf, conference_strategy_type_id: optionId }),
+      });
+      if (!putRes.ok) throw new Error('Failed to update conference');
+      toast.success(`${conferenceName}'s strategy updated to ${targetStrategy}.`);
+      setDrawerOpen(false);
+      onStrategyUpdated();
+    } catch {
+      toast.error("Failed to update the conference's strategy.");
+    } finally {
+      setUpdatingTarget(null);
+    }
+  };
+
+  const handleKeepAsIs = () => {
+    setDrawerOpen(false);
+    toast(`No changes were made to ${conferenceName}'s strategy`);
+  };
+
+  if (sa.strategyAlignment === 'aligned') return null;
+
+  if (sa.strategyAlignment === 'unset') {
+    return (
+      <div className="flex items-center gap-3 rounded-xl px-4 py-3 bg-gray-50">
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          <span className="text-xs font-bold uppercase tracking-wide text-gray-400">Review Strategy Alignment</span>
+        </div>
+        <span className="text-xs text-gray-400">No strategy selected</span>
+      </div>
+    );
+  }
+
+  const alignment = sa.strategyAlignment as 'partial' | 'misaligned';
+  const tone: 'amber' | 'red' = alignment === 'partial' ? 'amber' : 'red';
+  const toneRowBg = tone === 'amber' ? 'bg-amber-50' : 'bg-red-50';
+  const toneLabelText = tone === 'amber' ? 'text-amber-700' : 'text-red-700';
+  const toneIcon = tone === 'amber' ? 'text-amber-500' : 'text-red-500';
+  const toneButton = tone === 'amber'
+    ? 'bg-amber-600 hover:bg-amber-700 text-white'
+    : 'bg-red-600 hover:bg-red-700 text-white';
+  const message = alignment === 'partial' ? ALIGNMENT_PARTIAL_MESSAGE : ALIGNMENT_MISALIGNED_MESSAGE;
+
+  const drawerProps = {
+    alignment,
+    selectedStrategy: sa.selectedStrategy ?? '',
+    recommendedStrategy: sa.recommendedStrategy,
+    secondaryStrategy: sa.secondaryStrategy,
+    alignmentMessage: sa.strategyAlignmentMessage,
+    componentScores: {
+      icpOpportunity: sa.icpOpportunityScore,
+      targetAccountOpportunity: sa.targetAccountOpportunityScore,
+      buyerAccess: sa.buyerAccessScore,
+      relationshipLeverage: sa.relationshipLeverageScore,
+      customerPresence: sa.customerPresenceScore,
+      pipelinePotential: sa.pipelinePotentialScore,
+      eventEconomicsFit: sa.eventEconomicsFitScore,
+    },
+    scoreWithSelected: sa.scoreWithSelectedStrategy,
+    scoreWithRecommended: sa.scoreWithRecommendedStrategy,
+    scoreWithSecondary: sa.scoreWithSecondaryStrategy,
+    conferenceName,
+    updatingTarget,
+    onUpdateToRecommended: () => applyStrategyUpdate(sa.recommendedStrategy, 'recommended'),
+    onUpdateToSecondary: sa.secondaryStrategy ? () => applyStrategyUpdate(sa.secondaryStrategy!, 'secondary') : undefined,
+    onKeepAsIs: handleKeepAsIs,
+    onClose: () => setDrawerOpen(false),
+  };
+
+  return (
+    <div>
+      <div className={`flex items-center gap-3 rounded-xl px-4 py-3 ${toneRowBg}`}>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <svg className={`w-4 h-4 flex-shrink-0 ${toneIcon}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          <span className={`text-xs font-bold uppercase tracking-wide whitespace-nowrap ${toneLabelText}`}>Review Strategy Alignment</span>
+        </div>
+        <span className={`text-xs flex-1 min-w-0 ${toneLabelText}`}>{message}</span>
+        <button
+          type="button"
+          onClick={() => setDrawerOpen(o => !o)}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap flex-shrink-0 transition-colors ${toneButton}`}
+        >
+          Review Details
+        </button>
+      </div>
+
+      {/* Desktop: in-flow accordion that pushes the rows below it down */}
+      <div
+        className="hidden sm:grid transition-[grid-template-rows] duration-300 ease-in-out"
+        style={{ gridTemplateRows: drawerOpen ? '1fr' : '0fr' }}
+      >
+        <div className="overflow-hidden min-h-0">
+          <StrategyAlignmentDrawer {...drawerProps} />
+        </div>
+      </div>
+
+      {/* Mobile: bottom sheet */}
+      <div
+        className={`sm:hidden fixed inset-0 z-[65] bg-black/30 transition-opacity duration-300 ease-in-out ${drawerOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={() => setDrawerOpen(false)}
+      />
+      <div
+        className={`sm:hidden fixed inset-x-0 bottom-0 z-[66] max-h-[85vh] overflow-y-auto rounded-t-2xl shadow-2xl transition-transform duration-300 ease-in-out ${drawerOpen ? 'translate-y-0' : 'translate-y-full pointer-events-none'}`}
+      >
+        <StrategyAlignmentDrawer {...drawerProps} />
+      </div>
+    </div>
+  );
+}
+
 // ─── Full section ──────────────────────────────────────────────────────────────
 
-function StrategyAssessmentSection({ sa }: { sa: StrategyAssessment }) {
+function StrategyAssessmentSection({
+  sa,
+  conferenceId,
+  conferenceName,
+  onStrategyUpdated,
+}: {
+  sa: StrategyAssessment;
+  conferenceId: number;
+  conferenceName: string;
+  onStrategyUpdated: () => void;
+}) {
   return (
-    <div className="pb-2 border-b border-gray-100 mb-6">
+    <div className="pb-2 border-b border-gray-100 mb-6 space-y-4">
+      {/* Strategy alignment bar — full width, above the score row */}
+      <StrategyAlignmentRow sa={sa} conferenceId={conferenceId} conferenceName={conferenceName} onStrategyUpdated={onStrategyUpdated} />
+
       <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 items-stretch">
         {/* Score card — 2 cols */}
         <div className="lg:col-span-2 flex">
@@ -536,8 +743,8 @@ function PipelineChartsPanel({
   const avgCostPerUnit = useAvgCostPerUnit();
   const [meetingsConvPct, setMeetingsConvPct] = useState(60);
   const [requiredPipeline, setRequiredPipeline] = useState<number | null>(null);
-  const [pipelineOpen, setPipelineOpen] = useState(false);
-  const [meetingPipelineOpen, setMeetingPipelineOpen] = useState(false);
+  const [pipelineOpen, setPipelineOpen] = useState(true);
+  const [meetingPipelineOpen, setMeetingPipelineOpen] = useState(true);
 
   // Fixed conversion rate matching ConferenceTargetsTab default — not user-adjustable here
   const conversionPct = 60;
@@ -605,10 +812,10 @@ function PipelineChartsPanel({
   const hasMeetingValues = avgCostPerUnit > 0 && meetingCompanyBestTier.size > 0;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 h-full">
       {/* Targeted Pipeline Value */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <button type="button" onClick={() => setPipelineOpen(o => !o)} className="flex items-center justify-between w-full mb-3">
+      <div className="rounded-xl border border-gray-200 bg-white p-4 flex-1 flex flex-col overflow-y-auto">
+        <button type="button" onClick={() => setPipelineOpen(o => !o)} className="flex items-center justify-between w-full mb-3 flex-shrink-0">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">Targeted Pipeline Value</p>
           <svg className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${pipelineOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
         </button>
@@ -647,8 +854,8 @@ function PipelineChartsPanel({
               {TIER_DATA.map(tier => {
                 const val = tierValueSum[tier.key] ?? 0;
                 return (
-                  <div key={tier.key} className="flex items-center gap-2">
-                    <span className="text-xs text-gray-600 w-24 flex-shrink-0 truncate">{tier.label}</span>
+                  <div key={tier.key} className="flex items-start gap-2">
+                    <span className="text-xs text-gray-600 w-24 flex-shrink-0 leading-tight">{tier.label}</span>
                     <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
                       <div
                         className="h-2 rounded-full"
@@ -672,8 +879,8 @@ function PipelineChartsPanel({
       </div>
 
       {/* Meetings Pipeline Value */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <button type="button" onClick={() => setMeetingPipelineOpen(o => !o)} className="flex items-center justify-between w-full mb-3">
+      <div className="rounded-xl border border-gray-200 bg-white p-4 flex-1 flex flex-col overflow-y-auto">
+        <button type="button" onClick={() => setMeetingPipelineOpen(o => !o)} className="flex items-center justify-between w-full mb-3 flex-shrink-0">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">Meetings Pipeline</p>
           <svg className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${meetingPipelineOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
         </button>
@@ -712,8 +919,8 @@ function PipelineChartsPanel({
               {TIER_DATA.map(tier => {
                 const val = meetingTierValueSum[tier.key] ?? 0;
                 return (
-                  <div key={tier.key} className="flex items-center gap-2">
-                    <span className="text-xs text-gray-600 w-24 flex-shrink-0 truncate">{tier.label}</span>
+                  <div key={tier.key} className="flex items-start gap-2">
+                    <span className="text-xs text-gray-600 w-24 flex-shrink-0 leading-tight">{tier.label}</span>
                     <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
                       <div
                         className="h-2 rounded-full"
@@ -1200,9 +1407,11 @@ export function LandscapeTab({
   strategyAssessment,
   meetingAttendeeIds,
   conferenceId,
+  conferenceName,
   byRep,
   icpCompanies,
   relationships,
+  onStrategyUpdated,
 }: {
   data: LandscapeData;
   targetMap: Map<number, TargetEntry>;
@@ -1210,14 +1419,23 @@ export function LandscapeTab({
   strategyAssessment: StrategyAssessment | null;
   meetingAttendeeIds: Set<number>;
   conferenceId: number;
+  conferenceName: string;
   byRep: ByRepEntry[];
   icpCompanies: IcpCompany[];
   relationships: RelationshipRow[];
+  onStrategyUpdated: () => void;
 }) {
   return (
     <div className="space-y-8">
       {/* Strategy Assessment (above existing charts) */}
-      {strategyAssessment && <StrategyAssessmentSection sa={strategyAssessment} />}
+      {strategyAssessment && (
+        <StrategyAssessmentSection
+          sa={strategyAssessment}
+          conferenceId={conferenceId}
+          conferenceName={conferenceName}
+          onStrategyUpdated={onStrategyUpdated}
+        />
+      )}
 
       {/* 5-column layout: client | competitors | pipeline charts | relationship heatmap */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-stretch">
@@ -1238,7 +1456,7 @@ export function LandscapeTab({
         />
 
         {/* Col 3: Pipeline Charts */}
-        <div className="md:col-span-1">
+        <div className="md:col-span-1 h-full">
           <PipelineChartsPanel
             conferenceId={conferenceId}
             targetMap={targetMap}

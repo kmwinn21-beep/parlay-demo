@@ -545,9 +545,11 @@ export function PreConferenceReviewModal() {
                   strategyAssessment={data.strategyAssessment ?? null}
                   meetingAttendeeIds={meetingAttendeeIds}
                   conferenceId={conferenceId}
+                  conferenceName={conferenceName}
                   byRep={data.byRep}
                   icpCompanies={data.icpCompanies}
                   relationships={data.relationships}
+                  onStrategyUpdated={() => load(conferenceId)}
                 />
               )}
               {activeTab === 'icp' && (
