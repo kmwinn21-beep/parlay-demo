@@ -7,6 +7,7 @@ import type { LandscapeData, TargetEntry, ClientCompanyEntry, ByRepEntry, IcpCom
 import type { StrategyAssessment } from '@/lib/strategyAssessment';
 import { useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
 import { StrategyAlignmentDrawer } from '../StrategyAlignmentDrawer';
+import toast from 'react-hot-toast';
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -126,17 +127,17 @@ function StrategyFitScoreCard({ sa }: { sa: StrategyAssessment }) {
       className="rounded-xl p-4 flex flex-col w-full"
       style={{ backgroundColor: color + '15', borderLeft: `4px solid ${color}` }}
     >
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-xs font-bold uppercase tracking-wide text-gray-500">
-          Pre-Conf. Strategy Score
-        </div>
-        <SelectedStrategyPill sa={sa} />
+      <div className="text-xs font-bold uppercase tracking-wide text-gray-500">
+        Pre-Conf. Strategy Score
       </div>
       <div className="flex items-end gap-1 mt-1">
         <div className="text-4xl font-bold" style={{ color }}>{sa.strategyFitScore}</div>
         <div className="text-sm text-gray-400 mb-0.5">/100</div>
       </div>
-      <div className="text-xs font-semibold mb-3" style={{ color }}>{sa.strategyFitInterpretation}</div>
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="text-xs font-semibold" style={{ color }}>{sa.strategyFitInterpretation}</div>
+        <SelectedStrategyPill sa={sa} />
+      </div>
 
       <div className="mt-auto pt-3 border-t space-y-1.5" style={{ borderColor: color + '33' }}>
         {components.map(([label, score, weight]) => (
@@ -376,34 +377,72 @@ function ActionsPanel({ sa }: { sa: StrategyAssessment }) {
   );
 }
 
-// ─── Strategy alignment row ─────────────────────────────────────────────────────
+// ─── Strategy alignment bar ──────────────────────────────────────────────────────
 
-// Fixed pixel widths for the label + score-dash columns — the drawer anchors its
-// left edge to the sum of these so it spans the "selected / recommended / secondary /
-// weight" columns without covering the label.
-const ALIGNMENT_ROW_COL1_WIDTH = 168;
-const ALIGNMENT_ROW_COL2_WIDTH = 32;
+const ALIGNMENT_PARTIAL_MESSAGE = "Your selected conference strategy partially aligns with Parlay's recommended conference strategy.";
+const ALIGNMENT_MISALIGNED_MESSAGE = "Your selected conference strategy and Parlay's recommended conference strategies are misaligned.";
 
-const ALIGNMENT_PILL_TONE_CLASSES: Record<'amber' | 'red', string> = {
-  amber: 'bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200',
-  red: 'bg-red-100 text-red-800 border border-red-300 hover:bg-red-200',
-};
+async function resolveStrategyOptionId(label: string): Promise<number | null> {
+  const res = await fetch('/api/config?category=conference_strategy_type');
+  if (!res.ok) return null;
+  const opts = await res.json() as Array<{ id: number; value: string }>;
+  return opts.find(o => o.value === label)?.id ?? null;
+}
 
-function StrategyAlignmentRow({ sa }: { sa: StrategyAssessment }) {
+function StrategyAlignmentRow({
+  sa,
+  conferenceId,
+  conferenceName,
+  onStrategyUpdated,
+}: {
+  sa: StrategyAssessment;
+  conferenceId: number;
+  conferenceName: string;
+  onStrategyUpdated: () => void;
+}) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [updatingTarget, setUpdatingTarget] = useState<'recommended' | 'secondary' | null>(null);
+
+  const applyStrategyUpdate = async (targetStrategy: string, which: 'recommended' | 'secondary') => {
+    setUpdatingTarget(which);
+    try {
+      const optionId = await resolveStrategyOptionId(targetStrategy);
+      if (optionId == null) throw new Error('Strategy option not found');
+      const confRes = await fetch(`/api/conferences/${conferenceId}`);
+      if (!confRes.ok) throw new Error('Failed to load conference');
+      const conf = await confRes.json();
+      const putRes = await fetch(`/api/conferences/${conferenceId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...conf, conference_strategy_type_id: optionId }),
+      });
+      if (!putRes.ok) throw new Error('Failed to update conference');
+      toast.success(`${conferenceName}'s strategy updated to ${targetStrategy}.`);
+      setDrawerOpen(false);
+      onStrategyUpdated();
+    } catch {
+      toast.error("Failed to update the conference's strategy.");
+    } finally {
+      setUpdatingTarget(null);
+    }
+  };
+
+  const handleKeepAsIs = () => {
+    setDrawerOpen(false);
+    toast(`No changes were made to ${conferenceName}'s strategy`);
+  };
 
   if (sa.strategyAlignment === 'aligned') return null;
 
   if (sa.strategyAlignment === 'unset') {
     return (
       <div className="flex items-center gap-3 rounded-xl px-4 py-3 bg-gray-50">
-        <div className="flex items-center gap-2 flex-shrink-0" style={{ width: ALIGNMENT_ROW_COL1_WIDTH }}>
+        <div className="flex items-center gap-2 flex-shrink-0">
           <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
           </svg>
-          <span className="text-xs font-bold uppercase tracking-wide text-gray-400">Strategy alignment</span>
+          <span className="text-xs font-bold uppercase tracking-wide text-gray-400">Review Strategy Alignment</span>
         </div>
-        <span className="text-xs text-gray-400 flex-shrink-0" style={{ width: ALIGNMENT_ROW_COL2_WIDTH }}>—</span>
         <span className="text-xs text-gray-400">No strategy selected</span>
       </div>
     );
@@ -414,82 +453,98 @@ function StrategyAlignmentRow({ sa }: { sa: StrategyAssessment }) {
   const toneRowBg = tone === 'amber' ? 'bg-amber-50' : 'bg-red-50';
   const toneLabelText = tone === 'amber' ? 'text-amber-700' : 'text-red-700';
   const toneIcon = tone === 'amber' ? 'text-amber-500' : 'text-red-500';
+  const toneButton = tone === 'amber'
+    ? 'bg-amber-600 hover:bg-amber-700 text-white'
+    : 'bg-red-600 hover:bg-red-700 text-white';
+  const message = alignment === 'partial' ? ALIGNMENT_PARTIAL_MESSAGE : ALIGNMENT_MISALIGNED_MESSAGE;
+
+  const drawerProps = {
+    alignment,
+    selectedStrategy: sa.selectedStrategy ?? '',
+    recommendedStrategy: sa.recommendedStrategy,
+    secondaryStrategy: sa.secondaryStrategy,
+    alignmentMessage: sa.strategyAlignmentMessage,
+    componentScores: {
+      icpOpportunity: sa.icpOpportunityScore,
+      targetAccountOpportunity: sa.targetAccountOpportunityScore,
+      buyerAccess: sa.buyerAccessScore,
+      relationshipLeverage: sa.relationshipLeverageScore,
+      customerPresence: sa.customerPresenceScore,
+      pipelinePotential: sa.pipelinePotentialScore,
+      eventEconomicsFit: sa.eventEconomicsFitScore,
+    },
+    scoreWithSelected: sa.scoreWithSelectedStrategy,
+    scoreWithRecommended: sa.scoreWithRecommendedStrategy,
+    scoreWithSecondary: sa.scoreWithSecondaryStrategy,
+    conferenceName,
+    updatingTarget,
+    onUpdateToRecommended: () => applyStrategyUpdate(sa.recommendedStrategy, 'recommended'),
+    onUpdateToSecondary: sa.secondaryStrategy ? () => applyStrategyUpdate(sa.secondaryStrategy!, 'secondary') : undefined,
+    onKeepAsIs: handleKeepAsIs,
+    onClose: () => setDrawerOpen(false),
+  };
 
   return (
-    <div className="relative" style={{ overflow: 'visible', zIndex: 10 }}>
+    <div>
       <div className={`flex items-center gap-3 rounded-xl px-4 py-3 ${toneRowBg}`}>
-        {/* Col 1: label */}
-        <div className="flex items-center gap-2 flex-shrink-0" style={{ width: ALIGNMENT_ROW_COL1_WIDTH }}>
+        <div className="flex items-center gap-2 flex-shrink-0">
           <svg className={`w-4 h-4 flex-shrink-0 ${toneIcon}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
           </svg>
-          <span className={`text-xs font-bold uppercase tracking-wide ${toneLabelText}`}>Strategy alignment</span>
+          <span className={`text-xs font-bold uppercase tracking-wide whitespace-nowrap ${toneLabelText}`}>Review Strategy Alignment</span>
         </div>
-        {/* Col 2: score dash */}
-        <span className="text-xs text-gray-400 text-center flex-shrink-0" style={{ width: ALIGNMENT_ROW_COL2_WIDTH }}>—</span>
-        {/* Col 3: selected strategy pill (clickable) */}
-        <div className="flex-1 min-w-0">
-          <button
-            type="button"
-            onClick={() => setDrawerOpen(true)}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap transition-colors ${ALIGNMENT_PILL_TONE_CLASSES[tone]}`}
-          >
-            <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-            </svg>
-            {sa.selectedStrategy}
-          </button>
-        </div>
-        {/* Col 4: recommended strategy pill (read-only, green) */}
-        <div className="flex-1 min-w-0">
-          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap bg-emerald-50 text-emerald-700 border border-emerald-200">
-            {sa.recommendedStrategy}
-          </span>
-        </div>
-        {/* Col 5: secondary strategy pill (read-only, blue) */}
-        <div className="flex-1 min-w-0">
-          {sa.secondaryStrategy ? (
-            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap bg-blue-50 text-blue-700 border border-blue-200">
-              {sa.secondaryStrategy}
-            </span>
-          ) : (
-            <span className="text-xs text-gray-400">—</span>
-          )}
-        </div>
-        {/* Col 6: weight-applied dash */}
-        <span className="text-xs text-gray-400 text-center flex-shrink-0 w-10">—</span>
+        <span className={`text-xs flex-1 min-w-0 ${toneLabelText}`}>{message}</span>
+        <button
+          type="button"
+          onClick={() => setDrawerOpen(o => !o)}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap flex-shrink-0 transition-colors ${toneButton}`}
+        >
+          Review Details
+        </button>
       </div>
 
-      <StrategyAlignmentDrawer
-        isOpen={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        alignment={alignment}
-        selectedStrategy={sa.selectedStrategy ?? ''}
-        recommendedStrategy={sa.recommendedStrategy}
-        secondaryStrategy={sa.secondaryStrategy}
-        alignmentMessage={sa.strategyAlignmentMessage}
-        componentScores={{
-          icpOpportunity: sa.icpOpportunityScore,
-          targetAccountOpportunity: sa.targetAccountOpportunityScore,
-          buyerAccess: sa.buyerAccessScore,
-          relationshipLeverage: sa.relationshipLeverageScore,
-          customerPresence: sa.customerPresenceScore,
-          pipelinePotential: sa.pipelinePotentialScore,
-          eventEconomicsFit: sa.eventEconomicsFitScore,
-        }}
-        scoreWithSelected={sa.scoreWithSelectedStrategy}
-        scoreWithRecommended={sa.scoreWithRecommendedStrategy}
-        leftOffsetPx={ALIGNMENT_ROW_COL1_WIDTH + ALIGNMENT_ROW_COL2_WIDTH}
+      {/* Desktop: in-flow accordion that pushes the rows below it down */}
+      <div
+        className="hidden sm:grid transition-[grid-template-rows] duration-300 ease-in-out"
+        style={{ gridTemplateRows: drawerOpen ? '1fr' : '0fr' }}
+      >
+        <div className="overflow-hidden min-h-0">
+          <StrategyAlignmentDrawer {...drawerProps} />
+        </div>
+      </div>
+
+      {/* Mobile: bottom sheet */}
+      <div
+        className={`sm:hidden fixed inset-0 z-[65] bg-black/30 transition-opacity duration-300 ease-in-out ${drawerOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={() => setDrawerOpen(false)}
       />
+      <div
+        className={`sm:hidden fixed inset-x-0 bottom-0 z-[66] max-h-[85vh] overflow-y-auto rounded-t-2xl shadow-2xl transition-transform duration-300 ease-in-out ${drawerOpen ? 'translate-y-0' : 'translate-y-full pointer-events-none'}`}
+      >
+        <StrategyAlignmentDrawer {...drawerProps} />
+      </div>
     </div>
   );
 }
 
 // ─── Full section ──────────────────────────────────────────────────────────────
 
-function StrategyAssessmentSection({ sa }: { sa: StrategyAssessment }) {
+function StrategyAssessmentSection({
+  sa,
+  conferenceId,
+  conferenceName,
+  onStrategyUpdated,
+}: {
+  sa: StrategyAssessment;
+  conferenceId: number;
+  conferenceName: string;
+  onStrategyUpdated: () => void;
+}) {
   return (
-    <div className="pb-2 border-b border-gray-100 mb-6">
+    <div className="pb-2 border-b border-gray-100 mb-6 space-y-4">
+      {/* Strategy alignment bar — full width, above the score row */}
+      <StrategyAlignmentRow sa={sa} conferenceId={conferenceId} conferenceName={conferenceName} onStrategyUpdated={onStrategyUpdated} />
+
       <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 items-stretch">
         {/* Score card — 2 cols */}
         <div className="lg:col-span-2 flex">
@@ -506,10 +561,6 @@ function StrategyAssessmentSection({ sa }: { sa: StrategyAssessment }) {
         {/* Actions panel — 2 cols */}
         <div className="lg:col-span-2">
           <ActionsPanel sa={sa} />
-        </div>
-        {/* Strategy alignment row — full width */}
-        <div className="lg:col-span-6">
-          <StrategyAlignmentRow sa={sa} />
         </div>
       </div>
     </div>
@@ -1356,9 +1407,11 @@ export function LandscapeTab({
   strategyAssessment,
   meetingAttendeeIds,
   conferenceId,
+  conferenceName,
   byRep,
   icpCompanies,
   relationships,
+  onStrategyUpdated,
 }: {
   data: LandscapeData;
   targetMap: Map<number, TargetEntry>;
@@ -1366,14 +1419,23 @@ export function LandscapeTab({
   strategyAssessment: StrategyAssessment | null;
   meetingAttendeeIds: Set<number>;
   conferenceId: number;
+  conferenceName: string;
   byRep: ByRepEntry[];
   icpCompanies: IcpCompany[];
   relationships: RelationshipRow[];
+  onStrategyUpdated: () => void;
 }) {
   return (
     <div className="space-y-8">
       {/* Strategy Assessment (above existing charts) */}
-      {strategyAssessment && <StrategyAssessmentSection sa={strategyAssessment} />}
+      {strategyAssessment && (
+        <StrategyAssessmentSection
+          sa={strategyAssessment}
+          conferenceId={conferenceId}
+          conferenceName={conferenceName}
+          onStrategyUpdated={onStrategyUpdated}
+        />
+      )}
 
       {/* 5-column layout: client | competitors | pipeline charts | relationship heatmap */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-stretch">

@@ -101,6 +101,7 @@ export interface StrategyAssessment {
   selectedStrategy: string | null;
   scoreWithSelectedStrategy: number;
   scoreWithRecommendedStrategy: number;
+  scoreWithSecondaryStrategy: number | null;
 
   primaryStrategy: string;
   primaryStrategyReasons: string[];
@@ -681,6 +682,17 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
     eventEconomicsFitScore * recommendedWeights.eventEconomicsFit,
   );
 
+  const secondaryWeights = secondaryStrategy ? (STRATEGY_WEIGHT_PROFILES[secondaryStrategy] ?? DEFAULT_WEIGHTS) : null;
+  const scoreWithSecondaryStrategy = secondaryWeights == null ? null : Math.round(
+    icpOpportunityScore * secondaryWeights.icpOpportunity +
+    targetAccountOpportunityScore * secondaryWeights.targetAccountOpportunity +
+    buyerAccessScore * secondaryWeights.buyerAccess +
+    relLeverageScore * secondaryWeights.relationshipLeverage +
+    customerPresenceScore * secondaryWeights.customerPresence +
+    pipelinePotentialScore * secondaryWeights.pipelinePotential +
+    eventEconomicsFitScore * secondaryWeights.eventEconomicsFit,
+  );
+
   const selectedNormalized = (input.conferenceStrategyType ?? '').trim().toLowerCase();
   const recommendedNormalized = recommendedStrategy.trim().toLowerCase();
 
@@ -776,6 +788,7 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
     selectedStrategy: input.conferenceStrategyType ?? null,
     scoreWithSelectedStrategy: strategyFitScore,
     scoreWithRecommendedStrategy,
+    scoreWithSecondaryStrategy,
     primaryStrategy,
     primaryStrategyReasons,
     secondaryStrategy,
