@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSectionConfig } from '@/lib/useSectionConfig';
+import { useConferenceReviewModals } from '@/lib/ConferenceReviewModalsContext';
+import { DraggableTabNav } from './DraggableTabNav';
 import { SummaryTab } from './post-conference/SummaryTab';
 import { ContactsCapturedTab } from './post-conference/ContactsCapturedTab';
 import { MeetingsTab } from './post-conference/MeetingsTab';
@@ -167,30 +169,65 @@ interface Props {
   conferenceName: string;
 }
 
+// Page-local trigger button — the heavy modal itself is mounted once at the app
+// root (see PostConferenceReviewModal) so it survives navigation while minimized.
 export function PostConferenceReview({ conferenceId, conferenceName }: Props) {
-  const [open, setOpen] = useState(false);
+  const { openPostConference } = useConferenceReviewModals();
+  return (
+    <button
+      type="button"
+      onClick={() => openPostConference(conferenceId, conferenceName)}
+      className="flex items-center gap-1 py-1 px-1 text-sm font-medium text-gray-500 hover:text-brand-accent transition-colors whitespace-nowrap cursor-pointer"
+    >
+      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12h4l2 -6l4 12l2 -6h6" />
+      </svg>
+      <span>Activity Debrief</span>
+    </button>
+  );
+}
+
+export function PostConferenceReviewModal() {
+  const { postConference: slot, minimizePostConference, closePostConference } = useConferenceReviewModals();
   const [data, setData] = useState<PostConferenceData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('summary');
   const [statsOpen, setStatsOpen] = useState(true);
+  const loadedForIdRef = useRef<number | null>(null);
 
   const tabConfig = useSectionConfig('post_conference_review');
   const visibleTabs = TAB_ORDER.filter(k => tabConfig.orderedKeys.includes(k) && tabConfig.isVisible(k));
 
-  const handleOpen = async () => {
+  const load = async (id: number) => {
+    if (loadedForIdRef.current !== id) {
+      setData(null);
+      setActiveTab('summary');
+    }
+    loadedForIdRef.current = id;
     setLoading(true);
+    setError(null);
     try {
-      const res = await fetch(`/api/conferences/${conferenceId}/post-conference`);
-      if (res.ok) {
-        const d = await res.json() as PostConferenceData;
-        setData(d);
-        setOpen(true);
-        setActiveTab(visibleTabs[0] ?? 'summary');
-      }
+      const res = await fetch(`/api/conferences/${id}/post-conference`);
+      if (!res.ok) throw new Error('Failed to load post-conference data.');
+      const d = await res.json() as PostConferenceData;
+      setData(d);
+    } catch {
+      setError('Failed to load post-conference data.');
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (slot.isOpen && slot.conferenceId != null && loadedForIdRef.current !== slot.conferenceId) {
+      load(slot.conferenceId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slot.isOpen, slot.conferenceId]);
+
+  const conferenceId = slot.conferenceId ?? 0;
+  const conferenceName = slot.conferenceName;
 
   const fuRate = data
     ? data.summary.followUpsCreated > 0
@@ -198,41 +235,56 @@ export function PostConferenceReview({ conferenceId, conferenceName }: Props) {
       : 0
     : 0;
 
-  // ── Trigger button ──────────────────────────────────────────────────────────
-  const triggerBtn = (
-    <button
-      type="button"
-      onClick={handleOpen}
-      className={`flex items-center gap-1 py-1 px-1 text-sm font-medium text-gray-500 hover:text-brand-accent transition-colors whitespace-nowrap ${loading ? 'cursor-wait' : 'cursor-pointer'}`}
-    >
-      {loading ? (
-        <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
+  if (!slot.isOpen) return null;
+
+  const handleClose = () => {
+    closePostConference();
+    setData(null);
+    setError(null);
+    loadedForIdRef.current = null;
+  };
+
+  if (loading && !data) {
+    if (slot.isMinimized) return null;
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <svg className="w-10 h-10 animate-spin text-brand-primary" fill="none" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
         </svg>
-      ) : (
-        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12h4l2 -6l4 12l2 -6h6" />
-        </svg>
-      )}
-      <span>Activity Debrief</span>
-    </button>
-  );
+      </div>
+    );
+  }
 
-  if (!open || !data) return triggerBtn;
+  if (error && !data) {
+    if (slot.isMinimized) return null;
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={handleClose}>
+        <div className="bg-white rounded-xl p-6 text-center" onClick={e => e.stopPropagation()}>
+          <p className="text-sm text-red-500 mb-3">{error}</p>
+          <button onClick={() => slot.conferenceId != null && load(slot.conferenceId)} className="btn-primary text-sm">Try again</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) return null;
 
   const effectiveTab = visibleTabs.includes(activeTab) ? activeTab : (visibleTabs[0] ?? 'summary');
+  const minimized = slot.isMinimized;
 
   return (
-    <>
-      {triggerBtn}
-
-      {/* Modal */}
-      <div className="fixed inset-0 z-50" style={{ animation: 'fadeUp 0.2s ease-out' }}>
-        <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
-        <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
-        <div className="absolute inset-0 sm:left-64 sm:flex sm:items-center sm:justify-center sm:p-5">
-          <div className="relative w-full h-full sm:h-[85vh] sm:max-w-[1440px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden">
+    <div className={`fixed inset-0 z-50 ${minimized ? 'pointer-events-none' : ''}`} style={{ animation: 'fadeUp 0.2s ease-out' }}>
+      <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+      <div
+        className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ease-in-out ${minimized ? 'opacity-0' : 'opacity-100'}`}
+        onClick={() => minimizePostConference()}
+      />
+      <div className="absolute inset-0 sm:left-64 sm:flex sm:items-center sm:justify-center sm:p-5">
+        <div
+          className={`relative w-full h-full sm:h-[85vh] sm:max-w-[1440px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden transition-all duration-300 ease-in-out origin-bottom-left
+            ${minimized ? 'opacity-0 scale-50 translate-y-[40vh] -translate-x-[20vw]' : 'opacity-100 scale-100 translate-y-0 translate-x-0'}`}
+        >
 
           {/* Header */}
           <div className="flex-shrink-0 px-6 py-4" style={{ backgroundColor: GREEN }}>
@@ -253,7 +305,12 @@ export function PostConferenceReview({ conferenceId, conferenceName }: Props) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
-                <button onClick={() => setOpen(false)} className="transition-colors" style={{ color: `${GREEN_DARK}aa` }}>
+                <button onClick={() => minimizePostConference()} className="transition-colors" style={{ color: `${GREEN_DARK}aa` }} title="Minimize">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14" />
+                  </svg>
+                </button>
+                <button onClick={handleClose} className="transition-colors" style={{ color: `${GREEN_DARK}aa` }} title="Close">
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
@@ -273,17 +330,17 @@ export function PostConferenceReview({ conferenceId, conferenceName }: Props) {
 
           {/* Tab nav */}
           <div className="border-b border-gray-200 bg-white overflow-x-auto flex-shrink-0">
-            <nav className="flex gap-0 px-4">
-              {visibleTabs.map(t => (
-                <button key={t} onClick={() => setActiveTab(t)}
-                  className="py-3 px-3 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-                  style={effectiveTab === t
-                    ? { borderColor: GREEN_ACTIVE, color: GREEN_ACTIVE }
-                    : { borderColor: 'transparent', color: '#6b7280' }}>
-                  {tabConfig.getLabel(t)}
-                </button>
-              ))}
-            </nav>
+            <DraggableTabNav
+              tabs={visibleTabs.map(t => ({ key: t, label: tabConfig.getLabel(t) }))}
+              activeKey={effectiveTab}
+              onSelect={key => setActiveTab(key)}
+              onReorder={tabConfig.reorderTabs}
+              renderTab={(t, isActive) => ({
+                style: isActive
+                  ? { borderColor: GREEN_ACTIVE, color: GREEN_ACTIVE }
+                  : { borderColor: 'transparent', color: '#6b7280' },
+              })}
+            />
           </div>
 
           {/* Tab content */}
@@ -297,9 +354,8 @@ export function PostConferenceReview({ conferenceId, conferenceName }: Props) {
             {effectiveTab === 'events_touchpoints' && <EventsTouchpointsTab socialEvents={data.socialEvents} touchpoints={data.touchpoints} />}
             {effectiveTab === 'action_items' && <ActionItemsTab actionItems={data.actionItems} />}
           </div>
-          </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

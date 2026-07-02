@@ -72,6 +72,16 @@ export interface StrategyAssessmentInput {
   tierConfig?: TierThresholdConfig;
 }
 
+export interface StrategyWeightProfile {
+  icpOpportunity: number;
+  targetAccountOpportunity: number;
+  buyerAccess: number;
+  relationshipLeverage: number;
+  customerPresence: number;
+  pipelinePotential: number;
+  eventEconomicsFit: number;
+}
+
 export interface StrategyAssessment {
   strategyFitScore: number;
   strategyFitInterpretation: string;
@@ -83,6 +93,11 @@ export interface StrategyAssessment {
   customerPresenceScore: number;
   pipelinePotentialScore: number;
   eventEconomicsFitScore: number;
+
+  appliedStrategyWeights: StrategyWeightProfile;
+  strategyAlignment: 'aligned' | 'partial' | 'misaligned' | 'unset';
+  strategyAlignmentMessage: string | null;
+  recommendedStrategy: string;
 
   primaryStrategy: string;
   primaryStrategyReasons: string[];
@@ -357,8 +372,95 @@ function recommendSecondaryStrategy(
   return best[0];
 }
 
+// Keys must match exact conference_strategy_type config_options values seeded in lib/db.ts
+const STRATEGY_WEIGHT_PROFILES: Record<string, StrategyWeightProfile> = {
+  'Pipeline Generation': {
+    icpOpportunity:           0.15,
+    targetAccountOpportunity: 0.25,
+    buyerAccess:              0.20,
+    relationshipLeverage:     0.10,
+    customerPresence:         0.05,
+    pipelinePotential:        0.20,
+    eventEconomicsFit:        0.05,
+  },
+  'Pipeline Acceleration': {
+    icpOpportunity:           0.10,
+    targetAccountOpportunity: 0.15,
+    buyerAccess:              0.25,
+    relationshipLeverage:     0.25,
+    customerPresence:         0.05,
+    pipelinePotential:        0.15,
+    eventEconomicsFit:        0.05,
+  },
+  'Customer Retention / Customer Nurture': {
+    icpOpportunity:           0.10,
+    targetAccountOpportunity: 0.05,
+    buyerAccess:              0.10,
+    relationshipLeverage:     0.25,
+    customerPresence:         0.40,
+    pipelinePotential:        0.05,
+    eventEconomicsFit:        0.05,
+  },
+  'Market Presence / Brand Visibility': {
+    icpOpportunity:           0.30,
+    targetAccountOpportunity: 0.10,
+    buyerAccess:              0.05,
+    relationshipLeverage:     0.10,
+    customerPresence:         0.15,
+    pipelinePotential:        0.10,
+    eventEconomicsFit:        0.20,
+  },
+  'Strategic Account Relationship Building': {
+    icpOpportunity:           0.10,
+    targetAccountOpportunity: 0.10,
+    buyerAccess:              0.10,
+    relationshipLeverage:     0.35,
+    customerPresence:         0.20,
+    pipelinePotential:        0.10,
+    eventEconomicsFit:        0.05,
+  },
+  'Partner / Ecosystem Development': {
+    icpOpportunity:           0.15,
+    targetAccountOpportunity: 0.05,
+    buyerAccess:              0.15,
+    relationshipLeverage:     0.35,
+    customerPresence:         0.20,
+    pipelinePotential:        0.05,
+    eventEconomicsFit:        0.05,
+  },
+  'Competitive Defense': {
+    icpOpportunity:           0.15,
+    targetAccountOpportunity: 0.10,
+    buyerAccess:              0.10,
+    relationshipLeverage:     0.25,
+    customerPresence:         0.30,
+    pipelinePotential:        0.05,
+    eventEconomicsFit:        0.05,
+  },
+  'Thought Leadership': {
+    icpOpportunity:           0.30,
+    targetAccountOpportunity: 0.15,
+    buyerAccess:              0.05,
+    relationshipLeverage:     0.10,
+    customerPresence:         0.15,
+    pipelinePotential:        0.05,
+    eventEconomicsFit:        0.20,
+  },
+};
+
+const DEFAULT_WEIGHTS: StrategyWeightProfile = {
+  icpOpportunity:           0.20,
+  targetAccountOpportunity: 0.20,
+  buyerAccess:              0.15,
+  relationshipLeverage:     0.15,
+  customerPresence:         0.10,
+  pipelinePotential:        0.15,
+  eventEconomicsFit:        0.05,
+};
+
 export async function computeStrategyAssessment(input: StrategyAssessmentInput): Promise<StrategyAssessment> {
   const { totalAttendees, totalCompanies, icpCount, clientCompanyCount } = input;
+  const weights = STRATEGY_WEIGHT_PROFILES[input.conferenceStrategyType ?? ''] ?? DEFAULT_WEIGHTS;
 
   const safeTotal = Math.max(totalCompanies, 1);
   const safeTotalAtt = Math.max(totalAttendees, 1);
@@ -536,15 +638,15 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
   const costScore = costPerICP > 0 ? Math.min(5000 / costPerICP, 1) * 100 : 50;
   const eventEconomicsFitScore = clamp(economicsCoverageScore * 0.5 + costScore * 0.5);
 
-  // Final weighted score
+  // Final weighted score — weights come from the conference's selected strategy profile
   const strategyFitScore = Math.round(
-    icpOpportunityScore * 0.20 +
-    targetAccountOpportunityScore * 0.20 +
-    buyerAccessScore * 0.15 +
-    relLeverageScore * 0.15 +
-    customerPresenceScore * 0.10 +
-    pipelinePotentialScore * 0.15 +
-    eventEconomicsFitScore * 0.05,
+    icpOpportunityScore * weights.icpOpportunity +
+    targetAccountOpportunityScore * weights.targetAccountOpportunity +
+    buyerAccessScore * weights.buyerAccess +
+    relLeverageScore * weights.relationshipLeverage +
+    customerPresenceScore * weights.customerPresence +
+    pipelinePotentialScore * weights.pipelinePotential +
+    eventEconomicsFitScore * weights.eventEconomicsFit,
   );
 
   // Strategy recommendations
@@ -559,6 +661,29 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
 
   const primaryStrategy = recommendStrategy(componentScores, input, mustProxy, highProxy);
   const secondaryStrategy = recommendSecondaryStrategy(primaryStrategy, componentScores, input, mustProxy, highProxy);
+
+  // Strategy alignment — does the conference's selected strategy match what the data recommends?
+  const recommendedStrategy = primaryStrategy;
+  const selectedNormalized = (input.conferenceStrategyType ?? '').trim().toLowerCase();
+  const recommendedNormalized = recommendedStrategy.trim().toLowerCase();
+
+  const strategyAlignment: 'aligned' | 'partial' | 'misaligned' | 'unset' =
+    !input.conferenceStrategyType
+      ? 'unset'
+      : selectedNormalized === recommendedNormalized
+      ? 'aligned'
+      : STRATEGY_WEIGHT_PROFILES[input.conferenceStrategyType]
+        ? 'partial'
+        : 'misaligned';
+
+  const strategyAlignmentMessage: string | null =
+    strategyAlignment === 'aligned'
+      ? null
+      : strategyAlignment === 'partial'
+      ? `Data suggests this conference fits better as ${recommendedStrategy}. Consider updating the strategy or adjusting expectations.`
+      : strategyAlignment === 'unset'
+      ? 'No strategy selected. Score uses default weights.'
+      : null;
 
   const primaryStrategyReasons = strategyReasons(primaryStrategy, input, mustProxy, highProxy, realisticPipelineGoal, pipelineCoverageRate);
   const secondaryStrategyReasons = secondaryStrategy
@@ -627,6 +752,10 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
     customerPresenceScore: Math.round(customerPresenceScore),
     pipelinePotentialScore: Math.round(pipelinePotentialScore),
     eventEconomicsFitScore: Math.round(eventEconomicsFitScore),
+    appliedStrategyWeights: weights,
+    strategyAlignment,
+    strategyAlignmentMessage,
+    recommendedStrategy,
     primaryStrategy,
     primaryStrategyReasons,
     secondaryStrategy,

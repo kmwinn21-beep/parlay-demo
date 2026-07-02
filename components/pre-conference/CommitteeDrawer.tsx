@@ -111,7 +111,7 @@ export function CommitteeDrawer({
   conferenceId,
   onTargeted,
 }: CommitteeDrawerProps) {
-  const { panelStyle, handleResizeStart } = useDrawerResize(480, 300, 900);
+  const { panelStyle, handleResizeStart } = useDrawerResize(900, 300, 900);
   const [targeting, setTargeting] = useState<Set<number>>(new Set());
   const [targetedCompanies, setTargetedCompanies] = useState<Set<number>>(new Set());
 

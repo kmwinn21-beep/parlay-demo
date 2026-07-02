@@ -23,6 +23,10 @@ import { MeetingNotesDrawerProvider, useMeetingNotesDrawer } from '@/lib/Meeting
 import { MeetingNotesDrawer } from '@/components/MeetingNotesDrawer';
 import { ClosedDealDraftProvider, useClosedDealDraft } from '@/lib/ClosedDealDraftContext';
 import { ClosedWonDealModal } from '@/components/ClosedWonDealModal';
+import { ConferenceReviewModalsProvider, useConferenceReviewModals } from '@/lib/ConferenceReviewModalsContext';
+import { PreConferenceReviewModal } from '@/components/PreConferenceReview';
+import { PostConferenceReviewModal } from '@/components/PostConferenceReview';
+import { ConferenceEffectivenessModalBody } from '@/components/ConferenceEffectivenessModal';
 
 function GlobalMeetingDrawer() {
   const { meetingId, closeMeetingNotes } = useMeetingNotesDrawer();
@@ -48,6 +52,52 @@ function GlobalClosedDealBar() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>
+    </div>
+  );
+}
+
+function GlobalReviewModalsBar() {
+  const {
+    preConference, expandPreConference, closePreConference,
+    postConference, expandPostConference, closePostConference,
+    effectiveness, expandEffectiveness, closeEffectiveness,
+  } = useConferenceReviewModals();
+
+  const pills = [
+    preConference.isOpen && preConference.isMinimized && {
+      key: 'pre-conference', label: preConference.conferenceName || 'Pre-Conference', expand: expandPreConference, close: closePreConference,
+    },
+    postConference.isOpen && postConference.isMinimized && {
+      key: 'post-conference', label: postConference.conferenceName || 'Activity Debrief', expand: expandPostConference, close: closePostConference,
+    },
+    effectiveness.isOpen && effectiveness.isMinimized && {
+      key: 'effectiveness', label: effectiveness.conferenceName || 'Effectiveness', expand: expandEffectiveness, close: closeEffectiveness,
+    },
+  ].filter((p): p is { key: string; label: string; expand: () => void; close: () => void } => Boolean(p));
+
+  if (pills.length === 0) return null;
+
+  return (
+    <div className="hidden lg:flex fixed bottom-0 left-64 ml-2 z-[60] flex-col-reverse gap-2 items-start">
+      {pills.map(p => (
+        <div
+          key={p.key}
+          className="flex items-center gap-2.5 px-4 py-2.5 bg-white border border-b-0 rounded-t-xl shadow-lg w-[220px] select-none"
+          style={{ borderColor: 'rgb(var(--brand-accent-rgb))' }}
+        >
+          <svg className="w-4 h-4 text-brand-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+          <button type="button" onClick={p.expand} className="text-sm font-medium text-gray-800 truncate hover:text-brand-primary transition-colors flex-1 text-left min-w-0">
+            {p.label}
+          </button>
+          <button type="button" onClick={p.close} className="text-gray-400 hover:text-red-500 transition-colors flex-shrink-0" title="Close">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      ))}
     </div>
   );
 }
@@ -106,6 +156,12 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       {/* Global closed deal modal — persists across page navigations */}
       <ClosedWonDealModal />
       <GlobalClosedDealBar />
+
+      {/* Global pre-conference / post-conference / effectiveness review modals — persist across page navigations */}
+      <PreConferenceReviewModal />
+      <PostConferenceReviewModal />
+      <ConferenceEffectivenessModalBody />
+      <GlobalReviewModalsBar />
     </>
   );
 }
@@ -135,9 +191,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <ActiveConferenceProvider>
       <MeetingNotesDrawerProvider>
       <ClosedDealDraftProvider>
+      <ConferenceReviewModalsProvider>
         <Suspense fallback={<AppShellInner>{children}</AppShellInner>}>
           <EmbedChecker>{children}</EmbedChecker>
         </Suspense>
+      </ConferenceReviewModalsProvider>
       </ClosedDealDraftProvider>
       </MeetingNotesDrawerProvider>
       </ActiveConferenceProvider>
