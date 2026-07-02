@@ -98,6 +98,7 @@ export interface StrategyAssessment {
   strategyAlignment: 'aligned' | 'partial' | 'misaligned' | 'unset';
   strategyAlignmentMessage: string | null;
   recommendedStrategy: string;
+  selectedStrategy: string | null;
 
   primaryStrategy: string;
   primaryStrategyReasons: string[];
@@ -756,6 +757,7 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
     strategyAlignment,
     strategyAlignmentMessage,
     recommendedStrategy,
+    selectedStrategy: input.conferenceStrategyType ?? null,
     primaryStrategy,
     primaryStrategyReasons,
     secondaryStrategy,

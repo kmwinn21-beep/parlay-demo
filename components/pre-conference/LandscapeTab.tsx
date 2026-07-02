@@ -69,6 +69,45 @@ function PipelineBarChart({ realistic, required }: { realistic: number; required
 
 // ─── Score Fit Card (mirrors Sales Effectiveness Score card) ───────────────────
 
+const STRATEGY_PILL_TONE_CLASSES: Record<'green' | 'gold' | 'red', string> = {
+  green: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  gold: 'bg-amber-50 text-amber-700 border border-amber-200',
+  red: 'bg-red-50 text-red-700 border border-red-200',
+};
+
+function normalizeStrategyLabel(v: string | null | undefined): string | null {
+  const t = (v ?? '').trim().toLowerCase();
+  return t.length > 0 ? t : null;
+}
+
+function SelectedStrategyPill({ sa }: { sa: StrategyAssessment }) {
+  if (!sa.selectedStrategy) return null;
+
+  const selected = normalizeStrategyLabel(sa.selectedStrategy);
+  const recommended = normalizeStrategyLabel(sa.recommendedStrategy);
+  const secondary = normalizeStrategyLabel(sa.secondaryStrategy);
+
+  const tone: 'green' | 'gold' | 'red' =
+    selected && recommended && selected === recommended ? 'green'
+    : selected && secondary && selected === secondary ? 'gold'
+    : 'red';
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${STRATEGY_PILL_TONE_CLASSES[tone]}`}>
+      {tone === 'red' ? (
+        <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+        </svg>
+      ) : (
+        <svg className="w-2 h-2 flex-shrink-0" viewBox="0 0 8 8" fill="currentColor">
+          <circle cx="4" cy="4" r="4" />
+        </svg>
+      )}
+      {sa.selectedStrategy}
+    </span>
+  );
+}
+
 function StrategyFitScoreCard({ sa }: { sa: StrategyAssessment }) {
   const color = scoreColor(sa.strategyFitScore);
   const components: [string, number, string][] = [
@@ -86,8 +125,11 @@ function StrategyFitScoreCard({ sa }: { sa: StrategyAssessment }) {
       className="rounded-xl p-4 flex flex-col w-full"
       style={{ backgroundColor: color + '15', borderLeft: `4px solid ${color}` }}
     >
-      <div className="text-xs font-bold uppercase tracking-wide text-gray-500">
-        Pre-Conf. Strategy Score
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs font-bold uppercase tracking-wide text-gray-500">
+          Pre-Conf. Strategy Score
+        </div>
+        <SelectedStrategyPill sa={sa} />
       </div>
       <div className="flex items-end gap-1 mt-1">
         <div className="text-4xl font-bold" style={{ color }}>{sa.strategyFitScore}</div>
