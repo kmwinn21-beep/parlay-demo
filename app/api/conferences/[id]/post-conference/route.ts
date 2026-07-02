@@ -778,12 +778,18 @@ export async function GET(
     });
   }
 
-  // Persist raw (uncapped) health scores back to attendees table
-  for (const row of contactRows) {
-    await db.execute({
+  // Persist raw (uncapped) health scores back to attendees table.
+  // Batched (chunks of 200) instead of one round-trip per attendee — with
+  // hundreds of attendees the sequential version could take many seconds
+  // on its own, regardless of how much meeting/follow-up activity exists.
+  if (contactRows.length > 0) {
+    const healthScoreStmts = contactRows.map(row => ({
       sql: `UPDATE attendees SET health_score = ? WHERE id = ?`,
       args: [row.healthScore, row.attendee_id],
-    });
+    }));
+    for (let i = 0; i < healthScoreStmts.length; i += 200) {
+      await db.batch(healthScoreStmts.slice(i, i + 200), 'write');
+    }
   }
 
   // ── Categorize contacts ────────────────────────────────────────────────────
@@ -1320,18 +1326,16 @@ export async function GET(
     const aid = c.attendee_id;
     const allConfs = allConfByAttendee.get(aid) ?? [confId];
     const priorConfs = allConfs.filter(cc => priorConfIds.has(cc));
-    const maps = buildAttMaps(aid, allConfs);
     const healthAfter = c.healthScore;
-    const healthBefore = priorConfs.length === 0 ? 0 : computeHealthScore({
-      attendeeConfs: allConfs,
-      detailsByConf: maps.detailsByConf,
-      meetingsByConf: maps.meetingsByConf,
-      followUpsByConf: maps.fusByConf,
-      noteCountByConf: maps.noteCountByConf,
-      socialByConf: maps.socialByConf,
-      actionKeyMap,
-      excludeConfId: confId,
-    });
+    // Reuse the value already computed in the main per-attendee loop above
+    // (same computeHealthScore call, same excludeConfId: confId) instead of
+    // rebuilding buildAttMaps() and recomputing it from scratch per attendee.
+    // Note: this also makes the number consistent with healthDelta shown in
+    // the main contacts list — the old recomputation here omitted the
+    // relationship floor that the main computation includes, so this fixes
+    // a pre-existing discrepancy between the two sections in addition to
+    // avoiding the redundant work.
+    const healthBefore = healthBeforeByAttendee.get(aid) ?? 0;
     const delta = healthAfter - healthBefore;
     let shiftReason = '';
     if (delta > 0) {
