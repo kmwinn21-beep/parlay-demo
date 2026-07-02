@@ -6,6 +6,7 @@ import { useRecordDrawer } from './RecordDrawerContext';
 import type { LandscapeData, TargetEntry, ClientCompanyEntry, ByRepEntry, IcpCompany, RelationshipRow } from '../PreConferenceReview';
 import type { StrategyAssessment } from '@/lib/strategyAssessment';
 import { useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
+import { StrategyAlignmentDrawer } from '../StrategyAlignmentDrawer';
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -375,6 +376,115 @@ function ActionsPanel({ sa }: { sa: StrategyAssessment }) {
   );
 }
 
+// ─── Strategy alignment row ─────────────────────────────────────────────────────
+
+// Fixed pixel widths for the label + score-dash columns — the drawer anchors its
+// left edge to the sum of these so it spans the "selected / recommended / secondary /
+// weight" columns without covering the label.
+const ALIGNMENT_ROW_COL1_WIDTH = 168;
+const ALIGNMENT_ROW_COL2_WIDTH = 32;
+
+const ALIGNMENT_PILL_TONE_CLASSES: Record<'amber' | 'red', string> = {
+  amber: 'bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200',
+  red: 'bg-red-100 text-red-800 border border-red-300 hover:bg-red-200',
+};
+
+function StrategyAlignmentRow({ sa }: { sa: StrategyAssessment }) {
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  if (sa.strategyAlignment === 'aligned') return null;
+
+  if (sa.strategyAlignment === 'unset') {
+    return (
+      <div className="flex items-center gap-3 rounded-xl px-4 py-3 bg-gray-50">
+        <div className="flex items-center gap-2 flex-shrink-0" style={{ width: ALIGNMENT_ROW_COL1_WIDTH }}>
+          <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          <span className="text-xs font-bold uppercase tracking-wide text-gray-400">Strategy alignment</span>
+        </div>
+        <span className="text-xs text-gray-400 flex-shrink-0" style={{ width: ALIGNMENT_ROW_COL2_WIDTH }}>—</span>
+        <span className="text-xs text-gray-400">No strategy selected</span>
+      </div>
+    );
+  }
+
+  const alignment = sa.strategyAlignment as 'partial' | 'misaligned';
+  const tone: 'amber' | 'red' = alignment === 'partial' ? 'amber' : 'red';
+  const toneRowBg = tone === 'amber' ? 'bg-amber-50' : 'bg-red-50';
+  const toneLabelText = tone === 'amber' ? 'text-amber-700' : 'text-red-700';
+  const toneIcon = tone === 'amber' ? 'text-amber-500' : 'text-red-500';
+
+  return (
+    <div className="relative" style={{ overflow: 'visible', zIndex: 10 }}>
+      <div className={`flex items-center gap-3 rounded-xl px-4 py-3 ${toneRowBg}`}>
+        {/* Col 1: label */}
+        <div className="flex items-center gap-2 flex-shrink-0" style={{ width: ALIGNMENT_ROW_COL1_WIDTH }}>
+          <svg className={`w-4 h-4 flex-shrink-0 ${toneIcon}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          <span className={`text-xs font-bold uppercase tracking-wide ${toneLabelText}`}>Strategy alignment</span>
+        </div>
+        {/* Col 2: score dash */}
+        <span className="text-xs text-gray-400 text-center flex-shrink-0" style={{ width: ALIGNMENT_ROW_COL2_WIDTH }}>—</span>
+        {/* Col 3: selected strategy pill (clickable) */}
+        <div className="flex-1 min-w-0">
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(true)}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap transition-colors ${ALIGNMENT_PILL_TONE_CLASSES[tone]}`}
+          >
+            <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+            {sa.selectedStrategy}
+          </button>
+        </div>
+        {/* Col 4: recommended strategy pill (read-only, green) */}
+        <div className="flex-1 min-w-0">
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap bg-emerald-50 text-emerald-700 border border-emerald-200">
+            {sa.recommendedStrategy}
+          </span>
+        </div>
+        {/* Col 5: secondary strategy pill (read-only, blue) */}
+        <div className="flex-1 min-w-0">
+          {sa.secondaryStrategy ? (
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap bg-blue-50 text-blue-700 border border-blue-200">
+              {sa.secondaryStrategy}
+            </span>
+          ) : (
+            <span className="text-xs text-gray-400">—</span>
+          )}
+        </div>
+        {/* Col 6: weight-applied dash */}
+        <span className="text-xs text-gray-400 text-center flex-shrink-0 w-10">—</span>
+      </div>
+
+      <StrategyAlignmentDrawer
+        isOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        alignment={alignment}
+        selectedStrategy={sa.selectedStrategy ?? ''}
+        recommendedStrategy={sa.recommendedStrategy}
+        secondaryStrategy={sa.secondaryStrategy}
+        alignmentMessage={sa.strategyAlignmentMessage}
+        componentScores={{
+          icpOpportunity: sa.icpOpportunityScore,
+          targetAccountOpportunity: sa.targetAccountOpportunityScore,
+          buyerAccess: sa.buyerAccessScore,
+          relationshipLeverage: sa.relationshipLeverageScore,
+          customerPresence: sa.customerPresenceScore,
+          pipelinePotential: sa.pipelinePotentialScore,
+          eventEconomicsFit: sa.eventEconomicsFitScore,
+        }}
+        scoreWithSelected={sa.scoreWithSelectedStrategy}
+        scoreWithRecommended={sa.scoreWithRecommendedStrategy}
+        leftOffsetPx={ALIGNMENT_ROW_COL1_WIDTH + ALIGNMENT_ROW_COL2_WIDTH}
+      />
+    </div>
+  );
+}
+
 // ─── Full section ──────────────────────────────────────────────────────────────
 
 function StrategyAssessmentSection({ sa }: { sa: StrategyAssessment }) {
@@ -396,6 +506,10 @@ function StrategyAssessmentSection({ sa }: { sa: StrategyAssessment }) {
         {/* Actions panel — 2 cols */}
         <div className="lg:col-span-2">
           <ActionsPanel sa={sa} />
+        </div>
+        {/* Strategy alignment row — full width */}
+        <div className="lg:col-span-6">
+          <StrategyAlignmentRow sa={sa} />
         </div>
       </div>
     </div>

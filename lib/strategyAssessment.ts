@@ -99,6 +99,8 @@ export interface StrategyAssessment {
   strategyAlignmentMessage: string | null;
   recommendedStrategy: string;
   selectedStrategy: string | null;
+  scoreWithSelectedStrategy: number;
+  scoreWithRecommendedStrategy: number;
 
   primaryStrategy: string;
   primaryStrategyReasons: string[];
@@ -374,7 +376,7 @@ function recommendSecondaryStrategy(
 }
 
 // Keys must match exact conference_strategy_type config_options values seeded in lib/db.ts
-const STRATEGY_WEIGHT_PROFILES: Record<string, StrategyWeightProfile> = {
+export const STRATEGY_WEIGHT_PROFILES: Record<string, StrategyWeightProfile> = {
   'Pipeline Generation': {
     icpOpportunity:           0.15,
     targetAccountOpportunity: 0.25,
@@ -449,7 +451,7 @@ const STRATEGY_WEIGHT_PROFILES: Record<string, StrategyWeightProfile> = {
   },
 };
 
-const DEFAULT_WEIGHTS: StrategyWeightProfile = {
+export const DEFAULT_WEIGHTS: StrategyWeightProfile = {
   icpOpportunity:           0.20,
   targetAccountOpportunity: 0.20,
   buyerAccess:              0.15,
@@ -665,6 +667,20 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
 
   // Strategy alignment — does the conference's selected strategy match what the data recommends?
   const recommendedStrategy = primaryStrategy;
+
+  // Re-score using the recommended strategy's weight profile, so the alignment drawer can
+  // show how much the score would shift if the conference were tagged with that strategy.
+  const recommendedWeights = STRATEGY_WEIGHT_PROFILES[recommendedStrategy] ?? DEFAULT_WEIGHTS;
+  const scoreWithRecommendedStrategy = Math.round(
+    icpOpportunityScore * recommendedWeights.icpOpportunity +
+    targetAccountOpportunityScore * recommendedWeights.targetAccountOpportunity +
+    buyerAccessScore * recommendedWeights.buyerAccess +
+    relLeverageScore * recommendedWeights.relationshipLeverage +
+    customerPresenceScore * recommendedWeights.customerPresence +
+    pipelinePotentialScore * recommendedWeights.pipelinePotential +
+    eventEconomicsFitScore * recommendedWeights.eventEconomicsFit,
+  );
+
   const selectedNormalized = (input.conferenceStrategyType ?? '').trim().toLowerCase();
   const recommendedNormalized = recommendedStrategy.trim().toLowerCase();
 
@@ -758,6 +774,8 @@ export async function computeStrategyAssessment(input: StrategyAssessmentInput):
     strategyAlignmentMessage,
     recommendedStrategy,
     selectedStrategy: input.conferenceStrategyType ?? null,
+    scoreWithSelectedStrategy: strategyFitScore,
+    scoreWithRecommendedStrategy,
     primaryStrategy,
     primaryStrategyReasons,
     secondaryStrategy,
