@@ -1,12 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SummaryTab } from './effectiveness/SummaryTab';
 import { SalesExecutionTab } from './effectiveness/SalesExecutionTab';
 import { AudienceMessagingTab } from './effectiveness/AudienceMessagingTab';
 import { OperationalROITab } from './effectiveness/OperationalROITab';
 import { DefinitionsTab } from './effectiveness/DefinitionsTab';
 import { useSectionConfig } from '@/lib/useSectionConfig';
+import { useConferenceReviewModals } from '@/lib/ConferenceReviewModalsContext';
+import { DraggableTabNav } from './DraggableTabNav';
 
 // ── Shared data types ─────────────────────────────────────────────────────────
 
@@ -107,29 +109,51 @@ interface Props {
 
 type TabKey = 'summary' | 'sales' | 'audience' | 'roi' | 'definitions';
 
+// Page-local trigger button — the heavy modal itself is mounted once at the app
+// root (see ConferenceEffectivenessModalBody) so it survives navigation while minimized.
 export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: Props) {
-  const [open, setOpen] = useState(false);
+  const { openEffectiveness } = useConferenceReviewModals();
+  return (
+    <button
+      type="button"
+      onClick={() => openEffectiveness(conferenceId, conferenceName)}
+      className="flex items-center gap-1 py-1 px-1 text-sm font-medium transition-colors whitespace-nowrap text-gray-500 hover:text-brand-secondary cursor-pointer"
+    >
+      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+      </svg>
+      <span>Effectiveness</span>
+    </button>
+  );
+}
+
+export function ConferenceEffectivenessModalBody() {
+  const { effectiveness: slot, minimizeEffectiveness, closeEffectiveness } = useConferenceReviewModals();
   const [data, setData] = useState<EffectivenessData | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>('summary');
   const [statsOpen, setStatsOpen] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { orderedKeys, isVisible, getLabel } = useSectionConfig('effectiveness_modal');
+  const loadedForIdRef = useRef<number | null>(null);
+  const { orderedKeys, isVisible, getLabel, reorderTabs } = useSectionConfig('effectiveness_modal');
 
   const visibleTabs = (orderedKeys.length > 0 ? orderedKeys : ['summary', 'sales', 'audience', 'roi', 'definitions'])
     .filter(key => isVisible(key))
     .map(key => ({ key: key as TabKey, label: getLabel(key) }));
 
-  const handleOpen = async () => {
+  const load = async (id: number) => {
+    if (loadedForIdRef.current !== id) {
+      setData(null);
+      setActiveTab('summary');
+    }
+    loadedForIdRef.current = id;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/conferences/${conferenceId}/effectiveness`);
+      const res = await fetch(`/api/conferences/${id}/effectiveness`);
       if (!res.ok) throw new Error('Failed to load effectiveness data');
       const d = await res.json() as EffectivenessData;
       setData(d);
-      setOpen(true);
-      setActiveTab((visibleTabs[0]?.key ?? 'summary') as TabKey);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -137,33 +161,49 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
     }
   };
 
-  const triggerBtn = (
-    <button
-      type="button"
-      onClick={handleOpen}
-      disabled={loading}
-      className="flex items-center gap-1 py-1 px-1 text-sm font-medium transition-colors whitespace-nowrap text-gray-500 hover:text-brand-secondary cursor-pointer disabled:opacity-50"
-    >
-      {loading ? (
-        <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
+  useEffect(() => {
+    if (slot.isOpen && slot.conferenceId != null && loadedForIdRef.current !== slot.conferenceId) {
+      load(slot.conferenceId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slot.isOpen, slot.conferenceId]);
+
+  const conferenceId = slot.conferenceId ?? 0;
+  const conferenceName = slot.conferenceName;
+
+  if (!slot.isOpen) return null;
+
+  const handleClose = () => {
+    closeEffectiveness();
+    setData(null);
+    loadedForIdRef.current = null;
+  };
+
+  if (slot.isMinimized) return null;
+
+  if (loading && !data) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <svg className="w-10 h-10 animate-spin text-brand-primary" fill="none" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
         </svg>
-      ) : (
-        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-        </svg>
-      )}
-      <span>Effectiveness</span>
-    </button>
-  );
+      </div>
+    );
+  }
 
-  if (!open || !data) return (
-    <>
-      {triggerBtn}
-      {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
-    </>
-  );
+  if (error && !data) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={handleClose}>
+        <div className="bg-white rounded-xl p-6 text-center" onClick={e => e.stopPropagation()}>
+          <p className="text-sm text-red-500 mb-3">{error}</p>
+          <button onClick={() => slot.conferenceId != null && load(slot.conferenceId)} className="btn-primary text-sm">Try again</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) return null;
 
   const conf = data.conference;
   const ces = data.ces;
@@ -178,14 +218,11 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
   const location = conf.location ? String(conf.location) : '';
 
   return (
-    <>
-      {triggerBtn}
-
-      <div className="fixed inset-0 z-50" style={{ animation: 'fadeUp 0.2s ease-out' }}>
-        <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
-        <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
-        <div className="absolute inset-0 sm:left-64 sm:flex sm:items-center sm:justify-center sm:p-5">
-          <div className="relative w-full h-full sm:h-[85vh] sm:max-w-[1440px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50" style={{ animation: 'fadeUp 0.2s ease-out' }}>
+      <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+      <div className="absolute inset-0 bg-black/40" onClick={() => minimizeEffectiveness()} />
+      <div className="absolute inset-0 sm:left-64 sm:flex sm:items-center sm:justify-center sm:p-5">
+        <div className="relative w-full h-full sm:h-[85vh] sm:max-w-[1440px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden">
 
           {/* Header */}
           <div className="flex-shrink-0 px-6 py-4" style={{ backgroundColor: HEADER_BG }}>
@@ -196,6 +233,7 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
                 {(dateRange || location) && (
                   <p className="text-xs mt-0.5 opacity-60" style={{ color: HEADER_TEXT }}>{[dateRange, location].filter(Boolean).join(' · ')}</p>
                 )}
+                <p className="text-xs mt-0.5 opacity-40 hidden sm:block" style={{ color: HEADER_TEXT }}>Click outside to minimize</p>
               </div>
               <div className="flex items-center gap-2 mt-1">
                 <button
@@ -208,7 +246,12 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
-                <button onClick={() => setOpen(false)} className="transition-colors opacity-60 hover:opacity-100" style={{ color: HEADER_TEXT }}>
+                <button onClick={() => minimizeEffectiveness()} className="transition-colors opacity-60 hover:opacity-100" style={{ color: HEADER_TEXT }} title="Minimize">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14" />
+                  </svg>
+                </button>
+                <button onClick={handleClose} className="transition-colors opacity-60 hover:opacity-100" style={{ color: HEADER_TEXT }} title="Close">
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
@@ -227,17 +270,17 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
 
           {/* Tab nav */}
           <div className="border-b border-gray-200 bg-white overflow-x-auto flex-shrink-0">
-            <nav className="flex gap-0 px-4">
-              {visibleTabs.map(t => (
-                <button key={t.key} onClick={() => setActiveTab(t.key)}
-                  className="py-3 px-3 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
-                  style={activeTab === t.key
-                    ? { borderColor: SECONDARY, color: SECONDARY }
-                    : { borderColor: 'transparent', color: '#6b7280' }}>
-                  {t.label}
-                </button>
-              ))}
-            </nav>
+            <DraggableTabNav
+              tabs={visibleTabs}
+              activeKey={activeTab}
+              onSelect={key => setActiveTab(key as TabKey)}
+              onReorder={reorderTabs}
+              renderTab={(t, isActive) => ({
+                style: isActive
+                  ? { borderColor: SECONDARY, color: SECONDARY }
+                  : { borderColor: 'transparent', color: '#6b7280' },
+              })}
+            />
           </div>
 
           {/* Tab content */}
@@ -248,9 +291,8 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
             {activeTab === 'roi'         && <OperationalROITab data={data} />}
             {activeTab === 'definitions' && <DefinitionsTab />}
           </div>
-          </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

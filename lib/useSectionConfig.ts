@@ -140,5 +140,39 @@ export function useSectionConfig(page: string) {
     return cfg.visible;
   };
 
-  return { getLabel, orderedKeys, isVisible };
+  // Reorders only the visible tabs (per newVisibleOrder), keeping hidden tabs pinned
+  // to their existing absolute slots, then persists the full order back to the admin
+  // section_config table so Admin → Section Management stays in sync.
+  const reorderTabs = async (newVisibleOrder: string[]) => {
+    const current = orderedKeys;
+    const visibleSlots = current.map((k, i) => (isVisible(k) ? i : -1)).filter(i => i !== -1);
+    if (visibleSlots.length !== newVisibleOrder.length) return;
+    const fullOrder = [...current];
+    visibleSlots.forEach((slotIdx, pos) => { fullOrder[slotIdx] = newVisibleOrder[pos]; });
+
+    const sections: SectionConfig[] = fullOrder.map((key, idx) => {
+      const existing = config.find(c => c.key === key);
+      return {
+        key,
+        label: existing?.label ?? defs.find(d => d.key === key)?.label ?? key,
+        sort_order: idx,
+        visible: existing ? existing.visible : true,
+      };
+    });
+
+    setConfig(sections);
+    _cache[page] = sections;
+
+    try {
+      await fetch('/api/admin/section-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ page, sections }),
+      });
+    } finally {
+      invalidateSectionConfig(page);
+    }
+  };
+
+  return { getLabel, orderedKeys, isVisible, reorderTabs };
 }
