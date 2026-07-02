@@ -110,6 +110,17 @@ export async function GET(
     const prospectTypeValue = prospectTypeRes.rows.length > 0 ? String(prospectTypeRes.rows[0].value ?? '') : '';
 
     const icpConfig = await getIcpConfig(db);
+
+    // Eligible company types = every type configured in the ICP Parameters "Company Types"
+    // rule, plus the legacy single "prospect"-flagged type for backward compatibility.
+    // Previously this only used the single flagged type, which silently excluded every
+    // company from Target Recommendations if their type wasn't that exact flagged value —
+    // even when that type was explicitly marked ICP-eligible via the ICP rule.
+    const companyTypeRule = icpConfig.rules.find(r => r.category === 'company_type');
+    const icpAllowedTypes = (companyTypeRule?.conditions ?? []).map(c => c.option_value).filter(Boolean);
+    const allowedCompanyTypes = Array.from(new Set(
+      [...icpAllowedTypes, prospectTypeValue].filter(Boolean).map(v => v.toLowerCase())
+    ));
     const weights = parseJson<TargetPriorityWeights>(settings.icp_target_priority_weights, { icp_fit: 40, buyer_access: 30, relationship_leverage: 20, conference_opportunity: 10 });
 
     // Build tier config from saved settings; only use it when at least one operator is explicitly saved
@@ -154,7 +165,7 @@ export async function GET(
     const batchMode = request.nextUrl.searchParams.get('batch') === '1' || requestedLimit > 0;
     const batchLimit = batchMode ? Math.max(1, Math.min(50, requestedLimit || 25)) : Number.MAX_SAFE_INTEGER;
 
-    if (!prospectTypeIdValue) {
+    if (allowedCompanyTypes.length === 0) {
       return NextResponse.json({
         conference_id: conferenceId,
         generated_at: new Date().toISOString(),
@@ -162,7 +173,7 @@ export async function GET(
           target_priority_weights: config.target_priority_weights,
           tier_thresholds: config.tier_thresholds,
           recommended_actions: config.recommended_actions,
-          target_company_type_id: null,
+          target_company_type_id: prospectTypeId,
         },
         companies: [],
         pagination: {
@@ -173,10 +184,11 @@ export async function GET(
           has_more: false,
           next_offset: null,
         },
-        unavailable_reason: 'Prospect company type is not configured.',
+        unavailable_reason: 'No company types are configured as ICP-eligible. Add company types under ICP Parameters → Company Types, or set a Prospect company type.',
       });
     }
 
+    const typeOrClause = allowedCompanyTypes.map(() => 'LOWER(c.company_type) = ?').join(' OR ');
     const attendeesRes = await db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority, a.company_id,
                    c.name as company_name, c.company_type, c.services, c.status, c.icp, c.wse, c.assigned_user
@@ -184,9 +196,11 @@ export async function GET(
             JOIN attendees a ON a.id = ca.attendee_id
             JOIN companies c ON c.id = a.company_id
             WHERE ca.conference_id = ?
-              AND (c.company_type = ? OR LOWER(c.company_type) = LOWER(?))
+              AND (${typeOrClause}${prospectTypeIdValue ? ' OR c.company_type = ?' : ''})
             ORDER BY c.name, a.last_name, a.first_name`,
-      args: [conferenceId, prospectTypeIdValue, prospectTypeValue],
+      args: prospectTypeIdValue
+        ? [conferenceId, ...allowedCompanyTypes, prospectTypeIdValue]
+        : [conferenceId, ...allowedCompanyTypes],
     });
 
     const rawCompanyMap = new Map<number, { company: TargetingCompanyInput; attendeeRows: Row[] }>();
