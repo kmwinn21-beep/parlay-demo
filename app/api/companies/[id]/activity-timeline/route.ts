@@ -106,35 +106,37 @@ export async function GET(
       args: [companyId],
     });
 
-    // Step 7 — First contact per attendee: earliest conference by start_date via conference_attendees
-    const attendeeIds = attendeesResult.rows.map(r => Number(r.id));
-    let firstContacts: Array<{ attendeeId: number; conferenceId: number }> = [];
+    // Step 7 — First contact per attendee: earliest conference (by start_date) where the
+    // attendee has at least one logged meeting, follow-up, or touchpoint. Being merely
+    // registered/attending (conference_attendees) does NOT qualify — a first-contact star
+    // must correspond to real logged engagement.
+    const confStartDateById = new Map<number, string>();
+    for (const r of confsResult.rows) confStartDateById.set(Number(r.id), String(r.start_date ?? ''));
 
-    if (attendeeIds.length > 0) {
-      const placeholders = attendeeIds.map(() => '?').join(',');
-      const firstContactResult = await db.execute({
-        sql: `SELECT ca.attendee_id, ca.conference_id
-              FROM conference_attendees ca
-              JOIN conferences c ON c.id = ca.conference_id
-              WHERE ca.attendee_id IN (${placeholders})
-                AND c.start_date = (
-                  SELECT MIN(c2.start_date)
-                  FROM conference_attendees ca2
-                  JOIN conferences c2 ON c2.id = ca2.conference_id
-                  WHERE ca2.attendee_id = ca.attendee_id
-                )`,
-        args: attendeeIds,
-      });
+    const engagedConfsByAttendee = new Map<number, Set<number>>();
+    const addEngagement = (attendeeId: number, conferenceId: number) => {
+      if (!engagedConfsByAttendee.has(attendeeId)) engagedConfsByAttendee.set(attendeeId, new Set());
+      engagedConfsByAttendee.get(attendeeId)!.add(conferenceId);
+    };
+    for (const r of meetingsResult.rows) addEngagement(Number(r.attendee_id), Number(r.conference_id));
+    for (const r of followUpsResult.rows) addEngagement(Number(r.attendee_id), Number(r.conference_id));
+    for (const r of touchpointsResult.rows) addEngagement(Number(r.attendee_id), Number(r.conference_id));
 
-      // Deduplicate — keep one first contact per attendee (earliest conference)
-      const seen = new Set<number>();
-      firstContacts = firstContactResult.rows
-        .map(r => ({ attendeeId: Number(r.attendee_id), conferenceId: Number(r.conference_id) }))
-        .filter(r => {
-          if (seen.has(r.attendeeId)) return false;
-          seen.add(r.attendeeId);
-          return true;
-        });
+    const firstContacts: Array<{ attendeeId: number; conferenceId: number }> = [];
+    for (const [attendeeId, confIds] of Array.from(engagedConfsByAttendee.entries())) {
+      let earliestConfId: number | null = null;
+      let earliestDate: string | null = null;
+      for (const cid of Array.from(confIds)) {
+        const startDate = confStartDateById.get(cid);
+        if (!startDate) continue;
+        if (earliestDate === null || startDate < earliestDate) {
+          earliestDate = startDate;
+          earliestConfId = cid;
+        }
+      }
+      if (earliestConfId != null) {
+        firstContacts.push({ attendeeId, conferenceId: earliestConfId });
+      }
     }
 
     // Step 7b — Avg health score per conference: SQL AVG over all company attendees present at each conference
