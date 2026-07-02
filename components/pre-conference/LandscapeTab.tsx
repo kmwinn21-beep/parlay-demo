@@ -973,7 +973,7 @@ function RelationshipHeatmapPanel({
   };
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden flex flex-col h-full">
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden flex flex-col h-full min-h-[420px]">
       {/* Toggle header */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50 flex-shrink-0">
         <button
@@ -1219,7 +1219,7 @@ export function LandscapeTab({
       {/* Strategy Assessment (above existing charts) */}
       {strategyAssessment && <StrategyAssessmentSection sa={strategyAssessment} />}
 
-      {/* 5-column layout: client | pipeline charts | relationship heatmap | competitors */}
+      {/* 5-column layout: client | competitors | pipeline charts | relationship heatmap */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-stretch">
         {/* Col 1: Client Attendees */}
         <CompanyPanel
@@ -1229,7 +1229,15 @@ export function LandscapeTab({
           emptyText="No client companies attending"
         />
 
-        {/* Col 2: Pipeline Charts */}
+        {/* Col 2: Competitors Attending */}
+        <CompanyPanel
+          title="Competitors Attending"
+          companies={data.competitorCompanies}
+          accentColor={data.competitorColor}
+          emptyText="No competitor companies attending"
+        />
+
+        {/* Col 3: Pipeline Charts */}
         <div className="md:col-span-1">
           <PipelineChartsPanel
             conferenceId={conferenceId}
@@ -1238,7 +1246,7 @@ export function LandscapeTab({
           />
         </div>
 
-        {/* Cols 3-4: Relationship Heatmap */}
+        {/* Cols 4-5: Relationship Heatmap */}
         <div className="md:col-span-2 h-full">
           <RelationshipHeatmapPanel
             byRep={byRep}
@@ -1247,14 +1255,6 @@ export function LandscapeTab({
             relationships={relationships}
           />
         </div>
-
-        {/* Col 5: Competitors Attending */}
-        <CompanyPanel
-          title="Competitors Attending"
-          companies={data.competitorCompanies}
-          accentColor={data.competitorColor}
-          emptyText="No competitor companies attending"
-        />
       </div>
     </div>
   );
