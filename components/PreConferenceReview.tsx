@@ -433,22 +433,27 @@ export function PreConferenceReviewModal() {
     loadedForIdRef.current = null;
   };
 
-  if (slot.isMinimized) return null;
+  const minimized = slot.isMinimized;
 
   return (
     <RecordDrawerCtx.Provider value={openRecord}>
-      <div className="fixed inset-0 z-50" style={{ animation: 'fadeUp 0.2s ease-out' }}>
+      <div className={`fixed inset-0 z-50 ${minimized ? 'pointer-events-none' : ''}`} style={{ animation: 'fadeUp 0.2s ease-out' }}>
         <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
-        <div className="absolute inset-0 bg-black/40" onClick={() => { minimizePreConference(); closeRecord(); }} />
+        <div
+          className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ease-in-out ${minimized ? 'opacity-0' : 'opacity-100'}`}
+          onClick={() => { minimizePreConference(); closeRecord(); }}
+        />
         <div className="absolute inset-0 sm:left-64 sm:flex sm:items-center sm:justify-center sm:p-5">
-          <div className="relative w-full h-full sm:h-[85vh] sm:max-w-[1440px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden">
+          <div
+            className={`relative w-full h-full sm:h-[85vh] sm:max-w-[1440px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden transition-all duration-300 ease-in-out origin-bottom-left
+              ${minimized ? 'opacity-0 scale-50 translate-y-[40vh] -translate-x-[20vw]' : 'opacity-100 scale-100 translate-y-0 translate-x-0'}`}
+          >
             {/* Panel header */}
             <div className="bg-brand-primary px-6 py-4 flex-shrink-0">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-xs text-white/60 uppercase tracking-widest font-semibold mb-0.5">Pre-Conference Review</p>
                   <h2 className="text-lg font-bold text-white leading-tight">{conferenceName}</h2>
-                  <p className="text-xs text-white/40 mt-0.5 hidden sm:block">Click outside to minimize</p>
                 </div>
                 <div className="flex items-center gap-2 mt-1">
                   <button

@@ -179,9 +179,8 @@ export function ConferenceEffectivenessModalBody() {
     loadedForIdRef.current = null;
   };
 
-  if (slot.isMinimized) return null;
-
   if (loading && !data) {
+    if (slot.isMinimized) return null;
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
         <svg className="w-10 h-10 animate-spin text-brand-primary" fill="none" viewBox="0 0 24 24">
@@ -193,6 +192,7 @@ export function ConferenceEffectivenessModalBody() {
   }
 
   if (error && !data) {
+    if (slot.isMinimized) return null;
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={handleClose}>
         <div className="bg-white rounded-xl p-6 text-center" onClick={e => e.stopPropagation()}>
@@ -205,6 +205,7 @@ export function ConferenceEffectivenessModalBody() {
 
   if (!data) return null;
 
+  const minimized = slot.isMinimized;
   const conf = data.conference;
   const ces = data.ces;
   const pi = Number(data.pipeline.total_pipeline_influence ?? 0);
@@ -218,11 +219,17 @@ export function ConferenceEffectivenessModalBody() {
   const location = conf.location ? String(conf.location) : '';
 
   return (
-    <div className="fixed inset-0 z-50" style={{ animation: 'fadeUp 0.2s ease-out' }}>
+    <div className={`fixed inset-0 z-50 ${minimized ? 'pointer-events-none' : ''}`} style={{ animation: 'fadeUp 0.2s ease-out' }}>
       <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
-      <div className="absolute inset-0 bg-black/40" onClick={() => minimizeEffectiveness()} />
+      <div
+        className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ease-in-out ${minimized ? 'opacity-0' : 'opacity-100'}`}
+        onClick={() => minimizeEffectiveness()}
+      />
       <div className="absolute inset-0 sm:left-64 sm:flex sm:items-center sm:justify-center sm:p-5">
-        <div className="relative w-full h-full sm:h-[85vh] sm:max-w-[1440px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden">
+        <div
+          className={`relative w-full h-full sm:h-[85vh] sm:max-w-[1440px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden transition-all duration-300 ease-in-out origin-bottom-left
+            ${minimized ? 'opacity-0 scale-50 translate-y-[40vh] -translate-x-[20vw]' : 'opacity-100 scale-100 translate-y-0 translate-x-0'}`}
+        >
 
           {/* Header */}
           <div className="flex-shrink-0 px-6 py-4" style={{ backgroundColor: HEADER_BG }}>
@@ -233,7 +240,6 @@ export function ConferenceEffectivenessModalBody() {
                 {(dateRange || location) && (
                   <p className="text-xs mt-0.5 opacity-60" style={{ color: HEADER_TEXT }}>{[dateRange, location].filter(Boolean).join(' · ')}</p>
                 )}
-                <p className="text-xs mt-0.5 opacity-40 hidden sm:block" style={{ color: HEADER_TEXT }}>Click outside to minimize</p>
               </div>
               <div className="flex items-center gap-2 mt-1">
                 <button
