@@ -87,7 +87,7 @@ function StrategyFitScoreCard({ sa }: { sa: StrategyAssessment }) {
       style={{ backgroundColor: color + '15', borderLeft: `4px solid ${color}` }}
     >
       <div className="text-xs font-bold uppercase tracking-wide text-gray-500">
-        Pre-Conference Strategy Score
+        Pre-Conf. Strategy Score
       </div>
       <div className="flex items-end gap-1 mt-1">
         <div className="text-4xl font-bold" style={{ color }}>{sa.strategyFitScore}</div>
@@ -536,8 +536,8 @@ function PipelineChartsPanel({
   const avgCostPerUnit = useAvgCostPerUnit();
   const [meetingsConvPct, setMeetingsConvPct] = useState(60);
   const [requiredPipeline, setRequiredPipeline] = useState<number | null>(null);
-  const [pipelineOpen, setPipelineOpen] = useState(false);
-  const [meetingPipelineOpen, setMeetingPipelineOpen] = useState(false);
+  const [pipelineOpen, setPipelineOpen] = useState(true);
+  const [meetingPipelineOpen, setMeetingPipelineOpen] = useState(true);
 
   // Fixed conversion rate matching ConferenceTargetsTab default — not user-adjustable here
   const conversionPct = 60;
@@ -605,10 +605,10 @@ function PipelineChartsPanel({
   const hasMeetingValues = avgCostPerUnit > 0 && meetingCompanyBestTier.size > 0;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 h-full">
       {/* Targeted Pipeline Value */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <button type="button" onClick={() => setPipelineOpen(o => !o)} className="flex items-center justify-between w-full mb-3">
+      <div className="rounded-xl border border-gray-200 bg-white p-4 flex-1 flex flex-col overflow-y-auto">
+        <button type="button" onClick={() => setPipelineOpen(o => !o)} className="flex items-center justify-between w-full mb-3 flex-shrink-0">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">Targeted Pipeline Value</p>
           <svg className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${pipelineOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
         </button>
@@ -647,8 +647,8 @@ function PipelineChartsPanel({
               {TIER_DATA.map(tier => {
                 const val = tierValueSum[tier.key] ?? 0;
                 return (
-                  <div key={tier.key} className="flex items-center gap-2">
-                    <span className="text-xs text-gray-600 w-24 flex-shrink-0 truncate">{tier.label}</span>
+                  <div key={tier.key} className="flex items-start gap-2">
+                    <span className="text-xs text-gray-600 w-24 flex-shrink-0 leading-tight">{tier.label}</span>
                     <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
                       <div
                         className="h-2 rounded-full"
@@ -672,8 +672,8 @@ function PipelineChartsPanel({
       </div>
 
       {/* Meetings Pipeline Value */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <button type="button" onClick={() => setMeetingPipelineOpen(o => !o)} className="flex items-center justify-between w-full mb-3">
+      <div className="rounded-xl border border-gray-200 bg-white p-4 flex-1 flex flex-col overflow-y-auto">
+        <button type="button" onClick={() => setMeetingPipelineOpen(o => !o)} className="flex items-center justify-between w-full mb-3 flex-shrink-0">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">Meetings Pipeline</p>
           <svg className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${meetingPipelineOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
         </button>
@@ -712,8 +712,8 @@ function PipelineChartsPanel({
               {TIER_DATA.map(tier => {
                 const val = meetingTierValueSum[tier.key] ?? 0;
                 return (
-                  <div key={tier.key} className="flex items-center gap-2">
-                    <span className="text-xs text-gray-600 w-24 flex-shrink-0 truncate">{tier.label}</span>
+                  <div key={tier.key} className="flex items-start gap-2">
+                    <span className="text-xs text-gray-600 w-24 flex-shrink-0 leading-tight">{tier.label}</span>
                     <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
                       <div
                         className="h-2 rounded-full"
@@ -1238,7 +1238,7 @@ export function LandscapeTab({
         />
 
         {/* Col 3: Pipeline Charts */}
-        <div className="md:col-span-1">
+        <div className="md:col-span-1 h-full">
           <PipelineChartsPanel
             conferenceId={conferenceId}
             targetMap={targetMap}
