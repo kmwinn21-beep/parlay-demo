@@ -99,15 +99,9 @@ export function StrategyAlignmentDrawer({
 
   return (
     <div className={`bg-white shadow-lg overflow-hidden ${toneTopBorder}`}>
-      {/* Section 1 — Header */}
-      <div className={`flex items-center justify-between gap-3 px-4 py-3 ${toneBg}`}>
-        <div className={`flex items-center gap-2 text-sm font-semibold ${toneText}`}>
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-          </svg>
-          {alignment === 'partial' ? 'Partial strategy alignment' : 'Strategy misaligned'}
-        </div>
-        <button type="button" onClick={onClose} className={`${toneText} hover:opacity-70 transition-opacity flex-shrink-0`} aria-label="Close">
+      {/* Section 1 — Header (close only) */}
+      <div className="flex items-center justify-end px-4 py-2">
+        <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0" aria-label="Close">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -166,14 +160,14 @@ export function StrategyAlignmentDrawer({
             <div className="flex items-center justify-between text-xs gap-2">
               <span className="text-gray-500 flex items-center gap-1.5 min-w-0">
                 <span className="truncate">Score with {selectedStrategy} weights</span>
-                <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-red-100 text-red-700">Selected Strategy</span>
+                <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-red-100 text-red-700">Selected</span>
               </span>
               <span className={`font-semibold flex-shrink-0 ${selectedColor}`}>{scoreWithSelected}</span>
             </div>
             <div className="flex items-center justify-between text-xs gap-2">
               <span className="text-gray-500 flex items-center gap-1.5 min-w-0">
                 <span className="truncate">Score with {recommendedStrategy} weights</span>
-                <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-100 text-emerald-700">Recommended Strategy</span>
+                <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-100 text-emerald-700">Recommended</span>
               </span>
               <span className={`font-semibold flex-shrink-0 ${recommendedColor}`}>{scoreWithRecommended}</span>
             </div>
@@ -181,7 +175,7 @@ export function StrategyAlignmentDrawer({
               <div className="flex items-center justify-between text-xs gap-2">
                 <span className="text-gray-500 flex items-center gap-1.5 min-w-0">
                   <span className="truncate">Score with {secondaryStrategy} weights</span>
-                  <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-amber-100 text-amber-700">Secondary Strategy</span>
+                  <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-amber-100 text-amber-700">Secondary</span>
                 </span>
                 <span className={`font-semibold flex-shrink-0 ${secondaryColor}`}>{scoreWithSecondary}</span>
               </div>
