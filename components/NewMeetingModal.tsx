@@ -439,11 +439,11 @@ export function NewMeetingModal({
       }
       const created = await res.json();
       toast.success('Meeting scheduled successfully!');
-      if (onSuccess) {
+      {
         const contact = contacts.find(a => a.id === Number(selectedAttendeeId));
         const conf = conferences.find(c => c.id === Number(selectedConferenceId));
         const company = companies.find(c => c.id === Number(selectedCompanyId));
-        onSuccess({
+        const meeting: Meeting = {
           id: Number(created.id),
           attendee_id: Number(selectedAttendeeId),
           conference_id: Number(selectedConferenceId),
@@ -462,7 +462,12 @@ export function NewMeetingModal({
           company_name: company?.name || null,
           company_wse: null,
           conference_name: conf?.name || '',
-        });
+        };
+        onSuccess?.(meeting);
+        // Broadcast so any Meetings tab/list elsewhere on the page (which may not have a
+        // direct prop connection to this modal, e.g. a globally-mounted drawer) can also
+        // optimistically insert this meeting instead of requiring a reload.
+        window.dispatchEvent(new CustomEvent('meeting-scheduled', { detail: meeting }));
       }
       handleClose();
     } catch (err: unknown) {

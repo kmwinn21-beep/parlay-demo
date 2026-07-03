@@ -14,6 +14,7 @@ import { RelationshipsTab } from './pre-conference/RelationshipsTab';
 import { ConferenceTargetsTab } from './pre-conference/ConferenceTargetsTab';
 import { TargetRecommendationsTab } from './pre-conference/TargetRecommendationsTab';
 import { ProductIcpTab } from './pre-conference/ProductIcpTab';
+import { type Meeting } from './MeetingsTable';
 export type { StrategyAssessment } from '@/lib/strategyAssessment';
 
 export interface PreConferenceSummary {
@@ -424,6 +425,36 @@ export function PreConferenceReviewModal() {
     [data?.meetings]
   );
 
+  // Optimistically reflect a meeting scheduled from Conference Targets (or anywhere else
+  // NewMeetingModal is used within this conference) in this modal's own Meetings tab too,
+  // instead of requiring a reload.
+  const handleMeetingScheduled = useCallback((meeting: Meeting) => {
+    if (meeting.conference_id !== conferenceId) return;
+    setData(prev => {
+      if (!prev) return prev;
+      if (prev.meetings.some(m => m.id === meeting.id)) return prev;
+      return {
+        ...prev,
+        meetings: [{
+          id: meeting.id,
+          attendee_id: meeting.attendee_id,
+          meeting_date: meeting.meeting_date,
+          meeting_time: meeting.meeting_time,
+          location: meeting.location,
+          scheduled_by: meeting.scheduled_by,
+          outcome: meeting.outcome,
+          meeting_type: meeting.meeting_type,
+          first_name: meeting.first_name,
+          last_name: meeting.last_name,
+          title: meeting.title,
+          company_name: meeting.company_name,
+          company_id: meeting.company_id,
+          hasConflict: false,
+        }, ...prev.meetings],
+      };
+    });
+  }, [conferenceId]);
+
   if (!slot.isOpen) return null;
 
   const handleClose = () => {
@@ -580,6 +611,7 @@ export function PreConferenceReviewModal() {
                   onToggleTarget={toggleTarget}
                   onSetTier={setTargetTier}
                   readOnly={targetsReadOnly}
+                  onMeetingScheduled={handleMeetingScheduled}
                 />
               )}
               {activeTab === 'target_recommendations' && (

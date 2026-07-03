@@ -323,6 +323,21 @@ export default function ConferenceDetailPage() {
   const [confPinnedNotes, setConfPinnedNotes] = useState<PinnedNote[]>([]);
   const [confMeetings, setConfMeetings] = useState<Meeting[]>([]);
   const meetingAttendeeIds = useMemo(() => new Set(confMeetings.map(m => m.attendee_id)), [confMeetings]);
+
+  // Optimistically insert a newly-scheduled meeting into this tab's list. Idempotent (checks
+  // for an existing id) since both the local NewMeetingModal onSuccess and the global
+  // 'meeting-scheduled' broadcast (fired by every NewMeetingModal instance, including ones
+  // in other tabs/modals like Conference Targets) can both fire for the same meeting.
+  const addMeetingOptimistically = useCallback((meeting: Meeting) => {
+    if (meeting.conference_id !== conference?.id) return;
+    setConfMeetings(prev => prev.some(m => m.id === meeting.id) ? prev : [meeting, ...prev]);
+  }, [conference?.id]);
+
+  useEffect(() => {
+    const handler = (e: Event) => addMeetingOptimistically((e as CustomEvent<Meeting>).detail);
+    window.addEventListener('meeting-scheduled', handler);
+    return () => window.removeEventListener('meeting-scheduled', handler);
+  }, [addMeetingOptimistically]);
   const [confSocialEvents, setConfSocialEvents] = useState<SocialEvent[]>([]);
   const [actionOptions, setActionOptions] = useState<string[]>([]);
   const [actionConfigs, setActionConfigs] = useState<{ id: number; value: string; action_key: string | null }[]>([]);
@@ -3292,7 +3307,7 @@ export default function ConferenceDetailPage() {
         onClose={() => setNewMeetingOpen(false)}
         availableConferences={conference ? [{ id: conference.id, name: conference.name, start_date: conference.start_date, end_date: conference.end_date }] : []}
         defaultConferenceId={conference?.id}
-        onSuccess={m => setConfMeetings(prev => [m, ...prev])}
+        onSuccess={addMeetingOptimistically}
       />
 
       {activeTab === 'follow-ups' && (
