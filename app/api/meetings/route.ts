@@ -119,9 +119,11 @@ export async function POST(request: NextRequest) {
     const stageBlock = await validateConferenceStage(request, Number(conference_id), 'canLogMeeting');
     if (stageBlock) return stageBlock;
 
-    // Look up the current display name for "Meeting Scheduled" by action_key
+    // Look up the current display name for "Meeting Scheduled" by action_key.
+    // ORDER BY id is a safety net against duplicate action_key rows (see lib/db.ts
+    // action_key backfill) — always prefer the lowest/original row deterministically.
     const meetingScheduledConfig = await db.execute({
-      sql: "SELECT value FROM config_options WHERE category = 'action' AND action_key = 'meeting_scheduled' LIMIT 1",
+      sql: "SELECT value FROM config_options WHERE category = 'action' AND action_key = 'meeting_scheduled' ORDER BY id LIMIT 1",
       args: [],
     });
     const meetingScheduledName = meetingScheduledConfig.rows.length > 0

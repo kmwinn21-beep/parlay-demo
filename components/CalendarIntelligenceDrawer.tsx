@@ -42,117 +42,154 @@ const TIER_PILL_CLASSES: Record<string, string> = {
   do_not_prioritize:          'bg-red-50 text-red-600 border-red-100',
 };
 
+const STRATEGY_SPARKLE_PATH = 'M10 2L12.4 7.2L18 8.1L14 12L15 17.6L10 15L5 17.6L6 12L2 8.1L7.6 7.2L10 2Z';
+
+function strategyBarColor(score: number): string {
+  if (score >= 70) return '#059669';
+  if (score >= 50) return '#d97706';
+  return '#dc2626';
+}
+
 // Builds the same component cards as ScoreDrawerContent in the Cal Intel page
 function ScoreComponentCards({ row }: { row: CalendarConferenceRow }) {
   const cs = row.componentScores;
+  const cd = row.componentDetails;
   const d = row.diagnostics ?? {};
   const te = d.targetingEngine;
   const cp = d.commercialPotential;
   const bud = d.budget;
   const W = { audienceFit: 30, targetOpportunity: 24, commercialPotential: 18, costJustification: 18, strategicValue: 10 };
+  const [expandedComponent, setExpandedComponent] = useState<string | null>(null);
 
-  const projectedPipeline = Number(cp?.projected_pipeline ?? 0);
-  const realisticPipeline = Number(cp?.realistic_pipeline ?? 0);
-  const reqPipeline = Number(bud?.required_pipeline_amount ?? 0);
-  const reqMultiple = Number(bud?.required_pipeline_multiple ?? 5);
-  const teBenchmarks = te != null ? (te.isLargeConference ? { must: '15%', high: '30%', worth: '25%' } : { must: '10%', high: '20%', worth: '20%' }) : null;
-  const teActionableRate = te != null && te.totalScoredCompanies > 0
-    ? (te.actionableCount / te.totalScoredCompanies * 100).toFixed(0) + '%'
-    : null;
-
-  const components: { key: string; score: number | null; weight: number; unavailable?: string; bullets: string[] }[] = [
+  const components: { key: string; detailsKey: keyof NonNullable<CalendarConferenceRow['componentDetails']>; score: number | null; weight: number; unavailable?: string }[] = [
     {
       key: 'Audience Fit',
+      detailsKey: 'audienceFit',
       score: cs?.audienceFit ?? null,
       weight: W.audienceFit,
-      bullets: [
-        `${row.icpCompanies} ICP companies out of ${row.totalCompanies} total (${row.icpDensityPct.toFixed(1)}% density — benchmark 15%)`,
-        ...(te != null ? [`Avg buyer access score: ${te.avgBuyerAccessScore.toFixed(0)}/100`] : []),
-      ],
     },
     {
       key: 'Target Opportunity',
+      detailsKey: 'targetOpportunity',
       score: cs?.targetOpportunity ?? null,
       weight: W.targetOpportunity,
       unavailable: te == null ? 'Prospect company type not configured.' : undefined,
-      bullets: te != null ? [
-        `${te.totalScoredCompanies} companies scored`,
-        `Must Target: ${te.mustTargetCount} (benchmark ${teBenchmarks!.must})`,
-        `High Priority: ${te.highPriorityCount} (benchmark ${teBenchmarks!.high})`,
-        `Worth Engaging: ${te.worthEngagingCount} (benchmark ${teBenchmarks!.worth})`,
-        `Actionable rate: ${teActionableRate}`,
-      ] : ['Target scoring not run.', 'Ensure the prospect company type is configured.'],
     },
     {
       key: 'Commercial Potential',
+      detailsKey: 'commercialPotential',
       score: cs?.commercialPotential ?? null,
       weight: W.commercialPotential,
       unavailable: cp == null ? 'Commercial inputs unavailable.' : undefined,
-      bullets: cp != null ? [
-        `Available pipeline: $${projectedPipeline.toLocaleString()}`,
-        ...(realisticPipeline > 0 ? [`Realistic pipeline: $${realisticPipeline.toLocaleString()}`] : []),
-        ...(reqPipeline > 0 ? [
-          `Required: $${reqPipeline.toLocaleString()}`,
-          `Total Coverage: ${((projectedPipeline / reqPipeline) * 100).toFixed(0)}%`,
-          ...(realisticPipeline > 0 ? [`Realistic Coverage: ${((realisticPipeline / reqPipeline) * 100).toFixed(0)}%`] : []),
-        ] : ['No budget entered.']),
-      ] : ['No target WSE or avg cost data available.'],
     },
     {
       key: 'Cost Justification',
+      detailsKey: 'costJustification',
       score: cs?.costJustification ?? null,
       weight: W.costJustification,
-      unavailable: bud == null ? 'No budget data available.' : undefined,
-      bullets: bud != null ? [
-        `Required pipeline: $${reqPipeline.toLocaleString()}`,
-        `Required ROI multiple: ${reqMultiple}x`,
-        ...(cp != null && reqPipeline > 0 ? [
-          `Attainable Pipeline: $${realisticPipeline > 0 ? realisticPipeline.toLocaleString() : projectedPipeline.toLocaleString()} (${(((realisticPipeline > 0 ? realisticPipeline : projectedPipeline) / reqPipeline) * 100).toFixed(0)}%)`,
-        ] : []),
-      ] : ['Budget not entered.', 'Add budget in conference settings. This would add up to 18 points to your score.'],
+      unavailable: bud == null ? 'No budget data available. Add budget in conference settings — this would add up to 18 points to your score.' : undefined,
     },
     {
       key: 'Strategic Value',
+      detailsKey: 'strategicValue',
       score: cs?.strategicValue ?? null,
       weight: W.strategicValue,
-      unavailable: te == null ? 'Prospect company type not configured.' : undefined,
-      bullets: (() => {
-        const sv = d.strategicValue;
-        if (!sv) return ['Prospect company type not configured.', 'This would add up to 10 points to your score.'];
-        return [
-          `Avg relationship leverage: ${sv.base_score}/100 (across ${sv.total_scored} prospect companies)`,
-          `Companies with internal relationships: ${sv.internal_rel_count}`,
-          `Companies with prior engagement: ${sv.prior_engagement_count}`,
-          `Known prospects attending: ${sv.known_prospect_count}`,
-          sv.client_count > 0 ? `Clients attending: ${sv.client_count} ↩ retention/expansion signal` : 'Clients attending: 0',
-          sv.has_competitor ? `Competitor presence: Yes (+${sv.competitor_bonus} pts applied)` : 'Competitor presence: No',
-        ];
-      })(),
+      unavailable: te == null ? 'Prospect company type not configured. This would add up to 10 points to your score.' : undefined,
     },
   ];
 
   return (
     <div className="space-y-3">
-      {components.map((c) => (
-        <div key={c.key} className="border rounded-lg p-3">
-          <div className="flex items-center justify-between">
-            <p className={`font-semibold text-sm ${c.score == null ? 'text-gray-400' : 'text-gray-800'}`}>{c.key}</p>
-            <p className="text-xs text-gray-500">
-              {c.score == null ? '—' : Math.round(c.score)}/100 · {c.weight}%
-              {c.score == null ? ' — not scored' : ''}
-            </p>
+      {components.map((c) => {
+        const details = cd?.[c.detailsKey] ?? [];
+        const isExpanded = expandedComponent === c.key;
+        return (
+          <div key={c.key} className="border rounded-lg p-3">
+            <button
+              type="button"
+              onClick={() => details.length > 0 && setExpandedComponent(isExpanded ? null : c.key)}
+              className="flex items-center justify-between w-full text-left"
+              disabled={details.length === 0}
+            >
+              <p className={`font-semibold text-sm ${c.score == null ? 'text-gray-400' : 'text-gray-800'}`}>{c.key}</p>
+              <span className="flex items-center gap-1.5 flex-shrink-0">
+                <span className="text-xs text-gray-500">
+                  {c.score == null ? '—' : Math.round(c.score)}/100 · {c.weight}%
+                  {c.score == null ? ' — not scored' : ''}
+                </span>
+                {details.length > 0 && (
+                  <i
+                    className="ti ti-chevron-right text-gray-400"
+                    style={{ fontSize: 13, transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 150ms ease' }}
+                    aria-hidden="true"
+                  />
+                )}
+              </span>
+            </button>
+            <div className="mt-2 h-1.5 rounded bg-gray-100 overflow-hidden">
+              <div className="h-full rounded" style={{ width: `${c.score ?? 0}%`, backgroundColor: calendarScoreColor(c.score) }} />
+            </div>
+            {c.score == null && c.unavailable && (
+              <p className="text-xs text-gray-400 mt-1.5">{c.unavailable}</p>
+            )}
+            {isExpanded && details.length > 0 && (
+              <div style={{ paddingLeft: 8, paddingBottom: 6, paddingTop: 8 }}>
+                {details.map((bullet, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 6, fontSize: 11, color: '#64748B', marginBottom: 3 }}>
+                    <span style={{ color: '#CBD5E1', flexShrink: 0 }}>·</span>
+                    <span>{bullet}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="mt-2 h-1.5 rounded bg-gray-100 overflow-hidden">
-            <div className="h-full rounded" style={{ width: `${c.score ?? 0}%`, backgroundColor: calendarScoreColor(c.score) }} />
+        );
+      })}
+
+      {row.strategyScores && row.strategyScores.length > 0 && row.recommendedStrategy && (
+        <>
+          <div className="border-t border-gray-100 my-4" />
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Strategy fit</p>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <svg className="w-2.5 h-2.5 flex-shrink-0" viewBox="0 0 20 20" fill="none">
+                <path d={STRATEGY_SPARKLE_PATH} fill="#34D399" stroke="#059669" strokeWidth={1.2} strokeLinejoin="round" />
+              </svg>
+              {row.recommendedStrategy}
+            </span>
           </div>
-          {c.score == null && c.unavailable && (
-            <p className="text-xs text-gray-400 mt-1.5">{c.unavailable}</p>
+
+          <div style={{ border: '0.5px solid #C0DD97', backgroundColor: '#EAF3DE', borderRadius: 8, padding: '9px 11px' }}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-bold text-emerald-800">{row.recommendedStrategy}</span>
+              <span className="text-sm font-bold text-emerald-700 flex-shrink-0">{row.strategyScores[0].score}</span>
+            </div>
+            {row.strategyRationale && (
+              <p className="text-xs text-emerald-700/80 mt-1 leading-relaxed">{row.strategyRationale}</p>
+            )}
+            {row.conferenceStrategyType && row.conferenceStrategyType === row.recommendedStrategy && (
+              <span className="inline-flex items-center px-2 py-0.5 mt-2 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+                Matches your selected strategy
+              </span>
+            )}
+          </div>
+          {row.conferenceStrategyType && row.conferenceStrategyType !== row.recommendedStrategy && (
+            <p className="text-[11px] text-gray-400 mt-1.5">Your selected strategy: {row.conferenceStrategyType}</p>
           )}
-          <ul className="list-disc pl-4 mt-2 text-xs text-gray-500 space-y-0.5">
-            {c.bullets.map((b) => <li key={b}>{b}</li>)}
-          </ul>
-        </div>
-      ))}
+
+          <div className="mt-3 space-y-1.5">
+            {row.strategyScores.slice(1).map((s) => (
+              <div key={s.strategy} className="flex items-center gap-2">
+                <span className="text-xs text-gray-600 w-32 flex-shrink-0 truncate" title={s.strategy}>{s.strategy}</span>
+                <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, s.score))}%`, backgroundColor: strategyBarColor(s.score) }} />
+                </div>
+                <span className="text-xs font-semibold text-gray-500 w-7 text-right flex-shrink-0">{s.score}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

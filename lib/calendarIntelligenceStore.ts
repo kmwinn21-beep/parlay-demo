@@ -19,6 +19,17 @@ export interface CalendarConferenceRow {
     costJustification: number | null;
     strategicValue: number | null;
   };
+  componentDetails?: {
+    audienceFit: string[];
+    targetOpportunity: string[];
+    commercialPotential: string[];
+    costJustification: string[];
+    strategicValue: string[];
+  };
+  strategyScores?: Array<{ strategy: string; score: number }>;
+  recommendedStrategy?: string;
+  strategyRationale?: string;
+  conferenceStrategyType?: string | null;
   confidenceMultiplier?: number;
   availableComponentCount?: number;
   totalComponentCount?: number;
@@ -44,6 +55,7 @@ export interface CalendarConferenceRow {
       avgRelationshipLeverageScore: number;
       actionableCount: number;
       isLargeConference: boolean;
+      totalScheduledMeetings?: number;
     } | null;
     budget?: { line_items?: unknown; return_on_cost?: string | null; required_pipeline_amount?: number; required_pipeline_multiple?: number } | null;
     commercialPotential?: { projected_pipeline?: number; realistic_pipeline?: number; must_wse?: number; high_wse?: number; worth_wse?: number; avg_cost_per_unit?: number } | null;

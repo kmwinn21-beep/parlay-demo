@@ -600,22 +600,32 @@ async function runFullMigrations(): Promise<void> {
     }
   } catch { /* non-fatal */ }
 
+  // Repair: earlier versions of the backfill below could race and stamp action_key=
+  // 'meeting_scheduled' onto the "Rescheduled" row, since "Rescheduled" is a substring
+  // match for the "%scheduled%" pattern. Self-heal any tenant DB still carrying that.
+  await db.execute({
+    sql: "UPDATE config_options SET action_key = 'rescheduled' WHERE category = 'action' AND LOWER(value) = 'rescheduled' AND action_key = 'meeting_scheduled'",
+    args: [],
+  }).catch(() => {});
+
   // Always ensure action_key is set for meeting-related actions (runs every startup)
-  // Uses LIKE pattern matching so renamed values (e.g. "No-Show" vs "Meeting No-Show") are still identified
-  const actionKeySeeds: Array<{ key: string; pattern: string }> = [
-    { key: 'meeting_scheduled', pattern: '%scheduled%' },
+  // Uses LIKE pattern matching so renamed values (e.g. "No-Show" vs "Meeting No-Show") are still identified.
+  // "exclude" prevents e.g. "Rescheduled" (which contains "scheduled") from matching the
+  // meeting_scheduled pattern. Run sequentially (not Promise.all) so there's no cross-seed race.
+  const actionKeySeeds: Array<{ key: string; pattern: string; exclude?: string }> = [
+    { key: 'meeting_scheduled', pattern: '%scheduled%', exclude: '%reschedul%' },
     { key: 'meeting_held', pattern: '%held%' },
     { key: 'rescheduled', pattern: '%reschedul%' },
     { key: 'cancelled', pattern: '%cancel%' },
     { key: 'no_show', pattern: '%no%show%' },
     { key: 'pending', pattern: '%pending%' },
   ];
-  await Promise.all(actionKeySeeds.map(({ key, pattern }) =>
-    db.execute({
-      sql: "UPDATE config_options SET action_key = ? WHERE category = 'action' AND LOWER(value) LIKE ? AND (action_key IS NULL OR action_key = '')",
-      args: [key, pattern],
-    }).catch(() => {})
-  ));
+  for (const { key, pattern, exclude } of actionKeySeeds) {
+    await db.execute({
+      sql: `UPDATE config_options SET action_key = ? WHERE category = 'action' AND LOWER(value) LIKE ?${exclude ? ' AND LOWER(value) NOT LIKE ?' : ''} AND (action_key IS NULL OR action_key = '')`,
+      args: exclude ? [key, pattern, exclude] : [key, pattern],
+    }).catch(() => {});
+  }
   } finally {
     await releaseMigrationLock(workerId);
   }
@@ -980,21 +990,31 @@ export async function seedFreshDb(client: Client): Promise<void> {
     }
   } catch { /* ignore */ }
 
-  // Ensure action_key is set for meeting-related actions
-  const actionKeySeeds: Array<{ key: string; pattern: string }> = [
-    { key: 'meeting_scheduled', pattern: '%scheduled%' },
+  // Repair: earlier versions of the backfill below could race and stamp action_key=
+  // 'meeting_scheduled' onto the "Rescheduled" row, since "Rescheduled" is a substring
+  // match for the "%scheduled%" pattern. Self-heal any tenant DB still carrying that.
+  await client.execute({
+    sql: "UPDATE config_options SET action_key = 'rescheduled' WHERE category = 'action' AND LOWER(value) = 'rescheduled' AND action_key = 'meeting_scheduled'",
+    args: [],
+  }).catch(() => {});
+
+  // Ensure action_key is set for meeting-related actions.
+  // "exclude" prevents e.g. "Rescheduled" (which contains "scheduled") from matching the
+  // meeting_scheduled pattern. Run sequentially (not Promise.all) so there's no cross-seed race.
+  const actionKeySeeds: Array<{ key: string; pattern: string; exclude?: string }> = [
+    { key: 'meeting_scheduled', pattern: '%scheduled%', exclude: '%reschedul%' },
     { key: 'meeting_held', pattern: '%held%' },
     { key: 'rescheduled', pattern: '%reschedul%' },
     { key: 'cancelled', pattern: '%cancel%' },
     { key: 'no_show', pattern: '%no%show%' },
     { key: 'pending', pattern: '%pending%' },
   ];
-  await Promise.all(actionKeySeeds.map(({ key, pattern }) =>
-    client.execute({
-      sql: "UPDATE config_options SET action_key = ? WHERE category = 'action' AND LOWER(value) LIKE ? AND (action_key IS NULL OR action_key = '')",
-      args: [key, pattern],
-    }).catch(() => {})
-  ));
+  for (const { key, pattern, exclude } of actionKeySeeds) {
+    await client.execute({
+      sql: `UPDATE config_options SET action_key = ? WHERE category = 'action' AND LOWER(value) LIKE ?${exclude ? ' AND LOWER(value) NOT LIKE ?' : ''} AND (action_key IS NULL OR action_key = '')`,
+      args: exclude ? [key, pattern, exclude] : [key, pattern],
+    }).catch(() => {});
+  }
 
   // conference_company_intel table
   await client.execute({
