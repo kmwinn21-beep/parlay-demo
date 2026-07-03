@@ -323,6 +323,21 @@ export default function ConferenceDetailPage() {
   const [confPinnedNotes, setConfPinnedNotes] = useState<PinnedNote[]>([]);
   const [confMeetings, setConfMeetings] = useState<Meeting[]>([]);
   const meetingAttendeeIds = useMemo(() => new Set(confMeetings.map(m => m.attendee_id)), [confMeetings]);
+
+  // Optimistically insert a newly-scheduled meeting into this tab's list. Idempotent (checks
+  // for an existing id) since both the local NewMeetingModal onSuccess and the global
+  // 'meeting-scheduled' broadcast (fired by every NewMeetingModal instance, including ones
+  // in other tabs/modals like Conference Targets) can both fire for the same meeting.
+  const addMeetingOptimistically = useCallback((meeting: Meeting) => {
+    if (meeting.conference_id !== conference?.id) return;
+    setConfMeetings(prev => prev.some(m => m.id === meeting.id) ? prev : [meeting, ...prev]);
+  }, [conference?.id]);
+
+  useEffect(() => {
+    const handler = (e: Event) => addMeetingOptimistically((e as CustomEvent<Meeting>).detail);
+    window.addEventListener('meeting-scheduled', handler);
+    return () => window.removeEventListener('meeting-scheduled', handler);
+  }, [addMeetingOptimistically]);
   const [confSocialEvents, setConfSocialEvents] = useState<SocialEvent[]>([]);
   const [actionOptions, setActionOptions] = useState<string[]>([]);
   const [actionConfigs, setActionConfigs] = useState<{ id: number; value: string; action_key: string | null }[]>([]);
@@ -419,6 +434,7 @@ export default function ConferenceDetailPage() {
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [showDebrief, setShowDebrief] = useState(false);
   const [activityMapOpen, setActivityMapOpen] = useState(false);
+  const [mobileReportMenuOpen, setMobileReportMenuOpen] = useState(false);
   const [executiveBriefOpen, setExecutiveBriefOpen] = useState(false);
   const [executiveBriefSnapshot, setExecutiveBriefSnapshot] = useState<ConferenceSnapshot | null>(null);
   const [executiveBriefYoY, setExecutiveBriefYoY] = useState<SeriesYoYData | null>(null);
@@ -1848,7 +1864,7 @@ export default function ConferenceDetailPage() {
             {/* Top row: report nav (scrollable) + Field Report pinned at right */}
             <div className="flex items-start relative">
               {/* Scrollable buttons — right padding reserves space for the absolutely-positioned button stack */}
-              <div className="flex items-center gap-5 overflow-x-auto flex-nowrap hide-scrollbar flex-1 min-w-0 pr-44">
+              <div className="flex items-center gap-5 overflow-x-auto flex-nowrap hide-scrollbar flex-1 min-w-0 pr-10 sm:pr-44">
               <PreConferenceReview
                 conferenceId={conference.id}
                 conferenceName={conference.name}
@@ -1877,7 +1893,7 @@ export default function ConferenceDetailPage() {
                   Absolutely positioned so its height (now 4 rows tall) doesn't force the whole
                   top row — and the gap below it — to grow with it. */}
               {isInternalAttendee && (
-                <div className="absolute top-0 right-0 flex items-stretch gap-3 flex-shrink-0 bg-white pl-2">
+                <div className="hidden sm:flex absolute top-0 right-0 items-stretch gap-3 flex-shrink-0 bg-white pl-2">
                   <div className="self-stretch w-px bg-gray-200" />
                   <div className="flex flex-col gap-3 justify-center">
                     <button
@@ -1935,6 +1951,86 @@ export default function ConferenceDetailPage() {
                       </button>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* Mobile: same 4 links collapsed behind a kebab menu. Opaque bg + fixed width
+                  masks the scrollable button row underneath so it doesn't peek out. */}
+              {isInternalAttendee && (
+                <div className="sm:hidden absolute top-0 right-0 bottom-0 w-10 flex items-start justify-end bg-white flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setMobileReportMenuOpen(v => !v)}
+                    className="p-1.5 text-gray-500 hover:text-brand-accent transition-colors"
+                    aria-label="More report options"
+                  >
+                    <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
+                      <circle cx="10" cy="4" r="1.5" />
+                      <circle cx="10" cy="10" r="1.5" />
+                      <circle cx="10" cy="16" r="1.5" />
+                    </svg>
+                  </button>
+                  {mobileReportMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setMobileReportMenuOpen(false)} />
+                      <div className="absolute top-full right-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-100 py-1.5 z-20">
+                        <button
+                          type="button"
+                          onClick={() => { setShowDebrief(true); setMobileReportMenuOpen(false); }}
+                          className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-brand-accent hover:bg-gray-50 transition-colors"
+                        >
+                          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v4a1 1 0 0 0 1 1h4" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 17l0 -5" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 17l0 -1" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 17l0 -3" />
+                          </svg>
+                          Field Report
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setActivityMapOpen(true); setMobileReportMenuOpen(false); }}
+                          className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-brand-accent hover:bg-gray-50 transition-colors"
+                        >
+                          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 12h4l2 -6l4 12l2 -6h6" />
+                          </svg>
+                          Activity map
+                        </button>
+                        {capabilities?.planCapabilities?.revenue_intelligence?.executive_brief && (
+                          <button
+                            type="button"
+                            onClick={() => { setExecutiveBriefOpen(true); setMobileReportMenuOpen(false); }}
+                            className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-brand-accent hover:bg-gray-50 transition-colors"
+                          >
+                            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-10" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v4" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 20h6" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12v-4" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 12v-6" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12v-2" />
+                            </svg>
+                            Executive brief
+                          </button>
+                        )}
+                        {capabilities?.capabilities?.crm_export && (
+                          <button
+                            type="button"
+                            onClick={() => { setShowCrmExport(true); setMobileReportMenuOpen(false); }}
+                            className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-brand-accent hover:bg-gray-50 transition-colors"
+                          >
+                            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            Export CRM Files
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -3211,7 +3307,7 @@ export default function ConferenceDetailPage() {
         onClose={() => setNewMeetingOpen(false)}
         availableConferences={conference ? [{ id: conference.id, name: conference.name, start_date: conference.start_date, end_date: conference.end_date }] : []}
         defaultConferenceId={conference?.id}
-        onSuccess={m => setConfMeetings(prev => [m, ...prev])}
+        onSuccess={addMeetingOptimistically}
       />
 
       {activeTab === 'follow-ups' && (

@@ -6,6 +6,7 @@ import { useRecordDrawer } from './RecordDrawerContext';
 import type { TargetEntry } from '../PreConferenceReview';
 import { useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
 import { NewMeetingModal } from '@/components/NewMeetingModal';
+import { type Meeting } from '@/components/MeetingsTable';
 
 export interface AddableAttendee {
   id: number;
@@ -207,6 +208,7 @@ export function ConferenceTargetsTab({
   onAddTargets,
   loadingAddAttendees,
   readOnly = false,
+  onMeetingScheduled,
 }: {
   conferenceId: number;
   conferenceName: string;
@@ -218,6 +220,7 @@ export function ConferenceTargetsTab({
   onAddTargets?: (entries: Array<Omit<TargetEntry, 'tier'>>) => Promise<void>;
   loadingAddAttendees?: boolean;
   readOnly?: boolean;
+  onMeetingScheduled?: (meeting: Meeting) => void;
 }) {
   const avgCostPerUnit = useAvgCostPerUnit();
   const [draggingId, setDraggingId] = useState<number | null>(null);
@@ -749,8 +752,9 @@ export function ConferenceTargetsTab({
           defaultConferenceId={conferenceId}
           prefillCompanyId={schedulingEntry.companyId ?? undefined}
           prefillAttendeeId={schedulingEntry.attendeeId}
-          onSuccess={() => {
+          onSuccess={(meeting) => {
             setOptimisticMeetingIds(prev => new Set([...Array.from(prev), schedulingEntry.attendeeId]));
+            onMeetingScheduled?.(meeting);
             setSchedulingEntry(null);
           }}
         />
