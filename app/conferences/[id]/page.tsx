@@ -1939,9 +1939,10 @@ export default function ConferenceDetailPage() {
                 </div>
               )}
 
-              {/* Mobile: same 4 links collapsed behind a kebab menu */}
+              {/* Mobile: same 4 links collapsed behind a kebab menu. Opaque bg + fixed width
+                  masks the scrollable button row underneath so it doesn't peek out. */}
               {isInternalAttendee && (
-                <div className="sm:hidden absolute top-0 right-0 flex-shrink-0">
+                <div className="sm:hidden absolute top-0 right-0 bottom-0 w-10 flex items-start justify-end bg-white flex-shrink-0">
                   <button
                     type="button"
                     onClick={() => setMobileReportMenuOpen(v => !v)}
