@@ -433,44 +433,53 @@ function RecordPanel({
   onClose: () => void;
 }) {
   return (
-    <div
-      className={`relative flex flex-col overflow-hidden bg-white border-l border-gray-200 flex-shrink-0 transition-all duration-200 ease-out ${
-        record != null ? '' : 'w-0'
-      }`}
-      style={record != null ? { width: 480 } : undefined}
-    >
+    <>
+      {/* Mobile-only scrim behind the bottom sheet */}
       {record != null && (
-        <>
-          <div className="flex items-center gap-3 px-4 py-3 bg-brand-accent flex-shrink-0">
-            <span className="text-sm font-medium text-brand-primary truncate flex-1 min-w-0 capitalize">
-              {record.type} record
-            </span>
-            <a
-              href={`/${record.type === 'attendee' ? 'attendees' : 'companies'}/${record.id}`}
-              className="text-xs text-brand-primary hover:underline whitespace-nowrap flex-shrink-0"
-            >
-              Go to record →
-            </a>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="flex-shrink-0 p-1.5 rounded-lg text-brand-primary hover:bg-black/5 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <iframe
-            key={`${record.type}-${record.id}`}
-            src={`/${record.type === 'attendee' ? 'attendees' : 'companies'}/${record.id}?embed=true`}
-            className="flex-1 border-0 w-full"
-            title={`${record.type} record`}
-          />
-        </>
+        <div className="sm:hidden fixed inset-0 z-[59] bg-black/30" onClick={onClose} />
       )}
-    </div>
+      <div
+        className={`flex flex-col overflow-hidden bg-white transition-all duration-200 ease-out
+          fixed inset-x-0 bottom-0 z-[60] rounded-t-2xl border-t border-gray-200
+          sm:static sm:z-auto sm:rounded-none sm:border-t-0 sm:border-l sm:flex-shrink-0
+          ${record != null
+            ? 'translate-y-0 h-[80vh] sm:translate-y-0 sm:h-auto sm:w-[480px]'
+            : 'translate-y-full h-0 sm:translate-y-0 sm:h-auto sm:w-0'}
+        `}
+      >
+        {record != null && (
+          <>
+            <div className="flex items-center gap-3 px-4 py-3 bg-brand-accent flex-shrink-0">
+              <span className="text-sm font-medium text-brand-primary truncate flex-1 min-w-0 capitalize">
+                {record.type} record
+              </span>
+              <a
+                href={`/${record.type === 'attendee' ? 'attendees' : 'companies'}/${record.id}`}
+                className="text-xs text-brand-primary hover:underline whitespace-nowrap flex-shrink-0"
+              >
+                Go to record →
+              </a>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close"
+                className="flex-shrink-0 p-1.5 rounded-lg text-brand-primary hover:bg-black/5 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <iframe
+              key={`${record.type}-${record.id}`}
+              src={`/${record.type === 'attendee' ? 'attendees' : 'companies'}/${record.id}?embed=true`}
+              className="flex-1 border-0 w-full"
+              title={`${record.type} record`}
+            />
+          </>
+        )}
+      </div>
+    </>
   );
 }
 
