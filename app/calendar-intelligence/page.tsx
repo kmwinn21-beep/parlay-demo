@@ -860,7 +860,7 @@ export default function CalendarIntelligencePage() {
                 }).length;
                 const budgetCardActive = calendarBudgetFilter === 'needs_attention';
                 return (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4 items-start">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-6 gap-4 items-start">
                     <div className="card border-l-4 border-brand-secondary py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Conferences Scored</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.length}</p></div>
                     <div className="card border-l-4 border-green-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Attend &amp; Invest</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => r.recommendationTier === 'attend_invest_more').length}</p></div>
                     <div className="card border-l-4 border-emerald-500 py-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Attend &amp; Maintain</p><p className="text-3xl font-bold text-brand-primary">{calendarRows.filter(r => r.recommendationTier === 'attend_maintain').length}</p></div>

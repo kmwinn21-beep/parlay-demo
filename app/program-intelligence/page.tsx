@@ -1470,7 +1470,7 @@ export default function ProgramIntelligencePage() {
               {trendsLoading ? (
                 <div className="card space-y-4 animate-pulse">
                   <div className="h-4 bg-gray-200 rounded w-1/3" />
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                     {[0,1,2,3].map(i => <div key={i} className="h-20 bg-gray-100 rounded-lg" />)}
                   </div>
                   <div className="h-48 bg-gray-100 rounded-lg" />
@@ -1478,7 +1478,7 @@ export default function ProgramIntelligencePage() {
               ) : trendsData ? (
                 <>
                   {/* KPI tiles */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                     <div className="card text-center">
                       <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Conferences Tracked</p>
                       <p className="text-3xl font-bold text-brand-primary">{trendsData.totalConferences}</p>
@@ -1627,7 +1627,7 @@ export default function ProgramIntelligencePage() {
 
                   {trendsConfLoading ? (
                     <div className="space-y-3 animate-pulse">
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                         {[0,1,2,3].map(i => <div key={i} className="h-16 bg-gray-100 rounded-lg" />)}
                       </div>
                       <div className="grid sm:grid-cols-2 gap-3">
@@ -1638,7 +1638,7 @@ export default function ProgramIntelligencePage() {
                   ) : trendsConfData ? (
                     <div className="space-y-4">
                       {/* KPI tiles */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                         <div className="bg-gray-50 rounded-lg p-3 text-center">
                           <p className="text-xs text-gray-400 mb-1">Attendees</p>
                           <p className="text-2xl font-bold text-brand-primary">{trendsConfData.totalAttendees.toLocaleString()}</p>
@@ -1754,7 +1754,48 @@ export default function ProgramIntelligencePage() {
                             {filteredRows.length === 0 ? (
                               <p className="text-sm text-gray-400">No companies match this filter.</p>
                             ) : (
-                              <div className="overflow-x-auto relative">
+                              <>
+                                {/* Mobile: one card per company, stacked */}
+                                <div className="sm:hidden divide-y divide-gray-50">
+                                  {filteredRows.map(co => (
+                                    <div key={co.id} className="py-2 flex items-center justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <button
+                                          type="button"
+                                          className="text-sm font-medium text-brand-primary hover:underline text-left block truncate"
+                                          onClick={() => { setTrendsDrawerCompanyId(co.id); setTrendsDrawerCompanyName(co.name); }}
+                                        >
+                                          {co.name}
+                                        </button>
+                                        {co.company_type ? (
+                                          <span className={getBadgeClass(co.company_type, companyTypeColors)} style={{ fontSize: '10px', padding: '1px 6px' }}>
+                                            {co.company_type}
+                                          </span>
+                                        ) : (
+                                          <span className="text-xs text-gray-300">—</span>
+                                        )}
+                                      </div>
+                                      <button
+                                        type="button"
+                                        className="px-2 py-0.5 text-xs font-semibold rounded-full cursor-pointer flex-shrink-0"
+                                        style={confCountStyle(co.total_confs)}
+                                        onClick={(e) => {
+                                          if (trendsPopoverId === co.id) {
+                                            setTrendsPopoverId(null);
+                                            setTrendsPopoverPos(null);
+                                          } else {
+                                            const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                                            setTrendsPopoverId(co.id);
+                                            setTrendsPopoverPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                                          }
+                                        }}
+                                      >
+                                        {co.total_confs}
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              <div className="hidden sm:block overflow-x-auto relative">
                                 <table className="w-full text-sm">
                                   <thead>
                                     <tr className="border-b border-gray-100">
@@ -1808,6 +1849,7 @@ export default function ProgramIntelligencePage() {
                                   </tbody>
                                 </table>
                               </div>
+                              </>
                             )}
                           </div>
                         );
@@ -1861,13 +1903,13 @@ export default function ProgramIntelligencePage() {
                     </div>
 
                     {satLoading ? (
-                      <div className="grid grid-cols-2 gap-4 animate-pulse">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-pulse">
                         <div className="h-20 bg-gray-100 rounded-lg" />
                         <div className="h-20 bg-gray-100 rounded-lg" />
                       </div>
                     ) : satData ? (
                       <>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="card text-center">
                             <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Avg Saturation Score</p>
                             <p className="text-3xl font-bold" style={{ color: satScoreColor(satData.avg_saturation_score) }}>
@@ -1991,7 +2033,7 @@ export default function ProgramIntelligencePage() {
                                   </div>
 
                                   {/* Health breakdown */}
-                                  <div className="grid grid-cols-3 gap-2 text-center">
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center">
                                     {[
                                       { label: 'Strong', count: conf.contacts_high_health, color: '#059669', bg: '#f0fdf4' },
                                       { label: 'Developing', count: conf.contacts_mid_health, color: '#d97706', bg: '#fffbeb' },
@@ -2017,7 +2059,45 @@ export default function ProgramIntelligencePage() {
                                         satDetail.droppable_contacts.length === 0 ? (
                                           <p className="text-xs text-gray-400">No droppable contacts found.</p>
                                         ) : (
-                                          <div className="overflow-x-auto">
+                                          <>
+                                            {/* Mobile: one card per contact, stacked */}
+                                            <div className="sm:hidden divide-y divide-gray-50">
+                                              {satDetail.droppable_contacts.map(c => {
+                                                const displayHealth = Math.min(c.health_score, 100);
+                                                const hColor = c.health_score >= 70 ? '#059669' : c.health_score >= 40 ? '#d97706' : '#dc2626';
+                                                const fullName = [c.first_name, c.last_name].filter(Boolean).join(' ') || '—';
+                                                return (
+                                                  <div key={c.attendee_id} className="py-2 flex items-center justify-between gap-2">
+                                                    <div className="min-w-0">
+                                                      <p className="font-medium text-gray-800 text-xs truncate">{fullName}</p>
+                                                      {c.title && <p className="text-gray-400 text-[11px] truncate">{c.title}</p>}
+                                                      <p className="text-gray-500 text-[11px] truncate">{c.company_name || '—'}</p>
+                                                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                                        <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-brand-primary/10 text-brand-primary">
+                                                          {c.interaction_count}× interactions
+                                                        </span>
+                                                        {c.cumulative_meetings > 0 && (
+                                                          <span className="text-[10px] text-gray-500" title={c.last_meeting_outcome ?? undefined}>
+                                                            {c.cumulative_meetings} meetings
+                                                          </span>
+                                                        )}
+                                                        <span className="text-[10px] font-semibold" style={{ color: hColor }}>
+                                                          Health {displayHealth}
+                                                        </span>
+                                                      </div>
+                                                    </div>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => setSatFollowUpAttendeeId(c.attendee_id)}
+                                                      className="text-xs text-brand-secondary hover:underline font-medium whitespace-nowrap flex-shrink-0"
+                                                    >
+                                                      Outreach →
+                                                    </button>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          <div className="hidden sm:block overflow-x-auto">
                                             <table className="w-full text-xs">
                                               <thead>
                                                 <tr className="border-b border-gray-100">
@@ -2082,6 +2162,7 @@ export default function ProgramIntelligencePage() {
                                               </tbody>
                                             </table>
                                           </div>
+                                          </>
                                         )
                                       ) : null}
                                     </div>
@@ -2204,7 +2285,7 @@ export default function ProgramIntelligencePage() {
             ) : (
               <>
                 {/* Summary stat cards */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="card border-l-4 border-brand-secondary py-4">
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Reps Tracked</p>
                     <p className="text-3xl font-bold text-brand-primary">{repDerivedData.filteredForCards.length}</p>
@@ -2288,8 +2369,76 @@ export default function ProgramIntelligencePage() {
                   </div>
                 </div>
 
+                {/* Mobile: one card per rep, stacked, with a small horizontally-scrollable
+                    strip of per-conference scores inside each card (full detail lives
+                    in the rep drawer, opened by tapping the card, same as the desktop row). */}
+                <div className="sm:hidden card p-0 divide-y divide-gray-100">
+                  {repDerivedData.sorted.slice((repPage - 1) * REP_PAGE_SIZE, repPage * REP_PAGE_SIZE).map(rep => {
+                    const totalConfs = repDerivedData.conferences.length;
+                    const attendedConfs = rep.confCount;
+                    const sparse = attendedConfs < totalConfs / 2;
+                    const viewScores = repDerivedData.conferences.map(c => {
+                      const cell = rep.conferences[c.id];
+                      if (!cell) return null;
+                      if (repScoreView === 'ces') return cell.cesScore;
+                      return repScoreView === 'cost' ? cell.costEffScore : cell.sesScore;
+                    }).filter((s): s is number => s != null);
+                    const viewAvg = viewScores.length ? Math.round(viewScores.reduce((a, b) => a + b, 0) / viewScores.length) : null;
+                    return (
+                      <button
+                        key={rep.repId}
+                        type="button"
+                        onClick={() => { setSelectedRep(rep); setDrawerScoreView('ses'); }}
+                        className="w-full text-left px-4 py-3"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-medium text-brand-secondary text-sm truncate">{rep.repName}</p>
+                            {rep.role && <p className="text-xs text-gray-400 capitalize">{rep.role.replace(/_/g, ' ')}</p>}
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <div className="font-bold text-lg tabular-nums" style={{ color: sesScoreColor(viewAvg) }}>{viewAvg ?? '—'}</div>
+                            {repScoreView === 'ses' && rep.trend && (
+                              <div className={`text-xs ${rep.trend === 'up' ? 'text-emerald-500' : rep.trend === 'down' ? 'text-red-500' : 'text-gray-400'}`}>
+                                {rep.trend === 'up' ? '↑' : rep.trend === 'down' ? '↓' : '→'}
+                              </div>
+                            )}
+                            <div className="text-[10px] text-gray-400">{rep.minScore}–{rep.maxScore}</div>
+                            {sparse && <div className="text-[10px] text-gray-400">{attendedConfs} of {totalConfs}</div>}
+                          </div>
+                        </div>
+                        <div className="flex gap-1.5 overflow-x-auto hide-scrollbar mt-2 pb-0.5">
+                          {repDerivedData.conferences.map(conf => {
+                            const cell = rep.conferences[conf.id];
+                            const score = !cell
+                              ? null
+                              : repScoreView === 'ces'
+                                ? cell.cesScore
+                                : repScoreView === 'cost'
+                                  ? cell.costEffScore
+                                  : cell.sesScore;
+                            const notAttended = !cell;
+                            return (
+                              <div
+                                key={conf.id}
+                                className={`flex-shrink-0 rounded px-1.5 py-1 text-center ${notAttended ? 'bg-gray-50 text-gray-300' : sesCellClasses(score)}`}
+                                style={{ minWidth: 48 }}
+                              >
+                                <div className="text-[9px] truncate" style={{ maxWidth: 44 }} title={conf.name}>
+                                  {conf.name.length > 8 ? conf.name.slice(0, 7) + '…' : conf.name}
+                                </div>
+                                <div className="text-xs font-semibold tabular-nums">{score != null ? score : '—'}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
                 {/* Heatmap table */}
-                <div className="card p-0 overflow-hidden">
+                <div className="hidden sm:block card p-0 overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="text-sm border-collapse" style={{ minWidth: `${160 + repDerivedData.conferences.length * 72 + 96}px` }}>
                       <thead>
@@ -2406,16 +2555,18 @@ export default function ProgramIntelligencePage() {
                       </tbody>
                     </table>
                   </div>
-                  {repDerivedData.sorted.length > REP_PAGE_SIZE && (
-                    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
-                      <span className="text-xs text-gray-500">Showing {(repPage - 1) * REP_PAGE_SIZE + 1}–{Math.min(repPage * REP_PAGE_SIZE, repDerivedData.sorted.length)} of {repDerivedData.sorted.length} reps</span>
-                      <div className="flex gap-2">
-                        <button disabled={repPage === 1} onClick={() => setRepPage(p => p - 1)} className="btn-secondary text-xs px-3 py-1 disabled:opacity-40">← Prev</button>
-                        <button disabled={repPage * REP_PAGE_SIZE >= repDerivedData.sorted.length} onClick={() => setRepPage(p => p + 1)} className="btn-secondary text-xs px-3 py-1 disabled:opacity-40">Next →</button>
-                      </div>
-                    </div>
-                  )}
                 </div>
+
+                {/* Pagination — shared by the mobile card list and desktop table above */}
+                {repDerivedData.sorted.length > REP_PAGE_SIZE && (
+                  <div className="flex items-center justify-between bg-white rounded-xl shadow-sm border border-gray-100 px-4 py-3">
+                    <span className="text-xs text-gray-500">Showing {(repPage - 1) * REP_PAGE_SIZE + 1}–{Math.min(repPage * REP_PAGE_SIZE, repDerivedData.sorted.length)} of {repDerivedData.sorted.length} reps</span>
+                    <div className="flex gap-2">
+                      <button disabled={repPage === 1} onClick={() => setRepPage(p => p - 1)} className="btn-secondary text-xs px-3 py-1 disabled:opacity-40">← Prev</button>
+                      <button disabled={repPage * REP_PAGE_SIZE >= repDerivedData.sorted.length} onClick={() => setRepPage(p => p + 1)} className="btn-secondary text-xs px-3 py-1 disabled:opacity-40">Next →</button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Interpretation panel */}
                 {repDerivedData.filteredForCards.length >= 2 && (() => {
@@ -2701,7 +2852,100 @@ export default function ProgramIntelligencePage() {
                 const instances = [...snapshotYoY.instances].sort((a, b) => a.startDate.localeCompare(b.startDate));
 
                 return (
-                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <>
+                    {/* Mobile: one card per conference instance, stacked */}
+                    <div className="sm:hidden border border-gray-200 rounded-lg divide-y divide-gray-100">
+                      {instances.map(instance => {
+                        const override = snapshotOverrides[instance.conferenceId];
+                        const hasSnapshot = override?.hasSnapshot ?? instance.hasSnapshot;
+                        const snapshotTakenAt = override?.snapshotTakenAt ?? instance.snapshotTakenAt;
+                        const isClosed = instance.effectiveStage === 'closed';
+                        const isComputing = computing === instance.conferenceId;
+                        const err = snapshotErrors[instance.conferenceId];
+                        const justComputed = override?.justComputed === true;
+
+                        let completeness = 0;
+                        if (override) {
+                          completeness = override.completenessPercent;
+                        } else if (hasSnapshot) {
+                          const nonNull = SNAPSHOT_FIELDS.filter(f => instance[f as keyof typeof instance] != null).length;
+                          completeness = Math.round((nonNull / SNAPSHOT_FIELDS.length) * 100);
+                        }
+
+                        const dateRange = [instance.startDate, instance.endDate].filter(Boolean).join(' – ');
+                        const { label: sLabel, cls: sCls } = stageLabel(instance.effectiveStage);
+
+                        return (
+                          <div key={instance.conferenceId} className="px-4 py-3 space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="font-medium text-gray-800 text-sm truncate">{instance.conferenceName}</p>
+                                {dateRange && <p className="text-xs text-gray-400 mt-0.5">{dateRange}</p>}
+                              </div>
+                              <span className={`inline-flex items-center text-xs font-medium rounded-full px-2 py-0.5 flex-shrink-0 ${sCls}`}>
+                                {sLabel}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-2">
+                              {hasSnapshot ? (
+                                <span className="inline-flex items-center gap-1 text-xs font-medium bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5">
+                                  <i className="ti ti-circle-check text-xs" aria-hidden="true" />Current
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200 rounded-full px-2 py-0.5">
+                                  <i className="ti ti-circle-dashed text-xs" aria-hidden="true" />Missing
+                                </span>
+                              )}
+                              <span className="text-xs text-gray-500">
+                                {justComputed ? <span className="text-green-600 font-medium">✓ Snapshot computed</span> : relativeDate(snapshotTakenAt)}
+                              </span>
+                            </div>
+
+                            {hasSnapshot && (
+                              <div className="flex items-center gap-2" title={completeness < 40 ? 'Limited data — budget or activity may not be recorded for this conference.' : undefined}>
+                                <span className="text-xs text-gray-400 flex-shrink-0">Completeness</span>
+                                <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                  <div className="h-full rounded-full bg-brand-secondary" style={{ width: `${completeness}%` }} />
+                                </div>
+                                <span className="text-xs text-gray-500 flex-shrink-0">{completeness}%</span>
+                              </div>
+                            )}
+
+                            {isClosed ? (
+                              <div className="flex items-center gap-3 pt-0.5">
+                                <button
+                                  onClick={() => handleComputeSnapshot(instance.conferenceId)}
+                                  disabled={isComputing || computingAll}
+                                  className="flex items-center gap-1 text-xs font-medium text-brand-secondary hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {isComputing
+                                    ? <><i className="ti ti-loader-2 text-xs animate-spin" aria-hidden="true" />Computing...</>
+                                    : hasSnapshot
+                                      ? <><i className="ti ti-refresh text-xs" aria-hidden="true" />Recompute</>
+                                      : <><i className="ti ti-bolt text-xs" aria-hidden="true" />Compute</>
+                                  }
+                                </button>
+                                {hasSnapshot && !isComputing && (
+                                  <button
+                                    onClick={() => handleDeleteSnapshot(instance.conferenceId)}
+                                    disabled={computingAll}
+                                    className="flex items-center gap-1 text-xs font-medium text-red-400 hover:text-red-600 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    <i className="ti ti-trash text-xs" aria-hidden="true" />Clear
+                                  </button>
+                                )}
+                                {err && <p className="text-xs text-red-500">{err}</p>}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-gray-400">Not yet closed</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                  <div className="hidden sm:block border border-gray-200 rounded-lg overflow-hidden">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-gray-50 border-b border-gray-200">
@@ -2827,6 +3071,7 @@ export default function ProgramIntelligencePage() {
                       </tbody>
                     </table>
                   </div>
+                  </>
                 );
               })()}
             </div>
@@ -3271,13 +3516,15 @@ export default function ProgramIntelligencePage() {
       </div>
 
       {selectedRep && repDerivedData && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setSelectedRep(null)}>
+        <div className="fixed inset-0 z-50 bg-black/30 sm:flex sm:justify-end" onClick={() => setSelectedRep(null)}>
+          <style>{`
+            @keyframes slideInFromRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+            @keyframes slideUpFromBottomRep { from { transform: translateY(100%); } to { transform: translateY(0); } }
+          `}</style>
           <div
-            className="h-full w-full max-w-[560px] bg-white p-5 overflow-y-auto"
-            style={{ animation: 'slideInFromRight 200ms ease-out' }}
+            className="fixed inset-x-0 bottom-0 sm:static h-[90vh] sm:h-full w-full sm:max-w-[560px] bg-white p-5 overflow-y-auto rounded-t-2xl sm:rounded-none animate-[slideUpFromBottomRep_200ms_ease-out] sm:animate-[slideInFromRight_200ms_ease-out]"
             onClick={e => e.stopPropagation()}
           >
-            <style>{`@keyframes slideInFromRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="text-xl font-bold text-gray-900">{selectedRep.repName}</h3>
