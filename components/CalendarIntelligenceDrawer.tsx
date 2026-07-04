@@ -210,6 +210,10 @@ const DRAWER_KEYFRAMES = `
     from { transform: translateX(100%); }
     to   { transform: translateX(0); }
   }
+  @keyframes slideUpFromBottom {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
   @keyframes mainPanelEnterFullScreen {
     from { transform: translateX(calc(100vw - 492px)); }
     to   { transform: translateX(0); }
@@ -218,9 +222,21 @@ const DRAWER_KEYFRAMES = `
     from { transform: translateX(50px); opacity: 0; }
     to   { transform: translateX(0);    opacity: 1; }
   }
+  @keyframes toolPanelSlideUp {
+    from { transform: translateY(30px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
   @keyframes backdropFadeIn {
     from { background-color: rgba(0,0,0,0.3); }
     to   { background-color: rgba(0,0,0,0.5); }
+  }
+  /* Mobile: panels slide up from the bottom, stacked full-width.
+     Desktop (md+): panels slide in from the right, side by side. */
+  .calintel-main-panel { animation: slideUpFromBottom 220ms ease-out; }
+  .calintel-tool-panel { animation: toolPanelSlideUp 240ms ease-out 80ms both; }
+  @media (min-width: 768px) {
+    .calintel-main-panel { animation: mainPanelEnterFullScreen 300ms cubic-bezier(0.4, 0, 0.2, 1); }
+    .calintel-tool-panel { animation: toolPanelSlideIn 240ms ease-out 120ms both; }
   }
 `;
 
@@ -374,21 +390,21 @@ export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basic
       onClick={onClose}
     >
       <style>{DRAWER_KEYFRAMES}</style>
-      <div className="flex h-full w-full gap-3 p-3 overflow-x-auto" onClick={e => e.stopPropagation()}>
-        {/* Main score panel — slides from its right-drawer position */}
-        <OverlayPanel
-          className="w-[480px] flex-shrink-0 flex flex-col"
-          style={{ animation: 'mainPanelEnterFullScreen 300ms cubic-bezier(0.4, 0, 0.2, 1)' }}
-        >
+      {/* Mobile: panels stack vertically (one near-full-screen "page" per open
+          panel, scroll to reach the others) and slide up from the bottom.
+          Desktop (md+): panels sit side by side and slide in from the right. */}
+      <div
+        className="flex flex-col md:flex-row h-full w-full gap-3 p-3 overflow-y-auto md:overflow-x-auto md:overflow-y-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Main score panel */}
+        <OverlayPanel className="calintel-main-panel w-full h-[85vh] md:h-full md:w-[480px] flex-shrink-0 flex flex-col">
           {mainPanelContent}
         </OverlayPanel>
 
         {/* Gap Analysis panel */}
         {pathToTierOpen && deepRow && (
-          <OverlayPanel
-            className="w-[420px] flex-shrink-0"
-            style={{ animation: 'toolPanelSlideIn 240ms ease-out 120ms both' }}
-          >
+          <OverlayPanel className="calintel-tool-panel w-full h-[85vh] md:h-full md:w-[420px] flex-shrink-0">
             <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
               <h3 className="font-semibold text-gray-900 text-sm">Gap Analysis</h3>
               <button onClick={() => setPathToTierOpen(false)} className="text-gray-400 hover:text-gray-600">
@@ -406,10 +422,7 @@ export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basic
 
         {/* Execution panel */}
         {executionCompOpen && deepRow && (
-          <OverlayPanel
-            className="w-[420px] flex-shrink-0"
-            style={{ animation: 'toolPanelSlideIn 240ms ease-out 120ms both' }}
-          >
+          <OverlayPanel className="calintel-tool-panel w-full h-[85vh] md:h-full md:w-[420px] flex-shrink-0">
             <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
               <h3 className="font-semibold text-gray-900 text-sm">Execution</h3>
               <button onClick={() => setExecutionCompOpen(false)} className="text-gray-400 hover:text-gray-600">
@@ -424,10 +437,7 @@ export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basic
 
         {/* Team input panel */}
         {teamInputOpen && (
-          <OverlayPanel
-            className="w-[420px] flex-shrink-0 flex flex-col"
-            style={{ animation: 'toolPanelSlideIn 240ms ease-out 120ms both' }}
-          >
+          <OverlayPanel className="calintel-tool-panel w-full h-[85vh] md:h-full md:w-[420px] flex-shrink-0 flex flex-col">
             <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10 flex-shrink-0">
               <h3 className="font-semibold text-gray-900 text-sm">Team input</h3>
               <div className="flex items-center gap-2">
@@ -474,6 +484,7 @@ export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basic
       {/* Mobile: bottom-up */}
       <div
         className="md:hidden w-full h-[85vh] absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl overflow-hidden flex flex-col"
+        style={{ animation: 'slideUpFromBottom 220ms ease-out' }}
         onClick={e => e.stopPropagation()}
       >
         {mainPanelContent}

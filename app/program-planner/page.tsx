@@ -294,6 +294,7 @@ export default function ProgramPlannerPage() {
   const [confsData, setConfsData] = useState<ConferencesData | null>(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'program' | 'cost'>('program');
+  const [statsOpen, setStatsOpen] = useState(true);
   const [groupMode, setGroupMode] = useState<GroupMode>('series');
   const [rankMetric, setRankMetric] = useState<RankMetric>('ces');
   const [collapsedSeries, setCollapsedSeries] = useState<Set<string>>(new Set());
@@ -520,7 +521,20 @@ export default function ProgramPlannerPage() {
         {loading ? <Skeleton /> : (
           <>
             {/* Stat cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="sm:hidden flex items-center justify-between">
+              <span className="text-sm font-semibold text-gray-700">Summary</span>
+              <button
+                type="button"
+                onClick={() => setStatsOpen(v => !v)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                aria-label={statsOpen ? 'Collapse summary' : 'Expand summary'}
+              >
+                <svg className={`w-5 h-5 transition-transform duration-200 ${statsOpen ? '' : '-rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+            <div className={`grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 sm:grid ${statsOpen ? 'grid' : 'hidden'}`}>
               {/* Conferences attended */}
               <div className="card text-center">
                 <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Conferences attended</p>
@@ -736,8 +750,8 @@ export default function ProgramPlannerPage() {
                           </div>
 
                           <div className="grid grid-cols-2 gap-2 text-[12px]">
-                            <div className="flex items-center justify-between bg-gray-50 rounded-lg px-2 py-1.5">
-                              <span className="text-gray-400">CES</span>
+                            <div className="bg-gray-50 rounded-lg px-2 py-1.5">
+                              <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">CES</p>
                               {c.ces != null ? (
                                 <button
                                   type="button"
@@ -749,30 +763,30 @@ export default function ProgramPlannerPage() {
                                 </button>
                               ) : <span className="text-gray-400">—</span>}
                             </div>
-                            <div className="flex items-center justify-between bg-gray-50 rounded-lg px-2 py-1.5">
-                              <span className="text-gray-400">Actual cost</span>
+                            <div className="bg-gray-50 rounded-lg px-2 py-1.5">
+                              <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Actual cost</p>
                               {c.actualSpend != null ? (
                                 <button
                                   type="button"
                                   onClick={() => setBudgetDrawer(c)}
-                                  className="px-1.5 py-0.5 rounded text-[12px] font-semibold border tabular-nums"
+                                  className="w-full text-left px-1.5 py-0.5 rounded text-[12px] font-semibold border tabular-nums"
                                   style={{ backgroundColor: actualCostPillStyle(c.actualSpend, c.budgetTotal).bg, color: actualCostPillStyle(c.actualSpend, c.budgetTotal).color, borderColor: actualCostPillStyle(c.actualSpend, c.budgetTotal).border }}
                                 >
                                   {fmtCurrency(c.actualSpend)}
                                 </button>
                               ) : <span className="text-gray-400 tabular-nums">—</span>}
                             </div>
-                            <div className="flex items-center justify-between bg-gray-50 rounded-lg px-2 py-1.5">
-                              <span className="text-gray-400">Pipeline inf.</span>
+                            <div className="bg-gray-50 rounded-lg px-2 py-1.5">
+                              <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Pipeline inf.</p>
                               <span className="text-gray-700 tabular-nums">{fmtCurrency(c.pipelineInfluenced)}</span>
                             </div>
-                            <div className="flex items-center justify-between bg-gray-50 rounded-lg px-2 py-1.5">
-                              <span className="text-gray-400">Closed/won</span>
+                            <div className="bg-gray-50 rounded-lg px-2 py-1.5">
+                              <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Closed/won</p>
                               {(c.closedWon ?? 0) > 0 ? (
                                 <button
                                   type="button"
                                   onClick={() => setClosedWonDrawer({ type: 'conference', conferenceId: c.conferenceId, conferenceName: c.name })}
-                                  className="px-1.5 py-0.5 rounded text-[12px] font-semibold border bg-green-50 text-green-700 border-green-200 tabular-nums"
+                                  className="w-full text-left px-1.5 py-0.5 rounded text-[12px] font-semibold border bg-green-50 text-green-700 border-green-200 tabular-nums"
                                 >
                                   {fmtCurrency(c.closedWon)}
                                 </button>
