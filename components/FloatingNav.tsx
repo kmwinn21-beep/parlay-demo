@@ -564,14 +564,15 @@ export function FloatingNav() {
               Intelligence
             </button>
 
-            {/* Submenu items — anchored to whichever side of the Intelligence button is
-                away from the FAB/main floating nav menu, so it never sits under/overlaps
-                it. Always in DOM so closing can animate out, same as the main menu. */}
+            {/* Submenu items — anchored flush with the Intelligence button's own edge
+                (not extended a full button-width further out) and narrow enough
+                (with wrapping labels) to stay on-screen. Always in DOM so closing
+                can animate out, same as the main menu. */}
             <div
               style={{
                 position: 'absolute',
                 bottom: '100%',
-                ...(onRight ? { right: '100%', marginRight: 8 } : { left: '100%', marginLeft: 8 }),
+                right: 0,
                 marginBottom: 6,
                 display: 'flex',
                 flexDirection: 'column-reverse',
@@ -596,7 +597,7 @@ export function FloatingNav() {
                     <Link
                       href={item.href}
                       onClick={() => { setOpen(false); setIntelOpen(false); }}
-                      className="block text-xs font-medium whitespace-nowrap text-blue-100 bg-brand-primary/90 hover:bg-brand-secondary/90 backdrop-blur-sm rounded-full px-3 py-1.5 border border-blue-700/40 shadow-lg transition-colors text-left"
+                      className="block w-28 text-xs font-medium leading-tight text-blue-100 bg-brand-primary/90 hover:bg-brand-secondary/90 backdrop-blur-sm rounded-2xl px-3 py-1.5 border border-blue-700/40 shadow-lg transition-colors text-left"
                     >
                       {item.label}
                     </Link>
