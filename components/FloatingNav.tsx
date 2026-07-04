@@ -21,6 +21,12 @@ const STORAGE_KEY = 'floatingNavPos';
 const BTN = 56; // diameter in px (w-14)
 const PAD = 20; // min distance from viewport edges
 
+const INTEL_ITEMS = [
+  { href: '/program-planner', label: 'Program Planner' },
+  { href: '/calendar-intelligence', label: 'Calendar Intelligence' },
+  { href: '/program-intelligence', label: 'Program Intelligence' },
+];
+
 const NAV_ITEMS = [
   {
     href: '/',
@@ -104,6 +110,7 @@ export function FloatingNav() {
   const { setPanelOpen } = useChatPanel();
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [open, setOpen] = useState(false);
+  const [intelOpen, setIntelOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showQuickNote, setShowQuickNote] = useState(false);
@@ -141,7 +148,9 @@ export function FloatingNav() {
   }, []);
 
   // Close menu on route change
-  useEffect(() => { setOpen(false); }, [pathname]);
+  useEffect(() => { setOpen(false); setIntelOpen(false); }, [pathname]);
+  // Close the Intelligence submenu whenever the main menu closes
+  useEffect(() => { if (!open) setIntelOpen(false); }, [open]);
 
   /* ── Pointer handlers ── */
   const onDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -543,6 +552,58 @@ export function FloatingNav() {
           >
             Sign out
           </button>
+
+          {/* Intelligence — reveals Program Planner / Calendar Intelligence / Program Intelligence
+              stacked above this button, using the same staggered animation as the main menu items. */}
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => setIntelOpen(v => !v)}
+              className="text-xs font-medium text-white/75 hover:text-white bg-brand-primary/80 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20 shadow-lg transition-colors"
+            >
+              Intelligence
+            </button>
+
+            {/* Submenu items — always in DOM so closing can animate out, same as the main menu */}
+            <div
+              style={{
+                position: 'absolute',
+                bottom: '100%',
+                right: 0,
+                marginBottom: 6,
+                display: 'flex',
+                flexDirection: 'column-reverse',
+                gap: 6,
+                pointerEvents: intelOpen ? 'auto' : 'none',
+              }}
+            >
+              {INTEL_ITEMS.map((item, i) => {
+                const openDelay = i * 42;
+                const closeDelay = (INTEL_ITEMS.length - 1 - i) * 28;
+                return (
+                  <div
+                    key={item.href}
+                    style={{
+                      transition: intelOpen
+                        ? `opacity 0.26s cubic-bezier(0.34,1.56,0.64,1) ${openDelay}ms, transform 0.26s cubic-bezier(0.34,1.56,0.64,1) ${openDelay}ms`
+                        : `opacity 0.16s cubic-bezier(0.4,0,1,1) ${closeDelay}ms, transform 0.16s cubic-bezier(0.4,0,1,1) ${closeDelay}ms`,
+                      opacity: intelOpen ? 1 : 0,
+                      transform: intelOpen ? 'translateY(0) scale(1)' : 'translateY(10px) scale(0.88)',
+                    }}
+                  >
+                    <Link
+                      href={item.href}
+                      onClick={() => { setOpen(false); setIntelOpen(false); }}
+                      className="block text-xs font-medium whitespace-nowrap text-blue-100 bg-brand-primary/90 hover:bg-brand-secondary/90 backdrop-blur-sm rounded-full px-3 py-1.5 border border-blue-700/40 shadow-lg transition-colors text-right"
+                    >
+                      {item.label}
+                    </Link>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           <button
             type="button"
             onClick={() => { setOpen(false); setNavHidden(true); }}
