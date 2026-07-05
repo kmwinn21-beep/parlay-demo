@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -3569,8 +3570,11 @@ export default function ConferenceDetailPage() {
         />
       )}
 
-      {/* Quick View iframe drawer */}
-      {quickViewId !== null && (
+      {/* Quick View iframe drawer — rendered via portal directly under <body> so its
+          fixed positioning is always relative to the true viewport, matching the
+          Companies tab's quick-view drawer regardless of where this component sits
+          in the page's DOM tree. */}
+      {quickViewId !== null && createPortal(
         <>
           <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
           <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setQuickViewId(null)} />
@@ -3604,7 +3608,8 @@ export default function ConferenceDetailPage() {
               title="Quick View"
             />
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );
