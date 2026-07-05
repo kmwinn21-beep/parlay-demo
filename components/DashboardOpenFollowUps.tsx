@@ -159,7 +159,7 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
   followUps: OpenFollowUp[];
   bannerData: BannerData;
 }) {
-  const { panelStyle: companyPanelStyle, handleResizeStart: companyResizeStart } = useDrawerResize(600);
+  const { panelStyle: companyPanelStyle, handleResizeStart: companyResizeStart } = useDrawerResize(480);
   const { panelStyle: confPanelStyle, handleResizeStart: confResizeStart } = useDrawerResize(520);
 
   const [collapsed, setCollapsed] = useState(() => {
@@ -300,7 +300,7 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
             onClick={() => setCompanyDrawerId(null)}
           />
           <div
-            className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[600px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none z-50"
+            className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[480px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none z-50"
             style={companyPanelStyle}
           >
             <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={companyResizeStart}>

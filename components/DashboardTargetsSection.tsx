@@ -174,7 +174,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
   const [meetingAttendeeIds, setMeetingAttendeeIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
   const [selectedTiers, setSelectedTiers] = useState<Set<string>>(new Set(['1']));
-  const { panelStyle: attendeePanelStyle, handleResizeStart: attendeeResizeStart } = useDrawerResize(600);
+  const { panelStyle: attendeePanelStyle, handleResizeStart: attendeeResizeStart } = useDrawerResize(480);
   const [drawerAttendeeId, setDrawerAttendeeId] = useState<number | null>(null);
   const [drawerAttendeeName, setDrawerAttendeeName] = useState<string>('');
 
@@ -358,7 +358,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
           <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
           <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setDrawerAttendeeId(null)} />
           <div
-            className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[600px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none z-50"
+            className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[480px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none z-50"
             style={attendeePanelStyle}
           >
             <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={attendeeResizeStart}>
