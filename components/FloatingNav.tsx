@@ -541,7 +541,7 @@ export function FloatingNav() {
             top: pos.y + Math.round((BTN - 28) / 2),
             zIndex: 62,
             display: 'flex',
-            gap: 6,
+            gap: 12,
             whiteSpace: 'nowrap',
           }}
         >
@@ -605,7 +605,7 @@ export function FloatingNav() {
                   <Link
                     href={item.href}
                     onClick={() => { setOpen(false); setIntelOpen(false); }}
-                    className="block w-28 text-xs font-medium leading-tight text-blue-100 bg-brand-primary/90 hover:bg-brand-secondary/90 backdrop-blur-sm rounded-2xl px-3 py-1.5 border border-blue-700/40 shadow-lg transition-colors text-left"
+                    className="block whitespace-nowrap text-xs font-medium text-blue-100 bg-brand-primary/90 hover:bg-brand-secondary/90 backdrop-blur-sm rounded-2xl px-3 py-1.5 border border-blue-700/40 shadow-lg transition-colors text-left"
                   >
                     {item.label}
                   </Link>
