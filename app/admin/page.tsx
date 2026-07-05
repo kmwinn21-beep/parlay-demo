@@ -1850,7 +1850,7 @@ export default function AdminPage() {
       if (!res.ok) throw new Error();
       setSavedTagline(taglineInput.trim());
       invalidateTagline();
-      toast.success(taglineInput.trim() ? 'Tagline saved.' : 'Tagline reset to default.');
+      toast.success(taglineInput.trim() ? 'Tagline saved.' : 'Tagline cleared.');
     } catch { toast.error('Failed to save tagline.'); }
     finally { setSavingTagline(false); }
   };
@@ -2590,13 +2590,13 @@ export default function AdminPage() {
             {/* Tagline */}
             <div className="card">
               <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Sidebar Tagline</h2>
-              <p className="text-sm text-gray-500 mb-4">Set the italic tagline shown beneath the logo in the sidebar. Leave blank to use the default: <span className="italic text-gray-600">&quot;Relationships Matter&quot;</span></p>
+              <p className="text-sm text-gray-500 mb-4">Set the italic tagline shown beneath the logo in the sidebar. Leave blank to show no tagline.</p>
               <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
                 <input
                   type="text"
                   value={taglineInput}
                   onChange={e => setTaglineInput(e.target.value)}
-                  placeholder="Relationships Matter"
+                  placeholder="No tagline"
                   className="input-field text-sm flex-1"
                   maxLength={80}
                 />

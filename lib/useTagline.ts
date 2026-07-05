@@ -1,8 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
 
-const DEFAULT = 'Relationships Matter';
-
 let _cache: string | null = null;
 let _pending: Promise<string> | undefined;
 
@@ -14,16 +12,16 @@ export function invalidateTagline() {
 async function fetchTagline(): Promise<string> {
   try {
     const res = await fetch('/api/tagline', { cache: 'no-store' });
-    if (!res.ok) return DEFAULT;
+    if (!res.ok) return '';
     const { tagline } = await res.json() as { tagline: string };
-    return tagline || DEFAULT;
+    return tagline || '';
   } catch {
-    return DEFAULT;
+    return '';
   }
 }
 
 export function useTagline(): string {
-  const [tagline, setTagline] = useState<string>(_cache ?? DEFAULT);
+  const [tagline, setTagline] = useState<string>(_cache ?? '');
 
   useEffect(() => {
     if (_cache !== null) { setTagline(_cache); return; }
