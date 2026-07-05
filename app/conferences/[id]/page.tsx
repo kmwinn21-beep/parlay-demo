@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -363,7 +364,7 @@ export default function ConferenceDetailPage() {
   const [filterConfCounts, setFilterConfCounts] = useState<Set<string>>(new Set());
   const [showConfFilter, setShowConfFilter] = useState(false);
   const [filterUpdatedWithin, setFilterUpdatedWithin] = useState('');
-  const { panelStyle: qvPanelStyle, handleResizeStart: qvResizeStart } = useDrawerResize(600);
+  const { panelStyle: qvPanelStyle, handleResizeStart: qvResizeStart } = useDrawerResize(480);
   const [quickViewId, setQuickViewId] = useState<number | null>(null);
   const [quickViewType, setQuickViewType] = useState<'attendee' | 'company'>('attendee');
   const [attendeeFiltersOpen, setAttendeeFiltersOpen] = useState(false);
@@ -3569,13 +3570,16 @@ export default function ConferenceDetailPage() {
         />
       )}
 
-      {/* Quick View iframe drawer */}
-      {quickViewId !== null && (
+      {/* Quick View iframe drawer — rendered via portal directly under <body> so its
+          fixed positioning is always relative to the true viewport, matching the
+          Companies tab's quick-view drawer regardless of where this component sits
+          in the page's DOM tree. */}
+      {quickViewId !== null && createPortal(
         <>
           <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
           <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setQuickViewId(null)} />
           <div
-            className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[600px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none z-50"
+            className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[480px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none z-50"
             style={qvPanelStyle}
           >
             <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={qvResizeStart}>
@@ -3604,7 +3608,8 @@ export default function ConferenceDetailPage() {
               title="Quick View"
             />
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );

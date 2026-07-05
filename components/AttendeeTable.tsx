@@ -155,7 +155,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const statusOptions = configOptions.status ?? [];
   const seniorityConfigOptions = useMemo(() => configOptions.seniority ?? [], [configOptions.seniority]);
   const companyTypeOptions = useMemo(() => configOptions.company_type ?? [], [configOptions.company_type]);
-  const { panelStyle: qvPanelStyle, handleResizeStart: qvResizeStart } = useDrawerResize(600);
+  const { panelStyle: qvPanelStyle, handleResizeStart: qvResizeStart } = useDrawerResize(480);
 
   const [localAttendees, setLocalAttendees] = useState<Attendee[]>(attendees);
   useEffect(() => { setLocalAttendees(attendees); }, [attendees]);
@@ -1128,7 +1128,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
           <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
           <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setQuickViewId(null)} />
           <div
-            className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[600px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none z-50"
+            className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[480px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none z-50"
             style={qvPanelStyle}
           >
             <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={qvResizeStart}>
