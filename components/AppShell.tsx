@@ -102,6 +102,48 @@ function GlobalReviewModalsBar() {
   );
 }
 
+function GlobalReviewModalsMobileTab() {
+  const {
+    preConference, expandPreConference,
+    postConference, expandPostConference,
+    effectiveness, expandEffectiveness,
+  } = useConferenceReviewModals();
+
+  const tabs = [
+    preConference.isOpen && preConference.isMinimized && {
+      key: 'pre-conference', label: preConference.conferenceName || 'Pre-Conference', expand: expandPreConference,
+    },
+    postConference.isOpen && postConference.isMinimized && {
+      key: 'post-conference', label: postConference.conferenceName || 'Activity Debrief', expand: expandPostConference,
+    },
+    effectiveness.isOpen && effectiveness.isMinimized && {
+      key: 'effectiveness', label: effectiveness.conferenceName || 'Effectiveness', expand: expandEffectiveness,
+    },
+  ].filter((t): t is { key: string; label: string; expand: () => void } => Boolean(t));
+
+  if (tabs.length === 0) return null;
+
+  return (
+    <div className="lg:hidden fixed right-0 top-1/2 -translate-y-1/2 z-[55] flex flex-col gap-2">
+      {tabs.map(t => (
+        <button
+          key={t.key}
+          type="button"
+          onClick={t.expand}
+          title={t.label}
+          aria-label={`Expand ${t.label}`}
+          className="w-10 h-10 flex items-center justify-center bg-white border border-r-0 rounded-l-xl shadow-lg"
+          style={{ borderColor: 'rgb(var(--brand-accent-rgb))' }}
+        >
+          <svg className="w-4 h-4 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function AppShellInner({ children }: { children: React.ReactNode }) {
   const { isOpen, defaultPlan, closeUpgradeModal } = useUpgradeModal();
   return (
@@ -162,6 +204,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       <PostConferenceReviewModal />
       <ConferenceEffectivenessModalBody />
       <GlobalReviewModalsBar />
+      <GlobalReviewModalsMobileTab />
     </>
   );
 }

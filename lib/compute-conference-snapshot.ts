@@ -1,4 +1,5 @@
 import type { Client } from '@libsql/client';
+import { getIcpConfig, evaluateIcpRules } from './icpRules';
 
 interface CesBenchmarks {
   cost_per_company: { elite_max: number; strong_max: number; healthy_max: number; weak_max: number };
@@ -305,6 +306,33 @@ export async function computeConferenceSnapshot(
     const pipelineNetNewVal = pipelineInfluenced != null ? pipelineNetNew : null;
     const pipelineContinuedVal = pipelineInfluenced != null ? pipelineContinued : null;
 
+    // Step 6b — live ICP evaluation per company attending this conference. Evaluates the
+    // current icp_rules config directly rather than trusting the cached companies.icp
+    // column, which is only refreshed by a separate admin job and can go stale relative
+    // to rule changes (causing this count to drift from the live pre-conference tab).
+    const icpConfig = await getIcpConfig(db);
+    const companyAttrsRes = await db.execute({
+      sql: `SELECT DISTINCT co.id, co.company_type, co.entity_structure, co.profit_type, co.services, co.wse
+            FROM conference_attendees ca
+            JOIN attendees a ON ca.attendee_id = a.id
+            JOIN companies co ON a.company_id = co.id
+            WHERE ca.conference_id = ?`,
+      args: [conferenceId],
+    });
+    const icpCompanyIdSet = new Set<number>();
+    for (const row of companyAttrsRes.rows) {
+      const vals = {
+        company_type: String(row.company_type ?? ''),
+        entity_structure: String(row.entity_structure ?? ''),
+        profit_type: String(row.profit_type ?? ''),
+        services: String(row.services ?? ''),
+        wse: String(row.wse ?? ''),
+      };
+      if (evaluateIcpRules(vals, icpConfig) === 'Yes') icpCompanyIdSet.add(Number(row.id));
+    }
+    const icpCompanyIds = Array.from(icpCompanyIdSet);
+    const icpIdPlaceholders = icpCompanyIds.length > 0 ? icpCompanyIds.map(() => '?').join(',') : 'NULL';
+
     // Step 7 — engagement summary: total companies, companies_engaged, ICP coverage
     const engSummaryRes = await db.execute({
       sql: `WITH ${ENGAGEMENT_CTES}
@@ -313,12 +341,10 @@ export async function computeConferenceSnapshot(
               COUNT(DISTINCT ae.company_id) AS companies_engaged,
               (SELECT COUNT(DISTINCT acc3.company_id)
                FROM all_cc acc3
-               JOIN companies co3 ON co3.id = acc3.company_id
-               WHERE co3.icp = 'Yes') AS icp_companies_total,
-              COUNT(DISTINCT CASE WHEN co.icp = 'Yes' THEN ae.company_id END) AS icp_companies_engaged
-            FROM all_eng ae
-            JOIN companies co ON co.id = ae.company_id`,
-      args: [conferenceId, conferenceId, conferenceId, conferenceId],
+               WHERE acc3.company_id IN (${icpIdPlaceholders})) AS icp_companies_total,
+              COUNT(DISTINCT CASE WHEN ae.company_id IN (${icpIdPlaceholders}) THEN ae.company_id END) AS icp_companies_engaged
+            FROM all_eng ae`,
+      args: [conferenceId, conferenceId, conferenceId, conferenceId, ...icpCompanyIds, ...icpCompanyIds],
     });
     const engRow = engSummaryRes.rows[0] as Record<string, unknown>;
     const totalCompanies = Number(engRow?.total_companies ?? 0);
@@ -596,9 +622,8 @@ export async function computeConferenceSnapshot(
                ) THEN 1 ELSE 0 END AS has_touchpoint
              FROM conference_attendees ca
              JOIN attendees a ON ca.attendee_id = a.id
-             JOIN companies co ON a.company_id = co.id
-             WHERE ca.conference_id = ? AND co.icp = 'Yes' AND a.company_id IS NOT NULL`,
-      args: [conferenceId, conferenceId, conferenceId, conferenceId],
+             WHERE ca.conference_id = ? AND a.company_id IN (${icpIdPlaceholders})`,
+      args: [conferenceId, conferenceId, conferenceId, conferenceId, ...icpCompanyIds],
     });
 
     // Inline title key normalization (lowercase + trim, matching normalizeTitleKey behaviour)
@@ -718,9 +743,8 @@ export async function computeConferenceSnapshot(
                COUNT(DISTINCT CASE WHEN COALESCE(fu.completed,0)=1 THEN fu.id END) AS completed_followups
              FROM follow_ups fu
              JOIN attendees a ON fu.attendee_id = a.id
-             JOIN companies co ON a.company_id = co.id
-             WHERE fu.conference_id = ? AND co.icp = 'Yes'`,
-      args: [conferenceId],
+             WHERE fu.conference_id = ? AND a.company_id IN (${icpIdPlaceholders})`,
+      args: [conferenceId, ...icpCompanyIds],
     });
     const maIcpFuRow = maIcpFollowupRes.rows[0] as Record<string, unknown> | undefined;
     const maIcpCompaniesWithFollowup = Number(maIcpFuRow?.icp_companies_with_followup ?? 0);
@@ -808,9 +832,8 @@ export async function computeConferenceSnapshot(
         sql: `WITH ${ENGAGEMENT_CTES}
               SELECT DISTINCT ae.company_id
               FROM all_eng ae
-              JOIN companies co ON co.id = ae.company_id
-              WHERE co.icp = 'Yes'`,
-        args: [conferenceId, conferenceId, conferenceId, conferenceId],
+              WHERE ae.company_id IN (${icpIdPlaceholders})`,
+        args: [conferenceId, conferenceId, conferenceId, conferenceId, ...icpCompanyIds],
       });
       let fullCommitteeCount = 0;
       for (const coRow of engagedIcpCoRes.rows) {
