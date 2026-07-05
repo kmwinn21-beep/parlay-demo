@@ -14,21 +14,13 @@ export function ConferenceInputPanel({ conferenceId, conferenceName, onClose }: 
   const [requestFormOpen, setRequestFormOpen] = useState(false);
 
   const content = (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <style>{`
-        @keyframes slideInFromRight {
-          from { transform: translateX(100%); }
-          to   { transform: translateX(0); }
-        }
-      `}</style>
-
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-stretch sm:justify-end">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
 
-      {/* Drawer */}
+      {/* Drawer — slides up from the bottom on mobile, in from the right on desktop */}
       <div
-        className="relative flex flex-col w-full max-w-[400px] h-full bg-white shadow-2xl overflow-hidden rounded-tl-2xl"
-        style={{ animation: 'slideInFromRight 220ms ease-out' }}
+        className="drawer-mobile-responsive relative flex flex-col w-full max-h-[85vh] sm:max-h-full sm:max-w-[400px] sm:h-full bg-white shadow-2xl overflow-hidden rounded-t-2xl sm:rounded-t-none sm:rounded-tl-2xl"
       >
         {/* Header — matches Cal Intel drawer style */}
         <div
