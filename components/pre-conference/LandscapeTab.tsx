@@ -486,18 +486,27 @@ function StrategyAlignmentRow({
 
   return (
     <div>
-      <div className={`flex items-center gap-3 rounded-xl px-4 py-3 ${toneRowBg}`}>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <svg className={`w-4 h-4 flex-shrink-0 ${toneIcon}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-          </svg>
-          <span className={`text-xs font-bold uppercase tracking-wide whitespace-nowrap ${toneLabelText}`}>Review Strategy Alignment</span>
+      <div className={`flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl px-4 py-3 ${toneRowBg}`}>
+        <div className="flex items-center justify-between gap-2 sm:justify-start sm:flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <svg className={`w-4 h-4 flex-shrink-0 ${toneIcon}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+            <span className={`text-xs font-bold uppercase tracking-wide whitespace-nowrap ${toneLabelText}`}>Review Strategy Alignment</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(o => !o)}
+            className={`sm:hidden px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap flex-shrink-0 transition-colors ${toneButton}`}
+          >
+            Review Details
+          </button>
         </div>
-        <span className={`text-xs flex-1 min-w-0 ${toneLabelText}`}>{message}</span>
+        <span className={`text-xs sm:flex-1 sm:min-w-0 ${toneLabelText}`}>{message}</span>
         <button
           type="button"
           onClick={() => setDrawerOpen(o => !o)}
-          className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap flex-shrink-0 transition-colors ${toneButton}`}
+          className={`hidden sm:block px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap flex-shrink-0 transition-colors ${toneButton}`}
         >
           Review Details
         </button>
