@@ -148,11 +148,11 @@ export function Sidebar() {
     <>
       <aside className="w-64 bg-brand-primary flex flex-col flex-shrink-0 h-full">
       {/* Logo area */}
-      <div className="p-5 border-b border-white/20">
+      <div className="p-5 border-b border-white/20 flex flex-col justify-center min-h-[76px]">
         <div className="flex items-center gap-3">
           <LogoImage variant="sidebar" width={140} height={42} className="object-contain" alt="Logo" />
         </div>
-        <p className="text-sidebar-font/60 text-xs mt-2 italic">{tagline}</p>
+        {tagline && <p className="text-sidebar-font/60 text-xs mt-2 italic">{tagline}</p>}
       </div>
 
       {/* Navigation */}
