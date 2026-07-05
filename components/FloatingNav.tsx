@@ -555,57 +555,13 @@ export function FloatingNav() {
 
           {/* Intelligence — reveals Program Planner / Calendar Intelligence / Program Intelligence
               stacked above this button, using the same staggered animation as the main menu items. */}
-          <div style={{ position: 'relative' }}>
-            <button
-              type="button"
-              onClick={() => setIntelOpen(v => !v)}
-              className="text-xs font-medium text-white/75 hover:text-white bg-brand-primary/80 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20 shadow-lg transition-colors"
-            >
-              Intelligence
-            </button>
-
-            {/* Submenu items — anchored flush with the Intelligence button's own edge
-                (not extended a full button-width further out) and narrow enough
-                (with wrapping labels) to stay on-screen. Always in DOM so closing
-                can animate out, same as the main menu. */}
-            <div
-              style={{
-                position: 'absolute',
-                bottom: '100%',
-                right: 0,
-                marginBottom: 6,
-                display: 'flex',
-                flexDirection: 'column-reverse',
-                gap: 6,
-                pointerEvents: intelOpen ? 'auto' : 'none',
-              }}
-            >
-              {INTEL_ITEMS.map((item, i) => {
-                const openDelay = i * 42;
-                const closeDelay = (INTEL_ITEMS.length - 1 - i) * 28;
-                return (
-                  <div
-                    key={item.href}
-                    style={{
-                      transition: intelOpen
-                        ? `opacity 0.26s cubic-bezier(0.34,1.56,0.64,1) ${openDelay}ms, transform 0.26s cubic-bezier(0.34,1.56,0.64,1) ${openDelay}ms`
-                        : `opacity 0.16s cubic-bezier(0.4,0,1,1) ${closeDelay}ms, transform 0.16s cubic-bezier(0.4,0,1,1) ${closeDelay}ms`,
-                      opacity: intelOpen ? 1 : 0,
-                      transform: intelOpen ? 'translateY(0) scale(1)' : 'translateY(10px) scale(0.88)',
-                    }}
-                  >
-                    <Link
-                      href={item.href}
-                      onClick={() => { setOpen(false); setIntelOpen(false); }}
-                      className="block w-28 text-xs font-medium leading-tight text-blue-100 bg-brand-primary/90 hover:bg-brand-secondary/90 backdrop-blur-sm rounded-2xl px-3 py-1.5 border border-blue-700/40 shadow-lg transition-colors text-left"
-                    >
-                      {item.label}
-                    </Link>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={() => setIntelOpen(v => !v)}
+            className="text-xs font-medium text-white/75 hover:text-white bg-brand-primary/80 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20 shadow-lg transition-colors"
+          >
+            Intelligence
+          </button>
 
           <button
             type="button"
@@ -614,6 +570,49 @@ export function FloatingNav() {
           >
             Hide
           </button>
+
+          {/* Submenu items — anchored to this whole row's own left edge (= Sign out
+              button's left edge), which keeps it clear of the main floating nav menu
+              (anchored near the FAB, to the right) without running off the left edge
+              of narrow mobile viewports. Always in DOM so closing can animate out,
+              same as the main menu. */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '100%',
+              left: 0,
+              marginBottom: 6,
+              display: 'flex',
+              flexDirection: 'column-reverse',
+              gap: 6,
+              pointerEvents: intelOpen ? 'auto' : 'none',
+            }}
+          >
+            {INTEL_ITEMS.map((item, i) => {
+              const openDelay = i * 42;
+              const closeDelay = (INTEL_ITEMS.length - 1 - i) * 28;
+              return (
+                <div
+                  key={item.href}
+                  style={{
+                    transition: intelOpen
+                      ? `opacity 0.26s cubic-bezier(0.34,1.56,0.64,1) ${openDelay}ms, transform 0.26s cubic-bezier(0.34,1.56,0.64,1) ${openDelay}ms`
+                      : `opacity 0.16s cubic-bezier(0.4,0,1,1) ${closeDelay}ms, transform 0.16s cubic-bezier(0.4,0,1,1) ${closeDelay}ms`,
+                    opacity: intelOpen ? 1 : 0,
+                    transform: intelOpen ? 'translateY(0) scale(1)' : 'translateY(10px) scale(0.88)',
+                  }}
+                >
+                  <Link
+                    href={item.href}
+                    onClick={() => { setOpen(false); setIntelOpen(false); }}
+                    className="block w-28 text-xs font-medium leading-tight text-blue-100 bg-brand-primary/90 hover:bg-brand-secondary/90 backdrop-blur-sm rounded-2xl px-3 py-1.5 border border-blue-700/40 shadow-lg transition-colors text-left"
+                  >
+                    {item.label}
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
