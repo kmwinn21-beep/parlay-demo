@@ -108,12 +108,12 @@ function AttendeeMiniCard({ attendee }: { attendee: CompanyAttendeeLite }) {
 
 export function CompanyAttendeesDrawer({ companyName, attendees, onClose }: Props) {
   const content = (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-stretch sm:justify-start">
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-stretch sm:justify-end">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
 
-      {/* Drawer — slides up from the bottom on mobile, in from the left on desktop */}
-      <div className="drawer-mobile-responsive-left relative flex flex-col w-full max-h-[85vh] sm:max-h-full sm:max-w-[480px] sm:h-full bg-white shadow-2xl overflow-hidden rounded-t-2xl sm:rounded-t-none sm:rounded-tr-2xl">
+      {/* Drawer — slides up from the bottom on mobile, in from the right on desktop */}
+      <div className="drawer-mobile-responsive relative flex flex-col w-full max-h-[85vh] sm:max-h-full sm:max-w-[480px] sm:h-full bg-white shadow-2xl overflow-hidden rounded-t-2xl sm:rounded-t-none sm:rounded-tl-2xl">
         <div
           className="flex-shrink-0 px-5 py-4 flex items-center justify-between gap-3"
           style={{ background: 'rgb(var(--brand-primary-rgb))' }}
