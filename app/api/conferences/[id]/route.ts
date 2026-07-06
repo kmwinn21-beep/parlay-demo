@@ -27,6 +27,7 @@ export async function GET(
 
     const attendeesResult = await db.execute({
       sql: `SELECT a.*, c.name as company_name, c.company_type, c.wse as company_wse,
+                   c.icp as company_icp, c.assigned_user as company_assigned_user,
                    COALESCE(conf_agg.conference_count, 0) as conference_count,
                    conf_agg.conference_names,
                    COALESCE(notes_agg.notes_count, 0) as entity_notes_count

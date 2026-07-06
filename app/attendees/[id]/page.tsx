@@ -986,7 +986,7 @@ export default function AttendeeDetailPage() {
                     </button>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-100">
                   <div>
                     <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Company</p>
                     {attendee.company_name ? (
@@ -1034,12 +1034,22 @@ export default function AttendeeDetailPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                           </svg>
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(attendee.email!)
+                              .then(() => toast.success('Email copied to clipboard.'))
+                              .catch(() => toast.error('Failed to copy email.'));
+                          }}
+                          title="Copy email"
+                          className="flex-shrink-0 text-gray-400 hover:text-brand-secondary transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                        </button>
                       </div>
                     ) : <p className="text-sm text-gray-400">—</p>}
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Added</p>
-                    <p className="text-sm text-gray-600">{new Date(attendee.created_at.includes('Z') || attendee.created_at.includes('+') ? attendee.created_at : attendee.created_at + 'Z').toLocaleDateString()}</p>
                   </div>
                 </div>
               </div>
