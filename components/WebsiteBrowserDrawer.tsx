@@ -16,7 +16,8 @@ interface Props {
 const LOAD_TIMEOUT_MS = 6000;
 
 function normalizeUrl(url: string): string {
-  return url.startsWith('http') ? url : `https://${url}`;
+  const trimmed = url.trim();
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
 function hostnameOf(url: string): string {
