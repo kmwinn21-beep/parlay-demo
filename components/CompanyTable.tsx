@@ -1400,6 +1400,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
 
       {attendeesDrawerCompany && (
         <CompanyAttendeesDrawer
+          companyId={attendeesDrawerCompany.id}
           companyName={attendeesDrawerCompany.name}
           attendees={(conferenceAttendees ?? []).filter(a => a.company_id === attendeesDrawerCompany.id)}
           onClose={() => setAttendeesDrawerCompany(null)}

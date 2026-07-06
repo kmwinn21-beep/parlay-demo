@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -7,6 +8,8 @@ import { effectiveSeniority } from '@/lib/parsers';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getBadgeClass, getPillClass, getPreset } from '@/lib/colors';
 import { useUserOptions, parseRepIds, getRepInitials } from '@/lib/useUserOptions';
+import { useCapabilities } from '@/lib/useCapabilities';
+import { ActivityTimelineModal } from './ActivityTimelineModal';
 
 export interface CompanyAttendeeLite {
   id: number;
@@ -24,9 +27,18 @@ export interface CompanyAttendeeLite {
 }
 
 interface Props {
+  companyId: number;
   companyName: string;
   attendees: CompanyAttendeeLite[];
   onClose: () => void;
+}
+
+interface TimelineActivity {
+  meetings: unknown[];
+  followUps: unknown[];
+  touchpoints: unknown[];
+  hostedEvents: unknown[];
+  firstContacts: unknown[];
 }
 
 function AttendeeMiniCard({ attendee }: { attendee: CompanyAttendeeLite }) {
@@ -106,34 +118,84 @@ function AttendeeMiniCard({ attendee }: { attendee: CompanyAttendeeLite }) {
   );
 }
 
-export function CompanyAttendeesDrawer({ companyName, attendees, onClose }: Props) {
+export function CompanyAttendeesDrawer({ companyId, companyName, attendees, onClose }: Props) {
+  const { planCapabilities } = useCapabilities();
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [hasActivity, setHasActivity] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/companies/${companyId}/activity-timeline`)
+      .then(r => (r.ok ? r.json() : null))
+      .then((data: { activity?: TimelineActivity } | null) => {
+        if (cancelled || !data?.activity) return;
+        const a = data.activity;
+        setHasActivity(
+          a.meetings.length > 0 || a.followUps.length > 0 || a.touchpoints.length > 0 ||
+          a.hostedEvents.length > 0 || a.firstContacts.length > 0
+        );
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [companyId]);
+
+  const showTimelineButton = Boolean(planCapabilities?.intelligence_core?.activity_timeline) && hasActivity;
+
   const content = (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-stretch sm:justify-end">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
 
-      {/* Drawer — slides up from the bottom on mobile, in from the right on desktop */}
-      <div className="drawer-mobile-responsive relative flex flex-col w-full max-h-[85vh] sm:max-h-full sm:max-w-[480px] sm:h-full bg-white shadow-2xl overflow-hidden rounded-t-2xl sm:rounded-t-none sm:rounded-tl-2xl">
-        <div
-          className="flex-shrink-0 px-5 py-4 flex items-center justify-between gap-3"
-          style={{ background: 'rgb(var(--brand-primary-rgb))' }}
-        >
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-white/60 mb-0.5">{attendees.length} Attendee{attendees.length === 1 ? '' : 's'}</p>
-            <h2 className="text-base font-bold text-white leading-snug truncate" title={companyName}>{companyName}</h2>
+      <div className="relative flex sm:h-full">
+        {/* Drawer — slides up from the bottom on mobile, in from the right on desktop.
+            Hidden on mobile while the docked timeline is open (mobile has no room for
+            both side by side); stays visible alongside it on desktop, just pushed left. */}
+        <div className={`drawer-mobile-responsive relative flex-col w-full max-h-[85vh] sm:max-h-full sm:max-w-[480px] sm:h-full bg-white shadow-2xl overflow-hidden rounded-t-2xl sm:rounded-t-none ${timelineOpen ? 'hidden sm:flex' : 'flex'} ${timelineOpen ? '' : 'sm:rounded-tl-2xl'}`}>
+          <div
+            className="flex-shrink-0 px-5 py-4 flex items-center justify-between gap-3"
+            style={{ background: 'rgb(var(--brand-primary-rgb))' }}
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/60 mb-0.5">{attendees.length} Attendee{attendees.length === 1 ? '' : 's'}</p>
+              <h2 className="text-base font-bold text-white leading-snug truncate" title={companyName}>{companyName}</h2>
+            </div>
+            <button type="button" onClick={onClose} className="flex-shrink-0 text-white/70 hover:text-white transition-colors" aria-label="Close">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
-          <button type="button" onClick={onClose} className="flex-shrink-0 text-white/70 hover:text-white transition-colors" aria-label="Close">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
+            {showTimelineButton && (
+              <button
+                type="button"
+                onClick={() => setTimelineOpen(true)}
+                title="View Activity Timeline"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors text-sm font-medium text-brand-secondary"
+              >
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 flex-shrink-0" aria-hidden="true">
+                  <line x1="2" y1="10" x2="18" y2="10" /><circle cx="6" cy="6" r="1.5" fill="currentColor" stroke="none" /><circle cx="10" cy="13" r="1.5" fill="currentColor" stroke="none" /><circle cx="14" cy="5" r="1.5" fill="currentColor" stroke="none" /><line x1="6" y1="10" x2="6" y2="6" strokeWidth="1.4" /><line x1="10" y1="10" x2="10" y2="13" strokeWidth="1.4" /><line x1="14" y1="10" x2="14" y2="5" strokeWidth="1.4" />
+                </svg>
+                View Activity Timeline
+              </button>
+            )}
+            {attendees.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-8">No attendees at this conference.</p>
+            ) : attendees.map(a => <AttendeeMiniCard key={a.id} attendee={a} />)}
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
-          {attendees.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-8">No attendees at this conference.</p>
-          ) : attendees.map(a => <AttendeeMiniCard key={a.id} attendee={a} />)}
-        </div>
+        {timelineOpen && (
+          <ActivityTimelineModal
+            isOpen={timelineOpen}
+            onClose={() => setTimelineOpen(false)}
+            companyId={companyId}
+            companyName={companyName}
+            variant="docked"
+            defaultWidth={750}
+          />
+        )}
       </div>
     </div>
   );
