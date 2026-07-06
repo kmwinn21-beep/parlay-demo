@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import toast from 'react-hot-toast';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useUserOptions, parseRepIds } from '@/lib/useUserOptions';
 import { getBadgeClass } from '@/lib/colors';
@@ -49,6 +50,36 @@ function IconTooltipCell({ value, iconColor }: { value: string; iconColor: strin
   );
 }
 
+function EmailIconCell({ value }: { value: string }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <a
+        href={`mailto:${value}`}
+        title={value}
+        className="inline-flex items-center justify-center w-6 h-6 rounded-full text-gray-400 hover:text-brand-secondary hover:bg-gray-100 transition-colors"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+        </svg>
+      </a>
+      <button
+        type="button"
+        title="Copy email"
+        onClick={() => {
+          navigator.clipboard.writeText(value)
+            .then(() => toast.success('Email copied to clipboard.'))
+            .catch(() => toast.error('Failed to copy email.'));
+        }}
+        className="inline-flex items-center justify-center w-6 h-6 rounded-full text-gray-400 hover:text-brand-secondary hover:bg-gray-100 transition-colors"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 function UserIconPillCell({ value, nameFormat }: { value: string; nameFormat: 'full' | 'initials' | 'first_last_initial' }) {
   const userOptions = useUserOptions();
   const ids = parseRepIds(value);
@@ -89,6 +120,10 @@ export function CustomColumnCell({ column, value }: { column: CustomColumnDef; v
   if (!strVal) return <span className="text-gray-400 text-xs">—</span>;
 
   const cfg = column.display_config ?? {};
+
+  if (column.data_key === 'email') {
+    return <EmailIconCell value={strVal} />;
+  }
 
   if (column.display_type === 'pill_value') {
     const parts = strVal.split(',').map(v => v.trim()).filter(Boolean);
