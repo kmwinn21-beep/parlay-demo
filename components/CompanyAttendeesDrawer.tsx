@@ -118,85 +118,117 @@ function AttendeeMiniCard({ attendee }: { attendee: CompanyAttendeeLite }) {
   );
 }
 
+function TimelineIcon({ className }: { className: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <line x1="2" y1="10" x2="18" y2="10" /><circle cx="6" cy="6" r="1.5" fill="currentColor" stroke="none" /><circle cx="10" cy="13" r="1.5" fill="currentColor" stroke="none" /><circle cx="14" cy="5" r="1.5" fill="currentColor" stroke="none" /><line x1="6" y1="10" x2="6" y2="6" strokeWidth="1.4" /><line x1="10" y1="10" x2="10" y2="13" strokeWidth="1.4" /><line x1="14" y1="10" x2="14" y2="5" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
 export function CompanyAttendeesDrawer({ companyId, companyName, attendees, onClose }: Props) {
   const { planCapabilities } = useCapabilities();
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const [activityLoading, setActivityLoading] = useState(true);
   const [hasActivity, setHasActivity] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    setActivityLoading(true);
     fetch(`/api/companies/${companyId}/activity-timeline`)
       .then(r => (r.ok ? r.json() : null))
       .then((data: { activity?: TimelineActivity } | null) => {
-        if (cancelled || !data?.activity) return;
-        const a = data.activity;
-        setHasActivity(
-          a.meetings.length > 0 || a.followUps.length > 0 || a.touchpoints.length > 0 ||
-          a.hostedEvents.length > 0 || a.firstContacts.length > 0
-        );
+        if (cancelled) return;
+        const a = data?.activity;
+        setHasActivity(Boolean(a) && (
+          a!.meetings.length > 0 || a!.followUps.length > 0 || a!.touchpoints.length > 0 ||
+          a!.hostedEvents.length > 0 || a!.firstContacts.length > 0
+        ));
       })
-      .catch(() => {});
+      .catch(() => { if (!cancelled) setHasActivity(false); })
+      .finally(() => { if (!cancelled) setActivityLoading(false); });
     return () => { cancelled = true; };
   }, [companyId]);
 
-  const showTimelineButton = Boolean(planCapabilities?.intelligence_core?.activity_timeline) && hasActivity;
+  const capabilityEnabled = Boolean(planCapabilities?.intelligence_core?.activity_timeline);
 
   const content = (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-stretch sm:justify-end">
-      {/* Backdrop */}
+    <div className="fixed inset-0 z-50">
+      {/* Backdrop — shared by both the attendees drawer and the docked timeline; closes both */}
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
 
-      <div className="relative flex sm:h-full">
-        {/* Drawer — slides up from the bottom on mobile, in from the right on desktop.
-            Hidden on mobile while the docked timeline is open (mobile has no room for
-            both side by side); stays visible alongside it on desktop, just pushed left. */}
-        <div className={`drawer-mobile-responsive relative flex-col w-full max-h-[85vh] sm:max-h-full sm:max-w-[480px] sm:h-full bg-white shadow-2xl overflow-hidden rounded-t-2xl sm:rounded-t-none ${timelineOpen ? 'hidden sm:flex' : 'flex'} ${timelineOpen ? '' : 'sm:rounded-tl-2xl'}`}>
-          <div
-            className="flex-shrink-0 px-5 py-4 flex items-center justify-between gap-3"
-            style={{ background: 'rgb(var(--brand-primary-rgb))' }}
-          >
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-white/60 mb-0.5">{attendees.length} Attendee{attendees.length === 1 ? '' : 's'}</p>
-              <h2 className="text-base font-bold text-white leading-snug truncate" title={companyName}>{companyName}</h2>
-            </div>
-            <button type="button" onClick={onClose} className="flex-shrink-0 text-white/70 hover:text-white transition-colors" aria-label="Close">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+      {/* Attendee drawer — slides up from the bottom on mobile, in from the right on desktop.
+          When the timeline is open on desktop, it moves to anchor against the left sidebar
+          instead of sitting flush against the timeline drawer. Hidden on mobile while the
+          timeline is open (no room for both side by side). */}
+      <div
+        className={`drawer-mobile-responsive fixed inset-x-0 bottom-0 sm:inset-y-0 sm:inset-x-auto ${timelineOpen ? 'sm:left-64' : 'sm:right-0'} h-[85vh] sm:h-auto w-full sm:w-[480px] bg-white shadow-2xl overflow-hidden rounded-t-2xl sm:rounded-t-none ${timelineOpen ? 'hidden sm:flex sm:rounded-tr-2xl' : 'flex sm:rounded-tl-2xl'} flex-col`}
+      >
+        <div
+          className="flex-shrink-0 px-5 py-4 flex items-center justify-between gap-3"
+          style={{ background: 'rgb(var(--brand-primary-rgb))' }}
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/60 mb-0.5">{attendees.length} Attendee{attendees.length === 1 ? '' : 's'}</p>
+            <h2 className="text-base font-bold text-white leading-snug truncate" title={companyName}>{companyName}</h2>
           </div>
+          <button type="button" onClick={onClose} className="flex-shrink-0 text-white/70 hover:text-white transition-colors" aria-label="Close">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
-            {showTimelineButton && (
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
+          {capabilityEnabled && (
+            activityLoading ? (
+              <div className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-sm font-medium text-gray-400">
+                <svg className="animate-spin w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Loading Recent Activity
+              </div>
+            ) : hasActivity ? (
               <button
                 type="button"
                 onClick={() => setTimelineOpen(true)}
                 title="View Activity Timeline"
                 className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors text-sm font-medium text-brand-secondary"
               >
-                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 flex-shrink-0" aria-hidden="true">
-                  <line x1="2" y1="10" x2="18" y2="10" /><circle cx="6" cy="6" r="1.5" fill="currentColor" stroke="none" /><circle cx="10" cy="13" r="1.5" fill="currentColor" stroke="none" /><circle cx="14" cy="5" r="1.5" fill="currentColor" stroke="none" /><line x1="6" y1="10" x2="6" y2="6" strokeWidth="1.4" /><line x1="10" y1="10" x2="10" y2="13" strokeWidth="1.4" /><line x1="14" y1="10" x2="14" y2="5" strokeWidth="1.4" />
-                </svg>
+                <TimelineIcon className="w-4 h-4 flex-shrink-0" />
                 View Activity Timeline
               </button>
-            )}
-            {attendees.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-8">No attendees at this conference.</p>
-            ) : attendees.map(a => <AttendeeMiniCard key={a.id} attendee={a} />)}
+            ) : (
+              <div className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-sm font-medium text-gray-400">
+                <TimelineIcon className="w-4 h-4 flex-shrink-0" />
+                No activity found for {companyName}.
+              </div>
+            )
+          )}
+          {attendees.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">No attendees at this conference.</p>
+          ) : attendees.map(a => <AttendeeMiniCard key={a.id} attendee={a} />)}
+        </div>
+      </div>
+
+      {/* Activity timeline — always anchored flush to the right edge, independent of the
+          attendee drawer's position. pointer-events-none on the full-screen wrapper lets
+          clicks outside the panel itself fall through to the shared backdrop above. */}
+      {timelineOpen && (
+        <div className="fixed inset-0 flex items-end sm:items-stretch sm:justify-end pointer-events-none">
+          <div className="pointer-events-auto w-full sm:w-auto">
+            <ActivityTimelineModal
+              isOpen={timelineOpen}
+              onClose={() => setTimelineOpen(false)}
+              companyId={companyId}
+              companyName={companyName}
+              variant="docked"
+              defaultWidth={750}
+            />
           </div>
         </div>
-
-        {timelineOpen && (
-          <ActivityTimelineModal
-            isOpen={timelineOpen}
-            onClose={() => setTimelineOpen(false)}
-            companyId={companyId}
-            companyName={companyName}
-            variant="docked"
-            defaultWidth={750}
-          />
-        )}
-      </div>
+      )}
     </div>
   );
 
