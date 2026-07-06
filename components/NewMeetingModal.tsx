@@ -490,7 +490,7 @@ export function NewMeetingModal({
           setInviteContext({
             attendeeName: `${contact.first_name} ${contact.last_name}`.trim(),
             attendeeEmail: contact.email || null,
-            title: `${attendeeFirst} <> ${repFirst}: ${conf?.name || 'Conference'} Meeting`,
+            title: `${attendeeFirst} and ${repFirst}: ${conf?.name || 'Conference'} Meeting`,
             location: location || meetingType || '',
             dateYMD: meetingDate,
             timeHM: meetingTime,
