@@ -81,6 +81,13 @@ export async function POST(request: NextRequest) {
     const start_date = formData.get('start_date') as string;
     const end_date = formData.get('end_date') as string;
     const location = formData.get('location') as string;
+    const location_place_id = (formData.get('location_place_id') as string | null) || null;
+    const location_lat = formData.has('location_lat') ? Number(formData.get('location_lat')) : null;
+    const location_lng = formData.has('location_lng') ? Number(formData.get('location_lng')) : null;
+    const location_city = (formData.get('location_city') as string | null) || null;
+    const location_state = (formData.get('location_state') as string | null) || null;
+    const location_country = (formData.get('location_country') as string | null) || null;
+    const location_timezone = (formData.get('location_timezone') as string | null) || null;
     const notes = formData.get('notes') as string | null;
     const internal_attendees = formData.get('internal_attendees') as string | null;
     const conference_strategy_type_id = formData.get('conference_strategy_type_id') as string | null;
@@ -120,12 +127,16 @@ export async function POST(request: NextRequest) {
     // Create the conference record
     const confResult = await db.execute({
       sql: `INSERT INTO conferences
-              (name, start_date, end_date, location, notes, internal_attendees, conference_strategy_type_id,
+              (name, start_date, end_date, location,
+               location_place_id, location_lat, location_lng, location_city, location_state, location_country, location_timezone,
+               notes, internal_attendees, conference_strategy_type_id,
                is_historical, post_conference_days, series_id, season_id,
                industry_focus, conference_type, website, sponsorship_level,
                booth_present, booth_width, booth_length, booth_number, booth_hall)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
-      args: [name, start_date, end_date, location, notes || null, internal_attendees || null,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+      args: [name, start_date, end_date, location,
+             location_place_id, location_lat, location_lng, location_city, location_state, location_country, location_timezone,
+             notes || null, internal_attendees || null,
              conference_strategy_type_id ? Number(conference_strategy_type_id) : null,
              is_historical ? 1 : 0, defaultPostConferenceDays, series_id, season_id,
              industry_focus, conference_type, website, sponsorship_level,

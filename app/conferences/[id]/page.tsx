@@ -56,6 +56,7 @@ import { ConferenceActivityMapDrawer } from '@/components/ConferenceActivityMapD
 import type { SeriesYoYData } from '@/lib/get-series-yoy-data';
 import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 import { useDrawerResize } from '@/lib/useDrawerResize';
+import { LocationAutocompleteInput } from '@/components/LocationAutocompleteInput';
 
 interface Attendee {
   id: number;
@@ -129,6 +130,13 @@ interface Conference {
   start_date: string;
   end_date: string;
   location: string;
+  location_place_id?: string | null;
+  location_lat?: number | null;
+  location_lng?: number | null;
+  location_city?: string | null;
+  location_state?: string | null;
+  location_country?: string | null;
+  location_timezone?: string | null;
   notes?: string;
   internal_attendees?: string;
   conference_strategy_type_id?: number | null;
@@ -727,6 +735,13 @@ export default function ConferenceDetailPage() {
         start_date: data.start_date,
         end_date: data.end_date,
         location: data.location,
+        location_place_id: data.location_place_id ?? null,
+        location_lat: data.location_lat ?? null,
+        location_lng: data.location_lng ?? null,
+        location_city: data.location_city ?? null,
+        location_state: data.location_state ?? null,
+        location_country: data.location_country ?? null,
+        location_timezone: data.location_timezone ?? null,
         notes: data.notes || '',
         conference_strategy_type_id: data.conference_strategy_type_id ?? null,
         series_id: data.series_id ?? null,
@@ -1508,10 +1523,20 @@ export default function ConferenceDetailPage() {
               </div>
               <div>
                 <label className="label">Location *</label>
-                <input
+                <LocationAutocompleteInput
                   value={editData.location || ''}
-                  onChange={(e) => setEditData((p) => ({ ...p, location: e.target.value }))}
-                  className="input-field"
+                  onChange={(v) => setEditData((p) => ({ ...p, location: v }))}
+                  onSelect={(details) => setEditData((p) => ({
+                    ...p,
+                    location: details.formatted_address,
+                    location_place_id: details.place_id,
+                    location_lat: details.lat,
+                    location_lng: details.lng,
+                    location_city: details.city,
+                    location_state: details.state,
+                    location_country: details.country,
+                    location_timezone: details.timezone,
+                  }))}
                 />
               </div>
               <div>

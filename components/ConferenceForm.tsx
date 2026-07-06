@@ -8,6 +8,7 @@ import { useConfigOptions } from '@/lib/useConfigOptions';
 import { ColumnMappingModal } from './ColumnMappingModal';
 import { type ColumnMapping } from '@/lib/columnMapping';
 import { SeriesSeasonCombobox, type SeriesOption } from './SeriesSeasonCombobox';
+import { LocationAutocompleteInput, type LocationDetails } from './LocationAutocompleteInput';
 
 interface ConferenceFormData {
   name: string;
@@ -97,8 +98,19 @@ export function ConferenceForm() {
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<ConferenceFormData>();
+
+  // 'location' is driven by LocationAutocompleteInput (a fully custom component) rather than
+  // a native <input>, so register it without spreading its ref/onChange anywhere and drive its
+  // value exclusively through setValue — the standard react-hook-form pattern for wiring up
+  // non-native form controls without pulling in the Controller API.
+  useEffect(() => {
+    register('location', { required: 'Location is required' });
+  }, [register]);
+  const [locationDetails, setLocationDetails] = useState<LocationDetails | null>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -198,6 +210,17 @@ export function ConferenceForm() {
       formData.append('start_date', data.start_date);
       formData.append('end_date', data.end_date);
       formData.append('location', data.location);
+      // Only send structured location data if it still matches the current text — if the
+      // user edited the field after picking a suggestion, the picked details are stale.
+      if (locationDetails && locationDetails.formatted_address === data.location) {
+        formData.append('location_place_id', locationDetails.place_id);
+        if (locationDetails.lat != null) formData.append('location_lat', String(locationDetails.lat));
+        if (locationDetails.lng != null) formData.append('location_lng', String(locationDetails.lng));
+        if (locationDetails.city) formData.append('location_city', locationDetails.city);
+        if (locationDetails.state) formData.append('location_state', locationDetails.state);
+        if (locationDetails.country) formData.append('location_country', locationDetails.country);
+        if (locationDetails.timezone) formData.append('location_timezone', locationDetails.timezone);
+      }
       formData.append('notes', data.notes || '');
       formData.append('internal_attendees', selectedInternalAttendees.join(','));
       if (conferenceMode === 'new') formData.append('conference_strategy_type_id', data.conference_strategy_type_id);
@@ -509,9 +532,10 @@ export function ConferenceForm() {
 
           <div className="md:col-span-2">
             <label className="label">Location *</label>
-            <input
-              {...register('location', { required: 'Location is required' })}
-              className="input-field"
+            <LocationAutocompleteInput
+              value={watch('location') || ''}
+              onChange={(v) => setValue('location', v, { shouldValidate: true })}
+              onSelect={(details) => setLocationDetails(details)}
               placeholder="e.g., Las Vegas Convention Center, NV"
             />
             {errors.location && <p className="text-red-500 text-xs mt-1">{errors.location.message}</p>}

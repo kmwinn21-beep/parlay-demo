@@ -1399,4 +1399,15 @@ export const migrations: string[] = [
   // 478 — follow_ups.touchpoint_id: links a follow-up back to the touchpoint that auto-created it,
   // mirroring the existing follow_ups.meeting_id link for meeting-originated follow-ups.
   `ALTER TABLE follow_ups ADD COLUMN touchpoint_id INTEGER REFERENCES attendee_touchpoints(id)`,
+  // 479 — conferences: structured location data captured via the Google Places autocomplete
+  // field, alongside the existing free-text `location` display value. Supports location
+  // aggregation and (future) timezone-aware calendar invites. All nullable since historical
+  // rows and free-typed locations won't have structured data.
+  `ALTER TABLE conferences ADD COLUMN location_place_id TEXT`,
+  `ALTER TABLE conferences ADD COLUMN location_lat REAL`,
+  `ALTER TABLE conferences ADD COLUMN location_lng REAL`,
+  `ALTER TABLE conferences ADD COLUMN location_city TEXT`,
+  `ALTER TABLE conferences ADD COLUMN location_state TEXT`,
+  `ALTER TABLE conferences ADD COLUMN location_country TEXT`,
+  `ALTER TABLE conferences ADD COLUMN location_timezone TEXT`,
 ];

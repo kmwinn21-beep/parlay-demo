@@ -74,7 +74,9 @@ export async function PUT(
   const db = await getDb(user?.accountId);
   try {
     const body = await request.json();
-    const { name, start_date, end_date, location, notes, internal_attendees, conference_strategy_type_id, series_id, season_id,
+    const { name, start_date, end_date, location,
+            location_place_id, location_lat, location_lng, location_city, location_state, location_country, location_timezone,
+            notes, internal_attendees, conference_strategy_type_id, series_id, season_id,
             industry_focus, conference_type, website, sponsorship_level, booth_present, booth_width, booth_length, booth_number, booth_hall } = body;
 
     const existingResult = await db.execute({
@@ -88,13 +90,18 @@ export async function PUT(
 
     const updatedResult = await db.execute({
       sql: `UPDATE conferences SET
-              name = ?, start_date = ?, end_date = ?, location = ?, notes = ?,
+              name = ?, start_date = ?, end_date = ?, location = ?,
+              location_place_id = ?, location_lat = ?, location_lng = ?, location_city = ?, location_state = ?, location_country = ?, location_timezone = ?,
+              notes = ?,
               internal_attendees = ?, conference_strategy_type_id = ?, series_id = ?, season_id = ?,
               industry_focus = ?, conference_type = ?, website = ?, sponsorship_level = ?,
               booth_present = ?, booth_width = ?, booth_length = ?, booth_number = ?, booth_hall = ?,
               updated_at = datetime('now')
             WHERE id = ? RETURNING *`,
-      args: [name, start_date, end_date, location, notes || null,
+      args: [name, start_date, end_date, location,
+             location_place_id ?? null, location_lat ?? null, location_lng ?? null,
+             location_city ?? null, location_state ?? null, location_country ?? null, location_timezone ?? null,
+             notes || null,
              internal_attendees || null, conference_strategy_type_id ? Number(conference_strategy_type_id) : null,
              series_id ?? null, season_id ?? null,
              industry_focus ?? null, conference_type ?? null, website ?? null, sponsorship_level ?? null,
