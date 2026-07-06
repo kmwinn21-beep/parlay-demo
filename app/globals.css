@@ -110,6 +110,11 @@ h1, h2, h3 {
   to   { transform: translateX(0); }
 }
 
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+
 @keyframes slideInUp {
   from { transform: translateY(100%); }
   to   { transform: translateY(0); }
@@ -123,6 +128,17 @@ h1, h2, h3 {
 @media (min-width: 640px) {
   .drawer-mobile-responsive {
     animation: slideInRight 0.25s ease-out;
+  }
+}
+
+/* Same as .drawer-mobile-responsive, but anchored/animated from the left on desktop */
+.drawer-mobile-responsive-left {
+  animation: slideInUp 0.25s ease-out;
+}
+
+@media (min-width: 640px) {
+  .drawer-mobile-responsive-left {
+    animation: slideInLeft 0.25s ease-out;
   }
 }
 

@@ -3087,6 +3087,7 @@ export default function ConferenceDetailPage() {
               onRefresh={loadCompanies}
               tableName="conference_companies"
               onDecoupleSelected={handleDecoupleCompanies}
+              conferenceAttendees={conference?.attendees}
             />
           )}
         </div>
