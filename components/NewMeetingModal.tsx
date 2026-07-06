@@ -9,12 +9,15 @@ import { useHideBottomNav } from './BottomNavContext';
 import { type Meeting } from '@/components/MeetingsTable';
 import { useUser } from '@/components/UserContext';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
+import { SendCalendarInvitePrompt } from '@/components/SendCalendarInvitePrompt';
+import { buildGoogleCalendarUrl, buildOutlookCalendarUrl } from '@/lib/calendarInvite';
 
 interface ConferenceOption {
   id: number;
   name: string;
   start_date: string;
   end_date?: string;
+  location_timezone?: string | null;
 }
 
 interface AttendeeOption {
@@ -24,6 +27,7 @@ interface AttendeeOption {
   title: string | null;
   company_id: number | null;
   company_name: string | null;
+  email?: string | null;
 }
 
 interface CompanyOption {
@@ -213,6 +217,15 @@ export function NewMeetingModal({
   const [conferences, setConferences] = useState<ConferenceOption[]>([]);
   const [attendees, setAttendees] = useState<AttendeeOption[]>([]);
   const [loadingConference, setLoadingConference] = useState(false);
+  const [inviteContext, setInviteContext] = useState<{
+    attendeeName: string;
+    attendeeEmail: string | null;
+    title: string;
+    location: string;
+    dateYMD: string;
+    timeHM: string;
+    timezone: string | null;
+  } | null>(null);
 
   const [selectedRepIds, setSelectedRepIds] = useState<number[]>([]);
   const [selectedConferenceId, setSelectedConferenceId] = useState('');
@@ -468,8 +481,25 @@ export function NewMeetingModal({
         // direct prop connection to this modal, e.g. a globally-mounted drawer) can also
         // optimistically insert this meeting instead of requiring a reload.
         window.dispatchEvent(new CustomEvent('meeting-scheduled', { detail: meeting }));
+
+        // Offer to draft a calendar invite instead of closing immediately — the modal stays
+        // mounted (isOpen is still true) and swaps to the SendCalendarInvitePrompt below.
+        if (contact) {
+          const attendeeFirst = contact.first_name || 'Attendee';
+          const repFirst = user?.firstName || 'Rep';
+          setInviteContext({
+            attendeeName: `${contact.first_name} ${contact.last_name}`.trim(),
+            attendeeEmail: contact.email || null,
+            title: `${attendeeFirst} <> ${repFirst}: ${conf?.name || 'Conference'} Meeting`,
+            location: location || meetingType || '',
+            dateYMD: meetingDate,
+            timeHM: meetingTime,
+            timezone: conf?.location_timezone || null,
+          });
+        } else {
+          handleClose();
+        }
       }
-      handleClose();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Failed to schedule meeting');
     } finally {
@@ -478,6 +508,38 @@ export function NewMeetingModal({
   }
 
   if (!isOpen) return null;
+
+  if (inviteContext) {
+    const finish = () => { setInviteContext(null); handleClose(); };
+    return (
+      <SendCalendarInvitePrompt
+        attendeeName={inviteContext.attendeeName}
+        onDismiss={finish}
+        onGoogle={() => {
+          window.open(buildGoogleCalendarUrl({
+            title: inviteContext.title,
+            attendeeEmail: inviteContext.attendeeEmail,
+            location: inviteContext.location,
+            dateYMD: inviteContext.dateYMD,
+            timeHM: inviteContext.timeHM,
+            timezone: inviteContext.timezone,
+          }), '_blank', 'noopener,noreferrer');
+          finish();
+        }}
+        onOutlook={() => {
+          window.open(buildOutlookCalendarUrl({
+            title: inviteContext.title,
+            attendeeEmail: inviteContext.attendeeEmail,
+            location: inviteContext.location,
+            dateYMD: inviteContext.dateYMD,
+            timeHM: inviteContext.timeHM,
+            timezone: inviteContext.timezone,
+          }), '_blank', 'noopener,noreferrer');
+          finish();
+        }}
+      />
+    );
+  }
 
   const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary focus:border-brand-secondary bg-white';
   const labelClass = 'block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1';
@@ -655,7 +717,7 @@ export function NewMeetingModal({
 
             {/* Location */}
             <div>
-              <label className={labelClass}>Location / Meeting Type</label>
+              <label className={labelClass}>Meeting Location</label>
               <input type="text" className={inputClass} value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Room 201, Lobby Bar" />
             </div>
 
