@@ -14,7 +14,8 @@ import {
   resolveConfigValue,
   getRepInitials,
 } from '@/lib/useUserOptions';
-import { useTableColumnConfig } from '@/lib/useTableColumnConfig';
+import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
+import { CustomColumnCell } from '@/components/CustomColumnCell';
 
 export interface FollowUp {
   id: number;
@@ -164,6 +165,7 @@ export function FollowUpsTable({
 }) {
   const nextStepsOpts = useConfigWithIds('next_steps');
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
+  const customColumns = useCustomColumns(tableName);
   const [editingRepKey, setEditingRepKey] = useState<number | null>(null);
   const [editingNextStepsKey, setEditingNextStepsKey] = useState<number | null>(null);
   const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
@@ -459,6 +461,11 @@ export function FollowUpsTable({
             default: return null;
           }
         })}
+        {customColumns.filter(c => c.visible).map(col => (
+          <td key={`custom_${col.id}`} className="px-3 py-2">
+            <CustomColumnCell column={col} value={(fu as unknown as Record<string, unknown>)[col.data_key]} />
+          </td>
+        ))}
         {onDelete && (
           <td className="px-3 py-2">
             <button type="button" onClick={() => onDelete(fu.id)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">Delete</button>
@@ -527,6 +534,9 @@ export function FollowUpsTable({
                     default: return null;
                   }
                 })}
+                {customColumns.filter(c => c.visible).map(col => (
+                  <th key={`custom_${col.id}`} className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">{col.label}</th>
+                ))}
                 {onDelete && <th className="px-3 py-2"></th>}
               </tr>
             </thead>
@@ -592,6 +602,9 @@ export function FollowUpsTable({
                     default: return null;
                   }
                 })}
+                {customColumns.filter(c => c.visible).map(col => (
+                  <th key={`custom_${col.id}`} className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">{col.label}</th>
+                ))}
                 {onDelete && <th className="px-3 py-2"></th>}
               </tr>
             </thead>
@@ -691,6 +704,9 @@ export function FollowUpsTable({
                   default: return null;
                 }
               })}
+              {customColumns.filter(c => c.visible).map(col => (
+                <th key={`custom_${col.id}`} className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">{col.label}</th>
+              ))}
               {onDelete && <th className="px-3 py-2"></th>}
             </tr>
           </thead>

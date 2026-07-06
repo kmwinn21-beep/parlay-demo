@@ -8,7 +8,8 @@ import { useConfigColors } from '@/lib/useConfigColors';
 import { getConfig } from '@/lib/configCache';
 import { parseRepIds } from '@/lib/useUserOptions';
 import { useUser } from '@/components/UserContext';
-import { useTableColumnConfig } from '@/lib/useTableColumnConfig';
+import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
+import { CustomColumnCell } from './CustomColumnCell';
 
 type RsvpStatus = 'yes' | 'no' | 'maybe' | 'attended';
 
@@ -668,6 +669,7 @@ export function SocialEventsTable({
     }).catch(() => {});
   }, []);
   const { isVisible, orderedColumns } = useTableColumnConfig('social_events');
+  const customColumns = useCustomColumns('social_events');
 
   /* form state */
   const [showForm, setShowForm] = useState(false);
@@ -1051,6 +1053,12 @@ export function SocialEventsTable({
                     <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Invite Only</p><p className="text-gray-700">{ev.invite_only === 'Yes' ? 'Yes' : 'No'}</p></div>
                     <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Entered By</p><p className="text-gray-700">{ev.entered_by || '—'}</p></div>
                     <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Internal</p><InternalAttendeePill internalAttendees={ev.internal_attendees} /></div>
+                    {customColumns.filter(c => c.visible).map(col => (
+                      <div key={`custom_${col.id}`}>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{col.label}</p>
+                        <CustomColumnCell column={col} value={(ev as unknown as Record<string, unknown>)[col.data_key]} />
+                      </div>
+                    ))}
                   </div>
                   <div className="pt-2 border-t border-gray-100">
                     <button type="button" onClick={() => setGuestListEventId(ev.id)} className="flex items-center gap-2 text-sm font-medium text-brand-secondary hover:text-brand-primary transition-colors">
@@ -1085,6 +1093,11 @@ export function SocialEventsTable({
                       default: return null;
                     }
                   })}
+                  {customColumns.filter(c => c.visible).map(col => (
+                    <th key={`custom_${col.id}`} className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                      {col.label}
+                    </th>
+                  ))}
                   <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap"></th>
                 </tr>
               </thead>
@@ -1115,6 +1128,11 @@ export function SocialEventsTable({
                             default: return null;
                           }
                         })}
+                        {customColumns.filter(c => c.visible).map(col => (
+                          <td key={`custom_${col.id}`} className="px-3 py-3 whitespace-nowrap">
+                            <CustomColumnCell column={col} value={(ev as unknown as Record<string, unknown>)[col.data_key]} />
+                          </td>
+                        ))}
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-1">
                             {invited.length > 0 && (

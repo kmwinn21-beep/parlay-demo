@@ -11,6 +11,8 @@ import { NotesPopover } from './NotesPopover';
 import { useDrawerResize } from '@/lib/useDrawerResize';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
+import { parseRepIds } from '@/lib/useUserOptions';
+import { useUser } from './UserContext';
 import { getBadgeClass } from '@/lib/colors';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
 import { CustomColumnCell } from './CustomColumnCell';
@@ -166,6 +168,33 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
   const [filterConfCounts, setFilterConfCounts] = useState<Set<string>>(new Set());
   const [showConfFilter, setShowConfFilter] = useState(false);
   const [filterUpdatedWithin, setFilterUpdatedWithin] = useState('');
+  // Quick-filter badges — common one-click filters, multi-select, kept separate
+  // from the advanced Filters pane's single-select dropdowns.
+  const [quickFilterIcp, setQuickFilterIcp] = useState(false);
+  const [quickFilterTypes, setQuickFilterTypes] = useState<Set<string>>(new Set());
+  const [icpCompanyTypeOptions, setIcpCompanyTypeOptions] = useState<string[]>([]);
+  useEffect(() => {
+    fetch('/api/admin/icp-rules', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then((data: { rules?: { category: string; conditions: { option_value: string }[] }[] } | null) => {
+        const rule = data?.rules?.find(r => r.category === 'company_type');
+        if (rule) setIcpCompanyTypeOptions(rule.conditions.map(c => c.option_value));
+      })
+      .catch(() => {});
+  }, []);
+  const quickFilterTypeButtons = useMemo(() => {
+    const dynamicTypes = icpCompanyTypeOptions.filter(t => t !== 'Customer' && t !== 'Competitor');
+    return [...dynamicTypes, 'Customer', 'Competitor'];
+  }, [icpCompanyTypeOptions]);
+  const toggleQuickFilterType = (type: string) => {
+    setQuickFilterTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type); else next.add(type);
+      return next;
+    });
+  };
+  const { user: currentUser } = useUser();
+  const [quickFilterMyAccounts, setQuickFilterMyAccounts] = useState(false);
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showMergeModal, setShowMergeModal] = useState(false);
@@ -238,7 +267,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
 
   useEffect(() => {
     setPage(1);
-  }, [search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterUpdatedWithin, filterNeedsReview]);
+  }, [search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterUpdatedWithin, filterNeedsReview, quickFilterIcp, quickFilterTypes, quickFilterMyAccounts]);
 
   const seniorityFilterOptions = useMemo(() => {
     if (seniorityConfigOptions.length > 0) return seniorityConfigOptions;
@@ -294,7 +323,10 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
         return new Date(updAt.endsWith('Z') || updAt.includes('+') ? updAt : updAt + 'Z').getTime() >= Date.now() - days * 24 * 60 * 60 * 1000;
       })();
       const matchNeedsReview = !filterNeedsReview || (a.title ? shouldWarnForTitleMetadata(titleMetaMap[a.id]) : false);
-      return matchSearch && matchType && matchStatus && matchSeniority && matchConf && matchUpdatedWithin && matchNeedsReview;
+      const matchQuickIcp = !quickFilterIcp || a.company_icp === 'Yes';
+      const matchQuickTypes = quickFilterTypes.size === 0 || quickFilterTypes.has(a.company_type || '');
+      const matchQuickMyAccounts = !quickFilterMyAccounts || (currentUser?.configId != null && parseRepIds(a.company_assigned_user).includes(currentUser.configId));
+      return matchSearch && matchType && matchStatus && matchSeniority && matchConf && matchUpdatedWithin && matchNeedsReview && matchQuickIcp && matchQuickTypes && matchQuickMyAccounts;
     });
     list.sort((a, b) => {
       let aVal: string | number, bVal: string | number;
@@ -308,7 +340,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
     });
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localAttendees, search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterUpdatedWithin, filterNeedsReview, titleMetaMap, sortKey, sortDir]);
+  }, [localAttendees, search, filterCompanyType, filterStatus, filterSeniority, filterConfCounts, filterUpdatedWithin, filterNeedsReview, titleMetaMap, sortKey, sortDir, quickFilterIcp, quickFilterTypes, quickFilterMyAccounts, currentUser]);
 
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -516,6 +548,47 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
           <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, company, email, title..." className="input-field pl-9" />
         </div>
+
+        {/* Quick-filter badges — common one-click filters, multi-select */}
+        <button
+          type="button"
+          onClick={() => setQuickFilterIcp(v => !v)}
+          className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+            quickFilterIcp
+              ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+              : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+          }`}
+        >
+          ICP
+        </button>
+        {quickFilterTypeButtons.map(type => (
+          <button
+            key={type}
+            type="button"
+            onClick={() => toggleQuickFilterType(type)}
+            className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+              quickFilterTypes.has(type)
+                ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+                : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+            }`}
+          >
+            {type === 'Customer' ? 'Customers' : type === 'Competitor' ? 'Competitors' : type}
+          </button>
+        ))}
+        {currentUser && (
+          <button
+            type="button"
+            onClick={() => setQuickFilterMyAccounts(v => !v)}
+            className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+              quickFilterMyAccounts
+                ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+                : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+            }`}
+          >
+            My Accounts
+          </button>
+        )}
+
         <button
           type="button"
           onClick={() => setFiltersOpen(o => !o)}

@@ -19,10 +19,11 @@ import { effectiveSeniority } from '@/lib/parsers';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { useSectionConfig } from '@/lib/useSectionConfig';
-import { useTableColumnConfig } from '@/lib/useTableColumnConfig';
+import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
+import { CustomColumnCell } from '@/components/CustomColumnCell';
 import { getBadgeClass, getHex, type ColorMap } from '@/lib/colors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
-import { type UserOption, getRepInitials } from '@/lib/useUserOptions';
+import { type UserOption, getRepInitials, parseRepIds } from '@/lib/useUserOptions';
 import { ColumnMappingModal } from '@/components/ColumnMappingModal';
 import { type ColumnMapping } from '@/lib/columnMapping';
 import { ConflictResolutionModal, type ConflictItem } from '@/components/ConflictResolutionModal';
@@ -65,6 +66,8 @@ interface Attendee {
   company_name?: string;
   company_type?: string;
   company_wse?: number;
+  company_icp?: string;
+  company_assigned_user?: string;
   email?: string;
   status?: string;
   seniority?: string;
@@ -291,6 +294,7 @@ export default function ConferenceDetailPage() {
   const configOptions = useConfigOptions('conference_detail');
   const allConfigOptions = useConfigOptions();
   const { isVisible: isConfAttendeeColVisible, orderedColumns: confAttendeeColumns } = useTableColumnConfig('conference_attendees');
+  const customColumns = useCustomColumns('conference_attendees');
   const conferenceTabConfig = useSectionConfig('conference_details');
   const { user: currentUser } = useUser();
   const capabilities = useCapabilities();
@@ -364,6 +368,32 @@ export default function ConferenceDetailPage() {
   const [filterConfCounts, setFilterConfCounts] = useState<Set<string>>(new Set());
   const [showConfFilter, setShowConfFilter] = useState(false);
   const [filterUpdatedWithin, setFilterUpdatedWithin] = useState('');
+  // Quick-filter badges — common one-click filters, multi-select, kept separate
+  // from the advanced Filters pane's single-select dropdowns.
+  const [quickFilterIcp, setQuickFilterIcp] = useState(false);
+  const [quickFilterTypes, setQuickFilterTypes] = useState<Set<string>>(new Set());
+  const [icpCompanyTypeOptions, setIcpCompanyTypeOptions] = useState<string[]>([]);
+  useEffect(() => {
+    fetch('/api/admin/icp-rules', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then((data: { rules?: { category: string; conditions: { option_value: string }[] }[] } | null) => {
+        const rule = data?.rules?.find(r => r.category === 'company_type');
+        if (rule) setIcpCompanyTypeOptions(rule.conditions.map(c => c.option_value));
+      })
+      .catch(() => {});
+  }, []);
+  const quickFilterTypeButtons = useMemo(() => {
+    const dynamicTypes = icpCompanyTypeOptions.filter(t => t !== 'Customer' && t !== 'Competitor');
+    return [...dynamicTypes, 'Customer', 'Competitor'];
+  }, [icpCompanyTypeOptions]);
+  const toggleQuickFilterType = (type: string) => {
+    setQuickFilterTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type); else next.add(type);
+      return next;
+    });
+  };
+  const [quickFilterMyAccounts, setQuickFilterMyAccounts] = useState(false);
   const { panelStyle: qvPanelStyle, handleResizeStart: qvResizeStart } = useDrawerResize(480);
   const [quickViewId, setQuickViewId] = useState<number | null>(null);
   const [quickViewType, setQuickViewType] = useState<'attendee' | 'company'>('attendee');
@@ -1334,7 +1364,7 @@ export default function ConferenceDetailPage() {
     await doUpload(pendingMapping, resolutions);
   };
 
-  useEffect(() => { setAttendeePage(1); }, [attendeeSearch, filterSeniority, filterCompanyType, filterStatus, filterConfCounts, filterUpdatedWithin, filterNeedsReview]);
+  useEffect(() => { setAttendeePage(1); }, [attendeeSearch, filterSeniority, filterCompanyType, filterStatus, filterConfCounts, filterUpdatedWithin, filterNeedsReview, quickFilterIcp, quickFilterTypes, quickFilterMyAccounts]);
 
   const CONF_COUNT_OPTIONS = ['1', '2', '3', '4+'];
   const toggleConfFilter = (val: string) => {
@@ -1406,6 +1436,9 @@ export default function ConferenceDetailPage() {
         if (!updAt || new Date(updAt.endsWith('Z') || updAt.includes('+') ? updAt : updAt + 'Z').getTime() < Date.now() - days * 24 * 60 * 60 * 1000) return false;
       }
       if (filterNeedsReview && !(a.title ? shouldWarnForTitleMetadata(titleMetaMap[a.id]) : false)) return false;
+      if (quickFilterIcp && a.company_icp !== 'Yes') return false;
+      if (quickFilterTypes.size > 0 && !quickFilterTypes.has(a.company_type || '')) return false;
+      if (quickFilterMyAccounts && !(currentUser?.configId != null && parseRepIds(a.company_assigned_user).includes(currentUser.configId))) return false;
       return true;
     })
     .sort((a, b) => {
@@ -2461,6 +2494,17 @@ export default function ConferenceDetailPage() {
                   })()}
                 </>
               )}
+              <div className="relative">
+                <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  value={attendeeSearch}
+                  onChange={(e) => setAttendeeSearch(e.target.value)}
+                  placeholder="Search attendees..."
+                  className="input-field pl-9 w-56"
+                />
+              </div>
               <button
                 onClick={() => setShowBatchScan(true)}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium text-brand-primary"
@@ -2469,7 +2513,7 @@ export default function ConferenceDetailPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
-                Scan Cards
+                Scan
               </button>
               <button
                 onClick={() => setShowAddForm((v) => !v)}
@@ -2478,7 +2522,7 @@ export default function ConferenceDetailPage() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
-                Add Attendee
+                Add
               </button>
               <button
                 onClick={() => uploadFileRef.current?.click()}
@@ -2498,7 +2542,7 @@ export default function ConferenceDetailPage() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                     </svg>
-                    Upload List
+                    Upload
                   </>
                 )}
               </button>
@@ -2509,17 +2553,46 @@ export default function ConferenceDetailPage() {
                 className="hidden"
                 onChange={handleUploadAttendees}
               />
-              <div className="relative">
-                <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <input
-                  value={attendeeSearch}
-                  onChange={(e) => setAttendeeSearch(e.target.value)}
-                  placeholder="Search attendees..."
-                  className="input-field pl-9 w-56"
-                />
-              </div>
+              {/* Quick-filter badges — common one-click filters, multi-select */}
+              <button
+                type="button"
+                onClick={() => setQuickFilterIcp(v => !v)}
+                className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                  quickFilterIcp
+                    ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+                    : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                ICP
+              </button>
+              {quickFilterTypeButtons.map(type => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => toggleQuickFilterType(type)}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                    quickFilterTypes.has(type)
+                      ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+                      : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  {type === 'Customer' ? 'Customers' : type === 'Competitor' ? 'Competitors' : type}
+                </button>
+              ))}
+              {currentUser && (
+                <button
+                  type="button"
+                  onClick={() => setQuickFilterMyAccounts(v => !v)}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                    quickFilterMyAccounts
+                      ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+                      : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  My Accounts
+                </button>
+              )}
+
               {/* Filters toggle button */}
               <button
                 onClick={() => setAttendeeFiltersOpen(v => !v)}
@@ -2861,6 +2934,11 @@ export default function ConferenceDetailPage() {
                         default: return null;
                       }
                     })}
+                    {customColumns.filter(c => c.visible).map(col => (
+                      <th key={`custom_${col.id}`} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap" style={{ minWidth: 120 }}>
+                        {col.label}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -2970,6 +3048,11 @@ export default function ConferenceDetailPage() {
                           default: return null;
                         }
                       })}
+                      {customColumns.filter(c => c.visible).map(col => (
+                        <td key={`custom_${col.id}`} className="px-4 py-3 whitespace-nowrap">
+                          <CustomColumnCell column={col} value={(attendee as unknown as Record<string, unknown>)[col.data_key]} />
+                        </td>
+                      ))}
                     </tr>
                   ))}
                 </tbody>

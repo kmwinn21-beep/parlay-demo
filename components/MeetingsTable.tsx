@@ -14,8 +14,9 @@ import {
   resolveRepInitials,
   getRepInitials,
 } from '@/lib/useUserOptions';
-import { useTableColumnConfig } from '@/lib/useTableColumnConfig';
+import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
+import { CustomColumnCell } from './CustomColumnCell';
 
 export interface Meeting {
   id: number;
@@ -510,6 +511,7 @@ export function MeetingsTable({
   tableName?: string;
 }) {
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
+  const customColumns = useCustomColumns(tableName);
   const [sortKey, setSortKey] = useState<SortKey>('datetime');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -831,6 +833,11 @@ export function MeetingsTable({
                   default: return null;
                 }
               })}
+              {customColumns.filter(c => c.visible).map(col => (
+                <th key={`custom_${col.id}`} className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  {col.label}
+                </th>
+              ))}
               {hasActions && <th className="px-3 py-2"></th>}
             </tr>
           </thead>
@@ -843,7 +850,7 @@ export function MeetingsTable({
                   onSave={(id, data) => { onEdit(id, data); setEditingId(null); }}
                   onCancel={() => setEditingId(null)}
                   onDelete={onDelete ? (id) => { onDelete(id); setEditingId(null); } : undefined}
-                  colSpan={(hideCompany ? 8 : 9) + (hasActions ? 1 : 0) + (hasSelection ? 1 : 0)}
+                  colSpan={(hideCompany ? 8 : 9) + (hasActions ? 1 : 0) + (hasSelection ? 1 : 0) + customColumns.filter(c => c.visible).length}
                   userOptions={userOptions}
                   meetingTypeOptions={meetingTypeOptions}
                 />
@@ -914,6 +921,11 @@ export function MeetingsTable({
                       default: return null;
                     }
                   })}
+                  {customColumns.filter(c => c.visible).map(col => (
+                    <td key={`custom_${col.id}`} className="px-3 py-2 text-gray-600 leading-snug">
+                      <CustomColumnCell column={col} value={(m as unknown as Record<string, unknown>)[col.data_key]} />
+                    </td>
+                  ))}
                   {hasActions && (
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
