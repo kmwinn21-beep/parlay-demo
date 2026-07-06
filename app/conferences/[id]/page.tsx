@@ -2494,6 +2494,17 @@ export default function ConferenceDetailPage() {
                   })()}
                 </>
               )}
+              <div className="relative">
+                <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  value={attendeeSearch}
+                  onChange={(e) => setAttendeeSearch(e.target.value)}
+                  placeholder="Search attendees..."
+                  className="input-field pl-9 w-56"
+                />
+              </div>
               <button
                 onClick={() => setShowBatchScan(true)}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium text-brand-primary"
@@ -2542,18 +2553,6 @@ export default function ConferenceDetailPage() {
                 className="hidden"
                 onChange={handleUploadAttendees}
               />
-              <div className="relative">
-                <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <input
-                  value={attendeeSearch}
-                  onChange={(e) => setAttendeeSearch(e.target.value)}
-                  placeholder="Search attendees..."
-                  className="input-field pl-9 w-56"
-                />
-              </div>
-
               {/* Quick-filter badges — common one-click filters, multi-select */}
               <button
                 type="button"
