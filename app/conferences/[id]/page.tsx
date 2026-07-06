@@ -3088,6 +3088,7 @@ export default function ConferenceDetailPage() {
               tableName="conference_companies"
               onDecoupleSelected={handleDecoupleCompanies}
               conferenceAttendees={conference?.attendees}
+              conferenceLabel={conference ? `${conference.name}${conference.start_date ? ` ${new Date(conference.start_date).getUTCFullYear()}` : ''}` : undefined}
             />
           )}
         </div>

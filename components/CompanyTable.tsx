@@ -162,6 +162,8 @@ interface CompanyTableProps {
   // When provided (Conference Details' Companies tab), the attendee-count pill
   // becomes clickable, opening a drawer of that company's attendees at this conference.
   conferenceAttendees?: CompanyAttendeeLite[];
+  // e.g. "ModExpo 2026" — shown in the attendees drawer's header title.
+  conferenceLabel?: string;
 }
 
 function EntityStructureIcon({ structure }: { structure?: string }) {
@@ -213,7 +215,7 @@ function fmtDate(dateStr?: string): string {
   } catch { return '—'; }
 }
 
-export function CompanyTable({ companies, onRefresh, tableName = 'companies', rowAction, onDecoupleSelected, conferenceAttendees }: CompanyTableProps) {
+export function CompanyTable({ companies, onRefresh, tableName = 'companies', rowAction, onDecoupleSelected, conferenceAttendees, conferenceLabel }: CompanyTableProps) {
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions('company_table');
   const unitTypeLabel = useUnitTypeLabel();
@@ -1402,6 +1404,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         <CompanyAttendeesDrawer
           companyId={attendeesDrawerCompany.id}
           companyName={attendeesDrawerCompany.name}
+          conferenceLabel={conferenceLabel}
           attendees={(conferenceAttendees ?? []).filter(a => a.company_id === attendeesDrawerCompany.id)}
           onClose={() => setAttendeesDrawerCompany(null)}
         />
