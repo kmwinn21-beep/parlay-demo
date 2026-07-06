@@ -46,6 +46,12 @@ export type ActivityTimelineModalProps = {
   companyId: number;
   companyName: string;
   currentConferenceId?: number;
+  // 'standalone' (default) renders its own full-viewport backdrop and right-anchors
+  // itself. 'docked' renders just the sliding panel with no backdrop of its own, so
+  // it can be placed as a flex sibling next to another drawer (e.g. the company
+  // attendees drawer) instead of covering the whole screen.
+  variant?: 'standalone' | 'docked';
+  defaultWidth?: number;
 };
 
 // ─── Tooltip ──────────────────────────────────────────────────────────────────
@@ -271,8 +277,10 @@ export function ActivityTimelineModal({
   companyId,
   companyName,
   currentConferenceId,
+  variant = 'standalone',
+  defaultWidth = 1000,
 }: ActivityTimelineModalProps) {
-  const { panelStyle: timelinePanelStyle, handleResizeStart: timelineResizeStart } = useDrawerResize(1000, 640, 1400);
+  const { panelStyle: timelinePanelStyle, handleResizeStart: timelineResizeStart } = useDrawerResize(defaultWidth, 640, 1400);
 
   const [data, setData] = useState<TimelineData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -311,26 +319,9 @@ export function ActivityTimelineModal({
   const confYear = (c: ConferenceEntry) =>
     c.startDate ? new Date(c.startDate + 'T00:00:00').getFullYear() : '';
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-stretch sm:justify-end">
-      <style>{`
-        @keyframes timelineFadeIn  { from { opacity: 0; }              to { opacity: 1; } }
-        @keyframes timelineSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-        @keyframes timelineSlideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
-        .timeline-panel { animation: timelineSlideUp 0.25s ease-out; }
-        @media (min-width: 640px) { .timeline-panel { animation: timelineSlideIn 0.25s ease-out; } }
-      `}</style>
-
-      {/* Scrim */}
+  const panel = (
       <div
-        className="absolute inset-0"
-        style={{ animation: 'timelineFadeIn 0.2s ease-out', backgroundColor: 'rgba(0,0,0,0.45)' }}
-        onClick={onClose}
-      />
-
-      {/* Panel */}
-      <div
-        className="timeline-panel relative w-full sm:w-[1000px] h-[92vh] sm:h-full bg-white shadow-2xl flex flex-col border-t sm:border-t-0 sm:border-l border-gray-200 overflow-hidden rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none"
+        className={`timeline-panel relative w-full ${variant === 'docked' ? 'sm:w-[750px]' : 'sm:w-[1000px]'} h-[92vh] sm:h-full bg-white shadow-2xl flex flex-col border-t sm:border-t-0 sm:border-l border-gray-200 overflow-hidden rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none`}
         style={timelinePanelStyle}
       >
         <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={timelineResizeStart}>
@@ -586,6 +577,27 @@ export function ActivityTimelineModal({
           </div>
         )}
       </div>
-    </div>
+  );
+
+  return (
+    <>
+      <style>{`
+        @keyframes timelineFadeIn  { from { opacity: 0; }              to { opacity: 1; } }
+        @keyframes timelineSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes timelineSlideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        .timeline-panel { animation: timelineSlideUp 0.25s ease-out; }
+        @media (min-width: 640px) { .timeline-panel { animation: timelineSlideIn 0.25s ease-out; } }
+      `}</style>
+      {variant === 'standalone' ? (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-stretch sm:justify-end">
+          <div
+            className="absolute inset-0"
+            style={{ animation: 'timelineFadeIn 0.2s ease-out', backgroundColor: 'rgba(0,0,0,0.45)' }}
+            onClick={onClose}
+          />
+          {panel}
+        </div>
+      ) : panel}
+    </>
   );
 }

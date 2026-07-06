@@ -20,6 +20,7 @@ import { CustomColumnCell } from './CustomColumnCell';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import { useUser } from './UserContext';
+import { CompanyAttendeesDrawer, type CompanyAttendeeLite } from './CompanyAttendeesDrawer';
 
 interface Company {
   id: number;
@@ -90,7 +91,7 @@ function calcTooltipPos(el: HTMLElement, maxW = 260): TooltipPos {
   return { top: above ? rect.top - 8 : rect.bottom + 8, left, width: w, above };
 }
 
-function AttendeeTooltip({ count, summary }: { count: number; summary?: string }) {
+function AttendeeTooltip({ count, summary, onClick }: { count: number; summary?: string; onClick?: () => void }) {
   const [pos, setPos] = useState<TooltipPos | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const attendees = (summary || '').split('~~~').map(s => s.trim()).filter(Boolean).map(s => {
@@ -102,7 +103,11 @@ function AttendeeTooltip({ count, summary }: { count: number; summary?: string }
     <div ref={ref} className="relative inline-block"
       onMouseEnter={() => ref.current && setPos(calcTooltipPos(ref.current))}
       onMouseLeave={() => setPos(null)}>
-      <span className="badge-gray cursor-default">{count}</span>
+      {onClick ? (
+        <button type="button" onClick={onClick} className="badge-gray hover:ring-2 hover:ring-brand-secondary/40 transition-shadow" title="View attendees">{count}</button>
+      ) : (
+        <span className="badge-gray cursor-default">{count}</span>
+      )}
       {pos && attendees.length > 0 && (
         <div style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999, transform: pos.above ? 'translateY(-100%)' : 'translateY(0)' }}>
           <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2.5">
@@ -154,6 +159,11 @@ interface CompanyTableProps {
   tableName?: string;
   rowAction?: (company: Company) => React.ReactNode;
   onDecoupleSelected?: (ids: Set<number>) => void;
+  // When provided (Conference Details' Companies tab), the attendee-count pill
+  // becomes clickable, opening a drawer of that company's attendees at this conference.
+  conferenceAttendees?: CompanyAttendeeLite[];
+  // e.g. "ModExpo 2026" — shown in the attendees drawer's header title.
+  conferenceLabel?: string;
 }
 
 function EntityStructureIcon({ structure }: { structure?: string }) {
@@ -205,7 +215,7 @@ function fmtDate(dateStr?: string): string {
   } catch { return '—'; }
 }
 
-export function CompanyTable({ companies, onRefresh, tableName = 'companies', rowAction, onDecoupleSelected }: CompanyTableProps) {
+export function CompanyTable({ companies, onRefresh, tableName = 'companies', rowAction, onDecoupleSelected, conferenceAttendees, conferenceLabel }: CompanyTableProps) {
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions('company_table');
   const unitTypeLabel = useUnitTypeLabel();
@@ -284,6 +294,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   // 'child'  = has parent_company_id set
   const [filterHierarchy, setFilterHierarchy] = useState('');
   const [page, setPage] = useState(1);
+  const [attendeesDrawerCompany, setAttendeesDrawerCompany] = useState<Company | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [quickViewId, setQuickViewId] = useState<number | null>(null);
@@ -985,7 +996,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 <div className="flex items-center gap-4">
                   <span className="inline-flex items-center gap-1 text-xs text-gray-500">
                     <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                    <AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} />
+                    <AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} onClick={conferenceAttendees ? () => setAttendeesDrawerCompany(company) : undefined} />
                   </span>
                   <span className="inline-flex items-center gap-1 text-xs text-gray-500">
                     <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
@@ -1225,7 +1236,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                           </button>
                         )}
                       </td>;
-                      case 'attendees': return <td key="attendees" className="px-3 py-3"><AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} /></td>;
+                      case 'attendees': return <td key="attendees" className="px-3 py-3"><AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} onClick={conferenceAttendees ? () => setAttendeesDrawerCompany(company) : undefined} /></td>;
                       case 'conferences': return <td key="conferences" className="px-3 py-3"><ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} /></td>;
                       case 'wse': return <td key="wse" className="px-3 py-3 overflow-visible relative">
                         {editingCell?.companyId === company.id && editingCell.field === 'wse' ? (
@@ -1387,6 +1398,16 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
             />
           </div>
         </>
+      )}
+
+      {attendeesDrawerCompany && (
+        <CompanyAttendeesDrawer
+          companyId={attendeesDrawerCompany.id}
+          companyName={attendeesDrawerCompany.name}
+          conferenceLabel={conferenceLabel}
+          attendees={(conferenceAttendees ?? []).filter(a => a.company_id === attendeesDrawerCompany.id)}
+          onClose={() => setAttendeesDrawerCompany(null)}
+        />
       )}
     </div>
   );
