@@ -27,7 +27,6 @@ import { InternalRelationshipsSection } from '@/components/InternalRelationships
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { ComposeEmailModal } from '@/components/ComposeEmailModal';
 import { CompanyDrawer } from '@/components/CompanyDrawer';
-import { WebsiteBrowserDrawer } from '@/components/WebsiteBrowserDrawer';
 import { ActivityTimelineModal } from '@/components/ActivityTimelineModal';
 import { useCapabilities } from '@/lib/useCapabilities';
 import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
@@ -203,7 +202,6 @@ export default function CompanyDetailPage() {
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
   const [relMapOpen, setRelMapOpen] = useState(false);
-  const [websiteDrawerOpen, setWebsiteDrawerOpen] = useState(false);
 
   const [closedDeals, setClosedDeals] = useState<ClosedDeal[]>([]);
 
@@ -978,9 +976,15 @@ export default function CompanyDetailPage() {
                           </button>
                         )}
                         {company.website && (
-                          <button type="button" title="View website" onClick={() => setWebsiteDrawerOpen(true)} className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0">
+                          <a
+                            href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="View website"
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0"
+                          >
                             <svg className="w-5 h-5 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" /></svg>
-                          </button>
+                          </a>
                         )}
                       </span>
                     </h1>
@@ -1073,54 +1077,37 @@ export default function CompanyDetailPage() {
                     </button>
                   )}
                   {company.website && (
-                    <button type="button" title="View website" onClick={() => setWebsiteDrawerOpen(true)} className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0">
+                    <a
+                      href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="View website"
+                      className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0"
+                    >
                       <svg className="w-4 h-4 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" /></svg>
-                    </button>
+                    </a>
                   )}
                 </div>
               </div>
             </div>
 
             {/* Metadata fields */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-100">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100">
               <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Website</p>
-                {company.website ? (
-                  <a
-                    href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-brand-secondary hover:text-blue-700 transition-colors"
-                    title={company.website.replace(/^https?:\/\//, '')}
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                  </a>
-                ) : <p className="text-sm text-gray-400">—</p>}
-              </div>
-              <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Added</p>
-                <p className="text-sm text-gray-600">{new Date(company.created_at.includes('Z') || company.created_at.includes('+') ? company.created_at : company.created_at + 'Z').toLocaleDateString()}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Status</p>
-                <span className="flex flex-wrap gap-1">
-                  {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => (
-                    <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>
-                  ))}
-                  {statusOptionObjects.filter(o => o.scope === 'user').flatMap(opt => {
-                    const markers = (company.status_markers || []).filter(m => m.status_option_id === opt.id);
-                    return markers.map((m, i) => (
-                      <span key={`${opt.id}-${i}`} className={getBadgeClass(opt.value, colorMaps.status || {})}>
-                        {opt.value} - {m.initials}
-                      </span>
-                    ));
-                  })}
-                  {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 &&
-                    (company.status_markers || []).length === 0 &&
-                    <span className="text-sm text-gray-400">—</span>}
-                </span>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">ICP</p>
+                {(() => {
+                  const displayIcp = normalizeIcpValue(company.icp, icpOptions);
+                  return icpOptions.length > 0 && displayIcp === icpOptions[0] ? (
+                    <span className="inline-flex items-center gap-1 text-sm font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                      {displayIcp}
+                    </span>
+                  ) : (
+                    <span className="text-sm text-gray-500">{displayIcp || '—'}</span>
+                  );
+                })()}
               </div>
               <div>
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">{unitTypeLabel}</p>
@@ -1142,20 +1129,23 @@ export default function CompanyDetailPage() {
                 ) : <p className="text-sm text-gray-400">—</p>}
               </div>
               <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">ICP</p>
-                {(() => {
-                  const displayIcp = normalizeIcpValue(company.icp, icpOptions);
-                  return icpOptions.length > 0 && displayIcp === icpOptions[0] ? (
-                    <span className="inline-flex items-center gap-1 text-sm font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                      {displayIcp}
-                    </span>
-                  ) : (
-                    <span className="text-sm text-gray-500">{displayIcp || '—'}</span>
-                  );
-                })()}
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Status</p>
+                <span className="flex flex-wrap gap-1">
+                  {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => (
+                    <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>
+                  ))}
+                  {statusOptionObjects.filter(o => o.scope === 'user').flatMap(opt => {
+                    const markers = (company.status_markers || []).filter(m => m.status_option_id === opt.id);
+                    return markers.map((m, i) => (
+                      <span key={`${opt.id}-${i}`} className={getBadgeClass(opt.value, colorMaps.status || {})}>
+                        {opt.value} - {m.initials}
+                      </span>
+                    ));
+                  })}
+                  {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 &&
+                    (company.status_markers || []).length === 0 &&
+                    <span className="text-sm text-gray-400">—</span>}
+                </span>
               </div>
             </div>
           </div>
@@ -2010,11 +2000,6 @@ export default function CompanyDetailPage() {
       {/* Attendee quick view drawer */}
       {quickView && (
         <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
-      )}
-
-      {/* In-app website browser drawer */}
-      {websiteDrawerOpen && company?.website && (
-        <WebsiteBrowserDrawer url={company.website} onClose={() => setWebsiteDrawerOpen(false)} />
       )}
     </div>
   );
