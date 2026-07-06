@@ -27,6 +27,7 @@ import { InternalRelationshipsSection } from '@/components/InternalRelationships
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { ComposeEmailModal } from '@/components/ComposeEmailModal';
 import { CompanyDrawer } from '@/components/CompanyDrawer';
+import { WebsiteBrowserDrawer } from '@/components/WebsiteBrowserDrawer';
 import { ActivityTimelineModal } from '@/components/ActivityTimelineModal';
 import { useCapabilities } from '@/lib/useCapabilities';
 import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
@@ -202,6 +203,7 @@ export default function CompanyDetailPage() {
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
   const [relMapOpen, setRelMapOpen] = useState(false);
+  const [websiteDrawerOpen, setWebsiteDrawerOpen] = useState(false);
 
   const [closedDeals, setClosedDeals] = useState<ClosedDeal[]>([]);
 
@@ -975,6 +977,11 @@ export default function CompanyDetailPage() {
                             <svg className="w-5 h-5 text-[#7F77DD]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
                           </button>
                         )}
+                        {company.website && (
+                          <button type="button" title="View website" onClick={() => setWebsiteDrawerOpen(true)} className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0">
+                            <svg className="w-5 h-5 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                          </button>
+                        )}
                       </span>
                     </h1>
                     {company.parent_company && (
@@ -1063,6 +1070,11 @@ export default function CompanyDetailPage() {
                   {planCapabilities?.intelligence_core?.internal_relationship_mapping && (
                     <button type="button" title="View relationship map" onClick={() => setRelMapOpen(true)} className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#EEEDFE] hover:bg-[#E0DEF8] transition-colors flex-shrink-0">
                       <svg className="w-4 h-4 text-[#7F77DD]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                    </button>
+                  )}
+                  {company.website && (
+                    <button type="button" title="View website" onClick={() => setWebsiteDrawerOpen(true)} className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0">
+                      <svg className="w-4 h-4 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                     </button>
                   )}
                 </div>
@@ -1998,6 +2010,11 @@ export default function CompanyDetailPage() {
       {/* Attendee quick view drawer */}
       {quickView && (
         <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
+      )}
+
+      {/* In-app website browser drawer */}
+      {websiteDrawerOpen && company?.website && (
+        <WebsiteBrowserDrawer url={company.website} onClose={() => setWebsiteDrawerOpen(false)} />
       )}
     </div>
   );
