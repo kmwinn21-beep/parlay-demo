@@ -1,6 +1,6 @@
 {
-  "name": "Conference Hub",
-  "short_name": "Conf Hub",
+  "name": "Parlay",
+  "short_name": "Parlay",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0B3C62",
