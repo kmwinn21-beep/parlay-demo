@@ -21,6 +21,7 @@ import { useAppName } from '@/lib/useAppName';
 import { useCapabilities } from '@/lib/useCapabilities';
 import { clearActiveConferenceStorage } from '@/components/ActiveConferenceContext';
 import { SetConferenceButton } from '@/components/SetConferenceButton';
+import { useLogoConfig } from '@/lib/useLogoConfig';
 const pageTitles: Record<string, string> = {
   '/': 'Dashboard',
   '/conferences': 'Conferences',
@@ -87,6 +88,7 @@ export function Header() {
   const pathname = usePathname();
   const { user } = useUser();
   const appName = useAppName();
+  const { faviconUrl } = useLogoConfig();
   const { navHidden, setNavHidden, setHelpChatOpen } = useFloatingNavHidden();
   const { planCapabilities } = useCapabilities();
   const title = getPageTitle(pathname);
@@ -187,7 +189,13 @@ export function Header() {
   return (
     <header className="bg-white border-b border-gray-200 px-4 lg:px-6 py-3 flex items-center justify-between flex-shrink-0">
       <div>
-        <h1 className="text-xl font-semibold text-brand-primary font-serif">{title}</h1>
+        <h1 className="hidden lg:block text-xl font-semibold text-brand-primary font-serif">{title}</h1>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={faviconUrl || '/favicon.png'}
+          alt={title}
+          className="lg:hidden h-8 w-8 object-contain"
+        />
         <p className="text-xs text-gray-500 hidden sm:block">{appName}</p>
       </div>
       <div className="flex items-center gap-2">
