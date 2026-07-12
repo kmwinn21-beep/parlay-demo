@@ -22,7 +22,7 @@ export function MobileHeaderSearchBar({ onClose }: { onClose: () => void }) {
         @keyframes headerSearchSlideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
       `}</style>
       <div
-        className="lg:hidden absolute inset-0 z-20 bg-white flex items-center gap-2 pl-1"
+        className="lg:hidden absolute inset-0 z-20 bg-white flex items-center gap-2 px-4"
         style={{ animation: 'headerSearchSlideIn 200ms ease-out' }}
       >
         <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

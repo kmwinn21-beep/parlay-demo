@@ -187,7 +187,7 @@ export function Header() {
   };
 
   return (
-    <header className="bg-white border-b border-gray-200 px-4 lg:px-6 py-3 flex items-center justify-between flex-shrink-0">
+    <header className="relative bg-white border-b border-gray-200 px-4 lg:px-6 py-3 flex items-center justify-between flex-shrink-0">
       <div>
         <h1 className="hidden lg:block text-xl font-semibold text-brand-primary font-serif">{title}</h1>
         {/* Always the Parlay brand mark on mobile, regardless of any tenant favicon
@@ -200,7 +200,7 @@ export function Header() {
         />
         <p className="text-xs text-gray-500 hidden sm:block">{appName}</p>
       </div>
-      <div className="relative flex items-center gap-2">
+      <div className="flex items-center gap-2">
         {/* Hamburger — mobile only, shown when floating nav is hidden */}
         {navHidden && (
           <button
@@ -540,11 +540,11 @@ export function Header() {
             </button>
           </div>
         )}
-
-        {mobileSearchOpen && (
-          <MobileHeaderSearchBar onClose={() => setMobileSearchOpen(false)} />
-        )}
       </div>
+
+      {mobileSearchOpen && (
+        <MobileHeaderSearchBar onClose={() => setMobileSearchOpen(false)} />
+      )}
       <NewMeetingModal isOpen={showMeetingModal} onClose={() => setShowMeetingModal(false)} />
       <NewNoteModal isOpen={showNoteModal} onClose={() => setShowNoteModal(false)} />
       <AssignFollowUpModal isOpen={showFollowUpModal} onClose={() => setShowFollowUpModal(false)} onSuccess={() => {}} />
