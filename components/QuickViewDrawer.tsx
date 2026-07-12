@@ -5,10 +5,16 @@ import { createPortal } from 'react-dom';
 import { useDrawerResize } from '@/lib/useDrawerResize';
 
 export interface QuickViewTarget {
-  type: 'attendee' | 'company';
+  type: 'attendee' | 'company' | 'conference';
   id: number;
   name: string;
 }
+
+const BASE_PATHS: Record<QuickViewTarget['type'], string> = {
+  attendee: '/attendees',
+  company: '/companies',
+  conference: '/conferences',
+};
 
 interface Props {
   target: QuickViewTarget;
@@ -24,8 +30,7 @@ export function QuickViewDrawer({ target, onClose }: Props) {
     return () => setMounted(false);
   }, []);
 
-  const basePath = target.type === 'attendee' ? '/attendees' : '/companies';
-  const href = `${basePath}/${target.id}`;
+  const href = `${BASE_PATHS[target.type]}/${target.id}`;
 
   if (!mounted) return null;
 
