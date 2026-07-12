@@ -192,12 +192,14 @@ export function Header() {
         <h1 className="hidden lg:block text-xl font-semibold text-brand-primary font-serif">{title}</h1>
         {/* Always the Parlay brand mark on mobile, regardless of any tenant favicon
             configured in Brand settings (that customization only applies elsewhere). */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/favicon.png"
-          alt="Parlay"
-          className="lg:hidden h-8 w-8 object-contain"
-        />
+        <Link href="/" className="lg:hidden block w-8 h-8">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/favicon.png"
+            alt="Parlay — go to Dashboard"
+            className="h-8 w-8 object-contain"
+          />
+        </Link>
         <p className="text-xs text-gray-500 hidden sm:block">{appName}</p>
       </div>
       <div className="flex items-center gap-2">
