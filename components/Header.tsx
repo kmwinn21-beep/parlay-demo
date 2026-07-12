@@ -21,7 +21,7 @@ import { useAppName } from '@/lib/useAppName';
 import { useCapabilities } from '@/lib/useCapabilities';
 import { clearActiveConferenceStorage } from '@/components/ActiveConferenceContext';
 import { SetConferenceButton } from '@/components/SetConferenceButton';
-import { useLogoConfig } from '@/lib/useLogoConfig';
+import { MobileHeaderSearchBar } from '@/components/MobileHeaderSearchBar';
 const pageTitles: Record<string, string> = {
   '/': 'Dashboard',
   '/conferences': 'Conferences',
@@ -88,7 +88,6 @@ export function Header() {
   const pathname = usePathname();
   const { user } = useUser();
   const appName = useAppName();
-  const { faviconUrl } = useLogoConfig();
   const { navHidden, setNavHidden, setHelpChatOpen } = useFloatingNavHidden();
   const { planCapabilities } = useCapabilities();
   const title = getPageTitle(pathname);
@@ -106,6 +105,7 @@ export function Header() {
   const { openDeal: openClosedDeal } = useClosedDealDraft();
   const [showAddNew, setShowAddNew] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [showHelpChat, setShowHelpChat] = useState(false);
   const [helpUnread, setHelpUnread] = useState(false);
   const [uploadJob, setUploadJob] = useState<{ jobId: string; total: number; processed: number } | null>(null);
@@ -190,15 +190,17 @@ export function Header() {
     <header className="bg-white border-b border-gray-200 px-4 lg:px-6 py-3 flex items-center justify-between flex-shrink-0">
       <div>
         <h1 className="hidden lg:block text-xl font-semibold text-brand-primary font-serif">{title}</h1>
+        {/* Always the Parlay brand mark on mobile, regardless of any tenant favicon
+            configured in Brand settings (that customization only applies elsewhere). */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={faviconUrl || '/favicon.png'}
-          alt={title}
+          src="/favicon.png"
+          alt="Parlay"
           className="lg:hidden h-8 w-8 object-contain"
         />
         <p className="text-xs text-gray-500 hidden sm:block">{appName}</p>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="relative flex items-center gap-2">
         {/* Hamburger — mobile only, shown when floating nav is hidden */}
         {navHidden && (
           <button
@@ -465,6 +467,18 @@ export function Header() {
           )}
         </div>
 
+        {/* Global Search — mobile only, to the right of "Go to conference"; desktop uses the button above */}
+        <button
+          type="button"
+          onClick={() => setMobileSearchOpen(true)}
+          className="lg:hidden flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 transition-colors"
+          title="Search"
+        >
+          <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </button>
+
         {/* Admin Panel — hidden on mobile, only visible to administrators */}
         {user?.role === 'administrator' && (
           <Link
@@ -525,6 +539,10 @@ export function Header() {
               </svg>
             </button>
           </div>
+        )}
+
+        {mobileSearchOpen && (
+          <MobileHeaderSearchBar onClose={() => setMobileSearchOpen(false)} />
         )}
       </div>
       <NewMeetingModal isOpen={showMeetingModal} onClose={() => setShowMeetingModal(false)} />
