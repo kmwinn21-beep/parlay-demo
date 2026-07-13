@@ -173,7 +173,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
   const [targets, setTargets] = useState<TargetEntry[]>([]);
   const [meetingAttendeeIds, setMeetingAttendeeIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
-  const [selectedTiers, setSelectedTiers] = useState<Set<string>>(new Set(['1']));
+  const [selectedTier, setSelectedTier] = useState<string | null>(null);
   const { panelStyle: attendeePanelStyle, handleResizeStart: attendeeResizeStart } = useDrawerResize(480);
   const [drawerAttendeeId, setDrawerAttendeeId] = useState<number | null>(null);
   const [drawerAttendeeName, setDrawerAttendeeName] = useState<string>('');
@@ -221,19 +221,11 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
   };
 
   function toggleTier(key: string) {
-    setSelectedTiers(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
+    setSelectedTier(prev => (prev === key ? null : key));
   }
 
   const filteredTargets = targets
-    .filter(t => selectedTiers.has(t.tier))
+    .filter(t => selectedTier === null || t.tier === selectedTier)
     .sort((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier));
 
   return (
@@ -266,7 +258,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
             value={selectedConfId ?? ''}
             onChange={e => {
               setSelectedConfId(Number(e.target.value));
-              setSelectedTiers(new Set(['1']));
+              setSelectedTier(null);
             }}
             className="input-field text-sm w-full"
           >
@@ -302,7 +294,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
       {/* Tier filter cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {TIER_CONFIG.map(tier => {
-          const isSelected = selectedTiers.has(tier.key);
+          const isSelected = selectedTier === tier.key;
           const count = tierCounts[tier.key] ?? 0;
           return (
             <button
