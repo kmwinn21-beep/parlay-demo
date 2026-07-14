@@ -382,7 +382,7 @@ export function FormEditDrawer({
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                 {uploadingBgVideo ? 'Uploading…' : backgroundVideoUrl ? 'Replace Background Video' : '+ Add Background Video'}
               </button>
-              <input ref={bgVideoFileRef} type="file" accept="video/mp4,video/webm,video/quicktime" className="hidden" onChange={handleBgVideoFileChange} />
+              <input ref={bgVideoFileRef} type="file" accept="video/*" className="hidden" onChange={handleBgVideoFileChange} />
               {backgroundVideoUrl && (
                 <div className="flex items-center gap-2 pt-1">
                   <span className="text-xs text-gray-500 whitespace-nowrap">Opacity</span>
@@ -421,7 +421,7 @@ export function FormEditDrawer({
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                 {uploadingVideo ? 'Uploading…' : '+ Add Video'}
               </button>
-              <input ref={videoFileRef} type="file" accept="video/mp4,video/webm,video/quicktime" className="hidden" onChange={handleVideoFileChange} />
+              <input ref={videoFileRef} type="file" accept="video/*" className="hidden" onChange={handleVideoFileChange} />
               <button
                 type="button"
                 onClick={onAddText}
