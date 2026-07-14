@@ -17,6 +17,29 @@ interface Props {
   onAddText: () => void;
 }
 
+type DockSide = 'left' | 'right' | 'top' | 'bottom';
+
+const DOCK_OPTIONS: { side: DockSide; label: string; path: string }[] = [
+  { side: 'left', label: 'Dock left', path: 'M11 19l-7-7 7-7m-7 7h18' },
+  { side: 'top', label: 'Dock top', path: 'M5 11l7-7 7 7m-7-7v18' },
+  { side: 'right', label: 'Dock right', path: 'M13 5l7 7-7 7M20 12H2' },
+  { side: 'bottom', label: 'Dock bottom', path: 'M19 13l-7 7-7-7m7 7V2' },
+];
+
+const DOCK_PANEL_CLASS: Record<DockSide, string> = {
+  left: 'inset-y-0 left-0 w-full sm:w-[340px]',
+  right: 'inset-y-0 right-0 w-full sm:w-[340px]',
+  top: 'inset-x-0 top-0 h-full sm:h-[320px]',
+  bottom: 'inset-x-0 bottom-0 h-full sm:h-[320px]',
+};
+
+const DOCK_ANIM: Record<DockSide, string> = {
+  left: 'slideInLeft 200ms ease-out',
+  right: 'slideInRight 200ms ease-out',
+  top: 'slideInTop 200ms ease-out',
+  bottom: 'slideInBottom 200ms ease-out',
+};
+
 export function FormEditDrawer({
   formId,
   isEditMode,
@@ -31,6 +54,7 @@ export function FormEditDrawer({
   onAddText,
 }: Props) {
   const [uploading, setUploading] = useState(false);
+  const [dockSide, setDockSide] = useState<DockSide>('left');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -70,15 +94,40 @@ export function FormEditDrawer({
         {isEditMode ? 'Done Editing' : 'Edit Form'}
       </button>
 
-      {/* Left-sliding drawer */}
+      {/* Relocatable settings drawer — docks to any screen edge while editing */}
       {isEditMode && (
-        <div className="fixed inset-y-0 left-0 z-[10000] w-full sm:w-[340px] bg-white shadow-2xl overflow-y-auto animate-[slideInLeft_200ms_ease-out]">
-          <style>{'@keyframes slideInLeft { from { transform: translateX(-100%); } to { transform: translateX(0); } }'}</style>
+        <div
+          key={dockSide}
+          className={`fixed z-[10000] bg-white shadow-2xl overflow-y-auto ${DOCK_PANEL_CLASS[dockSide]}`}
+          style={{ animation: DOCK_ANIM[dockSide] }}
+        >
+          <style>{`
+            @keyframes slideInLeft { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+            @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+            @keyframes slideInTop { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+            @keyframes slideInBottom { from { transform: translateY(100%); } to { transform: translateY(0); } }
+          `}</style>
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <h3 className="text-sm font-bold text-brand-primary font-serif">Edit Form</h3>
-            <button type="button" onClick={onToggleEditMode} className="text-gray-400 hover:text-gray-600">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Relocate drawer to another screen edge */}
+              <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+                {DOCK_OPTIONS.map(opt => (
+                  <button
+                    key={opt.side}
+                    type="button"
+                    onClick={() => setDockSide(opt.side)}
+                    title={opt.label}
+                    className={`w-6 h-6 flex items-center justify-center rounded-md transition-colors ${dockSide === opt.side ? 'bg-white shadow-sm text-brand-secondary' : 'text-gray-400 hover:text-gray-600'}`}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={opt.path} /></svg>
+                  </button>
+                ))}
+              </div>
+              <button type="button" onClick={onToggleEditMode} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
           </div>
 
           <div className="p-5 space-y-5">
