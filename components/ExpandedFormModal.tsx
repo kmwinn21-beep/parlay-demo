@@ -163,7 +163,7 @@ function MediaElementCanvas({ src, mediaType, objectFit, focalX, focalY, cornerS
   // Sync from server once persisted — but not mid-drag, or the commit would snap back
   useEffect(() => { if (!isDragging) setLocalFocal({ x: focalX, y: focalY }); }, [focalX, focalY, isDragging]);
 
-  const embed = mediaType === 'video' ? resolveVideoEmbed(src) : null;
+  const embed = mediaType === 'video' ? resolveVideoEmbed(src, { autoplay: true, controls: true }) : null;
   const isIframeEmbed = embed?.type === 'iframe';
   const cropMode = objectFit === 'cover' && isEditMode && !isIframeEmbed;
 
@@ -231,6 +231,9 @@ function MediaElementCanvas({ src, mediaType, objectFit, focalX, focalY, cornerS
             className="w-full h-full"
             style={{ objectFit, objectPosition: `${localFocal.x}% ${localFocal.y}%`, pointerEvents: isEditMode ? 'none' : 'auto' }}
             controls={!isEditMode}
+            autoPlay={!isEditMode}
+            loop
+            muted
             playsInline
           />
         )
@@ -989,9 +992,9 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
       {/* Full-bleed background media, drawn beneath the page background color/gradient.
           A background video, if set, takes precedence over a background image. */}
       {formMeta.background_video_url ? (
-        resolveVideoEmbed(formMeta.background_video_url, { background: true }).type === 'iframe' ? (
+        resolveVideoEmbed(formMeta.background_video_url, { autoplay: true, controls: false }).type === 'iframe' ? (
           <iframe
-            src={resolveVideoEmbed(formMeta.background_video_url, { background: true }).src}
+            src={resolveVideoEmbed(formMeta.background_video_url, { autoplay: true, controls: false }).src}
             className="absolute inset-0 w-full h-full pointer-events-none"
             style={{ border: 0, opacity: formMeta.background_video_opacity / 100 }}
             allow="autoplay; encrypted-media; picture-in-picture"
