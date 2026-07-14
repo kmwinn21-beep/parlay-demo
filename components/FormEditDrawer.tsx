@@ -107,16 +107,43 @@ export function FormEditDrawer({
       .catch(() => {});
   }, []);
 
-  const uploadFile = async (file: File, kind: 'image' | 'video'): Promise<string | null> => {
+  const uploadImage = async (file: File): Promise<string | null> => {
     try {
       const body = new FormData();
       body.append('file', file);
-      const res = await fetch(`/api/conference-forms/${formId}/upload-${kind}`, { method: 'POST', body });
+      const res = await fetch(`/api/conference-forms/${formId}/upload-image`, { method: 'POST', body });
       if (!res.ok) throw new Error();
       const { url } = await res.json();
       return url as string;
     } catch {
-      toast.error(`Failed to upload ${kind}`);
+      toast.error('Failed to upload image');
+      return null;
+    }
+  };
+
+  // Videos upload directly to R2 via a presigned URL — routing the file bytes through our
+  // own API (like uploadImage does) would hit Vercel's ~4.5MB serverless request body limit.
+  const uploadVideo = async (file: File): Promise<string | null> => {
+    try {
+      const presignRes = await fetch(`/api/conference-forms/${formId}/upload-video`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size }),
+      });
+      if (!presignRes.ok) {
+        const err = await presignRes.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to prepare upload');
+      }
+      const { uploadUrl, publicUrl, contentType } = await presignRes.json();
+      const putRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': contentType },
+        body: file,
+      });
+      if (!putRes.ok) throw new Error('Upload to storage failed');
+      return publicUrl as string;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to upload video');
       return null;
     }
   };
@@ -126,7 +153,7 @@ export function FormEditDrawer({
     if (!file) return;
     e.target.value = '';
     setUploading(true);
-    const url = await uploadFile(file, 'image');
+    const url = await uploadImage(file);
     if (url) onAddImage(url);
     setUploading(false);
   };
@@ -136,7 +163,7 @@ export function FormEditDrawer({
     if (!file) return;
     e.target.value = '';
     setUploadingVideo(true);
-    const url = await uploadFile(file, 'video');
+    const url = await uploadVideo(file);
     if (url) onAddVideo(url);
     setUploadingVideo(false);
   };
@@ -146,7 +173,7 @@ export function FormEditDrawer({
     if (!file) return;
     e.target.value = '';
     setUploadingBg(true);
-    const url = await uploadFile(file, 'image');
+    const url = await uploadImage(file);
     if (url) onBackgroundImageChange(url);
     setUploadingBg(false);
   };
@@ -156,7 +183,7 @@ export function FormEditDrawer({
     if (!file) return;
     e.target.value = '';
     setUploadingBgVideo(true);
-    const url = await uploadFile(file, 'video');
+    const url = await uploadVideo(file);
     if (url) onBackgroundVideoChange(url);
     setUploadingBgVideo(false);
   };

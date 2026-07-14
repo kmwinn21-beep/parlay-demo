@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomBytes } from 'crypto';
 
 // Maps a video/* MIME subtype (or a bare file extension) to the extension/content-type
 // pair actually stored — covers every common video format browsers hand us, since
-// `file.type` varies a lot by OS/browser/codec for the same container.
+// the reported MIME type varies a lot by OS/browser/codec for the same container.
 const MIME_TO_EXT: Record<string, string> = {
   mp4: 'mp4',
   webm: 'webm',
@@ -42,14 +43,14 @@ const EXT_TO_CONTENT_TYPE: Record<string, string> = {
   ts: 'video/mp2t',
 };
 
-const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
+const MAX_BYTES = 500 * 1024 * 1024; // 500 MB — the file itself is streamed straight to R2, not through this function
 
-function resolveExt(file: File): string | null {
-  const subtype = file.type.split('/')[1]?.toLowerCase();
+function resolveExt(filename: string, mimeType: string): string | null {
+  const subtype = mimeType.split('/')[1]?.toLowerCase();
   if (subtype && MIME_TO_EXT[subtype]) return MIME_TO_EXT[subtype];
   // Some browsers report an empty/unrecognized MIME type for less common containers —
   // fall back to the file's own extension.
-  const nameExt = file.name.split('.').pop()?.toLowerCase();
+  const nameExt = filename.split('.').pop()?.toLowerCase();
   if (nameExt && EXT_TO_CONTENT_TYPE[nameExt]) return nameExt;
   return null;
 }
@@ -65,6 +66,9 @@ function r2Client() {
   });
 }
 
+// Returns a presigned R2 PUT URL — the browser uploads the video bytes directly to R2
+// instead of routing them through this serverless function, which avoids Vercel's ~4.5MB
+// request body limit on Serverless Functions entirely (that limit was causing the 413s).
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
@@ -74,35 +78,39 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   }
 
   try {
-    const formData = await request.formData();
-    const file = formData.get('file') as File | null;
-    if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    const { filename, contentType, size } = await request.json() as { filename?: string; contentType?: string; size?: number };
+    if (!filename) return NextResponse.json({ error: 'filename required' }, { status: 400 });
 
-    if (file.type && !file.type.startsWith('video/')) {
+    const mimeType = contentType || '';
+    if (mimeType && !mimeType.startsWith('video/')) {
       return NextResponse.json({ error: 'Unsupported file type — please choose a video file' }, { status: 400 });
     }
-    const ext = resolveExt(file);
+    const ext = resolveExt(filename, mimeType);
     if (!ext) {
       return NextResponse.json({ error: 'Unrecognized video format — try MP4, MOV, WebM, AVI, MKV, or WMV' }, { status: 400 });
     }
-    if (file.size > MAX_BYTES) return NextResponse.json({ error: 'File exceeds 100 MB limit' }, { status: 400 });
+    if (size != null && size > MAX_BYTES) {
+      return NextResponse.json({ error: 'File exceeds 500 MB limit' }, { status: 400 });
+    }
 
     const key = `forms/${params.id}/${randomBytes(8).toString('hex')}.${ext}`;
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const contentType = EXT_TO_CONTENT_TYPE[ext] || file.type || 'video/mp4';
+    const resolvedContentType = EXT_TO_CONTENT_TYPE[ext] || mimeType || 'video/mp4';
 
-    await r2Client().send(new PutObjectCommand({
-      Bucket: process.env.R2_BUCKET_NAME,
-      Key: key,
-      Body: buffer,
-      ContentType: contentType,
-      CacheControl: 'public, max-age=31536000, immutable',
-    }));
+    const uploadUrl = await getSignedUrl(
+      r2Client(),
+      new PutObjectCommand({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Key: key,
+        ContentType: resolvedContentType,
+        CacheControl: 'public, max-age=31536000, immutable',
+      }),
+      { expiresIn: 300 },
+    );
 
-    const url = `${process.env.R2_PUBLIC_URL}/${key}`;
-    return NextResponse.json({ url });
+    const publicUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
+    return NextResponse.json({ uploadUrl, publicUrl, contentType: resolvedContentType });
   } catch (error) {
     console.error('POST /api/conference-forms/[id]/upload-video error:', error);
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to prepare upload' }, { status: 500 });
   }
 }
