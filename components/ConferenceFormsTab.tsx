@@ -100,6 +100,57 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
     panel_logo_url: string;
   }>({ name: '', conference_logo_url: '', background_color: '', accent_color: '', accent_gradient: 'none', panel_logo_url: '' });
 
+  // Duplicate form → other conference(s)
+  const [duplicatingFormId, setDuplicatingFormId] = useState<number | null>(null);
+  const [conferenceOptions, setConferenceOptions] = useState<{ id: number; name: string }[] | null>(null);
+  const [selectedDupConfs, setSelectedDupConfs] = useState<Set<number>>(new Set());
+  const [duplicating, setDuplicating] = useState(false);
+  const dupDropRef = useRef<HTMLDivElement>(null);
+
+  const openDuplicateDropdown = useCallback(async (formId: number) => {
+    setDuplicatingFormId(prev => (prev === formId ? null : formId));
+    setSelectedDupConfs(new Set());
+    if (conferenceOptions === null) {
+      try {
+        const res = await fetch('/api/conferences?nav=1');
+        if (res.ok) {
+          const data = await res.json();
+          setConferenceOptions(data.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })));
+        }
+      } catch { toast.error('Failed to load conferences'); }
+    }
+  }, [conferenceOptions]);
+
+  useEffect(() => {
+    if (duplicatingFormId === null) return;
+    const handler = (e: MouseEvent) => {
+      if (dupDropRef.current && !dupDropRef.current.contains(e.target as Node)) setDuplicatingFormId(null);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [duplicatingFormId]);
+
+  const handleDuplicateForm = async (formId: number) => {
+    if (selectedDupConfs.size === 0) { toast.error('Select at least one conference'); return; }
+    setDuplicating(true);
+    try {
+      const res = await fetch(`/api/conference-forms/${formId}/duplicate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conference_ids: Array.from(selectedDupConfs) }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(`Duplicated to ${selectedDupConfs.size} conference${selectedDupConfs.size > 1 ? 's' : ''}`);
+      setDuplicatingFormId(null);
+      setSelectedDupConfs(new Set());
+      if (selectedDupConfs.has(conferenceId)) await loadForms();
+    } catch {
+      toast.error('Failed to duplicate form');
+    } finally {
+      setDuplicating(false);
+    }
+  };
+
   const loadForms = useCallback(async () => {
     try {
       const [formsRes, templatesRes, statusRes] = await Promise.all([
@@ -509,6 +560,58 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
                     </button>
+                    {/* Duplicate to another conference */}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => openDuplicateDropdown(form.id)}
+                        title="Duplicate form to another conference"
+                        className="p-2 rounded-lg text-gray-400 hover:text-brand-secondary hover:bg-blue-50 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                      </button>
+                      {duplicatingFormId === form.id && (
+                        <div ref={dupDropRef} className="absolute z-30 top-full mt-1 left-0 w-64 bg-white border border-gray-200 rounded-lg shadow-xl">
+                          <p className="px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-100">Duplicate to conference(s)</p>
+                          <div className="max-h-56 overflow-y-auto">
+                            {conferenceOptions === null && (
+                              <div className="px-3 py-3 text-xs text-gray-400">Loading…</div>
+                            )}
+                            {conferenceOptions?.length === 0 && (
+                              <div className="px-3 py-3 text-xs text-gray-400">No conferences found</div>
+                            )}
+                            {conferenceOptions?.map(c => (
+                              <label key={c.id} className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedDupConfs.has(c.id)}
+                                  onChange={e => {
+                                    setSelectedDupConfs(prev => {
+                                      const next = new Set(prev);
+                                      if (e.target.checked) next.add(c.id); else next.delete(c.id);
+                                      return next;
+                                    });
+                                  }}
+                                  className="accent-brand-secondary flex-shrink-0"
+                                />
+                                <span className="truncate">{c.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                          <div className="flex gap-2 px-3 py-2 border-t border-gray-100">
+                            <button
+                              type="button"
+                              onClick={() => handleDuplicateForm(form.id)}
+                              disabled={duplicating || selectedDupConfs.size === 0}
+                              className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
+                            >
+                              {duplicating ? 'Duplicating…' : `Duplicate${selectedDupConfs.size > 0 ? ` (${selectedDupConfs.size})` : ''}`}
+                            </button>
+                            <button type="button" onClick={() => setDuplicatingFormId(null)} className="btn-secondary text-xs px-3 py-1.5">Cancel</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                     {/* Delete */}
                     <button
                       type="button"

@@ -1,7 +1,10 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
+import { BRAND_COLOR_DEFAULTS, BRAND_COLOR_META, type BrandColorKey } from '@/lib/brand';
+
+const BRAND_SWATCH_KEYS: BrandColorKey[] = ['brand_dark_blue', 'brand_bright_blue', 'brand_beige', 'brand_gold'];
 
 interface Props {
   formId: number;
@@ -64,8 +67,23 @@ export function FormEditDrawer({
   const [uploading, setUploading] = useState(false);
   const [uploadingBg, setUploadingBg] = useState(false);
   const [dockSide, setDockSide] = useState<DockSide>('left');
+  const [brandColorsOpen, setBrandColorsOpen] = useState(false);
+  const [brandColors, setBrandColors] = useState<Record<BrandColorKey, string>>({ ...BRAND_COLOR_DEFAULTS });
   const fileRef = useRef<HTMLInputElement>(null);
   const bgFileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch('/api/admin/settings')
+      .then(r => r.ok ? r.json() : {})
+      .then((data: Record<string, string>) => {
+        const colors: Record<BrandColorKey, string> = { ...BRAND_COLOR_DEFAULTS };
+        for (const key of BRAND_SWATCH_KEYS) {
+          if (data[key]) colors[key] = data[key];
+        }
+        setBrandColors(colors);
+      })
+      .catch(() => {});
+  }, []);
 
   const uploadFile = async (file: File): Promise<string | null> => {
     try {
@@ -180,6 +198,51 @@ export function FormEditDrawer({
                 <input type="color" value={accentColor} onChange={e => onAccentColorChange(e.target.value)} className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white" />
                 <input type="text" value={accentColor} onChange={e => onAccentColorChange(e.target.value)} className="input-field text-sm flex-1" placeholder="#FFCB3F" />
               </div>
+            </div>
+
+            <div>
+              <button
+                type="button"
+                onClick={() => setBrandColorsOpen(v => !v)}
+                className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                Brand Colors
+                <svg className={`w-3.5 h-3.5 transition-transform ${brandColorsOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {brandColorsOpen && (
+                <div className="mt-2 space-y-3">
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">Apply to Form Card Color</p>
+                    <div className="flex gap-2">
+                      {BRAND_SWATCH_KEYS.map(key => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => onBackgroundColorChange(brandColors[key])}
+                          title={BRAND_COLOR_META[key].label}
+                          className="w-8 h-8 rounded-full border border-gray-300 hover:ring-2 hover:ring-brand-secondary transition-all flex-shrink-0"
+                          style={{ backgroundColor: brandColors[key] }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">Apply to Page Background Color</p>
+                    <div className="flex gap-2">
+                      {BRAND_SWATCH_KEYS.map(key => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => onAccentColorChange(brandColors[key])}
+                          title={BRAND_COLOR_META[key].label}
+                          className="w-8 h-8 rounded-full border border-gray-300 hover:ring-2 hover:ring-brand-secondary transition-all flex-shrink-0"
+                          style={{ backgroundColor: brandColors[key] }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="border-t border-gray-100 pt-4 space-y-2">

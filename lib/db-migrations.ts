@@ -1449,4 +1449,8 @@ export const migrations: string[] = [
   `ALTER TABLE form_elements ADD COLUMN object_fit TEXT NOT NULL DEFAULT 'contain'`,
   `ALTER TABLE form_elements ADD COLUMN focal_x REAL NOT NULL DEFAULT 50`,
   `ALTER TABLE form_elements ADD COLUMN focal_y REAL NOT NULL DEFAULT 50`,
+  // 485 — conference_forms.form_z_index: lets the form card itself participate in the same
+  // front/back layering stack as its canvas elements (images/text), instead of always
+  // rendering above them. Defaults high so existing forms keep their prior on-top behavior.
+  `ALTER TABLE conference_forms ADD COLUMN form_z_index INTEGER NOT NULL DEFAULT 1000`,
 ];

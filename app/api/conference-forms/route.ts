@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
       sql: `SELECT id, conference_id, template_id, name, conference_logo_url, background_color,
                    accent_color, accent_gradient, image_url, image_max_width, html_content,
                    image_offset_y, html_offset_y, form_width, form_height, form_offset_y, form_x,
-                   background_image_url, background_image_opacity,
+                   form_z_index, background_image_url, background_image_opacity,
                    panel_logo_url, created_by, created_at
             FROM conference_forms WHERE conference_id = ? ORDER BY created_at DESC`,
       args: [conferenceId],
@@ -100,6 +100,7 @@ export async function GET(request: NextRequest) {
         form_height: f.form_height != null ? Number(f.form_height) : null,
         form_offset_y: f.form_offset_y != null ? Number(f.form_offset_y) : null,
         form_x: f.form_x != null ? Number(f.form_x) : null,
+        form_z_index: Number(f.form_z_index),
         background_image_url: f.background_image_url ? String(f.background_image_url) : null,
         background_image_opacity: f.background_image_opacity != null ? Number(f.background_image_opacity) : null,
         panel_logo_url: f.panel_logo_url ? String(f.panel_logo_url) : null,

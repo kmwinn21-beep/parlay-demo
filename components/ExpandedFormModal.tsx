@@ -38,6 +38,7 @@ export interface ConferenceForm {
   form_height: number | null;
   form_offset_y: number | null;
   form_x: number | null;
+  form_z_index: number;
   background_image_url: string | null;
   background_image_opacity: number | null;
   panel_logo_url: string | null;
@@ -279,6 +280,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
     form_offset_y: form.form_offset_y,
     form_width: form.form_width ?? 420,
     form_height: form.form_height ?? 560,
+    form_z_index: form.form_z_index ?? 1000,
     background_image_url: form.background_image_url,
     background_image_opacity: form.background_image_opacity ?? 100,
   });
@@ -332,34 +334,41 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
     fetch(`/api/conference-forms/${form.id}/elements/${id}`, { method: 'DELETE' }).catch(() => {});
   }, [form.id]);
 
-  const reorderElement = useCallback((id: number, action: 'front' | 'forward' | 'backward' | 'back') => {
-    const sorted = [...elements].sort((a, b) => a.z_index - b.z_index);
-    const idx = sorted.findIndex(e => e.id === id);
+  // Unified layering stack: the form card is just another item alongside the image/text
+  // elements, so it can be sent behind or brought in front of them too.
+  const reorderStack = useCallback((target: { kind: 'element' | 'form'; id: number | 'form' }, action: 'front' | 'forward' | 'backward' | 'back') => {
+    type StackItem = { kind: 'element' | 'form'; id: number | 'form'; z: number };
+    const stack: StackItem[] = [
+      ...elements.map(e => ({ kind: 'element' as const, id: e.id, z: e.z_index })),
+      { kind: 'form' as const, id: 'form' as const, z: formMeta.form_z_index },
+    ].sort((a, b) => a.z - b.z);
+    const idx = stack.findIndex(s => s.kind === target.kind && s.id === target.id);
     if (idx === -1) return;
     if (action === 'front') {
-      const [item] = sorted.splice(idx, 1);
-      sorted.push(item);
+      const [item] = stack.splice(idx, 1);
+      stack.push(item);
     } else if (action === 'back') {
-      const [item] = sorted.splice(idx, 1);
-      sorted.unshift(item);
-    } else if (action === 'forward' && idx < sorted.length - 1) {
-      [sorted[idx], sorted[idx + 1]] = [sorted[idx + 1], sorted[idx]];
+      const [item] = stack.splice(idx, 1);
+      stack.unshift(item);
+    } else if (action === 'forward' && idx < stack.length - 1) {
+      [stack[idx], stack[idx + 1]] = [stack[idx + 1], stack[idx]];
     } else if (action === 'backward' && idx > 0) {
-      [sorted[idx], sorted[idx - 1]] = [sorted[idx - 1], sorted[idx]];
+      [stack[idx], stack[idx - 1]] = [stack[idx - 1], stack[idx]];
     }
-    const withZ = sorted.map((e, i) => ({ ...e, z_index: i }));
-    setElements(withZ);
-    withZ.forEach(e => {
-      const orig = elements.find(p => p.id === e.id);
-      if (orig && orig.z_index !== e.z_index) {
-        fetch(`/api/conference-forms/${form.id}/elements/${e.id}`, {
+    stack.forEach((item, z) => {
+      if (item.z === z) return;
+      if (item.kind === 'form') {
+        patchFormMeta({ form_z_index: z });
+      } else {
+        setElements(prev => prev.map(e => (e.id === item.id ? { ...e, z_index: z } : e)));
+        fetch(`/api/conference-forms/${form.id}/elements/${item.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ z_index: e.z_index }),
+          body: JSON.stringify({ z_index: z }),
         }).catch(() => {});
       }
     });
-  }, [elements, form.id]);
+  }, [elements, formMeta.form_z_index, form.id, patchFormMeta]);
 
   const addElement = useCallback(async (element_type: 'image' | 'text', content: string) => {
     const base = {
@@ -1004,16 +1013,16 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 2v14a2 2 0 002 2h14M18 22V8a2 2 0 00-2-2H2" /></svg>
                         </button>
                       )}
-                      <button type="button" onClick={() => reorderElement(el.id, 'back')} title="Send to back" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
+                      <button type="button" onClick={() => reorderStack({ kind: 'element', id: el.id }, 'back')} title="Send to back" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-5 5m5-5l5 5" /><path strokeLinecap="round" strokeLinejoin="round" d="M5 19h14" /></svg>
                       </button>
-                      <button type="button" onClick={() => reorderElement(el.id, 'backward')} title="Send backward" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
+                      <button type="button" onClick={() => reorderStack({ kind: 'element', id: el.id }, 'backward')} title="Send backward" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7-7-7" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 21V3" /></svg>
                       </button>
-                      <button type="button" onClick={() => reorderElement(el.id, 'forward')} title="Bring forward" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
+                      <button type="button" onClick={() => reorderStack({ kind: 'element', id: el.id }, 'forward')} title="Bring forward" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7 7 7" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18" /></svg>
                       </button>
-                      <button type="button" onClick={() => reorderElement(el.id, 'front')} title="Bring to front" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
+                      <button type="button" onClick={() => reorderStack({ kind: 'element', id: el.id }, 'front')} title="Bring to front" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m0 0l-5-5m5 5l5-5" /><path strokeLinecap="round" strokeLinejoin="round" d="M5 5h14" /></svg>
                       </button>
                       <button
@@ -1057,7 +1066,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
             bounds="parent"
             minWidth={280}
             minHeight={300}
-            style={{ zIndex: 50 }}
+            style={{ zIndex: formMeta.form_z_index }}
             className={isEditMode ? 'ring-2 ring-white/60 rounded-2xl' : ''}
             onDragStop={(_e, d) => patchFormMeta({ form_x: Math.round(d.x), form_offset_y: Math.round(d.y) })}
             onResizeStop={(_e, _dir, ref, _delta, pos) => patchFormMeta({
@@ -1067,9 +1076,25 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
           >
             <div className="relative w-full h-full">
               {isEditMode && (
-                <div className="rnd-drag-handle absolute -top-7 left-0 right-0 h-7 flex items-center justify-center gap-1.5 bg-gray-800/85 rounded-t-md cursor-move text-white/70 hover:text-white z-20" title="Drag to move the form">
-                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="8" cy="6" r="1.4" /><circle cx="16" cy="6" r="1.4" /><circle cx="8" cy="12" r="1.4" /><circle cx="16" cy="12" r="1.4" /><circle cx="8" cy="18" r="1.4" /><circle cx="16" cy="18" r="1.4" /></svg>
-                  <span className="text-[11px] font-semibold uppercase tracking-wide">Form</span>
+                <div className="absolute -top-7 left-0 right-0 h-7 flex items-center bg-gray-800/85 rounded-t-md overflow-hidden z-20">
+                  <div className="rnd-drag-handle flex-1 h-full flex items-center justify-center gap-1.5 cursor-move text-white/70 hover:text-white" title="Drag to move the form">
+                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="8" cy="6" r="1.4" /><circle cx="16" cy="6" r="1.4" /><circle cx="8" cy="12" r="1.4" /><circle cx="16" cy="12" r="1.4" /><circle cx="8" cy="18" r="1.4" /><circle cx="16" cy="18" r="1.4" /></svg>
+                    <span className="text-[11px] font-semibold uppercase tracking-wide">Form</span>
+                  </div>
+                  <div className="flex items-center gap-0.5 px-1">
+                    <button type="button" onClick={() => reorderStack({ kind: 'form', id: 'form' }, 'back')} title="Send to back" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-5 5m5-5l5 5" /><path strokeLinecap="round" strokeLinejoin="round" d="M5 19h14" /></svg>
+                    </button>
+                    <button type="button" onClick={() => reorderStack({ kind: 'form', id: 'form' }, 'backward')} title="Send backward" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7-7-7" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 21V3" /></svg>
+                    </button>
+                    <button type="button" onClick={() => reorderStack({ kind: 'form', id: 'form' }, 'forward')} title="Bring forward" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7 7 7" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18" /></svg>
+                    </button>
+                    <button type="button" onClick={() => reorderStack({ kind: 'form', id: 'form' }, 'front')} title="Bring to front" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m0 0l-5-5m5 5l5-5" /><path strokeLinecap="round" strokeLinejoin="round" d="M5 5h14" /></svg>
+                    </button>
+                  </div>
                 </div>
               )}
               <div className="w-full h-full rounded-2xl shadow-2xl overflow-y-auto" style={{ background: bgColor }}>
