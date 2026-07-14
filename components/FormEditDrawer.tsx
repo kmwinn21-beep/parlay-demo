@@ -86,6 +86,8 @@ export function FormEditDrawer({
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [uploadingBg, setUploadingBg] = useState(false);
   const [uploadingBgVideo, setUploadingBgVideo] = useState(false);
+  const [videoUrlInput, setVideoUrlInput] = useState('');
+  const [bgVideoUrlInput, setBgVideoUrlInput] = useState('');
   const [dockSide, setDockSide] = useState<DockSide>('left');
   const [brandColorsOpen, setBrandColorsOpen] = useState(false);
   const [brandColors, setBrandColors] = useState<Record<BrandColorKey, string>>({ ...BRAND_COLOR_DEFAULTS });
@@ -186,6 +188,20 @@ export function FormEditDrawer({
     const url = await uploadVideo(file);
     if (url) onBackgroundVideoChange(url);
     setUploadingBgVideo(false);
+  };
+
+  const handleAddVideoUrl = () => {
+    const url = videoUrlInput.trim();
+    if (!url) return;
+    onAddVideo(url);
+    setVideoUrlInput('');
+  };
+
+  const handleSetBgVideoUrl = () => {
+    const url = bgVideoUrlInput.trim();
+    if (!url) return;
+    onBackgroundVideoChange(url);
+    setBgVideoUrlInput('');
   };
 
   return (
@@ -410,6 +426,17 @@ export function FormEditDrawer({
                 {uploadingBgVideo ? 'Uploading…' : backgroundVideoUrl ? 'Replace Background Video' : '+ Add Background Video'}
               </button>
               <input ref={bgVideoFileRef} type="file" accept="video/*" className="hidden" onChange={handleBgVideoFileChange} />
+              <div className="flex gap-1.5">
+                <input
+                  type="url"
+                  value={bgVideoUrlInput}
+                  onChange={e => setBgVideoUrlInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSetBgVideoUrl(); } }}
+                  placeholder="or paste a video URL (MP4, YouTube, Vimeo…)"
+                  className="input-field text-xs flex-1"
+                />
+                <button type="button" onClick={handleSetBgVideoUrl} className="btn-secondary text-xs px-2.5 flex-shrink-0">Set</button>
+              </div>
               {backgroundVideoUrl && (
                 <div className="flex items-center gap-2 pt-1">
                   <span className="text-xs text-gray-500 whitespace-nowrap">Opacity</span>
@@ -449,6 +476,17 @@ export function FormEditDrawer({
                 {uploadingVideo ? 'Uploading…' : '+ Add Video'}
               </button>
               <input ref={videoFileRef} type="file" accept="video/*" className="hidden" onChange={handleVideoFileChange} />
+              <div className="flex gap-1.5">
+                <input
+                  type="url"
+                  value={videoUrlInput}
+                  onChange={e => setVideoUrlInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddVideoUrl(); } }}
+                  placeholder="or paste a video URL (MP4, YouTube, Vimeo…)"
+                  className="input-field text-xs flex-1"
+                />
+                <button type="button" onClick={handleAddVideoUrl} className="btn-secondary text-xs px-2.5 flex-shrink-0">Add</button>
+              </div>
               <button
                 type="button"
                 onClick={onAddText}

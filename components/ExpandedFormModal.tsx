@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import { compressImage } from './DashboardActionCard';
 import { RichTextEditor, getEditorExtensions } from './RichTextEditor';
 import { FormEditDrawer } from './FormEditDrawer';
+import { resolveVideoEmbed } from '@/lib/videoEmbed';
 
 export interface FormField {
   id: number;
@@ -159,7 +160,9 @@ function MediaElementCanvas({ src, mediaType, objectFit, focalX, focalY, isEditM
   // Sync from server once persisted — but not mid-drag, or the commit would snap back
   useEffect(() => { if (!isDragging) setLocalFocal({ x: focalX, y: focalY }); }, [focalX, focalY, isDragging]);
 
-  const cropMode = objectFit === 'cover' && isEditMode;
+  const embed = mediaType === 'video' ? resolveVideoEmbed(src) : null;
+  const isIframeEmbed = embed?.type === 'iframe';
+  const cropMode = objectFit === 'cover' && isEditMode && !isIframeEmbed;
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!cropMode) return;
@@ -210,14 +213,24 @@ function MediaElementCanvas({ src, mediaType, objectFit, focalX, focalY, isEditM
       style={{ cursor: cropMode ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
     >
       {mediaType === 'video' ? (
-        <video
-          src={src}
-          onError={() => setError(true)}
-          className="w-full h-full"
-          style={{ objectFit, objectPosition: `${localFocal.x}% ${localFocal.y}%`, pointerEvents: isEditMode ? 'none' : 'auto' }}
-          controls={!isEditMode}
-          playsInline
-        />
+        isIframeEmbed ? (
+          <iframe
+            src={embed!.src}
+            className="w-full h-full"
+            style={{ border: 0, pointerEvents: isEditMode ? 'none' : 'auto' }}
+            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+            allowFullScreen
+          />
+        ) : (
+          <video
+            src={src}
+            onError={() => setError(true)}
+            className="w-full h-full"
+            style={{ objectFit, objectPosition: `${localFocal.x}% ${localFocal.y}%`, pointerEvents: isEditMode ? 'none' : 'auto' }}
+            controls={!isEditMode}
+            playsInline
+          />
+        )
       ) : (
         <img
           src={src}
@@ -969,15 +982,24 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
       {/* Full-bleed background media, drawn beneath the page background color/gradient.
           A background video, if set, takes precedence over a background image. */}
       {formMeta.background_video_url ? (
-        <video
-          src={formMeta.background_video_url}
-          className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-          style={{ opacity: formMeta.background_video_opacity / 100 }}
-          autoPlay
-          muted
-          loop
-          playsInline
-        />
+        resolveVideoEmbed(formMeta.background_video_url, { background: true }).type === 'iframe' ? (
+          <iframe
+            src={resolveVideoEmbed(formMeta.background_video_url, { background: true }).src}
+            className="absolute inset-0 w-full h-full pointer-events-none"
+            style={{ border: 0, opacity: formMeta.background_video_opacity / 100 }}
+            allow="autoplay; encrypted-media; picture-in-picture"
+          />
+        ) : (
+          <video
+            src={formMeta.background_video_url}
+            className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+            style={{ opacity: formMeta.background_video_opacity / 100 }}
+            autoPlay
+            muted
+            loop
+            playsInline
+          />
+        )
       ) : formMeta.background_image_url && (
         <img
           src={formMeta.background_image_url}
@@ -1037,7 +1059,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
                       <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="8" cy="6" r="1.4" /><circle cx="16" cy="6" r="1.4" /><circle cx="8" cy="12" r="1.4" /><circle cx="16" cy="12" r="1.4" /><circle cx="8" cy="18" r="1.4" /><circle cx="16" cy="18" r="1.4" /></svg>
                     </div>
                     <div className="flex items-center gap-0.5 px-1">
-                      {(el.element_type === 'image' || el.element_type === 'video') && (
+                      {(el.element_type === 'image' || (el.element_type === 'video' && resolveVideoEmbed(el.content || '').type === 'direct')) && (
                         <button
                           type="button"
                           onClick={() => updateElement(el.id, { object_fit: el.object_fit === 'cover' ? 'contain' : 'cover' })}
