@@ -359,6 +359,8 @@ export function ConferenceTargetsTab({
   function renderTierColumn(tier: typeof TIERS[number]) {
     const tierCards = targets.filter(t => t.tier === tier.key);
     const isOver = dragOverTier === tier.key;
+    const visibleTierCount = TIERS.length - minimizedTiers.size;
+    const isSoleVisibleColumn = visibleTierCount <= 1;
     return (
       <div
         className={`rounded-xl border-2 p-3 min-h-[120px] transition-colors ${tier.border} ${tier.bg}`}
@@ -383,7 +385,7 @@ export function ConferenceTargetsTab({
               type="button"
               onClick={() => minimizeTier(tier.key)}
               title={`Hide ${tier.label}`}
-              className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 hover:bg-white/60 transition-colors"
+              className="flex-shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/70 text-gray-500 hover:text-gray-700 hover:bg-white transition-colors"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M18 12H6" />
@@ -391,7 +393,7 @@ export function ConferenceTargetsTab({
             </button>
           </div>
         </div>
-        <div className="space-y-2">
+        <div className={isSoleVisibleColumn ? 'grid grid-cols-2 gap-2' : 'space-y-2'}>
           {tierCards.map(entry => (
             <TargetCard
               key={entry.attendeeId}
@@ -406,7 +408,7 @@ export function ConferenceTargetsTab({
             />
           ))}
           {tierCards.length === 0 && (
-            <p className="text-xs text-gray-400 text-center py-4">Drop here</p>
+            <p className={`text-xs text-gray-400 text-center py-4 ${isSoleVisibleColumn ? 'col-span-2' : ''}`}>Drop here</p>
           )}
         </div>
       </div>
