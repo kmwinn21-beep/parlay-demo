@@ -63,6 +63,11 @@ function r2Client() {
       accessKeyId: process.env.R2_ACCESS_KEY_ID!,
       secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
     },
+    // Newer SDK versions add an x-amz-checksum-crc32 to PutObject by default. When
+    // presigning, the SDK can't see the real file body yet, so it signs a checksum for an
+    // *empty* body — R2 then rejects the upload once it hashes the actual bytes. This isn't
+    // needed for a plain PutObject, so turn it off.
+    requestChecksumCalculation: 'WHEN_REQUIRED',
   });
 }
 
