@@ -103,18 +103,25 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
 
   // Duplicate form → other conference(s)
   const [duplicatingFormId, setDuplicatingFormId] = useState<number | null>(null);
-  const [dupDropPos, setDupDropPos] = useState<{ top: number; left: number } | null>(null);
+  const [dupDropPos, setDupDropPos] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
   const [conferenceOptions, setConferenceOptions] = useState<{ id: number; name: string }[] | null>(null);
   const [selectedDupConfs, setSelectedDupConfs] = useState<Set<number>>(new Set());
   const [duplicating, setDuplicating] = useState(false);
   const dupDropRef = useRef<HTMLDivElement>(null);
 
   const openDuplicateDropdown = useCallback(async (formId: number, anchor: HTMLElement) => {
-    const rect = anchor.getBoundingClientRect();
+    const buttonRect = anchor.getBoundingClientRect();
+    const cardRect = (anchor.closest('.card') ?? anchor).getBoundingClientRect();
     const width = 260;
+    const margin = 12;
+    let left = buttonRect.right + 8;
+    // Flip to the left of the button if there isn't room on the right
+    if (left + width + margin > window.innerWidth) left = buttonRect.left - width - 8;
+    const top = cardRect.top;
     setDupDropPos({
-      top: rect.bottom + 4,
-      left: Math.min(rect.left, window.innerWidth - width - 12),
+      top,
+      left: Math.max(margin, left),
+      maxHeight: Math.max(180, window.innerHeight - top - margin),
     });
     setDuplicatingFormId(prev => (prev === formId ? null : formId));
     setSelectedDupConfs(new Set());
@@ -580,11 +587,11 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
                     {duplicatingFormId === form.id && dupDropPos && createPortal(
                       <div
                         ref={dupDropRef}
-                        className="fixed z-[10000] w-64 bg-white border border-gray-200 rounded-lg shadow-xl"
-                        style={{ top: dupDropPos.top, left: dupDropPos.left }}
+                        className="fixed z-[10000] w-64 bg-white border border-gray-200 rounded-lg shadow-xl flex flex-col"
+                        style={{ top: dupDropPos.top, left: dupDropPos.left, maxHeight: dupDropPos.maxHeight }}
                       >
-                        <p className="px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-100">Duplicate to conference(s)</p>
-                        <div className="max-h-56 overflow-y-auto">
+                        <p className="flex-shrink-0 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-100">Duplicate to conference(s)</p>
+                        <div className="flex-1 min-h-0 overflow-y-auto">
                           {conferenceOptions === null && (
                             <div className="px-3 py-3 text-xs text-gray-400">Loading…</div>
                           )}
@@ -609,7 +616,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
                             </label>
                           ))}
                         </div>
-                        <div className="flex gap-2 px-3 py-2 border-t border-gray-100">
+                        <div className="flex-shrink-0 flex gap-2 px-3 py-2 border-t border-gray-100">
                           <button
                             type="button"
                             onClick={() => handleDuplicateForm(form.id)}
