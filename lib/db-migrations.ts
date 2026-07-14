@@ -1410,4 +1410,31 @@ export const migrations: string[] = [
   `ALTER TABLE conferences ADD COLUMN location_state TEXT`,
   `ALTER TABLE conferences ADD COLUMN location_country TEXT`,
   `ALTER TABLE conferences ADD COLUMN location_timezone TEXT`,
+  // 480 — form_elements: free-position/resize canvas elements (images, rich-text blocks) for
+  // the revamped Conference Form editor. Replaces the old single image_url/html_content
+  // fields on conference_forms with an unbounded, drag/resize-positioned set of elements.
+  `CREATE TABLE IF NOT EXISTS form_elements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conference_form_id INTEGER NOT NULL REFERENCES conference_forms(id) ON DELETE CASCADE,
+    element_type TEXT NOT NULL CHECK(element_type IN ('image','text')),
+    x REAL NOT NULL DEFAULT 40,
+    y REAL NOT NULL DEFAULT 40,
+    width REAL NOT NULL DEFAULT 280,
+    height REAL NOT NULL DEFAULT 200,
+    z_index INTEGER NOT NULL DEFAULT 0,
+    content TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_form_elements_form ON form_elements(conference_form_id)`,
+  // 481 — conference_forms.form_x: the form card's own free x position on the new canvas
+  // (form_offset_y is reused as its y position; form_width/form_height as its size).
+  `ALTER TABLE conference_forms ADD COLUMN form_x REAL`,
+  // 482 — backfill: migrate each existing form's single image_url/html_content into the new
+  // form_elements canvas model so nothing is lost when the editor switches to free elements.
+  `INSERT INTO form_elements (conference_form_id, element_type, x, y, width, height, z_index, content)
+   SELECT id, 'image', 40, 40, 320, 240, 0, image_url FROM conference_forms
+   WHERE image_url IS NOT NULL AND TRIM(image_url) != ''`,
+  `INSERT INTO form_elements (conference_form_id, element_type, x, y, width, height, z_index, content)
+   SELECT id, 'text', 40, 300, 320, 320, 1, html_content FROM conference_forms
+   WHERE html_content IS NOT NULL AND TRIM(html_content) != ''`,
 ];

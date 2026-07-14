@@ -34,6 +34,7 @@
     "react-dom": "^18",
     "react-hook-form": "^7.51.5",
     "react-hot-toast": "^2.4.1",
+    "react-rnd": "^10.5.3",
     "recharts": "^2.12.7",
     "stripe": "^22.1.1",
     "svix": "^1.95.2",

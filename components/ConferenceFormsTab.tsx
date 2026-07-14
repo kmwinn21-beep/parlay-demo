@@ -98,16 +98,8 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
     background_color: string;
     accent_color: string;
     accent_gradient: string;
-    image_url: string;
-    image_max_width: string;
-    html_content: string;
-    image_offset_y: number;
-    html_offset_y: number;
-    form_width: number;
-    form_height: number | null;
-    form_offset_y: number;
     panel_logo_url: string;
-  }>({ name: '', conference_logo_url: '', background_color: '', accent_color: '', accent_gradient: 'none', image_url: '', image_max_width: '80', html_content: '', image_offset_y: 0, html_offset_y: 0, form_width: 420, form_height: null, form_offset_y: 0, panel_logo_url: '' });
+  }>({ name: '', conference_logo_url: '', background_color: '', accent_color: '', accent_gradient: 'none', panel_logo_url: '' });
 
   const loadForms = useCallback(async () => {
     try {
@@ -257,14 +249,6 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
           background_color: editDraft.background_color.trim() || null,
           accent_color: editDraft.accent_color.trim() || null,
           accent_gradient: editDraft.accent_gradient || null,
-          image_url: editDraft.image_url.trim() || null,
-          image_max_width: editDraft.image_max_width ? parseInt(editDraft.image_max_width, 10) : null,
-          html_content: editDraft.html_content.trim() || null,
-          image_offset_y: editDraft.image_offset_y,
-          html_offset_y: editDraft.html_offset_y,
-          form_width: editDraft.form_width,
-          form_height: editDraft.form_height,
-          form_offset_y: editDraft.form_offset_y,
           panel_logo_url: editDraft.panel_logo_url.trim() || null,
         }),
       });
@@ -452,112 +436,9 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                   </div>
                 </div>
 
-                {/* Row 4: Form dimensions + Y position (landscape only) */}
-                <div className="border-t border-gray-100 pt-4 space-y-3">
-                  <p className="text-xs font-semibold text-gray-500">Form Dimensions <span className="font-normal text-gray-400">(landscape/desktop only — portrait stays full-width)</span></p>
-
-                  {/* Width */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500 w-14 flex-shrink-0">Width</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, form_width: Math.max(280, d.form_width - 20) }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600 font-bold text-base leading-none" title="Narrower">‹</button>
-                    <span className="w-16 text-center text-sm font-medium tabular-nums">{editDraft.form_width} px</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, form_width: Math.min(700, d.form_width + 20) }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600 font-bold text-base leading-none" title="Wider">›</button>
-                    <span className="text-xs text-gray-400 ml-1">280–700 px</span>
-                  </div>
-
-                  {/* Height */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500 w-14 flex-shrink-0">Height</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, form_height: Math.max(200, (d.form_height ?? 560) - 20) }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600 font-bold text-base leading-none" title="Shorter">‹</button>
-                    <span className="w-16 text-center text-sm font-medium tabular-nums">{editDraft.form_height != null ? `${editDraft.form_height} px` : 'Auto'}</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, form_height: Math.min(1200, (d.form_height ?? 560) + 20) }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600 font-bold text-base leading-none" title="Taller">›</button>
-                    <span className="text-xs text-gray-400 ml-1">200–1200 px</span>
-                    {editDraft.form_height != null && (
-                      <button type="button" onClick={() => setEditDraft(d => ({ ...d, form_height: null, form_offset_y: 0 }))} className="text-xs text-gray-400 hover:text-gray-600 ml-1">Reset (Auto)</button>
-                    )}
-                  </div>
-
-                  {/* Y Position */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs text-gray-500 w-14 flex-shrink-0">Y Pos</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, form_offset_y: d.form_offset_y - 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move up">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" /></svg>
-                    </button>
-                    <input
-                      type="number"
-                      value={editDraft.form_offset_y}
-                      onChange={e => setEditDraft(d => ({ ...d, form_offset_y: parseInt(e.target.value, 10) || 0 }))}
-                      className="w-20 text-center input-field text-xs tabular-nums"
-                    />
-                    <span className="text-xs text-gray-400">px</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, form_offset_y: d.form_offset_y + 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move down">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditDraft(d => {
-                        const h = d.form_height ?? 560;
-                        const vh = typeof window !== 'undefined' ? window.innerHeight : 900;
-                        return { ...d, form_offset_y: Math.round((vh - h) / 2) };
-                      })}
-                      className="text-xs px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600 transition-colors ml-1 whitespace-nowrap"
-                      title="Set Y so the form is vertically centered based on its height"
-                    >
-                      ⊙ Center
-                    </button>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, form_offset_y: 0 }))} className="text-xs text-gray-400 hover:text-gray-600">Reset</button>
-                  </div>
-                </div>
-
-                {/* Row 5: Image element */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1">Image Element <span className="font-normal text-gray-400">(landscape/desktop left panel)</span></label>
-                  <div className="flex gap-3 items-start">
-                    <div className="flex-1">
-                      <input type="url" value={editDraft.image_url} onChange={e => setEditDraft(d => ({ ...d, image_url: e.target.value }))} className="input-field text-sm w-full" placeholder="https://example.com/image.png" />
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <label className="text-xs text-gray-500 whitespace-nowrap">Max width</label>
-                      <input type="number" min={10} max={100} value={editDraft.image_max_width} onChange={e => setEditDraft(d => ({ ...d, image_max_width: e.target.value }))} className="input-field text-sm w-16 text-center" />
-                      <span className="text-xs text-gray-400">%</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="text-xs text-gray-500 whitespace-nowrap">Y Position</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, image_offset_y: Math.max(0, d.image_offset_y - 5) }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move up (show lower in image)">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" /></svg>
-                    </button>
-                    <input type="number" min={0} max={100} value={editDraft.image_offset_y} onChange={e => setEditDraft(d => ({ ...d, image_offset_y: Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 50)) }))} className="w-16 text-center input-field text-xs tabular-nums" />
-                    <span className="text-xs text-gray-400">%</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, image_offset_y: Math.min(100, d.image_offset_y + 5) }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move down (show higher in image)">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
-                    </button>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, image_offset_y: 50 }))} className="text-xs text-gray-400 hover:text-gray-600 ml-1">Center</button>
-                  </div>
-                  {editDraft.image_url && (
-                    <div className="mt-2">
-                      <img src={editDraft.image_url} alt="Preview" className="max-h-20 rounded border border-gray-200 object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                    </div>
-                  )}
-                </div>
-
-                {/* Row 6: HTML text editor */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1">HTML Text Element <span className="font-normal text-gray-400">(landscape/desktop left panel)</span></label>
-                  <HtmlEditor value={editDraft.html_content} onChange={v => setEditDraft(d => ({ ...d, html_content: v }))} />
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="text-xs text-gray-500 whitespace-nowrap">Y Position</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, html_offset_y: d.html_offset_y - 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move up">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" /></svg>
-                    </button>
-                    <input type="number" value={editDraft.html_offset_y} onChange={e => setEditDraft(d => ({ ...d, html_offset_y: parseInt(e.target.value, 10) || 0 }))} className="w-20 text-center input-field text-xs tabular-nums" />
-                    <span className="text-xs text-gray-400">px</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, html_offset_y: d.html_offset_y + 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move down">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
-                    </button>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, html_offset_y: 0 }))} className="text-xs text-gray-400 hover:text-gray-600 ml-1">Reset</button>
-                  </div>
-                </div>
+                <p className="text-xs text-gray-400 border-t border-gray-100 pt-3">
+                  Images, text blocks, and the form&apos;s size/position are now edited directly on the canvas — click <strong>Expand Form</strong>, then <strong>Edit Form</strong> in the bottom-left corner.
+                </p>
 
                 <div className="flex gap-2 pt-1">
                   <button type="button" onClick={() => handleSaveEditForm(form.id)} className="btn-primary text-xs px-3 py-1.5">Save</button>
@@ -612,14 +493,6 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                           background_color: form.background_color || getCssVarHex('--brand-primary-rgb', '#0B3C62'),
                           accent_color: form.accent_color || getCssVarHex('--brand-highlight-rgb', '#FFCB3F'),
                           accent_gradient: form.accent_gradient || 'none',
-                          image_url: form.image_url || '',
-                          image_max_width: form.image_max_width != null ? String(form.image_max_width) : '80',
-                          html_content: form.html_content || '',
-                          image_offset_y: form.image_offset_y != null && form.image_offset_y !== 0 ? form.image_offset_y : 50,
-                          html_offset_y: form.html_offset_y ?? 0,
-                          form_width: form.form_width ?? 420,
-                          form_height: form.form_height ?? null,
-                          form_offset_y: form.form_offset_y ?? 0,
                           panel_logo_url: form.panel_logo_url || '',
                         });
                       }}
@@ -806,18 +679,9 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
             });
             loadForms();
           }}
-          onImageOffsetYChange={async (y) => {
-            try {
-              const res = await fetch(`/api/conference-forms/${expandedForm.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image_offset_y: y }),
-              });
-              if (res.ok) {
-                setForms(prev => prev.map(f => f.id === expandedForm.id ? { ...f, image_offset_y: y } : f));
-                setExpandedForm(prev => prev ? { ...prev, image_offset_y: y } : prev);
-              }
-            } catch { /* silent — don't interrupt user */ }
+          onFormUpdated={(patch) => {
+            setForms(prev => prev.map(f => f.id === expandedForm.id ? { ...f, ...patch } : f));
+            setExpandedForm(prev => prev ? { ...prev, ...patch } : prev);
           }}
         />
       )}
@@ -894,89 +758,6 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
           onClose={() => setBuilderFormId(null)}
         />
       )}
-    </div>
-  );
-}
-
-function HtmlEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const editorRef = useRef<HTMLDivElement>(null);
-
-  // Sync initial value to editor on mount only
-  useEffect(() => {
-    if (editorRef.current) {
-      editorRef.current.innerHTML = value || '';
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const exec = (cmd: string, val?: string) => {
-    editorRef.current?.focus();
-    document.execCommand(cmd, false, val); // execCommand deprecated but broadly supported for basic editing
-    if (editorRef.current) onChange(editorRef.current.innerHTML);
-  };
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const html = e.clipboardData.getData('text/html');
-    const text = e.clipboardData.getData('text/plain');
-    if (html) {
-      const doc = new DOMParser().parseFromString(html, 'text/html');
-      doc.querySelectorAll<HTMLElement>('*').forEach(el => {
-        el.style.background = '';
-        el.style.backgroundColor = '';
-      });
-      document.execCommand('insertHTML', false, doc.body.innerHTML);
-    } else {
-      document.execCommand('insertText', false, text);
-    }
-    if (editorRef.current) onChange(editorRef.current.innerHTML);
-  };
-
-  const toolbarBtn = (label: string, cmd: string, val?: string, title?: string) => (
-    <button
-      key={cmd + (val || '')}
-      type="button"
-      title={title || label}
-      onMouseDown={e => { e.preventDefault(); exec(cmd, val); }}
-      className="px-2 py-1 text-xs font-medium rounded hover:bg-gray-200 text-gray-700 transition-colors"
-    >
-      {label}
-    </button>
-  );
-
-  return (
-    <div className="border border-gray-300 rounded-lg overflow-hidden">
-      {/* Toolbar */}
-      <div className="flex flex-wrap gap-0.5 p-1.5 bg-gray-50 border-b border-gray-200">
-        {toolbarBtn('B', 'bold', undefined, 'Bold')}
-        {toolbarBtn('I', 'italic', undefined, 'Italic')}
-        {toolbarBtn('U', 'underline', undefined, 'Underline')}
-        <span className="w-px bg-gray-300 mx-1 self-stretch" />
-        {toolbarBtn('H2', 'formatBlock', 'h2', 'Heading 2')}
-        {toolbarBtn('H3', 'formatBlock', 'h3', 'Heading 3')}
-        {toolbarBtn('P', 'formatBlock', 'p', 'Paragraph')}
-        <span className="w-px bg-gray-300 mx-1 self-stretch" />
-        {toolbarBtn('• List', 'insertUnorderedList', undefined, 'Bullet list')}
-        {toolbarBtn('1. List', 'insertOrderedList', undefined, 'Numbered list')}
-        <span className="w-px bg-gray-300 mx-1 self-stretch" />
-        {toolbarBtn('⬅', 'justifyLeft', undefined, 'Align left')}
-        {toolbarBtn('↔', 'justifyCenter', undefined, 'Center')}
-        {toolbarBtn('➡', 'justifyRight', undefined, 'Align right')}
-        <span className="w-px bg-gray-300 mx-1 self-stretch" />
-        {toolbarBtn('✕ Clear', 'removeFormat', undefined, 'Clear formatting')}
-      </div>
-      {/* Editable area */}
-      <div
-        ref={editorRef}
-        contentEditable
-        suppressContentEditableWarning
-        onInput={() => { if (editorRef.current) onChange(editorRef.current.innerHTML); }}
-        onPaste={handlePaste}
-        className="min-h-[140px] p-3 text-sm outline-none"
-        style={{ lineHeight: 1.6 }}
-        data-placeholder="Type and format your text here. This content appears in the left panel on landscape/desktop screens."
-      />
-      <style>{`[data-placeholder]:empty::before { content: attr(data-placeholder); color: #9ca3af; pointer-events: none; }`}</style>
     </div>
   );
 }

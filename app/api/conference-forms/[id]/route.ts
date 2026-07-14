@@ -18,7 +18,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     }
     const { name, conference_logo_url, background_color,
             accent_color, accent_gradient, image_url, image_max_width, html_content,
-            image_offset_y, html_offset_y, form_width, form_height, form_offset_y,
+            image_offset_y, html_offset_y, form_width, form_height, form_offset_y, form_x,
             panel_logo_url } = await request.json();
     const sets: string[] = [];
     const args: (string | number | null)[] = [];
@@ -35,6 +35,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     if (form_width !== undefined) { sets.push('form_width = ?'); args.push(form_width != null ? Number(form_width) : null); }
     if (form_height !== undefined) { sets.push('form_height = ?'); args.push(form_height != null ? Number(form_height) : null); }
     if (form_offset_y !== undefined) { sets.push('form_offset_y = ?'); args.push(form_offset_y != null ? Number(form_offset_y) : null); }
+    if (form_x !== undefined) { sets.push('form_x = ?'); args.push(form_x != null ? Number(form_x) : null); }
     if (panel_logo_url !== undefined) { sets.push('panel_logo_url = ?'); args.push(panel_logo_url || null); }
     if (sets.length === 0) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
     args.push(params.id);

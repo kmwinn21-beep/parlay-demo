@@ -2,8 +2,12 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { Rnd } from 'react-rnd';
+import { useEditor } from '@tiptap/react';
 import toast from 'react-hot-toast';
 import { compressImage } from './DashboardActionCard';
+import { RichTextEditor, getEditorExtensions } from './RichTextEditor';
+import { FormEditDrawer } from './FormEditDrawer';
 
 export interface FormField {
   id: number;
@@ -33,12 +37,25 @@ export interface ConferenceForm {
   form_width: number | null;
   form_height: number | null;
   form_offset_y: number | null;
+  form_x: number | null;
   panel_logo_url: string | null;
   created_by: string | null;
   created_at: string;
   fields: FormField[];
   submission_count?: number;
   template_id?: number | null;
+}
+
+interface FormElement {
+  id: number;
+  conference_form_id: number;
+  element_type: 'image' | 'text';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  z_index: number;
+  content: string | null;
 }
 
 interface AttendeeOption {
@@ -58,15 +75,7 @@ interface Props {
   attendees: AttendeeOption[];
   onClose: () => void;
   onSubmitted: () => void;
-  onImageOffsetYChange?: (y: number) => void;
-}
-
-function hexToRgb(hex: string): string {
-  const clean = hex.replace('#', '');
-  const r = parseInt(clean.substring(0, 2), 16);
-  const g = parseInt(clean.substring(2, 4), 16);
-  const b = parseInt(clean.substring(4, 6), 16);
-  return `rgb(${r}, ${g}, ${b})`;
+  onFormUpdated?: (patch: Partial<ConferenceForm>) => void;
 }
 
 function adjustHex(hex: string, amount: number): string {
@@ -123,9 +132,55 @@ function isColorLight(hex: string): boolean {
   return (r * 299 + g * 587 + b * 114) / 1000 > 160;
 }
 
+function ImageElementCanvas({ src }: { src: string }) {
+  const [error, setError] = useState(false);
+  if (!src || error) {
+    return (
+      <div className="w-full h-full rounded-xl flex items-center justify-center border-2 border-dashed border-white/30 text-white/40">
+        <span className="text-sm font-semibold tracking-wide">Image</span>
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt=""
+      draggable={false}
+      onError={() => setError(true)}
+      className="w-full h-full object-cover rounded-xl pointer-events-none"
+    />
+  );
+}
+
+function TextElementCanvas({ element, isEditMode, textColor, onChange }: {
+  element: FormElement;
+  isEditMode: boolean;
+  textColor: string;
+  onChange: (html: string) => void;
+}) {
+  const editor = useEditor({
+    extensions: getEditorExtensions(),
+    content: element.content || '<p></p>',
+    editorProps: { attributes: { class: 'prose prose-sm max-w-none outline-none h-full overflow-y-auto px-2 py-1' } },
+    onUpdate: ({ editor }) => onChange(editor.getHTML()),
+    immediatelyRender: false,
+  });
+
+  if (isEditMode) {
+    return <div className="w-full h-full overflow-hidden rounded-xl bg-white"><RichTextEditor editor={editor} minHeight="100%" /></div>;
+  }
+  return (
+    <div
+      className="prose prose-sm max-w-none h-full overflow-y-auto px-2 py-1"
+      style={{ color: textColor }}
+      dangerouslySetInnerHTML={{ __html: sanitizeHtml(element.content || '') }}
+    />
+  );
+}
+
 type FieldValues = Record<number | string, string | string[]>;
 
-export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLogoUrl, attendees, onClose, onSubmitted, onImageOffsetYChange }: Props) {
+export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLogoUrl, attendees, onClose, onSubmitted, onFormUpdated }: Props) {
   const [values, setValues] = useState<FieldValues>({});
   const [isOther, setIsOther] = useState(false);
   const [manualFirst, setManualFirst] = useState('');
@@ -134,7 +189,6 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
   const [attendeeSearch, setAttendeeSearch] = useState('');
   const [attendeeDropOpen, setAttendeeDropOpen] = useState(false);
   const [isLandscape, setIsLandscape] = useState(false);
-  const [imgError, setImgError] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [scanLoading, setScanLoading] = useState(false);
   const [scanBanner, setScanBanner] = useState(false);
@@ -145,48 +199,91 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
   const attendeeDropRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Image drag-to-reposition state
-  // image_offset_y is stored as 0–100 (% for objectPosition Y); null/0 → 50 (center)
-  const imgYPctRef = useRef(
-    form.image_offset_y != null && form.image_offset_y !== 0
-      ? Math.max(0, Math.min(100, form.image_offset_y))
-      : 50
-  );
-  const [imgYPct, setImgYPctState] = useState(imgYPctRef.current);
-  const [isDraggingImg, setIsDraggingImg] = useState(false);
-  const imgContainerRef = useRef<HTMLDivElement>(null);
-  const imgDragStartRef = useRef<{ clientY: number; startYPct: number } | null>(null);
-
-  const setImgYPct = (v: number) => { imgYPctRef.current = v; setImgYPctState(v); };
-
-  const handleImgMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    imgDragStartRef.current = { clientY: e.clientY, startYPct: imgYPctRef.current };
-    setIsDraggingImg(true);
-  }, []);
+  // ── Canvas edit mode: free-position/resize elements + the form card itself ──
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [elements, setElements] = useState<FormElement[]>([]);
+  const [formMeta, setFormMeta] = useState({
+    name: form.name,
+    background_color: form.background_color || '#0B3C62',
+    accent_color: form.accent_color || '#FFCB3F',
+    accent_gradient: form.accent_gradient,
+    form_x: form.form_x,
+    form_offset_y: form.form_offset_y,
+    form_width: form.form_width ?? 420,
+    form_height: form.form_height ?? 560,
+  });
+  const metaTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const elementTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
-    if (!isDraggingImg) return;
-    const handleMove = (e: MouseEvent) => {
-      if (!imgDragStartRef.current || !imgContainerRef.current) return;
-      const containerH = imgContainerRef.current.clientHeight;
-      if (containerH === 0) return;
-      const deltaY = e.clientY - imgDragStartRef.current.clientY;
-      // Drag down → image moves down → top of image becomes visible → Y% decreases
-      const newY = Math.max(0, Math.min(100, imgDragStartRef.current.startYPct - (deltaY / containerH) * 100));
-      setImgYPct(newY);
+    fetch(`/api/conference-forms/${form.id}/elements`)
+      .then(r => r.ok ? r.json() : [])
+      .then(setElements)
+      .catch(() => {});
+  }, [form.id]);
+
+  const patchFormMeta = useCallback((patch: Partial<typeof formMeta>, debounceKey?: string) => {
+    setFormMeta(prev => ({ ...prev, ...patch }));
+    onFormUpdated?.(patch);
+    const run = () => {
+      fetch(`/api/conference-forms/${form.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      }).catch(() => {});
     };
-    const handleUp = () => {
-      setIsDraggingImg(false);
-      onImageOffsetYChange?.(Math.round(imgYPctRef.current));
+    if (debounceKey) {
+      clearTimeout(metaTimers.current[debounceKey]);
+      metaTimers.current[debounceKey] = setTimeout(run, 800);
+    } else {
+      run();
+    }
+  }, [form.id, onFormUpdated]);
+
+  const updateElement = useCallback((id: number, patch: Partial<FormElement>, opts?: { debounce?: boolean }) => {
+    setElements(prev => prev.map(e => (e.id === id ? { ...e, ...patch } : e)));
+    const run = () => {
+      fetch(`/api/conference-forms/${form.id}/elements/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      }).catch(() => {});
     };
-    document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', handleUp);
-    return () => {
-      document.removeEventListener('mousemove', handleMove);
-      document.removeEventListener('mouseup', handleUp);
+    if (opts?.debounce) {
+      clearTimeout(elementTimers.current[id]);
+      elementTimers.current[id] = setTimeout(run, 800);
+    } else {
+      run();
+    }
+  }, [form.id]);
+
+  const removeElement = useCallback((id: number) => {
+    setElements(prev => prev.filter(e => e.id !== id));
+    fetch(`/api/conference-forms/${form.id}/elements/${id}`, { method: 'DELETE' }).catch(() => {});
+  }, [form.id]);
+
+  const addElement = useCallback(async (element_type: 'image' | 'text', content: string) => {
+    const base = {
+      element_type,
+      x: 60, y: 60,
+      width: element_type === 'image' ? 300 : 280,
+      height: element_type === 'image' ? 220 : 180,
+      z_index: elements.length,
+      content,
     };
-  }, [isDraggingImg, onImageOffsetYChange]);
+    try {
+      const res = await fetch(`/api/conference-forms/${form.id}/elements`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(base),
+      });
+      if (!res.ok) throw new Error();
+      const { id } = await res.json();
+      setElements(prev => [...prev, { ...base, id, conference_form_id: form.id }]);
+    } catch {
+      toast.error('Failed to add element');
+    }
+  }, [form.id, elements.length]);
 
   // Portal SSR safety — document.body is only available client-side
   useEffect(() => { setMounted(true); }, []);
@@ -404,7 +501,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
   };
 
   // Form card colors
-  const bgColor = form.background_color || '#0B3C62';
+  const bgColor = formMeta.background_color;
   const cardIsLight = isColorLight(bgColor);
   const textColor = cardIsLight ? '#1a1a1a' : '#ffffff';
   const inputBg = cardIsLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.12)';
@@ -412,15 +509,9 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
   const inputText = cardIsLight ? '#1a1a1a' : '#ffffff';
 
   // Page accent colors
-  const accentColor = form.accent_color || '#FFCB3F';
-  const accentBg = buildAccentBackground(accentColor, form.accent_gradient);
+  const accentColor = formMeta.accent_color;
+  const accentBg = buildAccentBackground(accentColor, formMeta.accent_gradient);
   const accentIsLight = isColorLight(accentColor);
-  const imageMaxWidth = form.image_max_width ?? 80;
-  const imageOffsetY = form.image_offset_y ?? 0;
-  const htmlOffsetY = form.html_offset_y ?? 0;
-  const formWidth = form.form_width ?? 420;
-  const formHeight = form.form_height ?? null;
-  const formOffsetY = form.form_offset_y ?? 0;
 
   const renderField = (field: FormField) => {
     if (field.field_key === 'attendee_name') {
@@ -652,7 +743,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
             <img src={brandLogoUrl} alt="Brand" className="h-8 w-auto object-contain" />
           </div>
         )}
-        <h2 className="text-xl font-bold font-serif" style={{ color: textColor }}>{form.name}</h2>
+        <h2 className="text-xl font-bold font-serif" style={{ color: textColor }}>{formMeta.name}</h2>
         <p className="text-xs mt-0.5 opacity-70" style={{ color: textColor }}>{conferenceName}</p>
         {form.conference_logo_url && (
           <div className="flex justify-center mt-3">
@@ -734,6 +825,11 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
 
   if (!mounted) return null;
 
+  const formWidth = formMeta.form_width;
+  const formHeight = formMeta.form_height ?? 560;
+  const formX = formMeta.form_x ?? Math.round((window.innerWidth - formWidth) / 2);
+  const formY = formMeta.form_offset_y ?? Math.round((window.innerHeight - formHeight) / 2);
+
   const overlay = (
     <div
       style={{
@@ -762,124 +858,90 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
       </button>
 
       {isLandscape ? (
-        /* ── Landscape: 2-column layout ── */
-        <div className="flex h-full">
+        /* ── Landscape: free-position/resize canvas ── */
+        <div className="relative h-full w-full overflow-hidden">
+          {(form.panel_logo_url || brandLogoUrl) && (
+            <img
+              src={form.panel_logo_url || brandLogoUrl!}
+              alt="Logo"
+              className="absolute top-6 left-6 h-12 w-auto object-contain z-10 pointer-events-none"
+            />
+          )}
 
-          {/* Left panel — grid: logo (auto) + image (1fr) + html (3fr), no scrollbar */}
-          <div className="flex-1 flex flex-col overflow-hidden p-8" style={{ height: '100%' }}>
-            {/* Panel logo — per-form configurable, falls back to global brand logo */}
-            {(form.panel_logo_url || brandLogoUrl) && (
-              <div className="mb-4 flex-shrink-0">
-                <img src={form.panel_logo_url || brandLogoUrl!} alt="Logo" className="h-12 w-auto object-contain" />
-              </div>
-            )}
-            {/* 4-row grid: image (1fr) + html text (3fr) */}
-            <div style={{ display: 'grid', gridTemplateRows: '1fr 3fr', flex: 1, minHeight: 0, gap: '1rem' }}>
-
-              {/* Image cell — row 1 (1fr = 25%); drag to reposition */}
-              <div
-                ref={imgContainerRef}
-                onMouseDown={form.image_url && !imgError ? handleImgMouseDown : undefined}
-                style={{
-                  overflow: 'hidden',
-                  borderRadius: 12,
-                  position: 'relative',
-                  cursor: form.image_url && !imgError ? (isDraggingImg ? 'grabbing' : 'grab') : 'default',
-                  userSelect: 'none',
-                }}
-              >
-                {form.image_url && !imgError ? (
-                  <>
-                    <img
-                      src={form.image_url}
-                      alt=""
-                      onError={() => setImgError(true)}
-                      draggable={false}
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                        objectPosition: `50% ${imgYPct}%`,
-                        display: 'block',
-                        pointerEvents: 'none',
-                      }}
-                    />
-                    {!isDraggingImg && (
-                      <div style={{
-                        position: 'absolute', bottom: 6, right: 8,
-                        fontSize: 10, color: 'rgba(255,255,255,0.75)',
-                        background: 'rgba(0,0,0,0.45)', borderRadius: 4,
-                        padding: '2px 6px', pointerEvents: 'none',
-                        letterSpacing: '0.02em',
-                      }}>
-                        drag to reposition
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div
-                    className="w-full h-full rounded-xl flex items-center justify-center"
-                    style={{
-                      border: `2px dashed ${accentIsLight ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.35)'}`,
-                      color: accentIsLight ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.4)',
-                    }}
+          {elements.map(el => (
+            <Rnd
+              key={el.id}
+              size={{ width: el.width, height: el.height }}
+              position={{ x: el.x, y: el.y }}
+              disableDragging={!isEditMode}
+              enableResizing={isEditMode}
+              bounds="parent"
+              style={{ zIndex: el.z_index }}
+              className={isEditMode ? 'ring-2 ring-white/60 rounded-xl' : ''}
+              onDragStop={(_e, d) => updateElement(el.id, { x: Math.round(d.x), y: Math.round(d.y) })}
+              onResizeStop={(_e, _dir, ref, _delta, pos) => updateElement(el.id, {
+                width: ref.offsetWidth, height: ref.offsetHeight, x: Math.round(pos.x), y: Math.round(pos.y),
+              })}
+            >
+              <div className="relative w-full h-full">
+                {isEditMode && (
+                  <button
+                    type="button"
+                    onClick={() => removeElement(el.id)}
+                    className="absolute -top-2.5 -right-2.5 z-20 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center shadow hover:bg-red-600"
+                    title="Remove"
                   >
-                    <span className="text-lg font-semibold tracking-wide">Image Element</span>
-                  </div>
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                )}
+                {el.element_type === 'image' ? (
+                  <ImageElementCanvas src={el.content || ''} />
+                ) : (
+                  <TextElementCanvas
+                    element={el}
+                    isEditMode={isEditMode}
+                    textColor={accentIsLight ? '#1a1a1a' : '#ffffff'}
+                    onChange={html => updateElement(el.id, { content: html }, { debounce: true })}
+                  />
                 )}
               </div>
+            </Rnd>
+          ))}
 
-              {/* HTML text cell — rows 2-4 (3fr = 75%) */}
-              <div style={{ overflow: 'hidden', position: 'relative' }}>
-                <div style={{ transform: `translateY(${htmlOffsetY}px)` }}>
-                  {form.html_content ? (
-                    <div
-                      className="prose prose-sm max-w-none"
-                      style={{ color: accentIsLight ? '#1a1a1a' : '#ffffff' }}
-                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(form.html_content) }}
-                    />
-                  ) : (
-                    <div
-                      className="rounded-xl flex items-center justify-center py-12"
-                      style={{
-                        border: `2px dashed ${accentIsLight ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.35)'}`,
-                        color: accentIsLight ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.4)',
-                      }}
-                    >
-                      <span className="text-lg font-semibold tracking-wide">HTML Text Element</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-          {/* Right panel — column is formHeight tall (or 100% if unset), form card fills it */}
-          <div
-            className="flex-shrink-0 flex flex-col justify-center overflow-hidden"
-            style={{ width: formWidth, minWidth: 280, height: '100%' }}
+          <Rnd
+            size={{ width: formWidth, height: formHeight }}
+            position={{ x: formX, y: formY }}
+            disableDragging={!isEditMode}
+            enableResizing={isEditMode}
+            bounds="parent"
+            minWidth={280}
+            minHeight={300}
+            style={{ zIndex: 50 }}
+            className={isEditMode ? 'ring-2 ring-white/60 rounded-2xl' : ''}
+            onDragStop={(_e, d) => patchFormMeta({ form_x: Math.round(d.x), form_offset_y: Math.round(d.y) })}
+            onResizeStop={(_e, _dir, ref, _delta, pos) => patchFormMeta({
+              form_width: ref.offsetWidth, form_height: ref.offsetHeight,
+              form_x: Math.round(pos.x), form_offset_y: Math.round(pos.y),
+            })}
           >
-            {/* Inner container: sized to formHeight; form card stretches to fill it */}
-            <div
-              className="flex flex-col px-6 py-6"
-              style={{
-                height: formHeight != null ? formHeight : '100%',
-                flexShrink: 0,
-                transform: formOffsetY !== 0 ? `translateY(${formOffsetY}px)` : undefined,
-              }}
-            >
-              <div
-                className="w-full rounded-2xl shadow-2xl overflow-hidden"
-                style={{
-                  background: bgColor,
-                  flex: formHeight != null ? 1 : undefined,
-                }}
-              >
-                {formCardInterior}
-              </div>
+            <div className="w-full h-full rounded-2xl shadow-2xl overflow-y-auto" style={{ background: bgColor }}>
+              {formCardInterior}
             </div>
-          </div>
+          </Rnd>
+
+          <FormEditDrawer
+            formId={form.id}
+            isEditMode={isEditMode}
+            onToggleEditMode={() => setIsEditMode(v => !v)}
+            name={formMeta.name}
+            onNameChange={v => patchFormMeta({ name: v }, 'name')}
+            backgroundColor={formMeta.background_color}
+            onBackgroundColorChange={v => patchFormMeta({ background_color: v }, 'bg')}
+            accentColor={formMeta.accent_color}
+            onAccentColorChange={v => patchFormMeta({ accent_color: v }, 'accent')}
+            onAddImage={url => addElement('image', url)}
+            onAddText={() => addElement('text', '<p>New text</p>')}
+          />
         </div>
       ) : (
         /* ── Portrait: centered card ── */
