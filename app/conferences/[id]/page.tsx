@@ -3565,7 +3565,6 @@ export default function ConferenceDetailPage() {
             company_name: a.company_name,
             email: a.email,
           }))}
-          brandLogoUrl={logoConfig.logoDarkUrl}
           isAdmin={isAdminUser}
           currentUserEmail={currentUser?.email || ''}
         />

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { ExpandedFormModal, buildAccentBackground, type FormField, type ConferenceForm } from './ExpandedFormModal';
@@ -51,7 +52,6 @@ interface Props {
   conferenceId: number;
   conferenceName: string;
   attendees: AttendeeOption[];
-  brandLogoUrl?: string | null;
   isAdmin: boolean;
   currentUserEmail: string;
 }
@@ -63,7 +63,7 @@ function fmtDate(d?: string) {
   } catch { return '—'; }
 }
 
-export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, brandLogoUrl, isAdmin, currentUserEmail }: Props) {
+export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, isAdmin, currentUserEmail }: Props) {
   const [forms, setForms] = useState<ConferenceForm[]>([]);
   const [templates, setTemplates] = useState<FormTemplate[]>([]);
   const [statusOptions, setStatusOptions] = useState<StatusOption[]>([]);
@@ -98,16 +98,73 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
     background_color: string;
     accent_color: string;
     accent_gradient: string;
-    image_url: string;
-    image_max_width: string;
-    html_content: string;
-    image_offset_y: number;
-    html_offset_y: number;
-    form_width: number;
-    form_height: number | null;
-    form_offset_y: number;
     panel_logo_url: string;
-  }>({ name: '', conference_logo_url: '', background_color: '', accent_color: '', accent_gradient: 'none', image_url: '', image_max_width: '80', html_content: '', image_offset_y: 0, html_offset_y: 0, form_width: 420, form_height: null, form_offset_y: 0, panel_logo_url: '' });
+  }>({ name: '', conference_logo_url: '', background_color: '', accent_color: '', accent_gradient: 'none', panel_logo_url: '' });
+
+  // Duplicate form → other conference(s)
+  const [duplicatingFormId, setDuplicatingFormId] = useState<number | null>(null);
+  const [dupDropPos, setDupDropPos] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
+  const [conferenceOptions, setConferenceOptions] = useState<{ id: number; name: string }[] | null>(null);
+  const [selectedDupConfs, setSelectedDupConfs] = useState<Set<number>>(new Set());
+  const [duplicating, setDuplicating] = useState(false);
+  const dupDropRef = useRef<HTMLDivElement>(null);
+
+  const openDuplicateDropdown = useCallback(async (formId: number, anchor: HTMLElement) => {
+    const buttonRect = anchor.getBoundingClientRect();
+    const cardRect = (anchor.closest('.card') ?? anchor).getBoundingClientRect();
+    const width = 260;
+    const margin = 12;
+    let left = buttonRect.right + 8;
+    // Flip to the left of the button if there isn't room on the right
+    if (left + width + margin > window.innerWidth) left = buttonRect.left - width - 8;
+    const top = cardRect.top;
+    setDupDropPos({
+      top,
+      left: Math.max(margin, left),
+      maxHeight: Math.max(180, window.innerHeight - top - margin),
+    });
+    setDuplicatingFormId(prev => (prev === formId ? null : formId));
+    setSelectedDupConfs(new Set());
+    if (conferenceOptions === null) {
+      try {
+        const res = await fetch('/api/conferences?nav=1');
+        if (res.ok) {
+          const data = await res.json();
+          setConferenceOptions(data.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })));
+        }
+      } catch { toast.error('Failed to load conferences'); }
+    }
+  }, [conferenceOptions]);
+
+  useEffect(() => {
+    if (duplicatingFormId === null) return;
+    const handler = (e: MouseEvent) => {
+      if (dupDropRef.current && !dupDropRef.current.contains(e.target as Node)) setDuplicatingFormId(null);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [duplicatingFormId]);
+
+  const handleDuplicateForm = async (formId: number) => {
+    if (selectedDupConfs.size === 0) { toast.error('Select at least one conference'); return; }
+    setDuplicating(true);
+    try {
+      const res = await fetch(`/api/conference-forms/${formId}/duplicate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conference_ids: Array.from(selectedDupConfs) }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(`Duplicated to ${selectedDupConfs.size} conference${selectedDupConfs.size > 1 ? 's' : ''}`);
+      setDuplicatingFormId(null);
+      setSelectedDupConfs(new Set());
+      if (selectedDupConfs.has(conferenceId)) await loadForms();
+    } catch {
+      toast.error('Failed to duplicate form');
+    } finally {
+      setDuplicating(false);
+    }
+  };
 
   const loadForms = useCallback(async () => {
     try {
@@ -257,14 +314,6 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
           background_color: editDraft.background_color.trim() || null,
           accent_color: editDraft.accent_color.trim() || null,
           accent_gradient: editDraft.accent_gradient || null,
-          image_url: editDraft.image_url.trim() || null,
-          image_max_width: editDraft.image_max_width ? parseInt(editDraft.image_max_width, 10) : null,
-          html_content: editDraft.html_content.trim() || null,
-          image_offset_y: editDraft.image_offset_y,
-          html_offset_y: editDraft.html_offset_y,
-          form_width: editDraft.form_width,
-          form_height: editDraft.form_height,
-          form_offset_y: editDraft.form_offset_y,
           panel_logo_url: editDraft.panel_logo_url.trim() || null,
         }),
       });
@@ -452,112 +501,9 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                   </div>
                 </div>
 
-                {/* Row 4: Form dimensions + Y position (landscape only) */}
-                <div className="border-t border-gray-100 pt-4 space-y-3">
-                  <p className="text-xs font-semibold text-gray-500">Form Dimensions <span className="font-normal text-gray-400">(landscape/desktop only — portrait stays full-width)</span></p>
-
-                  {/* Width */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500 w-14 flex-shrink-0">Width</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, form_width: Math.max(280, d.form_width - 20) }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600 font-bold text-base leading-none" title="Narrower">‹</button>
-                    <span className="w-16 text-center text-sm font-medium tabular-nums">{editDraft.form_width} px</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, form_width: Math.min(700, d.form_width + 20) }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600 font-bold text-base leading-none" title="Wider">›</button>
-                    <span className="text-xs text-gray-400 ml-1">280–700 px</span>
-                  </div>
-
-                  {/* Height */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500 w-14 flex-shrink-0">Height</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, form_height: Math.max(200, (d.form_height ?? 560) - 20) }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600 font-bold text-base leading-none" title="Shorter">‹</button>
-                    <span className="w-16 text-center text-sm font-medium tabular-nums">{editDraft.form_height != null ? `${editDraft.form_height} px` : 'Auto'}</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, form_height: Math.min(1200, (d.form_height ?? 560) + 20) }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600 font-bold text-base leading-none" title="Taller">›</button>
-                    <span className="text-xs text-gray-400 ml-1">200–1200 px</span>
-                    {editDraft.form_height != null && (
-                      <button type="button" onClick={() => setEditDraft(d => ({ ...d, form_height: null, form_offset_y: 0 }))} className="text-xs text-gray-400 hover:text-gray-600 ml-1">Reset (Auto)</button>
-                    )}
-                  </div>
-
-                  {/* Y Position */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs text-gray-500 w-14 flex-shrink-0">Y Pos</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, form_offset_y: d.form_offset_y - 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move up">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" /></svg>
-                    </button>
-                    <input
-                      type="number"
-                      value={editDraft.form_offset_y}
-                      onChange={e => setEditDraft(d => ({ ...d, form_offset_y: parseInt(e.target.value, 10) || 0 }))}
-                      className="w-20 text-center input-field text-xs tabular-nums"
-                    />
-                    <span className="text-xs text-gray-400">px</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, form_offset_y: d.form_offset_y + 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move down">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditDraft(d => {
-                        const h = d.form_height ?? 560;
-                        const vh = typeof window !== 'undefined' ? window.innerHeight : 900;
-                        return { ...d, form_offset_y: Math.round((vh - h) / 2) };
-                      })}
-                      className="text-xs px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600 transition-colors ml-1 whitespace-nowrap"
-                      title="Set Y so the form is vertically centered based on its height"
-                    >
-                      ⊙ Center
-                    </button>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, form_offset_y: 0 }))} className="text-xs text-gray-400 hover:text-gray-600">Reset</button>
-                  </div>
-                </div>
-
-                {/* Row 5: Image element */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1">Image Element <span className="font-normal text-gray-400">(landscape/desktop left panel)</span></label>
-                  <div className="flex gap-3 items-start">
-                    <div className="flex-1">
-                      <input type="url" value={editDraft.image_url} onChange={e => setEditDraft(d => ({ ...d, image_url: e.target.value }))} className="input-field text-sm w-full" placeholder="https://example.com/image.png" />
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <label className="text-xs text-gray-500 whitespace-nowrap">Max width</label>
-                      <input type="number" min={10} max={100} value={editDraft.image_max_width} onChange={e => setEditDraft(d => ({ ...d, image_max_width: e.target.value }))} className="input-field text-sm w-16 text-center" />
-                      <span className="text-xs text-gray-400">%</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="text-xs text-gray-500 whitespace-nowrap">Y Position</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, image_offset_y: Math.max(0, d.image_offset_y - 5) }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move up (show lower in image)">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" /></svg>
-                    </button>
-                    <input type="number" min={0} max={100} value={editDraft.image_offset_y} onChange={e => setEditDraft(d => ({ ...d, image_offset_y: Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 50)) }))} className="w-16 text-center input-field text-xs tabular-nums" />
-                    <span className="text-xs text-gray-400">%</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, image_offset_y: Math.min(100, d.image_offset_y + 5) }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move down (show higher in image)">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
-                    </button>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, image_offset_y: 50 }))} className="text-xs text-gray-400 hover:text-gray-600 ml-1">Center</button>
-                  </div>
-                  {editDraft.image_url && (
-                    <div className="mt-2">
-                      <img src={editDraft.image_url} alt="Preview" className="max-h-20 rounded border border-gray-200 object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                    </div>
-                  )}
-                </div>
-
-                {/* Row 6: HTML text editor */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1">HTML Text Element <span className="font-normal text-gray-400">(landscape/desktop left panel)</span></label>
-                  <HtmlEditor value={editDraft.html_content} onChange={v => setEditDraft(d => ({ ...d, html_content: v }))} />
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="text-xs text-gray-500 whitespace-nowrap">Y Position</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, html_offset_y: d.html_offset_y - 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move up">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" /></svg>
-                    </button>
-                    <input type="number" value={editDraft.html_offset_y} onChange={e => setEditDraft(d => ({ ...d, html_offset_y: parseInt(e.target.value, 10) || 0 }))} className="w-20 text-center input-field text-xs tabular-nums" />
-                    <span className="text-xs text-gray-400">px</span>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, html_offset_y: d.html_offset_y + 20 }))} className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600" title="Move down">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
-                    </button>
-                    <button type="button" onClick={() => setEditDraft(d => ({ ...d, html_offset_y: 0 }))} className="text-xs text-gray-400 hover:text-gray-600 ml-1">Reset</button>
-                  </div>
-                </div>
+                <p className="text-xs text-gray-400 border-t border-gray-100 pt-3">
+                  Images, text blocks, and the form&apos;s size/position are now edited directly on the canvas — click <strong>Expand Form</strong>, then <strong>Edit Form</strong> in the bottom-left corner.
+                </p>
 
                 <div className="flex gap-2 pt-1">
                   <button type="button" onClick={() => handleSaveEditForm(form.id)} className="btn-primary text-xs px-3 py-1.5">Save</button>
@@ -612,14 +558,6 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                           background_color: form.background_color || getCssVarHex('--brand-primary-rgb', '#0B3C62'),
                           accent_color: form.accent_color || getCssVarHex('--brand-highlight-rgb', '#FFCB3F'),
                           accent_gradient: form.accent_gradient || 'none',
-                          image_url: form.image_url || '',
-                          image_max_width: form.image_max_width != null ? String(form.image_max_width) : '80',
-                          html_content: form.html_content || '',
-                          image_offset_y: form.image_offset_y != null && form.image_offset_y !== 0 ? form.image_offset_y : 50,
-                          html_offset_y: form.html_offset_y ?? 0,
-                          form_width: form.form_width ?? 420,
-                          form_height: form.form_height ?? null,
-                          form_offset_y: form.form_offset_y ?? 0,
                           panel_logo_url: form.panel_logo_url || '',
                         });
                       }}
@@ -637,6 +575,61 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
                     </button>
+                    {/* Duplicate to another conference */}
+                    <button
+                      type="button"
+                      onClick={e => openDuplicateDropdown(form.id, e.currentTarget)}
+                      title="Duplicate form to another conference"
+                      className="p-2 rounded-lg text-gray-400 hover:text-brand-secondary hover:bg-blue-50 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                    </button>
+                    {duplicatingFormId === form.id && dupDropPos && createPortal(
+                      <div
+                        ref={dupDropRef}
+                        className="fixed z-[10000] w-64 bg-white border border-gray-200 rounded-lg shadow-xl flex flex-col"
+                        style={{ top: dupDropPos.top, left: dupDropPos.left, maxHeight: dupDropPos.maxHeight }}
+                      >
+                        <p className="flex-shrink-0 px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-100">Duplicate to conference(s)</p>
+                        <div className="flex-1 min-h-0 overflow-y-auto">
+                          {conferenceOptions === null && (
+                            <div className="px-3 py-3 text-xs text-gray-400">Loading…</div>
+                          )}
+                          {conferenceOptions?.length === 0 && (
+                            <div className="px-3 py-3 text-xs text-gray-400">No conferences found</div>
+                          )}
+                          {conferenceOptions?.map(c => (
+                            <label key={c.id} className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedDupConfs.has(c.id)}
+                                onChange={e => {
+                                  setSelectedDupConfs(prev => {
+                                    const next = new Set(prev);
+                                    if (e.target.checked) next.add(c.id); else next.delete(c.id);
+                                    return next;
+                                  });
+                                }}
+                                className="accent-brand-secondary flex-shrink-0"
+                              />
+                              <span className="truncate">{c.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                        <div className="flex-shrink-0 flex gap-2 px-3 py-2 border-t border-gray-100">
+                          <button
+                            type="button"
+                            onClick={() => handleDuplicateForm(form.id)}
+                            disabled={duplicating || selectedDupConfs.size === 0}
+                            className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
+                          >
+                            {duplicating ? 'Duplicating…' : `Duplicate${selectedDupConfs.size > 0 ? ` (${selectedDupConfs.size})` : ''}`}
+                          </button>
+                          <button type="button" onClick={() => setDuplicatingFormId(null)} className="btn-secondary text-xs px-3 py-1.5">Cancel</button>
+                        </div>
+                      </div>,
+                      document.body
+                    )}
                     {/* Delete */}
                     <button
                       type="button"
@@ -795,7 +788,6 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
           form={expandedForm}
           conferenceId={conferenceId}
           conferenceName={conferenceName}
-          brandLogoUrl={brandLogoUrl}
           attendees={attendees}
           onClose={() => setExpandedForm(null)}
           onSubmitted={() => {
@@ -806,18 +798,9 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
             });
             loadForms();
           }}
-          onImageOffsetYChange={async (y) => {
-            try {
-              const res = await fetch(`/api/conference-forms/${expandedForm.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image_offset_y: y }),
-              });
-              if (res.ok) {
-                setForms(prev => prev.map(f => f.id === expandedForm.id ? { ...f, image_offset_y: y } : f));
-                setExpandedForm(prev => prev ? { ...prev, image_offset_y: y } : prev);
-              }
-            } catch { /* silent — don't interrupt user */ }
+          onFormUpdated={(patch) => {
+            setForms(prev => prev.map(f => f.id === expandedForm.id ? { ...f, ...patch } : f));
+            setExpandedForm(prev => prev ? { ...prev, ...patch } : prev);
           }}
         />
       )}
@@ -894,89 +877,6 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
           onClose={() => setBuilderFormId(null)}
         />
       )}
-    </div>
-  );
-}
-
-function HtmlEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const editorRef = useRef<HTMLDivElement>(null);
-
-  // Sync initial value to editor on mount only
-  useEffect(() => {
-    if (editorRef.current) {
-      editorRef.current.innerHTML = value || '';
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const exec = (cmd: string, val?: string) => {
-    editorRef.current?.focus();
-    document.execCommand(cmd, false, val); // execCommand deprecated but broadly supported for basic editing
-    if (editorRef.current) onChange(editorRef.current.innerHTML);
-  };
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const html = e.clipboardData.getData('text/html');
-    const text = e.clipboardData.getData('text/plain');
-    if (html) {
-      const doc = new DOMParser().parseFromString(html, 'text/html');
-      doc.querySelectorAll<HTMLElement>('*').forEach(el => {
-        el.style.background = '';
-        el.style.backgroundColor = '';
-      });
-      document.execCommand('insertHTML', false, doc.body.innerHTML);
-    } else {
-      document.execCommand('insertText', false, text);
-    }
-    if (editorRef.current) onChange(editorRef.current.innerHTML);
-  };
-
-  const toolbarBtn = (label: string, cmd: string, val?: string, title?: string) => (
-    <button
-      key={cmd + (val || '')}
-      type="button"
-      title={title || label}
-      onMouseDown={e => { e.preventDefault(); exec(cmd, val); }}
-      className="px-2 py-1 text-xs font-medium rounded hover:bg-gray-200 text-gray-700 transition-colors"
-    >
-      {label}
-    </button>
-  );
-
-  return (
-    <div className="border border-gray-300 rounded-lg overflow-hidden">
-      {/* Toolbar */}
-      <div className="flex flex-wrap gap-0.5 p-1.5 bg-gray-50 border-b border-gray-200">
-        {toolbarBtn('B', 'bold', undefined, 'Bold')}
-        {toolbarBtn('I', 'italic', undefined, 'Italic')}
-        {toolbarBtn('U', 'underline', undefined, 'Underline')}
-        <span className="w-px bg-gray-300 mx-1 self-stretch" />
-        {toolbarBtn('H2', 'formatBlock', 'h2', 'Heading 2')}
-        {toolbarBtn('H3', 'formatBlock', 'h3', 'Heading 3')}
-        {toolbarBtn('P', 'formatBlock', 'p', 'Paragraph')}
-        <span className="w-px bg-gray-300 mx-1 self-stretch" />
-        {toolbarBtn('• List', 'insertUnorderedList', undefined, 'Bullet list')}
-        {toolbarBtn('1. List', 'insertOrderedList', undefined, 'Numbered list')}
-        <span className="w-px bg-gray-300 mx-1 self-stretch" />
-        {toolbarBtn('⬅', 'justifyLeft', undefined, 'Align left')}
-        {toolbarBtn('↔', 'justifyCenter', undefined, 'Center')}
-        {toolbarBtn('➡', 'justifyRight', undefined, 'Align right')}
-        <span className="w-px bg-gray-300 mx-1 self-stretch" />
-        {toolbarBtn('✕ Clear', 'removeFormat', undefined, 'Clear formatting')}
-      </div>
-      {/* Editable area */}
-      <div
-        ref={editorRef}
-        contentEditable
-        suppressContentEditableWarning
-        onInput={() => { if (editorRef.current) onChange(editorRef.current.innerHTML); }}
-        onPaste={handlePaste}
-        className="min-h-[140px] p-3 text-sm outline-none"
-        style={{ lineHeight: 1.6 }}
-        data-placeholder="Type and format your text here. This content appears in the left panel on landscape/desktop screens."
-      />
-      <style>{`[data-placeholder]:empty::before { content: attr(data-placeholder); color: #9ca3af; pointer-events: none; }`}</style>
     </div>
   );
 }
