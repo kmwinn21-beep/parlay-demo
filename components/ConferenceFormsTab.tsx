@@ -51,7 +51,6 @@ interface Props {
   conferenceId: number;
   conferenceName: string;
   attendees: AttendeeOption[];
-  brandLogoUrl?: string | null;
   isAdmin: boolean;
   currentUserEmail: string;
 }
@@ -63,7 +62,7 @@ function fmtDate(d?: string) {
   } catch { return '—'; }
 }
 
-export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, brandLogoUrl, isAdmin, currentUserEmail }: Props) {
+export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, isAdmin, currentUserEmail }: Props) {
   const [forms, setForms] = useState<ConferenceForm[]>([]);
   const [templates, setTemplates] = useState<FormTemplate[]>([]);
   const [statusOptions, setStatusOptions] = useState<StatusOption[]>([]);
@@ -668,7 +667,6 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, br
           form={expandedForm}
           conferenceId={conferenceId}
           conferenceName={conferenceName}
-          brandLogoUrl={brandLogoUrl}
           attendees={attendees}
           onClose={() => setExpandedForm(null)}
           onSubmitted={() => {

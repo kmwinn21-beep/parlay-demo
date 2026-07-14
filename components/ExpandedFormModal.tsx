@@ -71,7 +71,6 @@ interface Props {
   form: ConferenceForm;
   conferenceId: number;
   conferenceName: string;
-  brandLogoUrl?: string | null;
   attendees: AttendeeOption[];
   onClose: () => void;
   onSubmitted: () => void;
@@ -180,7 +179,7 @@ function TextElementCanvas({ element, isEditMode, textColor, onChange }: {
 
 type FieldValues = Record<number | string, string | string[]>;
 
-export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLogoUrl, attendees, onClose, onSubmitted, onFormUpdated }: Props) {
+export function ExpandedFormModal({ form, conferenceId, conferenceName, attendees, onClose, onSubmitted, onFormUpdated }: Props) {
   const [values, setValues] = useState<FieldValues>({});
   const [isOther, setIsOther] = useState(false);
   const [manualFirst, setManualFirst] = useState('');
@@ -737,12 +736,6 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
     <form onSubmit={handleSubmit} className="flex flex-col">
       {/* Card header */}
       <div className="px-6 pt-6 pb-3 text-center">
-        {/* Portrait: brand logo top-left for brand continuity */}
-        {!isLandscape && brandLogoUrl && (
-          <div className="flex justify-start mb-3">
-            <img src={brandLogoUrl} alt="Brand" className="h-8 w-auto object-contain" />
-          </div>
-        )}
         <h2 className="text-xl font-bold font-serif" style={{ color: textColor }}>{formMeta.name}</h2>
         <p className="text-xs mt-0.5 opacity-70" style={{ color: textColor }}>{conferenceName}</p>
         {form.conference_logo_url && (
@@ -860,9 +853,9 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, brandLog
       {isLandscape ? (
         /* ── Landscape: free-position/resize canvas ── */
         <div className="relative h-full w-full overflow-hidden">
-          {(form.panel_logo_url || brandLogoUrl) && (
+          {form.panel_logo_url && (
             <img
-              src={form.panel_logo_url || brandLogoUrl!}
+              src={form.panel_logo_url}
               alt="Logo"
               className="absolute top-6 left-6 h-12 w-auto object-contain z-10 pointer-events-none"
             />
