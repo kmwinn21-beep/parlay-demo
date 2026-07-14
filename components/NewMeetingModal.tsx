@@ -150,8 +150,8 @@ function SidebarContent({
                   className={`w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-gray-100 transition-colors ${isSelectedDay ? 'bg-brand-primary/5' : ''}`}
                 >
                   <div className="flex items-center gap-2">
-                    <span className={`text-xs font-semibold ${isSelectedDay ? 'text-brand-primary' : 'text-gray-700'}`}>{short}</span>
-                    <span className="text-xs text-gray-400 bg-gray-200 rounded-full px-1.5 py-0.5 leading-none">{dayMeetings.length}</span>
+                    <span className={`text-xs font-semibold w-[72px] flex-shrink-0 ${isSelectedDay ? 'text-brand-primary' : 'text-gray-700'}`}>{short}</span>
+                    <span className="text-xs text-black bg-brand-highlight rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 leading-none">{dayMeetings.length}</span>
                   </div>
                   <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -325,7 +325,7 @@ export function NewMeetingModal({
           const d = a.meeting_date.localeCompare(b.meeting_date);
           return d !== 0 ? d : (a.meeting_time || '').localeCompare(b.meeting_time || '');
         }));
-        setCollapsedDays(new Set()); // expand all on new conference
+        setCollapsedDays(new Set(data.map(m => m.meeting_date))); // collapse all by default
       })
       .catch(() => setConferenceMeetings([]))
       .finally(() => setLoadingMeetings(false));
