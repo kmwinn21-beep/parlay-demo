@@ -225,6 +225,14 @@ export function ConferenceTargetsTab({
   const avgCostPerUnit = useAvgCostPerUnit();
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [dragOverTier, setDragOverTier] = useState<string | null>(null);
+  // Default: Must Target / High Priority / Worth Engaging shown, Monitor minimized to a pill.
+  const [minimizedTiers, setMinimizedTiers] = useState<Set<string>>(new Set(['unassigned']));
+  const minimizeTier = (key: string) => setMinimizedTiers(prev => new Set(prev).add(key));
+  const restoreTier = (key: string) => setMinimizedTiers(prev => {
+    const next = new Set(prev);
+    next.delete(key);
+    return next;
+  });
   const [conversionPct, setConversionPct] = useState(60);
   const [meetingsConvPct, setMeetingsConvPct] = useState(60);
   const [requiredPipeline, setRequiredPipeline] = useState<number | null>(null);
@@ -346,6 +354,63 @@ export function ConferenceTargetsTab({
     setDraggingId(null);
     setDragOverTier(null);
     await onSetTier(draggingId, tier);
+  }
+
+  function renderTierColumn(tier: typeof TIERS[number]) {
+    const tierCards = targets.filter(t => t.tier === tier.key);
+    const isOver = dragOverTier === tier.key;
+    return (
+      <div
+        className={`rounded-xl border-2 p-3 min-h-[120px] transition-colors ${tier.border} ${tier.bg}`}
+        style={isOver ? { outline: tier.dragOutline, outlineOffset: '2px' } : {}}
+        onDragOver={readOnly ? undefined : (e => { e.preventDefault(); setDragOverTier(tier.key); })}
+        onDragLeave={readOnly ? undefined : (() => setDragOverTier(null))}
+        onDrop={readOnly ? undefined : (() => handleDrop(tier.key))}
+      >
+        <div className="flex items-center justify-between mb-3 gap-2">
+          <span className={`text-lg font-bold uppercase tracking-wider ${tier.labelClass}`}>{tier.label}</span>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {hasValues ? (
+              <span className="text-sm font-semibold text-gray-500">
+                {tierValueSum[tier.key]
+                  ? '$' + tierValueSum[tier.key].toLocaleString('en-US')
+                  : '$0'}
+              </span>
+            ) : (
+              <span className="text-lg font-bold text-gray-400">{tierCards.length}</span>
+            )}
+            <button
+              type="button"
+              onClick={() => minimizeTier(tier.key)}
+              title={`Hide ${tier.label}`}
+              className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 hover:bg-white/60 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18 12H6" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {tierCards.map(entry => (
+            <TargetCard
+              key={entry.attendeeId}
+              entry={entry}
+              hasMeeting={effectiveMeetingIds.has(entry.attendeeId)}
+              isDragging={draggingId === entry.attendeeId}
+              avgCostPerUnit={avgCostPerUnit}
+              onDragStart={readOnly ? undefined : () => setDraggingId(entry.attendeeId)}
+              onToggleTarget={onToggleTarget}
+              onScheduleMeeting={handleScheduleMeeting}
+              readOnly={readOnly}
+            />
+          ))}
+          {tierCards.length === 0 && (
+            <p className="text-xs text-gray-400 text-center py-4">Drop here</p>
+          )}
+        </div>
+      </div>
+    );
   }
 
   if (targets.length === 0) {
@@ -539,8 +604,33 @@ export function ConferenceTargetsTab({
 
       {/* Kanban */}
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-gray-700">{conferenceName} Targets</h3>
+        <style>{`@keyframes minimizedPillIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }`}</style>
+        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-sm font-semibold text-gray-700 flex-shrink-0">{conferenceName} Targets</h3>
+            {TIERS.filter(tier => minimizedTiers.has(tier.key)).map(tier => {
+              const val = tierValueSum[tier.key] ?? 0;
+              const count = targets.filter(t => t.tier === tier.key).length;
+              return (
+                <button
+                  key={tier.key}
+                  type="button"
+                  onClick={() => restoreTier(tier.key)}
+                  title={`Show ${tier.label}`}
+                  style={{ animation: 'minimizedPillIn 200ms ease-out' }}
+                  className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-semibold transition-colors hover:brightness-95 ${tier.bg} ${tier.border} ${tier.labelClass}`}
+                >
+                  <span className="uppercase tracking-wide">{tier.label}</span>
+                  <span className="opacity-80">{hasValues ? '$' + val.toLocaleString('en-US') : count}</span>
+                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-white/70">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
 
           {onAddTargets && (
             <div className="relative" ref={addDropdownRef}>
@@ -696,52 +786,21 @@ export function ConferenceTargetsTab({
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          {TIERS.map(tier => {
-            const tierCards = targets.filter(t => t.tier === tier.key);
-            const isOver = dragOverTier === tier.key;
-            return (
-              <div
-                key={tier.key}
-                className={`rounded-xl border-2 p-3 min-h-[120px] transition-colors ${tier.border} ${tier.bg}`}
-                style={isOver ? { outline: tier.dragOutline, outlineOffset: '2px' } : {}}
-                onDragOver={readOnly ? undefined : (e => { e.preventDefault(); setDragOverTier(tier.key); })}
-                onDragLeave={readOnly ? undefined : (() => setDragOverTier(null))}
-                onDrop={readOnly ? undefined : (() => handleDrop(tier.key))}
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <span className={`text-lg font-bold uppercase tracking-wider ${tier.labelClass}`}>{tier.label}</span>
-                  {hasValues ? (
-                    <span className="text-sm font-semibold text-gray-500">
-                      {tierValueSum[tier.key]
-                        ? '$' + tierValueSum[tier.key].toLocaleString('en-US')
-                        : '$0'}
-                    </span>
-                  ) : (
-                    <span className="text-lg font-bold text-gray-400">{tierCards.length}</span>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  {tierCards.map(entry => (
-                    <TargetCard
-                      key={entry.attendeeId}
-                      entry={entry}
-                      hasMeeting={effectiveMeetingIds.has(entry.attendeeId)}
-                      isDragging={draggingId === entry.attendeeId}
-                      avgCostPerUnit={avgCostPerUnit}
-                      onDragStart={readOnly ? undefined : () => setDraggingId(entry.attendeeId)}
-                      onToggleTarget={onToggleTarget}
-                      onScheduleMeeting={handleScheduleMeeting}
-                      readOnly={readOnly}
-                    />
-                  ))}
-                  {tierCards.length === 0 && (
-                    <p className="text-xs text-gray-400 text-center py-4">Drop here</p>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+        {/* Mobile/tablet — simple stack of visible tiers only, reflows on add/remove */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:hidden gap-4">
+          {TIERS.filter(tier => !minimizedTiers.has(tier.key)).map(tier => renderTierColumn(tier))}
+        </div>
+
+        {/* Desktop — all tiers stay mounted; column width animates via grid-template-columns */}
+        <div
+          className="hidden xl:grid gap-4 transition-[grid-template-columns] duration-300 ease-in-out"
+          style={{ gridTemplateColumns: TIERS.map(t => minimizedTiers.has(t.key) ? '0fr' : '1fr').join(' ') }}
+        >
+          {TIERS.map(tier => (
+            <div key={tier.key} className="overflow-hidden min-w-0">
+              {renderTierColumn(tier)}
+            </div>
+          ))}
         </div>
       </div>
 
