@@ -624,19 +624,14 @@ export function PreConferenceReviewModal() {
             </div>}
           </div>
 
-          {/* Record drawer — fixed, full viewport height, slides in from right */}
+          {/* Record drawer — slides up from the bottom on mobile, in from the right on desktop */}
           {recordDrawer != null && (
-            <div className="sm:hidden fixed inset-0 z-[59] bg-black/30" onClick={closeRecord} />
-          )}
-          <div
-            className={`fixed top-0 right-0 h-screen bg-white border-l border-gray-200 shadow-2xl z-[60] flex flex-col overflow-hidden transition-all ease-out ${
-              recordDrawer != null ? 'w-full sm:w-[400px]' : 'w-0'
-            }`}
-            style={{ transitionDuration: '200ms' }}
-            onClick={e => e.stopPropagation()}
-          >
-            {recordDrawer != null && (
-              <>
+            <>
+              <div className="fixed inset-0 z-[59] bg-black/30" onClick={closeRecord} />
+              <div
+                className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[85vh] sm:h-screen w-full sm:w-[400px] bg-white border-t sm:border-t-0 sm:border-l border-gray-200 shadow-2xl z-[60] flex flex-col overflow-hidden rounded-t-2xl sm:rounded-none"
+                onClick={e => e.stopPropagation()}
+              >
                 <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 flex-shrink-0 bg-white">
                   <a
                     href={`/${recordDrawer.type === 'attendee' ? 'attendees' : 'companies'}/${recordDrawer.id}`}
@@ -656,11 +651,11 @@ export function PreConferenceReviewModal() {
                   className="flex-1 border-0 w-full"
                   title={`${recordDrawer.type} record`}
                 />
-              </>
-            )}
-            </div>
-          </div>
+              </div>
+            </>
+          )}
         </div>
+      </div>
       </RecordDrawerCtx.Provider>
   );
 }
