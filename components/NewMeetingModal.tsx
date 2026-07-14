@@ -546,8 +546,8 @@ export function NewMeetingModal({
   const hasSidebar = selectedConferenceId !== '' && (conferenceMeetings.length > 0 || loadingMeetings);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className={`relative bg-white rounded-xl shadow-2xl border border-brand-highlight w-full mx-4 max-h-[90vh] flex flex-col transition-all duration-200 overflow-hidden ${hasSidebar ? 'max-w-4xl' : 'max-w-lg'}`}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 py-6">
+      <div className={`relative bg-white rounded-xl shadow-2xl border border-brand-highlight w-full mx-4 max-h-[90vh] min-h-0 flex flex-col transition-all duration-200 overflow-hidden ${hasSidebar ? 'max-w-4xl' : 'max-w-lg'}`}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0">
           <h2 className="text-lg font-semibold text-brand-primary font-serif">Schedule New Meeting</h2>
@@ -561,7 +561,7 @@ export function NewMeetingModal({
         {/* Body — form + optional sidebar */}
         <div className="flex flex-1 min-h-0 overflow-hidden">
           {/* Form */}
-          <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-4 space-y-4 min-w-0">
+          <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-4 space-y-4 min-w-0 min-h-0">
             {/* Rep */}
             <div>
               <label className={labelClass}>Rep</label>
@@ -730,7 +730,7 @@ export function NewMeetingModal({
 
           {/* Sidebar — conference meetings (desktop: always visible, mobile: hidden — use sheet) */}
           {hasSidebar && (
-            <div className="hidden md:flex w-72 flex-shrink-0 border-l border-gray-200 flex-col overflow-hidden bg-gray-50">
+            <div className="hidden md:flex w-72 flex-shrink-0 border-l border-gray-200 flex-col overflow-hidden bg-gray-50 min-h-0">
               <SidebarContent
                 selectedConference={selectedConference}
                 loadingMeetings={loadingMeetings}
