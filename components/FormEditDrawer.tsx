@@ -13,6 +13,10 @@ interface Props {
   onBackgroundColorChange: (v: string) => void;
   accentColor: string;
   onAccentColorChange: (v: string) => void;
+  backgroundImageUrl: string | null;
+  onBackgroundImageChange: (url: string | null) => void;
+  backgroundImageOpacity: number;
+  onBackgroundImageOpacityChange: (v: number) => void;
   onAddImage: (url: string) => void;
   onAddText: () => void;
 }
@@ -50,30 +54,51 @@ export function FormEditDrawer({
   onBackgroundColorChange,
   accentColor,
   onAccentColorChange,
+  backgroundImageUrl,
+  onBackgroundImageChange,
+  backgroundImageOpacity,
+  onBackgroundImageOpacityChange,
   onAddImage,
   onAddText,
 }: Props) {
   const [uploading, setUploading] = useState(false);
+  const [uploadingBg, setUploadingBg] = useState(false);
   const [dockSide, setDockSide] = useState<DockSide>('left');
   const fileRef = useRef<HTMLInputElement>(null);
+  const bgFileRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = '';
-    setUploading(true);
+  const uploadFile = async (file: File): Promise<string | null> => {
     try {
       const body = new FormData();
       body.append('file', file);
       const res = await fetch(`/api/conference-forms/${formId}/upload-image`, { method: 'POST', body });
       if (!res.ok) throw new Error();
       const { url } = await res.json();
-      onAddImage(url);
+      return url as string;
     } catch {
       toast.error('Failed to upload image');
-    } finally {
-      setUploading(false);
+      return null;
     }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setUploading(true);
+    const url = await uploadFile(file);
+    if (url) onAddImage(url);
+    setUploading(false);
+  };
+
+  const handleBgFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setUploadingBg(true);
+    const url = await uploadFile(file);
+    if (url) onBackgroundImageChange(url);
+    setUploadingBg(false);
   };
 
   return (
@@ -155,6 +180,47 @@ export function FormEditDrawer({
                 <input type="color" value={accentColor} onChange={e => onAccentColorChange(e.target.value)} className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white" />
                 <input type="text" value={accentColor} onChange={e => onAccentColorChange(e.target.value)} className="input-field text-sm flex-1" placeholder="#FFCB3F" />
               </div>
+            </div>
+
+            <div className="border-t border-gray-100 pt-4 space-y-2">
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Background Image</label>
+              {backgroundImageUrl && (
+                <div className="relative">
+                  <img src={backgroundImageUrl} alt="Background preview" className="w-full h-20 object-cover rounded-lg border border-gray-200" />
+                  <button
+                    type="button"
+                    onClick={() => onBackgroundImageChange(null)}
+                    title="Remove background image"
+                    className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              )}
+              <button
+                type="button"
+                disabled={uploadingBg}
+                onClick={() => bgFileRef.current?.click()}
+                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold border border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M14 8h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                {uploadingBg ? 'Uploading…' : backgroundImageUrl ? 'Replace Background Image' : '+ Add Background Image'}
+              </button>
+              <input ref={bgFileRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={handleBgFileChange} />
+              {backgroundImageUrl && (
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-xs text-gray-500 whitespace-nowrap">Opacity</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={backgroundImageOpacity}
+                    onChange={e => onBackgroundImageOpacityChange(Number(e.target.value))}
+                    className="flex-1 accent-brand-secondary"
+                  />
+                  <span className="text-xs text-gray-500 w-9 text-right tabular-nums">{backgroundImageOpacity}%</span>
+                </div>
+              )}
             </div>
 
             <div className="border-t border-gray-100 pt-4 space-y-2">

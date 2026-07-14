@@ -8,7 +8,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   const db = await getDb(authResult?.accountId);
   try {
     const res = await db.execute({
-      sql: `SELECT id, conference_form_id, element_type, x, y, width, height, z_index, content
+      sql: `SELECT id, conference_form_id, element_type, x, y, width, height, z_index, content,
+                   object_fit, focal_x, focal_y
             FROM form_elements WHERE conference_form_id = ? ORDER BY z_index, id`,
       args: [params.id],
     });
@@ -22,6 +23,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       height: Number(r.height),
       z_index: Number(r.z_index),
       content: r.content != null ? String(r.content) : null,
+      object_fit: r.object_fit ? String(r.object_fit) : 'contain',
+      focal_x: r.focal_x != null ? Number(r.focal_x) : 50,
+      focal_y: r.focal_y != null ? Number(r.focal_y) : 50,
     }));
     return NextResponse.json(elements);
   } catch (error) {

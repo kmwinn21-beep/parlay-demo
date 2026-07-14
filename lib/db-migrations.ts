@@ -1437,4 +1437,16 @@ export const migrations: string[] = [
   `INSERT INTO form_elements (conference_form_id, element_type, x, y, width, height, z_index, content)
    SELECT id, 'text', 40, 300, 320, 320, 1, html_content FROM conference_forms
    WHERE html_content IS NOT NULL AND TRIM(html_content) != ''`,
+  // 483 — conference_forms: optional full-bleed background image, drawn beneath the page
+  // background color/gradient with an adjustable opacity. Distinct from the per-element
+  // image blocks on the canvas (form_elements).
+  `ALTER TABLE conference_forms ADD COLUMN background_image_url TEXT`,
+  `ALTER TABLE conference_forms ADD COLUMN background_image_opacity REAL`,
+  // 484 — form_elements: per-image fit mode + focal point. Images default to 'contain' so
+  // resizing the element to any aspect ratio never crops the picture; users can opt into
+  // 'cover' (crop) and drag to choose which part of the image shows via focal_x/focal_y
+  // (0-100, used as CSS object-position).
+  `ALTER TABLE form_elements ADD COLUMN object_fit TEXT NOT NULL DEFAULT 'contain'`,
+  `ALTER TABLE form_elements ADD COLUMN focal_x REAL NOT NULL DEFAULT 50`,
+  `ALTER TABLE form_elements ADD COLUMN focal_y REAL NOT NULL DEFAULT 50`,
 ];

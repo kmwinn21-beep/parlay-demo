@@ -38,6 +38,8 @@ export interface ConferenceForm {
   form_height: number | null;
   form_offset_y: number | null;
   form_x: number | null;
+  background_image_url: string | null;
+  background_image_opacity: number | null;
   panel_logo_url: string | null;
   created_by: string | null;
   created_at: string;
@@ -56,6 +58,9 @@ interface FormElement {
   height: number;
   z_index: number;
   content: string | null;
+  object_fit: 'contain' | 'cover';
+  focal_x: number;
+  focal_y: number;
 }
 
 interface AttendeeOption {
@@ -131,8 +136,59 @@ function isColorLight(hex: string): boolean {
   return (r * 299 + g * 587 + b * 114) / 1000 > 160;
 }
 
-function ImageElementCanvas({ src }: { src: string }) {
+function ImageElementCanvas({ src, objectFit, focalX, focalY, isEditMode, onFocalCommit }: {
+  src: string;
+  objectFit: 'contain' | 'cover';
+  focalX: number;
+  focalY: number;
+  isEditMode: boolean;
+  onFocalCommit: (x: number, y: number) => void;
+}) {
   const [error, setError] = useState(false);
+  const [localFocal, setLocalFocal] = useState({ x: focalX, y: focalY });
+  const [isDragging, setIsDragging] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ clientX: number; clientY: number; startX: number; startY: number; curX: number; curY: number } | null>(null);
+
+  // Sync from server once persisted — but not mid-drag, or the commit would snap back
+  useEffect(() => { if (!isDragging) setLocalFocal({ x: focalX, y: focalY }); }, [focalX, focalY, isDragging]);
+
+  const cropMode = objectFit === 'cover' && isEditMode;
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!cropMode) return;
+    e.stopPropagation();
+    dragRef.current = { clientX: e.clientX, clientY: e.clientY, startX: localFocal.x, startY: localFocal.y, curX: localFocal.x, curY: localFocal.y };
+    setIsDragging(true);
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+    const handleMove = (e: MouseEvent) => {
+      if (!dragRef.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const dxPct = ((e.clientX - dragRef.current.clientX) / rect.width) * 100;
+      const dyPct = ((e.clientY - dragRef.current.clientY) / rect.height) * 100;
+      // Dragging right/down reveals more of the left/top of the image → focal point moves opposite to the drag
+      const nextX = Math.max(0, Math.min(100, dragRef.current.startX - dxPct));
+      const nextY = Math.max(0, Math.min(100, dragRef.current.startY - dyPct));
+      dragRef.current.curX = nextX;
+      dragRef.current.curY = nextY;
+      setLocalFocal({ x: nextX, y: nextY });
+    };
+    const handleUp = () => {
+      setIsDragging(false);
+      if (dragRef.current) onFocalCommit(Math.round(dragRef.current.curX), Math.round(dragRef.current.curY));
+    };
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDragging]);
+
   if (!src || error) {
     return (
       <div className="w-full h-full rounded-xl flex items-center justify-center border-2 border-dashed border-white/30 text-white/40">
@@ -141,13 +197,26 @@ function ImageElementCanvas({ src }: { src: string }) {
     );
   }
   return (
-    <img
-      src={src}
-      alt=""
-      draggable={false}
-      onError={() => setError(true)}
-      className="w-full h-full object-cover rounded-xl pointer-events-none"
-    />
+    <div
+      ref={containerRef}
+      onMouseDown={handleMouseDown}
+      className="relative w-full h-full overflow-hidden rounded-xl"
+      style={{ cursor: cropMode ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
+    >
+      <img
+        src={src}
+        alt=""
+        draggable={false}
+        onError={() => setError(true)}
+        className="w-full h-full pointer-events-none"
+        style={{ objectFit, objectPosition: `${localFocal.x}% ${localFocal.y}%` }}
+      />
+      {cropMode && !isDragging && (
+        <div className="absolute bottom-1.5 right-1.5 text-[10px] text-white/80 bg-black/45 rounded px-1.5 py-0.5 pointer-events-none">
+          drag to reposition
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -210,6 +279,8 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
     form_offset_y: form.form_offset_y,
     form_width: form.form_width ?? 420,
     form_height: form.form_height ?? 560,
+    background_image_url: form.background_image_url,
+    background_image_opacity: form.background_image_opacity ?? 100,
   });
   const metaTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const elementTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
@@ -261,6 +332,35 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
     fetch(`/api/conference-forms/${form.id}/elements/${id}`, { method: 'DELETE' }).catch(() => {});
   }, [form.id]);
 
+  const reorderElement = useCallback((id: number, action: 'front' | 'forward' | 'backward' | 'back') => {
+    const sorted = [...elements].sort((a, b) => a.z_index - b.z_index);
+    const idx = sorted.findIndex(e => e.id === id);
+    if (idx === -1) return;
+    if (action === 'front') {
+      const [item] = sorted.splice(idx, 1);
+      sorted.push(item);
+    } else if (action === 'back') {
+      const [item] = sorted.splice(idx, 1);
+      sorted.unshift(item);
+    } else if (action === 'forward' && idx < sorted.length - 1) {
+      [sorted[idx], sorted[idx + 1]] = [sorted[idx + 1], sorted[idx]];
+    } else if (action === 'backward' && idx > 0) {
+      [sorted[idx], sorted[idx - 1]] = [sorted[idx - 1], sorted[idx]];
+    }
+    const withZ = sorted.map((e, i) => ({ ...e, z_index: i }));
+    setElements(withZ);
+    withZ.forEach(e => {
+      const orig = elements.find(p => p.id === e.id);
+      if (orig && orig.z_index !== e.z_index) {
+        fetch(`/api/conference-forms/${form.id}/elements/${e.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ z_index: e.z_index }),
+        }).catch(() => {});
+      }
+    });
+  }, [elements, form.id]);
+
   const addElement = useCallback(async (element_type: 'image' | 'text', content: string) => {
     const base = {
       element_type,
@@ -278,7 +378,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
       });
       if (!res.ok) throw new Error();
       const { id } = await res.json();
-      setElements(prev => [...prev, { ...base, id, conference_form_id: form.id }]);
+      setElements(prev => [...prev, { ...base, id, conference_form_id: form.id, object_fit: 'contain', focal_x: 50, focal_y: 50 }]);
     } catch {
       toast.error('Failed to add element');
     }
@@ -834,6 +934,16 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
         transition: 'background 0.3s ease',
       }}
     >
+      {/* Full-bleed background image, drawn beneath the page background color/gradient */}
+      {formMeta.background_image_url && (
+        <img
+          src={formMeta.background_image_url}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+          style={{ opacity: formMeta.background_image_opacity / 100 }}
+        />
+      )}
+
       {/* Floating close button */}
       <button
         type="button"
@@ -868,6 +978,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
               position={{ x: el.x, y: el.y }}
               disableDragging={!isEditMode}
               enableResizing={isEditMode}
+              dragHandleClassName="rnd-drag-handle"
               bounds="parent"
               style={{ zIndex: el.z_index }}
               className={isEditMode ? 'ring-2 ring-white/60 rounded-xl' : ''}
@@ -878,17 +989,53 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
             >
               <div className="relative w-full h-full">
                 {isEditMode && (
-                  <button
-                    type="button"
-                    onClick={() => removeElement(el.id)}
-                    className="absolute -top-2.5 -right-2.5 z-20 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center shadow hover:bg-red-600"
-                    title="Remove"
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
-                  </button>
+                  <div className="absolute -top-7 left-0 right-0 h-7 flex items-center bg-gray-800/85 rounded-t-md overflow-hidden z-20">
+                    <div className="rnd-drag-handle flex-1 h-full flex items-center justify-center cursor-move text-white/70 hover:text-white" title="Drag to move">
+                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="8" cy="6" r="1.4" /><circle cx="16" cy="6" r="1.4" /><circle cx="8" cy="12" r="1.4" /><circle cx="16" cy="12" r="1.4" /><circle cx="8" cy="18" r="1.4" /><circle cx="16" cy="18" r="1.4" /></svg>
+                    </div>
+                    <div className="flex items-center gap-0.5 px-1">
+                      {el.element_type === 'image' && (
+                        <button
+                          type="button"
+                          onClick={() => updateElement(el.id, { object_fit: el.object_fit === 'cover' ? 'contain' : 'cover' })}
+                          title={el.object_fit === 'cover' ? 'Stop cropping (fit full image)' : 'Crop image'}
+                          className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${el.object_fit === 'cover' ? 'text-brand-highlight' : 'text-white/70 hover:text-white'}`}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 2v14a2 2 0 002 2h14M18 22V8a2 2 0 00-2-2H2" /></svg>
+                        </button>
+                      )}
+                      <button type="button" onClick={() => reorderElement(el.id, 'back')} title="Send to back" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-5 5m5-5l5 5" /><path strokeLinecap="round" strokeLinejoin="round" d="M5 19h14" /></svg>
+                      </button>
+                      <button type="button" onClick={() => reorderElement(el.id, 'backward')} title="Send backward" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7-7-7" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 21V3" /></svg>
+                      </button>
+                      <button type="button" onClick={() => reorderElement(el.id, 'forward')} title="Bring forward" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7 7 7" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18" /></svg>
+                      </button>
+                      <button type="button" onClick={() => reorderElement(el.id, 'front')} title="Bring to front" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m0 0l-5-5m5 5l5-5" /><path strokeLinecap="round" strokeLinejoin="round" d="M5 5h14" /></svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeElement(el.id)}
+                        title="Remove"
+                        className="w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600 ml-0.5"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    </div>
+                  </div>
                 )}
                 {el.element_type === 'image' ? (
-                  <ImageElementCanvas src={el.content || ''} />
+                  <ImageElementCanvas
+                    src={el.content || ''}
+                    objectFit={el.object_fit}
+                    focalX={el.focal_x}
+                    focalY={el.focal_y}
+                    isEditMode={isEditMode}
+                    onFocalCommit={(x, y) => updateElement(el.id, { focal_x: x, focal_y: y })}
+                  />
                 ) : (
                   <TextElementCanvas
                     element={el}
@@ -906,6 +1053,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
             position={{ x: formX, y: formY }}
             disableDragging={!isEditMode}
             enableResizing={isEditMode}
+            dragHandleClassName="rnd-drag-handle"
             bounds="parent"
             minWidth={280}
             minHeight={300}
@@ -917,8 +1065,16 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
               form_x: Math.round(pos.x), form_offset_y: Math.round(pos.y),
             })}
           >
-            <div className="w-full h-full rounded-2xl shadow-2xl overflow-y-auto" style={{ background: bgColor }}>
-              {formCardInterior}
+            <div className="relative w-full h-full">
+              {isEditMode && (
+                <div className="rnd-drag-handle absolute -top-7 left-0 right-0 h-7 flex items-center justify-center gap-1.5 bg-gray-800/85 rounded-t-md cursor-move text-white/70 hover:text-white z-20" title="Drag to move the form">
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="8" cy="6" r="1.4" /><circle cx="16" cy="6" r="1.4" /><circle cx="8" cy="12" r="1.4" /><circle cx="16" cy="12" r="1.4" /><circle cx="8" cy="18" r="1.4" /><circle cx="16" cy="18" r="1.4" /></svg>
+                  <span className="text-[11px] font-semibold uppercase tracking-wide">Form</span>
+                </div>
+              )}
+              <div className="w-full h-full rounded-2xl shadow-2xl overflow-y-auto" style={{ background: bgColor }}>
+                {formCardInterior}
+              </div>
             </div>
           </Rnd>
 
@@ -932,6 +1088,10 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
             onBackgroundColorChange={v => patchFormMeta({ background_color: v }, 'bg')}
             accentColor={formMeta.accent_color}
             onAccentColorChange={v => patchFormMeta({ accent_color: v }, 'accent')}
+            backgroundImageUrl={formMeta.background_image_url}
+            onBackgroundImageChange={url => patchFormMeta({ background_image_url: url })}
+            backgroundImageOpacity={formMeta.background_image_opacity}
+            onBackgroundImageOpacityChange={v => patchFormMeta({ background_image_opacity: v }, 'bgOpacity')}
             onAddImage={url => addElement('image', url)}
             onAddText={() => addElement('text', '<p>New text</p>')}
           />
