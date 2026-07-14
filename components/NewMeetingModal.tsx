@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
@@ -511,7 +512,7 @@ export function NewMeetingModal({
 
   if (inviteContext) {
     const finish = () => { setInviteContext(null); handleClose(); };
-    return (
+    return createPortal(
       <SendCalendarInvitePrompt
         attendeeName={inviteContext.attendeeName}
         onDismiss={finish}
@@ -537,7 +538,8 @@ export function NewMeetingModal({
           }), '_blank', 'noopener,noreferrer');
           finish();
         }}
-      />
+      />,
+      document.body
     );
   }
 
@@ -545,7 +547,7 @@ export function NewMeetingModal({
   const labelClass = 'block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1';
   const hasSidebar = selectedConferenceId !== '' && (conferenceMeetings.length > 0 || loadingMeetings);
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 py-6">
       <div className={`relative bg-white rounded-xl shadow-2xl border border-brand-highlight w-full mx-4 max-h-[90vh] min-h-0 flex flex-col transition-all duration-200 overflow-hidden ${hasSidebar ? 'max-w-4xl' : 'max-w-lg'}`}>
         {/* Header */}
@@ -573,27 +575,27 @@ export function NewMeetingModal({
         <div className="flex flex-1 min-h-0 overflow-hidden">
           {/* Form */}
           <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-4 space-y-4 min-w-0 min-h-0">
-            {/* Rep */}
-            <div>
-              <label className={labelClass}>Rep</label>
-              <RepMultiSelect
-                options={userOptions}
-                selectedIds={selectedRepIds}
-                onChange={setSelectedRepIds}
-                triggerClass={`${inputClass} flex items-center justify-between gap-2`}
-                placeholder="Select reps..."
-              />
-            </div>
-
-            {/* Conference */}
-            <div>
-              <label className={labelClass}>Conference *</label>
-              <select className={inputClass} value={selectedConferenceId} onChange={e => { setSelectedConferenceId(e.target.value); setMeetingDate(''); setShowFullCalendar(false); }} required>
-                <option value="">Select conference...</option>
-                {conferences.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+            {/* Rep + Conference */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelClass}>Rep</label>
+                <RepMultiSelect
+                  options={userOptions}
+                  selectedIds={selectedRepIds}
+                  onChange={setSelectedRepIds}
+                  triggerClass={`${inputClass} flex items-center justify-between gap-2`}
+                  placeholder="Select reps..."
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Conference *</label>
+                <select className={inputClass} value={selectedConferenceId} onChange={e => { setSelectedConferenceId(e.target.value); setMeetingDate(''); setShowFullCalendar(false); }} required>
+                  <option value="">Select conference...</option>
+                  {conferences.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {/* Company */}
@@ -668,74 +670,77 @@ export function NewMeetingModal({
               )}
             </div>
 
-            {/* Time — 15-min increment dropdown */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className={labelClass} style={{ marginBottom: 0 }}>Time *</label>
-                {hasSidebar && (
-                  <button
-                    type="button"
-                    onClick={() => setShowMobileSidebar(true)}
-                    className="md:hidden flex items-center gap-1.5 text-xs font-medium text-brand-secondary hover:text-brand-primary transition-colors"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    {loadingMeetings ? 'Loading…' : `${conferenceMeetings.length} meeting${conferenceMeetings.length !== 1 ? 's' : ''}`}
-                    {(conflicts.repConflict || conflicts.overlapConflict) && (
-                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${conflicts.repConflict ? 'bg-red-500' : 'bg-amber-400'}`} />
-                    )}
-                  </button>
-                )}
-              </div>
-              <select className={inputClass} value={meetingTime} onChange={e => setMeetingTime(e.target.value)} required>
-                <option value="">Select time...</option>
-                {TIME_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-              {/* Conflict warnings */}
-              {meetingDate && meetingTime && (conflicts.repConflict || conflicts.overlapConflict) && (
-                <div className="mt-2 space-y-1.5">
-                  {conflicts.repConflict && (
-                    <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2">
-                      <svg className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            {/* Time + Meeting Type */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className={labelClass} style={{ marginBottom: 0 }}>Time *</label>
+                  {hasSidebar && (
+                    <button
+                      type="button"
+                      onClick={() => setShowMobileSidebar(true)}
+                      className="md:hidden flex items-center gap-1.5 text-xs font-medium text-brand-secondary hover:text-brand-primary transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
-                      <p className="text-xs text-red-700 font-medium">Rep conflict — selected rep already has a meeting at this time.</p>
-                    </div>
-                  )}
-                  {conflicts.overlapConflict && !conflicts.repConflict && (
-                    <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
-                      <svg className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                      </svg>
-                      <p className="text-xs text-amber-700 font-medium">Another meeting is scheduled within 30 minutes of this time.</p>
-                    </div>
+                      {loadingMeetings ? 'Loading…' : `${conferenceMeetings.length} meeting${conferenceMeetings.length !== 1 ? 's' : ''}`}
+                      {(conflicts.repConflict || conflicts.overlapConflict) && (
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${conflicts.repConflict ? 'bg-red-500' : 'bg-amber-400'}`} />
+                      )}
+                    </button>
                   )}
                 </div>
-              )}
+                <select className={inputClass} value={meetingTime} onChange={e => setMeetingTime(e.target.value)} required>
+                  <option value="">Select time...</option>
+                  {TIME_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Meeting Type */}
+              <div>
+                <label className={labelClass}>Meeting Type</label>
+                <select className={inputClass} value={meetingType} onChange={e => setMeetingType(e.target.value)}>
+                  <option value="">— None —</option>
+                  {meetingTypeOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              </div>
             </div>
 
-            {/* Meeting Type */}
-            <div>
-              <label className={labelClass}>Meeting Type</label>
-              <select className={inputClass} value={meetingType} onChange={e => setMeetingType(e.target.value)}>
-                <option value="">— None —</option>
-                {meetingTypeOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
-            </div>
+            {/* Conflict warnings */}
+            {meetingDate && meetingTime && (conflicts.repConflict || conflicts.overlapConflict) && (
+              <div className="space-y-1.5">
+                {conflicts.repConflict && (
+                  <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2">
+                    <svg className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                    </svg>
+                    <p className="text-xs text-red-700 font-medium">Rep conflict — selected rep already has a meeting at this time.</p>
+                  </div>
+                )}
+                {conflicts.overlapConflict && !conflicts.repConflict && (
+                  <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+                    <svg className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                    </svg>
+                    <p className="text-xs text-amber-700 font-medium">Another meeting is scheduled within 30 minutes of this time.</p>
+                  </div>
+                )}
+              </div>
+            )}
 
-            {/* Location */}
-            <div>
-              <label className={labelClass}>Meeting Location</label>
-              <input type="text" className={inputClass} value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Room 201, Lobby Bar" />
-            </div>
-
-            {/* Additional Attendees */}
-            <div>
-              <label className={labelClass}>Additional Attendees</label>
-              <input type="text" className={inputClass} value={additionalAttendees} onChange={e => setAdditionalAttendees(e.target.value)} placeholder="Comma-separated names" />
+            {/* Meeting Location + Additional Attendees */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelClass}>Meeting Location</label>
+                <input type="text" className={inputClass} value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Room 201, Lobby Bar" />
+              </div>
+              <div>
+                <label className={labelClass}>Additional Attendees</label>
+                <input type="text" className={inputClass} value={additionalAttendees} onChange={e => setAdditionalAttendees(e.target.value)} placeholder="Comma-separated names" />
+              </div>
             </div>
           </form>
 
@@ -784,6 +789,7 @@ export function NewMeetingModal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
