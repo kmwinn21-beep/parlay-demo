@@ -9,7 +9,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   try {
     const res = await db.execute({
       sql: `SELECT id, conference_form_id, element_type, x, y, width, height, z_index, content,
-                   object_fit, focal_x, focal_y
+                   object_fit, focal_x, focal_y, corner_style
             FROM form_elements WHERE conference_form_id = ? ORDER BY z_index, id`,
       args: [params.id],
     });
@@ -26,6 +26,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       object_fit: r.object_fit ? String(r.object_fit) : 'contain',
       focal_x: r.focal_x != null ? Number(r.focal_x) : 50,
       focal_y: r.focal_y != null ? Number(r.focal_y) : 50,
+      corner_style: r.corner_style ? String(r.corner_style) : 'rounded',
     }));
     return NextResponse.json(elements);
   } catch (error) {

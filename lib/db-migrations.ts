@@ -1491,4 +1491,6 @@ export const migrations: string[] = [
   // fallback behavior as before these were configurable.
   `ALTER TABLE conference_forms ADD COLUMN eyebrow_color TEXT`,
   `ALTER TABLE conference_forms ADD COLUMN submit_button_color TEXT`,
+  // 489 — form_elements: square vs rounded corners for image/video elements.
+  `ALTER TABLE form_elements ADD COLUMN corner_style TEXT NOT NULL DEFAULT 'rounded'`,
 ];
