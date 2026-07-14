@@ -40,8 +40,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const db = await getDb(authResult?.accountId);
   try {
     const { element_type, x, y, width, height, content, z_index } = await request.json();
-    if (!['image', 'text'].includes(element_type)) {
-      return NextResponse.json({ error: 'element_type must be image or text' }, { status: 400 });
+    if (!['image', 'text', 'video'].includes(element_type)) {
+      return NextResponse.json({ error: 'element_type must be image, text, or video' }, { status: 400 });
     }
     const result = await db.execute({
       sql: `INSERT INTO form_elements (conference_form_id, element_type, x, y, width, height, z_index, content)
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         x != null ? Number(x) : 40,
         y != null ? Number(y) : 40,
         width != null ? Number(width) : 280,
-        height != null ? Number(height) : (element_type === 'image' ? 240 : 200),
+        height != null ? Number(height) : (element_type === 'text' ? 200 : 240),
         z_index != null ? Number(z_index) : 0,
         content ?? null,
       ],

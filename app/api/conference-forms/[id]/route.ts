@@ -20,6 +20,8 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
             accent_color, accent_gradient, image_url, image_max_width, html_content,
             image_offset_y, html_offset_y, form_width, form_height, form_offset_y, form_x,
             form_z_index, background_image_url, background_image_opacity,
+            background_video_url, background_video_opacity,
+            eyebrow_color, submit_button_color,
             panel_logo_url } = await request.json();
     const sets: string[] = [];
     const args: (string | number | null)[] = [];
@@ -40,6 +42,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     if (form_z_index !== undefined) { sets.push('form_z_index = ?'); args.push(Number(form_z_index)); }
     if (background_image_url !== undefined) { sets.push('background_image_url = ?'); args.push(background_image_url || null); }
     if (background_image_opacity !== undefined) { sets.push('background_image_opacity = ?'); args.push(background_image_opacity != null ? Number(background_image_opacity) : null); }
+    if (background_video_url !== undefined) { sets.push('background_video_url = ?'); args.push(background_video_url || null); }
+    if (background_video_opacity !== undefined) { sets.push('background_video_opacity = ?'); args.push(background_video_opacity != null ? Number(background_video_opacity) : null); }
+    if (eyebrow_color !== undefined) { sets.push('eyebrow_color = ?'); args.push(eyebrow_color || null); }
+    if (submit_button_color !== undefined) { sets.push('submit_button_color = ?'); args.push(submit_button_color || null); }
     if (panel_logo_url !== undefined) { sets.push('panel_logo_url = ?'); args.push(panel_logo_url || null); }
     if (sets.length === 0) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
     args.push(params.id);

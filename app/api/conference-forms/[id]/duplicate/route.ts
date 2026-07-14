@@ -43,13 +43,17 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
                 (conference_id, template_id, name, conference_logo_url, background_color,
                  accent_color, accent_gradient, image_url, image_max_width, html_content,
                  image_offset_y, html_offset_y, form_width, form_height, form_offset_y, form_x,
-                 form_z_index, background_image_url, background_image_opacity, panel_logo_url, created_by)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+                 form_z_index, background_image_url, background_image_opacity,
+                 background_video_url, background_video_opacity, eyebrow_color, submit_button_color,
+                 panel_logo_url, created_by)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
         args: [
           conferenceId, source.template_id, source.name, source.conference_logo_url, source.background_color,
           source.accent_color, source.accent_gradient, source.image_url, source.image_max_width, source.html_content,
           source.image_offset_y, source.html_offset_y, source.form_width, source.form_height, source.form_offset_y, source.form_x,
-          source.form_z_index, source.background_image_url, source.background_image_opacity, source.panel_logo_url, user.email,
+          source.form_z_index, source.background_image_url, source.background_image_opacity,
+          source.background_video_url, source.background_video_opacity, source.eyebrow_color, source.submit_button_color,
+          source.panel_logo_url, user.email,
         ],
       });
       const newFormId = Number(insertRes.rows[0].id);
