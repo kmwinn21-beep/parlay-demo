@@ -61,7 +61,10 @@ export const FONT_SIZES = ['8px', '10px', '11px', '12px', '14px', '16px', '18px'
 export function getEditorExtensions({ withImage = false }: { withImage?: boolean } = {}) {
   /* eslint-disable */
   const exts: any[] = [
-    StarterKit,
+    // StarterKit (v3) now bundles Link/Underline itself — disable its copies so our own
+    // configured instances below don't collide with them (tiptap logs a duplicate-extension
+    // warning otherwise).
+    StarterKit.configure({ link: false, underline: false }),
     Underline,
     Link.configure({ openOnClick: false }),
     TextStyle,

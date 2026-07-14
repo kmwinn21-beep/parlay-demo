@@ -20,7 +20,16 @@ interface Props {
   onBackgroundImageChange: (url: string | null) => void;
   backgroundImageOpacity: number;
   onBackgroundImageOpacityChange: (v: number) => void;
+  backgroundVideoUrl: string | null;
+  onBackgroundVideoChange: (url: string | null) => void;
+  backgroundVideoOpacity: number;
+  onBackgroundVideoOpacityChange: (v: number) => void;
+  eyebrowColor: string | null;
+  onEyebrowColorChange: (v: string | null) => void;
+  submitButtonColor: string | null;
+  onSubmitButtonColorChange: (v: string | null) => void;
   onAddImage: (url: string) => void;
+  onAddVideo: (url: string) => void;
   onAddText: () => void;
 }
 
@@ -61,16 +70,31 @@ export function FormEditDrawer({
   onBackgroundImageChange,
   backgroundImageOpacity,
   onBackgroundImageOpacityChange,
+  backgroundVideoUrl,
+  onBackgroundVideoChange,
+  backgroundVideoOpacity,
+  onBackgroundVideoOpacityChange,
+  eyebrowColor,
+  onEyebrowColorChange,
+  submitButtonColor,
+  onSubmitButtonColorChange,
   onAddImage,
+  onAddVideo,
   onAddText,
 }: Props) {
   const [uploading, setUploading] = useState(false);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
   const [uploadingBg, setUploadingBg] = useState(false);
+  const [uploadingBgVideo, setUploadingBgVideo] = useState(false);
+  const [videoUrlInput, setVideoUrlInput] = useState('');
+  const [bgVideoUrlInput, setBgVideoUrlInput] = useState('');
   const [dockSide, setDockSide] = useState<DockSide>('left');
   const [brandColorsOpen, setBrandColorsOpen] = useState(false);
   const [brandColors, setBrandColors] = useState<Record<BrandColorKey, string>>({ ...BRAND_COLOR_DEFAULTS });
   const fileRef = useRef<HTMLInputElement>(null);
+  const videoFileRef = useRef<HTMLInputElement>(null);
   const bgFileRef = useRef<HTMLInputElement>(null);
+  const bgVideoFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch('/api/admin/settings')
@@ -85,7 +109,7 @@ export function FormEditDrawer({
       .catch(() => {});
   }, []);
 
-  const uploadFile = async (file: File): Promise<string | null> => {
+  const uploadImage = async (file: File): Promise<string | null> => {
     try {
       const body = new FormData();
       body.append('file', file);
@@ -99,14 +123,51 @@ export function FormEditDrawer({
     }
   };
 
+  // Videos upload directly to R2 via a presigned URL — routing the file bytes through our
+  // own API (like uploadImage does) would hit Vercel's ~4.5MB serverless request body limit.
+  const uploadVideo = async (file: File): Promise<string | null> => {
+    try {
+      const presignRes = await fetch(`/api/conference-forms/${formId}/upload-video`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size }),
+      });
+      if (!presignRes.ok) {
+        const err = await presignRes.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to prepare upload');
+      }
+      const { uploadUrl, publicUrl, contentType } = await presignRes.json();
+      const putRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': contentType },
+        body: file,
+      });
+      if (!putRes.ok) throw new Error('Upload to storage failed');
+      return publicUrl as string;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to upload video');
+      return null;
+    }
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
     setUploading(true);
-    const url = await uploadFile(file);
+    const url = await uploadImage(file);
     if (url) onAddImage(url);
     setUploading(false);
+  };
+
+  const handleVideoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setUploadingVideo(true);
+    const url = await uploadVideo(file);
+    if (url) onAddVideo(url);
+    setUploadingVideo(false);
   };
 
   const handleBgFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -114,9 +175,33 @@ export function FormEditDrawer({
     if (!file) return;
     e.target.value = '';
     setUploadingBg(true);
-    const url = await uploadFile(file);
+    const url = await uploadImage(file);
     if (url) onBackgroundImageChange(url);
     setUploadingBg(false);
+  };
+
+  const handleBgVideoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setUploadingBgVideo(true);
+    const url = await uploadVideo(file);
+    if (url) onBackgroundVideoChange(url);
+    setUploadingBgVideo(false);
+  };
+
+  const handleAddVideoUrl = () => {
+    const url = videoUrlInput.trim();
+    if (!url) return;
+    onAddVideo(url);
+    setVideoUrlInput('');
+  };
+
+  const handleSetBgVideoUrl = () => {
+    const url = bgVideoUrlInput.trim();
+    if (!url) return;
+    onBackgroundVideoChange(url);
+    setBgVideoUrlInput('');
   };
 
   return (
@@ -245,6 +330,33 @@ export function FormEditDrawer({
               )}
             </div>
 
+            <div className="border-t border-gray-100 pt-4 space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-gray-500">Eyebrow Text Color</label>
+                  {eyebrowColor && (
+                    <button type="button" onClick={() => onEyebrowColorChange(null)} className="text-xs text-gray-400 hover:text-gray-600">Reset</button>
+                  )}
+                </div>
+                <div className="flex gap-2 items-center">
+                  <input type="color" value={eyebrowColor || '#ffffff'} onChange={e => onEyebrowColorChange(e.target.value)} className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white" />
+                  <input type="text" value={eyebrowColor || ''} onChange={e => onEyebrowColorChange(e.target.value)} className="input-field text-sm flex-1" placeholder="Matches Form Card Color text" />
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-gray-500">Submit Button Color</label>
+                  {submitButtonColor && (
+                    <button type="button" onClick={() => onSubmitButtonColorChange(null)} className="text-xs text-gray-400 hover:text-gray-600">Reset</button>
+                  )}
+                </div>
+                <div className="flex gap-2 items-center">
+                  <input type="color" value={submitButtonColor || '#0B3C62'} onChange={e => onSubmitButtonColorChange(e.target.value)} className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white" />
+                  <input type="text" value={submitButtonColor || ''} onChange={e => onSubmitButtonColorChange(e.target.value)} className="input-field text-sm flex-1" placeholder="Auto (contrasts Form Card Color)" />
+                </div>
+              </div>
+            </div>
+
             <div className="border-t border-gray-100 pt-4 space-y-2">
               <label className="block text-xs font-semibold text-gray-500 mb-1">Background Image</label>
               {backgroundImageUrl && (
@@ -287,6 +399,61 @@ export function FormEditDrawer({
             </div>
 
             <div className="border-t border-gray-100 pt-4 space-y-2">
+              <label className="block text-xs font-semibold text-gray-500 mb-1">
+                Background Video
+                {backgroundVideoUrl && <span className="font-normal text-gray-400 ml-1">(takes precedence over Background Image)</span>}
+              </label>
+              {backgroundVideoUrl && (
+                <div className="relative">
+                  <video src={backgroundVideoUrl} className="w-full h-20 object-cover rounded-lg border border-gray-200" muted loop autoPlay playsInline />
+                  <button
+                    type="button"
+                    onClick={() => onBackgroundVideoChange(null)}
+                    title="Remove background video"
+                    className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              )}
+              <button
+                type="button"
+                disabled={uploadingBgVideo}
+                onClick={() => bgVideoFileRef.current?.click()}
+                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold border border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                {uploadingBgVideo ? 'Uploading…' : backgroundVideoUrl ? 'Replace Background Video' : '+ Add Background Video'}
+              </button>
+              <input ref={bgVideoFileRef} type="file" accept="video/*" className="hidden" onChange={handleBgVideoFileChange} />
+              <div className="flex gap-1.5">
+                <input
+                  type="url"
+                  value={bgVideoUrlInput}
+                  onChange={e => setBgVideoUrlInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSetBgVideoUrl(); } }}
+                  placeholder="or paste a video URL (MP4, YouTube, Vimeo…)"
+                  className="input-field text-xs flex-1"
+                />
+                <button type="button" onClick={handleSetBgVideoUrl} className="btn-secondary text-xs px-2.5 flex-shrink-0">Set</button>
+              </div>
+              {backgroundVideoUrl && (
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-xs text-gray-500 whitespace-nowrap">Opacity</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={backgroundVideoOpacity}
+                    onChange={e => onBackgroundVideoOpacityChange(Number(e.target.value))}
+                    className="flex-1 accent-brand-secondary"
+                  />
+                  <span className="text-xs text-gray-500 w-9 text-right tabular-nums">{backgroundVideoOpacity}%</span>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-gray-100 pt-4 space-y-2">
               <p className="text-xs font-semibold text-gray-500">Add Elements</p>
               <p className="text-xs text-gray-400">Drag to reposition, drag the corners/edges to resize. Applies to the form card too.</p>
               <button
@@ -299,6 +466,27 @@ export function FormEditDrawer({
                 {uploading ? 'Uploading…' : '+ Add Image'}
               </button>
               <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={handleFileChange} />
+              <button
+                type="button"
+                disabled={uploadingVideo}
+                onClick={() => videoFileRef.current?.click()}
+                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold border border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                {uploadingVideo ? 'Uploading…' : '+ Add Video'}
+              </button>
+              <input ref={videoFileRef} type="file" accept="video/*" className="hidden" onChange={handleVideoFileChange} />
+              <div className="flex gap-1.5">
+                <input
+                  type="url"
+                  value={videoUrlInput}
+                  onChange={e => setVideoUrlInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddVideoUrl(); } }}
+                  placeholder="or paste a video URL (MP4, YouTube, Vimeo…)"
+                  className="input-field text-xs flex-1"
+                />
+                <button type="button" onClick={handleAddVideoUrl} className="btn-secondary text-xs px-2.5 flex-shrink-0">Add</button>
+              </div>
               <button
                 type="button"
                 onClick={onAddText}

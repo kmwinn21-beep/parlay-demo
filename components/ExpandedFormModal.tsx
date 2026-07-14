@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import { compressImage } from './DashboardActionCard';
 import { RichTextEditor, getEditorExtensions } from './RichTextEditor';
 import { FormEditDrawer } from './FormEditDrawer';
+import { resolveVideoEmbed } from '@/lib/videoEmbed';
 
 export interface FormField {
   id: number;
@@ -41,6 +42,10 @@ export interface ConferenceForm {
   form_z_index: number;
   background_image_url: string | null;
   background_image_opacity: number | null;
+  background_video_url: string | null;
+  background_video_opacity: number | null;
+  eyebrow_color: string | null;
+  submit_button_color: string | null;
   panel_logo_url: string | null;
   created_by: string | null;
   created_at: string;
@@ -52,7 +57,7 @@ export interface ConferenceForm {
 interface FormElement {
   id: number;
   conference_form_id: number;
-  element_type: 'image' | 'text';
+  element_type: 'image' | 'text' | 'video';
   x: number;
   y: number;
   width: number;
@@ -137,8 +142,9 @@ function isColorLight(hex: string): boolean {
   return (r * 299 + g * 587 + b * 114) / 1000 > 160;
 }
 
-function ImageElementCanvas({ src, objectFit, focalX, focalY, isEditMode, onFocalCommit }: {
+function MediaElementCanvas({ src, mediaType, objectFit, focalX, focalY, isEditMode, onFocalCommit }: {
   src: string;
+  mediaType: 'image' | 'video';
   objectFit: 'contain' | 'cover';
   focalX: number;
   focalY: number;
@@ -154,7 +160,9 @@ function ImageElementCanvas({ src, objectFit, focalX, focalY, isEditMode, onFoca
   // Sync from server once persisted — but not mid-drag, or the commit would snap back
   useEffect(() => { if (!isDragging) setLocalFocal({ x: focalX, y: focalY }); }, [focalX, focalY, isDragging]);
 
-  const cropMode = objectFit === 'cover' && isEditMode;
+  const embed = mediaType === 'video' ? resolveVideoEmbed(src) : null;
+  const isIframeEmbed = embed?.type === 'iframe';
+  const cropMode = objectFit === 'cover' && isEditMode && !isIframeEmbed;
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!cropMode) return;
@@ -193,7 +201,7 @@ function ImageElementCanvas({ src, objectFit, focalX, focalY, isEditMode, onFoca
   if (!src || error) {
     return (
       <div className="w-full h-full rounded-xl flex items-center justify-center border-2 border-dashed border-white/30 text-white/40">
-        <span className="text-sm font-semibold tracking-wide">Image</span>
+        <span className="text-sm font-semibold tracking-wide">{mediaType === 'video' ? 'Video' : 'Image'}</span>
       </div>
     );
   }
@@ -204,14 +212,35 @@ function ImageElementCanvas({ src, objectFit, focalX, focalY, isEditMode, onFoca
       className="relative w-full h-full overflow-hidden rounded-xl"
       style={{ cursor: cropMode ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
     >
-      <img
-        src={src}
-        alt=""
-        draggable={false}
-        onError={() => setError(true)}
-        className="w-full h-full pointer-events-none"
-        style={{ objectFit, objectPosition: `${localFocal.x}% ${localFocal.y}%` }}
-      />
+      {mediaType === 'video' ? (
+        isIframeEmbed ? (
+          <iframe
+            src={embed!.src}
+            className="w-full h-full"
+            style={{ border: 0, pointerEvents: isEditMode ? 'none' : 'auto' }}
+            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+            allowFullScreen
+          />
+        ) : (
+          <video
+            src={src}
+            onError={() => setError(true)}
+            className="w-full h-full"
+            style={{ objectFit, objectPosition: `${localFocal.x}% ${localFocal.y}%`, pointerEvents: isEditMode ? 'none' : 'auto' }}
+            controls={!isEditMode}
+            playsInline
+          />
+        )
+      ) : (
+        <img
+          src={src}
+          alt=""
+          draggable={false}
+          onError={() => setError(true)}
+          className="w-full h-full pointer-events-none"
+          style={{ objectFit, objectPosition: `${localFocal.x}% ${localFocal.y}%` }}
+        />
+      )}
       {cropMode && !isDragging && (
         <div className="absolute bottom-1.5 right-1.5 text-[10px] text-white/80 bg-black/45 rounded px-1.5 py-0.5 pointer-events-none">
           drag to reposition
@@ -283,6 +312,10 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
     form_z_index: form.form_z_index ?? 1000,
     background_image_url: form.background_image_url,
     background_image_opacity: form.background_image_opacity ?? 100,
+    background_video_url: form.background_video_url,
+    background_video_opacity: form.background_video_opacity ?? 100,
+    eyebrow_color: form.eyebrow_color,
+    submit_button_color: form.submit_button_color,
   });
   const metaTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const elementTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
@@ -370,12 +403,12 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
     });
   }, [elements, formMeta.form_z_index, form.id, patchFormMeta]);
 
-  const addElement = useCallback(async (element_type: 'image' | 'text', content: string) => {
+  const addElement = useCallback(async (element_type: 'image' | 'text' | 'video', content: string) => {
     const base = {
       element_type,
       x: 60, y: 60,
-      width: element_type === 'image' ? 300 : 280,
-      height: element_type === 'image' ? 220 : 180,
+      width: element_type === 'text' ? 280 : 300,
+      height: element_type === 'text' ? 180 : 220,
       z_index: elements.length,
       content,
     };
@@ -615,6 +648,9 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
   const inputBg = cardIsLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.12)';
   const inputBorder = cardIsLight ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.25)';
   const inputText = cardIsLight ? '#1a1a1a' : '#ffffff';
+  const eyebrowColor = formMeta.eyebrow_color || textColor;
+  const submitBg = formMeta.submit_button_color || (cardIsLight ? '#0B3C62' : '#ffffff');
+  const submitTextColor = isColorLight(submitBg) ? '#0B3C62' : '#ffffff';
 
   // Page accent colors
   const accentColor = formMeta.accent_color;
@@ -846,7 +882,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
       {/* Card header */}
       <div className="px-6 pt-6 pb-3 text-center">
         <h2 className="text-xl font-bold font-serif" style={{ color: textColor }}>{formMeta.name}</h2>
-        <p className="text-xs mt-0.5 opacity-70" style={{ color: textColor }}>{conferenceName}</p>
+        <p className="text-xs mt-0.5 opacity-70" style={{ color: eyebrowColor }}>{conferenceName}</p>
         {form.conference_logo_url && (
           <div className="flex justify-center mt-3">
             <img src={form.conference_logo_url} alt="Conference Logo" className="h-14 w-auto object-contain" />
@@ -917,7 +953,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
           type="submit"
           disabled={submitting}
           className="w-full py-3 rounded-xl text-sm font-bold transition-all hover:opacity-90 disabled:opacity-50"
-          style={{ background: cardIsLight ? '#0B3C62' : '#ffffff', color: cardIsLight ? '#ffffff' : '#0B3C62' }}
+          style={{ background: submitBg, color: submitTextColor }}
         >
           {submitting ? 'Submitting…' : 'Submit'}
         </button>
@@ -943,8 +979,28 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
         transition: 'background 0.3s ease',
       }}
     >
-      {/* Full-bleed background image, drawn beneath the page background color/gradient */}
-      {formMeta.background_image_url && (
+      {/* Full-bleed background media, drawn beneath the page background color/gradient.
+          A background video, if set, takes precedence over a background image. */}
+      {formMeta.background_video_url ? (
+        resolveVideoEmbed(formMeta.background_video_url, { background: true }).type === 'iframe' ? (
+          <iframe
+            src={resolveVideoEmbed(formMeta.background_video_url, { background: true }).src}
+            className="absolute inset-0 w-full h-full pointer-events-none"
+            style={{ border: 0, opacity: formMeta.background_video_opacity / 100 }}
+            allow="autoplay; encrypted-media; picture-in-picture"
+          />
+        ) : (
+          <video
+            src={formMeta.background_video_url}
+            className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+            style={{ opacity: formMeta.background_video_opacity / 100 }}
+            autoPlay
+            muted
+            loop
+            playsInline
+          />
+        )
+      ) : formMeta.background_image_url && (
         <img
           src={formMeta.background_image_url}
           alt=""
@@ -1003,11 +1059,11 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
                       <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="8" cy="6" r="1.4" /><circle cx="16" cy="6" r="1.4" /><circle cx="8" cy="12" r="1.4" /><circle cx="16" cy="12" r="1.4" /><circle cx="8" cy="18" r="1.4" /><circle cx="16" cy="18" r="1.4" /></svg>
                     </div>
                     <div className="flex items-center gap-0.5 px-1">
-                      {el.element_type === 'image' && (
+                      {(el.element_type === 'image' || (el.element_type === 'video' && resolveVideoEmbed(el.content || '').type === 'direct')) && (
                         <button
                           type="button"
                           onClick={() => updateElement(el.id, { object_fit: el.object_fit === 'cover' ? 'contain' : 'cover' })}
-                          title={el.object_fit === 'cover' ? 'Stop cropping (fit full image)' : 'Crop image'}
+                          title={el.object_fit === 'cover' ? 'Stop cropping (fit full media)' : 'Crop'}
                           className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${el.object_fit === 'cover' ? 'text-brand-highlight' : 'text-white/70 hover:text-white'}`}
                         >
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 2v14a2 2 0 002 2h14M18 22V8a2 2 0 00-2-2H2" /></svg>
@@ -1036,9 +1092,10 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
                     </div>
                   </div>
                 )}
-                {el.element_type === 'image' ? (
-                  <ImageElementCanvas
+                {el.element_type === 'image' || el.element_type === 'video' ? (
+                  <MediaElementCanvas
                     src={el.content || ''}
+                    mediaType={el.element_type}
                     objectFit={el.object_fit}
                     focalX={el.focal_x}
                     focalY={el.focal_y}
@@ -1117,7 +1174,16 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
             onBackgroundImageChange={url => patchFormMeta({ background_image_url: url })}
             backgroundImageOpacity={formMeta.background_image_opacity}
             onBackgroundImageOpacityChange={v => patchFormMeta({ background_image_opacity: v }, 'bgOpacity')}
+            backgroundVideoUrl={formMeta.background_video_url}
+            onBackgroundVideoChange={url => patchFormMeta({ background_video_url: url })}
+            backgroundVideoOpacity={formMeta.background_video_opacity}
+            onBackgroundVideoOpacityChange={v => patchFormMeta({ background_video_opacity: v }, 'bgVideoOpacity')}
+            eyebrowColor={formMeta.eyebrow_color}
+            onEyebrowColorChange={v => patchFormMeta({ eyebrow_color: v }, 'eyebrow')}
+            submitButtonColor={formMeta.submit_button_color}
+            onSubmitButtonColorChange={v => patchFormMeta({ submit_button_color: v }, 'submitBtn')}
             onAddImage={url => addElement('image', url)}
+            onAddVideo={url => addElement('video', url)}
             onAddText={() => addElement('text', '<p>New text</p>')}
           />
         </div>

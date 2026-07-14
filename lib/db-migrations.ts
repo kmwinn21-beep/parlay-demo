@@ -1453,4 +1453,42 @@ export const migrations: string[] = [
   // front/back layering stack as its canvas elements (images/text), instead of always
   // rendering above them. Defaults high so existing forms keep their prior on-top behavior.
   `ALTER TABLE conference_forms ADD COLUMN form_z_index INTEGER NOT NULL DEFAULT 1000`,
+  // 486 — form_elements: widen element_type to allow 'video' alongside 'image'/'text'.
+  // SQLite can't alter an existing CHECK constraint in place, so the table is recreated
+  // with the wider constraint and its rows copied across (RENAME preserves the
+  // AUTOINCREMENT sequence, so existing element ids are unaffected).
+  `CREATE TABLE form_elements_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conference_form_id INTEGER NOT NULL REFERENCES conference_forms(id) ON DELETE CASCADE,
+    element_type TEXT NOT NULL CHECK(element_type IN ('image','text','video')),
+    x REAL NOT NULL DEFAULT 40,
+    y REAL NOT NULL DEFAULT 40,
+    width REAL NOT NULL DEFAULT 280,
+    height REAL NOT NULL DEFAULT 200,
+    z_index INTEGER NOT NULL DEFAULT 0,
+    content TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    object_fit TEXT NOT NULL DEFAULT 'contain',
+    focal_x REAL NOT NULL DEFAULT 50,
+    focal_y REAL NOT NULL DEFAULT 50
+  )`,
+  `INSERT INTO form_elements_new
+     (id, conference_form_id, element_type, x, y, width, height, z_index, content, created_at, object_fit, focal_x, focal_y)
+   SELECT id, conference_form_id, element_type, x, y, width, height, z_index, content, created_at, object_fit, focal_x, focal_y
+   FROM form_elements`,
+  `DROP TABLE form_elements`,
+  `ALTER TABLE form_elements_new RENAME TO form_elements`,
+  `CREATE INDEX IF NOT EXISTS idx_form_elements_form ON form_elements(conference_form_id)`,
+  // 487 — conference_forms: optional full-bleed background video (parallel to
+  // background_image_url), with its own opacity so switching between a background image
+  // and a background video doesn't clobber either one's saved settings. If both are set,
+  // the video takes precedence.
+  `ALTER TABLE conference_forms ADD COLUMN background_video_url TEXT`,
+  `ALTER TABLE conference_forms ADD COLUMN background_video_opacity REAL`,
+  // 488 — conference_forms: optional overrides for the small "eyebrow" caption text under
+  // the form name and for the submit button's background color. Null means "use the
+  // automatic default" (matches the form card's text color / auto-contrasts it), same
+  // fallback behavior as before these were configurable.
+  `ALTER TABLE conference_forms ADD COLUMN eyebrow_color TEXT`,
+  `ALTER TABLE conference_forms ADD COLUMN submit_button_color TEXT`,
 ];
