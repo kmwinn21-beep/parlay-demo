@@ -56,6 +56,23 @@ const DOCK_ANIM: Record<DockSide, string> = {
   bottom: 'slideInBottom 200ms ease-out',
 };
 
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border-t border-gray-100 pt-4 first:border-t-0 first:pt-0">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 hover:text-gray-700 transition-colors"
+      >
+        {title}
+        <svg className={`w-3.5 h-3.5 transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+      </button>
+      {open && <div className="mt-2 space-y-2">{children}</div>}
+    </div>
+  );
+}
+
 export function FormEditDrawer({
   formId,
   isEditMode,
@@ -86,10 +103,11 @@ export function FormEditDrawer({
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [uploadingBg, setUploadingBg] = useState(false);
   const [uploadingBgVideo, setUploadingBgVideo] = useState(false);
+  const [imageUrlInput, setImageUrlInput] = useState('');
   const [videoUrlInput, setVideoUrlInput] = useState('');
+  const [bgImageUrlInput, setBgImageUrlInput] = useState('');
   const [bgVideoUrlInput, setBgVideoUrlInput] = useState('');
   const [dockSide, setDockSide] = useState<DockSide>('left');
-  const [brandColorsOpen, setBrandColorsOpen] = useState(false);
   const [brandColors, setBrandColors] = useState<Record<BrandColorKey, string>>({ ...BRAND_COLOR_DEFAULTS });
   const fileRef = useRef<HTMLInputElement>(null);
   const videoFileRef = useRef<HTMLInputElement>(null);
@@ -190,6 +208,20 @@ export function FormEditDrawer({
     setUploadingBgVideo(false);
   };
 
+  const handleAddImageUrl = () => {
+    const url = imageUrlInput.trim();
+    if (!url) return;
+    onAddImage(url);
+    setImageUrlInput('');
+  };
+
+  const handleSetBgImageUrl = () => {
+    const url = bgImageUrlInput.trim();
+    if (!url) return;
+    onBackgroundImageChange(url);
+    setBgImageUrlInput('');
+  };
+
   const handleAddVideoUrl = () => {
     const url = videoUrlInput.trim();
     if (!url) return;
@@ -258,107 +290,95 @@ export function FormEditDrawer({
             </div>
           </div>
 
-          <div className="p-5 space-y-5">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Form Name</label>
+          <div className="p-5">
+            <Section title="Form Name">
               <input
                 type="text"
                 value={name}
                 onChange={e => onNameChange(e.target.value)}
                 className="input-field text-sm w-full"
               />
-            </div>
+            </Section>
 
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Form Card Color</label>
+            <Section title="Form Card Color">
               <div className="flex gap-2 items-center">
                 <input type="color" value={backgroundColor} onChange={e => onBackgroundColorChange(e.target.value)} className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white" />
                 <input type="text" value={backgroundColor} onChange={e => onBackgroundColorChange(e.target.value)} className="input-field text-sm flex-1" placeholder="#0B3C62" />
               </div>
-            </div>
+            </Section>
 
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Page Background Color</label>
+            <Section title="Page Background Color">
               <div className="flex gap-2 items-center">
                 <input type="color" value={accentColor} onChange={e => onAccentColorChange(e.target.value)} className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white" />
                 <input type="text" value={accentColor} onChange={e => onAccentColorChange(e.target.value)} className="input-field text-sm flex-1" placeholder="#FFCB3F" />
               </div>
-            </div>
+            </Section>
 
-            <div>
-              <button
-                type="button"
-                onClick={() => setBrandColorsOpen(v => !v)}
-                className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 hover:text-gray-700 transition-colors"
-              >
-                Brand Colors
-                <svg className={`w-3.5 h-3.5 transition-transform ${brandColorsOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-              </button>
-              {brandColorsOpen && (
-                <div className="mt-2 space-y-3">
-                  <div>
-                    <p className="text-xs text-gray-400 mb-1">Apply to Form Card Color</p>
-                    <div className="flex gap-2">
-                      {BRAND_SWATCH_KEYS.map(key => (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={() => onBackgroundColorChange(brandColors[key])}
-                          title={BRAND_COLOR_META[key].label}
-                          className="w-8 h-8 rounded-full border border-gray-300 hover:ring-2 hover:ring-brand-secondary transition-all flex-shrink-0"
-                          style={{ backgroundColor: brandColors[key] }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400 mb-1">Apply to Page Background Color</p>
-                    <div className="flex gap-2">
-                      {BRAND_SWATCH_KEYS.map(key => (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={() => onAccentColorChange(brandColors[key])}
-                          title={BRAND_COLOR_META[key].label}
-                          className="w-8 h-8 rounded-full border border-gray-300 hover:ring-2 hover:ring-brand-secondary transition-all flex-shrink-0"
-                          style={{ backgroundColor: brandColors[key] }}
-                        />
-                      ))}
-                    </div>
+            <Section title="Brand Colors">
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Apply to Form Card Color</p>
+                  <div className="flex gap-2">
+                    {BRAND_SWATCH_KEYS.map(key => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => onBackgroundColorChange(brandColors[key])}
+                        title={BRAND_COLOR_META[key].label}
+                        className="w-8 h-8 rounded-full border border-gray-300 hover:ring-2 hover:ring-brand-secondary transition-all flex-shrink-0"
+                        style={{ backgroundColor: brandColors[key] }}
+                      />
+                    ))}
                   </div>
                 </div>
-              )}
-            </div>
-
-            <div className="border-t border-gray-100 pt-4 space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-semibold text-gray-500">Eyebrow Text Color</label>
-                  {eyebrowColor && (
-                    <button type="button" onClick={() => onEyebrowColorChange(null)} className="text-xs text-gray-400 hover:text-gray-600">Reset</button>
-                  )}
-                </div>
-                <div className="flex gap-2 items-center">
-                  <input type="color" value={eyebrowColor || '#ffffff'} onChange={e => onEyebrowColorChange(e.target.value)} className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white" />
-                  <input type="text" value={eyebrowColor || ''} onChange={e => onEyebrowColorChange(e.target.value)} className="input-field text-sm flex-1" placeholder="Matches Form Card Color text" />
-                </div>
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-semibold text-gray-500">Submit Button Color</label>
-                  {submitButtonColor && (
-                    <button type="button" onClick={() => onSubmitButtonColorChange(null)} className="text-xs text-gray-400 hover:text-gray-600">Reset</button>
-                  )}
-                </div>
-                <div className="flex gap-2 items-center">
-                  <input type="color" value={submitButtonColor || '#0B3C62'} onChange={e => onSubmitButtonColorChange(e.target.value)} className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white" />
-                  <input type="text" value={submitButtonColor || ''} onChange={e => onSubmitButtonColorChange(e.target.value)} className="input-field text-sm flex-1" placeholder="Auto (contrasts Form Card Color)" />
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Apply to Page Background Color</p>
+                  <div className="flex gap-2">
+                    {BRAND_SWATCH_KEYS.map(key => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => onAccentColorChange(brandColors[key])}
+                        title={BRAND_COLOR_META[key].label}
+                        className="w-8 h-8 rounded-full border border-gray-300 hover:ring-2 hover:ring-brand-secondary transition-all flex-shrink-0"
+                        style={{ backgroundColor: brandColors[key] }}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
+            </Section>
 
-            <div className="border-t border-gray-100 pt-4 space-y-2">
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Background Image</label>
+            <Section title="Text & Button Colors">
+              <div className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-gray-500">Eyebrow Text Color</label>
+                    {eyebrowColor && (
+                      <button type="button" onClick={() => onEyebrowColorChange(null)} className="text-xs text-gray-400 hover:text-gray-600">Reset</button>
+                    )}
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <input type="color" value={eyebrowColor || '#ffffff'} onChange={e => onEyebrowColorChange(e.target.value)} className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white" />
+                    <input type="text" value={eyebrowColor || ''} onChange={e => onEyebrowColorChange(e.target.value)} className="input-field text-sm flex-1" placeholder="Matches Form Card Color text" />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-gray-500">Submit Button Color</label>
+                    {submitButtonColor && (
+                      <button type="button" onClick={() => onSubmitButtonColorChange(null)} className="text-xs text-gray-400 hover:text-gray-600">Reset</button>
+                    )}
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <input type="color" value={submitButtonColor || '#0B3C62'} onChange={e => onSubmitButtonColorChange(e.target.value)} className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white" />
+                    <input type="text" value={submitButtonColor || ''} onChange={e => onSubmitButtonColorChange(e.target.value)} className="input-field text-sm flex-1" placeholder="Auto (contrasts Form Card Color)" />
+                  </div>
+                </div>
+              </div>
+            </Section>
+
+            <Section title="Background Image">
               {backgroundImageUrl && (
                 <div className="relative">
                   <img src={backgroundImageUrl} alt="Background preview" className="w-full h-20 object-cover rounded-lg border border-gray-200" />
@@ -382,6 +402,17 @@ export function FormEditDrawer({
                 {uploadingBg ? 'Uploading…' : backgroundImageUrl ? 'Replace Background Image' : '+ Add Background Image'}
               </button>
               <input ref={bgFileRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={handleBgFileChange} />
+              <div className="flex gap-1.5">
+                <input
+                  type="url"
+                  value={bgImageUrlInput}
+                  onChange={e => setBgImageUrlInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSetBgImageUrl(); } }}
+                  placeholder="or paste an image URL"
+                  className="input-field text-xs flex-1"
+                />
+                <button type="button" onClick={handleSetBgImageUrl} className="btn-secondary text-xs px-2.5 flex-shrink-0">Set</button>
+              </div>
               {backgroundImageUrl && (
                 <div className="flex items-center gap-2 pt-1">
                   <span className="text-xs text-gray-500 whitespace-nowrap">Opacity</span>
@@ -396,13 +427,12 @@ export function FormEditDrawer({
                   <span className="text-xs text-gray-500 w-9 text-right tabular-nums">{backgroundImageOpacity}%</span>
                 </div>
               )}
-            </div>
+            </Section>
 
-            <div className="border-t border-gray-100 pt-4 space-y-2">
-              <label className="block text-xs font-semibold text-gray-500 mb-1">
-                Background Video
-                {backgroundVideoUrl && <span className="font-normal text-gray-400 ml-1">(takes precedence over Background Image)</span>}
-              </label>
+            <Section title="Background Video">
+              {backgroundVideoUrl && (
+                <p className="text-xs text-gray-400">Takes precedence over Background Image</p>
+              )}
               {backgroundVideoUrl && (
                 <div className="relative">
                   <video src={backgroundVideoUrl} className="w-full h-20 object-cover rounded-lg border border-gray-200" muted loop autoPlay playsInline />
@@ -451,10 +481,9 @@ export function FormEditDrawer({
                   <span className="text-xs text-gray-500 w-9 text-right tabular-nums">{backgroundVideoOpacity}%</span>
                 </div>
               )}
-            </div>
+            </Section>
 
-            <div className="border-t border-gray-100 pt-4 space-y-2">
-              <p className="text-xs font-semibold text-gray-500">Add Elements</p>
+            <Section title="Add Elements">
               <p className="text-xs text-gray-400">Drag to reposition, drag the corners/edges to resize. Applies to the form card too.</p>
               <button
                 type="button"
@@ -466,6 +495,17 @@ export function FormEditDrawer({
                 {uploading ? 'Uploading…' : '+ Add Image'}
               </button>
               <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={handleFileChange} />
+              <div className="flex gap-1.5">
+                <input
+                  type="url"
+                  value={imageUrlInput}
+                  onChange={e => setImageUrlInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddImageUrl(); } }}
+                  placeholder="or paste an image URL"
+                  className="input-field text-xs flex-1"
+                />
+                <button type="button" onClick={handleAddImageUrl} className="btn-secondary text-xs px-2.5 flex-shrink-0">Add</button>
+              </div>
               <button
                 type="button"
                 disabled={uploadingVideo}
@@ -495,7 +535,7 @@ export function FormEditDrawer({
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" /></svg>
                 + Add Text
               </button>
-            </div>
+            </Section>
           </div>
         </div>
       )}
