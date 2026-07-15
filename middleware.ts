@@ -27,6 +27,9 @@ const isPublicRoute = createRouteMatcher([
   '/ops-login',
   '/ops(.*)',
   '/api/ops/(.*)',
+  // Public self-serve conference form — gated by its own public_token, not a session
+  '/forms(.*)',
+  '/api/public/(.*)',
 ]);
 
 const isAdminRoute = createRouteMatcher(['/admin(.*)']);

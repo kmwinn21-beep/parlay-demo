@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { ExpandedFormModal, buildAccentBackground, type FormField, type ConferenceForm } from './ExpandedFormModal';
 import { FormBuilderModal } from './FormBuilderModal';
+import { useUser } from './UserContext';
 
 function getCssVarHex(varName: string, fallback: string): string {
   if (typeof window === 'undefined') return fallback;
@@ -64,6 +65,7 @@ function fmtDate(d?: string) {
 }
 
 export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, isAdmin, currentUserEmail }: Props) {
+  const { user } = useUser();
   const [forms, setForms] = useState<ConferenceForm[]>([]);
   const [templates, setTemplates] = useState<FormTemplate[]>([]);
   const [statusOptions, setStatusOptions] = useState<StatusOption[]>([]);
@@ -108,6 +110,32 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
   const [selectedDupConfs, setSelectedDupConfs] = useState<Set<number>>(new Set());
   const [duplicating, setDuplicating] = useState(false);
   const dupDropRef = useRef<HTMLDivElement>(null);
+
+  // Public link
+  const [publicLinkFormId, setPublicLinkFormId] = useState<number | null>(null);
+  const [publicLinkDropPos, setPublicLinkDropPos] = useState<{ top: number; left: number } | null>(null);
+  const [togglingPublic, setTogglingPublic] = useState(false);
+  const publicLinkDropRef = useRef<HTMLDivElement>(null);
+
+  const openPublicLinkDropdown = useCallback((formId: number, anchor: HTMLElement) => {
+    const buttonRect = anchor.getBoundingClientRect();
+    const cardRect = (anchor.closest('.card') ?? anchor).getBoundingClientRect();
+    const width = 300;
+    const margin = 12;
+    let left = buttonRect.right + 8;
+    if (left + width + margin > window.innerWidth) left = buttonRect.left - width - 8;
+    setPublicLinkDropPos({ top: cardRect.top, left: Math.max(margin, left) });
+    setPublicLinkFormId(prev => (prev === formId ? null : formId));
+  }, []);
+
+  useEffect(() => {
+    if (publicLinkFormId === null) return;
+    const handler = (e: MouseEvent) => {
+      if (publicLinkDropRef.current && !publicLinkDropRef.current.contains(e.target as Node)) setPublicLinkFormId(null);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [publicLinkFormId]);
 
   const openDuplicateDropdown = useCallback(async (formId: number, anchor: HTMLElement) => {
     const buttonRect = anchor.getBoundingClientRect();
@@ -163,6 +191,38 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
       toast.error('Failed to duplicate form');
     } finally {
       setDuplicating(false);
+    }
+  };
+
+  const handleTogglePublic = async (form: ConferenceForm) => {
+    setTogglingPublic(true);
+    try {
+      const res = await fetch(`/api/conference-forms/${form.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_public: !form.is_public }),
+      });
+      if (!res.ok) throw new Error();
+      await loadForms();
+    } catch {
+      toast.error('Failed to update public link');
+    } finally {
+      setTogglingPublic(false);
+    }
+  };
+
+  const publicFormUrl = (form: ConferenceForm) => {
+    if (!form.public_token) return '';
+    const aid = user?.accountId || 'master';
+    return `${window.location.origin}/forms?token=${form.public_token}&aid=${aid}`;
+  };
+
+  const handleCopyPublicLink = async (form: ConferenceForm) => {
+    try {
+      await navigator.clipboard.writeText(publicFormUrl(form));
+      toast.success('Link copied');
+    } catch {
+      toast.error('Failed to copy link');
     }
   };
 
@@ -626,6 +686,47 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
                             {duplicating ? 'Duplicating…' : `Duplicate${selectedDupConfs.size > 0 ? ` (${selectedDupConfs.size})` : ''}`}
                           </button>
                           <button type="button" onClick={() => setDuplicatingFormId(null)} className="btn-secondary text-xs px-3 py-1.5">Cancel</button>
+                        </div>
+                      </div>,
+                      document.body
+                    )}
+                    {/* Public self-serve link */}
+                    <button
+                      type="button"
+                      onClick={e => openPublicLinkDropdown(form.id, e.currentTarget)}
+                      title="Public link"
+                      className={`p-2 rounded-lg transition-colors ${form.is_public ? 'text-green-600 hover:bg-green-50' : 'text-gray-400 hover:text-brand-secondary hover:bg-blue-50'}`}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 010 5.656l-4 4a4 4 0 01-5.656-5.656l1.5-1.5M10.172 13.828a4 4 0 010-5.656l4-4a4 4 0 015.656 5.656l-1.5 1.5" /></svg>
+                    </button>
+                    {publicLinkFormId === form.id && publicLinkDropPos && createPortal(
+                      <div
+                        ref={publicLinkDropRef}
+                        className="fixed z-[10000] w-[300px] bg-white border border-gray-200 rounded-lg shadow-xl"
+                        style={{ top: publicLinkDropPos.top, left: publicLinkDropPos.left }}
+                      >
+                        <p className="px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-100">Public Link</p>
+                        <div className="p-3 space-y-3">
+                          <label className="flex items-center justify-between gap-2 cursor-pointer">
+                            <span className="text-sm text-gray-700">Anyone with the link can submit</span>
+                            <button
+                              type="button"
+                              onClick={() => handleTogglePublic(form)}
+                              disabled={togglingPublic}
+                              className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${form.is_public ? 'bg-green-500' : 'bg-gray-300'} disabled:opacity-50`}
+                            >
+                              <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${form.is_public ? 'translate-x-4' : ''}`} />
+                            </button>
+                          </label>
+                          {form.is_public && form.public_token && (
+                            <div className="flex gap-1.5">
+                              <input type="text" readOnly value={publicFormUrl(form)} onFocus={e => e.target.select()} className="input-field text-xs flex-1 truncate" />
+                              <button type="button" onClick={() => handleCopyPublicLink(form)} className="btn-secondary text-xs px-2.5 flex-shrink-0">Copy</button>
+                            </div>
+                          )}
+                          <p className="text-xs text-gray-400">
+                            No sign-in required. Submitters enter their own name, title, and company by hand.
+                          </p>
                         </div>
                       </div>,
                       document.body

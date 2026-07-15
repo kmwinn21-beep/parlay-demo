@@ -14,6 +14,7 @@ export interface AuthUser {
   firstName: string | null;
   demoVisitor?: boolean;
   capabilities?: Record<string, boolean>;
+  accountId?: string;
 }
 
 interface UserContextValue {

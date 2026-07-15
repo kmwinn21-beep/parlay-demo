@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomBytes } from 'crypto';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { validateConferenceStage } from '@/lib/validate-conference-stage';
@@ -9,7 +10,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   const db = await getDb(authResult?.accountId);
   try {
     const formRow = await db.execute({
-      sql: 'SELECT conference_id FROM conference_forms WHERE id = ?',
+      sql: 'SELECT conference_id, public_token FROM conference_forms WHERE id = ?',
       args: [params.id],
     });
     if (formRow.rows[0]?.conference_id != null) {
@@ -21,10 +22,18 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
             image_offset_y, html_offset_y, form_width, form_height, form_offset_y, form_x,
             form_z_index, background_image_url, background_image_opacity,
             background_video_url, background_video_opacity,
-            eyebrow_color, submit_button_color,
+            eyebrow_color, submit_button_color, is_public,
             panel_logo_url } = await request.json();
     const sets: string[] = [];
     const args: (string | number | null)[] = [];
+    if (is_public !== undefined) {
+      sets.push('is_public = ?');
+      args.push(is_public ? 1 : 0);
+      if (is_public && !formRow.rows[0]?.public_token) {
+        sets.push('public_token = ?');
+        args.push(randomBytes(16).toString('hex'));
+      }
+    }
     if (name !== undefined) { sets.push('name = ?'); args.push(name.trim()); }
     if (conference_logo_url !== undefined) { sets.push('conference_logo_url = ?'); args.push(conference_logo_url || null); }
     if (background_color !== undefined) { sets.push('background_color = ?'); args.push(background_color || null); }

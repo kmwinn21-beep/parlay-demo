@@ -46,6 +46,8 @@ export interface ConferenceForm {
   background_video_opacity: number | null;
   eyebrow_color: string | null;
   submit_button_color: string | null;
+  is_public: boolean;
+  public_token: string | null;
   panel_logo_url: string | null;
   created_by: string | null;
   created_at: string;

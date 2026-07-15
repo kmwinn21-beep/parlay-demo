@@ -1493,4 +1493,9 @@ export const migrations: string[] = [
   `ALTER TABLE conference_forms ADD COLUMN submit_button_color TEXT`,
   // 489 — form_elements: square vs rounded corners for image/video elements.
   `ALTER TABLE form_elements ADD COLUMN corner_style TEXT NOT NULL DEFAULT 'rounded'`,
+  // 490 — conference_forms: optional public self-serve link. is_public gates the public API
+  // routes; public_token is a stable (non-expiring, reusable) share token, unlike the
+  // one-time input_request_tokens — a form is meant to be filled out by many attendees.
+  `ALTER TABLE conference_forms ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE conference_forms ADD COLUMN public_token TEXT UNIQUE`,
 ];
