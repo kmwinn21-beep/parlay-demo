@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
     const subsRes = await db.execute({
       sql: `SELECT fs.id, fs.conference_form_id, fs.conference_id, fs.attendee_id, fs.submitted_at,
-                   fs.status_option_id, co.value as status_value,
+                   fs.status_option_id, fs.submission_source, co.value as status_value,
                    c.name as conference_name,
                    a.company_id
             FROM form_submissions fs
@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
         submitted_at: String(s.submitted_at),
         status_option_id: s.status_option_id ? Number(s.status_option_id) : null,
         status_value: s.status_value ? String(s.status_value) : null,
+        submission_source: s.submission_source ? String(s.submission_source) : 'manual',
         conference_name: String(s.conference_name),
         values: valsRes.rows.map(v => ({
           field_id: v.field_id ? Number(v.field_id) : null,

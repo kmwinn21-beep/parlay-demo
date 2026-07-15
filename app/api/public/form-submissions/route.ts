@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
     const conferenceName = confRow.rows.length > 0 ? String(confRow.rows[0].name) : '';
 
     const subResult = await db.execute({
-      sql: `INSERT INTO form_submissions (conference_form_id, conference_id, attendee_id) VALUES (?, ?, ?) RETURNING id`,
+      sql: `INSERT INTO form_submissions (conference_form_id, conference_id, attendee_id, submission_source) VALUES (?, ?, ?, 'public_link') RETURNING id`,
       args: [conference_form_id, conference_id, resolvedAttendeeId],
     });
     const submissionId = Number(subResult.rows[0].id);

@@ -1509,4 +1509,7 @@ export const migrations: string[] = [
   // via a partial unique index (ignores NULLs, so non-public forms are unaffected).
   `ALTER TABLE conference_forms ADD COLUMN public_token TEXT`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_conference_forms_public_token ON conference_forms(public_token) WHERE public_token IS NOT NULL`,
+  // 492 — form_submissions: whether the submission came from a staff member filling the
+  // form out in-app ('manual') or an attendee via the public self-serve link ('public_link').
+  `ALTER TABLE form_submissions ADD COLUMN submission_source TEXT NOT NULL DEFAULT 'manual'`,
 ];
