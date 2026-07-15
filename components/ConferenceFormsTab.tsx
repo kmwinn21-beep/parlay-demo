@@ -393,7 +393,9 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
       const nameVal = sub.values.find(v => v.field_label === 'Name')?.field_value || '';
       const row: (string | number)[] = [sub.conference_name, nameVal];
       for (const f of dataFields) {
-        const v = sub.values.find(vv => vv.field_label === f.label);
+        // Match by field_id first — field_label is a point-in-time snapshot at submission,
+        // so it goes stale (and stops matching) if the field's label is ever renamed later.
+        const v = sub.values.find(vv => vv.field_id === f.id) ?? sub.values.find(vv => vv.field_label === f.label);
         row.push(v?.field_value || '');
       }
       row.push(sub.submitted_at ? new Date(sub.submitted_at).toLocaleString() : '');
@@ -431,7 +433,9 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
   // before, email/notes fields collapse to an icon that opens a small popover instead of
   // showing (and truncating) the raw text inline.
   const renderFieldValue = (f: FormField, sub: Submission, key: string) => {
-    const v = sub.values.find(vv => vv.field_label === f.label);
+    // Match by field_id first — field_label is a point-in-time snapshot at submission, so
+    // it goes stale (and stops matching) if the field's label is ever renamed later.
+    const v = sub.values.find(vv => vv.field_id === f.id) ?? sub.values.find(vv => vv.field_label === f.label);
     const isCompany = f.field_key === 'company' || f.label.toLowerCase() === 'company';
     const isEmail = f.field_key === 'email' || f.label.toLowerCase().includes('email');
     const isNotes = f.field_key === 'notes' || f.label.toLowerCase().includes('note');
