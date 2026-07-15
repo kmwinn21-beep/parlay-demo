@@ -414,11 +414,16 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
     // contiguous (elements can be removed, or start from the migration backfill's fixed
     // values), so elements.length is not a reliable "next" value.
     const nextZ = elements.length > 0 ? Math.max(...elements.map(e => e.z_index)) + 1 : 0;
+    const width = element_type === 'text' ? 280 : 300;
+    const height = element_type === 'text' ? 180 : 220;
+    // Center in the viewport, not a fixed top-left offset — the settings drawer docks over
+    // that corner while editing, which made new elements land hidden behind it.
     const base = {
       element_type,
-      x: 60, y: 60,
-      width: element_type === 'text' ? 280 : 300,
-      height: element_type === 'text' ? 180 : 220,
+      x: Math.max(0, Math.round((window.innerWidth - width) / 2)),
+      y: Math.max(0, Math.round((window.innerHeight - height) / 2)),
+      width,
+      height,
       z_index: nextZ,
       content,
     };

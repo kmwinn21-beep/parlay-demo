@@ -108,6 +108,7 @@ export function FormEditDrawer({
   const [bgImageUrlInput, setBgImageUrlInput] = useState('');
   const [bgVideoUrlInput, setBgVideoUrlInput] = useState('');
   const [dockSide, setDockSide] = useState<DockSide>('left');
+  const [drawerCollapsed, setDrawerCollapsed] = useState(false);
   const [brandColors, setBrandColors] = useState<Record<BrandColorKey, string>>({ ...BRAND_COLOR_DEFAULTS });
   const fileRef = useRef<HTMLInputElement>(null);
   const videoFileRef = useRef<HTMLInputElement>(null);
@@ -126,6 +127,9 @@ export function FormEditDrawer({
       })
       .catch(() => {});
   }, []);
+
+  // Re-collapsing on exit means the panel always opens expanded the next time edit mode starts
+  useEffect(() => { if (!isEditMode) setDrawerCollapsed(false); }, [isEditMode]);
 
   const uploadImage = async (file: File): Promise<string | null> => {
     try {
@@ -238,24 +242,43 @@ export function FormEditDrawer({
 
   return (
     <>
-      {/* Gray "Edit Form" trigger — bottom-left corner */}
+      {/* "Edit Form" trigger — bottom-left corner; icon-only, expands to show its label on hover */}
       <button
         type="button"
         onClick={onToggleEditMode}
-        className="fixed bottom-4 left-4 z-[10001] flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold shadow-md transition-colors"
+        className="group fixed bottom-4 left-4 z-[10001] flex items-center gap-0 group-hover:gap-1.5 px-2.5 py-2 rounded-lg text-xs font-semibold shadow-md transition-colors"
         style={{
-          background: isEditMode ? '#374151' : 'rgba(107,114,128,0.85)',
+          background: isEditMode ? 'rgba(55,65,81,0.55)' : 'rgba(107,114,128,0.35)',
           color: '#fff',
         }}
       >
-        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
         </svg>
-        {isEditMode ? 'Done Editing' : 'Edit Form'}
+        <span className="max-w-0 group-hover:max-w-[8rem] overflow-hidden whitespace-nowrap opacity-0 group-hover:opacity-100 transition-all duration-200">
+          {isEditMode ? 'Done Editing' : 'Edit Form'}
+        </span>
       </button>
 
+      {/* Collapsed-panel restore tab — stays in edit mode, just hides the settings panel */}
+      {isEditMode && drawerCollapsed && (
+        <button
+          type="button"
+          onClick={() => setDrawerCollapsed(false)}
+          title="Show edit panel"
+          className={`fixed z-[10000] flex items-center justify-center px-2 py-3 bg-white shadow-lg text-gray-500 hover:text-brand-secondary transition-colors ${
+            dockSide === 'left' ? 'left-0 top-1/2 -translate-y-1/2 rounded-r-lg' :
+            dockSide === 'right' ? 'right-0 top-1/2 -translate-y-1/2 rounded-l-lg' :
+            dockSide === 'top' ? 'top-0 left-1/2 -translate-x-1/2 rounded-b-lg' :
+            'bottom-0 left-1/2 -translate-x-1/2 rounded-t-lg'
+          }`}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+        </button>
+      )}
+
       {/* Relocatable settings drawer — docks to any screen edge while editing */}
-      {isEditMode && (
+      {isEditMode && !drawerCollapsed && (
         <div
           key={dockSide}
           className={`fixed z-[10000] bg-white shadow-2xl overflow-y-auto ${DOCK_PANEL_CLASS[dockSide]}`}
@@ -284,7 +307,10 @@ export function FormEditDrawer({
                   </button>
                 ))}
               </div>
-              <button type="button" onClick={onToggleEditMode} className="text-gray-400 hover:text-gray-600">
+              <button type="button" onClick={() => setDrawerCollapsed(true)} title="Collapse panel (stay in edit mode)" className="text-gray-400 hover:text-gray-600">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 13H5v-2h14v2z" /></svg>
+              </button>
+              <button type="button" onClick={onToggleEditMode} title="Exit edit mode" className="text-gray-400 hover:text-gray-600">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
