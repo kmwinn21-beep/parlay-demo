@@ -1,12 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { ExpandedFormModal, buildAccentBackground, type FormField, type ConferenceForm } from './ExpandedFormModal';
 import { FormBuilderModal } from './FormBuilderModal';
 import { useUser } from './UserContext';
+import { useConfigColors } from '@/lib/useConfigColors';
+import { getBadgeClass } from '@/lib/colors';
 
 function getCssVarHex(varName: string, fallback: string): string {
   if (typeof window === 'undefined') return fallback;
@@ -37,6 +39,7 @@ interface Submission {
   conference_id: number;
   attendee_id: number | null;
   company_id: number | null;
+  company_type: string | null;
   submitted_at: string;
   status_option_id: number | null;
   status_value: string | null;
@@ -76,6 +79,7 @@ function SubTypePill({ source }: { source: string }) {
 
 export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, isAdmin, currentUserEmail }: Props) {
   const { user } = useUser();
+  const colorMaps = useConfigColors();
   const [forms, setForms] = useState<ConferenceForm[]>([]);
   const [templates, setTemplates] = useState<FormTemplate[]>([]);
   const [statusOptions, setStatusOptions] = useState<StatusOption[]>([]);
@@ -429,6 +433,19 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
     } catch { toast.error('Failed to save'); }
   };
 
+  const isCompanyField = (f: FormField) => f.field_key === 'company' || f.label.toLowerCase() === 'company';
+
+  // "Unknown" whenever there's no matched attendee (or that attendee has no company/type
+  // on file) — otherwise the same colored pill used for company type elsewhere in the app.
+  const renderCompanyTypePill = (sub: Submission) => {
+    const typeValue = sub.attendee_id && sub.company_type ? sub.company_type : null;
+    return (
+      <span className={getBadgeClass(typeValue || undefined, colorMaps.company_type || {})}>
+        {typeValue || 'Unknown'}
+      </span>
+    );
+  };
+
   // Shared by the mobile-card and desktop-table submission rows: company links stay as
   // before, email/notes fields collapse to an icon that opens a small popover instead of
   // showing (and truncating) the raw text inline.
@@ -436,7 +453,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
     // Match by field_id first — field_label is a point-in-time snapshot at submission, so
     // it goes stale (and stops matching) if the field's label is ever renamed later.
     const v = sub.values.find(vv => vv.field_id === f.id) ?? sub.values.find(vv => vv.field_label === f.label);
-    const isCompany = f.field_key === 'company' || f.label.toLowerCase() === 'company';
+    const isCompany = isCompanyField(f);
     const isEmail = f.field_key === 'email' || f.label.toLowerCase().includes('email');
     const isNotes = f.field_key === 'notes' || f.label.toLowerCase().includes('note');
 
@@ -859,9 +876,9 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
                                 {sub.attendee_id ? (
-                                  <a href={`/attendees/${sub.attendee_id}`} className="font-semibold text-sm text-brand-secondary hover:underline leading-snug block">{nameVal}</a>
+                                  <a href={`/attendees/${sub.attendee_id}`} className="font-semibold text-xs text-brand-secondary hover:underline leading-snug block">{nameVal}</a>
                                 ) : (
-                                  <p className="font-semibold text-sm text-gray-800 leading-snug">{nameVal}</p>
+                                  <p className="font-semibold text-xs text-gray-800 leading-snug">{nameVal}</p>
                                 )}
                                 <p className="text-xs text-gray-400 mt-0.5">{sub.conference_name}</p>
                               </div>
@@ -871,12 +888,20 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
                             {dataFields.length > 0 && (
                               <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                                 {dataFields.map(f => (
-                                  <div key={f.id}>
-                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{f.label}</p>
-                                    <div className="text-sm text-gray-700 truncate">
-                                      {renderFieldValue(f, sub, `m-${sub.id}-${f.id}`)}
+                                  <Fragment key={f.id}>
+                                    <div>
+                                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{f.label}</p>
+                                      <div className="text-xs text-gray-700 truncate">
+                                        {renderFieldValue(f, sub, `m-${sub.id}-${f.id}`)}
+                                      </div>
                                     </div>
-                                  </div>
+                                    {isCompanyField(f) && (
+                                      <div>
+                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Type</p>
+                                        <div className="text-xs truncate">{renderCompanyTypePill(sub)}</div>
+                                      </div>
+                                    )}
+                                  </Fragment>
                                 ))}
                               </div>
                             )}
@@ -899,13 +924,18 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
 
                     {/* Desktop table */}
                     <div className="hidden md:block overflow-x-auto">
-                      <table className="min-w-full text-sm">
+                      <table className="min-w-full text-xs">
                         <thead>
                           <tr className="bg-gray-50 border-b border-gray-100">
                             <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Conference</th>
                             <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Name</th>
                             {dataFields.map(f => (
-                              <th key={f.id} className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{f.label}</th>
+                              <Fragment key={f.id}>
+                                <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{f.label}</th>
+                                {isCompanyField(f) && (
+                                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Type</th>
+                                )}
+                              </Fragment>
                             ))}
                             <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Submitted</th>
                             <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Sub. Type</th>
@@ -926,11 +956,16 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
                                   )}
                                 </td>
                                 {dataFields.map(f => (
-                                  <td key={f.id} className="px-4 py-2.5 text-gray-700 max-w-xs">
-                                    <div className="truncate">
-                                      {renderFieldValue(f, sub, `d-${sub.id}-${f.id}`)}
-                                    </div>
-                                  </td>
+                                  <Fragment key={f.id}>
+                                    <td className="px-4 py-2.5 text-gray-700 max-w-xs">
+                                      <div className="truncate">
+                                        {renderFieldValue(f, sub, `d-${sub.id}-${f.id}`)}
+                                      </div>
+                                    </td>
+                                    {isCompanyField(f) && (
+                                      <td className="px-4 py-2.5 whitespace-nowrap">{renderCompanyTypePill(sub)}</td>
+                                    )}
+                                  </Fragment>
                                 ))}
                                 <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap text-xs">{fmtDate(sub.submitted_at)}</td>
                                 <td className="px-4 py-2.5 whitespace-nowrap">
@@ -1065,7 +1100,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
         >
           {fieldPopover.mode === 'email' ? (
             <div className="space-y-2">
-              <p className="text-sm text-gray-800 break-all">{fieldPopover.value}</p>
+              <p className="text-xs text-gray-800 break-all">{fieldPopover.value}</p>
               <button
                 type="button"
                 onClick={() => handleCopyEmail(fieldPopover.value)}
@@ -1075,7 +1110,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
               </button>
             </div>
           ) : (
-            <p className="text-sm text-gray-700 whitespace-pre-wrap">{fieldPopover.value}</p>
+            <p className="text-xs text-gray-700 whitespace-pre-wrap">{fieldPopover.value}</p>
           )}
         </div>,
         document.body
