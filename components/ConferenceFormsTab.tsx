@@ -1,11 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { ExpandedFormModal, buildAccentBackground, type FormField, type ConferenceForm } from './ExpandedFormModal';
 import { FormBuilderModal } from './FormBuilderModal';
+import { useUser } from './UserContext';
+import { useConfigColors } from '@/lib/useConfigColors';
+import { getBadgeClass } from '@/lib/colors';
 
 function getCssVarHex(varName: string, fallback: string): string {
   if (typeof window === 'undefined') return fallback;
@@ -36,9 +39,11 @@ interface Submission {
   conference_id: number;
   attendee_id: number | null;
   company_id: number | null;
+  company_type: string | null;
   submitted_at: string;
   status_option_id: number | null;
   status_value: string | null;
+  submission_source: string;
   conference_name: string;
   values: { field_id: number | null; field_label: string; field_value: string }[];
 }
@@ -63,7 +68,18 @@ function fmtDate(d?: string) {
   } catch { return '—'; }
 }
 
+function SubTypePill({ source }: { source: string }) {
+  const isPublic = source === 'public_link';
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${isPublic ? 'bg-purple-50 text-purple-600' : 'bg-gray-100 text-gray-600'}`}>
+      {isPublic ? 'Form Link' : 'Manual'}
+    </span>
+  );
+}
+
 export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, isAdmin, currentUserEmail }: Props) {
+  const { user } = useUser();
+  const colorMaps = useConfigColors();
   const [forms, setForms] = useState<ConferenceForm[]>([]);
   const [templates, setTemplates] = useState<FormTemplate[]>([]);
   const [statusOptions, setStatusOptions] = useState<StatusOption[]>([]);
@@ -108,6 +124,65 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
   const [selectedDupConfs, setSelectedDupConfs] = useState<Set<number>>(new Set());
   const [duplicating, setDuplicating] = useState(false);
   const dupDropRef = useRef<HTMLDivElement>(null);
+
+  // Public link
+  const [publicLinkFormId, setPublicLinkFormId] = useState<number | null>(null);
+  const [publicLinkDropPos, setPublicLinkDropPos] = useState<{ top: number; left: number } | null>(null);
+  const [togglingPublic, setTogglingPublic] = useState(false);
+  const publicLinkDropRef = useRef<HTMLDivElement>(null);
+
+  const openPublicLinkDropdown = useCallback((formId: number, anchor: HTMLElement) => {
+    const buttonRect = anchor.getBoundingClientRect();
+    const cardRect = (anchor.closest('.card') ?? anchor).getBoundingClientRect();
+    const width = 300;
+    const margin = 12;
+    let left = buttonRect.right + 8;
+    if (left + width + margin > window.innerWidth) left = buttonRect.left - width - 8;
+    setPublicLinkDropPos({ top: cardRect.top, left: Math.max(margin, left) });
+    setPublicLinkFormId(prev => (prev === formId ? null : formId));
+  }, []);
+
+  useEffect(() => {
+    if (publicLinkFormId === null) return;
+    const handler = (e: MouseEvent) => {
+      if (publicLinkDropRef.current && !publicLinkDropRef.current.contains(e.target as Node)) setPublicLinkFormId(null);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [publicLinkFormId]);
+
+  // Email / Notes field popovers (submissions table)
+  const [fieldPopover, setFieldPopover] = useState<{ key: string; mode: 'email' | 'notes'; value: string } | null>(null);
+  const [fieldPopoverPos, setFieldPopoverPos] = useState<{ top: number; left: number } | null>(null);
+  const fieldPopoverRef = useRef<HTMLDivElement>(null);
+
+  const openFieldPopover = useCallback((anchor: HTMLElement, key: string, mode: 'email' | 'notes', value: string) => {
+    const rect = anchor.getBoundingClientRect();
+    const width = 260;
+    const margin = 12;
+    let left = rect.left;
+    if (left + width + margin > window.innerWidth) left = window.innerWidth - width - margin;
+    setFieldPopoverPos({ top: rect.bottom + 6, left: Math.max(margin, left) });
+    setFieldPopover(prev => (prev?.key === key ? null : { key, mode, value }));
+  }, []);
+
+  useEffect(() => {
+    if (!fieldPopover) return;
+    const handler = (e: MouseEvent) => {
+      if (fieldPopoverRef.current && !fieldPopoverRef.current.contains(e.target as Node)) setFieldPopover(null);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [fieldPopover]);
+
+  const handleCopyEmail = async (email: string) => {
+    try {
+      await navigator.clipboard.writeText(email);
+      toast.success('Email copied');
+    } catch {
+      toast.error('Failed to copy email');
+    }
+  };
 
   const openDuplicateDropdown = useCallback(async (formId: number, anchor: HTMLElement) => {
     const buttonRect = anchor.getBoundingClientRect();
@@ -163,6 +238,38 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
       toast.error('Failed to duplicate form');
     } finally {
       setDuplicating(false);
+    }
+  };
+
+  const handleTogglePublic = async (form: ConferenceForm) => {
+    setTogglingPublic(true);
+    try {
+      const res = await fetch(`/api/conference-forms/${form.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_public: !form.is_public }),
+      });
+      if (!res.ok) throw new Error();
+      await loadForms();
+    } catch {
+      toast.error('Failed to update public link');
+    } finally {
+      setTogglingPublic(false);
+    }
+  };
+
+  const publicFormUrl = (form: ConferenceForm) => {
+    if (!form.public_token) return '';
+    const aid = user?.accountId || 'master';
+    return `${window.location.origin}/forms?token=${form.public_token}&aid=${aid}`;
+  };
+
+  const handleCopyPublicLink = async (form: ConferenceForm) => {
+    try {
+      await navigator.clipboard.writeText(publicFormUrl(form));
+      toast.success('Link copied');
+    } catch {
+      toast.error('Failed to copy link');
     }
   };
 
@@ -290,7 +397,9 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
       const nameVal = sub.values.find(v => v.field_label === 'Name')?.field_value || '';
       const row: (string | number)[] = [sub.conference_name, nameVal];
       for (const f of dataFields) {
-        const v = sub.values.find(vv => vv.field_label === f.label);
+        // Match by field_id first — field_label is a point-in-time snapshot at submission,
+        // so it goes stale (and stops matching) if the field's label is ever renamed later.
+        const v = sub.values.find(vv => vv.field_id === f.id) ?? sub.values.find(vv => vv.field_label === f.label);
         row.push(v?.field_value || '');
       }
       row.push(sub.submitted_at ? new Date(sub.submitted_at).toLocaleString() : '');
@@ -322,6 +431,62 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
       setEditingFormId(null);
       await loadForms();
     } catch { toast.error('Failed to save'); }
+  };
+
+  const isCompanyField = (f: FormField) => f.field_key === 'company' || f.label.toLowerCase() === 'company';
+
+  // "Unknown" whenever there's no matched attendee (or that attendee has no company/type
+  // on file) — otherwise the same colored pill used for company type elsewhere in the app.
+  const renderCompanyTypePill = (sub: Submission) => {
+    const typeValue = sub.attendee_id && sub.company_type ? sub.company_type : null;
+    return (
+      <span className={getBadgeClass(typeValue || undefined, colorMaps.company_type || {})}>
+        {typeValue || 'Unknown'}
+      </span>
+    );
+  };
+
+  // Shared by the mobile-card and desktop-table submission rows: company links stay as
+  // before, email/notes fields collapse to an icon that opens a small popover instead of
+  // showing (and truncating) the raw text inline.
+  const renderFieldValue = (f: FormField, sub: Submission, key: string) => {
+    // Match by field_id first — field_label is a point-in-time snapshot at submission, so
+    // it goes stale (and stops matching) if the field's label is ever renamed later.
+    const v = sub.values.find(vv => vv.field_id === f.id) ?? sub.values.find(vv => vv.field_label === f.label);
+    const isCompany = isCompanyField(f);
+    const isEmail = f.field_key === 'email' || f.label.toLowerCase().includes('email');
+    const isNotes = f.field_key === 'notes' || f.label.toLowerCase().includes('note');
+
+    if (isEmail) {
+      if (!v?.field_value) return <span className="text-gray-400">—</span>;
+      return (
+        <button
+          type="button"
+          onClick={e => openFieldPopover(e.currentTarget, key, 'email', v.field_value)}
+          title={v.field_value}
+          className="w-7 h-7 rounded-full bg-green-50 text-green-600 flex items-center justify-center hover:bg-green-100 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+        </button>
+      );
+    }
+    if (isNotes) {
+      if (!v?.field_value) return <span className="text-gray-400">—</span>;
+      return (
+        <button
+          type="button"
+          onClick={e => openFieldPopover(e.currentTarget, key, 'notes', v.field_value)}
+          title="View note"
+          className="w-7 h-7 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center hover:bg-blue-100 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+        </button>
+      );
+    }
+    if (isCompany && sub.company_id && v?.field_value) {
+      return <a href={`/companies/${sub.company_id}`} className="text-brand-secondary hover:underline">{v.field_value}</a>;
+    }
+    return <>{v?.field_value || '—'}</>;
   };
 
   const builderForm = forms.find(f => f.id === builderFormId);
@@ -630,6 +795,47 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
                       </div>,
                       document.body
                     )}
+                    {/* Public self-serve link */}
+                    <button
+                      type="button"
+                      onClick={e => openPublicLinkDropdown(form.id, e.currentTarget)}
+                      title="Public link"
+                      className={`p-2 rounded-lg transition-colors ${form.is_public ? 'text-green-600 hover:bg-green-50' : 'text-gray-400 hover:text-brand-secondary hover:bg-blue-50'}`}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 010 5.656l-4 4a4 4 0 01-5.656-5.656l1.5-1.5M10.172 13.828a4 4 0 010-5.656l4-4a4 4 0 015.656 5.656l-1.5 1.5" /></svg>
+                    </button>
+                    {publicLinkFormId === form.id && publicLinkDropPos && createPortal(
+                      <div
+                        ref={publicLinkDropRef}
+                        className="fixed z-[10000] w-[300px] bg-white border border-gray-200 rounded-lg shadow-xl"
+                        style={{ top: publicLinkDropPos.top, left: publicLinkDropPos.left }}
+                      >
+                        <p className="px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-100">Public Link</p>
+                        <div className="p-3 space-y-3">
+                          <label className="flex items-center justify-between gap-2 cursor-pointer">
+                            <span className="text-sm text-gray-700">Anyone with the link can submit</span>
+                            <button
+                              type="button"
+                              onClick={() => handleTogglePublic(form)}
+                              disabled={togglingPublic}
+                              className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${form.is_public ? 'bg-green-500' : 'bg-gray-300'} disabled:opacity-50`}
+                            >
+                              <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${form.is_public ? 'translate-x-4' : ''}`} />
+                            </button>
+                          </label>
+                          {form.is_public && form.public_token && (
+                            <div className="flex gap-1.5">
+                              <input type="text" readOnly value={publicFormUrl(form)} onFocus={e => e.target.select()} className="input-field text-xs flex-1 truncate" />
+                              <button type="button" onClick={() => handleCopyPublicLink(form)} className="btn-secondary text-xs px-2.5 flex-shrink-0">Copy</button>
+                            </div>
+                          )}
+                          <p className="text-xs text-gray-400">
+                            No sign-in required. Submitters enter their own name, title, and company by hand.
+                          </p>
+                        </div>
+                      </div>,
+                      document.body
+                    )}
                     {/* Delete */}
                     <button
                       type="button"
@@ -670,9 +876,9 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
                                 {sub.attendee_id ? (
-                                  <a href={`/attendees/${sub.attendee_id}`} className="font-semibold text-sm text-brand-secondary hover:underline leading-snug block">{nameVal}</a>
+                                  <a href={`/attendees/${sub.attendee_id}`} className="font-semibold text-xs text-brand-secondary hover:underline leading-snug block">{nameVal}</a>
                                 ) : (
-                                  <p className="font-semibold text-sm text-gray-800 leading-snug">{nameVal}</p>
+                                  <p className="font-semibold text-xs text-gray-800 leading-snug">{nameVal}</p>
                                 )}
                                 <p className="text-xs text-gray-400 mt-0.5">{sub.conference_name}</p>
                               </div>
@@ -681,30 +887,31 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
                             {/* Field values grid */}
                             {dataFields.length > 0 && (
                               <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                                {dataFields.map(f => {
-                                  const v = sub.values.find(vv => vv.field_label === f.label);
-                                  const isCompany = f.field_key === 'company' || f.label.toLowerCase() === 'company';
-                                  return (
-                                    <div key={f.id}>
+                                {dataFields.map(f => (
+                                  <Fragment key={f.id}>
+                                    <div>
                                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{f.label}</p>
-                                      <div className="text-sm text-gray-700 truncate">
-                                        {isCompany && sub.company_id && v?.field_value ? (
-                                          <a href={`/companies/${sub.company_id}`} className="text-brand-secondary hover:underline">{v.field_value}</a>
-                                        ) : (
-                                          v?.field_value || '—'
-                                        )}
+                                      <div className="text-xs text-gray-700 truncate">
+                                        {renderFieldValue(f, sub, `m-${sub.id}-${f.id}`)}
                                       </div>
                                     </div>
-                                  );
-                                })}
+                                    {isCompanyField(f) && (
+                                      <div>
+                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Type</p>
+                                        <div className="text-xs truncate">{renderCompanyTypePill(sub)}</div>
+                                      </div>
+                                    )}
+                                  </Fragment>
+                                ))}
                               </div>
                             )}
-                            {/* Status */}
-                            <div className="pt-1 border-t border-gray-100">
+                            {/* Submission type + Status */}
+                            <div className="pt-1 border-t border-gray-100 flex items-center justify-between gap-2">
+                              <SubTypePill source={sub.submission_source} />
                               <select
                                 value={sub.status_option_id ?? ''}
                                 onChange={e => handleStatusChange(sub, form.id, e.target.value ? Number(e.target.value) : null)}
-                                className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 hover:border-gray-300 transition-colors"
+                                className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 hover:border-gray-300 transition-colors"
                               >
                                 <option value="">— Status —</option>
                                 {statusOptions.map(s => <option key={s.id} value={s.id}>{s.value}</option>)}
@@ -717,15 +924,21 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
 
                     {/* Desktop table */}
                     <div className="hidden md:block overflow-x-auto">
-                      <table className="min-w-full text-sm">
+                      <table className="min-w-full text-xs">
                         <thead>
                           <tr className="bg-gray-50 border-b border-gray-100">
                             <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Conference</th>
                             <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Name</th>
                             {dataFields.map(f => (
-                              <th key={f.id} className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{f.label}</th>
+                              <Fragment key={f.id}>
+                                <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{f.label}</th>
+                                {isCompanyField(f) && (
+                                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Type</th>
+                                )}
+                              </Fragment>
                             ))}
                             <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Submitted</th>
+                            <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Sub. Type</th>
                             <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Status</th>
                           </tr>
                         </thead>
@@ -742,22 +955,22 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
                                     <span className="text-gray-800">{nameVal}</span>
                                   )}
                                 </td>
-                                {dataFields.map(f => {
-                                  const v = sub.values.find(vv => vv.field_label === f.label);
-                                  const isCompany = f.field_key === 'company' || f.label.toLowerCase() === 'company';
-                                  return (
-                                    <td key={f.id} className="px-4 py-2.5 text-gray-700 max-w-xs">
+                                {dataFields.map(f => (
+                                  <Fragment key={f.id}>
+                                    <td className="px-4 py-2.5 text-gray-700 max-w-xs">
                                       <div className="truncate">
-                                        {isCompany && sub.company_id && v?.field_value ? (
-                                          <a href={`/companies/${sub.company_id}`} className="text-brand-secondary hover:underline">{v.field_value}</a>
-                                        ) : (
-                                          v?.field_value || '—'
-                                        )}
+                                        {renderFieldValue(f, sub, `d-${sub.id}-${f.id}`)}
                                       </div>
                                     </td>
-                                  );
-                                })}
+                                    {isCompanyField(f) && (
+                                      <td className="px-4 py-2.5 whitespace-nowrap">{renderCompanyTypePill(sub)}</td>
+                                    )}
+                                  </Fragment>
+                                ))}
                                 <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap text-xs">{fmtDate(sub.submitted_at)}</td>
+                                <td className="px-4 py-2.5 whitespace-nowrap">
+                                  <SubTypePill source={sub.submission_source} />
+                                </td>
                                 <td className="px-4 py-2.5">
                                   <select
                                     value={sub.status_option_id ?? ''}
@@ -876,6 +1089,31 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
           }}
           onClose={() => setBuilderFormId(null)}
         />
+      )}
+
+      {/* Email / Notes field popover */}
+      {fieldPopover && fieldPopoverPos && createPortal(
+        <div
+          ref={fieldPopoverRef}
+          className="fixed z-[10000] w-[260px] bg-white border border-gray-200 rounded-lg shadow-xl p-3"
+          style={{ top: fieldPopoverPos.top, left: fieldPopoverPos.left }}
+        >
+          {fieldPopover.mode === 'email' ? (
+            <div className="space-y-2">
+              <p className="text-xs text-gray-800 break-all">{fieldPopover.value}</p>
+              <button
+                type="button"
+                onClick={() => handleCopyEmail(fieldPopover.value)}
+                className="btn-secondary text-xs px-2.5 py-1.5 w-full"
+              >
+                Copy Email
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-700 whitespace-pre-wrap">{fieldPopover.value}</p>
+          )}
+        </div>,
+        document.body
       )}
     </div>
   );

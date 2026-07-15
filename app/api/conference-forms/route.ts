@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
                    image_offset_y, html_offset_y, form_width, form_height, form_offset_y, form_x,
                    form_z_index, background_image_url, background_image_opacity,
                    background_video_url, background_video_opacity,
-                   eyebrow_color, submit_button_color,
+                   eyebrow_color, submit_button_color, is_public, public_token,
                    panel_logo_url, created_by, created_at
             FROM conference_forms WHERE conference_id = ? ORDER BY created_at DESC`,
       args: [conferenceId],
@@ -109,6 +109,8 @@ export async function GET(request: NextRequest) {
         background_video_opacity: f.background_video_opacity != null ? Number(f.background_video_opacity) : null,
         eyebrow_color: f.eyebrow_color ? String(f.eyebrow_color) : null,
         submit_button_color: f.submit_button_color ? String(f.submit_button_color) : null,
+        is_public: Number(f.is_public) === 1,
+        public_token: f.public_token ? String(f.public_token) : null,
         panel_logo_url: f.panel_logo_url ? String(f.panel_logo_url) : null,
         created_by: f.created_by ? String(f.created_by) : null,
         created_at: String(f.created_at),

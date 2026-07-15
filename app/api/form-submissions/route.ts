@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { resolveOrCreateAttendee } from '@/lib/resolveOrCreateAttendee';
 import type { Client } from '@libsql/client';
 
 export async function GET(request: NextRequest) {
@@ -14,13 +15,14 @@ export async function GET(request: NextRequest) {
 
     const subsRes = await db.execute({
       sql: `SELECT fs.id, fs.conference_form_id, fs.conference_id, fs.attendee_id, fs.submitted_at,
-                   fs.status_option_id, co.value as status_value,
+                   fs.status_option_id, fs.submission_source, co.value as status_value,
                    c.name as conference_name,
-                   a.company_id
+                   a.company_id, comp.company_type
             FROM form_submissions fs
             LEFT JOIN config_options co ON fs.status_option_id = co.id
             JOIN conferences c ON fs.conference_id = c.id
             LEFT JOIN attendees a ON fs.attendee_id = a.id
+            LEFT JOIN companies comp ON a.company_id = comp.id
             WHERE fs.conference_form_id = ?
             ORDER BY fs.submitted_at DESC`,
       args: [conferenceFormId],
@@ -37,9 +39,11 @@ export async function GET(request: NextRequest) {
         conference_id: Number(s.conference_id),
         attendee_id: s.attendee_id ? Number(s.attendee_id) : null,
         company_id: s.company_id ? Number(s.company_id) : null,
+        company_type: s.company_type ? String(s.company_type) : null,
         submitted_at: String(s.submitted_at),
         status_option_id: s.status_option_id ? Number(s.status_option_id) : null,
         status_value: s.status_value ? String(s.status_value) : null,
+        submission_source: s.submission_source ? String(s.submission_source) : 'manual',
         conference_name: String(s.conference_name),
         values: valsRes.rows.map(v => ({
           field_id: v.field_id ? Number(v.field_id) : null,
@@ -115,12 +119,15 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Create attendee
-      const newAtt = await db.execute({
-        sql: `INSERT INTO attendees (first_name, last_name, title, company_id, email) VALUES (?, ?, ?, ?, ?) RETURNING id`,
-        args: [manual_first_name.trim(), manual_last_name.trim(), titleVal || null, resolvedCompanyId, emailVal || null],
+      // Reuse an existing attendee with the same name (preferring the same company, if
+      // known) instead of always creating a new record.
+      resolvedAttendeeId = await resolveOrCreateAttendee(db, {
+        firstName: manual_first_name,
+        lastName: manual_last_name,
+        title: titleVal,
+        email: emailVal,
+        companyId: resolvedCompanyId,
       });
-      resolvedAttendeeId = Number(newAtt.rows[0].id);
 
       // Relate attendee to conference
       await db.execute({
