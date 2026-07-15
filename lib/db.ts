@@ -529,7 +529,7 @@ async function runFullMigrations(): Promise<void> {
         { field_type: 'attendee_picker', field_key: 'attendee_name', label: 'Name', sort_order: 1, required: 1 },
         { field_type: 'text_single', field_key: 'title', label: 'Title', sort_order: 2, required: 0 },
         { field_type: 'text_single', field_key: 'company', label: 'Company', sort_order: 3, required: 0 },
-        { field_type: 'text_single', field_key: 'email', label: 'Email Address', sort_order: 4, required: 0 },
+        { field_type: 'text_single', field_key: 'email', label: 'Email', sort_order: 4, required: 0 },
         { field_type: 'text_paragraph', field_key: 'notes', label: 'Notes', sort_order: 5, required: 0 },
       ];
       for (const f of defaultFields) {
@@ -978,7 +978,7 @@ export async function seedFreshDb(client: Client): Promise<void> {
         { field_type: 'attendee_picker', field_key: 'attendee_name', label: 'Name', sort_order: 1, required: 1 },
         { field_type: 'text_single', field_key: 'title', label: 'Title', sort_order: 2, required: 0 },
         { field_type: 'text_single', field_key: 'company', label: 'Company', sort_order: 3, required: 0 },
-        { field_type: 'text_single', field_key: 'email', label: 'Email Address', sort_order: 4, required: 0 },
+        { field_type: 'text_single', field_key: 'email', label: 'Email', sort_order: 4, required: 0 },
         { field_type: 'text_paragraph', field_key: 'notes', label: 'Notes', sort_order: 5, required: 0 },
       ];
       for (const f of defaultFields) {

@@ -1512,4 +1512,7 @@ export const migrations: string[] = [
   // 492 — form_submissions: whether the submission came from a staff member filling the
   // form out in-app ('manual') or an attendee via the public self-serve link ('public_link').
   `ALTER TABLE form_submissions ADD COLUMN submission_source TEXT NOT NULL DEFAULT 'manual'`,
+  // 493 — form_fields: shorten the default "Email Address" field label to "Email" —
+  // renames it everywhere it's already in use (template + per-form fields), not just new ones.
+  `UPDATE form_fields SET label = 'Email' WHERE label = 'Email Address'`,
 ];
