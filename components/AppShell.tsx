@@ -227,6 +227,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
+  // Public self-serve conference form — anonymous visitors, no session, no app chrome
+  if (pathname.startsWith('/forms')) {
+    return <>{children}</>;
+  }
+
   return (
     <UserProvider>
       <OnboardingProvider>
