@@ -7,7 +7,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
   try {
-    const { x, y, width, height, content, z_index, object_fit, focal_x, focal_y } = await request.json();
+    const { x, y, width, height, content, z_index, object_fit, focal_x, focal_y, corner_style } = await request.json();
     const sets: string[] = [];
     const args: (string | number)[] = [];
     if (x !== undefined) { sets.push('x = ?'); args.push(Number(x)); }
@@ -19,6 +19,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     if (object_fit !== undefined) { sets.push('object_fit = ?'); args.push(String(object_fit)); }
     if (focal_x !== undefined) { sets.push('focal_x = ?'); args.push(Number(focal_x)); }
     if (focal_y !== undefined) { sets.push('focal_y = ?'); args.push(Number(focal_y)); }
+    if (corner_style !== undefined) { sets.push('corner_style = ?'); args.push(String(corner_style)); }
     if (sets.length === 0) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
     args.push(params.elementId, params.id);
     await db.execute({

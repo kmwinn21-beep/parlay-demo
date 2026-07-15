@@ -31,7 +31,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }));
 
     const elementsRes = await db.execute({
-      sql: `SELECT element_type, x, y, width, height, z_index, content, object_fit, focal_x, focal_y
+      sql: `SELECT element_type, x, y, width, height, z_index, content, object_fit, focal_x, focal_y, corner_style
             FROM form_elements WHERE conference_form_id = ?`,
       args: [params.id],
     });
@@ -79,11 +79,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
       for (const el of elementsRes.rows) {
         await db.execute({
-          sql: `INSERT INTO form_elements (conference_form_id, element_type, x, y, width, height, z_index, content, object_fit, focal_x, focal_y)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          sql: `INSERT INTO form_elements (conference_form_id, element_type, x, y, width, height, z_index, content, object_fit, focal_x, focal_y, corner_style)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           args: [
             newFormId, el.element_type, el.x, el.y, el.width, el.height,
-            el.z_index, el.content, el.object_fit, el.focal_x, el.focal_y,
+            el.z_index, el.content, el.object_fit, el.focal_x, el.focal_y, el.corner_style,
           ],
         });
       }

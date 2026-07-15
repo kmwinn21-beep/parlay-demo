@@ -67,6 +67,7 @@ interface FormElement {
   object_fit: 'contain' | 'cover';
   focal_x: number;
   focal_y: number;
+  corner_style: 'square' | 'rounded';
 }
 
 interface AttendeeOption {
@@ -142,15 +143,17 @@ function isColorLight(hex: string): boolean {
   return (r * 299 + g * 587 + b * 114) / 1000 > 160;
 }
 
-function MediaElementCanvas({ src, mediaType, objectFit, focalX, focalY, isEditMode, onFocalCommit }: {
+function MediaElementCanvas({ src, mediaType, objectFit, focalX, focalY, cornerStyle, isEditMode, onFocalCommit }: {
   src: string;
   mediaType: 'image' | 'video';
   objectFit: 'contain' | 'cover';
   focalX: number;
   focalY: number;
+  cornerStyle: 'square' | 'rounded';
   isEditMode: boolean;
   onFocalCommit: (x: number, y: number) => void;
 }) {
+  const cornerClass = cornerStyle === 'rounded' ? 'rounded-xl' : 'rounded-none';
   const [error, setError] = useState(false);
   const [localFocal, setLocalFocal] = useState({ x: focalX, y: focalY });
   const [isDragging, setIsDragging] = useState(false);
@@ -160,7 +163,7 @@ function MediaElementCanvas({ src, mediaType, objectFit, focalX, focalY, isEditM
   // Sync from server once persisted — but not mid-drag, or the commit would snap back
   useEffect(() => { if (!isDragging) setLocalFocal({ x: focalX, y: focalY }); }, [focalX, focalY, isDragging]);
 
-  const embed = mediaType === 'video' ? resolveVideoEmbed(src) : null;
+  const embed = mediaType === 'video' ? resolveVideoEmbed(src, { autoplay: true, controls: true }) : null;
   const isIframeEmbed = embed?.type === 'iframe';
   const cropMode = objectFit === 'cover' && isEditMode && !isIframeEmbed;
 
@@ -200,7 +203,7 @@ function MediaElementCanvas({ src, mediaType, objectFit, focalX, focalY, isEditM
 
   if (!src || error) {
     return (
-      <div className="w-full h-full rounded-xl flex items-center justify-center border-2 border-dashed border-white/30 text-white/40">
+      <div className={`w-full h-full ${cornerClass} flex items-center justify-center border-2 border-dashed border-white/30 text-white/40`}>
         <span className="text-sm font-semibold tracking-wide">{mediaType === 'video' ? 'Video' : 'Image'}</span>
       </div>
     );
@@ -209,7 +212,7 @@ function MediaElementCanvas({ src, mediaType, objectFit, focalX, focalY, isEditM
     <div
       ref={containerRef}
       onMouseDown={handleMouseDown}
-      className="relative w-full h-full overflow-hidden rounded-xl"
+      className={`relative w-full h-full overflow-hidden ${cornerClass}`}
       style={{ cursor: cropMode ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
     >
       {mediaType === 'video' ? (
@@ -228,6 +231,9 @@ function MediaElementCanvas({ src, mediaType, objectFit, focalX, focalY, isEditM
             className="w-full h-full"
             style={{ objectFit, objectPosition: `${localFocal.x}% ${localFocal.y}%`, pointerEvents: isEditMode ? 'none' : 'auto' }}
             controls={!isEditMode}
+            autoPlay={!isEditMode}
+            loop
+            muted
             playsInline
           />
         )
@@ -404,12 +410,16 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
   }, [elements, formMeta.form_z_index, form.id, patchFormMeta]);
 
   const addElement = useCallback(async (element_type: 'image' | 'text' | 'video', content: string) => {
+    // Always stack new elements above every existing one — z_index isn't guaranteed to be
+    // contiguous (elements can be removed, or start from the migration backfill's fixed
+    // values), so elements.length is not a reliable "next" value.
+    const nextZ = elements.length > 0 ? Math.max(...elements.map(e => e.z_index)) + 1 : 0;
     const base = {
       element_type,
       x: 60, y: 60,
       width: element_type === 'text' ? 280 : 300,
       height: element_type === 'text' ? 180 : 220,
-      z_index: elements.length,
+      z_index: nextZ,
       content,
     };
     try {
@@ -420,11 +430,11 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
       });
       if (!res.ok) throw new Error();
       const { id } = await res.json();
-      setElements(prev => [...prev, { ...base, id, conference_form_id: form.id, object_fit: 'contain', focal_x: 50, focal_y: 50 }]);
+      setElements(prev => [...prev, { ...base, id, conference_form_id: form.id, object_fit: 'contain', focal_x: 50, focal_y: 50, corner_style: 'rounded' }]);
     } catch {
       toast.error('Failed to add element');
     }
-  }, [form.id, elements.length]);
+  }, [form.id, elements]);
 
   // Portal SSR safety — document.body is only available client-side
   useEffect(() => { setMounted(true); }, []);
@@ -982,9 +992,9 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
       {/* Full-bleed background media, drawn beneath the page background color/gradient.
           A background video, if set, takes precedence over a background image. */}
       {formMeta.background_video_url ? (
-        resolveVideoEmbed(formMeta.background_video_url, { background: true }).type === 'iframe' ? (
+        resolveVideoEmbed(formMeta.background_video_url, { autoplay: true, controls: false }).type === 'iframe' ? (
           <iframe
-            src={resolveVideoEmbed(formMeta.background_video_url, { background: true }).src}
+            src={resolveVideoEmbed(formMeta.background_video_url, { autoplay: true, controls: false }).src}
             className="absolute inset-0 w-full h-full pointer-events-none"
             style={{ border: 0, opacity: formMeta.background_video_opacity / 100 }}
             allow="autoplay; encrypted-media; picture-in-picture"
@@ -1069,6 +1079,20 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 2v14a2 2 0 002 2h14M18 22V8a2 2 0 00-2-2H2" /></svg>
                         </button>
                       )}
+                      {(el.element_type === 'image' || el.element_type === 'video') && (
+                        <button
+                          type="button"
+                          onClick={() => updateElement(el.id, { corner_style: el.corner_style === 'rounded' ? 'square' : 'rounded' })}
+                          title={el.corner_style === 'rounded' ? 'Use square corners' : 'Use rounded corners'}
+                          className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white"
+                        >
+                          {el.corner_style === 'rounded' ? (
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><rect x="4" y="4" width="16" height="16" rx="5" /></svg>
+                          ) : (
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><rect x="4" y="4" width="16" height="16" rx="0" /></svg>
+                          )}
+                        </button>
+                      )}
                       <button type="button" onClick={() => reorderStack({ kind: 'element', id: el.id }, 'back')} title="Send to back" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-5 5m5-5l5 5" /><path strokeLinecap="round" strokeLinejoin="round" d="M5 19h14" /></svg>
                       </button>
@@ -1099,6 +1123,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
                     objectFit={el.object_fit}
                     focalX={el.focal_x}
                     focalY={el.focal_y}
+                    cornerStyle={el.corner_style}
                     isEditMode={isEditMode}
                     onFocalCommit={(x, y) => updateElement(el.id, { focal_x: x, focal_y: y })}
                   />

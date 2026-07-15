@@ -6,8 +6,11 @@ export interface VideoEmbedInfo {
   src: string;
 }
 
-export function resolveVideoEmbed(url: string, opts?: { background?: boolean }): VideoEmbedInfo {
-  const bg = !!opts?.background;
+export function resolveVideoEmbed(url: string, opts?: { autoplay?: boolean; controls?: boolean }): VideoEmbedInfo {
+  // Autoplaying video (element or background) must be muted/looped — browsers block
+  // unmuted autoplay, and this is what makes it "just play" without the user hitting play.
+  const autoplay = !!opts?.autoplay;
+  const controls = opts?.controls !== false;
   try {
     const u = new URL(url);
     const host = u.hostname.replace(/^www\./, '').replace(/^m\./, '');
@@ -20,13 +23,13 @@ export function resolveVideoEmbed(url: string, opts?: { background?: boolean }):
       videoId = videoId.split('/')[0].split('?')[0];
       if (videoId) {
         const params = new URLSearchParams({
-          autoplay: bg ? '1' : '0',
-          mute: bg ? '1' : '0',
-          loop: bg ? '1' : '0',
-          controls: bg ? '0' : '1',
+          autoplay: autoplay ? '1' : '0',
+          mute: autoplay ? '1' : '0',
+          loop: autoplay ? '1' : '0',
+          controls: controls ? '1' : '0',
           playsinline: '1',
         });
-        if (bg) params.set('playlist', videoId); // required by YouTube for loop=1 to work
+        if (autoplay) params.set('playlist', videoId); // required by YouTube for loop=1 to work
         return { type: 'iframe', src: `https://www.youtube.com/embed/${videoId}?${params.toString()}` };
       }
     }
@@ -35,10 +38,10 @@ export function resolveVideoEmbed(url: string, opts?: { background?: boolean }):
       const videoId = u.pathname.split('/').filter(Boolean).pop() || '';
       if (videoId && /^\d+$/.test(videoId)) {
         const params = new URLSearchParams({
-          autoplay: bg ? '1' : '0',
-          muted: bg ? '1' : '0',
-          loop: bg ? '1' : '0',
-          background: bg ? '1' : '0',
+          autoplay: autoplay ? '1' : '0',
+          muted: autoplay ? '1' : '0',
+          loop: autoplay ? '1' : '0',
+          background: (autoplay && !controls) ? '1' : '0',
         });
         return { type: 'iframe', src: `https://player.vimeo.com/video/${videoId}?${params.toString()}` };
       }
