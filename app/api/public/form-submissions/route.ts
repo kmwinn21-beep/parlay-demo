@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/getDb';
 import { resolveOrCreateAttendee } from '@/lib/resolveOrCreateAttendee';
+import { notifyConferenceInternalAttendees } from '@/lib/notifications';
 
 export const dynamic = 'force-dynamic';
 
@@ -151,6 +152,16 @@ export async function POST(request: NextRequest) {
         args: [resolvedAttendeeId, conference_id, nextStepValue, `Follow up from public form: ${formName}`],
       });
     } catch { /* non-fatal */ }
+
+    // Notify internal attendees on this conference (in-app + email) — best-effort, never
+    // throws, so a notification failure can't fail the submission itself.
+    await notifyConferenceInternalAttendees({
+      conferenceId: conference_id,
+      conferenceName,
+      message: `${nameVal || 'Someone'}${companyVal ? ` from ${companyVal}` : ''} submitted the "${formName}" form via the public link`,
+      changedByEmail: 'Public Form Submission',
+      changedByConfigId: null,
+    });
 
     return NextResponse.json({ id: submissionId }, { status: 201 });
   } catch (error) {
