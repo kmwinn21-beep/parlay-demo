@@ -1496,6 +1496,17 @@ export const migrations: string[] = [
   // 490 — conference_forms: optional public self-serve link. is_public gates the public API
   // routes; public_token is a stable (non-expiring, reusable) share token, unlike the
   // one-time input_request_tokens — a form is meant to be filled out by many attendees.
+  // NOTE: `public_token TEXT UNIQUE` here is invalid — SQLite's ALTER TABLE ADD COLUMN does
+  // not support UNIQUE constraints, so on any DB that already ran past this migration this
+  // statement silently failed and public_token was never added, breaking every read of
+  // conference_forms (missing column). Left as-is (harmless no-op) so version-tracking
+  // isn't disturbed; fixed forward by #491 below, which re-adds the column correctly and
+  // enforces uniqueness via a partial index instead.
   `ALTER TABLE conference_forms ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE conference_forms ADD COLUMN public_token TEXT UNIQUE`,
+  // 491 — fix-forward for #490: add public_token without the invalid UNIQUE constraint
+  // (no-ops harmlessly on any DB where #490 actually succeeded), then enforce uniqueness
+  // via a partial unique index (ignores NULLs, so non-public forms are unaffected).
+  `ALTER TABLE conference_forms ADD COLUMN public_token TEXT`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_conference_forms_public_token ON conference_forms(public_token) WHERE public_token IS NOT NULL`,
 ];
