@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/getDb';
+import { resolveOrCreateAttendee } from '@/lib/resolveOrCreateAttendee';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,12 +69,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create attendee
-    const newAtt = await db.execute({
-      sql: `INSERT INTO attendees (first_name, last_name, title, company_id, email) VALUES (?, ?, ?, ?, ?) RETURNING id`,
-      args: [manual_first_name.trim(), manual_last_name.trim(), titleVal || null, resolvedCompanyId, emailVal || null],
+    // Reuse an existing attendee with the same name (preferring the same company, if
+    // known) instead of always creating a new record.
+    const resolvedAttendeeId = await resolveOrCreateAttendee(db, {
+      firstName: manual_first_name,
+      lastName: manual_last_name,
+      title: titleVal,
+      email: emailVal,
+      companyId: resolvedCompanyId,
     });
-    const resolvedAttendeeId = Number(newAtt.rows[0].id);
     await db.execute({
       sql: `INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)`,
       args: [conference_id, resolvedAttendeeId],
@@ -88,7 +92,14 @@ export async function POST(request: NextRequest) {
     });
     const submissionId = Number(subResult.rows[0].id);
 
-    for (const v of (values as { field_id?: number; field_label: string; field_value: string }[] | undefined) || []) {
+    // "Name" isn't one of form.fields (it's collected via the dedicated first/last name
+    // inputs, not a regular field), but the submissions table reads it from this list —
+    // without it, the Name column shows a dash for every public submission.
+    const valuesWithName = [
+      { field_id: null, field_label: 'Name', field_value: nameVal },
+      ...((values as { field_id?: number; field_label: string; field_value: string }[] | undefined) || []),
+    ];
+    for (const v of valuesWithName) {
       await db.execute({
         sql: `INSERT INTO form_submission_values (submission_id, field_id, field_label, field_value) VALUES (?, ?, ?, ?)`,
         args: [submissionId, v.field_id || null, v.field_label, v.field_value || ''],

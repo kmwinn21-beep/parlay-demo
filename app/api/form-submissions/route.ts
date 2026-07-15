@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { resolveOrCreateAttendee } from '@/lib/resolveOrCreateAttendee';
 import type { Client } from '@libsql/client';
 
 export async function GET(request: NextRequest) {
@@ -115,12 +116,15 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Create attendee
-      const newAtt = await db.execute({
-        sql: `INSERT INTO attendees (first_name, last_name, title, company_id, email) VALUES (?, ?, ?, ?, ?) RETURNING id`,
-        args: [manual_first_name.trim(), manual_last_name.trim(), titleVal || null, resolvedCompanyId, emailVal || null],
+      // Reuse an existing attendee with the same name (preferring the same company, if
+      // known) instead of always creating a new record.
+      resolvedAttendeeId = await resolveOrCreateAttendee(db, {
+        firstName: manual_first_name,
+        lastName: manual_last_name,
+        title: titleVal,
+        email: emailVal,
+        companyId: resolvedCompanyId,
       });
-      resolvedAttendeeId = Number(newAtt.rows[0].id);
 
       // Relate attendee to conference
       await db.execute({
