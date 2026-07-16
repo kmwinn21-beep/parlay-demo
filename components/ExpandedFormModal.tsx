@@ -49,6 +49,7 @@ export interface ConferenceForm {
   field_background_color: string | null;
   is_public: boolean;
   public_token: string | null;
+  social_event_id: number | null;
   panel_logo_url: string | null;
   created_by: string | null;
   created_at: string;

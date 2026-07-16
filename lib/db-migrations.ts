@@ -1519,4 +1519,51 @@ export const migrations: string[] = [
   // Company, etc.) input background color. Null keeps the previous automatic behavior
   // (a translucent overlay auto-contrasted against the Form Card Color).
   `ALTER TABLE conference_forms ADD COLUMN field_background_color TEXT`,
+  // 495 — conference_forms: optional link to a social_events row. When set, a successful
+  // submission also adds the submitter to that event's guest list and records their RSVP
+  // (read from the submission's 'rsvp_status'-keyed field, defaulting to 'maybe' if the
+  // form doesn't include one).
+  `ALTER TABLE conference_forms ADD COLUMN social_event_id INTEGER REFERENCES social_events(id) ON DELETE SET NULL`,
+  // 496 — seed a locked "Event RSVP" form template: Name + Email (required) + an RSVP
+  // Yes/No/Maybe dropdown (required, field_key 'rsvp_status'). Template fields are only
+  // editable by admins (existing is_template_field gate in FormBuilderModal), so a form
+  // built from this template can't have its required fields removed by regular users —
+  // matching the "non-editable" RSVP template the fields were designed around.
+  // Every INSERT below is guarded by a NOT EXISTS check so this is safe to run repeatedly
+  // and reaches already-provisioned tenant databases (not just newly-created ones).
+  `INSERT INTO form_templates (name, created_by)
+   SELECT 'Event RSVP', 'system'
+   WHERE NOT EXISTS (SELECT 1 FROM form_templates WHERE name = 'Event RSVP')`,
+  `INSERT INTO form_fields (template_id, field_type, field_key, label, sort_order, required)
+   SELECT t.id, 'attendee_picker', 'attendee_name', 'Name', 1, 1
+   FROM form_templates t WHERE t.name = 'Event RSVP'
+   AND NOT EXISTS (SELECT 1 FROM form_fields f WHERE f.template_id = t.id AND f.field_key = 'attendee_name')`,
+  `INSERT INTO form_fields (template_id, field_type, field_key, label, sort_order, required)
+   SELECT t.id, 'text_single', 'title', 'Title', 2, 0
+   FROM form_templates t WHERE t.name = 'Event RSVP'
+   AND NOT EXISTS (SELECT 1 FROM form_fields f WHERE f.template_id = t.id AND f.field_key = 'title')`,
+  `INSERT INTO form_fields (template_id, field_type, field_key, label, sort_order, required)
+   SELECT t.id, 'text_single', 'company', 'Company', 3, 0
+   FROM form_templates t WHERE t.name = 'Event RSVP'
+   AND NOT EXISTS (SELECT 1 FROM form_fields f WHERE f.template_id = t.id AND f.field_key = 'company')`,
+  `INSERT INTO form_fields (template_id, field_type, field_key, label, sort_order, required)
+   SELECT t.id, 'text_single', 'email', 'Email', 4, 1
+   FROM form_templates t WHERE t.name = 'Event RSVP'
+   AND NOT EXISTS (SELECT 1 FROM form_fields f WHERE f.template_id = t.id AND f.field_key = 'email')`,
+  `INSERT INTO form_fields (template_id, field_type, field_key, label, sort_order, required)
+   SELECT t.id, 'dropdown', 'rsvp_status', 'Will you be attending?', 5, 1
+   FROM form_templates t WHERE t.name = 'Event RSVP'
+   AND NOT EXISTS (SELECT 1 FROM form_fields f WHERE f.template_id = t.id AND f.field_key = 'rsvp_status')`,
+  `INSERT INTO form_field_options (field_id, value, sort_order)
+   SELECT f.id, 'Yes', 1 FROM form_fields f JOIN form_templates t ON f.template_id = t.id
+   WHERE t.name = 'Event RSVP' AND f.field_key = 'rsvp_status'
+   AND NOT EXISTS (SELECT 1 FROM form_field_options o WHERE o.field_id = f.id AND o.value = 'Yes')`,
+  `INSERT INTO form_field_options (field_id, value, sort_order)
+   SELECT f.id, 'No', 2 FROM form_fields f JOIN form_templates t ON f.template_id = t.id
+   WHERE t.name = 'Event RSVP' AND f.field_key = 'rsvp_status'
+   AND NOT EXISTS (SELECT 1 FROM form_field_options o WHERE o.field_id = f.id AND o.value = 'No')`,
+  `INSERT INTO form_field_options (field_id, value, sort_order)
+   SELECT f.id, 'Maybe', 3 FROM form_fields f JOIN form_templates t ON f.template_id = t.id
+   WHERE t.name = 'Event RSVP' AND f.field_key = 'rsvp_status'
+   AND NOT EXISTS (SELECT 1 FROM form_field_options o WHERE o.field_id = f.id AND o.value = 'Maybe')`,
 ];

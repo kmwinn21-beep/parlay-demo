@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/getDb';
 import { resolveOrCreateAttendee } from '@/lib/resolveOrCreateAttendee';
 import { notifyConferenceInternalAttendees } from '@/lib/notifications';
+import { findRsvpFieldId, mapRsvpAnswerToStatus, applySocialEventRsvp } from '@/lib/applySocialEventRsvp';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
     if (!db) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const formRes = await db.execute({
-      sql: `SELECT id, conference_id, name FROM conference_forms WHERE public_token = ? AND is_public = 1`,
+      sql: `SELECT id, conference_id, name, social_event_id FROM conference_forms WHERE public_token = ? AND is_public = 1`,
       args: [token],
     });
     const form = formRes.rows[0];
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
     const conference_form_id = Number(form.id);
     const conference_id = Number(form.conference_id);
     const formName = String(form.name);
+    const socialEventId = form.social_event_id != null ? Number(form.social_event_id) : null;
 
     const getVal = (label: string) =>
       (values as { field_label: string; field_value: string }[] | undefined)
@@ -152,6 +154,18 @@ export async function POST(request: NextRequest) {
         args: [resolvedAttendeeId, conference_id, nextStepValue, `Follow up from public form: ${formName}`],
       });
     } catch { /* non-fatal */ }
+
+    // If this form is linked to a social event, add the attendee to that event's guest list
+    // and record their RSVP answer (defaulting to "maybe" if the form has no RSVP field).
+    if (socialEventId) {
+      const rsvpFieldId = await findRsvpFieldId(db, conference_form_id);
+      const rsvpValueRaw = rsvpFieldId
+        ? (values as { field_id?: number; field_value: string }[] | undefined)
+            ?.find(v => v.field_id === rsvpFieldId)?.field_value
+        : null;
+      const rsvpStatus = mapRsvpAnswerToStatus(rsvpValueRaw);
+      await applySocialEventRsvp(db, { socialEventId, attendeeId: resolvedAttendeeId, rsvpStatus });
+    }
 
     // Notify internal attendees on this conference (in-app + email) — best-effort, never
     // throws, so a notification failure can't fail the submission itself.

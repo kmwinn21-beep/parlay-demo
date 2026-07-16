@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
                    form_z_index, background_image_url, background_image_opacity,
                    background_video_url, background_video_opacity,
                    eyebrow_color, submit_button_color, field_background_color, is_public, public_token,
-                   panel_logo_url, created_by, created_at
+                   social_event_id, panel_logo_url, created_by, created_at
             FROM conference_forms WHERE conference_id = ? ORDER BY created_at DESC`,
       args: [conferenceId],
     });
@@ -112,6 +112,7 @@ export async function GET(request: NextRequest) {
         field_background_color: f.field_background_color ? String(f.field_background_color) : null,
         is_public: Number(f.is_public) === 1,
         public_token: f.public_token ? String(f.public_token) : null,
+        social_event_id: f.social_event_id != null ? Number(f.social_event_id) : null,
         panel_logo_url: f.panel_logo_url ? String(f.panel_logo_url) : null,
         created_by: f.created_by ? String(f.created_by) : null,
         created_at: String(f.created_at),
@@ -136,7 +137,7 @@ export async function POST(request: NextRequest) {
     const { conference_id, template_id, name, conference_logo_url, background_color,
             accent_color, accent_gradient, image_url, image_max_width, html_content,
             image_offset_y, html_offset_y, form_width, form_height, form_offset_y,
-            panel_logo_url } = await request.json();
+            social_event_id, panel_logo_url } = await request.json();
     if (!conference_id || !name?.trim()) return NextResponse.json({ error: 'conference_id and name required' }, { status: 400 });
 
     const result = await db.execute({
@@ -144,8 +145,8 @@ export async function POST(request: NextRequest) {
               (conference_id, template_id, name, conference_logo_url, background_color,
                accent_color, accent_gradient, image_url, image_max_width, html_content,
                image_offset_y, html_offset_y, form_width, form_height, form_offset_y,
-               panel_logo_url, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+               social_event_id, panel_logo_url, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       args: [
         conference_id, template_id || null, name.trim(),
         conference_logo_url || null, background_color || null,
@@ -157,6 +158,7 @@ export async function POST(request: NextRequest) {
         form_width != null ? Number(form_width) : null,
         form_height != null ? Number(form_height) : null,
         form_offset_y != null ? Number(form_offset_y) : null,
+        social_event_id != null ? Number(social_event_id) : null,
         panel_logo_url || null,
         user.email,
       ],
