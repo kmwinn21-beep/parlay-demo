@@ -1515,4 +1515,8 @@ export const migrations: string[] = [
   // 493 — form_fields: shorten the default "Email Address" field label to "Email" —
   // renames it everywhere it's already in use (template + per-form fields), not just new ones.
   `UPDATE form_fields SET label = 'Email' WHERE label = 'Email Address'`,
+  // 494 — conference_forms: optional override for the submission fields' (Name, Title,
+  // Company, etc.) input background color. Null keeps the previous automatic behavior
+  // (a translucent overlay auto-contrasted against the Form Card Color).
+  `ALTER TABLE conference_forms ADD COLUMN field_background_color TEXT`,
 ];

@@ -47,6 +47,7 @@ interface PublicForm {
   background_video_opacity: number | null;
   eyebrow_color: string | null;
   submit_button_color: string | null;
+  field_background_color: string | null;
   panel_logo_url: string | null;
   fields: FormField[];
   elements: FormElement[];
@@ -223,8 +224,10 @@ function PublicFormInner() {
   const bgColor = form.background_color || '#0B3C62';
   const cardIsLight = isColorLight(bgColor);
   const textColor = cardIsLight ? '#1a1a1a' : '#ffffff';
-  const inputBg = cardIsLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.12)';
-  const inputBorder = cardIsLight ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.25)';
+  const fieldIsLight = form.field_background_color ? isColorLight(form.field_background_color) : cardIsLight;
+  const inputBg = form.field_background_color || (cardIsLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.12)');
+  const inputBorder = fieldIsLight ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.25)';
+  const fieldTextColor = fieldIsLight ? '#1a1a1a' : '#ffffff';
   const eyebrowColor = form.eyebrow_color || textColor;
   const submitBg = form.submit_button_color || (cardIsLight ? '#0B3C62' : '#ffffff');
   const submitTextColor = isColorLight(submitBg) ? '#0B3C62' : '#ffffff';
@@ -245,13 +248,13 @@ function PublicFormInner() {
             <label className="block text-xs font-medium mb-1" style={{ color: textColor }}>First Name *</label>
             <input type="text" required value={firstName} onChange={e => setFirstName(e.target.value)}
               className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
-              style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: textColor }} />
+              style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: fieldTextColor }} />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: textColor }}>Last Name *</label>
             <input type="text" required value={lastName} onChange={e => setLastName(e.target.value)}
               className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
-              style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: textColor }} />
+              style={{ background: inputBg, border: `1px solid ${inputBorder}`, color: fieldTextColor }} />
           </div>
         </div>
       );
@@ -261,7 +264,7 @@ function PublicFormInner() {
         {field.label}{field.required && <span className="ml-1 text-red-400">*</span>}
       </label>
     );
-    const inputStyle = { background: inputBg, border: `1px solid ${inputBorder}`, color: textColor } as React.CSSProperties;
+    const inputStyle = { background: inputBg, border: `1px solid ${inputBorder}`, color: fieldTextColor } as React.CSSProperties;
 
     if (field.field_type === 'text_paragraph') {
       return (

@@ -22,7 +22,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
             image_offset_y, html_offset_y, form_width, form_height, form_offset_y, form_x,
             form_z_index, background_image_url, background_image_opacity,
             background_video_url, background_video_opacity,
-            eyebrow_color, submit_button_color, is_public,
+            eyebrow_color, submit_button_color, field_background_color, is_public,
             panel_logo_url } = await request.json();
     const sets: string[] = [];
     const args: (string | number | null)[] = [];
@@ -55,6 +55,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     if (background_video_opacity !== undefined) { sets.push('background_video_opacity = ?'); args.push(background_video_opacity != null ? Number(background_video_opacity) : null); }
     if (eyebrow_color !== undefined) { sets.push('eyebrow_color = ?'); args.push(eyebrow_color || null); }
     if (submit_button_color !== undefined) { sets.push('submit_button_color = ?'); args.push(submit_button_color || null); }
+    if (field_background_color !== undefined) { sets.push('field_background_color = ?'); args.push(field_background_color || null); }
     if (panel_logo_url !== undefined) { sets.push('panel_logo_url = ?'); args.push(panel_logo_url || null); }
     if (sets.length === 0) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
     args.push(params.id);
