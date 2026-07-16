@@ -46,6 +46,7 @@ export interface ConferenceForm {
   background_video_opacity: number | null;
   eyebrow_color: string | null;
   submit_button_color: string | null;
+  field_background_color: string | null;
   is_public: boolean;
   public_token: string | null;
   panel_logo_url: string | null;
@@ -324,6 +325,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
     background_video_opacity: form.background_video_opacity ?? 100,
     eyebrow_color: form.eyebrow_color,
     submit_button_color: form.submit_button_color,
+    field_background_color: form.field_background_color,
   });
   const metaTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const elementTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
@@ -662,9 +664,13 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
   const bgColor = formMeta.background_color;
   const cardIsLight = isColorLight(bgColor);
   const textColor = cardIsLight ? '#1a1a1a' : '#ffffff';
-  const inputBg = cardIsLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.12)';
-  const inputBorder = cardIsLight ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.25)';
-  const inputText = cardIsLight ? '#1a1a1a' : '#ffffff';
+  // Submission fields (Name, Title, Company, etc.) default to a translucent overlay
+  // auto-contrasted against the Form Card Color; field_background_color overrides that
+  // with a solid, user-chosen color, auto-contrasting its own text/border instead.
+  const fieldIsLight = formMeta.field_background_color ? isColorLight(formMeta.field_background_color) : cardIsLight;
+  const inputBg = formMeta.field_background_color || (cardIsLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.12)');
+  const inputBorder = fieldIsLight ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.25)';
+  const inputText = fieldIsLight ? '#1a1a1a' : '#ffffff';
   const eyebrowColor = formMeta.eyebrow_color || textColor;
   const submitBg = formMeta.submit_button_color || (cardIsLight ? '#0B3C62' : '#ffffff');
   const submitTextColor = isColorLight(submitBg) ? '#0B3C62' : '#ffffff';
@@ -1214,6 +1220,8 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
             onEyebrowColorChange={v => patchFormMeta({ eyebrow_color: v }, 'eyebrow')}
             submitButtonColor={formMeta.submit_button_color}
             onSubmitButtonColorChange={v => patchFormMeta({ submit_button_color: v }, 'submitBtn')}
+            fieldBackgroundColor={formMeta.field_background_color}
+            onFieldBackgroundColorChange={v => patchFormMeta({ field_background_color: v }, 'fieldBg')}
             onAddImage={url => addElement('image', url)}
             onAddVideo={url => addElement('video', url)}
             onAddText={() => addElement('text', '<p>New text</p>')}

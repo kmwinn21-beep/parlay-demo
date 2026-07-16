@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
                    cf.accent_color, cf.accent_gradient, cf.form_width, cf.form_height, cf.form_offset_y, cf.form_x,
                    cf.form_z_index, cf.background_image_url, cf.background_image_opacity,
                    cf.background_video_url, cf.background_video_opacity,
-                   cf.eyebrow_color, cf.submit_button_color, cf.panel_logo_url,
+                   cf.eyebrow_color, cf.submit_button_color, cf.field_background_color, cf.panel_logo_url,
                    c.name as conference_name
             FROM conference_forms cf
             JOIN conferences c ON c.id = cf.conference_id
@@ -119,6 +119,7 @@ export async function GET(request: NextRequest) {
       background_video_opacity: f.background_video_opacity != null ? Number(f.background_video_opacity) : null,
       eyebrow_color: f.eyebrow_color ? String(f.eyebrow_color) : null,
       submit_button_color: f.submit_button_color ? String(f.submit_button_color) : null,
+      field_background_color: f.field_background_color ? String(f.field_background_color) : null,
       panel_logo_url: f.panel_logo_url ? String(f.panel_logo_url) : null,
       fields: allFields,
       elements,

@@ -28,6 +28,8 @@ interface Props {
   onEyebrowColorChange: (v: string | null) => void;
   submitButtonColor: string | null;
   onSubmitButtonColorChange: (v: string | null) => void;
+  fieldBackgroundColor: string | null;
+  onFieldBackgroundColorChange: (v: string | null) => void;
   onAddImage: (url: string) => void;
   onAddVideo: (url: string) => void;
   onAddText: () => void;
@@ -95,6 +97,8 @@ export function FormEditDrawer({
   onEyebrowColorChange,
   submitButtonColor,
   onSubmitButtonColorChange,
+  fieldBackgroundColor,
+  onFieldBackgroundColorChange,
   onAddImage,
   onAddVideo,
   onAddText,
@@ -399,6 +403,19 @@ export function FormEditDrawer({
                   <div className="flex gap-2 items-center">
                     <input type="color" value={submitButtonColor || '#0B3C62'} onChange={e => onSubmitButtonColorChange(e.target.value)} className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white" />
                     <input type="text" value={submitButtonColor || ''} onChange={e => onSubmitButtonColorChange(e.target.value)} className="input-field text-sm flex-1" placeholder="Auto (contrasts Form Card Color)" />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-gray-500">Form Field Background Color</label>
+                    {fieldBackgroundColor && (
+                      <button type="button" onClick={() => onFieldBackgroundColorChange(null)} className="text-xs text-gray-400 hover:text-gray-600">Reset</button>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400 mb-1">The Name, Title, Company, etc. input boxes on the form itself.</p>
+                  <div className="flex gap-2 items-center">
+                    <input type="color" value={fieldBackgroundColor || '#ffffff'} onChange={e => onFieldBackgroundColorChange(e.target.value)} className="w-10 h-9 rounded border border-gray-300 cursor-pointer p-0.5 bg-white" />
+                    <input type="text" value={fieldBackgroundColor || ''} onChange={e => onFieldBackgroundColorChange(e.target.value)} className="input-field text-sm flex-1" placeholder="Auto (contrasts Form Card Color)" />
                   </div>
                 </div>
               </div>
