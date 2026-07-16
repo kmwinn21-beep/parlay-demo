@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import toast from 'react-hot-toast';
 import { buildAccentBackground } from '@/components/ExpandedFormModal';
 import { resolveVideoEmbed } from '@/lib/videoEmbed';
 
@@ -163,12 +164,15 @@ function PublicFormInner() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form) return;
-    if (!firstName.trim() || !lastName.trim()) return;
+    if (!firstName.trim() || !lastName.trim()) { toast.error('First and last name are required'); return; }
     for (const f of form.fields) {
       if (f.field_key === 'attendee_name') continue;
       if (f.required) {
         const v = values[f.id];
-        if (!v || (Array.isArray(v) ? v.length === 0 : !String(v).trim())) return;
+        if (!v || (Array.isArray(v) ? v.length === 0 : !String(v).trim())) {
+          toast.error(`"${f.label}" is required`);
+          return;
+        }
       }
     }
     setSubmitting(true);
