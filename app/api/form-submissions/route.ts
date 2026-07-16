@@ -242,11 +242,10 @@ export async function POST(request: NextRequest) {
     // If this form is linked to a social event, add the attendee to that event's guest list
     // and record their RSVP answer (defaulting to "maybe" if the form has no RSVP field).
     if (socialEventId && resolvedAttendeeId) {
-      const rsvpFieldId = await findRsvpFieldId(db, Number(conference_form_id));
-      const rsvpValueRaw = rsvpFieldId
-        ? (values as { field_id?: number; field_value: string }[])
-            .find(v => v.field_id === rsvpFieldId)?.field_value
-        : null;
+      const submittedValues = (values as { field_id?: number; field_value: string }[]) || [];
+      const submittedFieldIds = submittedValues.map(v => v.field_id).filter((id): id is number => id != null);
+      const rsvpFieldId = await findRsvpFieldId(db, submittedFieldIds);
+      const rsvpValueRaw = rsvpFieldId ? submittedValues.find(v => v.field_id === rsvpFieldId)?.field_value : null;
       const rsvpStatus = mapRsvpAnswerToStatus(rsvpValueRaw);
       await applySocialEventRsvp(db, { socialEventId, attendeeId: resolvedAttendeeId, rsvpStatus });
     }

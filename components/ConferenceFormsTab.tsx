@@ -723,12 +723,9 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
                   <button
                     type="button"
                     onClick={() => toggleRow(form.id)}
-                    className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 transition-colors flex-shrink-0 mt-0.5"
-                    title={isExpanded ? 'Collapse' : 'Show submissions'}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors flex-shrink-0 mt-0.5 whitespace-nowrap"
                   >
-                    <svg className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
+                    {isExpanded ? 'Hide Submissions' : 'Show Submissions'}
                   </button>
                 </div>
 

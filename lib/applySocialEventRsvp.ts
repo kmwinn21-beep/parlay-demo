@@ -10,20 +10,17 @@ export function mapRsvpAnswerToStatus(raw: string | undefined | null): string {
   return VALID_RSVP_STATUSES.includes(normalized) ? normalized : 'maybe';
 }
 
-/** Finds the id of a form's 'rsvp_status'-keyed field, checking both its shared template
- * fields and its own per-form fields (mirrors how conference-forms routes merge the two). */
-export async function findRsvpFieldId(db: Client, conferenceFormId: number): Promise<number | null> {
+/** Finds which (if any) of the actually-submitted field ids is the form's 'rsvp_status'-keyed
+ * field. Checking the submitted ids directly — rather than re-deriving the field via the
+ * conference form's template_id — avoids depending on that join lining up (e.g. a field added
+ * directly on the form instead of inherited from a shared template still resolves correctly). */
+export async function findRsvpFieldId(db: Client, submittedFieldIds: number[]): Promise<number | null> {
+  if (submittedFieldIds.length === 0) return null;
   try {
-    const formRow = await db.execute({
-      sql: 'SELECT template_id FROM conference_forms WHERE id = ?',
-      args: [conferenceFormId],
-    });
-    const templateId = formRow.rows[0]?.template_id != null ? Number(formRow.rows[0].template_id) : null;
+    const placeholders = submittedFieldIds.map(() => '?').join(',');
     const res = await db.execute({
-      sql: `SELECT id FROM form_fields WHERE field_key = 'rsvp_status' AND (
-              (template_id = ? AND conference_form_id IS NULL) OR conference_form_id = ?
-            ) LIMIT 1`,
-      args: [templateId, conferenceFormId],
+      sql: `SELECT id FROM form_fields WHERE field_key = 'rsvp_status' AND id IN (${placeholders}) LIMIT 1`,
+      args: submittedFieldIds,
     });
     return res.rows.length > 0 ? Number(res.rows[0].id) : null;
   } catch {
