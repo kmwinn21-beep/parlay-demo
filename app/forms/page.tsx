@@ -161,10 +161,38 @@ function PublicFormInner() {
 
   const setValue = (fieldId: number, val: string | string[]) => setValues(prev => ({ ...prev, [fieldId]: val }));
 
+  // Most forms use the built-in "Name" field (field_key 'attendee_name'), which drives the
+  // dedicated firstName/lastName state below. But a form built without that field (custom
+  // "First Name"/"Last Name" text fields instead) has no way to populate that state — so the
+  // name must be derived from whichever fields actually hold it, or the required-name check
+  // fails even when the visible fields are filled in.
+  const deriveManualName = (): { first: string; last: string } => {
+    if (!form) return { first: '', last: '' };
+    if (form.fields.some(f => f.field_key === 'attendee_name')) {
+      return { first: firstName.trim(), last: lastName.trim() };
+    }
+    const firstField = form.fields.find(f => /first\s*name/i.test(f.label));
+    const lastField = form.fields.find(f => /last\s*name/i.test(f.label));
+    if (firstField || lastField) {
+      return {
+        first: firstField ? String(values[firstField.id] || '').trim() : '',
+        last: lastField ? String(values[lastField.id] || '').trim() : '',
+      };
+    }
+    const nameField = form.fields.find(f => f.label.trim().toLowerCase() === 'name');
+    if (nameField) {
+      const full = String(values[nameField.id] || '').trim();
+      const [first, ...rest] = full.split(/\s+/);
+      return { first: first || '', last: rest.join(' ') };
+    }
+    return { first: '', last: '' };
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form) return;
-    if (!firstName.trim() || !lastName.trim()) { toast.error('First and last name are required'); return; }
+    const manualName = deriveManualName();
+    if (!manualName.first || !manualName.last) { toast.error('First and last name are required'); return; }
     for (const f of form.fields) {
       if (f.field_key === 'attendee_name') continue;
       if (f.required) {
@@ -190,8 +218,8 @@ function PublicFormInner() {
         body: JSON.stringify({
           token, aid,
           honeypot: honeypotRef.current?.value || '',
-          manual_first_name: firstName.trim(),
-          manual_last_name: lastName.trim(),
+          manual_first_name: manualName.first,
+          manual_last_name: manualName.last,
           values: submissionValues,
         }),
       });
