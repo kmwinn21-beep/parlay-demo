@@ -364,7 +364,10 @@ function NoteCard({ note, onDelete, onAssign, onEdit }: {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(note.content);
   const [saving, setSaving] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const isLong = note.content.length > 200;
+  const stamp = `${fmtDate(note.created_at)}${note.created_by ? ` · ${note.created_by.split('@')[0]}` : ''}`;
 
   const handleEditSave = async () => {
     if (!editText.trim() || editText.trim() === note.content) { setEditing(false); return; }
@@ -374,11 +377,18 @@ function NoteCard({ note, onDelete, onAssign, onEdit }: {
     setEditing(false);
   };
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    const h = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [menuOpen]);
+
   return (
     <div className="border border-gray-200 rounded-xl p-4 bg-white hover:border-gray-300 transition-colors">
       <div className="flex items-start justify-between gap-3 mb-2">
         <div className="flex items-center gap-1.5 min-w-0">
-          <p className="text-xs text-gray-400 truncate">{fmtDate(note.created_at)}{note.created_by && ` · ${note.created_by.split('@')[0]}`}</p>
+          <p className="hidden sm:block text-xs text-gray-400 truncate">{stamp}</p>
           {note.tag === 'card-badge' && (
             <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-[10px] font-medium text-blue-600 flex-shrink-0">
               <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2" /></svg>
@@ -396,19 +406,32 @@ function NoteCard({ note, onDelete, onAssign, onEdit }: {
           )}
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          <button type="button" onClick={() => { setEditing(true); setEditText(note.content); }}
-            className="text-gray-300 hover:text-brand-secondary transition-colors p-1 rounded" title="Edit">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-          </button>
           <button type="button" onClick={onAssign}
             className="flex items-center gap-1.5 text-xs font-medium text-brand-secondary hover:text-brand-primary border border-brand-secondary/30 hover:border-brand-secondary px-2.5 py-1 rounded-lg transition-colors">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a2 2 0 012-2z" /></svg>
             Assign
           </button>
-          <button type="button" onClick={() => onDelete(note.id)}
-            className="text-gray-300 hover:text-red-400 transition-colors p-1 rounded" title="Delete">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-          </button>
+          <div className="relative" ref={menuRef}>
+            <button type="button" onClick={() => setMenuOpen(v => !v)}
+              className="text-gray-300 hover:text-gray-600 transition-colors p-1 rounded" title="More options">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.75" /><circle cx="12" cy="12" r="1.75" /><circle cx="12" cy="19" r="1.75" /></svg>
+            </button>
+            {menuOpen && (
+              <div className="absolute top-full right-0 mt-1 w-44 bg-white rounded-lg shadow-lg border border-gray-100 py-1.5 z-20">
+                <p className="sm:hidden px-3 pb-1.5 mb-1 border-b border-gray-100 text-xs text-gray-400 truncate">{stamp}</p>
+                <button type="button" onClick={() => { setEditing(true); setEditText(note.content); setMenuOpen(false); }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                  Edit
+                </button>
+                <button type="button" onClick={() => { setMenuOpen(false); onDelete(note.id); }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-red-500 hover:bg-red-50 transition-colors">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
       {editing ? (
