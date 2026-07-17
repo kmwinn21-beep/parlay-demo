@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { resolveOrCreateAttendee } from '@/lib/resolveOrCreateAttendee';
+import { findRsvpFieldId, mapRsvpAnswerToStatus, applySocialEventRsvp } from '@/lib/applySocialEventRsvp';
 import type { Client } from '@libsql/client';
 
 export async function GET(request: NextRequest) {
@@ -171,8 +172,11 @@ export async function POST(request: NextRequest) {
       .filter(v => v.field_value)
       .map(v => `${v.field_label}: ${v.field_value}`)
       .join('\n');
-    const formNameRow = await db.execute({ sql: `SELECT name FROM conference_forms WHERE id = ?`, args: [conference_form_id] });
+    const formNameRow = await db.execute({ sql: `SELECT name, social_event_id FROM conference_forms WHERE id = ?`, args: [conference_form_id] });
     const formName = formNameRow.rows.length > 0 ? String(formNameRow.rows[0].name) : 'Form';
+    const socialEventId = formNameRow.rows.length > 0 && formNameRow.rows[0].social_event_id != null
+      ? Number(formNameRow.rows[0].social_event_id)
+      : null;
     const noteContent = `Form Submission - ${formName}\n\n${noteLines}`;
 
     // Get rep display name and config_id
@@ -233,6 +237,17 @@ export async function POST(request: NextRequest) {
           args: [resolvedAttendeeId, conference_id, nextStepValue, `Follow up from form: ${formName}`, repConfigId],
         });
       } catch { /* non-fatal */ }
+    }
+
+    // If this form is linked to a social event, add the attendee to that event's guest list
+    // and record their RSVP answer (defaulting to "maybe" if the form has no RSVP field).
+    if (socialEventId && resolvedAttendeeId) {
+      const submittedValues = (values as { field_id?: number; field_value: string }[]) || [];
+      const submittedFieldIds = submittedValues.map(v => v.field_id).filter((id): id is number => id != null);
+      const rsvpFieldId = await findRsvpFieldId(db, submittedFieldIds);
+      const rsvpValueRaw = rsvpFieldId ? submittedValues.find(v => v.field_id === rsvpFieldId)?.field_value : null;
+      const rsvpStatus = mapRsvpAnswerToStatus(rsvpValueRaw);
+      await applySocialEventRsvp(db, { socialEventId, attendeeId: resolvedAttendeeId, rsvpStatus });
     }
 
     return NextResponse.json({

@@ -53,6 +53,12 @@ interface StatusOption {
   value: string;
 }
 
+interface SocialEventOption {
+  id: number;
+  event_name: string | null;
+  event_type: string | null;
+}
+
 interface Props {
   conferenceId: number;
   conferenceName: string;
@@ -92,7 +98,9 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
   const [newFormLogo, setNewFormLogo] = useState('');
   const [newFormBgColor, setNewFormBgColor] = useState('');
   const [newFormAccentColor, setNewFormAccentColor] = useState('');
+  const [newFormSocialEventId, setNewFormSocialEventId] = useState<number | null>(null);
   const [savingNewForm, setSavingNewForm] = useState(false);
+  const [socialEvents, setSocialEvents] = useState<SocialEventOption[]>([]);
 
   // Expanded form
   const [expandedForm, setExpandedForm] = useState<ConferenceForm | null>(null);
@@ -115,7 +123,8 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
     accent_color: string;
     accent_gradient: string;
     panel_logo_url: string;
-  }>({ name: '', conference_logo_url: '', background_color: '', accent_color: '', accent_gradient: 'none', panel_logo_url: '' });
+    social_event_id: number | null;
+  }>({ name: '', conference_logo_url: '', background_color: '', accent_color: '', accent_gradient: 'none', panel_logo_url: '', social_event_id: null });
 
   // Duplicate form → other conference(s)
   const [duplicatingFormId, setDuplicatingFormId] = useState<number | null>(null);
@@ -275,10 +284,11 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
 
   const loadForms = useCallback(async () => {
     try {
-      const [formsRes, templatesRes, statusRes] = await Promise.all([
+      const [formsRes, templatesRes, statusRes, socialEventsRes] = await Promise.all([
         fetch(`/api/conference-forms?conference_id=${conferenceId}`),
         fetch('/api/form-templates'),
         fetch('/api/config?category=status'),
+        fetch(`/api/social-events?conference_id=${conferenceId}`),
       ]);
       if (formsRes.ok) setForms(await formsRes.json());
       if (templatesRes.ok) setTemplates(await templatesRes.json());
@@ -286,6 +296,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
         const data = await statusRes.json();
         setStatusOptions(data.map((o: { id: number; value: string }) => ({ id: o.id, value: o.value })));
       }
+      if (socialEventsRes.ok) setSocialEvents(await socialEventsRes.json());
     } catch { toast.error('Failed to load forms'); }
     finally { setLoading(false); }
   }, [conferenceId]);
@@ -329,6 +340,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
           conference_logo_url: newFormLogo.trim() || null,
           background_color: newFormBgColor.trim() || null,
           accent_color: newFormAccentColor.trim() || null,
+          social_event_id: newFormSocialEventId,
         }),
       });
       if (!res.ok) throw new Error();
@@ -339,6 +351,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
       setNewFormLogo('');
       setNewFormBgColor('');
       setNewFormAccentColor('');
+      setNewFormSocialEventId(null);
       await loadForms();
     } catch { toast.error('Failed to create form'); }
     finally { setSavingNewForm(false); }
@@ -424,6 +437,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
           accent_color: editDraft.accent_color.trim() || null,
           accent_gradient: editDraft.accent_gradient || null,
           panel_logo_url: editDraft.panel_logo_url.trim() || null,
+          social_event_id: editDraft.social_event_id,
         }),
       });
       if (!res.ok) throw new Error();
@@ -536,6 +550,16 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
               </select>
             </div>
             <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">
+                Linked Social Event
+                <span className="font-normal text-gray-400 ml-1">(syncs RSVPs to the event guest list)</span>
+              </label>
+              <select value={newFormSocialEventId ?? ''} onChange={e => setNewFormSocialEventId(e.target.value ? Number(e.target.value) : null)} className="input-field text-sm w-full">
+                <option value="">— Not linked —</option>
+                {socialEvents.map(ev => <option key={ev.id} value={ev.id}>{ev.event_name || ev.event_type || `Event #${ev.id}`}</option>)}
+              </select>
+            </div>
+            <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">Conference Logo URL</label>
               <input type="url" value={newFormLogo} onChange={e => setNewFormLogo(e.target.value)} className="input-field text-sm w-full" placeholder="https://..." />
             </div>
@@ -618,6 +642,22 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
                   </div>
                 </div>
 
+                {/* Row 1c: Linked social event */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">
+                    Linked Social Event
+                    <span className="font-normal text-gray-400 ml-1">(syncs RSVPs to the event guest list)</span>
+                  </label>
+                  <select
+                    value={editDraft.social_event_id ?? ''}
+                    onChange={e => setEditDraft(d => ({ ...d, social_event_id: e.target.value ? Number(e.target.value) : null }))}
+                    className="input-field text-sm w-full"
+                  >
+                    <option value="">— Not linked —</option>
+                    {socialEvents.map(ev => <option key={ev.id} value={ev.id}>{ev.event_name || ev.event_type || `Event #${ev.id}`}</option>)}
+                  </select>
+                </div>
+
                 {/* Row 2: Form card color + Page background color */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -683,12 +723,9 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
                   <button
                     type="button"
                     onClick={() => toggleRow(form.id)}
-                    className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 transition-colors flex-shrink-0 mt-0.5"
-                    title={isExpanded ? 'Collapse' : 'Show submissions'}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors flex-shrink-0 mt-0.5 whitespace-nowrap"
                   >
-                    <svg className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
+                    {isExpanded ? 'Hide Submissions' : 'Show Submissions'}
                   </button>
                 </div>
 
@@ -724,6 +761,7 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
                           accent_color: form.accent_color || getCssVarHex('--brand-highlight-rgb', '#FFCB3F'),
                           accent_gradient: form.accent_gradient || 'none',
                           panel_logo_url: form.panel_logo_url || '',
+                          social_event_id: form.social_event_id,
                         });
                       }}
                       title="Edit form settings"
