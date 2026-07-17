@@ -96,38 +96,6 @@ export const ACTIVITY_DOT_CLASS: Record<'phone' | 'email' | 'linkedin', string> 
   linkedin: 'bg-purple-500',
 };
 
-function AssigneeStack({ assignees, max = 3 }: { assignees: OutreachAssignee[]; max?: number }) {
-  if (assignees.length === 0) {
-    return <span className="text-xs text-gray-400 italic">Unassigned</span>;
-  }
-  const shown = assignees.slice(0, max);
-  const overflow = assignees.length - shown.length;
-  // Leftmost avatar stacks on top (descending z-index), each subsequent one
-  // overlapping by -6px with a 1.5px border to show separation against the card.
-  return (
-    <div className="flex items-center">
-      {shown.map((a, i) => (
-        <div
-          key={a.userId}
-          title={a.displayName}
-          style={{ marginLeft: i === 0 ? 0 : -6, zIndex: shown.length - i, border: '1.5px solid #60a5fa' }}
-          className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 text-[10px] font-semibold flex items-center justify-center flex-shrink-0 relative"
-        >
-          {a.initials}
-        </div>
-      ))}
-      {overflow > 0 && (
-        <div
-          style={{ marginLeft: -6, zIndex: 0, border: '1.5px solid #60a5fa' }}
-          className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 text-[10px] font-semibold flex items-center justify-center flex-shrink-0 relative"
-        >
-          +{overflow}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // Small popover anchored to an activity icon for adding a note about that
 // specific logged activity. Fixed-positioned (computed from the trigger's
 // bounding rect, like components/FollowUpNotesPopover.tsx) rather than
@@ -329,10 +297,12 @@ export function OutreachCompanyCard({
     <div className="border border-gray-200 rounded-xl bg-white overflow-hidden hover:border-gray-300 transition-colors">
       {/* Collapsed row */}
       <div className="flex items-center gap-3 px-4 py-3">
-        <button
-          type="button"
+        <div
+          role="button"
+          tabIndex={0}
           onClick={() => setExpanded(v => !v)}
-          className="flex items-center gap-3 flex-1 min-w-0 text-left"
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setExpanded(v => !v); }}
+          className="flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer"
         >
           <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -355,17 +325,23 @@ export function OutreachCompanyCard({
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500 flex-shrink-0 hidden sm:inline-flex">
             {attendeeCount} {attendeeCount === 1 ? 'attendee' : 'attendees'}
           </span>
-        </button>
-
-        <div className="flex items-center gap-4 flex-shrink-0">
           <button
             type="button"
-            onClick={company.assignees.length === 0 ? onOpenAssign : undefined}
+            onClick={e => { e.stopPropagation(); if (company.assignees.length === 0) onOpenAssign(); }}
             title={company.assignees.length === 0 ? 'Assign reps' : company.assignees.map(a => a.displayName).join(', ')}
-            className={company.assignees.length === 0 ? 'cursor-pointer' : ''}
+            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 truncate max-w-[220px] ${
+              company.assignees.length > 0
+                ? 'bg-blue-50 text-blue-600 border border-blue-300'
+                : 'bg-gray-100 text-gray-500 border border-gray-200 cursor-pointer hover:bg-gray-200'
+            }`}
           >
-            <AssigneeStack assignees={company.assignees} />
+            {company.assignees.length > 0
+              ? `Outreach Assigned To: ${company.assignees.map(a => a.displayName).join(', ')}`
+              : 'Unassigned'}
           </button>
+        </div>
+
+        <div className="flex items-center gap-4 flex-shrink-0">
           <div className="relative">
             <button
               type="button"
