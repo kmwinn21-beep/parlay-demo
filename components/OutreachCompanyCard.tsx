@@ -274,6 +274,10 @@ export function OutreachCompanyCard({
   };
 
   const submitActivityNote = async (attendee: OutreachAttendee, activityType: 'phone' | 'email' | 'linkedin', body: string) => {
+    // Adding a note about an activity logs that activity too — the note popover
+    // is reached by hovering an activity icon, so submitting it is a statement
+    // that the touch happened, same as clicking the icon itself would be.
+    await logActivity(attendee, activityType);
     try {
       const res = await fetch(`/api/conferences/${conferenceId}/outreach/${company.companyId}/notes`, {
         method: 'POST',
