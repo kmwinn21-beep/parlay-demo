@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 
 interface TimelineActivity {
-  id: number;
-  activityType: 'phone' | 'email' | 'linkedin';
+  id: string;
+  activityType: 'phone' | 'email' | 'linkedin' | 'meeting';
   loggedByName: string;
   attendeeName: string | null;
   notes: string | null;
@@ -23,12 +23,14 @@ const DOT_COLOR: Record<TimelineActivity['activityType'], string> = {
   phone: 'bg-green-500',
   email: 'bg-blue-500',
   linkedin: 'bg-purple-500',
+  meeting: 'bg-amber-500',
 };
 
 const ACTIVITY_LABEL: Record<TimelineActivity['activityType'], string> = {
   phone: 'Phone call',
   email: 'Email',
   linkedin: 'LinkedIn touch',
+  meeting: 'Meeting scheduled',
 };
 
 function relativeTime(iso: string): string {

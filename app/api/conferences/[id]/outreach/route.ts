@@ -14,6 +14,7 @@ interface AttendeeEntry {
   title: string | null;
   seniorityLabel: string | null;
   activityCount: number;
+  activityCounts: { phone: number; email: number; linkedin: number };
 }
 
 interface CompanyAgg {
@@ -90,10 +91,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         args: [conferenceId, ...companyIds],
       }),
       db.execute({
-        sql: `SELECT company_id, attendee_id, COUNT(*) as cnt
+        sql: `SELECT company_id, attendee_id, activity_type, COUNT(*) as cnt
               FROM outreach_activity
               WHERE conference_id = ? AND company_id IN (${placeholders})
-              GROUP BY company_id, attendee_id`,
+              GROUP BY company_id, attendee_id, activity_type`,
         args: [conferenceId, ...companyIds],
       }),
       db.execute({
@@ -106,13 +107,19 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const activityByAttendee = new Map<number, number>();
     const activityByCompany = new Map<number, number>();
+    const activityByAttendeeType = new Map<number, { phone: number; email: number; linkedin: number }>();
     for (const r of activityRows.rows) {
       const cnt = Number(r.cnt);
       const companyId = Number(r.company_id);
+      const activityType = String(r.activity_type) as 'phone' | 'email' | 'linkedin';
       activityByCompany.set(companyId, (activityByCompany.get(companyId) || 0) + cnt);
       if (r.attendee_id != null) {
         const attendeeId = Number(r.attendee_id);
         activityByAttendee.set(attendeeId, (activityByAttendee.get(attendeeId) || 0) + cnt);
+        if (!activityByAttendeeType.has(attendeeId)) {
+          activityByAttendeeType.set(attendeeId, { phone: 0, email: 0, linkedin: 0 });
+        }
+        activityByAttendeeType.get(attendeeId)![activityType] = cnt;
       }
     }
 
@@ -131,6 +138,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         title: r.title ? String(r.title) : null,
         seniorityLabel: r.seniority ? String(r.seniority) : null,
         activityCount: activityByAttendee.get(attendeeId) || 0,
+        activityCounts: activityByAttendeeType.get(attendeeId) || { phone: 0, email: 0, linkedin: 0 },
       });
     }
 

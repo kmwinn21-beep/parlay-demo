@@ -20,6 +20,11 @@ const STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
 export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: number; conferenceName: string }) {
   const [data, setData] = useState<OutreachResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  // companyId -> target tier key ('1'|'2'|'3'|'unassigned'), sourced from the same
+  // targeting endpoint the Conference Targets tab uses — reused as-is rather than
+  // re-deriving tier scoring here (tier is a company-level classification, so it
+  // applies to every attendee row within that company on the outreach card).
+  const [tierByCompany, setTierByCompany] = useState<Map<number, string>>(new Map());
 
   const [drawerState, setDrawerState] = useState<{
     companyId: number;
@@ -50,6 +55,17 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
   }, [conferenceId]);
 
   useEffect(() => { loadOutreach(); }, [loadOutreach]);
+
+  useEffect(() => {
+    fetch(`/api/conferences/${conferenceId}/targeting`)
+      .then(r => (r.ok ? r.json() : Promise.reject()))
+      .then((json: { companies?: { company_id: number; target_priority_tier_key: string }[] }) => {
+        const map = new Map<number, string>();
+        for (const c of json.companies ?? []) map.set(c.company_id, c.target_priority_tier_key);
+        setTierByCompany(map);
+      })
+      .catch(() => {});
+  }, [conferenceId]);
 
   // Assignee filter options come from the outreach data itself (unique assignees
   // already present in the fetched companies) rather than a separate /api/users
@@ -148,6 +164,7 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
                   key={company.companyId}
                   company={company}
                   conferenceId={conferenceId}
+                  targetTier={tierByCompany.get(company.companyId)}
                   onActivityLogged={loadOutreach}
                   onOpenDrawer={(tab) => setDrawerState({ companyId: company.companyId, companyName: company.companyName, initialTab: tab })}
                   onOpenAssign={() => setAssignModalState({

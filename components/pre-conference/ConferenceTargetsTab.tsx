@@ -7,6 +7,7 @@ import type { TargetEntry } from '../PreConferenceReview';
 import { useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
 import { NewMeetingModal } from '@/components/NewMeetingModal';
 import { type Meeting } from '@/components/MeetingsTable';
+import { OutreachAssignModal } from '@/components/OutreachAssignModal';
 
 export interface AddableAttendee {
   id: number;
@@ -101,6 +102,7 @@ function TargetCard({
   onDragStart,
   onToggleTarget,
   onScheduleMeeting,
+  onAssignOutreach,
   readOnly = false,
 }: {
   entry: TargetEntry;
@@ -110,6 +112,7 @@ function TargetCard({
   onDragStart?: () => void;
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
   onScheduleMeeting: (entry: TargetEntry) => void;
+  onAssignOutreach: (entry: TargetEntry) => void;
   readOnly?: boolean;
 }) {
   const openRecord = useRecordDrawer();
@@ -151,6 +154,18 @@ function TargetCard({
                 d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </button>
+          {entry.companyId != null && (
+            <button
+              type="button"
+              title="Assign outreach"
+              onClick={e => { e.stopPropagation(); onAssignOutreach(entry); }}
+              className="p-1 rounded text-gray-400 hover:text-brand-secondary hover:bg-brand-secondary/10 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
+            </button>
+          )}
           <TargetBtn
             isTarget={true}
             size="sm"
@@ -239,6 +254,8 @@ export function ConferenceTargetsTab({
 
   // Schedule meeting modal state
   const [schedulingEntry, setSchedulingEntry] = useState<TargetEntry | null>(null);
+  // Assign outreach modal state
+  const [assigningOutreachEntry, setAssigningOutreachEntry] = useState<TargetEntry | null>(null);
   // Optimistic meeting attendee ids — merged with the parent's meetingAttendeeIds
   const [optimisticMeetingIds, setOptimisticMeetingIds] = useState<Set<number>>(new Set());
 
@@ -404,6 +421,7 @@ export function ConferenceTargetsTab({
               onDragStart={readOnly ? undefined : () => setDraggingId(entry.attendeeId)}
               onToggleTarget={onToggleTarget}
               onScheduleMeeting={handleScheduleMeeting}
+              onAssignOutreach={setAssigningOutreachEntry}
               readOnly={readOnly}
             />
           ))}
@@ -818,6 +836,17 @@ export function ConferenceTargetsTab({
             onMeetingScheduled?.(meeting);
             setSchedulingEntry(null);
           }}
+        />
+      )}
+
+      {assigningOutreachEntry?.companyId != null && (
+        <OutreachAssignModal
+          conferenceId={conferenceId}
+          companyId={assigningOutreachEntry.companyId}
+          companyName={assigningOutreachEntry.companyName ?? undefined}
+          currentAssigneeIds={[]}
+          onClose={() => setAssigningOutreachEntry(null)}
+          onAssigned={() => setAssigningOutreachEntry(null)}
         />
       )}
     </div>

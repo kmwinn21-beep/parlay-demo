@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { getBadgeClass, getHex } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
+import { NewMeetingModal } from './NewMeetingModal';
+import { type Meeting } from './MeetingsTable';
 
 export interface OutreachAssignee {
   userId: number;
@@ -17,6 +19,7 @@ export interface OutreachAttendee {
   title: string | null;
   seniorityLabel: string | null;
   activityCount: number;
+  activityCounts: { phone: number; email: number; linkedin: number };
 }
 
 export type OutreachStatus = 'not_started' | 'in_progress' | 'completed' | 'overdue';
@@ -38,6 +41,16 @@ const STATUS_STYLES: Record<OutreachStatus, { label: string; className: string }
   in_progress: { label: 'In Progress', className: 'bg-green-50 text-green-700 border border-green-200' },
   completed: { label: 'Completed', className: 'bg-blue-50 text-blue-700 border border-blue-200' },
   overdue: { label: 'Overdue', className: 'bg-amber-50 text-amber-700 border border-amber-200' },
+};
+
+// Same tier key/label/color convention as components/pre-conference/ConferenceTargetsTab.tsx's
+// TIERS array (not exported from there, so duplicated here — small enough to match this
+// codebase's precedent of per-file helper duplication rather than a shared import).
+const TIER_STYLES: Record<string, { label: string; className: string }> = {
+  '1': { label: 'Must Target', className: 'bg-red-50 text-red-600 border border-red-200' },
+  '2': { label: 'High Priority', className: 'bg-brand-primary/10 text-brand-primary border border-brand-primary/40' },
+  '3': { label: 'Worth Engaging', className: 'bg-brand-highlight/10 text-brand-highlight border border-brand-highlight/40' },
+  unassigned: { label: 'Monitor', className: 'bg-gray-50 text-gray-500 border border-gray-200' },
 };
 
 const ACTIVITY_ICONS: Record<'phone' | 'email' | 'linkedin', { title: string; hoverClass: string; path: React.ReactNode }> = {
@@ -93,12 +106,15 @@ function AssigneeStack({ assignees, max = 3 }: { assignees: OutreachAssignee[]; 
 export function OutreachCompanyCard({
   company,
   conferenceId,
+  targetTier,
   onActivityLogged,
   onOpenDrawer,
   onOpenAssign,
 }: {
   company: OutreachCompany;
   conferenceId: number;
+  /** This company's target tier key ('1'|'2'|'3'|'unassigned'), if it's on the targets board. */
+  targetTier?: string | null;
   onActivityLogged: () => void;
   onOpenDrawer: (tab: 'timeline' | 'notes') => void;
   onOpenAssign: () => void;
@@ -106,29 +122,34 @@ export function OutreachCompanyCard({
   const colorMaps = useConfigColors();
   const [expanded, setExpanded] = useState(false);
   const [flashKey, setFlashKey] = useState<string | null>(null);
-  const [localCounts, setLocalCounts] = useState<Record<number, number>>({});
+  const [hoverKey, setHoverKey] = useState<string | null>(null);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const [localCounts, setLocalCounts] = useState<Record<number, { phone: number; email: number; linkedin: number }>>({});
   const [localTotal, setLocalTotal] = useState(company.totalActivityCount);
   const [localStatus, setLocalStatus] = useState<OutreachStatus>(company.status);
+  const [schedulingAttendee, setSchedulingAttendee] = useState<OutreachAttendee | null>(null);
 
   const statusStyle = STATUS_STYLES[localStatus] ?? STATUS_STYLES.not_started;
+  const tierStyle = targetTier ? TIER_STYLES[targetTier] : null;
   const companyTypeHex = company.companyType ? getHex(company.companyType, colorMaps.company_type || {}) : '#6b7280';
 
-  const logActivity = async (attendeeId: number | null, activityType: 'phone' | 'email' | 'linkedin', flashId: string) => {
+  const countsFor = (attendee: OutreachAttendee) => localCounts[attendee.attendeeId] ?? attendee.activityCounts;
+
+  const logActivity = async (attendee: OutreachAttendee, activityType: 'phone' | 'email' | 'linkedin') => {
+    const key = `${attendee.attendeeId}-${activityType}`;
     try {
       const res = await fetch(`/api/conferences/${conferenceId}/outreach/${company.companyId}/activity`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attendeeId: attendeeId ?? undefined, activityType }),
+        body: JSON.stringify({ attendeeId: attendee.attendeeId, activityType }),
       });
       if (!res.ok) throw new Error('Failed to log activity');
 
-      setFlashKey(flashId);
-      setTimeout(() => setFlashKey(k => (k === flashId ? null : k)), 1000);
+      setFlashKey(key);
+      setTimeout(() => setFlashKey(k => (k === key ? null : k)), 1000);
 
-      if (attendeeId != null) {
-        const base = localCounts[attendeeId] ?? company.attendees.find(a => a.attendeeId === attendeeId)?.activityCount ?? 0;
-        setLocalCounts(prev => ({ ...prev, [attendeeId]: base + 1 }));
-      }
+      const base = countsFor(attendee);
+      setLocalCounts(prev => ({ ...prev, [attendee.attendeeId]: { ...base, [activityType]: base[activityType] + 1 } }));
 
       const isFirstActivity = localTotal === 0;
       setLocalTotal(t => t + 1);
@@ -147,6 +168,28 @@ export function OutreachCompanyCard({
     } catch {
       // Silent — matches the "no confirmation modal" instant-log spec; a failed log
       // just doesn't flash/increment, which is signal enough for a rapid-fire action.
+    }
+  };
+
+  const removeActivity = async (attendee: OutreachAttendee, activityType: 'phone' | 'email' | 'linkedin') => {
+    const key = `${attendee.attendeeId}-${activityType}`;
+    const base = countsFor(attendee);
+    if (base[activityType] === 0 || pendingKey === key) return;
+    setPendingKey(key);
+    try {
+      const res = await fetch(`/api/conferences/${conferenceId}/outreach/${company.companyId}/activity`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendeeId: attendee.attendeeId, activityType }),
+      });
+      if (!res.ok) throw new Error('Failed to remove activity');
+      setLocalCounts(prev => ({ ...prev, [attendee.attendeeId]: { ...base, [activityType]: Math.max(0, base[activityType] - 1) } }));
+      setLocalTotal(t => Math.max(0, t - 1));
+      onActivityLogged();
+    } catch {
+      // Silent, matches logActivity's failure handling.
+    } finally {
+      setPendingKey(null);
     }
   };
 
@@ -169,6 +212,11 @@ export function OutreachCompanyCard({
             <span className={getBadgeClass(company.companyType, colorMaps.company_type || {})}>{company.companyType}</span>
           )}
           {company.icp === 'Yes' && <span className="badge-green text-xs px-2 py-0.5 flex-shrink-0">ICP</span>}
+          {tierStyle && (
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${tierStyle.className}`}>
+              {tierStyle.label}
+            </span>
+          )}
           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${statusStyle.className}`}>
             {statusStyle.label}
           </span>
@@ -214,7 +262,8 @@ export function OutreachCompanyCard({
             <p className="text-xs text-gray-400 px-4 py-3">No attendees from this company at this conference.</p>
           )}
           {company.attendees.map((attendee, idx) => {
-            const count = localCounts[attendee.attendeeId] ?? attendee.activityCount;
+            const counts = countsFor(attendee);
+            const total = counts.phone + counts.email + counts.linkedin;
             return (
               <div
                 key={attendee.attendeeId}
@@ -233,33 +282,85 @@ export function OutreachCompanyCard({
                   </p>
                 </div>
                 <AssigneeStack assignees={company.assignees} />
-                <div className="flex items-center gap-1 flex-shrink-0">
+                <button
+                  type="button"
+                  title="Schedule meeting"
+                  onClick={() => setSchedulingAttendee(attendee)}
+                  className="w-7 h-7 rounded-lg border border-gray-200 text-gray-400 hover:border-brand-secondary hover:text-brand-secondary hover:bg-brand-secondary/10 flex items-center justify-center transition-colors flex-shrink-0"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </button>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
                   {(['phone', 'email', 'linkedin'] as const).map(type => {
-                    const flashId = `${attendee.attendeeId}-${type}`;
-                    const flashed = flashKey === flashId;
+                    const key = `${attendee.attendeeId}-${type}`;
+                    const flashed = flashKey === key;
+                    const hovered = hoverKey === key;
+                    const pending = pendingKey === key;
                     const icon = ACTIVITY_ICONS[type];
+                    const typeCount = counts[type];
                     return (
-                      <button
+                      <div
                         key={type}
-                        type="button"
-                        onClick={() => logActivity(attendee.attendeeId, type, flashId)}
-                        title={icon.title}
-                        className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-colors duration-300 ${
-                          flashed ? 'bg-green-100 border-green-400 text-green-600' : `border-gray-200 text-gray-400 ${icon.hoverClass}`
-                        }`}
+                        className="relative"
+                        onMouseEnter={() => setHoverKey(key)}
+                        onMouseLeave={() => setHoverKey(k => (k === key ? null : k))}
                       >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>{icon.path}</svg>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => logActivity(attendee, type)}
+                          disabled={pending}
+                          title={icon.title}
+                          className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-colors duration-300 ${
+                            flashed ? 'bg-green-100 border-green-400 text-green-600' : `border-gray-200 text-gray-400 ${icon.hoverClass}`
+                          } ${pending ? 'opacity-50 cursor-wait' : ''}`}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>{icon.path}</svg>
+                        </button>
+                        {typeCount > 0 && (
+                          <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-brand-secondary text-white text-[9px] font-bold flex items-center justify-center leading-none z-10">
+                            {typeCount}
+                          </span>
+                        )}
+                        {typeCount > 0 && hovered && !pending && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); removeActivity(attendee, type); }}
+                            className="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-white border border-gray-300 flex items-center justify-center hover:border-red-400 hover:text-red-500 transition-colors text-gray-400 shadow-sm z-10"
+                            title="Remove last"
+                          >
+                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M20 12H4" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
-                <span className={`text-[11px] font-medium flex-shrink-0 ${count > 0 ? 'text-green-600' : 'text-gray-400'}`}>
-                  {count > 0 ? `${count} logged` : 'None logged'}
+                <span className={`text-[11px] font-medium flex-shrink-0 ${total > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                  {total > 0 ? `${total} logged` : 'None logged'}
                 </span>
               </div>
             );
           })}
         </div>
+      )}
+
+      {schedulingAttendee && (
+        <NewMeetingModal
+          isOpen={true}
+          onClose={() => setSchedulingAttendee(null)}
+          defaultConferenceId={conferenceId}
+          prefillCompanyId={company.companyId}
+          prefillAttendeeId={schedulingAttendee.attendeeId}
+          onSuccess={(meeting: Meeting) => {
+            setSchedulingAttendee(null);
+            onActivityLogged();
+          }}
+        />
       )}
     </div>
   );
