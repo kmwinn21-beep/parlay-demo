@@ -1566,4 +1566,38 @@ export const migrations: string[] = [
    SELECT f.id, 'Maybe', 3 FROM form_fields f JOIN form_templates t ON f.template_id = t.id
    WHERE t.name = 'Event RSVP' AND f.field_key = 'rsvp_status'
    AND NOT EXISTS (SELECT 1 FROM form_field_options o WHERE o.field_id = f.id AND o.value = 'Maybe')`,
+  // 525 — Outreach: per-conference company assignment + activity + notes tracking.
+  `CREATE TABLE IF NOT EXISTS outreach_assignments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      assigned_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      assigned_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      status TEXT NOT NULL DEFAULT 'not_started'
+        CHECK(status IN ('not_started','in_progress','completed','overdue')),
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(conference_id, company_id, assigned_user_id)
+    )`,
+  // 526 — logged outreach actions (phone/email/linkedin) per attendee.
+  `CREATE TABLE IF NOT EXISTS outreach_activity (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      attendee_id INTEGER REFERENCES attendees(id) ON DELETE SET NULL,
+      logged_by_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      activity_type TEXT NOT NULL
+        CHECK(activity_type IN ('phone','email','linkedin')),
+      notes TEXT,
+      logged_at TEXT DEFAULT (datetime('now'))
+    )`,
+  // 527 — per-company outreach notes thread for a conference.
+  `CREATE TABLE IF NOT EXISTS outreach_notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      body TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
 ];
