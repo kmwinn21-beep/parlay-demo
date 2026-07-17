@@ -64,19 +64,25 @@ function AssigneeStack({ assignees, max = 3 }: { assignees: OutreachAssignee[]; 
   }
   const shown = assignees.slice(0, max);
   const overflow = assignees.length - shown.length;
+  // Leftmost avatar stacks on top (descending z-index), each subsequent one
+  // overlapping by -6px with a 1.5px border to show separation against the card.
   return (
-    <div className="flex items-center -space-x-2">
-      {shown.map(a => (
+    <div className="flex items-center">
+      {shown.map((a, i) => (
         <div
           key={a.userId}
           title={a.displayName}
-          className="w-6 h-6 rounded-full bg-brand-secondary text-white text-[10px] font-semibold flex items-center justify-center border-2 border-white flex-shrink-0"
+          style={{ marginLeft: i === 0 ? 0 : -6, zIndex: shown.length - i, border: '1.5px solid white' }}
+          className="w-6 h-6 rounded-full bg-brand-secondary text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0 relative"
         >
           {a.initials}
         </div>
       ))}
       {overflow > 0 && (
-        <div className="w-6 h-6 rounded-full bg-gray-200 text-gray-600 text-[10px] font-semibold flex items-center justify-center border-2 border-white flex-shrink-0">
+        <div
+          style={{ marginLeft: -6, zIndex: 0, border: '1.5px solid white' }}
+          className="w-6 h-6 rounded-full bg-gray-200 text-gray-600 text-[10px] font-semibold flex items-center justify-center flex-shrink-0 relative"
+        >
           +{overflow}
         </div>
       )}
@@ -127,19 +133,16 @@ export function OutreachCompanyCard({
       const isFirstActivity = localTotal === 0;
       setLocalTotal(t => t + 1);
 
-      let statusPatch: Promise<unknown> = Promise.resolve();
       if (isFirstActivity && localStatus === 'not_started') {
-        // Optimistic — flip locally without waiting on this request's response.
+        // Optimistic, fire-and-forget — local state flips immediately, the PATCH
+        // isn't awaited before continuing.
         setLocalStatus('in_progress');
-        statusPatch = fetch(`/api/conferences/${conferenceId}/outreach/${company.companyId}/status`, {
+        fetch(`/api/conferences/${conferenceId}/outreach/${company.companyId}/status`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'in_progress' }),
         }).catch(() => {});
       }
-      // Wait for the status patch (not the UI update) before the parent re-fetches,
-      // so the refreshed list doesn't briefly show stale 'not_started' and flicker.
-      await statusPatch;
       onActivityLogged();
     } catch {
       // Silent — matches the "no confirmation modal" instant-log spec; a failed log

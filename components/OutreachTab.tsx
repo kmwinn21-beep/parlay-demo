@@ -10,11 +10,6 @@ interface OutreachResponse {
   companies: OutreachCompany[];
 }
 
-interface UserOption {
-  id: number;
-  value: string;
-}
-
 const STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: 'not_started', label: 'Not Started' },
   { value: 'in_progress', label: 'In Progress' },
@@ -25,7 +20,6 @@ const STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
 export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: number; conferenceName: string }) {
   const [data, setData] = useState<OutreachResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [users, setUsers] = useState<UserOption[]>([]);
 
   const [drawerState, setDrawerState] = useState<{
     companyId: number;
@@ -57,12 +51,18 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
 
   useEffect(() => { loadOutreach(); }, [loadOutreach]);
 
-  useEffect(() => {
-    fetch('/api/users')
-      .then(r => (r.ok ? r.json() : Promise.reject()))
-      .then((rows: UserOption[]) => setUsers(rows))
-      .catch(() => {});
-  }, []);
+  // Assignee filter options come from the outreach data itself (unique assignees
+  // already present in the fetched companies) rather than a separate /api/users
+  // call — no point listing reps who have nothing assigned at this conference.
+  const assigneeOptions = useMemo(() => {
+    const byId = new Map<number, string>();
+    for (const c of data?.companies ?? []) {
+      for (const a of c.assignees) byId.set(a.userId, a.displayName);
+    }
+    return Array.from(byId.entries())
+      .map(([userId, displayName]) => ({ userId, displayName }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+  }, [data]);
 
   const filteredCompanies = useMemo(() => {
     const companies = data?.companies ?? [];
@@ -103,7 +103,7 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
             className="input-field text-xs py-1.5"
           >
             <option value="">All Assignees</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.value}</option>)}
+            {assigneeOptions.map(a => <option key={a.userId} value={a.userId}>{a.displayName}</option>)}
           </select>
           <select
             value={statusFilter ?? ''}
