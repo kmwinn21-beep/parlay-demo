@@ -210,6 +210,7 @@ export function OutreachCompanyCard({
   company,
   conferenceId,
   targetTier,
+  selectedAttendeeId,
   onActivityLogged,
   onOpenDrawer,
   onOpenAssign,
@@ -218,6 +219,8 @@ export function OutreachCompanyCard({
   conferenceId: number;
   /** This company's target tier key ('1'|'2'|'3'|'unassigned'), if it's on the targets board. */
   targetTier?: string | null;
+  /** The attendee the timeline/notes drawer is currently filtered to, if any — highlights that row. */
+  selectedAttendeeId?: number | null;
   onActivityLogged: () => void;
   onOpenDrawer: (tab: 'timeline' | 'notes', attendee?: OutreachAttendeeFilter) => void;
   onOpenAssign: () => void;
@@ -344,15 +347,17 @@ export function OutreachCompanyCard({
               {tierStyle.label}
             </span>
           )}
-          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${statusStyle.className}`}>
-            {statusStyle.label}
-          </span>
-          <span className="text-xs text-gray-400 flex-shrink-0 hidden sm:inline">
+          {localStatus !== 'overdue' && (
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${statusStyle.className}`}>
+              {statusStyle.label}
+            </span>
+          )}
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500 flex-shrink-0 hidden sm:inline-flex">
             {attendeeCount} {attendeeCount === 1 ? 'attendee' : 'attendees'}
           </span>
         </button>
 
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-4 flex-shrink-0">
           <button
             type="button"
             onClick={company.assignees.length === 0 ? onOpenAssign : undefined}
@@ -425,7 +430,9 @@ export function OutreachCompanyCard({
                   phone: attendee.phone,
                   linkedinUrl: attendee.linkedinUrl,
                 })}
-                className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-blue-50/40 transition-colors ${idx % 2 === 0 ? 'bg-gray-50/60' : 'bg-white'}`}
+                className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-blue-50/40 transition-colors ${
+                  attendee.attendeeId === selectedAttendeeId ? 'bg-blue-50' : idx % 2 === 0 ? 'bg-gray-50/60' : 'bg-white'
+                }`}
               >
                 <div
                   className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0"
@@ -463,7 +470,7 @@ export function OutreachCompanyCard({
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center gap-3 flex-shrink-0" onClick={e => e.stopPropagation()}>
                   {(['phone', 'email', 'linkedin'] as const).map(type => {
                     const key = `${attendee.attendeeId}-${type}`;
                     const flashed = flashKey === key;
