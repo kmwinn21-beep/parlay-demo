@@ -29,6 +29,7 @@ import { type ColumnMapping } from '@/lib/columnMapping';
 import { ConflictResolutionModal, type ConflictItem } from '@/components/ConflictResolutionModal';
 import { NewMeetingModal } from '@/components/NewMeetingModal';
 import { ConferenceFormsTab } from '@/components/ConferenceFormsTab';
+import { OutreachTab } from '@/components/OutreachTab';
 import { useUser } from '@/components/UserContext';
 import { useCapabilities } from '@/lib/useCapabilities';
 import { useOnboarding } from '@/lib/OnboardingContext';
@@ -173,9 +174,9 @@ interface ConferenceDetail {
   assigned_rep?: string;
 }
 
-type ConferenceTabKey = 'targets' | 'attendees' | 'companies' | 'meetings' | 'follow-ups' | 'social' | 'analytics' | 'notes' | 'forms' | 'agenda';
+type ConferenceTabKey = 'targets' | 'attendees' | 'companies' | 'meetings' | 'follow-ups' | 'outreach' | 'social' | 'analytics' | 'notes' | 'forms' | 'agenda';
 
-const CONFERENCE_TAB_ORDER: ConferenceTabKey[] = ['targets', 'attendees', 'companies', 'meetings', 'follow-ups', 'social', 'analytics', 'notes', 'forms', 'agenda'];
+const CONFERENCE_TAB_ORDER: ConferenceTabKey[] = ['targets', 'attendees', 'companies', 'meetings', 'follow-ups', 'outreach', 'social', 'analytics', 'notes', 'forms', 'agenda'];
 
 function formatDate(dateStr: string) {
   if (!dateStr) return '';
@@ -3537,6 +3538,13 @@ export default function ConferenceDetailPage() {
             );
           })()}
         </div>
+      )}
+
+      {activeTab === 'outreach' && (
+        <OutreachTab
+          conferenceId={conference.id}
+          conferenceName={conference.name}
+        />
       )}
 
       {activeTab === 'social' && (
