@@ -97,6 +97,7 @@ function UserPill({ name }: { name: string }) {
 function TargetCard({
   entry,
   hasMeeting,
+  hasOutreachAssignment,
   isDragging,
   avgCostPerUnit,
   onDragStart,
@@ -107,6 +108,7 @@ function TargetCard({
 }: {
   entry: TargetEntry;
   hasMeeting: boolean;
+  hasOutreachAssignment: boolean;
   isDragging: boolean;
   avgCostPerUnit: number;
   onDragStart?: () => void;
@@ -157,9 +159,14 @@ function TargetCard({
           {entry.companyId != null && (
             <button
               type="button"
-              title="Assign outreach"
-              onClick={e => { e.stopPropagation(); onAssignOutreach(entry); }}
-              className="p-1 rounded text-gray-400 hover:text-brand-secondary hover:bg-brand-secondary/10 transition-colors"
+              title={hasOutreachAssignment ? 'Outreach already assigned' : 'Assign outreach'}
+              disabled={hasOutreachAssignment}
+              onClick={e => { e.stopPropagation(); if (!hasOutreachAssignment) onAssignOutreach(entry); }}
+              className={`p-1 rounded transition-colors ${
+                hasOutreachAssignment
+                  ? 'text-green-600 bg-green-100 cursor-default'
+                  : 'text-gray-400 hover:text-brand-secondary hover:bg-brand-secondary/10'
+              }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
@@ -251,6 +258,20 @@ export function ConferenceTargetsTab({
   const [conversionPct, setConversionPct] = useState(60);
   const [meetingsConvPct, setMeetingsConvPct] = useState(60);
   const [requiredPipeline, setRequiredPipeline] = useState<number | null>(null);
+  // Which companies already have an outreach assignment at this conference — drives
+  // the assign-outreach icon's green/disabled state on each card.
+  const [outreachAssignedCompanyIds, setOutreachAssignedCompanyIds] = useState<Set<number>>(new Set());
+
+  const loadOutreachAssignedCompanies = useCallback(() => {
+    fetch(`/api/conferences/${conferenceId}/outreach`)
+      .then(r => (r.ok ? r.json() : Promise.reject()))
+      .then((json: { companies?: { companyId: number }[] }) => {
+        setOutreachAssignedCompanyIds(new Set((json.companies ?? []).map(c => c.companyId)));
+      })
+      .catch(() => {});
+  }, [conferenceId]);
+
+  useEffect(() => { loadOutreachAssignedCompanies(); }, [loadOutreachAssignedCompanies]);
 
   // Schedule meeting modal state
   const [schedulingEntry, setSchedulingEntry] = useState<TargetEntry | null>(null);
@@ -416,6 +437,7 @@ export function ConferenceTargetsTab({
               key={entry.attendeeId}
               entry={entry}
               hasMeeting={effectiveMeetingIds.has(entry.attendeeId)}
+              hasOutreachAssignment={entry.companyId != null && outreachAssignedCompanyIds.has(entry.companyId)}
               isDragging={draggingId === entry.attendeeId}
               avgCostPerUnit={avgCostPerUnit}
               onDragStart={readOnly ? undefined : () => setDraggingId(entry.attendeeId)}
@@ -846,7 +868,7 @@ export function ConferenceTargetsTab({
           companyName={assigningOutreachEntry.companyName ?? undefined}
           currentAssigneeIds={[]}
           onClose={() => setAssigningOutreachEntry(null)}
-          onAssigned={() => setAssigningOutreachEntry(null)}
+          onAssigned={() => { setAssigningOutreachEntry(null); loadOutreachAssignedCompanies(); }}
         />
       )}
     </div>

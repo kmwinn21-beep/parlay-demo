@@ -1600,4 +1600,14 @@ export const migrations: string[] = [
       body TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now'))
     )`,
+  // 528 — meeting versioning for the outreach tab's "edit scheduled meeting" flow:
+  // editing there doesn't mutate the meeting in place — it inserts a new meetings
+  // row and points the old one at it, so the outreach timeline can keep showing
+  // the old (struck-through) entry alongside the new one.
+  `ALTER TABLE meetings ADD COLUMN superseded_by_id INTEGER REFERENCES meetings(id) ON DELETE SET NULL`,
+  // 529-530 — per-activity outreach notes: tag a note with which logged activity
+  // (and attendee) it's about, so the notes thread can prefix it with that
+  // activity's colored dot + label.
+  `ALTER TABLE outreach_notes ADD COLUMN activity_type TEXT`,
+  `ALTER TABLE outreach_notes ADD COLUMN attendee_id INTEGER REFERENCES attendees(id) ON DELETE SET NULL`,
 ];

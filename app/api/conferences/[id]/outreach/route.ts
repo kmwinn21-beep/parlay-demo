@@ -15,6 +15,7 @@ interface AttendeeEntry {
   seniorityLabel: string | null;
   activityCount: number;
   activityCounts: { phone: number; email: number; linkedin: number };
+  meetingId: number | null;
 }
 
 interface CompanyAgg {
@@ -81,7 +82,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const companyIds = Array.from(companyMap.keys());
     const placeholders = companyIds.map(() => '?').join(',');
 
-    const [attendeeRows, activityRows, noteRows] = await Promise.all([
+    const [attendeeRows, activityRows, noteRows, meetingRows] = await Promise.all([
       db.execute({
         sql: `SELECT a.id as attendee_id, a.company_id, a.first_name, a.last_name, a.title, a.seniority
               FROM conference_attendees ca
@@ -101,6 +102,17 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         sql: `SELECT company_id, COUNT(*) as cnt FROM outreach_notes
               WHERE conference_id = ? AND company_id IN (${placeholders})
               GROUP BY company_id`,
+        args: [conferenceId, ...companyIds],
+      }),
+      // Most-recent non-superseded meeting per attendee at this conference — used
+      // to flip the outreach card's schedule-meeting icon into its "scheduled"
+      // (green, edit-on-click) state.
+      db.execute({
+        sql: `SELECT m.id, m.attendee_id
+              FROM meetings m
+              JOIN attendees a ON a.id = m.attendee_id
+              WHERE m.conference_id = ? AND a.company_id IN (${placeholders}) AND m.superseded_by_id IS NULL
+              ORDER BY m.id DESC`,
         args: [conferenceId, ...companyIds],
       }),
     ]);
@@ -126,6 +138,14 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const noteCountByCompany = new Map<number, number>();
     for (const r of noteRows.rows) noteCountByCompany.set(Number(r.company_id), Number(r.cnt));
 
+    // Rows are ordered by id DESC, so the first one seen per attendee is the
+    // current (most recent, non-superseded) meeting.
+    const meetingIdByAttendee = new Map<number, number>();
+    for (const r of meetingRows.rows) {
+      const attendeeId = Number(r.attendee_id);
+      if (!meetingIdByAttendee.has(attendeeId)) meetingIdByAttendee.set(attendeeId, Number(r.id));
+    }
+
     const attendeesByCompany = new Map<number, AttendeeEntry[]>();
     for (const r of attendeeRows.rows) {
       const companyId = Number(r.company_id);
@@ -139,6 +159,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         seniorityLabel: r.seniority ? String(r.seniority) : null,
         activityCount: activityByAttendee.get(attendeeId) || 0,
         activityCounts: activityByAttendeeType.get(attendeeId) || { phone: 0, email: 0, linkedin: 0 },
+        meetingId: meetingIdByAttendee.get(attendeeId) ?? null,
       });
     }
 

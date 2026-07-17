@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import toast from 'react-hot-toast';
 import { getBadgeClass, getHex } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { NewMeetingModal } from './NewMeetingModal';
+import { EditOutreachMeetingModal } from './EditOutreachMeetingModal';
 import { type Meeting } from './MeetingsTable';
 
 export interface OutreachAssignee {
@@ -20,6 +22,7 @@ export interface OutreachAttendee {
   seniorityLabel: string | null;
   activityCount: number;
   activityCounts: { phone: number; email: number; linkedin: number };
+  meetingId: number | null;
 }
 
 export type OutreachStatus = 'not_started' | 'in_progress' | 'completed' | 'overdue';
@@ -53,22 +56,33 @@ const TIER_STYLES: Record<string, { label: string; className: string }> = {
   unassigned: { label: 'Monitor', className: 'bg-gray-50 text-gray-500 border border-gray-200' },
 };
 
-const ACTIVITY_ICONS: Record<'phone' | 'email' | 'linkedin', { title: string; hoverClass: string; path: React.ReactNode }> = {
+export const ACTIVITY_ICONS: Record<'phone' | 'email' | 'linkedin', { title: string; label: string; hoverClass: string; path: React.ReactNode }> = {
   phone: {
     title: 'Log phone call',
+    label: 'Phone call',
     hoverClass: 'hover:border-green-400 hover:text-green-600 hover:bg-green-50',
     path: <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />,
   },
   email: {
     title: 'Log email',
+    label: 'Email',
     hoverClass: 'hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50',
     path: <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />,
   },
   linkedin: {
     title: 'Log LinkedIn touch',
+    label: 'LinkedIn touch',
     hoverClass: 'hover:border-purple-400 hover:text-purple-600 hover:bg-purple-50',
     path: <path strokeLinecap="round" strokeLinejoin="round" d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2zM4 6a2 2 0 100-4 2 2 0 000 4z" />,
   },
+};
+
+// Matches OutreachDrawer's DOT_COLOR so a note tagged with an activity shows the
+// same colored dot in the notes thread as that activity gets in the timeline.
+export const ACTIVITY_DOT_CLASS: Record<'phone' | 'email' | 'linkedin', string> = {
+  phone: 'bg-green-500',
+  email: 'bg-blue-500',
+  linkedin: 'bg-purple-500',
 };
 
 function AssigneeStack({ assignees, max = 3 }: { assignees: OutreachAssignee[]; max?: number }) {
@@ -103,6 +117,84 @@ function AssigneeStack({ assignees, max = 3 }: { assignees: OutreachAssignee[]; 
   );
 }
 
+// Small popover anchored to an activity icon for adding a note about that
+// specific logged activity. Fixed-positioned (computed from the trigger's
+// bounding rect, like components/FollowUpNotesPopover.tsx) rather than
+// absolutely positioned, since the card it lives in clips overflow.
+function ActivityNotePopover({
+  anchorRef,
+  onClose,
+  onSubmit,
+}: {
+  anchorRef: React.RefObject<HTMLElement>;
+  onClose: () => void;
+  onSubmit: (body: string) => Promise<void>;
+}) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [text, setText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!anchorRef.current) return;
+    const rect = anchorRef.current.getBoundingClientRect();
+    const width = 220;
+    setPos({
+      top: rect.bottom + 6,
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
+    });
+  }, [anchorRef]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node) && anchorRef.current && !anchorRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [anchorRef, onClose]);
+
+  const handleSubmit = async () => {
+    const body = text.trim();
+    if (!body || submitting) return;
+    setSubmitting(true);
+    await onSubmit(body);
+    setSubmitting(false);
+  };
+
+  if (!pos) return null;
+
+  return (
+    <div
+      ref={popoverRef}
+      style={{ position: 'fixed', top: pos.top, left: pos.left, width: 220, zIndex: 10000 }}
+      className="bg-white rounded-lg shadow-xl border border-gray-200 p-2.5"
+      onClick={e => e.stopPropagation()}
+    >
+      <textarea
+        value={text}
+        onChange={e => setText(e.target.value)}
+        rows={3}
+        autoFocus
+        placeholder="Add a note about this…"
+        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary resize-none"
+      />
+      <div className="flex items-center justify-end gap-2 mt-1.5">
+        <button type="button" onClick={onClose} className="text-xs text-gray-400 hover:text-gray-600 px-1.5 py-1">Cancel</button>
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={submitting || !text.trim()}
+          className="text-xs font-medium text-white bg-brand-secondary hover:bg-brand-primary px-2.5 py-1 rounded-lg transition-colors disabled:opacity-50"
+        >
+          {submitting ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function OutreachCompanyCard({
   company,
   conferenceId,
@@ -116,7 +208,7 @@ export function OutreachCompanyCard({
   /** This company's target tier key ('1'|'2'|'3'|'unassigned'), if it's on the targets board. */
   targetTier?: string | null;
   onActivityLogged: () => void;
-  onOpenDrawer: (tab: 'timeline' | 'notes') => void;
+  onOpenDrawer: (tab: 'timeline' | 'notes', attendee?: { id: number; name: string }) => void;
   onOpenAssign: () => void;
 }) {
   const colorMaps = useConfigColors();
@@ -126,14 +218,20 @@ export function OutreachCompanyCard({
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [localCounts, setLocalCounts] = useState<Record<number, { phone: number; email: number; linkedin: number }>>({});
   const [localTotal, setLocalTotal] = useState(company.totalActivityCount);
+  const [localNoteCount, setLocalNoteCount] = useState(company.noteCount);
   const [localStatus, setLocalStatus] = useState<OutreachStatus>(company.status);
+  const [localMeetingIds, setLocalMeetingIds] = useState<Record<number, number>>({});
   const [schedulingAttendee, setSchedulingAttendee] = useState<OutreachAttendee | null>(null);
+  const [editingMeetingId, setEditingMeetingId] = useState<number | null>(null);
+  const [notePopoverKey, setNotePopoverKey] = useState<string | null>(null);
+  const activityIconRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const statusStyle = STATUS_STYLES[localStatus] ?? STATUS_STYLES.not_started;
   const tierStyle = targetTier ? TIER_STYLES[targetTier] : null;
   const companyTypeHex = company.companyType ? getHex(company.companyType, colorMaps.company_type || {}) : '#6b7280';
 
   const countsFor = (attendee: OutreachAttendee) => localCounts[attendee.attendeeId] ?? attendee.activityCounts;
+  const meetingIdFor = (attendee: OutreachAttendee) => localMeetingIds[attendee.attendeeId] ?? attendee.meetingId;
 
   const logActivity = async (attendee: OutreachAttendee, activityType: 'phone' | 'email' | 'linkedin') => {
     const key = `${attendee.attendeeId}-${activityType}`;
@@ -193,6 +291,24 @@ export function OutreachCompanyCard({
     }
   };
 
+  const submitActivityNote = async (attendee: OutreachAttendee, activityType: 'phone' | 'email' | 'linkedin', body: string) => {
+    try {
+      const res = await fetch(`/api/conferences/${conferenceId}/outreach/${company.companyId}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body, activityType, attendeeId: attendee.attendeeId }),
+      });
+      if (!res.ok) throw new Error();
+      setLocalNoteCount(n => n + 1);
+      toast.success('Note added');
+      onActivityLogged();
+    } catch {
+      toast.error('Failed to add note');
+    } finally {
+      setNotePopoverKey(null);
+    }
+  };
+
   const attendeeCount = company.attendees.length;
 
   return (
@@ -234,23 +350,45 @@ export function OutreachCompanyCard({
           >
             <AssigneeStack assignees={company.assignees} />
           </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => onOpenDrawer('timeline')}
+              title="View timeline"
+              className="w-7 h-7 rounded-full bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-brand-secondary flex items-center justify-center transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            </button>
+            {localTotal > 0 && (
+              <span className="absolute -top-1.5 -left-1.5 min-w-[16px] h-4 px-1 rounded-full bg-brand-secondary text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                {localTotal}
+              </span>
+            )}
+          </div>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => onOpenDrawer('notes')}
+              title="View notes"
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+                localNoteCount > 0 ? 'bg-blue-50 text-blue-500 hover:bg-blue-100' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+            </button>
+            {localNoteCount > 0 && (
+              <span className="absolute -top-1.5 -left-1.5 min-w-[16px] h-4 px-1 rounded-full bg-green-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                {localNoteCount}
+              </span>
+            )}
+          </div>
           <button
             type="button"
-            onClick={() => onOpenDrawer('timeline')}
-            title="View timeline"
+            onClick={onOpenAssign}
+            title="Edit assigned reps"
             className="w-7 h-7 rounded-full bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-brand-secondary flex items-center justify-center transition-colors"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          </button>
-          <button
-            type="button"
-            onClick={() => onOpenDrawer('notes')}
-            title="View notes"
-            className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
-              company.noteCount > 0 ? 'bg-blue-50 text-blue-500 hover:bg-blue-100' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
-            }`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
           </button>
         </div>
       </div>
@@ -264,10 +402,13 @@ export function OutreachCompanyCard({
           {company.attendees.map((attendee, idx) => {
             const counts = countsFor(attendee);
             const total = counts.phone + counts.email + counts.linkedin;
+            const meetingId = meetingIdFor(attendee);
+            const hasMeeting = meetingId != null;
             return (
               <div
                 key={attendee.attendeeId}
-                className={`flex items-center gap-3 px-4 py-2.5 ${idx % 2 === 0 ? 'bg-gray-50/60' : 'bg-white'}`}
+                onClick={() => onOpenDrawer('timeline', { id: attendee.attendeeId, name: `${attendee.firstName} ${attendee.lastName}` })}
+                className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-blue-50/40 transition-colors ${idx % 2 === 0 ? 'bg-gray-50/60' : 'bg-white'}`}
               >
                 <div
                   className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0"
@@ -281,19 +422,34 @@ export function OutreachCompanyCard({
                     {[attendee.title, attendee.seniorityLabel].filter(Boolean).join(' · ') || '—'}
                   </p>
                 </div>
-                <AssigneeStack assignees={company.assignees} />
-                <button
-                  type="button"
-                  title="Schedule meeting"
-                  onClick={() => setSchedulingAttendee(attendee)}
-                  className="w-7 h-7 rounded-lg border border-gray-200 text-gray-400 hover:border-brand-secondary hover:text-brand-secondary hover:bg-brand-secondary/10 flex items-center justify-center transition-colors flex-shrink-0"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </button>
-                <div className="flex items-center gap-1.5 flex-shrink-0">
+                <span onClick={e => e.stopPropagation()}>
+                  <AssigneeStack assignees={company.assignees} />
+                </span>
+                <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    title={hasMeeting ? 'Edit scheduled meeting' : 'Schedule meeting'}
+                    onClick={() => (hasMeeting ? setEditingMeetingId(meetingId) : setSchedulingAttendee(attendee))}
+                    className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-colors ${
+                      hasMeeting
+                        ? 'border-green-300 bg-green-50 text-green-600 hover:bg-green-100'
+                        : 'border-gray-200 text-gray-400 hover:border-brand-secondary hover:text-brand-secondary hover:bg-brand-secondary/10'
+                    }`}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                  {hasMeeting && (
+                    <span className="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-green-500 text-white flex items-center justify-center">
+                      <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
                   {(['phone', 'email', 'linkedin'] as const).map(type => {
                     const key = `${attendee.attendeeId}-${type}`;
                     const flashed = flashKey === key;
@@ -304,6 +460,7 @@ export function OutreachCompanyCard({
                     return (
                       <div
                         key={type}
+                        ref={el => { activityIconRefs.current[key] = el; }}
                         className="relative"
                         onMouseEnter={() => setHoverKey(key)}
                         onMouseLeave={() => setHoverKey(k => (k === key ? null : k))}
@@ -336,6 +493,25 @@ export function OutreachCompanyCard({
                             </svg>
                           </button>
                         )}
+                        {hovered && !pending && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setNotePopoverKey(k => (k === key ? null : key)); }}
+                            className="absolute -bottom-1.5 -left-1.5 w-4 h-4 rounded-full bg-white border border-gray-300 flex items-center justify-center hover:border-brand-secondary hover:text-brand-secondary transition-colors text-gray-400 shadow-sm z-10"
+                            title="Add note about this"
+                          >
+                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </button>
+                        )}
+                        {notePopoverKey === key && (
+                          <ActivityNotePopover
+                            anchorRef={{ current: activityIconRefs.current[key] }}
+                            onClose={() => setNotePopoverKey(null)}
+                            onSubmit={(body) => submitActivityNote(attendee, type, body)}
+                          />
+                        )}
                       </div>
                     );
                   })}
@@ -357,7 +533,20 @@ export function OutreachCompanyCard({
           prefillCompanyId={company.companyId}
           prefillAttendeeId={schedulingAttendee.attendeeId}
           onSuccess={(meeting: Meeting) => {
+            setLocalMeetingIds(prev => ({ ...prev, [schedulingAttendee.attendeeId]: meeting.id }));
             setSchedulingAttendee(null);
+            onActivityLogged();
+          }}
+        />
+      )}
+
+      {editingMeetingId != null && (
+        <EditOutreachMeetingModal
+          meetingId={editingMeetingId}
+          onClose={() => setEditingMeetingId(null)}
+          onSuccess={(meeting: Meeting) => {
+            setLocalMeetingIds(prev => ({ ...prev, [meeting.attendee_id]: meeting.id }));
+            setEditingMeetingId(null);
             onActivityLogged();
           }}
         />

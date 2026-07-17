@@ -30,6 +30,7 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
     companyId: number;
     companyName: string;
     initialTab: 'timeline' | 'notes';
+    attendeeFilter?: { id: number; name: string };
   } | null>(null);
 
   const [assignModalState, setAssignModalState] = useState<{
@@ -166,7 +167,12 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
                   conferenceId={conferenceId}
                   targetTier={tierByCompany.get(company.companyId)}
                   onActivityLogged={loadOutreach}
-                  onOpenDrawer={(tab) => setDrawerState({ companyId: company.companyId, companyName: company.companyName, initialTab: tab })}
+                  onOpenDrawer={(tab, attendee) => setDrawerState({
+                    companyId: company.companyId,
+                    companyName: company.companyName,
+                    initialTab: tab,
+                    attendeeFilter: attendee,
+                  })}
                   onOpenAssign={() => setAssignModalState({
                     companyId: company.companyId,
                     companyName: company.companyName,
@@ -182,6 +188,7 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
                   companyId={drawerState.companyId}
                   companyName={drawerState.companyName}
                   initialTab={drawerState.initialTab}
+                  attendeeFilter={drawerState.attendeeFilter}
                   onClose={() => setDrawerState(null)}
                 />
               </div>

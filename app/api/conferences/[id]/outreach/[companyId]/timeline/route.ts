@@ -8,7 +8,9 @@ import { resolveUserDisplayName } from '@/lib/initials';
 // this company's attendees at this conference (regardless of where they were
 // scheduled from — the targets kanban, this tab, or anywhere else), most recent
 // first. Meetings use their row-creation timestamp (when they were scheduled),
-// not the meeting's own date/time (when it's set to happen).
+// not the meeting's own date/time (when it's set to happen). A meeting that's
+// been superseded (edited via the outreach tab) still appears — the client
+// renders it struck through — alongside the new meeting row it points to.
 export async function GET(request: NextRequest, { params }: { params: { id: string; companyId: string } }) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
@@ -21,7 +23,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   try {
     const [activityRows, meetingRows] = await Promise.all([
       db.execute({
-        sql: `SELECT oa.id, oa.activity_type, oa.notes, oa.logged_at,
+        sql: `SELECT oa.id, oa.activity_type, oa.notes, oa.logged_at, oa.attendee_id,
                      u.display_name, u.first_name, u.last_name, u.email,
                      a.first_name as attendee_first_name, a.last_name as attendee_last_name
               FROM outreach_activity oa
@@ -33,6 +35,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       }),
       db.execute({
         sql: `SELECT m.id, m.created_at, m.meeting_date, m.meeting_time, m.location, m.scheduled_by,
+                     m.superseded_by_id, m.attendee_id,
                      a.first_name as attendee_first_name, a.last_name as attendee_last_name
               FROM meetings m
               JOIN attendees a ON a.id = m.attendee_id
@@ -42,22 +45,49 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       }),
     ]);
 
+    // scheduled_by is a CSV of config_options ids (same convention as
+    // follow_ups.assigned_rep) — resolve them to display names in one query
+    // rather than printing the raw ids.
+    const repIds = new Set<number>();
+    for (const r of meetingRows.rows) {
+      String(r.scheduled_by || '').split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n)).forEach(id => repIds.add(id));
+    }
+    const repNameById = new Map<number, string>();
+    if (repIds.size > 0) {
+      const ids = Array.from(repIds);
+      const placeholders = ids.map(() => '?').join(',');
+      const repRows = await db.execute({
+        sql: `SELECT id, value FROM config_options WHERE id IN (${placeholders})`,
+        args: ids,
+      });
+      for (const r of repRows.rows) repNameById.set(Number(r.id), String(r.value));
+    }
+    const resolveScheduledBy = (csv: unknown): string => {
+      const ids = String(csv || '').split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+      const names = ids.map(id => repNameById.get(id)).filter((n): n is string => !!n);
+      return names.length > 0 ? names.join(', ') : 'Someone';
+    };
+
     const activities = activityRows.rows.map(r => ({
       id: `activity-${r.id}`,
       activityType: String(r.activity_type),
       loggedByName: resolveUserDisplayName(r),
+      attendeeId: r.attendee_id != null ? Number(r.attendee_id) : null,
       attendeeName: r.attendee_first_name ? `${r.attendee_first_name} ${r.attendee_last_name}` : null,
       notes: r.notes ? String(r.notes) : null,
       loggedAt: String(r.logged_at),
+      supersededById: null as string | null,
     }));
 
     const meetings = meetingRows.rows.map(r => ({
       id: `meeting-${r.id}`,
       activityType: 'meeting',
-      loggedByName: r.scheduled_by ? String(r.scheduled_by) : 'Someone',
+      loggedByName: resolveScheduledBy(r.scheduled_by),
+      attendeeId: r.attendee_id != null ? Number(r.attendee_id) : null,
       attendeeName: r.attendee_first_name ? `${r.attendee_first_name} ${r.attendee_last_name}` : null,
       notes: `Meeting scheduled for ${r.meeting_date}${r.meeting_time ? ` at ${r.meeting_time}` : ''}${r.location ? ` — ${r.location}` : ''}`,
       loggedAt: String(r.created_at),
+      supersededById: r.superseded_by_id != null ? `meeting-${r.superseded_by_id}` : null,
     }));
 
     const merged = [...activities, ...meetings].sort((a, b) => b.loggedAt.localeCompare(a.loggedAt));
