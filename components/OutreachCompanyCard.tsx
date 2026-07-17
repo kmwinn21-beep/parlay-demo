@@ -20,9 +20,20 @@ export interface OutreachAttendee {
   lastName: string;
   title: string | null;
   seniorityLabel: string | null;
+  email: string | null;
+  phone: string | null;
+  linkedinUrl: string | null;
   activityCount: number;
   activityCounts: { phone: number; email: number; linkedin: number };
   meetingId: number | null;
+}
+
+export interface OutreachAttendeeFilter {
+  id: number;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  linkedinUrl: string | null;
 }
 
 export type OutreachStatus = 'not_started' | 'in_progress' | 'completed' | 'overdue';
@@ -99,16 +110,16 @@ function AssigneeStack({ assignees, max = 3 }: { assignees: OutreachAssignee[]; 
         <div
           key={a.userId}
           title={a.displayName}
-          style={{ marginLeft: i === 0 ? 0 : -6, zIndex: shown.length - i, border: '1.5px solid white' }}
-          className="w-6 h-6 rounded-full bg-brand-secondary text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0 relative"
+          style={{ marginLeft: i === 0 ? 0 : -6, zIndex: shown.length - i, border: '1.5px solid #60a5fa' }}
+          className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 text-[10px] font-semibold flex items-center justify-center flex-shrink-0 relative"
         >
           {a.initials}
         </div>
       ))}
       {overflow > 0 && (
         <div
-          style={{ marginLeft: -6, zIndex: 0, border: '1.5px solid white' }}
-          className="w-6 h-6 rounded-full bg-gray-200 text-gray-600 text-[10px] font-semibold flex items-center justify-center flex-shrink-0 relative"
+          style={{ marginLeft: -6, zIndex: 0, border: '1.5px solid #60a5fa' }}
+          className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 text-[10px] font-semibold flex items-center justify-center flex-shrink-0 relative"
         >
           +{overflow}
         </div>
@@ -208,7 +219,7 @@ export function OutreachCompanyCard({
   /** This company's target tier key ('1'|'2'|'3'|'unassigned'), if it's on the targets board. */
   targetTier?: string | null;
   onActivityLogged: () => void;
-  onOpenDrawer: (tab: 'timeline' | 'notes', attendee?: { id: number; name: string }) => void;
+  onOpenDrawer: (tab: 'timeline' | 'notes', attendee?: OutreachAttendeeFilter) => void;
   onOpenAssign: () => void;
 }) {
   const colorMaps = useConfigColors();
@@ -407,7 +418,13 @@ export function OutreachCompanyCard({
             return (
               <div
                 key={attendee.attendeeId}
-                onClick={() => onOpenDrawer('timeline', { id: attendee.attendeeId, name: `${attendee.firstName} ${attendee.lastName}` })}
+                onClick={() => onOpenDrawer('timeline', {
+                  id: attendee.attendeeId,
+                  name: `${attendee.firstName} ${attendee.lastName}`,
+                  email: attendee.email,
+                  phone: attendee.phone,
+                  linkedinUrl: attendee.linkedinUrl,
+                })}
                 className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-blue-50/40 transition-colors ${idx % 2 === 0 ? 'bg-gray-50/60' : 'bg-white'}`}
               >
                 <div
@@ -422,9 +439,6 @@ export function OutreachCompanyCard({
                     {[attendee.title, attendee.seniorityLabel].filter(Boolean).join(' · ') || '—'}
                   </p>
                 </div>
-                <span onClick={e => e.stopPropagation()}>
-                  <AssigneeStack assignees={company.assignees} />
-                </span>
                 <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
                   <button
                     type="button"
@@ -516,7 +530,7 @@ export function OutreachCompanyCard({
                     );
                   })}
                 </div>
-                <span className={`text-[11px] font-medium flex-shrink-0 ${total > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                <span className={`text-[11px] font-medium flex-shrink-0 w-[72px] text-right ${total > 0 ? 'text-green-600' : 'text-gray-400'}`}>
                   {total > 0 ? `${total} logged` : 'None logged'}
                 </span>
               </div>

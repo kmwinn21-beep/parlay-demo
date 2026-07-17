@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { OutreachCompanyCard, type OutreachCompany } from './OutreachCompanyCard';
+import { OutreachCompanyCard, type OutreachCompany, type OutreachAttendeeFilter } from './OutreachCompanyCard';
 import { OutreachDrawer } from './OutreachDrawer';
 import { OutreachAssignModal } from './OutreachAssignModal';
 
@@ -30,7 +30,7 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
     companyId: number;
     companyName: string;
     initialTab: 'timeline' | 'notes';
-    attendeeFilter?: { id: number; name: string };
+    attendeeFilter?: OutreachAttendeeFilter;
   } | null>(null);
 
   const [assignModalState, setAssignModalState] = useState<{
