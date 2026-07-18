@@ -600,12 +600,14 @@ export function OutreachCompanyCard({
                   attendee.attendeeId === selectedAttendeeId ? 'bg-blue-50' : idx % 2 === 0 ? 'bg-gray-50/60' : 'bg-white'
                 }`}
               >
-                <div
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0"
-                  style={{ backgroundColor: companyTypeHex }}
-                >
-                  {(attendee.firstName[0] ?? '') + (attendee.lastName[0] ?? '')}
-                </div>
+                {isDesktop && (
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0"
+                    style={{ backgroundColor: companyTypeHex }}
+                  >
+                    {(attendee.firstName[0] ?? '') + (attendee.lastName[0] ?? '')}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-gray-800 truncate">{attendee.firstName} {attendee.lastName}</p>
                   <div className="flex items-center gap-1.5 min-w-0">
@@ -641,9 +643,20 @@ export function OutreachCompanyCard({
                     )}
                   </div>
                 )}
-                <span className={`text-[11px] font-medium flex-shrink-0 w-[72px] text-right ${total > 0 ? 'text-green-600' : 'text-gray-400'}`}>
-                  {total > 0 ? `${total} logged` : 'None logged'}
-                </span>
+                {isDesktop ? (
+                  <span className={`text-[11px] font-medium flex-shrink-0 w-[72px] text-right ${total > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                    {total > 0 ? `${total} logged` : 'None logged'}
+                  </span>
+                ) : (
+                  <span
+                    title={total > 0 ? `${total} logged` : 'None logged'}
+                    className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                      total > 0 ? 'border border-green-400 bg-green-50 text-green-600' : 'border border-gray-200 bg-gray-50 text-gray-400'
+                    }`}
+                  >
+                    {total > 0 ? total : '-'}
+                  </span>
+                )}
               </div>
             );
           })}
