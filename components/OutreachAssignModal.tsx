@@ -97,7 +97,33 @@ export function OutreachAssignModal({
     }
   };
 
+  // Only offered when editing an existing assignment (opened with reps already
+  // assigned) — clears every rep for this company+conference via the same
+  // assign endpoint (empty userIds), which drops it out of the Outreach list
+  // entirely since GET /outreach only returns companies with an assignment row.
+  const handleRemoveCompany = async () => {
+    if (!selectedCompanyId) return;
+    if (!confirm(`Remove ${selectedCompanyName ?? 'this company'} from Outreach? This clears all assigned reps and outreach tracking for this company at this conference.`)) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/conferences/${conferenceId}/outreach/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyId: selectedCompanyId, userIds: [] }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Removed from Outreach');
+      onAssigned();
+      onClose();
+    } catch {
+      toast.error('Failed to remove company');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const needsCompanyPicker = !companyId;
+  const isEditingExisting = currentAssigneeIds.length > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 py-6">
@@ -183,6 +209,17 @@ export function OutreachAssignModal({
         </div>
 
         <div className="flex gap-2 px-5 py-3 border-t border-gray-100 flex-shrink-0">
+          {isEditingExisting && (
+            <button
+              type="button"
+              onClick={handleRemoveCompany}
+              disabled={submitting}
+              title="Remove this company from Outreach"
+              className="text-sm font-medium text-red-500 hover:text-red-600 hover:bg-red-50 px-3 py-2 rounded-lg transition-colors disabled:opacity-50"
+            >
+              Remove
+            </button>
+          )}
           <button
             type="button"
             onClick={handleSubmit}

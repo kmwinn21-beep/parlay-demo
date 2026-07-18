@@ -246,6 +246,16 @@ export function OutreachCompanyCard({
   const tierStyle = targetTier ? TIER_STYLES[targetTier] : null;
   const companyTypeHex = company.companyType ? getHex(company.companyType, colorMaps.company_type || {}) : '#6b7280';
   const valuePill = formatValuePill(company.wse, avgCostPerUnit);
+  // Same $1.1M / $441K compact-number convention used elsewhere (e.g.
+  // components/pre-conference/LandscapeTab.tsx, lib/strategyAssessment.ts) —
+  // duplicated locally per this codebase's precedent rather than a shared import.
+  const abbreviatedValuePill = (() => {
+    if (company.wse == null || avgCostPerUnit <= 0) return null;
+    const total = company.wse * avgCostPerUnit;
+    if (total >= 1_000_000) return `$${(total / 1_000_000).toFixed(1)}M`;
+    if (total >= 1_000) return `$${Math.round(total / 1_000)}K`;
+    return `$${Math.round(total).toLocaleString('en-US')}`;
+  })();
 
   const countsFor = (attendee: OutreachAttendee) => localCounts[attendee.attendeeId] ?? attendee.activityCounts;
   const meetingIdFor = (attendee: OutreachAttendee) => localMeetingIds[attendee.attendeeId] ?? attendee.meetingId;
@@ -330,8 +340,6 @@ export function OutreachCompanyCard({
     }
   };
 
-  const attendeeCount = company.attendees.length;
-
   const assigneePill = (
     <button
       type="button"
@@ -372,9 +380,11 @@ export function OutreachCompanyCard({
           </span>
         )
       ) : (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500 flex-shrink-0">
-          {attendeeCount} {attendeeCount === 1 ? 'attendee' : 'attendees'}
-        </span>
+        abbreviatedValuePill && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 flex-shrink-0 whitespace-nowrap">
+            {abbreviatedValuePill}
+          </span>
+        )
       )}
       {assigneePill}
     </>
@@ -622,16 +632,17 @@ export function OutreachCompanyCard({
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-gray-800 truncate">{attendee.firstName} {attendee.lastName}</p>
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    {attendee.title && <p className="text-[11px] text-gray-400 truncate">{attendee.title}</p>}
-                    {isDesktop && attendee.seniorityLabel && (
-                      <span className={`${getBadgeClass(attendee.seniorityLabel, colorMaps.seniority || {})} flex-shrink-0`}>
+                  <p className="text-xs text-gray-400 truncate">{attendee.title || '—'}</p>
+                </div>
+                {isDesktop && (
+                  <div className="w-24 flex-shrink-0">
+                    {attendee.seniorityLabel && (
+                      <span className={`${getBadgeClass(attendee.seniorityLabel, colorMaps.seniority || {})} text-[11px]`}>
                         {attendee.seniorityLabel}
                       </span>
                     )}
-                    {!attendee.title && !(isDesktop && attendee.seniorityLabel) && <p className="text-[11px] text-gray-400">—</p>}
                   </div>
-                </div>
+                )}
                 {isDesktop ? (
                   <>
                     {meetingIconBlock}
@@ -657,7 +668,7 @@ export function OutreachCompanyCard({
                 )}
                 {isDesktop ? (
                   <span className={`text-[11px] font-medium flex-shrink-0 w-[72px] text-right ${total > 0 ? 'text-green-600' : 'text-gray-400'}`}>
-                    {total > 0 ? `${total} logged` : 'None logged'}
+                    {total > 0 ? `${total} logged` : '-'}
                   </span>
                 ) : (
                   <span
