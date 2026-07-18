@@ -610,12 +610,12 @@ export function OutreachCompanyCard({
                   <p className="text-xs font-medium text-gray-800 truncate">{attendee.firstName} {attendee.lastName}</p>
                   <div className="flex items-center gap-1.5 min-w-0">
                     {attendee.title && <p className="text-[11px] text-gray-400 truncate">{attendee.title}</p>}
-                    {attendee.seniorityLabel && (
+                    {isDesktop && attendee.seniorityLabel && (
                       <span className={`${getBadgeClass(attendee.seniorityLabel, colorMaps.seniority || {})} flex-shrink-0`}>
                         {attendee.seniorityLabel}
                       </span>
                     )}
-                    {!attendee.title && !attendee.seniorityLabel && <p className="text-[11px] text-gray-400">—</p>}
+                    {!attendee.title && !(isDesktop && attendee.seniorityLabel) && <p className="text-[11px] text-gray-400">—</p>}
                   </div>
                 </div>
                 {isDesktop ? (
