@@ -26,6 +26,7 @@ interface CompanyAgg {
   companyName: string;
   companyType: string | null;
   icp: string | null;
+  wse: number | null;
   status: string;
   assignees: { userId: number; displayName: string; initials: string }[];
 }
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const assignRows = await db.execute({
       sql: `SELECT oa.company_id, oa.status, oa.assigned_user_id,
-                   c.name as company_name, c.company_type, c.icp,
+                   c.name as company_name, c.company_type, c.icp, c.wse,
                    u.display_name, u.first_name, u.last_name, u.email
             FROM outreach_assignments oa
             JOIN companies c ON c.id = oa.company_id
@@ -71,6 +72,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
           companyName: String(r.company_name),
           companyType: r.company_type ? String(r.company_type) : null,
           icp: r.icp ? String(r.icp) : null,
+          wse: r.wse != null ? Number(r.wse) : null,
           status: String(r.status),
           assignees: [],
         });
@@ -175,6 +177,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       companyName: c.companyName,
       companyType: c.companyType,
       icp: c.icp,
+      wse: c.wse,
       status: c.status === 'not_started' && isPastEnd ? 'overdue' : c.status,
       assignees: c.assignees,
       attendees: attendeesByCompany.get(c.companyId) || [],

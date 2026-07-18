@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { getBadgeClass, getHex } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
+import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import { NewMeetingModal } from './NewMeetingModal';
 import { EditOutreachMeetingModal } from './EditOutreachMeetingModal';
 import { type Meeting } from './MeetingsTable';
@@ -43,6 +44,7 @@ export interface OutreachCompany {
   companyName: string;
   companyType: string | null;
   icp: string | null;
+  wse: number | null;
   status: OutreachStatus;
   assignees: OutreachAssignee[];
   attendees: OutreachAttendee[];
@@ -194,6 +196,7 @@ export function OutreachCompanyCard({
   onOpenAssign: () => void;
 }) {
   const colorMaps = useConfigColors();
+  const avgCostPerUnit = useAvgCostPerUnit();
   const [expanded, setExpanded] = useState(false);
   const [flashKey, setFlashKey] = useState<string | null>(null);
   const [hoverKey, setHoverKey] = useState<string | null>(null);
@@ -242,6 +245,7 @@ export function OutreachCompanyCard({
   const statusStyle = STATUS_STYLES[localStatus] ?? STATUS_STYLES.not_started;
   const tierStyle = targetTier ? TIER_STYLES[targetTier] : null;
   const companyTypeHex = company.companyType ? getHex(company.companyType, colorMaps.company_type || {}) : '#6b7280';
+  const valuePill = formatValuePill(company.wse, avgCostPerUnit);
 
   const countsFor = (attendee: OutreachAttendee) => localCounts[attendee.attendeeId] ?? attendee.activityCounts;
   const meetingIdFor = (attendee: OutreachAttendee) => localMeetingIds[attendee.attendeeId] ?? attendee.meetingId;
@@ -361,9 +365,17 @@ export function OutreachCompanyCard({
           {statusStyle.label}
         </span>
       )}
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500 flex-shrink-0">
-        {attendeeCount} {attendeeCount === 1 ? 'attendee' : 'attendees'}
-      </span>
+      {isDesktop ? (
+        valuePill && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 flex-shrink-0 whitespace-nowrap">
+            {valuePill}
+          </span>
+        )
+      ) : (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500 flex-shrink-0">
+          {attendeeCount} {attendeeCount === 1 ? 'attendee' : 'attendees'}
+        </span>
+      )}
       {assigneePill}
     </>
   );
