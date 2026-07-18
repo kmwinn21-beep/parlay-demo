@@ -340,7 +340,7 @@ export function OutreachCompanyCard({
             }`}
           >
             {company.assignees.length > 0
-              ? `Outreach Assigned To: ${company.assignees.map(a => a.displayName).join(', ')}`
+              ? company.assignees.map(a => a.displayName).join(', ')
               : 'Unassigned'}
           </button>
         </div>
