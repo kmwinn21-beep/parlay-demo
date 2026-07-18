@@ -104,8 +104,8 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
 
   return (
     <div className="card p-0 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2">
+      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-nowrap overflow-x-auto">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <h2 className="text-lg font-semibold text-brand-primary font-serif">Outreach</h2>
           {totalCount > 0 && (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
@@ -113,7 +113,7 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-nowrap flex-shrink-0">
           <select
             value={assigneeFilter ?? ''}
             onChange={e => setAssigneeFilter(e.target.value ? Number(e.target.value) : null)}
