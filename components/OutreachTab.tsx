@@ -133,7 +133,7 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
           <button
             type="button"
             onClick={() => setAssignModalState({ currentAssigneeIds: [] })}
-            className="btn-primary text-xs px-3 py-1.5"
+            className="btn-primary text-xs px-3 py-1.5 whitespace-nowrap flex-shrink-0"
           >
             Assign company
           </button>
@@ -185,7 +185,7 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
               ))}
             </div>
             {drawerState && (
-              <div className="w-72 flex-shrink-0">
+              <div className="sm:w-72 sm:flex-shrink-0">
                 <OutreachDrawer
                   conferenceId={conferenceId}
                   companyId={drawerState.companyId}

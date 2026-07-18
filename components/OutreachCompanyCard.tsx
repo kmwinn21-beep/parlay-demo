@@ -208,6 +208,37 @@ export function OutreachCompanyCard({
   const [notePopoverKey, setNotePopoverKey] = useState<string | null>(null);
   const activityIconRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
+  // Below sm (640px), the header's timeline/notes/edit-assignees icons and each
+  // attendee row's meeting/activity icons collapse behind a kabob button —
+  // matches the app's other mobile-vs-desktop breakpoint (e.g. drawers switch
+  // at the same width).
+  const [isDesktop, setIsDesktop] = useState(true);
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 640px)');
+    const update = () => setIsDesktop(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const headerMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!headerMenuOpen) return;
+    const h = (e: MouseEvent) => { if (headerMenuRef.current && !headerMenuRef.current.contains(e.target as Node)) setHeaderMenuOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [headerMenuOpen]);
+
+  const [mobileAttendeeMenuKey, setMobileAttendeeMenuKey] = useState<number | null>(null);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (mobileAttendeeMenuKey == null) return;
+    const h = (e: MouseEvent) => { if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target as Node)) setMobileAttendeeMenuKey(null); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [mobileAttendeeMenuKey]);
+
   const statusStyle = STATUS_STYLES[localStatus] ?? STATUS_STYLES.not_started;
   const tierStyle = targetTier ? TIER_STYLES[targetTier] : null;
   const companyTypeHex = company.companyType ? getHex(company.companyType, colorMaps.company_type || {}) : '#6b7280';
@@ -297,97 +328,152 @@ export function OutreachCompanyCard({
 
   const attendeeCount = company.attendees.length;
 
+  const assigneePill = (
+    <button
+      type="button"
+      onClick={e => { e.stopPropagation(); if (company.assignees.length === 0) onOpenAssign(); }}
+      title={company.assignees.length === 0 ? 'Assign reps' : company.assignees.map(a => a.displayName).join(', ')}
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 truncate max-w-[220px] ${
+        company.assignees.length > 0
+          ? 'bg-blue-50 text-blue-600 border border-blue-300'
+          : 'bg-gray-100 text-gray-500 border border-gray-200 cursor-pointer hover:bg-gray-200'
+      }`}
+    >
+      {company.assignees.length > 0
+        ? company.assignees.map(a => a.displayName).join(', ')
+        : 'Unassigned'}
+    </button>
+  );
+
+  const badgesRow = (
+    <>
+      {company.companyType && (
+        <span className={getBadgeClass(company.companyType, colorMaps.company_type || {})}>{company.companyType}</span>
+      )}
+      {company.icp === 'Yes' && <span className="badge-green text-xs px-2 py-0.5 flex-shrink-0">ICP</span>}
+      {tierStyle && (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${tierStyle.className}`}>
+          {tierStyle.label}
+        </span>
+      )}
+      {localStatus !== 'overdue' && (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${statusStyle.className}`}>
+          {statusStyle.label}
+        </span>
+      )}
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500 flex-shrink-0">
+        {attendeeCount} {attendeeCount === 1 ? 'attendee' : 'attendees'}
+      </span>
+      {assigneePill}
+    </>
+  );
+
+  const headerIcons = (
+    <>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => onOpenDrawer('timeline')}
+          title="View timeline"
+          className="w-7 h-7 rounded-full bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-brand-secondary flex items-center justify-center transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        </button>
+        {localTotal > 0 && (
+          <span className="absolute -top-1.5 -left-1.5 min-w-[16px] h-4 px-1 rounded-full bg-brand-secondary text-white text-[9px] font-bold flex items-center justify-center leading-none">
+            {localTotal}
+          </span>
+        )}
+      </div>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => onOpenDrawer('notes')}
+          title="View notes"
+          className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+            localNoteCount > 0 ? 'bg-blue-50 text-blue-500 hover:bg-blue-100' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
+          }`}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+        </button>
+        {localNoteCount > 0 && (
+          <span className="absolute -top-1.5 -left-1.5 min-w-[16px] h-4 px-1 rounded-full bg-green-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+            {localNoteCount}
+          </span>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={onOpenAssign}
+        title="Edit assigned reps"
+        className="w-7 h-7 rounded-full bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-brand-secondary flex items-center justify-center transition-colors"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+      </button>
+    </>
+  );
+
+  const expandToggle = (
+    <>
+      <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+      </svg>
+      <span className="text-sm font-bold text-gray-800 truncate">{company.companyName}</span>
+    </>
+  );
+
   return (
     <div className="border border-gray-200 rounded-xl bg-white overflow-hidden hover:border-gray-300 transition-colors">
       {/* Collapsed row */}
-      <div className="flex items-center gap-3 px-4 py-3">
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => setExpanded(v => !v)}
-          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setExpanded(v => !v); }}
-          className="flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer"
-        >
-          <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-          <span className="text-sm font-bold text-gray-800 truncate">{company.companyName}</span>
-          {company.companyType && (
-            <span className={getBadgeClass(company.companyType, colorMaps.company_type || {})}>{company.companyType}</span>
-          )}
-          {company.icp === 'Yes' && <span className="badge-green text-xs px-2 py-0.5 flex-shrink-0">ICP</span>}
-          {tierStyle && (
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${tierStyle.className}`}>
-              {tierStyle.label}
-            </span>
-          )}
-          {localStatus !== 'overdue' && (
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${statusStyle.className}`}>
-              {statusStyle.label}
-            </span>
-          )}
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500 flex-shrink-0 hidden sm:inline-flex">
-            {attendeeCount} {attendeeCount === 1 ? 'attendee' : 'attendees'}
-          </span>
-          <button
-            type="button"
-            onClick={e => { e.stopPropagation(); if (company.assignees.length === 0) onOpenAssign(); }}
-            title={company.assignees.length === 0 ? 'Assign reps' : company.assignees.map(a => a.displayName).join(', ')}
-            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 truncate max-w-[220px] ${
-              company.assignees.length > 0
-                ? 'bg-blue-50 text-blue-600 border border-blue-300'
-                : 'bg-gray-100 text-gray-500 border border-gray-200 cursor-pointer hover:bg-gray-200'
-            }`}
+      {isDesktop ? (
+        <div className="flex items-center gap-3 px-4 py-3">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setExpanded(v => !v)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setExpanded(v => !v); }}
+            className="flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer"
           >
-            {company.assignees.length > 0
-              ? company.assignees.map(a => a.displayName).join(', ')
-              : 'Unassigned'}
-          </button>
-        </div>
-
-        <div className="flex items-center gap-4 flex-shrink-0">
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => onOpenDrawer('timeline')}
-              title="View timeline"
-              className="w-7 h-7 rounded-full bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-brand-secondary flex items-center justify-center transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            </button>
-            {localTotal > 0 && (
-              <span className="absolute -top-1.5 -left-1.5 min-w-[16px] h-4 px-1 rounded-full bg-brand-secondary text-white text-[9px] font-bold flex items-center justify-center leading-none">
-                {localTotal}
-              </span>
-            )}
+            {expandToggle}
+            {badgesRow}
           </div>
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => onOpenDrawer('notes')}
-              title="View notes"
-              className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
-                localNoteCount > 0 ? 'bg-blue-50 text-blue-500 hover:bg-blue-100' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-            </button>
-            {localNoteCount > 0 && (
-              <span className="absolute -top-1.5 -left-1.5 min-w-[16px] h-4 px-1 rounded-full bg-green-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
-                {localNoteCount}
-              </span>
-            )}
+          <div className="flex items-center gap-4 flex-shrink-0">
+            {headerIcons}
           </div>
-          <button
-            type="button"
-            onClick={onOpenAssign}
-            title="Edit assigned reps"
-            className="w-7 h-7 rounded-full bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-brand-secondary flex items-center justify-center transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-          </button>
         </div>
-      </div>
+      ) : (
+        <div className="flex flex-col gap-2 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setExpanded(v => !v)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setExpanded(v => !v); }}
+              className="flex items-center gap-2 flex-1 min-w-0 text-left cursor-pointer"
+            >
+              {expandToggle}
+            </div>
+            <div className="relative flex-shrink-0" ref={headerMenuRef}>
+              <button
+                type="button"
+                onClick={() => setHeaderMenuOpen(v => !v)}
+                title="More options"
+                className="w-7 h-7 rounded-full bg-gray-50 text-gray-400 hover:bg-gray-100 flex items-center justify-center transition-colors"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.75" /><circle cx="12" cy="12" r="1.75" /><circle cx="12" cy="19" r="1.75" /></svg>
+              </button>
+              {headerMenuOpen && (
+                <div className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-100 p-2 z-20 flex items-center gap-3">
+                  {headerIcons}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap pl-6">
+            {badgesRow}
+          </div>
+        </div>
+      )}
 
       {/* Expanded attendee rows */}
       {expanded && (
@@ -400,58 +486,37 @@ export function OutreachCompanyCard({
             const total = counts.phone + counts.email + counts.linkedin;
             const meetingId = meetingIdFor(attendee);
             const hasMeeting = meetingId != null;
-            return (
-              <div
-                key={attendee.attendeeId}
-                onClick={() => onOpenDrawer('timeline', {
-                  id: attendee.attendeeId,
-                  name: `${attendee.firstName} ${attendee.lastName}`,
-                  email: attendee.email,
-                  phone: attendee.phone,
-                  linkedinUrl: attendee.linkedinUrl,
-                })}
-                className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-blue-50/40 transition-colors ${
-                  attendee.attendeeId === selectedAttendeeId ? 'bg-blue-50' : idx % 2 === 0 ? 'bg-gray-50/60' : 'bg-white'
-                }`}
-              >
-                <div
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0"
-                  style={{ backgroundColor: companyTypeHex }}
+
+            const meetingIconBlock = (
+              <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
+                <button
+                  type="button"
+                  title={hasMeeting ? 'Edit scheduled meeting' : 'Schedule meeting'}
+                  onClick={() => (hasMeeting ? setEditingMeetingId(meetingId) : setSchedulingAttendee(attendee))}
+                  className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-colors ${
+                    hasMeeting
+                      ? 'border-green-300 bg-green-50 text-green-600 hover:bg-green-100'
+                      : 'border-gray-200 text-gray-400 hover:border-brand-secondary hover:text-brand-secondary hover:bg-brand-secondary/10'
+                  }`}
                 >
-                  {(attendee.firstName[0] ?? '') + (attendee.lastName[0] ?? '')}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-gray-800 truncate">{attendee.firstName} {attendee.lastName}</p>
-                  <p className="text-[11px] text-gray-400 truncate">
-                    {[attendee.title, attendee.seniorityLabel].filter(Boolean).join(' · ') || '—'}
-                  </p>
-                </div>
-                <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
-                  <button
-                    type="button"
-                    title={hasMeeting ? 'Edit scheduled meeting' : 'Schedule meeting'}
-                    onClick={() => (hasMeeting ? setEditingMeetingId(meetingId) : setSchedulingAttendee(attendee))}
-                    className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-colors ${
-                      hasMeeting
-                        ? 'border-green-300 bg-green-50 text-green-600 hover:bg-green-100'
-                        : 'border-gray-200 text-gray-400 hover:border-brand-secondary hover:text-brand-secondary hover:bg-brand-secondary/10'
-                    }`}
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </button>
+                {hasMeeting && (
+                  <span className="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-green-500 text-white flex items-center justify-center">
+                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
-                  </button>
-                  {hasMeeting && (
-                    <span className="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-green-500 text-white flex items-center justify-center">
-                      <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-3 flex-shrink-0" onClick={e => e.stopPropagation()}>
-                  {(['phone', 'email', 'linkedin'] as const).map(type => {
+                  </span>
+                )}
+              </div>
+            );
+
+            const activityIconsBlock = (
+              <div className="flex items-center gap-3 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                {(['phone', 'email', 'linkedin'] as const).map(type => {
                     const key = `${attendee.attendeeId}-${type}`;
                     const flashed = flashKey === key;
                     const hovered = hoverKey === key;
@@ -516,7 +581,66 @@ export function OutreachCompanyCard({
                       </div>
                     );
                   })}
+              </div>
+            );
+
+            const mobileMenuOpen = mobileAttendeeMenuKey === attendee.attendeeId;
+
+            return (
+              <div
+                key={attendee.attendeeId}
+                onClick={() => onOpenDrawer('timeline', {
+                  id: attendee.attendeeId,
+                  name: `${attendee.firstName} ${attendee.lastName}`,
+                  email: attendee.email,
+                  phone: attendee.phone,
+                  linkedinUrl: attendee.linkedinUrl,
+                })}
+                className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-blue-50/40 transition-colors ${
+                  attendee.attendeeId === selectedAttendeeId ? 'bg-blue-50' : idx % 2 === 0 ? 'bg-gray-50/60' : 'bg-white'
+                }`}
+              >
+                <div
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0"
+                  style={{ backgroundColor: companyTypeHex }}
+                >
+                  {(attendee.firstName[0] ?? '') + (attendee.lastName[0] ?? '')}
                 </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-gray-800 truncate">{attendee.firstName} {attendee.lastName}</p>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    {attendee.title && <p className="text-[11px] text-gray-400 truncate">{attendee.title}</p>}
+                    {attendee.seniorityLabel && (
+                      <span className={`${getBadgeClass(attendee.seniorityLabel, colorMaps.seniority || {})} flex-shrink-0`}>
+                        {attendee.seniorityLabel}
+                      </span>
+                    )}
+                    {!attendee.title && !attendee.seniorityLabel && <p className="text-[11px] text-gray-400">—</p>}
+                  </div>
+                </div>
+                {isDesktop ? (
+                  <>
+                    {meetingIconBlock}
+                    {activityIconsBlock}
+                  </>
+                ) : (
+                  <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()} ref={mobileMenuOpen ? mobileMenuRef : undefined}>
+                    <button
+                      type="button"
+                      onClick={() => setMobileAttendeeMenuKey(k => (k === attendee.attendeeId ? null : attendee.attendeeId))}
+                      title="More options"
+                      className="w-7 h-7 rounded-full bg-gray-50 text-gray-400 hover:bg-gray-100 flex items-center justify-center transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.75" /><circle cx="12" cy="12" r="1.75" /><circle cx="12" cy="19" r="1.75" /></svg>
+                    </button>
+                    {mobileMenuOpen && (
+                      <div className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-100 p-2 z-20 flex items-center gap-3">
+                        {meetingIconBlock}
+                        {activityIconsBlock}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <span className={`text-[11px] font-medium flex-shrink-0 w-[72px] text-right ${total > 0 ? 'text-green-600' : 'text-gray-400'}`}>
                   {total > 0 ? `${total} logged` : 'None logged'}
                 </span>

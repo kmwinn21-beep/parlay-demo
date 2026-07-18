@@ -77,8 +77,19 @@ export function OutreachDrawer({
   // Reveal top-down on mount, collapse bottom-up on close — 'closed' is the
   // pre-mount/post-close state (scaleY 0 from the top), 'open' is fully shown;
   // closing flips transform-origin to the bottom before scaling back to 0, so
-  // the same shrink motion reads as coming from the opposite edge.
+  // the same shrink motion reads as coming from the opposite edge. Desktop only —
+  // below sm (640px) this becomes a bottom sheet using the same
+  // drawer-mobile-responsive slide-up used by every other mobile drawer in the app.
   const [phase, setPhase] = useState<'closed' | 'open' | 'closing'>('closed');
+  const [isDesktop, setIsDesktop] = useState(true);
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 640px)');
+    const update = () => setIsDesktop(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => setPhase('open'));
@@ -86,6 +97,7 @@ export function OutreachDrawer({
   }, []);
 
   const handleClose = () => {
+    if (!isDesktop) { onClose(); return; }
     setPhase('closing');
     setTimeout(onClose, ANIMATION_MS);
   };
@@ -155,15 +167,21 @@ export function OutreachDrawer({
   const supersededIds = new Set(visibleActivities.map(a => a.supersededById).filter((id): id is string => !!id));
 
   return (
-    <div
-      style={{
-        transformOrigin: phase === 'closing' ? 'bottom' : 'top',
-        transform: phase === 'open' ? 'scaleY(1)' : 'scaleY(0.05)',
-        opacity: phase === 'open' ? 1 : 0,
-        transition: `transform ${ANIMATION_MS}ms ease, opacity ${ANIMATION_MS}ms ease`,
-      }}
-      className="border border-gray-200 rounded-xl bg-white overflow-hidden sticky top-4 flex flex-col max-h-[calc(100vh-6rem)]"
-    >
+    <>
+      {!isDesktop && (
+        <div className="fixed inset-0 bg-black/30 z-40" onClick={handleClose} />
+      )}
+      <div
+        style={isDesktop ? {
+          transformOrigin: phase === 'closing' ? 'bottom' : 'top',
+          transform: phase === 'open' ? 'scaleY(1)' : 'scaleY(0.05)',
+          opacity: phase === 'open' ? 1 : 0,
+          transition: `transform ${ANIMATION_MS}ms ease, opacity ${ANIMATION_MS}ms ease`,
+        } : undefined}
+        className={isDesktop
+          ? 'border border-gray-200 rounded-xl bg-white overflow-hidden sticky top-4 flex flex-col max-h-[calc(100vh-6rem)]'
+          : 'drawer-mobile-responsive fixed inset-x-0 bottom-0 z-50 h-[75vh] w-full rounded-t-2xl border border-gray-200 bg-white overflow-hidden flex flex-col'}
+      >
       <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-gray-100">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-gray-700 truncate">{companyName}</p>
@@ -332,6 +350,7 @@ export function OutreachDrawer({
           </button>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }
