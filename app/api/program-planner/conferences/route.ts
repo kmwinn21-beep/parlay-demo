@@ -16,9 +16,10 @@ export async function GET(request: NextRequest) {
   // Conferences for this year with series info
   const confsRes = await db.execute({
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.series_id, c.internal_attendees, c.stage_override,
-                 cs.display_name as series_name
+                 cs.display_name as series_name, co.value as strategy_type_name
           FROM conferences c
           LEFT JOIN conference_series cs ON cs.id = c.series_id
+          LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
           WHERE c.start_date >= ? AND c.start_date <= ?
           ORDER BY c.start_date ASC`,
     args: [startDate, endDate],
@@ -76,10 +77,10 @@ export async function GET(request: NextRequest) {
 
   // conference_plans for this year
   const plansRes = await db.execute({
-    sql: `SELECT conference_id, decision, planned_budget, assigned_rep_ids FROM conference_plans WHERE conference_id IN (${ph}) AND plan_year = ?`,
+    sql: `SELECT conference_id, decision, planned_budget, assigned_rep_ids, notes FROM conference_plans WHERE conference_id IN (${ph}) AND plan_year = ?`,
     args: [...confIds, year],
   });
-  const planMap = new Map<number, { decision: string | null; planned_budget: number | null; assignedRepIds: number[] }>();
+  const planMap = new Map<number, { decision: string | null; planned_budget: number | null; assignedRepIds: number[]; notes: string | null }>();
   for (const r of plansRes.rows) {
     let assignedRepIds: number[] = [];
     try {
@@ -90,6 +91,7 @@ export async function GET(request: NextRequest) {
       decision: r.decision ? String(r.decision) : null,
       planned_budget: r.planned_budget != null ? Number(r.planned_budget) : null,
       assignedRepIds,
+      notes: r.notes ? String(r.notes) : null,
     });
   }
 
@@ -171,6 +173,8 @@ export async function GET(request: NextRequest) {
       plannedBudget: plan?.planned_budget ?? null,
       stageOverride: conf.stage_override ? String(conf.stage_override) : null,
       assignedReps: (plan?.assignedRepIds ?? []).map(id => repMap.get(id)).filter((r): r is { userId: number; displayName: string; initials: string } => r != null),
+      strategyTypeName: conf.strategy_type_name ? String(conf.strategy_type_name) : null,
+      planNotes: plan?.notes ?? null,
     };
   });
 

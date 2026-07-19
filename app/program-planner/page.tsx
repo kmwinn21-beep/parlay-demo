@@ -9,6 +9,7 @@ import { LineItemCostDrawer } from '@/components/LineItemCostDrawer';
 import { ConferenceBudgetDrawer } from '@/components/ConferenceBudgetDrawer';
 import { CalendarIntelligenceDrawer } from '@/components/CalendarIntelligenceDrawer';
 import { ConferenceInputPanel } from '@/components/ConferenceInputPanel';
+import { ProgramPlannerPlanView } from '@/components/ProgramPlannerPlanView';
 import { getCalendarStore, subscribeCalendarStore, startCalendarScoring } from '@/lib/calendarIntelligenceStore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -17,6 +18,12 @@ interface BudgetLineItem {
   label: string;
   budgeted: number | null;
   actual: number | null;
+}
+
+interface AssignedRep {
+  userId: number;
+  displayName: string;
+  initials: string;
 }
 
 interface ConferenceRow {
@@ -36,6 +43,9 @@ interface ConferenceRow {
   decision: string | null;
   plannedBudget: number | null;
   stageOverride: string | null;
+  assignedReps: AssignedRep[];
+  strategyTypeName: string | null;
+  planNotes: string | null;
 }
 
 interface SeriesGroup {
@@ -302,7 +312,7 @@ export default function ProgramPlannerPage() {
   const [summary, setSummary] = useState<SummaryData | null>(null);
   const [confsData, setConfsData] = useState<ConferencesData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'program' | 'cost'>('program');
+  const [view, setView] = useState<'program' | 'cost' | 'plan'>('program');
   const [statsOpen, setStatsOpen] = useState(true);
   const [groupMode, setGroupMode] = useState<GroupMode>('series');
   const [rankMetric, setRankMetric] = useState<RankMetric>('ces');
@@ -401,6 +411,18 @@ export default function ProgramPlannerPage() {
     setConfsData(prev => {
       if (!prev) return prev;
       const updateConf = (c: ConferenceRow) => c.conferenceId === confId ? { ...c, decision } : c;
+      return {
+        conferences: prev.conferences.map(updateConf),
+        series: prev.series.map(s => ({ ...s, conferences: s.conferences.map(updateConf) })),
+        standalone: prev.standalone.map(updateConf),
+      };
+    });
+  }, []);
+
+  const handleRepsUpdated = useCallback((confId: number, assignedReps: AssignedRep[]) => {
+    setConfsData(prev => {
+      if (!prev) return prev;
+      const updateConf = (c: ConferenceRow) => c.conferenceId === confId ? { ...c, assignedReps } : c;
       return {
         conferences: prev.conferences.map(updateConf),
         series: prev.series.map(s => ({ ...s, conferences: s.conferences.map(updateConf) })),
@@ -607,15 +629,22 @@ export default function ProgramPlannerPage() {
             {/* View toggle */}
             <div className="flex items-center gap-2">
               <AnimatedToggle
-                options={[{ id: 'program', label: 'Program' }, { id: 'cost', label: 'Cost' }]}
+                options={[{ id: 'program', label: 'Program' }, { id: 'cost', label: 'Cost' }, { id: 'plan', label: 'Plan' }]}
                 value={view}
-                onChange={v => setView(v as 'program' | 'cost')}
-                activeBg={id => id === 'program' ? 'bg-brand-primary' : 'bg-brand-accent'}
-                className="w-[160px]"
+                onChange={v => setView(v as 'program' | 'cost' | 'plan')}
+                activeBg={id => id === 'program' ? 'bg-brand-primary' : id === 'cost' ? 'bg-brand-accent' : 'bg-brand-secondary'}
+                className="w-[240px]"
               />
             </div>
 
-            {view === 'cost' ? (
+            {view === 'plan' ? (
+              <ProgramPlannerPlanView
+                year={selectedYear}
+                conferences={flattenedConferences}
+                calIntelScores={calIntelScores}
+                onRepsUpdated={handleRepsUpdated}
+              />
+            ) : view === 'cost' ? (
               <div className="grid grid-cols-1 lg:grid-cols-6 gap-3 items-start">
                 <div className="lg:col-span-4">
                   <ProgramPlannerCostMatrix
