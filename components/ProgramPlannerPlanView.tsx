@@ -454,7 +454,98 @@ export function ProgramPlannerPlanView({
                 {hasBudget ? `${fmtCurrency(groupBudget)} planned · ${groupReps} rep${groupReps !== 1 ? 's' : ''}` : 'No budget committed'}
               </span>
             </div>
-            <div className="overflow-x-auto">
+            {/* Mobile: one card per conference, stacked */}
+            <div className="sm:hidden divide-y divide-gray-100">
+              {rows.map(c => {
+                const ci = calIntelScores.get(c.conferenceId);
+                return (
+                  <div key={c.conferenceId} className={`px-4 py-3 space-y-2.5 ${dimRows ? 'opacity-60' : ''}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <Link href={`/conferences/${c.conferenceId}`} className="text-brand-secondary hover:text-brand-primary font-medium text-sm truncate block">
+                          {c.name}
+                        </Link>
+                        <DatesEditCell
+                          conferenceId={c.conferenceId}
+                          planYear={year}
+                          displayStartDate={c.plannedStartDate ?? c.startDate}
+                          plannedStartDate={c.plannedStartDate}
+                          plannedEndDate={c.plannedEndDate}
+                          fallbackStartDate={c.startDate}
+                          fallbackEndDate={c.endDate}
+                          onUpdated={(start, end) => onDatesUpdated(c.conferenceId, start, end)}
+                        />
+                      </div>
+                      <div className="flex-shrink-0 text-right">
+                        {c.plannedBudget != null ? (
+                          <button
+                            type="button"
+                            onClick={() => setBudgetModalConf(c)}
+                            className="text-gray-700 font-semibold text-sm tabular-nums hover:text-brand-primary transition-colors"
+                          >
+                            {fmtCurrency(c.plannedBudget)}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setBudgetModalConf(c)}
+                            className="text-brand-secondary hover:text-brand-primary text-[11px] font-medium whitespace-nowrap"
+                          >
+                            + Budget
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <StrategyEditPill
+                        conferenceId={c.conferenceId}
+                        strategyTypeId={c.strategyTypeId}
+                        strategyTypeName={c.strategyTypeName}
+                        onUpdated={(id, name) => onStrategyUpdated(c.conferenceId, id, name)}
+                      />
+                      <TypePill value={c.conferenceType} />
+                      <SponsorshipPill value={c.sponsorshipLevel} />
+                      <BoothPill present={c.boothPresent} width={c.boothWidth} length={c.boothLength} number={c.boothNumber} />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-gray-500">
+                      <div className="truncate"><span className="text-gray-400">Industry:</span> {c.industryFocus || '—'}</div>
+                      <div className="truncate"><span className="text-gray-400">Location:</span> {c.location || '—'}</div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <div style={{ position: 'relative', overflow: 'visible' }}>
+                        <RepAssignmentPopover
+                          conferenceId={c.conferenceId}
+                          planYear={year}
+                          assignedReps={c.assignedReps}
+                          allConferences={conferencesForConflicts}
+                          onUpdate={reps => onRepsUpdated(c.conferenceId, reps)}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="text-center">
+                          <p className="text-[9px] text-gray-400 uppercase tracking-wide leading-none mb-1">Cal Intel</p>
+                          <ScoreDot score={ci?.score ?? null} />
+                        </div>
+                        <div className="text-center">
+                          <p className="text-[9px] text-gray-400 uppercase tracking-wide leading-none mb-1">CES</p>
+                          <ScoreDot score={c.ces} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {c.planNotes && (
+                      <p className="text-[11px] text-gray-500 truncate">{c.planNotes}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop: table */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className={`w-full text-xs border-collapse ${dimRows ? 'opacity-60' : ''}`}>
                 <colgroup>
                   <col style={{ minWidth: 140 }} />
