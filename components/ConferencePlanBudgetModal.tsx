@@ -23,6 +23,23 @@ function fmtCurrency(v: number | null | undefined): string {
   return '$' + Math.round(v).toLocaleString();
 }
 
+function calcVariancePct(budgeted: number | null, actual: number | null): number | null {
+  if (budgeted == null || actual == null || budgeted === 0) return null;
+  return ((actual - budgeted) / budgeted) * 100;
+}
+
+function VariancePill({ variance }: { variance: number | null }) {
+  if (variance == null) return <span className="text-gray-300 text-[11px]">—</span>;
+  const over = variance >= 0;
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${
+      over ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'
+    }`}>
+      {over ? '+' : ''}{variance.toFixed(1)}%
+    </span>
+  );
+}
+
 export function ConferencePlanBudgetModal({
   conferenceId, conferenceName, year, actualLineItems, plannedLineItems, categoryAverages, onClose, onSaved,
 }: ConferencePlanBudgetModalProps) {
@@ -104,7 +121,8 @@ export function ConferencePlanBudgetModal({
                   <tr className="border-b border-gray-200">
                     <th className="text-left text-[10px] font-semibold uppercase tracking-wider text-gray-400 pb-2 pr-2">Item</th>
                     <th className="text-right text-[10px] font-semibold uppercase tracking-wider text-gray-400 pb-2 px-2">Budget</th>
-                    <th className="text-right text-[10px] font-semibold uppercase tracking-wider text-gray-400 pb-2 pl-2">Actual</th>
+                    <th className="text-right text-[10px] font-semibold uppercase tracking-wider text-gray-400 pb-2 px-2">Actual</th>
+                    <th className="text-right text-[10px] font-semibold uppercase tracking-wider text-gray-400 pb-2 pl-2">Var</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -112,7 +130,8 @@ export function ConferencePlanBudgetModal({
                     <tr key={li.label} className={i % 2 === 1 ? 'bg-gray-50' : ''}>
                       <td className="py-1.5 pr-2 text-[12px] text-gray-700">{li.label}</td>
                       <td className="py-1.5 px-2 text-right text-[12px] text-gray-600 tabular-nums">{fmtCurrency(li.budgeted)}</td>
-                      <td className="py-1.5 pl-2 text-right text-[12px] text-gray-600 tabular-nums">{fmtCurrency(li.actual)}</td>
+                      <td className="py-1.5 px-2 text-right text-[12px] text-gray-600 tabular-nums">{fmtCurrency(li.actual)}</td>
+                      <td className="py-1.5 pl-2 text-right"><VariancePill variance={calcVariancePct(li.budgeted, li.actual)} /></td>
                     </tr>
                   ))}
                 </tbody>
