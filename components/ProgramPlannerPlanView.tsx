@@ -1,8 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { RepAssignmentPopover, type AssignedRep } from './RepAssignmentPopover';
+import { ConferencePlanBudgetModal } from './ConferencePlanBudgetModal';
+import { useConfigWithIds } from '@/lib/useUserOptions';
+
+interface BudgetLineItem { label: string; budgeted: number | null; actual: number | null }
+interface PlannedLineItem { label: string; budgeted: number }
+interface CategoryAverage { label: string; avgActual: number }
 
 export interface PlanConferenceRow {
   conferenceId: number;
@@ -12,7 +18,10 @@ export interface PlanConferenceRow {
   actualSpend: number | null;
   decision: string | null;
   plannedBudget: number | null;
+  plannedBudgetLineItems: PlannedLineItem[];
+  budgetLineItems: BudgetLineItem[] | null;
   assignedReps: AssignedRep[];
+  strategyTypeId: number | null;
   strategyTypeName: string | null;
   planNotes: string | null;
 }
@@ -23,7 +32,10 @@ interface ProgramPlannerPlanViewProps {
   year: number;
   conferences: PlanConferenceRow[];
   calIntelScores: Map<number, CalIntelScore>;
+  categoryAverages: CategoryAverage[];
   onRepsUpdated: (conferenceId: number, assignedReps: AssignedRep[]) => void;
+  onBudgetUpdated: (conferenceId: number, plannedBudget: number, lineItems: PlannedLineItem[]) => void;
+  onStrategyUpdated: (conferenceId: number, strategyTypeId: number | null, strategyTypeName: string | null) => void;
 }
 
 function fmtCurrency(v: number | null | undefined): string {
@@ -57,12 +69,99 @@ const GROUP_CONFIG: Record<GroupKey, { label: string; icon: string; headerBg: st
   cut:        { label: 'Not attending',                   icon: 'ti-x',            headerBg: 'bg-red-50',    headerText: 'text-red-800',    pillBg: 'bg-red-100',    pillText: 'text-red-700' },
 };
 
-function StrategyPill({ label }: { label: string | null }) {
-  if (!label) return <span className="text-gray-400 text-[11px]">—</span>;
+// Inline strategy editor — reads/writes conferences.conference_strategy_type_id via
+// its own scoped PATCH route. Deliberately isolated from any other edit path for this
+// field (e.g. the conference detail page's full form) so this table cell can't affect
+// any other field on the conference.
+function StrategyEditPill({
+  conferenceId, strategyTypeId, strategyTypeName, onUpdated,
+}: {
+  conferenceId: number;
+  strategyTypeId: number | null;
+  strategyTypeName: string | null;
+  onUpdated: (strategyTypeId: number | null, strategyTypeName: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const options = useConfigWithIds('conference_strategy_type');
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (buttonRef.current?.contains(e.target as Node) || dropdownRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const openDropdown = () => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + 4, left: rect.left });
+    }
+    setOpen(true);
+  };
+
+  const select = async (id: number | null, name: string | null) => {
+    setOpen(false);
+    setSaving(true);
+    onUpdated(id, name);
+    try {
+      await fetch(`/api/conferences/${conferenceId}/strategy`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conferenceStrategyTypeId: id }),
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-800 border border-blue-200 whitespace-nowrap">
-      {label}
-    </span>
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={openDropdown}
+        disabled={saving}
+        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity ${saving ? 'opacity-50' : ''} ${
+          strategyTypeName
+            ? 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'
+            : 'bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500'
+        }`}
+      >
+        {strategyTypeName ?? '—'}
+      </button>
+      {open && pos && (
+        <div
+          ref={dropdownRef}
+          className="bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[200px] max-h-64 overflow-y-auto"
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999 }}
+        >
+          {options.map(o => (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => select(o.id, o.value)}
+              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 ${o.id === strategyTypeId ? 'font-semibold text-blue-800' : 'text-gray-700'}`}
+            >
+              {o.value}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => select(null, null)}
+            className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:bg-gray-50 border-t border-gray-100 mt-1"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -78,8 +177,11 @@ function ScoreDot({ score }: { score: number | null }) {
   );
 }
 
-export function ProgramPlannerPlanView({ year, conferences, calIntelScores, onRepsUpdated }: ProgramPlannerPlanViewProps) {
+export function ProgramPlannerPlanView({
+  year, conferences, calIntelScores, categoryAverages, onRepsUpdated, onBudgetUpdated, onStrategyUpdated,
+}: ProgramPlannerPlanViewProps) {
   const [priorYearActual, setPriorYearActual] = useState<number | null>(null);
+  const [budgetModalConf, setBudgetModalConf] = useState<PlanConferenceRow | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -212,8 +314,33 @@ export function ProgramPlannerPlanView({ year, conferences, calIntelScores, onRe
                           </Link>
                         </td>
                         <td className="px-3 py-2 text-center text-gray-500 whitespace-nowrap">{fmtDateShort(c.startDate)}</td>
-                        <td className="px-3 py-2"><StrategyPill label={c.strategyTypeName} /></td>
-                        <td className="px-3 py-2 text-center text-gray-700 font-medium tabular-nums">{fmtCurrency(c.plannedBudget)}</td>
+                        <td className="px-3 py-2">
+                          <StrategyEditPill
+                            conferenceId={c.conferenceId}
+                            strategyTypeId={c.strategyTypeId}
+                            strategyTypeName={c.strategyTypeName}
+                            onUpdated={(id, name) => onStrategyUpdated(c.conferenceId, id, name)}
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {c.plannedBudget != null ? (
+                            <button
+                              type="button"
+                              onClick={() => setBudgetModalConf(c)}
+                              className="text-gray-700 font-medium tabular-nums hover:text-brand-primary transition-colors"
+                            >
+                              {fmtCurrency(c.plannedBudget)}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setBudgetModalConf(c)}
+                              className="text-brand-secondary hover:text-brand-primary text-[11px] font-medium whitespace-nowrap"
+                            >
+                              + Budget
+                            </button>
+                          )}
+                        </td>
                         <td className="px-3 py-2" style={{ position: 'relative', overflow: 'visible' }}>
                           <RepAssignmentPopover
                             conferenceId={c.conferenceId}
@@ -235,6 +362,19 @@ export function ProgramPlannerPlanView({ year, conferences, calIntelScores, onRe
           </div>
         );
       })}
+
+      {budgetModalConf && (
+        <ConferencePlanBudgetModal
+          conferenceId={budgetModalConf.conferenceId}
+          conferenceName={budgetModalConf.name}
+          year={year}
+          actualLineItems={budgetModalConf.budgetLineItems}
+          plannedLineItems={budgetModalConf.plannedBudgetLineItems}
+          categoryAverages={categoryAverages}
+          onClose={() => setBudgetModalConf(null)}
+          onSaved={(plannedBudget, lineItems) => onBudgetUpdated(budgetModalConf.conferenceId, plannedBudget, lineItems)}
+        />
+      )}
     </div>
   );
 }

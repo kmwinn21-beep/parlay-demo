@@ -1623,4 +1623,8 @@ export const migrations: string[] = [
   // 532 — conference_plans: assigned reps for program planner, stored as a JSON
   // array of user IDs (same pattern as conferences.internal_attendees).
   `ALTER TABLE conference_plans ADD COLUMN assigned_rep_ids TEXT DEFAULT '[]'`,
+  // 533 — conference_plans: per-line-item planned budget for program planner,
+  // stored as a JSON array of {label, budgeted}. planned_budget stays the
+  // auto-summed total (unchanged meaning, still used by the Program view).
+  `ALTER TABLE conference_plans ADD COLUMN planned_budget_line_items TEXT DEFAULT '[]'`,
 ];

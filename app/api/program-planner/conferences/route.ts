@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   // Conferences for this year with series info
   const confsRes = await db.execute({
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.series_id, c.internal_attendees, c.stage_override,
-                 cs.display_name as series_name, co.value as strategy_type_name
+                 c.conference_strategy_type_id, cs.display_name as series_name, co.value as strategy_type_name
           FROM conferences c
           LEFT JOIN conference_series cs ON cs.id = c.series_id
           LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
 
   const confIds = confsRes.rows.map(r => Number(r.id));
   if (confIds.length === 0) {
-    return NextResponse.json({ conferences: [], series: [], standalone: [] });
+    return NextResponse.json({ conferences: [], series: [], standalone: [], categoryAverages: [] });
   }
 
   const ph = confIds.map(() => '?').join(',');
@@ -77,23 +77,55 @@ export async function GET(request: NextRequest) {
 
   // conference_plans for this year
   const plansRes = await db.execute({
-    sql: `SELECT conference_id, decision, planned_budget, assigned_rep_ids, notes FROM conference_plans WHERE conference_id IN (${ph}) AND plan_year = ?`,
+    sql: `SELECT conference_id, decision, planned_budget, assigned_rep_ids, notes, planned_budget_line_items FROM conference_plans WHERE conference_id IN (${ph}) AND plan_year = ?`,
     args: [...confIds, year],
   });
-  const planMap = new Map<number, { decision: string | null; planned_budget: number | null; assignedRepIds: number[]; notes: string | null }>();
+  type PlannedLineItem = { label: string; budgeted: number };
+  const planMap = new Map<number, { decision: string | null; planned_budget: number | null; assignedRepIds: number[]; notes: string | null; plannedBudgetLineItems: PlannedLineItem[] }>();
   for (const r of plansRes.rows) {
     let assignedRepIds: number[] = [];
     try {
       const parsed = JSON.parse(String(r.assigned_rep_ids ?? '[]'));
       if (Array.isArray(parsed)) assignedRepIds = parsed.map(Number).filter(n => !isNaN(n));
     } catch { /* ignore */ }
+    let plannedBudgetLineItems: PlannedLineItem[] = [];
+    try {
+      const parsed = JSON.parse(String(r.planned_budget_line_items ?? '[]'));
+      if (Array.isArray(parsed)) {
+        plannedBudgetLineItems = parsed
+          .filter((li): li is Record<string, unknown> => li != null && typeof li === 'object')
+          .map(li => ({ label: String(li.label ?? ''), budgeted: Number(li.budgeted ?? 0) }))
+          .filter(li => li.label);
+      }
+    } catch { /* ignore */ }
     planMap.set(Number(r.conference_id), {
       decision: r.decision ? String(r.decision) : null,
       planned_budget: r.planned_budget != null ? Number(r.planned_budget) : null,
       assignedRepIds,
       notes: r.notes ? String(r.notes) : null,
+      plannedBudgetLineItems,
     });
   }
+
+  // Category averages for this year — used by the Plan view's budget modal as a
+  // reference for conferences with no actual budget history yet. Averaged over
+  // conferences that have a non-zero actual for that category (zeros would just
+  // drag the average down for categories most conferences don't use).
+  const categoryTotals = new Map<string, { sum: number; count: number }>();
+  for (const snap of Array.from(snapMap.values())) {
+    for (const li of snap.budgetLineItems ?? []) {
+      const actual = li.actual ?? 0;
+      if (actual <= 0) continue;
+      const entry = categoryTotals.get(li.label) ?? { sum: 0, count: 0 };
+      entry.sum += actual;
+      entry.count += 1;
+      categoryTotals.set(li.label, entry);
+    }
+  }
+  const categoryAverages = Array.from(categoryTotals.entries()).map(([label, { sum, count }]) => ({
+    label,
+    avgActual: Math.round(sum / count),
+  }));
 
   // Resolve assigned rep user details for every rep referenced across all plans
   const allRepIds = Array.from(new Set(Array.from(planMap.values()).flatMap(p => p.assignedRepIds)));
@@ -173,8 +205,10 @@ export async function GET(request: NextRequest) {
       plannedBudget: plan?.planned_budget ?? null,
       stageOverride: conf.stage_override ? String(conf.stage_override) : null,
       assignedReps: (plan?.assignedRepIds ?? []).map(id => repMap.get(id)).filter((r): r is { userId: number; displayName: string; initials: string } => r != null),
+      strategyTypeId: conf.conference_strategy_type_id != null ? Number(conf.conference_strategy_type_id) : null,
       strategyTypeName: conf.strategy_type_name ? String(conf.strategy_type_name) : null,
       planNotes: plan?.notes ?? null,
+      plannedBudgetLineItems: plan?.plannedBudgetLineItems ?? [],
     };
   });
 
@@ -207,5 +241,5 @@ export async function GET(request: NextRequest) {
     conferences: s.conferences,
   }));
 
-  return NextResponse.json({ conferences, series, standalone });
+  return NextResponse.json({ conferences, series, standalone, categoryAverages });
 }

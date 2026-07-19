@@ -26,6 +26,11 @@ interface AssignedRep {
   initials: string;
 }
 
+interface PlannedLineItem {
+  label: string;
+  budgeted: number;
+}
+
 interface ConferenceRow {
   conferenceId: number;
   name: string;
@@ -42,8 +47,10 @@ interface ConferenceRow {
   headcount: number | null;
   decision: string | null;
   plannedBudget: number | null;
+  plannedBudgetLineItems: PlannedLineItem[];
   stageOverride: string | null;
   assignedReps: AssignedRep[];
+  strategyTypeId: number | null;
   strategyTypeName: string | null;
   planNotes: string | null;
 }
@@ -72,10 +79,16 @@ interface SummaryData {
   conferencesScored: number;
 }
 
+interface CategoryAverage {
+  label: string;
+  avgActual: number;
+}
+
 interface ConferencesData {
   conferences: ConferenceRow[];
   series: SeriesGroup[];
   standalone: ConferenceRow[];
+  categoryAverages: CategoryAverage[];
 }
 
 type GroupMode = 'series' | 'date' | 'ces';
@@ -412,6 +425,7 @@ export default function ProgramPlannerPage() {
       if (!prev) return prev;
       const updateConf = (c: ConferenceRow) => c.conferenceId === confId ? { ...c, decision } : c;
       return {
+        ...prev,
         conferences: prev.conferences.map(updateConf),
         series: prev.series.map(s => ({ ...s, conferences: s.conferences.map(updateConf) })),
         standalone: prev.standalone.map(updateConf),
@@ -424,6 +438,33 @@ export default function ProgramPlannerPage() {
       if (!prev) return prev;
       const updateConf = (c: ConferenceRow) => c.conferenceId === confId ? { ...c, assignedReps } : c;
       return {
+        ...prev,
+        conferences: prev.conferences.map(updateConf),
+        series: prev.series.map(s => ({ ...s, conferences: s.conferences.map(updateConf) })),
+        standalone: prev.standalone.map(updateConf),
+      };
+    });
+  }, []);
+
+  const handleBudgetUpdated = useCallback((confId: number, plannedBudget: number, plannedBudgetLineItems: PlannedLineItem[]) => {
+    setConfsData(prev => {
+      if (!prev) return prev;
+      const updateConf = (c: ConferenceRow) => c.conferenceId === confId ? { ...c, plannedBudget, plannedBudgetLineItems } : c;
+      return {
+        ...prev,
+        conferences: prev.conferences.map(updateConf),
+        series: prev.series.map(s => ({ ...s, conferences: s.conferences.map(updateConf) })),
+        standalone: prev.standalone.map(updateConf),
+      };
+    });
+  }, []);
+
+  const handleStrategyUpdated = useCallback((confId: number, strategyTypeId: number | null, strategyTypeName: string | null) => {
+    setConfsData(prev => {
+      if (!prev) return prev;
+      const updateConf = (c: ConferenceRow) => c.conferenceId === confId ? { ...c, strategyTypeId, strategyTypeName } : c;
+      return {
+        ...prev,
         conferences: prev.conferences.map(updateConf),
         series: prev.series.map(s => ({ ...s, conferences: s.conferences.map(updateConf) })),
         standalone: prev.standalone.map(updateConf),
@@ -642,7 +683,10 @@ export default function ProgramPlannerPage() {
                 year={selectedYear}
                 conferences={flattenedConferences}
                 calIntelScores={calIntelScores}
+                categoryAverages={confsData?.categoryAverages ?? []}
                 onRepsUpdated={handleRepsUpdated}
+                onBudgetUpdated={handleBudgetUpdated}
+                onStrategyUpdated={handleStrategyUpdated}
               />
             ) : view === 'cost' ? (
               <div className="grid grid-cols-1 lg:grid-cols-6 gap-3 items-start">
