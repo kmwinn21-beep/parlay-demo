@@ -765,7 +765,7 @@ export default function ProgramPlannerPage() {
                         value={decisionFilter}
                         onChange={v => setDecisionFilter(v as typeof decisionFilter)}
                         activeBg={id => (id === 'all' ? 'bg-brand-primary' : DECISION_TOGGLE_COLORS[id] ?? 'bg-brand-primary')}
-                        className="w-[340px]"
+                        className="w-[410px]"
                       />
                       <AnimatedToggle
                         options={[
