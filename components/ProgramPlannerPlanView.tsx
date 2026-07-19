@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { RepAssignmentPopover, type AssignedRep } from './RepAssignmentPopover';
 import { ConferencePlanBudgetModal } from './ConferencePlanBudgetModal';
+import { AddConferenceDrawer } from './AddConferenceDrawer';
 import { useConfigWithIds } from '@/lib/useUserOptions';
 
 interface BudgetLineItem { label: string; budgeted: number | null; actual: number | null }
@@ -27,6 +28,15 @@ export interface PlanConferenceRow {
   planNotes: string | null;
   plannedStartDate: string | null;
   plannedEndDate: string | null;
+  industryFocus: string | null;
+  conferenceType: string | null;
+  sponsorshipLevel: string | null;
+  location: string | null;
+  boothPresent: boolean;
+  boothWidth: number | null;
+  boothLength: number | null;
+  boothNumber: string | null;
+  boothHall: string | null;
 }
 
 interface CalIntelScore { score: number; tier: string; confidence: string }
@@ -40,6 +50,7 @@ interface ProgramPlannerPlanViewProps {
   onBudgetUpdated: (conferenceId: number, plannedBudget: number, lineItems: PlannedLineItem[]) => void;
   onStrategyUpdated: (conferenceId: number, strategyTypeId: number | null, strategyTypeName: string | null) => void;
   onDatesUpdated: (conferenceId: number, plannedStartDate: string | null, plannedEndDate: string | null) => void;
+  onConferenceCreated: () => void;
 }
 
 function fmtCurrency(v: number | null | undefined): string {
@@ -294,6 +305,36 @@ function DatesEditCell({
   );
 }
 
+// Pill colors match app/conferences/[id]/page.tsx exactly (static per-field colors,
+// not per-value — that page doesn't color-code by the specific type/level either).
+function TypePill({ value }: { value: string | null }) {
+  if (!value) return <span className="text-gray-400 text-[11px]">—</span>;
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-300 whitespace-nowrap">
+      {value}
+    </span>
+  );
+}
+
+function SponsorshipPill({ value }: { value: string | null }) {
+  if (!value || value.toLowerCase() === 'none') return <span className="text-gray-400 text-[11px]">—</span>;
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-50 text-green-800 border border-green-300 whitespace-nowrap">
+      {value}
+    </span>
+  );
+}
+
+function BoothPill({ present, width, length, number }: { present: boolean; width: number | null; length: number | null; number: string | null }) {
+  if (!present) return <span className="text-gray-400 text-[11px]">No Booth</span>;
+  const dims = width != null || length != null ? ` · ${width ?? '?'}×${length ?? '?'} ft` : '';
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-purple-50 text-purple-800 border border-purple-300 whitespace-nowrap">
+      {`Booth${number ? ` #${number}` : ''}${dims}`}
+    </span>
+  );
+}
+
 function ScoreDot({ score }: { score: number | null }) {
   const s = scoreDotStyle(score);
   return (
@@ -307,10 +348,11 @@ function ScoreDot({ score }: { score: number | null }) {
 }
 
 export function ProgramPlannerPlanView({
-  year, conferences, calIntelScores, categoryAverages, onRepsUpdated, onBudgetUpdated, onStrategyUpdated, onDatesUpdated,
+  year, conferences, calIntelScores, categoryAverages, onRepsUpdated, onBudgetUpdated, onStrategyUpdated, onDatesUpdated, onConferenceCreated,
 }: ProgramPlannerPlanViewProps) {
   const [priorYearActual, setPriorYearActual] = useState<number | null>(null);
   const [budgetModalConf, setBudgetModalConf] = useState<PlanConferenceRow | null>(null);
+  const [showAddDrawer, setShowAddDrawer] = useState(false);
 
   // Effective start date for grouping/conflict math — the plan year's own date once
   // set, falling back to the conference's actual date until then.
@@ -352,13 +394,14 @@ export function ProgramPlannerPlanView({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-end">
-        <Link
-          href="/conferences/new"
+        <button
+          type="button"
+          onClick={() => setShowAddDrawer(true)}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-primary text-white hover:opacity-90 transition-opacity"
         >
           <i className="ti ti-plus text-[13px]" aria-hidden="true" />
           Add conference
-        </Link>
+        </button>
       </div>
 
       {/* Summary stat strip */}
@@ -417,6 +460,11 @@ export function ProgramPlannerPlanView({
                   <col style={{ minWidth: 140 }} />
                   <col style={{ width: 70 }} />
                   <col style={{ minWidth: 170 }} />
+                  <col style={{ width: 100 }} />
+                  <col style={{ minWidth: 120 }} />
+                  <col style={{ width: 100 }} />
+                  <col style={{ minWidth: 140 }} />
+                  <col style={{ minWidth: 130 }} />
                   <col style={{ width: 80 }} />
                   <col style={{ width: 130 }} />
                   <col style={{ width: 52 }} />
@@ -428,6 +476,11 @@ export function ProgramPlannerPlanView({
                     <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Conference</th>
                     <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Dates</th>
                     <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Strategy</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Industry</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Type</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Sponsorship</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Booth</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Location</th>
                     <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Budget</th>
                     <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Assigned reps</th>
                     <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Cal. Intel</th>
@@ -469,6 +522,11 @@ export function ProgramPlannerPlanView({
                             onUpdated={(id, name) => onStrategyUpdated(c.conferenceId, id, name)}
                           />
                         </td>
+                        <td className="px-3 py-2 text-gray-600 truncate max-w-[100px]">{c.industryFocus || <span className="text-gray-400">—</span>}</td>
+                        <td className="px-3 py-2"><TypePill value={c.conferenceType} /></td>
+                        <td className="px-3 py-2"><SponsorshipPill value={c.sponsorshipLevel} /></td>
+                        <td className="px-3 py-2"><BoothPill present={c.boothPresent} width={c.boothWidth} length={c.boothLength} number={c.boothNumber} /></td>
+                        <td className="px-3 py-2 text-gray-600 truncate max-w-[110px]">{c.location || <span className="text-gray-400">—</span>}</td>
                         <td className="px-3 py-2 text-center">
                           {c.plannedBudget != null ? (
                             <button
@@ -520,6 +578,14 @@ export function ProgramPlannerPlanView({
           categoryAverages={categoryAverages}
           onClose={() => setBudgetModalConf(null)}
           onSaved={(plannedBudget, lineItems) => onBudgetUpdated(budgetModalConf.conferenceId, plannedBudget, lineItems)}
+        />
+      )}
+
+      {showAddDrawer && (
+        <AddConferenceDrawer
+          planYear={year}
+          onClose={() => setShowAddDrawer(false)}
+          onCreated={onConferenceCreated}
         />
       )}
     </div>

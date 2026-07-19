@@ -16,7 +16,9 @@ export async function GET(request: NextRequest) {
   // Conferences for this year with series info
   const confsRes = await db.execute({
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.series_id, c.internal_attendees, c.stage_override,
-                 c.conference_strategy_type_id, cs.display_name as series_name, co.value as strategy_type_name
+                 c.conference_strategy_type_id, cs.display_name as series_name, co.value as strategy_type_name,
+                 c.industry_focus, c.conference_type, c.sponsorship_level, c.location,
+                 c.booth_present, c.booth_width, c.booth_length, c.booth_number, c.booth_hall
           FROM conferences c
           LEFT JOIN conference_series cs ON cs.id = c.series_id
           LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
@@ -216,6 +218,15 @@ export async function GET(request: NextRequest) {
       plannedBudgetLineItems: plan?.plannedBudgetLineItems ?? [],
       plannedStartDate: plan?.plannedStartDate ?? null,
       plannedEndDate: plan?.plannedEndDate ?? null,
+      industryFocus: conf.industry_focus ? String(conf.industry_focus) : null,
+      conferenceType: conf.conference_type ? String(conf.conference_type) : null,
+      sponsorshipLevel: conf.sponsorship_level ? String(conf.sponsorship_level) : null,
+      location: conf.location ? String(conf.location) : null,
+      boothPresent: Boolean(Number(conf.booth_present ?? 0)),
+      boothWidth: conf.booth_width != null ? Number(conf.booth_width) : null,
+      boothLength: conf.booth_length != null ? Number(conf.booth_length) : null,
+      boothNumber: conf.booth_number ? String(conf.booth_number) : null,
+      boothHall: conf.booth_hall ? String(conf.booth_hall) : null,
     };
   });
 

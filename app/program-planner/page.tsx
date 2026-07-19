@@ -55,6 +55,15 @@ interface ConferenceRow {
   planNotes: string | null;
   plannedStartDate: string | null;
   plannedEndDate: string | null;
+  industryFocus: string | null;
+  conferenceType: string | null;
+  sponsorshipLevel: string | null;
+  location: string | null;
+  boothPresent: boolean;
+  boothWidth: number | null;
+  boothLength: number | null;
+  boothNumber: string | null;
+  boothHall: string | null;
 }
 
 interface SeriesGroup {
@@ -703,6 +712,7 @@ export default function ProgramPlannerPage() {
                 onBudgetUpdated={handleBudgetUpdated}
                 onStrategyUpdated={handleStrategyUpdated}
                 onDatesUpdated={handleDatesUpdated}
+                onConferenceCreated={() => fetchData(selectedYear)}
               />
             ) : view === 'cost' ? (
               <div className="grid grid-cols-1 lg:grid-cols-6 gap-3 items-start">
