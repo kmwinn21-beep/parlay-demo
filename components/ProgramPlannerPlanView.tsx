@@ -60,7 +60,7 @@ const GROUP_CONFIG: Record<GroupKey, { label: string; icon: string; headerBg: st
 function StrategyPill({ label }: { label: string | null }) {
   if (!label) return <span className="text-gray-400 text-[11px]">—</span>;
   return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-800 border border-blue-200 truncate max-w-[100px]">
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-800 border border-blue-200 whitespace-nowrap">
       {label}
     </span>
   );
@@ -178,7 +178,7 @@ export function ProgramPlannerPlanView({ year, conferences, calIntelScores, onRe
                 <colgroup>
                   <col style={{ minWidth: 140 }} />
                   <col style={{ width: 70 }} />
-                  <col style={{ width: 110 }} />
+                  <col style={{ minWidth: 170 }} />
                   <col style={{ width: 80 }} />
                   <col style={{ width: 130 }} />
                   <col style={{ width: 52 }} />
