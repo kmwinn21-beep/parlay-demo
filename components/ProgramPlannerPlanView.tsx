@@ -143,7 +143,7 @@ function StrategyEditPill({
       {open && pos && (
         <div
           ref={dropdownRef}
-          className="bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[200px] max-h-64 overflow-y-auto"
+          className="bg-white border border-gray-200 rounded-lg shadow-lg py-1 w-max max-w-[320px] max-h-64 overflow-y-auto"
           style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999 }}
         >
           {options.map(o => (
@@ -151,7 +151,7 @@ function StrategyEditPill({
               key={o.id}
               type="button"
               onClick={() => select(o.id, o.value)}
-              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 ${o.id === strategyTypeId ? 'font-semibold text-blue-800' : 'text-gray-700'}`}
+              className={`w-full text-left px-3 py-1.5 text-xs whitespace-nowrap hover:bg-gray-50 ${o.id === strategyTypeId ? 'font-semibold text-blue-800' : 'text-gray-700'}`}
             >
               {o.value}
             </button>
