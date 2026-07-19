@@ -1620,4 +1620,7 @@ export const migrations: string[] = [
       created_at TEXT DEFAULT (datetime('now')),
       PRIMARY KEY (conference_id, company_id, attendee_id)
     )`,
+  // 532 — conference_plans: assigned reps for program planner, stored as a JSON
+  // array of user IDs (same pattern as conferences.internal_attendees).
+  `ALTER TABLE conference_plans ADD COLUMN assigned_rep_ids TEXT DEFAULT '[]'`,
 ];

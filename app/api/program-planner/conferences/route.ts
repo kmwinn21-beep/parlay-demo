@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { getInitials, resolveUserDisplayName } from '@/lib/initials';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -75,15 +76,36 @@ export async function GET(request: NextRequest) {
 
   // conference_plans for this year
   const plansRes = await db.execute({
-    sql: `SELECT conference_id, decision, planned_budget FROM conference_plans WHERE conference_id IN (${ph}) AND plan_year = ?`,
+    sql: `SELECT conference_id, decision, planned_budget, assigned_rep_ids FROM conference_plans WHERE conference_id IN (${ph}) AND plan_year = ?`,
     args: [...confIds, year],
   });
-  const planMap = new Map<number, { decision: string | null; planned_budget: number | null }>();
+  const planMap = new Map<number, { decision: string | null; planned_budget: number | null; assignedRepIds: number[] }>();
   for (const r of plansRes.rows) {
+    let assignedRepIds: number[] = [];
+    try {
+      const parsed = JSON.parse(String(r.assigned_rep_ids ?? '[]'));
+      if (Array.isArray(parsed)) assignedRepIds = parsed.map(Number).filter(n => !isNaN(n));
+    } catch { /* ignore */ }
     planMap.set(Number(r.conference_id), {
       decision: r.decision ? String(r.decision) : null,
       planned_budget: r.planned_budget != null ? Number(r.planned_budget) : null,
+      assignedRepIds,
     });
+  }
+
+  // Resolve assigned rep user details for every rep referenced across all plans
+  const allRepIds = Array.from(new Set(Array.from(planMap.values()).flatMap(p => p.assignedRepIds)));
+  const repMap = new Map<number, { userId: number; displayName: string; initials: string }>();
+  if (allRepIds.length > 0) {
+    const repPh = allRepIds.map(() => '?').join(',');
+    const repsRes = await db.execute({
+      sql: `SELECT id, display_name, first_name, last_name, email FROM users WHERE id IN (${repPh})`,
+      args: allRepIds,
+    });
+    for (const r of repsRes.rows) {
+      const displayName = resolveUserDisplayName(r);
+      repMap.set(Number(r.id), { userId: Number(r.id), displayName, initials: getInitials(displayName) });
+    }
   }
 
   // closed/won per conference — apply proper attribution math
@@ -148,6 +170,7 @@ export async function GET(request: NextRequest) {
       decision: plan?.decision ?? null,
       plannedBudget: plan?.planned_budget ?? null,
       stageOverride: conf.stage_override ? String(conf.stage_override) : null,
+      assignedReps: (plan?.assignedRepIds ?? []).map(id => repMap.get(id)).filter((r): r is { userId: number; displayName: string; initials: string } => r != null),
     };
   });
 
