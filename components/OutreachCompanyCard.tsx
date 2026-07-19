@@ -649,7 +649,7 @@ export function OutreachCompanyCard({
                   onClick={() => handleRemoveAttendee(attendee)}
                   disabled={removingThis}
                   title="Remove from outreach"
-                  className={`w-7 h-7 rounded-lg border border-gray-200 text-gray-400 hover:border-red-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center transition-colors ${removingThis ? 'opacity-50 cursor-wait' : ''}`}
+                  className={`w-7 h-7 text-red-500 hover:text-red-700 flex items-center justify-center transition-colors ${removingThis ? 'opacity-50 cursor-wait' : ''}`}
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -721,11 +721,7 @@ export function OutreachCompanyCard({
                     )}
                   </div>
                 )}
-                {isDesktop ? (
-                  <span className={`text-[11px] font-medium flex-shrink-0 w-[72px] text-right ${total > 0 ? 'text-green-600' : 'text-gray-400'}`}>
-                    {total > 0 ? `${total} logged` : '-'}
-                  </span>
-                ) : (
+                {!isDesktop && (
                   <span
                     title={total > 0 ? `${total} logged` : 'None logged'}
                     className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
