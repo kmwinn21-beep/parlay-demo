@@ -1610,4 +1610,14 @@ export const migrations: string[] = [
   // activity's colored dot + label.
   `ALTER TABLE outreach_notes ADD COLUMN activity_type TEXT`,
   `ALTER TABLE outreach_notes ADD COLUMN attendee_id INTEGER REFERENCES attendees(id) ON DELETE SET NULL`,
+  // 531 — the outreach attendee list is otherwise fully derived (every conference
+  // attendee at an assigned company), so removing one specific attendee from the
+  // section needs its own exclusion list rather than a flag on attendees itself.
+  `CREATE TABLE IF NOT EXISTS outreach_excluded_attendees (
+      conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      attendee_id INTEGER NOT NULL REFERENCES attendees(id) ON DELETE CASCADE,
+      created_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (conference_id, company_id, attendee_id)
+    )`,
 ];

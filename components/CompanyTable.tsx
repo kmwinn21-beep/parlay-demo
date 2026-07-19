@@ -21,6 +21,7 @@ import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import { useUser } from './UserContext';
 import { CompanyAttendeesDrawer, type CompanyAttendeeLite } from './CompanyAttendeesDrawer';
+import { BulkAssignOutreachModal } from './BulkAssignOutreachModal';
 
 interface Company {
   id: number;
@@ -164,6 +165,9 @@ interface CompanyTableProps {
   conferenceAttendees?: CompanyAttendeeLite[];
   // e.g. "ModExpo 2026" — shown in the attendees drawer's header title.
   conferenceLabel?: string;
+  // When provided (also Conference Details' Companies tab), enables the bulk
+  // "Assign Outreach" action, scoped to this conference.
+  conferenceId?: number;
 }
 
 function EntityStructureIcon({ structure }: { structure?: string }) {
@@ -215,7 +219,7 @@ function fmtDate(dateStr?: string): string {
   } catch { return '—'; }
 }
 
-export function CompanyTable({ companies, onRefresh, tableName = 'companies', rowAction, onDecoupleSelected, conferenceAttendees, conferenceLabel }: CompanyTableProps) {
+export function CompanyTable({ companies, onRefresh, tableName = 'companies', rowAction, onDecoupleSelected, conferenceAttendees, conferenceLabel, conferenceId }: CompanyTableProps) {
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions('company_table');
   const unitTypeLabel = useUnitTypeLabel();
@@ -303,6 +307,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const [showRepRelModal, setShowRepRelModal] = useState(false);
   const [relPopupCompany, setRelPopupCompany] = useState<{ id: number; name: string } | null>(null);
   const [showAddToConf, setShowAddToConf] = useState(false);
+  const [showBulkAssignOutreach, setShowBulkAssignOutreach] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS);
@@ -698,6 +703,12 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
               Add to Conference
             </button>
+            {conferenceId != null && (
+              <button onClick={() => setShowBulkAssignOutreach(true)} className="btn-secondary flex items-center gap-2 text-sm">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
+                Assign Outreach ({selectedIds.size})
+              </button>
+            )}
           </>
         )}
         {selectedIds.size >= 1 && (
@@ -1359,6 +1370,16 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
           selectedIds={selectedIds}
           onClose={() => setShowAddToConf(false)}
           onSuccess={() => { setSelectedIds(new Set()); onRefresh(); }}
+        />
+      )}
+
+      {showBulkAssignOutreach && conferenceId != null && (
+        <BulkAssignOutreachModal
+          conferenceId={conferenceId}
+          companyIds={Array.from(selectedIds)}
+          companyNames={companies.filter(c => selectedIds.has(c.id)).map(c => c.name)}
+          onClose={() => setShowBulkAssignOutreach(false)}
+          onAssigned={() => { setSelectedIds(new Set()); onRefresh(); }}
         />
       )}
 

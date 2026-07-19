@@ -7,6 +7,7 @@ import { useConfigColors } from '@/lib/useConfigColors';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import { NewMeetingModal } from './NewMeetingModal';
 import { EditOutreachMeetingModal } from './EditOutreachMeetingModal';
+import { AttendeeQuickViewDrawer } from './AttendeeQuickViewDrawer';
 import { type Meeting } from './MeetingsTable';
 
 export interface OutreachAssignee {
@@ -35,6 +36,7 @@ export interface OutreachAttendeeFilter {
   email: string | null;
   phone: string | null;
   linkedinUrl: string | null;
+  seniorityLabel: string | null;
 }
 
 export type OutreachStatus = 'not_started' | 'in_progress' | 'completed' | 'overdue';
@@ -208,6 +210,9 @@ export function OutreachCompanyCard({
   const [localMeetingIds, setLocalMeetingIds] = useState<Record<number, number>>({});
   const [schedulingAttendee, setSchedulingAttendee] = useState<OutreachAttendee | null>(null);
   const [editingMeetingId, setEditingMeetingId] = useState<number | null>(null);
+  const [quickViewAttendeeId, setQuickViewAttendeeId] = useState<number | null>(null);
+  const [excludedAttendeeIds, setExcludedAttendeeIds] = useState<Set<number>>(new Set());
+  const [removingAttendeeId, setRemovingAttendeeId] = useState<number | null>(null);
   const [notePopoverKey, setNotePopoverKey] = useState<string | null>(null);
   const activityIconRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -337,6 +342,23 @@ export function OutreachCompanyCard({
       toast.error('Failed to add note');
     } finally {
       setNotePopoverKey(null);
+    }
+  };
+
+  const handleRemoveAttendee = async (attendee: OutreachAttendee) => {
+    if (!confirm(`Remove ${attendee.firstName} ${attendee.lastName} from this company's outreach list? Their logged activity and notes are kept — they just won't show here.`)) return;
+    setRemovingAttendeeId(attendee.attendeeId);
+    try {
+      const res = await fetch(`/api/conferences/${conferenceId}/outreach/${company.companyId}/attendees/${attendee.attendeeId}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error();
+      setExcludedAttendeeIds(prev => new Set(prev).add(attendee.attendeeId));
+      onActivityLogged();
+    } catch {
+      toast.error('Failed to remove attendee');
+    } finally {
+      setRemovingAttendeeId(null);
     }
   };
 
@@ -498,12 +520,14 @@ export function OutreachCompanyCard({
       )}
 
       {/* Expanded attendee rows */}
-      {expanded && (
+      {expanded && (() => {
+        const visibleAttendees = company.attendees.filter(a => !excludedAttendeeIds.has(a.attendeeId));
+        return (
         <div className="border-t border-gray-100">
-          {company.attendees.length === 0 && (
+          {visibleAttendees.length === 0 && (
             <p className="text-xs text-gray-400 px-4 py-3">No attendees from this company at this conference.</p>
           )}
-          {company.attendees.map((attendee, idx) => {
+          {visibleAttendees.map((attendee, idx) => {
             const counts = countsFor(attendee);
             const total = counts.phone + counts.email + counts.linkedin;
             const meetingId = meetingIdFor(attendee);
@@ -606,6 +630,34 @@ export function OutreachCompanyCard({
               </div>
             );
 
+            const removingThis = removingAttendeeId === attendee.attendeeId;
+            const extraIconsBlock = (
+              <div className="flex items-center gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                <button
+                  type="button"
+                  onClick={() => setQuickViewAttendeeId(attendee.attendeeId)}
+                  title="Quick view attendee"
+                  className="w-7 h-7 rounded-lg border border-gray-200 text-gray-400 hover:border-brand-secondary hover:text-brand-secondary hover:bg-brand-secondary/10 flex items-center justify-center transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveAttendee(attendee)}
+                  disabled={removingThis}
+                  title="Remove from outreach"
+                  className={`w-7 h-7 rounded-lg border border-gray-200 text-gray-400 hover:border-red-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center transition-colors ${removingThis ? 'opacity-50 cursor-wait' : ''}`}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
+            );
+
             const mobileMenuOpen = mobileAttendeeMenuKey === attendee.attendeeId;
 
             return (
@@ -617,6 +669,7 @@ export function OutreachCompanyCard({
                   email: attendee.email,
                   phone: attendee.phone,
                   linkedinUrl: attendee.linkedinUrl,
+                  seniorityLabel: attendee.seniorityLabel,
                 })}
                 className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-blue-50/40 transition-colors ${
                   attendee.attendeeId === selectedAttendeeId ? 'bg-blue-50' : idx % 2 === 0 ? 'bg-gray-50/60' : 'bg-white'
@@ -647,6 +700,7 @@ export function OutreachCompanyCard({
                   <>
                     {meetingIconBlock}
                     {activityIconsBlock}
+                    {extraIconsBlock}
                   </>
                 ) : (
                   <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()} ref={mobileMenuOpen ? mobileMenuRef : undefined}>
@@ -659,9 +713,10 @@ export function OutreachCompanyCard({
                       <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.75" /><circle cx="12" cy="12" r="1.75" /><circle cx="12" cy="19" r="1.75" /></svg>
                     </button>
                     {mobileMenuOpen && (
-                      <div className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-100 p-2 z-20 flex items-center gap-3">
+                      <div className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-100 p-2 z-20 flex items-center gap-3 flex-wrap max-w-[220px]">
                         {meetingIconBlock}
                         {activityIconsBlock}
+                        {extraIconsBlock}
                       </div>
                     )}
                   </div>
@@ -684,7 +739,8 @@ export function OutreachCompanyCard({
             );
           })}
         </div>
-      )}
+        );
+      })()}
 
       {schedulingAttendee && (
         <NewMeetingModal
@@ -710,6 +766,13 @@ export function OutreachCompanyCard({
             setEditingMeetingId(null);
             onActivityLogged();
           }}
+        />
+      )}
+
+      {quickViewAttendeeId != null && (
+        <AttendeeQuickViewDrawer
+          attendeeId={quickViewAttendeeId}
+          onClose={() => setQuickViewAttendeeId(null)}
         />
       )}
     </div>

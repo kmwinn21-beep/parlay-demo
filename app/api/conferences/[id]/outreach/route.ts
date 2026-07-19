@@ -87,7 +87,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const companyIds = Array.from(companyMap.keys());
     const placeholders = companyIds.map(() => '?').join(',');
 
-    const [attendeeRows, activityRows, noteRows, meetingRows] = await Promise.all([
+    const [attendeeRows, activityRows, noteRows, meetingRows, excludedRows] = await Promise.all([
       db.execute({
         sql: `SELECT a.id as attendee_id, a.company_id, a.first_name, a.last_name, a.title, a.seniority,
                      a.email, a.phone, a.linkedin_url
@@ -121,7 +121,19 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
               ORDER BY m.id DESC`,
         args: [conferenceId, ...companyIds],
       }),
+      db.execute({
+        sql: `SELECT company_id, attendee_id FROM outreach_excluded_attendees
+              WHERE conference_id = ? AND company_id IN (${placeholders})`,
+        args: [conferenceId, ...companyIds],
+      }),
     ]);
+
+    const excludedByCompany = new Map<number, Set<number>>();
+    for (const r of excludedRows.rows) {
+      const companyId = Number(r.company_id);
+      if (!excludedByCompany.has(companyId)) excludedByCompany.set(companyId, new Set());
+      excludedByCompany.get(companyId)!.add(Number(r.attendee_id));
+    }
 
     const activityByAttendee = new Map<number, number>();
     const activityByCompany = new Map<number, number>();
@@ -156,6 +168,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     for (const r of attendeeRows.rows) {
       const companyId = Number(r.company_id);
       const attendeeId = Number(r.attendee_id);
+      if (excludedByCompany.get(companyId)?.has(attendeeId)) continue;
       if (!attendeesByCompany.has(companyId)) attendeesByCompany.set(companyId, []);
       attendeesByCompany.get(companyId)!.push({
         attendeeId,
