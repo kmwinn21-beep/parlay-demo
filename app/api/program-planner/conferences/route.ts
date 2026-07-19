@@ -77,11 +77,14 @@ export async function GET(request: NextRequest) {
 
   // conference_plans for this year
   const plansRes = await db.execute({
-    sql: `SELECT conference_id, decision, planned_budget, assigned_rep_ids, notes, planned_budget_line_items FROM conference_plans WHERE conference_id IN (${ph}) AND plan_year = ?`,
+    sql: `SELECT conference_id, decision, planned_budget, assigned_rep_ids, notes, planned_budget_line_items, planned_start_date, planned_end_date FROM conference_plans WHERE conference_id IN (${ph}) AND plan_year = ?`,
     args: [...confIds, year],
   });
   type PlannedLineItem = { label: string; budgeted: number };
-  const planMap = new Map<number, { decision: string | null; planned_budget: number | null; assignedRepIds: number[]; notes: string | null; plannedBudgetLineItems: PlannedLineItem[] }>();
+  const planMap = new Map<number, {
+    decision: string | null; planned_budget: number | null; assignedRepIds: number[]; notes: string | null;
+    plannedBudgetLineItems: PlannedLineItem[]; plannedStartDate: string | null; plannedEndDate: string | null;
+  }>();
   for (const r of plansRes.rows) {
     let assignedRepIds: number[] = [];
     try {
@@ -104,6 +107,8 @@ export async function GET(request: NextRequest) {
       assignedRepIds,
       notes: r.notes ? String(r.notes) : null,
       plannedBudgetLineItems,
+      plannedStartDate: r.planned_start_date ? String(r.planned_start_date) : null,
+      plannedEndDate: r.planned_end_date ? String(r.planned_end_date) : null,
     });
   }
 
@@ -209,6 +214,8 @@ export async function GET(request: NextRequest) {
       strategyTypeName: conf.strategy_type_name ? String(conf.strategy_type_name) : null,
       planNotes: plan?.notes ?? null,
       plannedBudgetLineItems: plan?.plannedBudgetLineItems ?? [],
+      plannedStartDate: plan?.plannedStartDate ?? null,
+      plannedEndDate: plan?.plannedEndDate ?? null,
     };
   });
 

@@ -14,6 +14,7 @@ export interface PlanConferenceRow {
   conferenceId: number;
   name: string;
   startDate: string;
+  endDate: string;
   ces: number | null;
   actualSpend: number | null;
   decision: string | null;
@@ -24,6 +25,8 @@ export interface PlanConferenceRow {
   strategyTypeId: number | null;
   strategyTypeName: string | null;
   planNotes: string | null;
+  plannedStartDate: string | null;
+  plannedEndDate: string | null;
 }
 
 interface CalIntelScore { score: number; tier: string; confidence: string }
@@ -36,6 +39,7 @@ interface ProgramPlannerPlanViewProps {
   onRepsUpdated: (conferenceId: number, assignedReps: AssignedRep[]) => void;
   onBudgetUpdated: (conferenceId: number, plannedBudget: number, lineItems: PlannedLineItem[]) => void;
   onStrategyUpdated: (conferenceId: number, strategyTypeId: number | null, strategyTypeName: string | null) => void;
+  onDatesUpdated: (conferenceId: number, plannedStartDate: string | null, plannedEndDate: string | null) => void;
 }
 
 function fmtCurrency(v: number | null | undefined): string {
@@ -165,6 +169,131 @@ function StrategyEditPill({
   );
 }
 
+// Inline dates editor — writes conference_plans.planned_start_date/planned_end_date
+// for the selected plan year, distinct from conferences.start_date/end_date (this
+// year's actual dates, which stay the fallback until the user sets next year's own).
+function DatesEditCell({
+  conferenceId, planYear, displayStartDate, plannedStartDate, plannedEndDate, fallbackStartDate, fallbackEndDate, onUpdated,
+}: {
+  conferenceId: number;
+  planYear: number;
+  displayStartDate: string;
+  plannedStartDate: string | null;
+  plannedEndDate: string | null;
+  fallbackStartDate: string;
+  fallbackEndDate: string;
+  onUpdated: (plannedStartDate: string | null, plannedEndDate: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [start, setStart] = useState(plannedStartDate ?? fallbackStartDate);
+  const [end, setEnd] = useState(plannedEndDate ?? fallbackEndDate);
+  const [saving, setSaving] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (buttonRef.current?.contains(e.target as Node) || popoverRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const openPopover = () => {
+    setStart(plannedStartDate ?? fallbackStartDate);
+    setEnd(plannedEndDate ?? fallbackEndDate);
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + 4, left: rect.left });
+    }
+    setOpen(true);
+  };
+
+  const save = async (newStart: string | null, newEnd: string | null) => {
+    setOpen(false);
+    setSaving(true);
+    onUpdated(newStart, newEnd);
+    try {
+      await fetch(`/api/program-planner/conferences/${conferenceId}/dates?year=${planYear}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plannedStartDate: newStart, plannedEndDate: newEnd }),
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const isOverridden = plannedStartDate != null;
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={openPopover}
+        disabled={saving}
+        className={`text-[11px] whitespace-nowrap transition-colors ${saving ? 'opacity-50' : ''} ${
+          isOverridden ? 'text-gray-700 font-medium hover:text-brand-primary' : 'text-gray-400 italic hover:text-brand-secondary'
+        }`}
+        title={isOverridden ? undefined : `Using ${fallbackStartDate} as fallback — click to set FY${planYear} dates`}
+      >
+        {fmtDateShort(displayStartDate)}
+      </button>
+      {open && pos && (
+        <div
+          ref={popoverRef}
+          className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 space-y-2"
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999, width: 200 }}
+        >
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">FY{planYear} dates</p>
+          <div className="space-y-1.5">
+            <div>
+              <label className="text-[10px] text-gray-500 block mb-0.5">Start</label>
+              <input
+                type="date"
+                value={start}
+                onChange={e => setStart(e.target.value)}
+                className="input-field text-xs w-full"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 block mb-0.5">End</label>
+              <input
+                type="date"
+                value={end}
+                onChange={e => setEnd(e.target.value)}
+                className="input-field text-xs w-full"
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-2 pt-1">
+            {isOverridden ? (
+              <button
+                type="button"
+                onClick={() => save(null, null)}
+                className="text-[10px] text-gray-400 hover:text-red-500 transition-colors"
+              >
+                Reset to {fallbackStartDate}
+              </button>
+            ) : <span />}
+            <button
+              type="button"
+              onClick={() => save(start || null, end || null)}
+              className="btn-primary text-[11px] px-2.5 py-1"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function ScoreDot({ score }: { score: number | null }) {
   const s = scoreDotStyle(score);
   return (
@@ -178,10 +307,17 @@ function ScoreDot({ score }: { score: number | null }) {
 }
 
 export function ProgramPlannerPlanView({
-  year, conferences, calIntelScores, categoryAverages, onRepsUpdated, onBudgetUpdated, onStrategyUpdated,
+  year, conferences, calIntelScores, categoryAverages, onRepsUpdated, onBudgetUpdated, onStrategyUpdated, onDatesUpdated,
 }: ProgramPlannerPlanViewProps) {
   const [priorYearActual, setPriorYearActual] = useState<number | null>(null);
   const [budgetModalConf, setBudgetModalConf] = useState<PlanConferenceRow | null>(null);
+
+  // Effective start date for grouping/conflict math — the plan year's own date once
+  // set, falling back to the conference's actual date until then.
+  const conferencesForConflicts = conferences.map(c => ({
+    ...c,
+    startDate: c.plannedStartDate ?? c.startDate,
+  }));
 
   useEffect(() => {
     let cancelled = false;
@@ -313,7 +449,18 @@ export function ProgramPlannerPlanView({
                             {c.name}
                           </Link>
                         </td>
-                        <td className="px-3 py-2 text-center text-gray-500 whitespace-nowrap">{fmtDateShort(c.startDate)}</td>
+                        <td className="px-3 py-2 text-center whitespace-nowrap">
+                          <DatesEditCell
+                            conferenceId={c.conferenceId}
+                            planYear={year}
+                            displayStartDate={c.plannedStartDate ?? c.startDate}
+                            plannedStartDate={c.plannedStartDate}
+                            plannedEndDate={c.plannedEndDate}
+                            fallbackStartDate={c.startDate}
+                            fallbackEndDate={c.endDate}
+                            onUpdated={(start, end) => onDatesUpdated(c.conferenceId, start, end)}
+                          />
+                        </td>
                         <td className="px-3 py-2">
                           <StrategyEditPill
                             conferenceId={c.conferenceId}
@@ -346,7 +493,7 @@ export function ProgramPlannerPlanView({
                             conferenceId={c.conferenceId}
                             planYear={year}
                             assignedReps={c.assignedReps}
-                            allConferences={conferences}
+                            allConferences={conferencesForConflicts}
                             onUpdate={reps => onRepsUpdated(c.conferenceId, reps)}
                           />
                         </td>

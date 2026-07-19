@@ -53,6 +53,8 @@ interface ConferenceRow {
   strategyTypeId: number | null;
   strategyTypeName: string | null;
   planNotes: string | null;
+  plannedStartDate: string | null;
+  plannedEndDate: string | null;
 }
 
 interface SeriesGroup {
@@ -472,6 +474,19 @@ export default function ProgramPlannerPage() {
     });
   }, []);
 
+  const handleDatesUpdated = useCallback((confId: number, plannedStartDate: string | null, plannedEndDate: string | null) => {
+    setConfsData(prev => {
+      if (!prev) return prev;
+      const updateConf = (c: ConferenceRow) => c.conferenceId === confId ? { ...c, plannedStartDate, plannedEndDate } : c;
+      return {
+        ...prev,
+        conferences: prev.conferences.map(updateConf),
+        series: prev.series.map(s => ({ ...s, conferences: s.conferences.map(updateConf) })),
+        standalone: prev.standalone.map(updateConf),
+      };
+    });
+  }, []);
+
   const toggleSeries = (seriesId: string) => {
     setCollapsedSeries(prev => {
       const next = new Set(prev);
@@ -687,6 +702,7 @@ export default function ProgramPlannerPage() {
                 onRepsUpdated={handleRepsUpdated}
                 onBudgetUpdated={handleBudgetUpdated}
                 onStrategyUpdated={handleStrategyUpdated}
+                onDatesUpdated={handleDatesUpdated}
               />
             ) : view === 'cost' ? (
               <div className="grid grid-cols-1 lg:grid-cols-6 gap-3 items-start">

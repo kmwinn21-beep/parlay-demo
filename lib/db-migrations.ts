@@ -1627,4 +1627,9 @@ export const migrations: string[] = [
   // stored as a JSON array of {label, budgeted}. planned_budget stays the
   // auto-summed total (unchanged meaning, still used by the Program view).
   `ALTER TABLE conference_plans ADD COLUMN planned_budget_line_items TEXT DEFAULT '[]'`,
+  // 534 — conference_plans: user-set dates for the planned year, distinct from
+  // conferences.start_date/end_date (this year's actual/original dates, used as
+  // a fallback in the Plan view until the user sets next year's own dates).
+  `ALTER TABLE conference_plans ADD COLUMN planned_start_date TEXT`,
+  `ALTER TABLE conference_plans ADD COLUMN planned_end_date TEXT`,
 ];
