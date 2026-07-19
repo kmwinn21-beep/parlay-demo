@@ -182,6 +182,15 @@ const DECISION_CONFIG: Record<string, { label: string; bg: string; text: string 
   new:        { label: 'New',        bg: 'bg-purple-100', text: 'text-purple-700' },
 };
 
+// Solid-fill versions of DECISION_CONFIG's badge colors, for the decision filter
+// toggle's active-pill background (badge tints are too pale to read white text on).
+const DECISION_TOGGLE_COLORS: Record<string, string> = {
+  attend: 'bg-green-600',
+  reduce: 'bg-amber-500',
+  cut: 'bg-red-600',
+  evaluating: 'bg-gray-500',
+};
+
 // ── Decision Dropdown ─────────────────────────────────────────────────────────
 
 function DecisionPill({
@@ -297,6 +306,7 @@ export default function ProgramPlannerPage() {
   const [statsOpen, setStatsOpen] = useState(true);
   const [groupMode, setGroupMode] = useState<GroupMode>('series');
   const [rankMetric, setRankMetric] = useState<RankMetric>('ces');
+  const [decisionFilter, setDecisionFilter] = useState<'all' | NonNullable<DecisionValue>>('all');
   const [collapsedSeries, setCollapsedSeries] = useState<Set<string>>(new Set());
   const [effectivenessDrawer, setEffectivenessDrawer] = useState<{ conferenceId: number; conferenceName: string } | null>(null);
   type CWTarget = { type: 'conference'; conferenceId: number; conferenceName: string } | { type: 'series'; seriesId: string; seriesName: string };
@@ -445,37 +455,42 @@ export default function ProgramPlannerPage() {
     | { type: 'conference'; conf: ConferenceRow; rowIndex: number; key: string }
     | { type: 'standalone_header'; key: string };
 
+  const matchesDecision = (c: ConferenceRow) => decisionFilter === 'all' || c.decision === decisionFilter;
+
   const buildRows = (): TableRow[] => {
     if (!confsData) return [];
     const rows: TableRow[] = [];
 
     if (groupMode === 'series') {
       for (const s of confsData.series) {
+        const filteredConfs = s.conferences.filter(matchesDecision);
+        if (filteredConfs.length === 0) continue;
         rows.push({ type: 'series', group: s, key: `series-${s.seriesId}` });
         if (!collapsedSeries.has(s.seriesId)) {
           let rowIndex = 0;
-          for (const c of s.conferences) {
+          for (const c of filteredConfs) {
             rows.push({ type: 'conference', conf: c, rowIndex: rowIndex++, key: `conf-${c.conferenceId}` });
           }
         }
       }
-      if (confsData.standalone.length > 0) {
+      const filteredStandalone = confsData.standalone.filter(matchesDecision);
+      if (filteredStandalone.length > 0) {
         rows.push({ type: 'standalone_header', key: 'standalone' });
         if (!collapsedSeries.has('__standalone__')) {
           let rowIndex = 0;
-          for (const c of confsData.standalone) {
+          for (const c of filteredStandalone) {
             rows.push({ type: 'conference', conf: c, rowIndex: rowIndex++, key: `conf-${c.conferenceId}` });
           }
         }
       }
     } else if (groupMode === 'date') {
-      const sorted = [...allConfs].sort((a, b) => a.startDate.localeCompare(b.startDate));
+      const sorted = allConfs.filter(matchesDecision).sort((a, b) => a.startDate.localeCompare(b.startDate));
       for (let i = 0; i < sorted.length; i++) {
         rows.push({ type: 'conference', conf: sorted[i], rowIndex: i, key: `conf-${sorted[i].conferenceId}` });
       }
     } else {
       // CES sort
-      const sorted = [...allConfs].sort((a, b) => (b.ces ?? -1) - (a.ces ?? -1));
+      const sorted = allConfs.filter(matchesDecision).sort((a, b) => (b.ces ?? -1) - (a.ces ?? -1));
       for (let i = 0; i < sorted.length; i++) {
         rows.push({ type: 'conference', conf: sorted[i], rowIndex: i, key: `conf-${sorted[i].conferenceId}` });
       }
@@ -649,17 +664,32 @@ export default function ProgramPlannerPage() {
                         </div>
                       )}
                     </div>
-                    <AnimatedToggle
-                      options={[
-                        { id: 'series', label: 'Series' },
-                        { id: 'date', label: 'Date' },
-                        { id: 'ces', label: 'CES' },
-                      ]}
-                      value={groupMode}
-                      onChange={v => setGroupMode(v as GroupMode)}
-                      activeBg="bg-brand-primary"
-                      className="w-[200px]"
-                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <AnimatedToggle
+                        options={[
+                          { id: 'all', label: 'All' },
+                          { id: 'attend', label: 'Attend' },
+                          { id: 'reduce', label: 'Reduce' },
+                          { id: 'cut', label: 'Cut' },
+                          { id: 'evaluating', label: 'Evaluating' },
+                        ]}
+                        value={decisionFilter}
+                        onChange={v => setDecisionFilter(v as typeof decisionFilter)}
+                        activeBg={id => (id === 'all' ? 'bg-brand-primary' : DECISION_TOGGLE_COLORS[id] ?? 'bg-brand-primary')}
+                        className="w-[340px]"
+                      />
+                      <AnimatedToggle
+                        options={[
+                          { id: 'series', label: 'Series' },
+                          { id: 'date', label: 'Date' },
+                          { id: 'ces', label: 'CES' },
+                        ]}
+                        value={groupMode}
+                        onChange={v => setGroupMode(v as GroupMode)}
+                        activeBg="bg-brand-primary"
+                        className="w-[200px]"
+                      />
+                    </div>
                   </div>
 
                   {/* Mobile: one card per conference, stacked */}
