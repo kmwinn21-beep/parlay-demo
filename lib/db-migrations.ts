@@ -1566,4 +1566,48 @@ export const migrations: string[] = [
    SELECT f.id, 'Maybe', 3 FROM form_fields f JOIN form_templates t ON f.template_id = t.id
    WHERE t.name = 'Event RSVP' AND f.field_key = 'rsvp_status'
    AND NOT EXISTS (SELECT 1 FROM form_field_options o WHERE o.field_id = f.id AND o.value = 'Maybe')`,
+  // 525 — Outreach: per-conference company assignment + activity + notes tracking.
+  `CREATE TABLE IF NOT EXISTS outreach_assignments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      assigned_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      assigned_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      status TEXT NOT NULL DEFAULT 'not_started'
+        CHECK(status IN ('not_started','in_progress','completed','overdue')),
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(conference_id, company_id, assigned_user_id)
+    )`,
+  // 526 — logged outreach actions (phone/email/linkedin) per attendee.
+  `CREATE TABLE IF NOT EXISTS outreach_activity (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      attendee_id INTEGER REFERENCES attendees(id) ON DELETE SET NULL,
+      logged_by_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      activity_type TEXT NOT NULL
+        CHECK(activity_type IN ('phone','email','linkedin')),
+      notes TEXT,
+      logged_at TEXT DEFAULT (datetime('now'))
+    )`,
+  // 527 — per-company outreach notes thread for a conference.
+  `CREATE TABLE IF NOT EXISTS outreach_notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      body TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+  // 528 — meeting versioning for the outreach tab's "edit scheduled meeting" flow:
+  // editing there doesn't mutate the meeting in place — it inserts a new meetings
+  // row and points the old one at it, so the outreach timeline can keep showing
+  // the old (struck-through) entry alongside the new one.
+  `ALTER TABLE meetings ADD COLUMN superseded_by_id INTEGER REFERENCES meetings(id) ON DELETE SET NULL`,
+  // 529-530 — per-activity outreach notes: tag a note with which logged activity
+  // (and attendee) it's about, so the notes thread can prefix it with that
+  // activity's colored dot + label.
+  `ALTER TABLE outreach_notes ADD COLUMN activity_type TEXT`,
+  `ALTER TABLE outreach_notes ADD COLUMN attendee_id INTEGER REFERENCES attendees(id) ON DELETE SET NULL`,
 ];
