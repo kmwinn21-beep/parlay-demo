@@ -1742,4 +1742,59 @@ export const migrations: string[] = [
     notes TEXT,
     created_at TEXT DEFAULT (datetime('now'))
   )`,
+  // 557 — conference_plan_rep_travel.user_id and conference_plan_speaking_slots.
+  // speaker_user_id were both defined as REFERENCES users(id), but reps/speakers
+  // are actually picked from the config_options (category='user') roster — the
+  // same one RepAssignmentPopover and every other assigned-rep feature in the
+  // app uses, not `users` logins. With foreign_keys=ON, every INSERT/UPDATE
+  // against those columns using a real (config_options) rep ID failed its FK
+  // check, surfacing as "Failed to update travel status" on every Travel tab
+  // field. SQLite can't ALTER a column's REFERENCES clause in place, so both
+  // tables are recreated without the users FK.
+  `CREATE TABLE IF NOT EXISTS conference_plan_rep_travel_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+    plan_year INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    flight_status TEXT DEFAULT 'not_started'
+      CHECK(flight_status IN ('not_started','booked','pending')),
+    hotel_status TEXT DEFAULT 'not_started'
+      CHECK(hotel_status IN ('not_started','booked','pending')),
+    hotel_confirmation TEXT,
+    flight_confirmation TEXT,
+    notes TEXT,
+    UNIQUE(conference_id, plan_year, user_id)
+  )`,
+  `INSERT INTO conference_plan_rep_travel_new
+     (id, conference_id, plan_year, user_id, flight_status, hotel_status, hotel_confirmation, flight_confirmation, notes)
+   SELECT id, conference_id, plan_year, user_id, flight_status, hotel_status, hotel_confirmation, flight_confirmation, notes
+   FROM conference_plan_rep_travel`,
+  `DROP TABLE conference_plan_rep_travel`,
+  `ALTER TABLE conference_plan_rep_travel_new RENAME TO conference_plan_rep_travel`,
+  `CREATE TABLE IF NOT EXISTS conference_plan_speaking_slots_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+    plan_year INTEGER NOT NULL,
+    speaker_user_id INTEGER,
+    speaker_name TEXT,
+    session_title TEXT,
+    session_type TEXT CHECK(session_type IN (
+      'keynote','panel','breakout','workshop','fireside_chat','moderator','other'
+    )),
+    session_date TEXT,
+    session_time TEXT,
+    room_stage TEXT,
+    slides_submitted INTEGER NOT NULL DEFAULT 0,
+    bio_submitted INTEGER NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`,
+  `INSERT INTO conference_plan_speaking_slots_new
+     (id, conference_id, plan_year, speaker_user_id, speaker_name, session_title, session_type,
+      session_date, session_time, room_stage, slides_submitted, bio_submitted, notes, created_at)
+   SELECT id, conference_id, plan_year, speaker_user_id, speaker_name, session_title, session_type,
+      session_date, session_time, room_stage, slides_submitted, bio_submitted, notes, created_at
+   FROM conference_plan_speaking_slots`,
+  `DROP TABLE conference_plan_speaking_slots`,
+  `ALTER TABLE conference_plan_speaking_slots_new RENAME TO conference_plan_speaking_slots`,
 ];
