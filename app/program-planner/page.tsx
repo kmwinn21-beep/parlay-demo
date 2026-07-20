@@ -31,6 +31,15 @@ interface PlannedLineItem {
   budgeted: number;
 }
 
+interface PlanMeta {
+  decision: string | null;
+  plannedBudget: number | null;
+  plannedBudgetLineItems: PlannedLineItem[];
+  assignedReps: AssignedRep[];
+  plannedStartDate: string | null;
+  plannedEndDate: string | null;
+}
+
 interface ConferenceRow {
   conferenceId: number;
   name: string;
@@ -46,15 +55,10 @@ interface ConferenceRow {
   closedWon: number | null;
   headcount: number | null;
   decision: string | null;
-  plannedBudget: number | null;
-  plannedBudgetLineItems: PlannedLineItem[];
   stageOverride: string | null;
-  assignedReps: AssignedRep[];
   strategyTypeId: number | null;
   strategyTypeName: string | null;
-  planNotes: string | null;
-  plannedStartDate: string | null;
-  plannedEndDate: string | null;
+  plan: PlanMeta;
   industryFocus: string | null;
   conferenceType: string | null;
   sponsorshipLevel: string | null;
@@ -444,10 +448,14 @@ export default function ProgramPlannerPage() {
     });
   }, []);
 
-  const handleRepsUpdated = useCallback((confId: number, assignedReps: AssignedRep[]) => {
+  // All Plan-tab mutations below update the nested `plan` object (plan_year =
+  // selectedYear + 1), never the top-level fields the Program tab's DecisionPill
+  // reads/writes (plan_year = selectedYear) — the two are separate conference_plans
+  // rows on the same conference.
+  const updatePlanField = useCallback((confId: number, patch: Partial<PlanMeta>) => {
     setConfsData(prev => {
       if (!prev) return prev;
-      const updateConf = (c: ConferenceRow) => c.conferenceId === confId ? { ...c, assignedReps } : c;
+      const updateConf = (c: ConferenceRow) => c.conferenceId === confId ? { ...c, plan: { ...c.plan, ...patch } } : c;
       return {
         ...prev,
         conferences: prev.conferences.map(updateConf),
@@ -457,10 +465,28 @@ export default function ProgramPlannerPage() {
     });
   }, []);
 
+  const handlePlanDecisionUpdated = useCallback((confId: number, decision: string | null) => {
+    updatePlanField(confId, { decision });
+  }, [updatePlanField]);
+
+  const handleRepsUpdated = useCallback((confId: number, assignedReps: AssignedRep[]) => {
+    updatePlanField(confId, { assignedReps });
+  }, [updatePlanField]);
+
   const handleBudgetUpdated = useCallback((confId: number, plannedBudget: number, plannedBudgetLineItems: PlannedLineItem[]) => {
+    updatePlanField(confId, { plannedBudget, plannedBudgetLineItems });
+  }, [updatePlanField]);
+
+  const handleDatesUpdated = useCallback((confId: number, plannedStartDate: string | null, plannedEndDate: string | null) => {
+    updatePlanField(confId, { plannedStartDate, plannedEndDate });
+  }, [updatePlanField]);
+
+  // Conference-level field mutations (shared with the conference detail page — these
+  // touch the same conferences row, not conference_plans).
+  const updateConferenceField = useCallback((confId: number, patch: Partial<ConferenceRow>) => {
     setConfsData(prev => {
       if (!prev) return prev;
-      const updateConf = (c: ConferenceRow) => c.conferenceId === confId ? { ...c, plannedBudget, plannedBudgetLineItems } : c;
+      const updateConf = (c: ConferenceRow) => c.conferenceId === confId ? { ...c, ...patch } : c;
       return {
         ...prev,
         conferences: prev.conferences.map(updateConf),
@@ -471,30 +497,24 @@ export default function ProgramPlannerPage() {
   }, []);
 
   const handleStrategyUpdated = useCallback((confId: number, strategyTypeId: number | null, strategyTypeName: string | null) => {
-    setConfsData(prev => {
-      if (!prev) return prev;
-      const updateConf = (c: ConferenceRow) => c.conferenceId === confId ? { ...c, strategyTypeId, strategyTypeName } : c;
-      return {
-        ...prev,
-        conferences: prev.conferences.map(updateConf),
-        series: prev.series.map(s => ({ ...s, conferences: s.conferences.map(updateConf) })),
-        standalone: prev.standalone.map(updateConf),
-      };
-    });
-  }, []);
+    updateConferenceField(confId, { strategyTypeId, strategyTypeName });
+  }, [updateConferenceField]);
 
-  const handleDatesUpdated = useCallback((confId: number, plannedStartDate: string | null, plannedEndDate: string | null) => {
-    setConfsData(prev => {
-      if (!prev) return prev;
-      const updateConf = (c: ConferenceRow) => c.conferenceId === confId ? { ...c, plannedStartDate, plannedEndDate } : c;
-      return {
-        ...prev,
-        conferences: prev.conferences.map(updateConf),
-        series: prev.series.map(s => ({ ...s, conferences: s.conferences.map(updateConf) })),
-        standalone: prev.standalone.map(updateConf),
-      };
-    });
-  }, []);
+  const handleTypeUpdated = useCallback((confId: number, conferenceType: string | null) => {
+    updateConferenceField(confId, { conferenceType });
+  }, [updateConferenceField]);
+
+  const handleSponsorshipUpdated = useCallback((confId: number, sponsorshipLevel: string | null) => {
+    updateConferenceField(confId, { sponsorshipLevel });
+  }, [updateConferenceField]);
+
+  const handleBoothUpdated = useCallback((confId: number, booth: { boothPresent: boolean; boothWidth: number | null; boothLength: number | null; boothNumber: string | null; boothHall: string | null }) => {
+    updateConferenceField(confId, booth);
+  }, [updateConferenceField]);
+
+  const handleLocationUpdated = useCallback((confId: number, location: string) => {
+    updateConferenceField(confId, { location });
+  }, [updateConferenceField]);
 
   const toggleSeries = (seriesId: string) => {
     setCollapsedSeries(prev => {
@@ -708,10 +728,17 @@ export default function ProgramPlannerPage() {
                 conferences={flattenedConferences}
                 calIntelScores={calIntelScores}
                 categoryAverages={confsData?.categoryAverages ?? []}
+                teamInputMap={teamInputMap}
+                onOpenInputPanel={(conferenceId, conferenceName) => setInputPanelConference({ conferenceId, conferenceName })}
+                onPlanDecisionUpdated={handlePlanDecisionUpdated}
                 onRepsUpdated={handleRepsUpdated}
                 onBudgetUpdated={handleBudgetUpdated}
                 onStrategyUpdated={handleStrategyUpdated}
                 onDatesUpdated={handleDatesUpdated}
+                onTypeUpdated={handleTypeUpdated}
+                onSponsorshipUpdated={handleSponsorshipUpdated}
+                onBoothUpdated={handleBoothUpdated}
+                onLocationUpdated={handleLocationUpdated}
                 onConferenceCreated={() => fetchData(selectedYear)}
               />
             ) : view === 'cost' ? (

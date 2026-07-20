@@ -13,7 +13,10 @@ export async function GET(request: NextRequest) {
   const startDate = `${year}-01-01`;
   const endDate = `${year}-12-31`;
 
-  // Conferences for this year with series info
+  // Conferences for this year with series info — also pulls in any conference whose
+  // only tie to this response is a conference_plans row for next year's plan (e.g. a
+  // conference added directly from the Plan tab, dated with a placeholder in year+1
+  // rather than falling within this year's own date range).
   const confsRes = await db.execute({
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.series_id, c.internal_attendees, c.stage_override,
                  c.conference_strategy_type_id, cs.display_name as series_name, co.value as strategy_type_name,
@@ -22,9 +25,10 @@ export async function GET(request: NextRequest) {
           FROM conferences c
           LEFT JOIN conference_series cs ON cs.id = c.series_id
           LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
-          WHERE c.start_date >= ? AND c.start_date <= ?
+          WHERE (c.start_date >= ? AND c.start_date <= ?)
+             OR c.id IN (SELECT conference_id FROM conference_plans WHERE plan_year = ?)
           ORDER BY c.start_date ASC`,
-    args: [startDate, endDate],
+    args: [startDate, endDate, year + 1],
   });
 
   const confIds = confsRes.rows.map(r => Number(r.id));
@@ -77,42 +81,53 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // conference_plans for this year
-  const plansRes = await db.execute({
-    sql: `SELECT conference_id, decision, planned_budget, assigned_rep_ids, notes, planned_budget_line_items, planned_start_date, planned_end_date FROM conference_plans WHERE conference_id IN (${ph}) AND plan_year = ?`,
-    args: [...confIds, year],
-  });
   type PlannedLineItem = { label: string; budgeted: number };
-  const planMap = new Map<number, {
+  interface PlanRow {
     decision: string | null; planned_budget: number | null; assignedRepIds: number[]; notes: string | null;
     plannedBudgetLineItems: PlannedLineItem[]; plannedStartDate: string | null; plannedEndDate: string | null;
-  }>();
-  for (const r of plansRes.rows) {
-    let assignedRepIds: number[] = [];
-    try {
-      const parsed = JSON.parse(String(r.assigned_rep_ids ?? '[]'));
-      if (Array.isArray(parsed)) assignedRepIds = parsed.map(Number).filter(n => !isNaN(n));
-    } catch { /* ignore */ }
-    let plannedBudgetLineItems: PlannedLineItem[] = [];
-    try {
-      const parsed = JSON.parse(String(r.planned_budget_line_items ?? '[]'));
-      if (Array.isArray(parsed)) {
-        plannedBudgetLineItems = parsed
-          .filter((li): li is Record<string, unknown> => li != null && typeof li === 'object')
-          .map(li => ({ label: String(li.label ?? ''), budgeted: Number(li.budgeted ?? 0) }))
-          .filter(li => li.label);
-      }
-    } catch { /* ignore */ }
-    planMap.set(Number(r.conference_id), {
-      decision: r.decision ? String(r.decision) : null,
-      planned_budget: r.planned_budget != null ? Number(r.planned_budget) : null,
-      assignedRepIds,
-      notes: r.notes ? String(r.notes) : null,
-      plannedBudgetLineItems,
-      plannedStartDate: r.planned_start_date ? String(r.planned_start_date) : null,
-      plannedEndDate: r.planned_end_date ? String(r.planned_end_date) : null,
-    });
   }
+  function parsePlanRows(rows: Array<Record<string, unknown>>): Map<number, PlanRow> {
+    const map = new Map<number, PlanRow>();
+    for (const r of rows) {
+      let assignedRepIds: number[] = [];
+      try {
+        const parsed = JSON.parse(String(r.assigned_rep_ids ?? '[]'));
+        if (Array.isArray(parsed)) assignedRepIds = parsed.map(Number).filter(n => !isNaN(n));
+      } catch { /* ignore */ }
+      let plannedBudgetLineItems: PlannedLineItem[] = [];
+      try {
+        const parsed = JSON.parse(String(r.planned_budget_line_items ?? '[]'));
+        if (Array.isArray(parsed)) {
+          plannedBudgetLineItems = parsed
+            .filter((li): li is Record<string, unknown> => li != null && typeof li === 'object')
+            .map(li => ({ label: String(li.label ?? ''), budgeted: Number(li.budgeted ?? 0) }))
+            .filter(li => li.label);
+        }
+      } catch { /* ignore */ }
+      map.set(Number(r.conference_id), {
+        decision: r.decision ? String(r.decision) : null,
+        planned_budget: r.planned_budget != null ? Number(r.planned_budget) : null,
+        assignedRepIds,
+        notes: r.notes ? String(r.notes) : null,
+        plannedBudgetLineItems,
+        plannedStartDate: r.planned_start_date ? String(r.planned_start_date) : null,
+        plannedEndDate: r.planned_end_date ? String(r.planned_end_date) : null,
+      });
+    }
+    return map;
+  }
+
+  const plansSql = `SELECT conference_id, decision, planned_budget, assigned_rep_ids, notes, planned_budget_line_items, planned_start_date, planned_end_date FROM conference_plans WHERE conference_id IN (${ph}) AND plan_year = ?`;
+
+  // Two independent conference_plans rows per conference: `year` (the reference year
+  // shown in Program/Cost, unchanged) and `year + 1` (the Plan tab's own next-year
+  // decision/budget/reps/dates — a genuinely separate row, not a view onto the same data).
+  const [plansRes, plansNextRes] = await Promise.all([
+    db.execute({ sql: plansSql, args: [...confIds, year] }),
+    db.execute({ sql: plansSql, args: [...confIds, year + 1] }),
+  ]);
+  const planMap = parsePlanRows(plansRes.rows as Array<Record<string, unknown>>);
+  const planNextMap = parsePlanRows(plansNextRes.rows as Array<Record<string, unknown>>);
 
   // Category averages for this year — used by the Plan view's budget modal as a
   // reference for conferences with no actual budget history yet. Averaged over
@@ -134,8 +149,11 @@ export async function GET(request: NextRequest) {
     avgActual: Math.round(sum / count),
   }));
 
-  // Resolve assigned rep user details for every rep referenced across all plans
-  const allRepIds = Array.from(new Set(Array.from(planMap.values()).flatMap(p => p.assignedRepIds)));
+  // Resolve assigned rep user details for every rep referenced across both years' plans
+  const allRepIds = Array.from(new Set([
+    ...Array.from(planMap.values()).flatMap(p => p.assignedRepIds),
+    ...Array.from(planNextMap.values()).flatMap(p => p.assignedRepIds),
+  ]));
   const repMap = new Map<number, { userId: number; displayName: string; initials: string }>();
   if (allRepIds.length > 0) {
     const repPh = allRepIds.map(() => '?').join(',');
@@ -187,6 +205,7 @@ export async function GET(request: NextRequest) {
     const confId = Number(conf.id);
     const snap = snapMap.get(confId);
     const plan = planMap.get(confId);
+    const planNext = planNextMap.get(confId);
     // headcount from internal_attendees JSON array length
     let headcount: number | null = null;
     try {
@@ -209,15 +228,20 @@ export async function GET(request: NextRequest) {
       closedWon: cwByConfId.has(confId) ? Math.round(cwByConfId.get(confId)!) : null,
       headcount,
       decision: plan?.decision ?? null,
-      plannedBudget: plan?.planned_budget ?? null,
       stageOverride: conf.stage_override ? String(conf.stage_override) : null,
-      assignedReps: (plan?.assignedRepIds ?? []).map(id => repMap.get(id)).filter((r): r is { userId: number; displayName: string; initials: string } => r != null),
       strategyTypeId: conf.conference_strategy_type_id != null ? Number(conf.conference_strategy_type_id) : null,
       strategyTypeName: conf.strategy_type_name ? String(conf.strategy_type_name) : null,
-      planNotes: plan?.notes ?? null,
-      plannedBudgetLineItems: plan?.plannedBudgetLineItems ?? [],
-      plannedStartDate: plan?.plannedStartDate ?? null,
-      plannedEndDate: plan?.plannedEndDate ?? null,
+      // Next year's own conference_plans row (plan_year = year + 1) — the Plan tab's
+      // decision/budget/reps/dates, deliberately separate from the `decision` field
+      // above (which is this year's, used by the Program tab's DecisionPill).
+      plan: {
+        decision: planNext?.decision ?? null,
+        plannedBudget: planNext?.planned_budget ?? null,
+        plannedBudgetLineItems: planNext?.plannedBudgetLineItems ?? [],
+        assignedReps: (planNext?.assignedRepIds ?? []).map(id => repMap.get(id)).filter((r): r is { userId: number; displayName: string; initials: string } => r != null),
+        plannedStartDate: planNext?.plannedStartDate ?? null,
+        plannedEndDate: planNext?.plannedEndDate ?? null,
+      },
       industryFocus: conf.industry_focus ? String(conf.industry_focus) : null,
       conferenceType: conf.conference_type ? String(conf.conference_type) : null,
       sponsorshipLevel: conf.sponsorship_level ? String(conf.sponsorship_level) : null,
