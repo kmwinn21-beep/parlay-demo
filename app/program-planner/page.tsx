@@ -704,7 +704,7 @@ export default function ProgramPlannerPage() {
 
             {view === 'plan' ? (
               <ProgramPlannerPlanView
-                year={selectedYear}
+                year={selectedYear + 1}
                 conferences={flattenedConferences}
                 calIntelScores={calIntelScores}
                 categoryAverages={confsData?.categoryAverages ?? []}
