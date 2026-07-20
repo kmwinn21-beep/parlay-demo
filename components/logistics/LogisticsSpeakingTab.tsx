@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { type LogisticsSpeakingSlot, type AssignedRepOption } from './types';
+import { EmptyState } from './shared';
 
 const SESSION_TYPE_OPTIONS = [
   { value: 'keynote', label: 'Keynote' },
@@ -131,9 +132,9 @@ export function LogisticsSpeakingTab({ conferenceId, planYear, speakingSlots, as
 
   if (speakingSlots.length === 0) {
     return (
-      <div className="text-center py-8">
-        <p className="text-xs text-gray-400 mb-3">No speaking slots added yet.</p>
-        <button type="button" onClick={addSlot} className="btn-primary text-xs px-3 py-1.5">+ Add speaking slot</button>
+      <div>
+        <EmptyState icon="ti-microphone" headline="No speaking slots yet" subtext="Add a session or panel appearance" />
+        <button type="button" onClick={addSlot} className="btn-primary text-xs px-3 py-1.5 mx-auto block">+ Add speaking slot</button>
       </div>
     );
   }
@@ -162,9 +163,9 @@ export function LogisticsSpeakingTab({ conferenceId, planYear, speakingSlots, as
               <div className="flex items-center gap-3 mt-2">
                 <button type="button" onClick={() => startEdit(slot)} className="text-[11px] text-brand-secondary hover:text-brand-primary font-medium">Edit</button>
                 {confirmDeleteId === slot.id ? (
-                  <span className="text-[11px] text-gray-500 flex items-center gap-1.5">
-                    Are you sure?
-                    <button type="button" onClick={() => deleteSlot(slot.id)} className="text-red-600 font-medium">Confirm</button>
+                  <span className="flex items-center gap-1.5" style={{ fontSize: 11 }}>
+                    <span style={{ color: 'var(--text-danger, #DC2626)' }}>Remove this slot?</span>
+                    <button type="button" onClick={() => deleteSlot(slot.id)} className="text-red-600 font-medium">Yes, remove</button>
                     <button type="button" onClick={() => setConfirmDeleteId(null)} className="text-gray-400">Cancel</button>
                   </span>
                 ) : (
@@ -189,9 +190,13 @@ export function LogisticsSpeakingTab({ conferenceId, planYear, speakingSlots, as
                   }}
                   className="input-field text-xs"
                 >
-                  <option value="">Select rep...</option>
-                  {assignedReps.map(r => <option key={r.userId} value={r.userId}>{r.displayName}</option>)}
-                  <option value="__other__">Other — enter name manually</option>
+                  <option value="">Select speaker...</option>
+                  {assignedReps.length > 0 && (
+                    <optgroup label="Assigned reps">
+                      {assignedReps.map(r => <option key={r.userId} value={r.userId}>{r.displayName}</option>)}
+                    </optgroup>
+                  )}
+                  <option value="__other__">Other — enter name</option>
                 </select>
               ) : (
                 <div className="flex items-center gap-1.5">

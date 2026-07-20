@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { type LogisticsHostedEvent, fmtDate } from './types';
+import { EmptyState } from './shared';
 
 const EVENT_TYPE_OPTIONS = [
   { value: 'dinner', label: 'Dinner' },
@@ -98,9 +99,9 @@ export function LogisticsHostedEventsTab({ conferenceId, planYear, hostedEvents,
 
   if (hostedEvents.length === 0) {
     return (
-      <div className="text-center py-8">
-        <p className="text-xs text-gray-400 mb-3">No hosted events added yet.</p>
-        <button type="button" onClick={addEvent} className="btn-primary text-xs px-3 py-1.5">+ Add hosted event</button>
+      <div>
+        <EmptyState icon="ti-confetti" headline="No hosted events planned" subtext="Add a dinner, reception, or other event" />
+        <button type="button" onClick={addEvent} className="btn-primary text-xs px-3 py-1.5 mx-auto block">+ Add hosted event</button>
       </div>
     );
   }

@@ -105,7 +105,11 @@ export function ConferencePlanLogisticsDrawer({
         @keyframes logisticsSlideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
         .logistics-panel { animation: logisticsSlideUp 0.25s ease-out; }
         @media (min-width: 640px) { .logistics-panel { animation: logisticsSlideIn 0.25s ease-out; } }
-        .logistics-tabbar { overflow-x: auto; scrollbar-width: none; }
+        .logistics-tabbar {
+          overflow-x: auto; scrollbar-width: none;
+          mask-image: linear-gradient(to right, black 85%, transparent 100%);
+          -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+        }
         .logistics-tabbar::-webkit-scrollbar { display: none; }
       `}</style>
 

@@ -4,6 +4,16 @@ import { useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { colorForName, fmtFileSize, type LogisticsFile } from './types';
 
+export function EmptyState({ icon, headline, subtext }: { icon: string; headline: string; subtext: string }) {
+  return (
+    <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
+      <i className={`ti ${icon}`} style={{ fontSize: 28, color: 'var(--text-muted, #9CA3AF)', display: 'block', marginBottom: 8 }} aria-hidden="true" />
+      <p style={{ fontSize: 13, color: 'var(--text-secondary, #6B7280)', margin: '0 0 4px' }}>{headline}</p>
+      <p style={{ fontSize: 12, color: 'var(--text-muted, #9CA3AF)', margin: 0 }}>{subtext}</p>
+    </div>
+  );
+}
+
 // Small fading checkmark shown next to a field for ~1.5s after a successful
 // auto-save — the fallback pattern confirmed for this codebase (no dedicated
 // inline "saved" indicator existed; react-hot-toast exists but is reserved here
