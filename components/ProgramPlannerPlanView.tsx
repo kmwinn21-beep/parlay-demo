@@ -685,6 +685,16 @@ export function ProgramPlannerPlanView({
   const [showAddDrawer, setShowAddDrawer] = useState(false);
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [dragOverGroup, setDragOverGroup] = useState<GroupKey | null>(null);
+  // Decision-group sections can be hidden from view (same minimize/restore
+  // pattern as the tier columns in the pre-conference Targets tab's kanban) —
+  // minimized ones collapse to a small restore pill instead of rendering.
+  const [minimizedGroups, setMinimizedGroups] = useState<Set<GroupKey>>(new Set());
+  const minimizeGroup = (key: GroupKey) => setMinimizedGroups(prev => new Set(prev).add(key));
+  const restoreGroup = (key: GroupKey) => setMinimizedGroups(prev => {
+    const next = new Set(prev);
+    next.delete(key);
+    return next;
+  });
   const [logisticsDrawer, setLogisticsDrawer] = useState<{
     conferenceId: number;
     conferenceName: string;
@@ -793,19 +803,42 @@ export function ProgramPlannerPlanView({
         </div>
       </div>
 
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          {ORDERED_GROUPS.filter(key => minimizedGroups.has(key)).map(key => {
+            const cfg = GROUP_CONFIG[key];
+            const count = groups[key].length;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => restoreGroup(key)}
+                title={`Show ${cfg.label}`}
+                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border border-transparent text-xs font-semibold transition-colors hover:brightness-95 ${cfg.headerBg} ${cfg.headerText}`}
+              >
+                <span>{cfg.label}</span>
+                <span className="opacity-80">{count}</span>
+                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-white/70">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                </span>
+              </button>
+            );
+          })}
+        </div>
         <button
           type="button"
           onClick={() => setShowAddDrawer(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-primary text-white hover:opacity-90 transition-opacity"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-primary text-white hover:opacity-90 transition-opacity flex-shrink-0"
         >
           <i className="ti ti-plus text-[13px]" aria-hidden="true" />
           Add conference
         </button>
       </div>
 
-      {/* Decision groups — always all 5, even empty, so a row can be dragged into any of them */}
-      {ORDERED_GROUPS.map(key => {
+      {/* Decision groups — always all 5 (unless minimized), even empty, so a row can be dragged into any of them */}
+      {ORDERED_GROUPS.filter(key => !minimizedGroups.has(key)).map(key => {
         const rows = groups[key];
         const cfg = GROUP_CONFIG[key];
         const groupBudget = rows.reduce((sum, c) => sum + (c.plan.plannedBudget ?? 0), 0);
@@ -824,6 +857,16 @@ export function ProgramPlannerPlanView({
           >
             <div className={`flex items-center justify-between gap-2 px-4 py-2.5 ${cfg.headerBg}`}>
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => minimizeGroup(key)}
+                  title={`Hide ${cfg.label}`}
+                  className="flex-shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/70 text-gray-500 hover:text-gray-700 hover:bg-white transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M18 12H6" />
+                  </svg>
+                </button>
                 <i className={`ti ${cfg.icon} text-[14px] ${cfg.headerText}`} aria-hidden="true" />
                 <span className={`text-sm font-semibold ${cfg.headerText}`}>{cfg.label}</span>
                 <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${cfg.pillBg} ${cfg.pillText}`}>
