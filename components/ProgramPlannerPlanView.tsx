@@ -81,7 +81,7 @@ function fmtDateShort(dateStr: string): string {
 }
 
 type GroupKey = 'attend' | 'reduce' | 'new' | 'evaluating' | 'cut';
-const ORDERED_GROUPS: GroupKey[] = ['attend', 'reduce', 'new', 'evaluating', 'cut'];
+const ORDERED_GROUPS: GroupKey[] = ['evaluating', 'attend', 'reduce', 'new', 'cut'];
 const GROUP_TO_DECISION: Record<GroupKey, GroupKey> = {
   attend: 'attend', reduce: 'reduce', new: 'new', evaluating: 'evaluating', cut: 'cut',
 };
