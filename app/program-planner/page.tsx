@@ -694,11 +694,11 @@ export default function ProgramPlannerPage() {
             {/* View toggle */}
             <div className="flex items-center gap-2">
               <AnimatedToggle
-                options={[{ id: 'program', label: 'Program' }, { id: 'cost', label: 'Cost' }, { id: 'plan', label: 'Plan' }]}
+                options={[{ id: 'program', label: 'Program' }, { id: 'cost', label: 'Cost' }, { id: 'plan', label: `${selectedYear + 1} Plan` }]}
                 value={view}
                 onChange={v => setView(v as 'program' | 'cost' | 'plan')}
-                activeBg={id => id === 'program' ? 'bg-brand-primary' : id === 'cost' ? 'bg-brand-accent' : 'bg-brand-secondary'}
-                className="w-[240px]"
+                activeBg={id => id === 'program' ? 'bg-brand-primary' : id === 'cost' ? 'bg-brand-accent' : 'bg-purple-600'}
+                className="w-[280px]"
               />
             </div>
 
