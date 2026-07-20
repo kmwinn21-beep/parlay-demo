@@ -39,6 +39,23 @@ export function ChevronRightIcon({ className = 'w-4 h-4' }: { className?: string
   );
 }
 
+export function EyeIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  );
+}
+
+export function CloseIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  );
+}
+
 export function FileIcon({ className = 'w-4 h-4' }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -337,8 +354,69 @@ function fileTypeColor(fileType: string | null, fileName: string): string {
   return 'text-gray-500';
 }
 
+type PreviewKind = 'image' | 'pdf' | null;
+
+function previewKind(fileType: string | null, fileName: string): PreviewKind {
+  const ext = (fileName.split('.').pop() || '').toLowerCase();
+  if (fileType?.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) return 'image';
+  if (fileType?.includes('pdf') || ext === 'pdf') return 'pdf';
+  return null;
+}
+
+// In-drawer preview so a user can look at an uploaded file without downloading
+// it or leaving the planning drawer for another tab. Only images and PDFs can
+// render inline in the browser; anything else falls back to a download prompt.
+export function FilePreviewModal({ file, onClose }: { file: LogisticsFile; onClose: () => void }) {
+  const kind = previewKind(file.fileType, file.fileName);
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.6)' }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl shadow-2xl flex flex-col w-full max-w-3xl"
+        style={{ maxHeight: '85vh' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2.5 px-4 py-3 border-b border-gray-100 flex-shrink-0">
+          <p className="text-sm font-medium text-gray-800 truncate flex-1">{file.fileName}</p>
+          <a
+            href={file.fileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            download={file.fileName}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-brand-secondary hover:bg-gray-50 transition-colors flex-shrink-0"
+            title="Download"
+          >
+            <DownloadIcon className="w-4 h-4" />
+          </a>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors flex-shrink-0" title="Close">
+            <CloseIcon className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-auto bg-gray-50 flex items-center justify-center min-h-[300px]">
+          {kind === 'image' ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={file.fileUrl} alt={file.fileName} className="max-w-full max-h-full object-contain" />
+          ) : kind === 'pdf' ? (
+            <iframe src={file.fileUrl} title={file.fileName} className="w-full h-full border-0" style={{ minHeight: '70vh' }} />
+          ) : (
+            <div className="text-center py-12 px-6">
+              <FileIcon className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+              <p className="text-sm text-gray-500 mb-1">Preview not available for this file type</p>
+              <p className="text-xs text-gray-400">Download it to view the contents.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function FileRow({ conferenceId, file, onDeleted }: { conferenceId: number; file: LogisticsFile; onDeleted: (id: number) => void }) {
   const [deleting, setDeleting] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const color = fileTypeColor(file.fileType, file.fileName);
 
   const handleDelete = async () => {
@@ -356,12 +434,20 @@ export function FileRow({ conferenceId, file, onDeleted }: { conferenceId: numbe
   return (
     <div className="flex items-center gap-2.5 py-2 border-b border-gray-100 last:border-0">
       <FileIcon className={`w-4 h-4 flex-shrink-0 ${color}`} />
-      <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium text-gray-800 truncate">{file.fileName}</p>
+      <button type="button" onClick={() => setPreviewOpen(true)} className="min-w-0 flex-1 text-left">
+        <p className="text-xs font-medium text-gray-800 truncate hover:text-brand-secondary transition-colors">{file.fileName}</p>
         <p className="text-[10px] text-gray-400">
           {fmtFileSize(file.fileSize)}{file.uploadedByName ? ` · ${file.uploadedByName}` : ''}
         </p>
-      </div>
+      </button>
+      <button
+        type="button"
+        onClick={() => setPreviewOpen(true)}
+        className="p-1.5 rounded-lg text-gray-400 hover:text-brand-secondary hover:bg-gray-50 transition-colors flex-shrink-0"
+        title="Preview"
+      >
+        <EyeIcon className="w-4 h-4" />
+      </button>
       <a
         href={file.fileUrl}
         target="_blank"
@@ -381,6 +467,7 @@ export function FileRow({ conferenceId, file, onDeleted }: { conferenceId: numbe
       >
         <TrashIcon className="w-4 h-4" />
       </button>
+      {previewOpen && <FilePreviewModal file={file} onClose={() => setPreviewOpen(false)} />}
     </div>
   );
 }
