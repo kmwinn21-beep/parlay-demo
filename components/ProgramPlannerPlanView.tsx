@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { RepAssignmentPopover, type AssignedRep } from './RepAssignmentPopover';
 import { ConferencePlanBudgetModal } from './ConferencePlanBudgetModal';
@@ -110,6 +110,26 @@ const CONFERENCE_TYPE_OPTIONS = [
   'Partner / ecosystem event', 'Other',
 ];
 
+// Shared viewport-aware positioning for the click-to-edit dropdowns (Strategy, Type,
+// Sponsorship) — flips to open upward when there isn't enough room below, same
+// approach as RepMultiSelect's calcPos.
+type DropdownPos = { top?: number; bottom?: number; left: number; above: boolean };
+const DROPDOWN_EST_HEIGHT = 260;
+function calcDropdownPos(el: HTMLElement): DropdownPos {
+  const rect = el.getBoundingClientRect();
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const above = spaceBelow < DROPDOWN_EST_HEIGHT && rect.top > spaceBelow;
+  return {
+    top: above ? undefined : rect.bottom + 4,
+    bottom: above ? window.innerHeight - rect.top + 4 : undefined,
+    left: rect.left,
+    above,
+  };
+}
+function dropdownStyle(pos: DropdownPos): CSSProperties {
+  return { position: 'fixed', top: pos.top, bottom: pos.bottom, left: pos.left, zIndex: 9999 };
+}
+
 function GripIcon() {
   return (
     <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" className="text-gray-300">
@@ -153,7 +173,7 @@ function StrategyEditPill({
   onUpdated: (strategyTypeId: number | null, strategyTypeName: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<DropdownPos | null>(null);
   const [saving, setSaving] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -170,10 +190,7 @@ function StrategyEditPill({
   }, [open]);
 
   const openDropdown = () => {
-    if (buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: rect.left });
-    }
+    if (buttonRef.current) setPos(calcDropdownPos(buttonRef.current));
     setOpen(true);
   };
 
@@ -211,7 +228,7 @@ function StrategyEditPill({
         <div
           ref={dropdownRef}
           className="bg-white border border-gray-200 rounded-lg shadow-lg py-1 w-max max-w-[320px] max-h-64 overflow-y-auto"
-          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999 }}
+          style={dropdownStyle(pos)}
         >
           {options.map(o => (
             <button
@@ -248,7 +265,7 @@ function OptionEditPill({
   onSelect: (value: string | null) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<DropdownPos | null>(null);
   const [saving, setSaving] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -264,10 +281,7 @@ function OptionEditPill({
   }, [open]);
 
   const openDropdown = () => {
-    if (buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: rect.left });
-    }
+    if (buttonRef.current) setPos(calcDropdownPos(buttonRef.current));
     setOpen(true);
   };
 
@@ -294,7 +308,7 @@ function OptionEditPill({
         <div
           ref={dropdownRef}
           className="bg-white border border-gray-200 rounded-lg shadow-lg py-1 w-max max-w-[240px] max-h-64 overflow-y-auto"
-          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999 }}
+          style={dropdownStyle(pos)}
         >
           {options.map(o => (
             <button
