@@ -32,7 +32,6 @@ interface PlannedLineItem {
 }
 
 interface PlanMeta {
-  decision: string | null;
   plannedBudget: number | null;
   plannedBudgetLineItems: PlannedLineItem[];
   assignedReps: AssignedRep[];
@@ -108,7 +107,7 @@ interface ConferencesData {
 
 type GroupMode = 'series' | 'date' | 'ces';
 type RankMetric = 'ces' | 'pipeline' | 'closedwon' | 'spend' | 'icp';
-type DecisionValue = 'attend' | 'reduce' | 'cut' | 'evaluating' | null;
+type DecisionValue = 'attend' | 'reduce' | 'cut' | 'evaluating' | 'new' | null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -465,10 +464,6 @@ export default function ProgramPlannerPage() {
     });
   }, []);
 
-  const handlePlanDecisionUpdated = useCallback((confId: number, decision: string | null) => {
-    updatePlanField(confId, { decision });
-  }, [updatePlanField]);
-
   const handleRepsUpdated = useCallback((confId: number, assignedReps: AssignedRep[]) => {
     updatePlanField(confId, { assignedReps });
   }, [updatePlanField]);
@@ -730,7 +725,7 @@ export default function ProgramPlannerPage() {
                 categoryAverages={confsData?.categoryAverages ?? []}
                 teamInputMap={teamInputMap}
                 onOpenInputPanel={(conferenceId, conferenceName) => setInputPanelConference({ conferenceId, conferenceName })}
-                onPlanDecisionUpdated={handlePlanDecisionUpdated}
+                onDecisionUpdated={handleDecisionUpdated}
                 onRepsUpdated={handleRepsUpdated}
                 onBudgetUpdated={handleBudgetUpdated}
                 onStrategyUpdated={handleStrategyUpdated}
@@ -900,7 +895,7 @@ export default function ProgramPlannerPage() {
                             <DecisionPill
                               confId={c.conferenceId}
                               value={c.decision}
-                              year={selectedYear}
+                              year={selectedYear + 1}
                               onUpdated={handleDecisionUpdated}
                             />
                           </div>
@@ -1253,7 +1248,7 @@ export default function ProgramPlannerPage() {
                                 <DecisionPill
                                   confId={c.conferenceId}
                                   value={c.decision}
-                                  year={selectedYear}
+                                  year={selectedYear + 1}
                                   onUpdated={handleDecisionUpdated}
                                 />
                               </td>

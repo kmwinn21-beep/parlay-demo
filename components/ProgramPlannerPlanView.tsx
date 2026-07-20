@@ -14,7 +14,6 @@ interface CategoryAverage { label: string; avgActual: number }
 interface TeamInputInfo { hasInput: boolean; hasComments: boolean }
 
 interface PlanMeta {
-  decision: string | null;
   plannedBudget: number | null;
   plannedBudgetLineItems: PlannedLineItem[];
   assignedReps: AssignedRep[];
@@ -30,6 +29,7 @@ export interface PlanConferenceRow {
   ces: number | null;
   actualSpend: number | null;
   budgetLineItems: BudgetLineItem[] | null;
+  decision: string | null;
   strategyTypeId: number | null;
   strategyTypeName: string | null;
   conferenceType: string | null;
@@ -52,7 +52,7 @@ interface ProgramPlannerPlanViewProps {
   categoryAverages: CategoryAverage[];
   teamInputMap: Map<number, TeamInputInfo>;
   onOpenInputPanel: (conferenceId: number, conferenceName: string) => void;
-  onPlanDecisionUpdated: (conferenceId: number, decision: string | null) => void;
+  onDecisionUpdated: (conferenceId: number, decision: 'attend' | 'reduce' | 'cut' | 'evaluating' | 'new' | null) => void;
   onRepsUpdated: (conferenceId: number, assignedReps: AssignedRep[]) => void;
   onBudgetUpdated: (conferenceId: number, plannedBudget: number, lineItems: PlannedLineItem[]) => void;
   onStrategyUpdated: (conferenceId: number, strategyTypeId: number | null, strategyTypeName: string | null) => void;
@@ -92,7 +92,7 @@ function scoreDotStyle(score: number | null): { bg: string; color: string; borde
 
 type GroupKey = 'attend' | 'reduce' | 'new' | 'evaluating' | 'cut';
 const ORDERED_GROUPS: GroupKey[] = ['attend', 'reduce', 'new', 'evaluating', 'cut'];
-const GROUP_TO_DECISION: Record<GroupKey, string> = {
+const GROUP_TO_DECISION: Record<GroupKey, GroupKey> = {
   attend: 'attend', reduce: 'reduce', new: 'new', evaluating: 'evaluating', cut: 'cut',
 };
 
@@ -676,7 +676,7 @@ function ScoreDot({ score }: { score: number | null }) {
 
 export function ProgramPlannerPlanView({
   year, conferences, calIntelScores, categoryAverages, teamInputMap, onOpenInputPanel,
-  onPlanDecisionUpdated, onRepsUpdated, onBudgetUpdated, onStrategyUpdated, onDatesUpdated,
+  onDecisionUpdated, onRepsUpdated, onBudgetUpdated, onStrategyUpdated, onDatesUpdated,
   onTypeUpdated, onSponsorshipUpdated, onBoothUpdated, onLocationUpdated, onConferenceCreated,
 }: ProgramPlannerPlanViewProps) {
   const [priorYearActual, setPriorYearActual] = useState<number | null>(null);
@@ -705,7 +705,7 @@ export function ProgramPlannerPlanView({
   }, [year]);
 
   const groupOf = (c: PlanConferenceRow): GroupKey => {
-    const d = c.plan.decision;
+    const d = c.decision;
     if (d === 'attend' || d === 'reduce' || d === 'new' || d === 'cut') return d;
     return 'evaluating';
   };
@@ -720,7 +720,7 @@ export function ProgramPlannerPlanView({
 
   const moveToGroup = async (conferenceId: number, group: GroupKey) => {
     const decision = GROUP_TO_DECISION[group];
-    onPlanDecisionUpdated(conferenceId, decision);
+    onDecisionUpdated(conferenceId, decision);
     await fetch(`/api/program-planner/conferences/${conferenceId}/decision`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
