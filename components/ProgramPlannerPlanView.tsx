@@ -509,9 +509,8 @@ export function ProgramPlannerPlanView({
                       <BoothPill present={c.boothPresent} width={c.boothWidth} length={c.boothLength} number={c.boothNumber} />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-gray-500">
-                      <div className="truncate"><span className="text-gray-400">Industry:</span> {c.industryFocus || '—'}</div>
-                      <div className="truncate"><span className="text-gray-400">Location:</span> {c.location || '—'}</div>
+                    <div className="text-[11px] text-gray-500 truncate">
+                      <span className="text-gray-400">Location:</span> {c.location || '—'}
                     </div>
 
                     <div className="flex items-center justify-between gap-2">
@@ -551,7 +550,6 @@ export function ProgramPlannerPlanView({
                   <col style={{ minWidth: 140 }} />
                   <col style={{ width: 70 }} />
                   <col style={{ minWidth: 170 }} />
-                  <col style={{ width: 100 }} />
                   <col style={{ minWidth: 120 }} />
                   <col style={{ width: 100 }} />
                   <col style={{ minWidth: 140 }} />
@@ -567,7 +565,6 @@ export function ProgramPlannerPlanView({
                     <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Conference</th>
                     <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Dates</th>
                     <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Strategy</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Industry</th>
                     <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Type</th>
                     <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Sponsorship</th>
                     <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Booth</th>
@@ -613,7 +610,6 @@ export function ProgramPlannerPlanView({
                             onUpdated={(id, name) => onStrategyUpdated(c.conferenceId, id, name)}
                           />
                         </td>
-                        <td className="px-3 py-2 text-gray-600 truncate max-w-[100px]">{c.industryFocus || <span className="text-gray-400">—</span>}</td>
                         <td className="px-3 py-2"><TypePill value={c.conferenceType} /></td>
                         <td className="px-3 py-2"><SponsorshipPill value={c.sponsorshipLevel} /></td>
                         <td className="px-3 py-2"><BoothPill present={c.boothPresent} width={c.boothWidth} length={c.boothLength} number={c.boothNumber} /></td>
