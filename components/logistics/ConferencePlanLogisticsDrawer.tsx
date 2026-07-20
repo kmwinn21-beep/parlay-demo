@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDrawerResize } from '@/lib/useDrawerResize';
 import { type LogisticsResponse, type AssignedRepOption } from './types';
-import { Spinner } from './shared';
+import { Spinner, ChevronLeftIcon, ChevronRightIcon } from './shared';
 import { LogisticsDeadlinesTab } from './LogisticsDeadlinesTab';
 import { LogisticsRegistrationTab } from './LogisticsRegistrationTab';
 import { LogisticsBoothTab } from './LogisticsBoothTab';
@@ -169,7 +169,7 @@ export function ConferencePlanLogisticsDrawer({
             className="flex-shrink-0 px-1 py-1.5 text-gray-400 hover:text-gray-700"
             aria-label="Scroll tabs left"
           >
-            <i className="ti ti-chevron-left text-sm" aria-hidden="true" />
+            <ChevronLeftIcon className="w-3.5 h-3.5" />
           </button>
           <div ref={tabBarRef} className="logistics-tabbar flex-1 min-w-0 flex gap-1 px-1 py-1.5 whitespace-nowrap">
             {VISIBLE_TABS.map(t => (
@@ -191,7 +191,7 @@ export function ConferencePlanLogisticsDrawer({
             className="flex-shrink-0 px-1 py-1.5 text-gray-400 hover:text-gray-700"
             aria-label="Scroll tabs right"
           >
-            <i className="ti ti-chevron-right text-sm" aria-hidden="true" />
+            <ChevronRightIcon className="w-3.5 h-3.5" />
           </button>
         </div>
 

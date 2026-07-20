@@ -3,7 +3,44 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { type LogisticsDeadline, type LogisticsSpeakingSlot, type LogisticsFile, type AssignedRepOption } from './types';
-import { FileRow, FileUploadZone, DeadlineStatusPill } from './shared';
+import { FileRow, FileUploadZone, DeadlineStatusPill, TrashIcon } from './shared';
+
+const CATEGORY_LABELS: Record<string, string> = {
+  registration: 'Registration',
+  booth: 'Booth',
+  sponsorship: 'Sponsorship',
+  speaking: 'Speaking',
+  travel: 'Travel',
+  shipping: 'Shipping',
+  marketing: 'Marketing',
+  budget: 'Budget',
+  post_show: 'Post-show',
+  other: 'Other',
+};
+
+const CATEGORY_COLORS: Record<string, string> = {
+  registration: 'bg-blue-100 text-blue-700',
+  booth: 'bg-purple-100 text-purple-700',
+  sponsorship: 'bg-amber-100 text-amber-700',
+  speaking: 'bg-pink-100 text-pink-700',
+  travel: 'bg-cyan-100 text-cyan-700',
+  shipping: 'bg-orange-100 text-orange-700',
+  marketing: 'bg-teal-100 text-teal-700',
+  budget: 'bg-green-100 text-green-700',
+  post_show: 'bg-indigo-100 text-indigo-700',
+  other: 'bg-gray-100 text-gray-600',
+};
+
+function CategoryPill({ category }: { category: string | null }) {
+  if (!category) return <span className="w-[74px] flex-shrink-0" />;
+  const label = CATEGORY_LABELS[category] ?? category;
+  const color = CATEGORY_COLORS[category] ?? 'bg-gray-100 text-gray-600';
+  return (
+    <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap w-[74px] flex-shrink-0 text-center ${color}`}>
+      {label}
+    </span>
+  );
+}
 
 interface Props {
   conferenceId: number;
@@ -15,13 +52,6 @@ interface Props {
   onDeadlinesChange: (deadlines: LogisticsDeadline[]) => void;
   onSpeakingSlotsChange: (slots: LogisticsSpeakingSlot[]) => void;
   onFilesChange: (files: LogisticsFile[]) => void;
-}
-
-function statusIcon(d: LogisticsDeadline): { icon: string; color: string } {
-  if (d.completed) return { icon: 'ti-circle-check', color: 'text-green-600' };
-  if (d.daysUntil < 0) return { icon: 'ti-alert-circle', color: 'text-red-600' };
-  if (d.daysUntil <= 14) return { icon: 'ti-clock', color: 'text-amber-600' };
-  return { icon: 'ti-circle', color: 'text-gray-300' };
 }
 
 function sortDeadlines(deadlines: LogisticsDeadline[]): LogisticsDeadline[] {
@@ -130,7 +160,9 @@ export function LogisticsDeadlinesTab({
       <div>
         {overdueCount > 0 && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 mb-3">
-            <i className="ti ti-alert-circle text-red-600 text-sm" aria-hidden="true" />
+            <svg className="w-4 h-4 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
             <p className="text-xs font-medium text-red-700">{overdueCount} deadline{overdueCount !== 1 ? 's' : ''} overdue</p>
           </div>
         )}
@@ -140,31 +172,35 @@ export function LogisticsDeadlinesTab({
           <p className="text-xs text-gray-400 italic mb-2">No deadlines yet.</p>
         ) : (
           <div className="space-y-1 mb-3">
-            {sorted.map(d => {
-              const si = statusIcon(d);
-              return (
-                <div key={d.id} className="flex items-center gap-1.5 py-1">
-                  <button type="button" onClick={() => toggleComplete(d)} className="flex-shrink-0">
-                    <i className={`ti ${si.icon} ${si.color} text-base`} aria-hidden="true" />
-                  </button>
-                  <input
-                    defaultValue={d.label}
-                    onBlur={e => saveLabel(d, e.target.value)}
-                    className={`flex-1 min-w-0 text-xs bg-transparent border-0 focus:ring-0 focus:outline-none px-0 ${d.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}
-                  />
-                  <input
-                    type="date"
-                    defaultValue={d.dueDate}
-                    onBlur={e => saveDueDate(d, e.target.value)}
-                    className="text-[10px] text-gray-400 bg-transparent border-0 focus:ring-0 focus:outline-none w-[92px] flex-shrink-0"
-                  />
-                  <div className="flex-shrink-0"><DeadlineStatusPill deadline={d} /></div>
-                  <button type="button" onClick={() => deleteDeadline(d.id)} className="text-gray-300 hover:text-red-500 flex-shrink-0">
-                    <i className="ti ti-x text-xs" aria-hidden="true" />
-                  </button>
-                </div>
-              );
-            })}
+            {sorted.map(d => (
+              <div
+                key={d.id}
+                className="flex items-center gap-1.5 py-1 px-1.5 rounded-md border border-dashed border-transparent focus-within:border-gray-400"
+              >
+                <button type="button" onClick={() => deleteDeadline(d.id)} className="text-red-500 hover:text-red-600 flex-shrink-0" title="Delete deadline">
+                  <TrashIcon />
+                </button>
+                <input
+                  type="checkbox"
+                  checked={d.completed}
+                  onChange={() => toggleComplete(d)}
+                  className="accent-brand-secondary w-3.5 h-3.5 flex-shrink-0"
+                />
+                <input
+                  defaultValue={d.label}
+                  onBlur={e => saveLabel(d, e.target.value)}
+                  className={`flex-1 min-w-0 text-xs bg-transparent border-0 focus:ring-0 focus:outline-none px-0 ${d.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}
+                />
+                <input
+                  type="date"
+                  defaultValue={d.dueDate}
+                  onBlur={e => saveDueDate(d, e.target.value)}
+                  className="text-[10px] text-gray-400 bg-transparent border-0 focus:ring-0 focus:outline-none w-[92px] flex-shrink-0"
+                />
+                <CategoryPill category={d.category} />
+                <div className="flex-shrink-0"><DeadlineStatusPill deadline={d} /></div>
+              </div>
+            ))}
           </div>
         )}
 

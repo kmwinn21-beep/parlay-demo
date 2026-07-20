@@ -4,6 +4,50 @@ import { useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { colorForName, fmtFileSize, fmtDate, type LogisticsFile, type LogisticsDeadline } from './types';
 
+// No Tabler icon font is loaded anywhere in this app, so `ti ti-*` classes render
+// nothing — these inline SVGs (same pattern as BudgetVsActualModal.tsx /
+// QuickNotesSection.tsx) are the actually-working icon approach.
+export function TrashIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+    </svg>
+  );
+}
+
+export function DownloadIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+    </svg>
+  );
+}
+
+export function ChevronLeftIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+    </svg>
+  );
+}
+
+export function ChevronRightIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+    </svg>
+  );
+}
+
+export function FileIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 2v6h6" />
+    </svg>
+  );
+}
+
 export function EmptyState({ icon, headline, subtext }: { icon: string; headline: string; subtext: string }) {
   return (
     <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
@@ -131,7 +175,7 @@ export function AutoSaveCheckbox({
 
 export function DeadlineStatusPill({ deadline }: { deadline: LogisticsDeadline }) {
   if (deadline.completed) {
-    return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700 whitespace-nowrap">Done</span>;
+    return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700 whitespace-nowrap">Complete</span>;
   }
   if (deadline.daysUntil < 0) {
     return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700 whitespace-nowrap">Overdue</span>;
@@ -140,13 +184,6 @@ export function DeadlineStatusPill({ deadline }: { deadline: LogisticsDeadline }
     return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700 whitespace-nowrap">{deadline.daysUntil} day{deadline.daysUntil !== 1 ? 's' : ''}</span>;
   }
   return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500 whitespace-nowrap">{deadline.daysUntil} days</span>;
-}
-
-function statusIconFor(d: LogisticsDeadline): { icon: string; color: string } {
-  if (d.completed) return { icon: 'ti-circle-check', color: 'text-green-600' };
-  if (d.daysUntil < 0) return { icon: 'ti-alert-circle', color: 'text-red-600' };
-  if (d.daysUntil <= 14) return { icon: 'ti-clock', color: 'text-amber-600' };
-  return { icon: 'ti-circle', color: 'text-gray-300' };
 }
 
 // Generic, editable checklist backed by conference_plan_deadlines rows scoped to a
@@ -230,31 +267,40 @@ export function ChecklistSection({
       {items.length === 0 ? (
         <p className="text-xs text-gray-400 italic mb-2">No items yet.</p>
       ) : (
-        <div className="space-y-1.5 mb-2">
-          {items.map(item => {
-            const si = statusIconFor(item);
-            return (
-              <div key={item.id} className="flex items-center gap-1.5">
-                <button type="button" onClick={() => toggleComplete(item)} className="flex-shrink-0">
-                  <i className={`ti ${si.icon} ${si.color} text-base`} aria-hidden="true" />
-                </button>
-                <input
-                  defaultValue={item.label}
-                  onBlur={e => saveLabel(item, e.target.value)}
-                  className={`flex-1 min-w-0 text-xs bg-transparent border-0 focus:ring-0 focus:outline-none px-0 ${item.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}
-                />
-                <input
-                  type="date"
-                  defaultValue={item.dueDate}
-                  onBlur={e => saveDueDate(item, e.target.value)}
-                  className="text-[10px] text-gray-400 bg-transparent border-0 focus:ring-0 focus:outline-none w-[92px] flex-shrink-0"
-                />
-                <button type="button" onClick={() => deleteItem(item.id)} className="text-gray-300 hover:text-red-500 flex-shrink-0">
-                  <i className="ti ti-x text-xs" aria-hidden="true" />
-                </button>
-              </div>
-            );
-          })}
+        <div className="space-y-1 mb-2">
+          {items.map(item => (
+            <div
+              key={item.id}
+              className="flex items-center gap-1.5 rounded-md px-1.5 py-1 border border-dashed border-transparent focus-within:border-gray-400"
+            >
+              <button
+                type="button"
+                onClick={() => deleteItem(item.id)}
+                className="text-red-500 hover:text-red-600 flex-shrink-0"
+                title="Delete item"
+              >
+                <TrashIcon />
+              </button>
+              <input
+                type="checkbox"
+                checked={item.completed}
+                onChange={() => toggleComplete(item)}
+                className="accent-brand-secondary w-3.5 h-3.5 flex-shrink-0"
+              />
+              <input
+                defaultValue={item.label}
+                onBlur={e => saveLabel(item, e.target.value)}
+                className={`flex-1 min-w-0 text-xs bg-transparent border-0 focus:ring-0 focus:outline-none px-0 ${item.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}
+              />
+              <input
+                type="date"
+                defaultValue={item.dueDate}
+                onBlur={e => saveDueDate(item, e.target.value)}
+                className="text-[10px] text-gray-400 bg-transparent border-0 focus:ring-0 focus:outline-none w-[92px] flex-shrink-0"
+              />
+              <div className="flex-shrink-0"><DeadlineStatusPill deadline={item} /></div>
+            </div>
+          ))}
         </div>
       )}
       <div className="flex items-center gap-1.5">
@@ -277,17 +323,17 @@ export function Spinner({ size = 24 }: { size?: number }) {
   );
 }
 
-function fileTypeIconColor(fileType: string | null, fileName: string): { icon: string; color: string } {
+function fileTypeColor(fileType: string | null, fileName: string): string {
   const ext = (fileName.split('.').pop() || '').toLowerCase();
-  if (fileType?.includes('pdf') || ext === 'pdf') return { icon: 'ti-file-type-pdf', color: 'text-red-600' };
-  if (fileType?.includes('sheet') || ['xlsx', 'xls', 'csv'].includes(ext)) return { icon: 'ti-file-spreadsheet', color: 'text-green-600' };
-  if (fileType?.includes('word') || ['docx', 'doc'].includes(ext)) return { icon: 'ti-file-text', color: 'text-blue-600' };
-  return { icon: 'ti-file', color: 'text-gray-500' };
+  if (fileType?.includes('pdf') || ext === 'pdf') return 'text-red-600';
+  if (fileType?.includes('sheet') || ['xlsx', 'xls', 'csv'].includes(ext)) return 'text-green-600';
+  if (fileType?.includes('word') || ['docx', 'doc'].includes(ext)) return 'text-blue-600';
+  return 'text-gray-500';
 }
 
 export function FileRow({ conferenceId, file, onDeleted }: { conferenceId: number; file: LogisticsFile; onDeleted: (id: number) => void }) {
   const [deleting, setDeleting] = useState(false);
-  const { icon, color } = fileTypeIconColor(file.fileType, file.fileName);
+  const color = fileTypeColor(file.fileType, file.fileName);
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -303,7 +349,7 @@ export function FileRow({ conferenceId, file, onDeleted }: { conferenceId: numbe
 
   return (
     <div className="flex items-center gap-2.5 py-2 border-b border-gray-100 last:border-0">
-      <i className={`ti ${icon} ${color} text-lg flex-shrink-0`} aria-hidden="true" />
+      <FileIcon className={`w-4 h-4 flex-shrink-0 ${color}`} />
       <div className="min-w-0 flex-1">
         <p className="text-xs font-medium text-gray-800 truncate">{file.fileName}</p>
         <p className="text-[10px] text-gray-400">
@@ -318,7 +364,7 @@ export function FileRow({ conferenceId, file, onDeleted }: { conferenceId: numbe
         className="p-1.5 rounded-lg text-gray-400 hover:text-brand-secondary hover:bg-gray-50 transition-colors flex-shrink-0"
         title="Download"
       >
-        <i className="ti ti-download text-sm" aria-hidden="true" />
+        <DownloadIcon className="w-4 h-4" />
       </a>
       <button
         type="button"
@@ -327,7 +373,7 @@ export function FileRow({ conferenceId, file, onDeleted }: { conferenceId: numbe
         className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0 disabled:opacity-50"
         title="Delete"
       >
-        <i className="ti ti-trash text-sm" aria-hidden="true" />
+        <TrashIcon className="w-4 h-4" />
       </button>
     </div>
   );
