@@ -36,7 +36,7 @@ function CategoryPill({ category }: { category: string | null }) {
   const label = CATEGORY_LABELS[category] ?? category;
   const color = CATEGORY_COLORS[category] ?? 'bg-gray-100 text-gray-600';
   return (
-    <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap w-[74px] flex-shrink-0 text-center ${color}`}>
+    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap w-[74px] flex-shrink-0 text-center ${color}`}>
       {label}
     </span>
   );
@@ -172,6 +172,14 @@ export function LogisticsDeadlinesTab({
           <p className="text-xs text-gray-400 italic mb-2">No deadlines yet.</p>
         ) : (
           <div className="space-y-1 mb-3">
+            <div className="flex items-center gap-1.5 px-1.5 pb-1">
+              <span className="w-3.5 flex-shrink-0" />
+              <span className="w-3.5 flex-shrink-0" />
+              <span className="flex-1 min-w-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Checklist Item</span>
+              <span className="w-[104px] flex-shrink-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Due Date</span>
+              <span className="w-[74px] flex-shrink-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wide text-center">Category</span>
+              <span className="w-[74px] flex-shrink-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wide text-center">Status</span>
+            </div>
             {sorted.map(d => (
               <div
                 key={d.id}

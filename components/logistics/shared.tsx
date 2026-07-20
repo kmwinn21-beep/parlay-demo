@@ -177,7 +177,7 @@ export function AutoSaveCheckbox({
 // ("Overdue" vs "12 days" vs "Complete") doesn't change how much space is left
 // for the flex-1 label to its left — which would otherwise shift the date
 // column out of alignment row to row.
-const STATUS_PILL_CLASS = 'w-16 text-center py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap flex-shrink-0';
+const STATUS_PILL_CLASS = 'w-[74px] px-2 text-center py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap flex-shrink-0';
 
 export function DeadlineStatusPill({ deadline }: { deadline: LogisticsDeadline }) {
   if (deadline.completed) {
