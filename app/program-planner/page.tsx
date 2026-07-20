@@ -723,7 +723,6 @@ export default function ProgramPlannerPage() {
               <ProgramPlannerPlanView
                 year={selectedYear + 1}
                 conferences={flattenedConferences}
-                calIntelScores={calIntelScores}
                 categoryAverages={confsData?.categoryAverages ?? []}
                 teamInputMap={teamInputMap}
                 onOpenInputPanel={(conferenceId, conferenceName) => setInputPanelConference({ conferenceId, conferenceName })}

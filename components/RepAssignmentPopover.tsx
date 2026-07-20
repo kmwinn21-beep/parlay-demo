@@ -135,8 +135,8 @@ export function RepAssignmentPopover({ conferenceId, planYear, assignedReps, all
     <div ref={containerRef} className="relative inline-block">
       <button ref={triggerRef} type="button" onClick={openPopover} className="flex items-center">
         {assignedReps.length === 0 ? (
-          <span className="inline-flex items-center gap-1 text-gray-400 hover:text-gray-600 text-xs transition-colors">
-            <i className="ti ti-user-plus text-[13px]" aria-hidden="true" />
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors">
+            <i className="ti ti-user-plus text-[12px]" aria-hidden="true" />
             Assign reps
           </span>
         ) : (

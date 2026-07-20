@@ -43,12 +43,9 @@ export interface PlanConferenceRow {
   plan: PlanMeta;
 }
 
-interface CalIntelScore { score: number; tier: string; confidence: string }
-
 interface ProgramPlannerPlanViewProps {
   year: number;
   conferences: PlanConferenceRow[];
-  calIntelScores: Map<number, CalIntelScore>;
   categoryAverages: CategoryAverage[];
   teamInputMap: Map<number, TeamInputInfo>;
   onOpenInputPanel: (conferenceId: number, conferenceName: string) => void;
@@ -80,14 +77,6 @@ function fmtDateShort(dateStr: string): string {
     const d = new Date(dateStr + 'T00:00:00');
     return `${d.toLocaleDateString('en-US', { month: 'short' })} '${String(d.getFullYear()).slice(-2)}`;
   } catch { return dateStr; }
-}
-
-function scoreDotStyle(score: number | null): { bg: string; color: string; border: string } {
-  if (score == null) return { bg: '#F3F4F6', color: '#9CA3AF', border: '#D1D5DB' };
-  if (score >= 70) return { bg: '#DCFCE7', color: '#059669', border: '#6EE7B7' };
-  if (score >= 50) return { bg: '#DBEAFE', color: '#1B76BC', border: '#93C5FD' };
-  if (score >= 40) return { bg: '#FEF3C7', color: '#d97706', border: '#FCD34D' };
-  return { bg: '#FEE2E2', color: '#dc2626', border: '#FCA5A5' };
 }
 
 type GroupKey = 'attend' | 'reduce' | 'new' | 'evaluating' | 'cut';
@@ -637,8 +626,10 @@ function DatesEditCell({
         type="button"
         onClick={openPopover}
         disabled={saving}
-        className={`text-[11px] whitespace-nowrap transition-colors ${saving ? 'opacity-50' : ''} ${
-          isOverridden ? 'text-gray-700 font-medium hover:text-brand-primary' : 'text-gray-400 italic hover:text-brand-secondary'
+        className={`whitespace-nowrap transition-opacity ${saving ? 'opacity-50' : ''} ${
+          isOverridden
+            ? 'text-[11px] text-gray-700 font-medium hover:text-brand-primary'
+            : 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors'
         }`}
       >
         {displayStartDate ? fmtDateShort(displayStartDate) : 'Set dates'}
@@ -676,20 +667,8 @@ function DatesEditCell({
   );
 }
 
-function ScoreDot({ score }: { score: number | null }) {
-  const s = scoreDotStyle(score);
-  return (
-    <span
-      className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold border mx-auto"
-      style={{ backgroundColor: s.bg, color: s.color, borderColor: s.border }}
-    >
-      {score != null ? Math.round(score) : '—'}
-    </span>
-  );
-}
-
 export function ProgramPlannerPlanView({
-  year, conferences, calIntelScores, categoryAverages, teamInputMap, onOpenInputPanel,
+  year, conferences, categoryAverages, teamInputMap, onOpenInputPanel,
   onDecisionUpdated, onRepsUpdated, onBudgetUpdated, onStrategyUpdated, onDatesUpdated,
   onTypeUpdated, onSponsorshipUpdated, onBoothUpdated, onLocationUpdated, onConferenceCreated,
 }: ProgramPlannerPlanViewProps) {
@@ -827,7 +806,6 @@ export function ProgramPlannerPlanView({
                 {/* Mobile: one card per conference, stacked */}
                 <div className="sm:hidden divide-y divide-gray-100">
                   {rows.map(c => {
-                    const ci = calIntelScores.get(c.conferenceId);
                     const info = teamInputMap.get(c.conferenceId);
                     return (
                       <div
@@ -863,7 +841,7 @@ export function ProgramPlannerPlanView({
                                 {fmtCurrency(c.plan.plannedBudget)}
                               </button>
                             ) : (
-                              <button type="button" onClick={() => setBudgetModalConf(c)} className="text-brand-secondary hover:text-brand-primary text-[11px] font-medium whitespace-nowrap">
+                              <button type="button" onClick={() => setBudgetModalConf(c)} className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors">
                                 + Budget
                               </button>
                             )}
@@ -920,17 +898,7 @@ export function ProgramPlannerPlanView({
                               onUpdate={reps => onRepsUpdated(c.conferenceId, reps)}
                             />
                           </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <div className="text-center">
-                              <p className="text-[9px] text-gray-400 uppercase tracking-wide leading-none mb-1">Cal Intel</p>
-                              <ScoreDot score={ci?.score ?? null} />
-                            </div>
-                            <div className="text-center">
-                              <p className="text-[9px] text-gray-400 uppercase tracking-wide leading-none mb-1">CES</p>
-                              <ScoreDot score={c.ces} />
-                            </div>
-                            <InputButton conferenceId={c.conferenceId} conferenceName={c.name} info={info} onOpen={onOpenInputPanel} />
-                          </div>
+                          <InputButton conferenceId={c.conferenceId} conferenceName={c.name} info={info} onOpen={onOpenInputPanel} />
                         </div>
                       </div>
                     );
@@ -952,8 +920,6 @@ export function ProgramPlannerPlanView({
                       <col style={{ width: 80 }} />
                       <col style={{ width: 130 }} />
                       <col style={{ width: 52 }} />
-                      <col style={{ width: 52 }} />
-                      <col style={{ width: 52 }} />
                     </colgroup>
                     <thead>
                       <tr className="border-b border-gray-100">
@@ -967,14 +933,11 @@ export function ProgramPlannerPlanView({
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Location</th>
                         <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Budget</th>
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Assigned reps</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Cal. Intel</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Prior CES</th>
                         <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Input</th>
                       </tr>
                     </thead>
                     <tbody>
                       {rows.map((c, i) => {
-                        const ci = calIntelScores.get(c.conferenceId);
                         const info = teamInputMap.get(c.conferenceId);
                         return (
                           <tr
@@ -1056,7 +1019,7 @@ export function ProgramPlannerPlanView({
                                   {fmtCurrency(c.plan.plannedBudget)}
                                 </button>
                               ) : (
-                                <button type="button" onClick={() => setBudgetModalConf(c)} className="text-brand-secondary hover:text-brand-primary text-[11px] font-medium whitespace-nowrap">
+                                <button type="button" onClick={() => setBudgetModalConf(c)} className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors">
                                   + Budget
                                 </button>
                               )}
@@ -1070,8 +1033,6 @@ export function ProgramPlannerPlanView({
                                 onUpdate={reps => onRepsUpdated(c.conferenceId, reps)}
                               />
                             </td>
-                            <td className="px-3 py-2 text-center"><ScoreDot score={ci?.score ?? null} /></td>
-                            <td className="px-3 py-2 text-center"><ScoreDot score={c.ces} /></td>
                             <td className="px-3 py-2 text-center">
                               <InputButton conferenceId={c.conferenceId} conferenceName={c.name} info={info} onOpen={onOpenInputPanel} />
                             </td>
