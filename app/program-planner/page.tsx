@@ -531,8 +531,9 @@ export default function ProgramPlannerPage() {
     ...(confsData?.standalone ?? []),
   ], [confsData]);
 
-  // Rankings
-  const ranked = [...allConfs].sort((a, b) => {
+  // Rankings — excludes decision='new' (Plan tab's "New — never attended" bucket
+  // never surfaces in the Program tab).
+  const ranked = [...allConfs].filter(c => c.decision !== 'new').sort((a, b) => {
     if (rankMetric === 'ces') return (b.ces ?? -1) - (a.ces ?? -1);
     if (rankMetric === 'pipeline') return (b.pipelineInfluenced ?? 0) - (a.pipelineInfluenced ?? 0);
     if (rankMetric === 'closedwon') return (b.closedWon ?? 0) - (a.closedWon ?? 0);
@@ -545,6 +546,7 @@ export default function ProgramPlannerPage() {
     attend: 0, reduce: 0, cut: 0, undecided: 0,
   };
   for (const c of allConfs) {
+    if (c.decision === 'new') continue;
     if (c.decision === 'attend') decisionCounts.attend++;
     else if (c.decision === 'reduce') decisionCounts.reduce++;
     else if (c.decision === 'cut') decisionCounts.cut++;
@@ -557,7 +559,7 @@ export default function ProgramPlannerPage() {
     | { type: 'conference'; conf: ConferenceRow; rowIndex: number; key: string }
     | { type: 'standalone_header'; key: string };
 
-  const matchesDecision = (c: ConferenceRow) => decisionFilter === 'all' || c.decision === decisionFilter;
+  const matchesDecision = (c: ConferenceRow) => c.decision !== 'new' && (decisionFilter === 'all' || c.decision === decisionFilter);
 
   const buildRows = (): TableRow[] => {
     if (!confsData) return [];

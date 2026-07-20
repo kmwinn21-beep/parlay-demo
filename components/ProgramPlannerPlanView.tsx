@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { RepAssignmentPopover, type AssignedRep } from './RepAssignmentPopover';
 import { ConferencePlanBudgetModal } from './ConferencePlanBudgetModal';
-import { AddConferenceDrawer } from './AddConferenceDrawer';
+import { AddConferenceModal } from './AddConferenceModal';
 import { LocationAutocompleteInput, type LocationDetails } from './LocationAutocompleteInput';
 import { useConfigWithIds } from '@/lib/useUserOptions';
 
@@ -99,7 +99,7 @@ const GROUP_TO_DECISION: Record<GroupKey, GroupKey> = {
 const GROUP_CONFIG: Record<GroupKey, { label: string; icon: string; headerBg: string; headerText: string; pillBg: string; pillText: string }> = {
   attend:     { label: 'Attending',                     icon: 'ti-check',        headerBg: 'bg-green-50',  headerText: 'text-green-800',  pillBg: 'bg-green-100',  pillText: 'text-green-700' },
   reduce:     { label: 'Attending (reduced footprint)',  icon: 'ti-arrows-minimize', headerBg: 'bg-amber-50',  headerText: 'text-amber-800',  pillBg: 'bg-amber-100',  pillText: 'text-amber-700' },
-  new:        { label: 'New — never attended',           icon: 'ti-sparkles',     headerBg: 'bg-purple-50', headerText: 'text-purple-800', pillBg: 'bg-purple-100', pillText: 'text-purple-700' },
+  new:        { label: 'New — never attended (Evaluating)', icon: 'ti-sparkles',  headerBg: 'bg-purple-50', headerText: 'text-purple-800', pillBg: 'bg-purple-100', pillText: 'text-purple-700' },
   evaluating: { label: 'Evaluating',                      icon: 'ti-clock',        headerBg: 'bg-gray-100',  headerText: 'text-gray-700',   pillBg: 'bg-gray-200',   pillText: 'text-gray-600' },
   cut:        { label: 'Not attending',                   icon: 'ti-x',            headerBg: 'bg-red-50',    headerText: 'text-red-800',    pillBg: 'bg-red-100',    pillText: 'text-red-700' },
 };
@@ -137,6 +137,20 @@ function GripIcon() {
       <circle cx="2" cy="8" r="1.5" /><circle cx="8" cy="8" r="1.5" />
       <circle cx="2" cy="14" r="1.5" /><circle cx="8" cy="14" r="1.5" />
     </svg>
+  );
+}
+
+// Flags a conference sitting in the "New — never attended (Evaluating)" bucket.
+function NewBadge() {
+  return (
+    <span
+      className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-purple-100 flex-shrink-0"
+      title="New — never attended, still evaluating"
+    >
+      <svg className="w-2.5 h-2.5 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M10 1l2.6 6.2L19 8.3l-4.9 4.3L15.5 19 10 15.6 4.5 19l1.4-6.4L1 8.3l6.4-1.1L10 1z" />
+      </svg>
+    </span>
   );
 }
 
@@ -826,9 +840,12 @@ export function ProgramPlannerPlanView({
                         <div className="flex items-start gap-2">
                           <span className="cursor-grab active:cursor-grabbing mt-1 flex-shrink-0"><GripIcon /></span>
                           <div className="min-w-0 flex-1">
-                            <Link href={`/conferences/${c.conferenceId}`} className="text-brand-secondary hover:text-brand-primary font-medium text-sm truncate block">
-                              {c.name}
-                            </Link>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <Link href={`/conferences/${c.conferenceId}`} className="text-brand-secondary hover:text-brand-primary font-medium text-sm truncate">
+                                {c.name}
+                              </Link>
+                              {c.decision === 'new' && <NewBadge />}
+                            </div>
                             <DatesEditCell
                               conferenceId={c.conferenceId}
                               planYear={year}
@@ -970,9 +987,12 @@ export function ProgramPlannerPlanView({
                           >
                             <td className="px-2 py-2 cursor-grab active:cursor-grabbing"><GripIcon /></td>
                             <td className="px-3 py-2">
-                              <Link href={`/conferences/${c.conferenceId}`} className="text-brand-secondary hover:text-brand-primary font-medium truncate max-w-[150px] block">
-                                {c.name}
-                              </Link>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <Link href={`/conferences/${c.conferenceId}`} className="text-brand-secondary hover:text-brand-primary font-medium truncate max-w-[130px]">
+                                  {c.name}
+                                </Link>
+                                {c.decision === 'new' && <NewBadge />}
+                              </div>
                             </td>
                             <td className="px-3 py-2 text-center whitespace-nowrap">
                               <DatesEditCell
@@ -1081,7 +1101,7 @@ export function ProgramPlannerPlanView({
       )}
 
       {showAddDrawer && (
-        <AddConferenceDrawer
+        <AddConferenceModal
           planYear={year}
           onClose={() => setShowAddDrawer(false)}
           onCreated={onConferenceCreated}

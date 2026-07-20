@@ -15,11 +15,12 @@ export async function GET(request: NextRequest) {
 
   // Conferences for this year with series info — also pulls in any conference whose
   // only tie to this response is a conference_plans row for next year's plan (e.g. a
-  // conference added directly from the Plan tab, dated with a placeholder in year+1
-  // rather than falling within this year's own date range). Conferences still sitting
-  // in the Plan tab's "New — never attended" bucket (decision='new') are deliberately
-  // excluded here — that section is Plan-tab-only and those conferences never surface
-  // in the Program tab until a real decision (attend/reduce/cut/evaluating) is made.
+  // conference added directly from the Plan tab, dated with a placeholder far outside
+  // any real year range rather than falling within this year's own date range). This
+  // OR-clause is what makes a conference show up for the correct year regardless of
+  // its (placeholder) start_date — including decision='new' ones, so the Plan tab can
+  // always find them; the Program tab separately filters decision='new' out of its own
+  // display, since that bucket is Plan-tab-only.
   const confsRes = await db.execute({
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.series_id, c.internal_attendees, c.stage_override,
                  c.conference_strategy_type_id, cs.display_name as series_name, co.value as strategy_type_name,
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
           LEFT JOIN conference_series cs ON cs.id = c.series_id
           LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
           WHERE (c.start_date >= ? AND c.start_date <= ?)
-             OR c.id IN (SELECT conference_id FROM conference_plans WHERE plan_year = ? AND decision IS NOT NULL AND decision != 'new')
+             OR c.id IN (SELECT conference_id FROM conference_plans WHERE plan_year = ?)
           ORDER BY c.start_date ASC`,
     args: [startDate, endDate, year + 1],
   });
