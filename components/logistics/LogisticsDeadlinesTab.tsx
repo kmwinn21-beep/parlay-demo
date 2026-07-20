@@ -1,0 +1,184 @@
+'use client';
+
+import { useState } from 'react';
+import toast from 'react-hot-toast';
+import { type LogisticsDeadline, type LogisticsSpeakingSlot, type LogisticsFile, type AssignedRepOption, fmtDate } from './types';
+import { FileRow, FileUploadZone } from './shared';
+
+interface Props {
+  conferenceId: number;
+  planYear: number;
+  deadlines: LogisticsDeadline[];
+  speakingSlots: LogisticsSpeakingSlot[];
+  files: LogisticsFile[];
+  assignedReps: AssignedRepOption[];
+  onDeadlinesChange: (deadlines: LogisticsDeadline[]) => void;
+  onSpeakingSlotsChange: (slots: LogisticsSpeakingSlot[]) => void;
+  onFilesChange: (files: LogisticsFile[]) => void;
+}
+
+function statusIcon(d: LogisticsDeadline): { icon: string; color: string } {
+  if (d.completed) return { icon: 'ti-circle-check', color: 'text-green-600' };
+  if (d.daysUntil < 0) return { icon: 'ti-alert-circle', color: 'text-red-600' };
+  if (d.daysUntil <= 14) return { icon: 'ti-clock', color: 'text-amber-600' };
+  return { icon: 'ti-circle', color: 'text-gray-300' };
+}
+
+function statusText(d: LogisticsDeadline): { text: string; color: string } {
+  if (d.completed) return { text: 'Done', color: 'text-green-600' };
+  if (d.daysUntil < 0) return { text: 'Overdue', color: 'text-red-600' };
+  if (d.daysUntil <= 14) return { text: `${d.daysUntil} day${d.daysUntil !== 1 ? 's' : ''}`, color: 'text-amber-600' };
+  return { text: fmtDate(d.dueDate), color: 'text-gray-400' };
+}
+
+function sortDeadlines(deadlines: LogisticsDeadline[]): LogisticsDeadline[] {
+  return [...deadlines].sort((a, b) => {
+    if (a.completed !== b.completed) return a.completed ? 1 : -1;
+    if (!a.completed && !b.completed) {
+      const aOverdue = a.daysUntil < 0, bOverdue = b.daysUntil < 0;
+      if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
+      return a.daysUntil - b.daysUntil;
+    }
+    return 0;
+  });
+}
+
+export function LogisticsDeadlinesTab({
+  conferenceId, planYear, deadlines, speakingSlots, files, assignedReps,
+  onDeadlinesChange, onSpeakingSlotsChange, onFilesChange,
+}: Props) {
+  const [newLabel, setNewLabel] = useState('');
+  const [newDueDate, setNewDueDate] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [addingSlot, setAddingSlot] = useState(false);
+  const [slotTitle, setSlotTitle] = useState('');
+
+  const overdueCount = deadlines.filter(d => d.daysUntil < 0 && !d.completed).length;
+  const sorted = sortDeadlines(deadlines);
+
+  const toggleComplete = async (d: LogisticsDeadline) => {
+    const prev = deadlines;
+    onDeadlinesChange(deadlines.map(x => x.id === d.id ? { ...x, completed: !x.completed } : x));
+    const res = await fetch(`/api/program-planner/conferences/${conferenceId}/logistics/deadlines/${d.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ completed: !d.completed }),
+    }).catch(() => null);
+    if (!res || !res.ok) { onDeadlinesChange(prev); toast.error('Failed to update deadline.'); }
+  };
+
+  const addDeadline = async () => {
+    if (!newLabel.trim() || !newDueDate) return;
+    setAdding(true);
+    try {
+      const res = await fetch(`/api/program-planner/conferences/${conferenceId}/logistics/deadlines?year=${planYear}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: newLabel.trim(), dueDate: newDueDate }),
+      });
+      if (!res.ok) throw new Error();
+      const created = await res.json() as LogisticsDeadline;
+      onDeadlinesChange([...deadlines, created]);
+      setNewLabel(''); setNewDueDate('');
+    } catch {
+      toast.error('Failed to add deadline.');
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const addQuickSlot = async () => {
+    if (!slotTitle.trim()) return;
+    setAddingSlot(true);
+    try {
+      const res = await fetch(`/api/program-planner/conferences/${conferenceId}/logistics/speaking?year=${planYear}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionTitle: slotTitle.trim() }),
+      });
+      if (!res.ok) throw new Error();
+      const created = await res.json() as LogisticsSpeakingSlot;
+      onSpeakingSlotsChange([...speakingSlots, created]);
+      setSlotTitle('');
+    } catch {
+      toast.error('Failed to add speaking slot.');
+    } finally {
+      setAddingSlot(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        {overdueCount > 0 && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 mb-3">
+            <i className="ti ti-alert-circle text-red-600 text-sm" aria-hidden="true" />
+            <p className="text-xs font-medium text-red-700">{overdueCount} deadline{overdueCount !== 1 ? 's' : ''} overdue</p>
+          </div>
+        )}
+
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Deadlines</p>
+        {sorted.length === 0 ? (
+          <p className="text-xs text-gray-400 italic mb-2">No deadlines yet.</p>
+        ) : (
+          <div className="space-y-1 mb-3">
+            {sorted.map(d => {
+              const si = statusIcon(d);
+              const st = statusText(d);
+              return (
+                <div key={d.id} className="flex items-center gap-2 py-1.5">
+                  <button type="button" onClick={() => toggleComplete(d)} className="flex-shrink-0">
+                    <i className={`ti ${si.icon} ${si.color} text-base`} aria-hidden="true" />
+                  </button>
+                  <span className={`text-xs flex-1 min-w-0 truncate ${d.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{d.label}</span>
+                  <span className={`text-[11px] font-medium flex-shrink-0 ${st.color}`}>{st.text}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="flex items-center gap-1.5">
+          <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Deadline label" className="input-field text-xs flex-1" />
+          <input type="date" value={newDueDate} onChange={e => setNewDueDate(e.target.value)} className="input-field text-xs w-32" />
+          <button type="button" onClick={addDeadline} disabled={adding || !newLabel.trim() || !newDueDate} className="btn-primary text-xs px-2.5 py-1.5 disabled:opacity-50 flex-shrink-0">
+            Add
+          </button>
+        </div>
+      </div>
+
+      <div className="pt-4 border-t border-gray-100">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Speaking</p>
+        {speakingSlots.length === 0 ? (
+          <p className="text-xs text-gray-400 italic mb-2">No speaking slots yet.</p>
+        ) : (
+          <div className="space-y-1.5 mb-2">
+            {speakingSlots.map(s => (
+              <div key={s.id} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50">
+                <span className="text-xs text-gray-700 truncate">{s.sessionTitle || 'Untitled session'}</span>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium flex-shrink-0 ${
+                  s.slidesSubmitted && s.bioSubmitted ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                }`}>
+                  {s.slidesSubmitted && s.bioSubmitted ? 'Confirmed' : 'Pending'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex items-center gap-1.5">
+          <input value={slotTitle} onChange={e => setSlotTitle(e.target.value)} placeholder="Session title" className="input-field text-xs flex-1" />
+          <button type="button" onClick={addQuickSlot} disabled={addingSlot || !slotTitle.trim()} className="btn-secondary text-xs px-2.5 py-1.5 disabled:opacity-50 flex-shrink-0">
+            + Add speaking slot
+          </button>
+        </div>
+        {assignedReps.length === 0 && <p className="text-[10px] text-gray-400 mt-1">Assign reps in the Plan table for a speaker picker.</p>}
+      </div>
+
+      <div className="pt-4 border-t border-gray-100">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Files</p>
+        {files.length > 0 && (
+          <div className="mb-2">
+            {files.map(f => <FileRow key={f.id} conferenceId={conferenceId} file={f} onDeleted={id => onFilesChange(files.filter(x => x.id !== id))} />)}
+          </div>
+        )}
+        <FileUploadZone conferenceId={conferenceId} planYear={planYear} onUploaded={f => onFilesChange([f, ...files])} />
+      </div>
+    </div>
+  );
+}

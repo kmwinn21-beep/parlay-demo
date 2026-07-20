@@ -119,6 +119,7 @@ export async function GET(
       fileSize: r.file_size != null ? Number(r.file_size) : null,
       fileType: r.file_type ? String(r.file_type) : null,
       storageKey: String(r.storage_key),
+      fileUrl: `${process.env.R2_PUBLIC_URL ?? ''}/${String(r.storage_key)}`,
       uploadedByName: r.display_name || r.first_name ? resolveUserDisplayName(r) : null,
       createdAt: String(r.created_at),
     }));

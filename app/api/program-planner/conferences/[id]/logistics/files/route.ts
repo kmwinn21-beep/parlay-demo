@@ -69,6 +69,7 @@ export async function POST(
       fileSize: file.size,
       fileType: file.type || null,
       storageKey: key,
+      fileUrl: `${process.env.R2_PUBLIC_URL ?? ''}/${key}`,
       uploadedByName: userRes.rows[0] ? resolveUserDisplayName(userRes.rows[0]) : null,
       createdAt: String(result.rows[0].created_at),
     }, { status: 201 });
