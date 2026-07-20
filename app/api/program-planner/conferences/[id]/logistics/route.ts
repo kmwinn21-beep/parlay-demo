@@ -30,7 +30,7 @@ export async function GET(
   if (isNaN(year)) return NextResponse.json({ error: 'year is required' }, { status: 400 });
 
   try {
-    const [planRes, deadlinesRes, speakingRes, filesRes, hostedEventsRes] = await Promise.all([
+    const [planRes, confRes, deadlinesRes, speakingRes, filesRes, hostedEventsRes] = await Promise.all([
       db.execute({
         sql: `SELECT booth_number, booth_size, booth_type, booth_contract_signed,
                      sponsorship_tier, sponsorship_contract_signed, sponsorship_deliverables_due,
@@ -40,6 +40,14 @@ export async function GET(
                      assigned_rep_ids
               FROM conference_plans WHERE conference_id = ? AND plan_year = ?`,
         args: [confId, year],
+      }),
+      // Sponsorship tier and booth number are also edited from the Plan table's
+      // own Sponsorship/Booth columns (conferences.sponsorship_level / .booth_number).
+      // Those are the source of truth for display here — this drawer's own edits
+      // write back to both places, but a table-side edit only touches this one.
+      db.execute({
+        sql: `SELECT sponsorship_level, booth_number FROM conferences WHERE id = ?`,
+        args: [confId],
       }),
       db.execute({
         sql: `SELECT id, label, due_date, completed, category FROM conference_plan_deadlines
@@ -75,12 +83,13 @@ export async function GET(
     ]);
 
     const planRow = planRes.rows[0];
+    const confRow = confRes.rows[0];
     const plan = {
-      boothNumber: planRow?.booth_number ? String(planRow.booth_number) : null,
+      boothNumber: confRow?.booth_number ? String(confRow.booth_number) : (planRow?.booth_number ? String(planRow.booth_number) : null),
       boothSize: planRow?.booth_size ? String(planRow.booth_size) : null,
       boothType: planRow?.booth_type ? String(planRow.booth_type) : null,
       boothContractSigned: planRow?.booth_contract_signed ? String(planRow.booth_contract_signed) : null,
-      sponsorshipTier: planRow?.sponsorship_tier ? String(planRow.sponsorship_tier) : null,
+      sponsorshipTier: confRow?.sponsorship_level ? String(confRow.sponsorship_level) : (planRow?.sponsorship_tier ? String(planRow.sponsorship_tier) : null),
       sponsorshipContractSigned: planRow?.sponsorship_contract_signed ? String(planRow.sponsorship_contract_signed) : null,
       sponsorshipDeliverablesDue: planRow?.sponsorship_deliverables_due ? String(planRow.sponsorship_deliverables_due) : null,
       logoSubmitted: Boolean(Number(planRow?.logo_submitted ?? 0)),
