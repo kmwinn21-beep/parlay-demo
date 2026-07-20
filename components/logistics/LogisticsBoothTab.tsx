@@ -25,11 +25,21 @@ interface Props {
   deadlines: LogisticsDeadline[];
   startDate: string | null;
   onDeadlinesChange: (deadlines: LogisticsDeadline[]) => void;
+  boothPresent: boolean;
+  boothWidth: number | null;
+  boothLength: number | null;
+  boothHall: string | null;
+  onBoothUpdated?: (booth: { boothPresent: boolean; boothWidth: number | null; boothLength: number | null; boothNumber: string | null; boothHall: string | null }) => void;
 }
 
-export function LogisticsBoothTab({ conferenceId, planYear, plan, deadlines, startDate, onDeadlinesChange }: Props) {
+export function LogisticsBoothTab({
+  conferenceId, planYear, plan, deadlines, startDate, onDeadlinesChange,
+  boothPresent, boothWidth, boothLength, boothHall, onBoothUpdated,
+}: Props) {
   const [boothType, setBoothType] = useState(plan.boothType ?? '');
   const [boothTypeSaved, setBoothTypeSaved] = useState(false);
+  const [boothNumber, setBoothNumber] = useState(plan.boothNumber ?? '');
+  const [boothNumberSaved, setBoothNumberSaved] = useState(false);
   const createdRef = useRef(false);
 
   useEffect(() => {
@@ -60,9 +70,36 @@ export function LogisticsBoothTab({ conferenceId, planYear, plan, deadlines, sta
     if (ok) { setBoothTypeSaved(true); setTimeout(() => setBoothTypeSaved(false), 1500); }
   };
 
+  // Booth number is also surfaced as its own column in the Plan table (Booth
+  // popover), so saving it here needs to push the same value over there too —
+  // optimistically via onBoothUpdated, then persisted via the conferences.booth
+  // route, merging in the other booth fields (width/length/hall) already set
+  // from the table so this save doesn't clobber them.
+  const saveBoothNumber = async () => {
+    const ok = await patchPlanField(conferenceId, planYear, 'boothNumber', boothNumber || null);
+    if (ok) { setBoothNumberSaved(true); setTimeout(() => setBoothNumberSaved(false), 1500); }
+    const booth = {
+      boothPresent: true,
+      boothWidth, boothLength, boothHall,
+      boothNumber: boothNumber || null,
+    };
+    onBoothUpdated?.(booth);
+    fetch(`/api/conferences/${conferenceId}/booth`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(booth),
+    }).catch(() => {});
+  };
+
   return (
     <div className="space-y-4">
-      <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="boothNumber" label="Booth number" initialValue={plan.boothNumber ?? ''} />
+      <div>
+        <label className="label flex items-center">Booth number<SavedCheckmark show={boothNumberSaved} /></label>
+        <input
+          className="input-field"
+          value={boothNumber}
+          onChange={e => setBoothNumber(e.target.value)}
+          onBlur={saveBoothNumber}
+        />
+      </div>
       <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="boothSize" label="Booth size" initialValue={plan.boothSize ?? ''} placeholder="10×20" />
 
       <div>

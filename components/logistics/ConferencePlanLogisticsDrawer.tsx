@@ -26,8 +26,14 @@ export interface ConferencePlanLogisticsDrawerProps {
   plannedBudget: number | null;
   assignedReps: AssignedRepOption[];
   calScore: number | null;
+  boothPresent: boolean;
+  boothWidth: number | null;
+  boothLength: number | null;
+  boothHall: string | null;
   isOpen: boolean;
   onClose: () => void;
+  onSponsorshipUpdated?: (sponsorshipLevel: string | null) => void;
+  onBoothUpdated?: (booth: { boothPresent: boolean; boothWidth: number | null; boothLength: number | null; boothNumber: string | null; boothHall: string | null }) => void;
 }
 
 const TABS = [
@@ -60,9 +66,11 @@ const DECISION_LABEL: Record<string, string> = {
 
 export function ConferencePlanLogisticsDrawer({
   conferenceId, conferenceName, seriesName, planYear, startDate, endDate,
-  decision, plannedBudget, assignedReps, calScore, isOpen, onClose,
+  decision, plannedBudget, assignedReps, calScore,
+  boothPresent, boothWidth, boothLength, boothHall,
+  isOpen, onClose, onSponsorshipUpdated, onBoothUpdated,
 }: ConferencePlanLogisticsDrawerProps) {
-  const { panelStyle, handleResizeStart } = useDrawerResize(460, 380, 720);
+  const { panelStyle, handleResizeStart } = useDrawerResize(800, 380, 800);
   const [data, setData] = useState<LogisticsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -228,6 +236,8 @@ export function ConferencePlanLogisticsDrawer({
                   conferenceId={conferenceId} planYear={planYear} plan={data.plan}
                   deadlines={data.deadlines} startDate={startDate}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
+                  boothPresent={boothPresent} boothWidth={boothWidth} boothLength={boothLength} boothHall={boothHall}
+                  onBoothUpdated={onBoothUpdated}
                 />
               )}
               {activeTab === 'sponsorship' && (
@@ -235,6 +245,7 @@ export function ConferencePlanLogisticsDrawer({
                   conferenceId={conferenceId} planYear={planYear} plan={data.plan}
                   deadlines={data.deadlines}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
+                  onSponsorshipUpdated={onSponsorshipUpdated}
                 />
               )}
               {activeTab === 'speaking' && (

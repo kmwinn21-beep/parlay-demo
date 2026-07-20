@@ -689,6 +689,10 @@ export function ProgramPlannerPlanView({
     plannedBudget: number | null;
     assignedReps: AssignedRep[];
     calScore: number | null;
+    boothPresent: boolean;
+    boothWidth: number | null;
+    boothLength: number | null;
+    boothHall: string | null;
   } | null>(null);
   const sponsorshipOptions = useConfigWithIds('sponsorship_level');
 
@@ -845,6 +849,10 @@ export function ProgramPlannerPlanView({
                                   plannedBudget: c.plan.plannedBudget ?? null,
                                   assignedReps: c.plan.assignedReps ?? [],
                                   calScore: null,
+                                  boothPresent: c.boothPresent,
+                                  boothWidth: c.boothWidth,
+                                  boothLength: c.boothLength,
+                                  boothHall: c.boothHall,
                                 })}
                                 className="text-brand-secondary hover:text-brand-primary font-medium text-sm truncate bg-transparent border-0 p-0 text-left cursor-pointer"
                               >
@@ -995,6 +1003,10 @@ export function ProgramPlannerPlanView({
                                     plannedBudget: c.plan.plannedBudget ?? null,
                                     assignedReps: c.plan.assignedReps ?? [],
                                     calScore: null,
+                                    boothPresent: c.boothPresent,
+                                    boothWidth: c.boothWidth,
+                                    boothLength: c.boothLength,
+                                    boothHall: c.boothHall,
                                   })}
                                   className="text-brand-secondary hover:text-brand-primary font-medium truncate max-w-[110px] bg-transparent border-0 p-0 text-left cursor-pointer"
                                 >
@@ -1130,8 +1142,17 @@ export function ProgramPlannerPlanView({
           plannedBudget={logisticsDrawer.plannedBudget}
           assignedReps={logisticsDrawer.assignedReps}
           calScore={logisticsDrawer.calScore}
+          boothPresent={logisticsDrawer.boothPresent}
+          boothWidth={logisticsDrawer.boothWidth}
+          boothLength={logisticsDrawer.boothLength}
+          boothHall={logisticsDrawer.boothHall}
           isOpen={true}
           onClose={() => setLogisticsDrawer(null)}
+          onSponsorshipUpdated={v => onSponsorshipUpdated(logisticsDrawer.conferenceId, v)}
+          onBoothUpdated={booth => {
+            onBoothUpdated(logisticsDrawer.conferenceId, booth);
+            setLogisticsDrawer(d => d && { ...d, boothPresent: booth.boothPresent, boothWidth: booth.boothWidth, boothLength: booth.boothLength, boothHall: booth.boothHall });
+          }}
         />
       )}
     </div>

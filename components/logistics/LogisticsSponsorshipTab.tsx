@@ -10,8 +10,9 @@ interface SponsorshipOption { id: number; value: string; color: string | null; i
 // Same fetch/create pattern as ConferenceForm.tsx's sponsorship chip picker —
 // /api/config/sponsorship-levels is the shared source of truth for tier names,
 // so a level added here shows up in the Add Conference form too, and vice versa.
-function SponsorshipTierPicker({ conferenceId, planYear, initialValue }: {
+function SponsorshipTierPicker({ conferenceId, planYear, initialValue, onSponsorshipUpdated }: {
   conferenceId: number; planYear: number; initialValue: string | null;
+  onSponsorshipUpdated?: (sponsorshipLevel: string | null) => void;
 }) {
   const [options, setOptions] = useState<SponsorshipOption[]>([]);
   const [selected, setSelected] = useState(initialValue ?? '');
@@ -30,8 +31,12 @@ function SponsorshipTierPicker({ conferenceId, planYear, initialValue }: {
   const select = async (value: string) => {
     const next = selected === value ? '' : value;
     setSelected(next);
+    onSponsorshipUpdated?.(next || null);
     const ok = await patchPlanField(conferenceId, planYear, 'sponsorshipTier', next || null);
     if (ok) { setSaved(true); setTimeout(() => setSaved(false), 1500); }
+    fetch(`/api/conferences/${conferenceId}/sponsorship`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sponsorshipLevel: next || null }),
+    }).catch(() => {});
   };
 
   const createLevel = async () => {
@@ -99,16 +104,17 @@ function SponsorshipTierPicker({ conferenceId, planYear, initialValue }: {
   );
 }
 
-export function LogisticsSponsorshipTab({ conferenceId, planYear, plan, deadlines, onDeadlinesChange }: {
+export function LogisticsSponsorshipTab({ conferenceId, planYear, plan, deadlines, onDeadlinesChange, onSponsorshipUpdated }: {
   conferenceId: number;
   planYear: number;
   plan: LogisticsPlan;
   deadlines: LogisticsDeadline[];
   onDeadlinesChange: (deadlines: LogisticsDeadline[]) => void;
+  onSponsorshipUpdated?: (sponsorshipLevel: string | null) => void;
 }) {
   return (
     <div className="space-y-4">
-      <SponsorshipTierPicker conferenceId={conferenceId} planYear={planYear} initialValue={plan.sponsorshipTier} />
+      <SponsorshipTierPicker conferenceId={conferenceId} planYear={planYear} initialValue={plan.sponsorshipTier} onSponsorshipUpdated={onSponsorshipUpdated} />
       <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="sponsorshipContractSigned" label="Contract signed date" type="date" initialValue={plan.sponsorshipContractSigned ?? ''} />
       <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="sponsorshipDeliverablesDue" label="Deliverables due date" type="date" initialValue={plan.sponsorshipDeliverablesDue ?? ''} />
       <AutoSaveCheckbox conferenceId={conferenceId} planYear={planYear} field="logoSubmitted" label="Logo submitted" initialChecked={plan.logoSubmitted} />
