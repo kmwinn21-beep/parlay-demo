@@ -1011,18 +1011,22 @@ export function ProgramPlannerPlanView({
 
                 {/* Desktop: table */}
                 <div className="hidden sm:block overflow-x-auto">
-                  <table className={`w-full text-xs border-collapse ${dimRows ? 'opacity-60' : ''}`}>
+                  <table className={`w-full text-xs border-collapse ${dimRows ? 'opacity-60' : ''}`} style={{ tableLayout: 'fixed' }}>
+                    {/* Identical, fixed-width colgroup in every section's table (table-layout:
+                        fixed forces it) so columns land in the same vertical line across all
+                        sections regardless of what content each section happens to contain —
+                        with table-layout:auto, minWidth-only columns drift per table instead. */}
                     <colgroup>
                       <col style={{ width: 24 }} />
-                      <col style={{ minWidth: 140 }} />
+                      <col style={{ width: 150 }} />
                       <col style={{ width: 70 }} />
-                      <col style={{ minWidth: 170 }} />
-                      <col style={{ minWidth: 120 }} />
+                      <col style={{ width: 160 }} />
+                      <col style={{ width: 110 }} />
                       <col style={{ width: 100 }} />
-                      <col style={{ minWidth: 140 }} />
-                      <col style={{ minWidth: 130 }} />
+                      <col style={{ width: 140 }} />
+                      <col style={{ width: 120 }} />
                       <col style={{ width: 80 }} />
-                      <col style={{ width: 130 }} />
+                      <col style={{ width: 110 }} />
                       <col style={{ width: 52 }} />
                     </colgroup>
                     <thead>
