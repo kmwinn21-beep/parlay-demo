@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { type LogisticsSpeakingSlot, type AssignedRepOption } from './types';
-import { EmptyState } from './shared';
+import { type LogisticsSpeakingSlot, type AssignedRepOption, type LogisticsDeadline } from './types';
+import { EmptyState, ChecklistSection } from './shared';
 
 const SESSION_TYPE_OPTIONS = [
   { value: 'keynote', label: 'Keynote' },
@@ -20,7 +20,9 @@ interface Props {
   planYear: number;
   speakingSlots: LogisticsSpeakingSlot[];
   assignedReps: AssignedRepOption[];
+  deadlines: LogisticsDeadline[];
   onChange: (slots: LogisticsSpeakingSlot[]) => void;
+  onDeadlinesChange: (deadlines: LogisticsDeadline[]) => void;
 }
 
 interface DraftSlot {
@@ -49,7 +51,7 @@ function toDraft(s: LogisticsSpeakingSlot): DraftSlot {
   };
 }
 
-export function LogisticsSpeakingTab({ conferenceId, planYear, speakingSlots, assignedReps, onChange }: Props) {
+export function LogisticsSpeakingTab({ conferenceId, planYear, speakingSlots, assignedReps, deadlines, onChange, onDeadlinesChange }: Props) {
   const [editingSlotId, setEditingSlotId] = useState<number | null>(null);
   const [draft, setDraft] = useState<DraftSlot | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
@@ -132,14 +134,18 @@ export function LogisticsSpeakingTab({ conferenceId, planYear, speakingSlots, as
 
   if (speakingSlots.length === 0) {
     return (
-      <div>
-        <EmptyState icon="ti-microphone" headline="No speaking slots yet" subtext="Add a session or panel appearance" />
-        <button type="button" onClick={addSlot} className="btn-primary text-xs px-3 py-1.5 mx-auto block">+ Add speaking slot</button>
+      <div className="space-y-4">
+        <div>
+          <EmptyState icon="ti-microphone" headline="No speaking slots yet" subtext="Add a session or panel appearance" />
+          <button type="button" onClick={addSlot} className="btn-primary text-xs px-3 py-1.5 mx-auto block">+ Add speaking slot</button>
+        </div>
+        <ChecklistSection conferenceId={conferenceId} planYear={planYear} category="speaking" deadlines={deadlines} onDeadlinesChange={onDeadlinesChange} />
       </div>
     );
   }
 
   return (
+    <div className="space-y-4">
     <div className="space-y-2">
       {speakingSlots.map(slot => {
         const isEditing = editingSlotId === slot.id;
@@ -261,6 +267,8 @@ export function LogisticsSpeakingTab({ conferenceId, planYear, speakingSlots, as
       <button type="button" onClick={addSlot} className="w-full text-center text-xs text-brand-secondary hover:text-brand-primary font-medium py-2">
         + Add speaking slot
       </button>
+    </div>
+    <ChecklistSection conferenceId={conferenceId} planYear={planYear} category="speaking" deadlines={deadlines} onDeadlinesChange={onDeadlinesChange} />
     </div>
   );
 }

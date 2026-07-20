@@ -44,6 +44,11 @@ const TABS = [
 ] as const;
 type TabId = typeof TABS[number]['id'];
 
+// Hosted events is hidden from the tab bar for now (per product request) but the
+// tab/component/routes stay fully functional so it can be unhidden later — just
+// filter it out of what's rendered as a clickable tab.
+const VISIBLE_TABS = TABS.filter(t => t.id !== 'hosted');
+
 function fmtCurrency(v: number | null): string {
   if (v == null) return '—';
   return '$' + Math.round(v).toLocaleString();
@@ -63,6 +68,11 @@ export function ConferencePlanLogisticsDrawer({
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>('deadlines');
   const lastConferenceIdRef = useRef<number | null>(null);
+  const tabBarRef = useRef<HTMLDivElement>(null);
+
+  const scrollTabs = (dir: -1 | 1) => {
+    tabBarRef.current?.scrollBy({ left: dir * 140, behavior: 'smooth' });
+  };
 
   const load = async () => {
     setLoading(true);
@@ -152,19 +162,37 @@ export function ConferencePlanLogisticsDrawer({
         </div>
 
         {/* Tab bar */}
-        <div className="logistics-tabbar flex-shrink-0 flex gap-1 px-2 py-1.5 border-b border-gray-200 whitespace-nowrap">
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setActiveTab(t.id)}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
-                activeTab === t.id ? 'bg-brand-primary text-white' : 'text-gray-500 hover:bg-gray-100'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+        <div className="flex-shrink-0 flex items-center border-b border-gray-200">
+          <button
+            type="button"
+            onClick={() => scrollTabs(-1)}
+            className="flex-shrink-0 px-1 py-1.5 text-gray-400 hover:text-gray-700"
+            aria-label="Scroll tabs left"
+          >
+            <i className="ti ti-chevron-left text-sm" aria-hidden="true" />
+          </button>
+          <div ref={tabBarRef} className="logistics-tabbar flex-1 min-w-0 flex gap-1 px-1 py-1.5 whitespace-nowrap">
+            {VISIBLE_TABS.map(t => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setActiveTab(t.id)}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
+                  activeTab === t.id ? 'bg-brand-primary text-white' : 'text-gray-500 hover:bg-gray-100'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => scrollTabs(1)}
+            className="flex-shrink-0 px-1 py-1.5 text-gray-400 hover:text-gray-700"
+            aria-label="Scroll tabs right"
+          >
+            <i className="ti ti-chevron-right text-sm" aria-hidden="true" />
+          </button>
         </div>
 
         {/* Body */}
@@ -189,7 +217,11 @@ export function ConferencePlanLogisticsDrawer({
                 />
               )}
               {activeTab === 'registration' && (
-                <LogisticsRegistrationTab conferenceId={conferenceId} planYear={planYear} plan={data.plan} />
+                <LogisticsRegistrationTab
+                  conferenceId={conferenceId} planYear={planYear} plan={data.plan}
+                  deadlines={data.deadlines}
+                  onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
+                />
               )}
               {activeTab === 'booth' && (
                 <LogisticsBoothTab
@@ -199,20 +231,28 @@ export function ConferencePlanLogisticsDrawer({
                 />
               )}
               {activeTab === 'sponsorship' && (
-                <LogisticsSponsorshipTab conferenceId={conferenceId} planYear={planYear} plan={data.plan} />
+                <LogisticsSponsorshipTab
+                  conferenceId={conferenceId} planYear={planYear} plan={data.plan}
+                  deadlines={data.deadlines}
+                  onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
+                />
               )}
               {activeTab === 'speaking' && (
                 <LogisticsSpeakingTab
                   conferenceId={conferenceId} planYear={planYear}
                   speakingSlots={data.speakingSlots} assignedReps={assignedReps}
+                  deadlines={data.deadlines}
                   onChange={speakingSlots => setData(d => d && { ...d, speakingSlots })}
+                  onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
                 />
               )}
               {activeTab === 'travel' && (
                 <LogisticsTravelTab
                   conferenceId={conferenceId} planYear={planYear}
                   repTravel={data.repTravel} plan={data.plan}
+                  deadlines={data.deadlines}
                   onChange={repTravel => setData(d => d && { ...d, repTravel })}
+                  onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
                 />
               )}
               {activeTab === 'hosted' && (

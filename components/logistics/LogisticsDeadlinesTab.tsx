@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { type LogisticsDeadline, type LogisticsSpeakingSlot, type LogisticsFile, type AssignedRepOption, fmtDate } from './types';
-import { FileRow, FileUploadZone } from './shared';
+import { type LogisticsDeadline, type LogisticsSpeakingSlot, type LogisticsFile, type AssignedRepOption } from './types';
+import { FileRow, FileUploadZone, DeadlineStatusPill } from './shared';
 
 interface Props {
   conferenceId: number;
@@ -22,13 +22,6 @@ function statusIcon(d: LogisticsDeadline): { icon: string; color: string } {
   if (d.daysUntil < 0) return { icon: 'ti-alert-circle', color: 'text-red-600' };
   if (d.daysUntil <= 14) return { icon: 'ti-clock', color: 'text-amber-600' };
   return { icon: 'ti-circle', color: 'text-gray-300' };
-}
-
-function statusText(d: LogisticsDeadline): { text: string; color: string } {
-  if (d.completed) return { text: 'Done', color: 'text-green-600' };
-  if (d.daysUntil < 0) return { text: 'Overdue', color: 'text-red-600' };
-  if (d.daysUntil <= 14) return { text: `${d.daysUntil} day${d.daysUntil !== 1 ? 's' : ''}`, color: 'text-amber-600' };
-  return { text: fmtDate(d.dueDate), color: 'text-gray-400' };
 }
 
 function sortDeadlines(deadlines: LogisticsDeadline[]): LogisticsDeadline[] {
@@ -63,6 +56,35 @@ export function LogisticsDeadlinesTab({
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ completed: !d.completed }),
     }).catch(() => null);
     if (!res || !res.ok) { onDeadlinesChange(prev); toast.error('Failed to update deadline.'); }
+  };
+
+  const saveLabel = async (d: LogisticsDeadline, label: string) => {
+    if (!label.trim() || label === d.label) return;
+    onDeadlinesChange(deadlines.map(x => x.id === d.id ? { ...x, label } : x));
+    const res = await fetch(`/api/program-planner/conferences/${conferenceId}/logistics/deadlines/${d.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label }),
+    }).catch(() => null);
+    if (!res || !res.ok) toast.error('Failed to update deadline.');
+  };
+
+  const saveDueDate = async (d: LogisticsDeadline, dueDate: string) => {
+    if (!dueDate || dueDate === d.dueDate) return;
+    const daysUntil = Math.ceil((new Date(dueDate).getTime() - Date.now()) / 86400000);
+    onDeadlinesChange(deadlines.map(x => x.id === d.id ? { ...x, dueDate, daysUntil } : x));
+    const res = await fetch(`/api/program-planner/conferences/${conferenceId}/logistics/deadlines/${d.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dueDate }),
+    }).catch(() => null);
+    if (!res || !res.ok) toast.error('Failed to update deadline.');
+  };
+
+  const deleteDeadline = async (id: number) => {
+    try {
+      const res = await fetch(`/api/program-planner/conferences/${conferenceId}/logistics/deadlines/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      onDeadlinesChange(deadlines.filter(x => x.id !== id));
+    } catch {
+      toast.error('Failed to delete deadline.');
+    }
   };
 
   const addDeadline = async () => {
@@ -120,14 +142,26 @@ export function LogisticsDeadlinesTab({
           <div className="space-y-1 mb-3">
             {sorted.map(d => {
               const si = statusIcon(d);
-              const st = statusText(d);
               return (
-                <div key={d.id} className="flex items-center gap-2 py-1.5">
+                <div key={d.id} className="flex items-center gap-1.5 py-1">
                   <button type="button" onClick={() => toggleComplete(d)} className="flex-shrink-0">
                     <i className={`ti ${si.icon} ${si.color} text-base`} aria-hidden="true" />
                   </button>
-                  <span className={`text-xs flex-1 min-w-0 truncate ${d.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{d.label}</span>
-                  <span className={`text-[11px] font-medium flex-shrink-0 ${st.color}`}>{st.text}</span>
+                  <input
+                    defaultValue={d.label}
+                    onBlur={e => saveLabel(d, e.target.value)}
+                    className={`flex-1 min-w-0 text-xs bg-transparent border-0 focus:ring-0 focus:outline-none px-0 ${d.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}
+                  />
+                  <input
+                    type="date"
+                    defaultValue={d.dueDate}
+                    onBlur={e => saveDueDate(d, e.target.value)}
+                    className="text-[10px] text-gray-400 bg-transparent border-0 focus:ring-0 focus:outline-none w-[92px] flex-shrink-0"
+                  />
+                  <div className="flex-shrink-0"><DeadlineStatusPill deadline={d} /></div>
+                  <button type="button" onClick={() => deleteDeadline(d.id)} className="text-gray-300 hover:text-red-500 flex-shrink-0">
+                    <i className="ti ti-x text-xs" aria-hidden="true" />
+                  </button>
                 </div>
               );
             })}

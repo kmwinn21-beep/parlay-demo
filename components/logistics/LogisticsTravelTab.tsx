@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { type LogisticsRepTravel, type TravelStatus, type LogisticsPlan } from './types';
-import { AvatarCircle, AutoSaveField } from './shared';
+import { type LogisticsRepTravel, type TravelStatus, type LogisticsPlan, type LogisticsDeadline } from './types';
+import { AvatarCircle, AutoSaveField, ChecklistSection } from './shared';
 
 const STATUS_OPTIONS: { value: TravelStatus; label: string }[] = [
   { value: 'not_started', label: 'Not started' },
@@ -16,7 +16,9 @@ interface Props {
   planYear: number;
   repTravel: LogisticsRepTravel[];
   plan: LogisticsPlan;
+  deadlines: LogisticsDeadline[];
   onChange: (repTravel: LogisticsRepTravel[]) => void;
+  onDeadlinesChange: (deadlines: LogisticsDeadline[]) => void;
 }
 
 function TravelRow({ conferenceId, planYear, rep, onUpdate }: {
@@ -93,7 +95,7 @@ function TravelRow({ conferenceId, planYear, rep, onUpdate }: {
   );
 }
 
-export function LogisticsTravelTab({ conferenceId, planYear, repTravel, plan, onChange }: Props) {
+export function LogisticsTravelTab({ conferenceId, planYear, repTravel, plan, deadlines, onChange, onDeadlinesChange }: Props) {
   return (
     <div className="space-y-4">
       {repTravel.length === 0 ? (
@@ -117,6 +119,8 @@ export function LogisticsTravelTab({ conferenceId, planYear, repTravel, plan, on
         <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="preferredHotel" label="Preferred hotel" initialValue={plan.preferredHotel ?? ''} />
         <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="hotelBlockCutoff" label="Block cutoff date" type="date" initialValue={plan.hotelBlockCutoff ?? ''} />
       </div>
+
+      <ChecklistSection conferenceId={conferenceId} planYear={planYear} category="travel" deadlines={deadlines} onDeadlinesChange={onDeadlinesChange} />
     </div>
   );
 }

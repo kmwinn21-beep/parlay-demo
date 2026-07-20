@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import toast from 'react-hot-toast';
-import { colorForName, fmtFileSize, type LogisticsFile } from './types';
+import { colorForName, fmtFileSize, fmtDate, type LogisticsFile, type LogisticsDeadline } from './types';
 
 export function EmptyState({ icon, headline, subtext }: { icon: string; headline: string; subtext: string }) {
   return (
@@ -126,6 +126,145 @@ export function AutoSaveCheckbox({
       <input type="checkbox" checked={checked} onChange={toggle} className="accent-brand-secondary w-4 h-4" />
       {label}
     </label>
+  );
+}
+
+export function DeadlineStatusPill({ deadline }: { deadline: LogisticsDeadline }) {
+  if (deadline.completed) {
+    return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700 whitespace-nowrap">Done</span>;
+  }
+  if (deadline.daysUntil < 0) {
+    return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700 whitespace-nowrap">Overdue</span>;
+  }
+  if (deadline.daysUntil <= 14) {
+    return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700 whitespace-nowrap">{deadline.daysUntil} day{deadline.daysUntil !== 1 ? 's' : ''}</span>;
+  }
+  return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500 whitespace-nowrap">{deadline.daysUntil} days</span>;
+}
+
+function statusIconFor(d: LogisticsDeadline): { icon: string; color: string } {
+  if (d.completed) return { icon: 'ti-circle-check', color: 'text-green-600' };
+  if (d.daysUntil < 0) return { icon: 'ti-alert-circle', color: 'text-red-600' };
+  if (d.daysUntil <= 14) return { icon: 'ti-clock', color: 'text-amber-600' };
+  return { icon: 'ti-circle', color: 'text-gray-300' };
+}
+
+// Generic, editable checklist backed by conference_plan_deadlines rows scoped to a
+// single `category` — shared by every tab's checklist (Booth/Shipping/Post-show's
+// auto-created defaults, plus Registration/Sponsorship/Speaking/Travel's
+// user-built-from-scratch lists). Each row's label and due date are directly
+// editable (blur to save), and rows can be added or removed at any time.
+export function ChecklistSection({
+  conferenceId, planYear, category, deadlines, onDeadlinesChange, title = 'Checklist',
+}: {
+  conferenceId: number;
+  planYear: number;
+  category: string;
+  deadlines: LogisticsDeadline[];
+  onDeadlinesChange: (deadlines: LogisticsDeadline[]) => void;
+  title?: string;
+}) {
+  const [newLabel, setNewLabel] = useState('');
+  const [newDueDate, setNewDueDate] = useState('');
+  const [adding, setAdding] = useState(false);
+
+  const items = deadlines.filter(d => d.category === category);
+
+  const patchItem = async (id: number, body: Partial<{ label: string; dueDate: string; completed: boolean }>) => {
+    const res = await fetch(`/api/program-planner/conferences/${conferenceId}/logistics/deadlines/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }).catch(() => null);
+    if (!res || !res.ok) toast.error('Failed to update checklist item.');
+  };
+
+  const toggleComplete = (item: LogisticsDeadline) => {
+    onDeadlinesChange(deadlines.map(d => d.id === item.id ? { ...d, completed: !d.completed } : d));
+    patchItem(item.id, { completed: !item.completed });
+  };
+
+  const saveLabel = (item: LogisticsDeadline, label: string) => {
+    if (!label.trim() || label === item.label) return;
+    onDeadlinesChange(deadlines.map(d => d.id === item.id ? { ...d, label } : d));
+    patchItem(item.id, { label });
+  };
+
+  const saveDueDate = (item: LogisticsDeadline, dueDate: string) => {
+    if (!dueDate || dueDate === item.dueDate) return;
+    const daysUntil = Math.ceil((new Date(dueDate).getTime() - Date.now()) / 86400000);
+    onDeadlinesChange(deadlines.map(d => d.id === item.id ? { ...d, dueDate, daysUntil } : d));
+    patchItem(item.id, { dueDate });
+  };
+
+  const deleteItem = async (id: number) => {
+    try {
+      const res = await fetch(`/api/program-planner/conferences/${conferenceId}/logistics/deadlines/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      onDeadlinesChange(deadlines.filter(d => d.id !== id));
+    } catch {
+      toast.error('Failed to delete checklist item.');
+    }
+  };
+
+  const addItem = async () => {
+    if (!newLabel.trim() || !newDueDate) return;
+    setAdding(true);
+    try {
+      const res = await fetch(`/api/program-planner/conferences/${conferenceId}/logistics/deadlines?year=${planYear}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: newLabel.trim(), dueDate: newDueDate, category }),
+      });
+      if (!res.ok) throw new Error();
+      const created = await res.json() as LogisticsDeadline;
+      onDeadlinesChange([...deadlines, created]);
+      setNewLabel(''); setNewDueDate('');
+    } catch {
+      toast.error('Failed to add checklist item.');
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  return (
+    <div className="pt-2 border-t border-gray-100">
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{title}</p>
+      {items.length === 0 ? (
+        <p className="text-xs text-gray-400 italic mb-2">No items yet.</p>
+      ) : (
+        <div className="space-y-1.5 mb-2">
+          {items.map(item => {
+            const si = statusIconFor(item);
+            return (
+              <div key={item.id} className="flex items-center gap-1.5">
+                <button type="button" onClick={() => toggleComplete(item)} className="flex-shrink-0">
+                  <i className={`ti ${si.icon} ${si.color} text-base`} aria-hidden="true" />
+                </button>
+                <input
+                  defaultValue={item.label}
+                  onBlur={e => saveLabel(item, e.target.value)}
+                  className={`flex-1 min-w-0 text-xs bg-transparent border-0 focus:ring-0 focus:outline-none px-0 ${item.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}
+                />
+                <input
+                  type="date"
+                  defaultValue={item.dueDate}
+                  onBlur={e => saveDueDate(item, e.target.value)}
+                  className="text-[10px] text-gray-400 bg-transparent border-0 focus:ring-0 focus:outline-none w-[92px] flex-shrink-0"
+                />
+                <button type="button" onClick={() => deleteItem(item.id)} className="text-gray-300 hover:text-red-500 flex-shrink-0">
+                  <i className="ti ti-x text-xs" aria-hidden="true" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="flex items-center gap-1.5">
+        <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Add item..." className="input-field text-xs flex-1" />
+        <input type="date" value={newDueDate} onChange={e => setNewDueDate(e.target.value)} className="input-field text-xs w-32" />
+        <button type="button" onClick={addItem} disabled={adding || !newLabel.trim() || !newDueDate} className="btn-secondary text-xs px-2.5 py-1.5 disabled:opacity-50 flex-shrink-0">
+          + Add
+        </button>
+      </div>
+    </div>
   );
 }
 
