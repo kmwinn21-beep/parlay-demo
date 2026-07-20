@@ -7,6 +7,7 @@ import { ConferencePlanBudgetModal } from './ConferencePlanBudgetModal';
 import { AddConferenceModal } from './AddConferenceModal';
 import { LocationAutocompleteInput, type LocationDetails } from './LocationAutocompleteInput';
 import { useConfigWithIds } from '@/lib/useUserOptions';
+import { ConferencePlanLogisticsDrawer } from './logistics';
 
 interface BudgetLineItem { label: string; budgeted: number | null; actual: number | null }
 interface PlannedLineItem { label: string; budgeted: number }
@@ -677,6 +678,18 @@ export function ProgramPlannerPlanView({
   const [showAddDrawer, setShowAddDrawer] = useState(false);
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [dragOverGroup, setDragOverGroup] = useState<GroupKey | null>(null);
+  const [logisticsDrawer, setLogisticsDrawer] = useState<{
+    conferenceId: number;
+    conferenceName: string;
+    seriesName: string | null;
+    planYear: number;
+    startDate: string | null;
+    endDate: string | null;
+    decision: string | null;
+    plannedBudget: number | null;
+    assignedReps: AssignedRep[];
+    calScore: number | null;
+  } | null>(null);
   const sponsorshipOptions = useConfigWithIds('sponsorship_level');
 
   // Effective start date for grouping/conflict math — the plan year's own date once
@@ -818,9 +831,27 @@ export function ProgramPlannerPlanView({
                         <div className="flex items-start gap-2">
                           <span className="cursor-grab active:cursor-grabbing mt-1 flex-shrink-0"><GripIcon /></span>
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <Link href={`/conferences/${c.conferenceId}`} className="text-brand-secondary hover:text-brand-primary font-medium text-sm truncate">
+                            <div className="flex items-center gap-1 min-w-0">
+                              <button
+                                type="button"
+                                onClick={() => setLogisticsDrawer({
+                                  conferenceId: c.conferenceId,
+                                  conferenceName: c.name,
+                                  seriesName: null,
+                                  planYear: year,
+                                  startDate: c.startDate ?? null,
+                                  endDate: c.endDate ?? null,
+                                  decision: c.decision ?? null,
+                                  plannedBudget: c.plan.plannedBudget ?? null,
+                                  assignedReps: c.plan.assignedReps ?? [],
+                                  calScore: null,
+                                })}
+                                className="text-brand-secondary hover:text-brand-primary font-medium text-sm truncate bg-transparent border-0 p-0 text-left cursor-pointer"
+                              >
                                 {c.name}
+                              </button>
+                              <Link href={`/conferences/${c.conferenceId}`} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Open conference detail">
+                                <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                               </Link>
                               {c.decision === 'new' && <NewBadge />}
                             </div>
@@ -950,9 +981,27 @@ export function ProgramPlannerPlanView({
                           >
                             <td className="px-2 py-2 cursor-grab active:cursor-grabbing"><GripIcon /></td>
                             <td className="px-3 py-2">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <Link href={`/conferences/${c.conferenceId}`} className="text-brand-secondary hover:text-brand-primary font-medium truncate max-w-[130px]">
+                              <div className="flex items-center gap-1 min-w-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setLogisticsDrawer({
+                                    conferenceId: c.conferenceId,
+                                    conferenceName: c.name,
+                                    seriesName: null,
+                                    planYear: year,
+                                    startDate: c.startDate ?? null,
+                                    endDate: c.endDate ?? null,
+                                    decision: c.decision ?? null,
+                                    plannedBudget: c.plan.plannedBudget ?? null,
+                                    assignedReps: c.plan.assignedReps ?? [],
+                                    calScore: null,
+                                  })}
+                                  className="text-brand-secondary hover:text-brand-primary font-medium truncate max-w-[110px] bg-transparent border-0 p-0 text-left cursor-pointer"
+                                >
                                   {c.name}
+                                </button>
+                                <Link href={`/conferences/${c.conferenceId}`} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Open conference detail">
+                                  <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                                 </Link>
                                 {c.decision === 'new' && <NewBadge />}
                               </div>
@@ -1066,6 +1115,23 @@ export function ProgramPlannerPlanView({
           planYear={year}
           onClose={() => setShowAddDrawer(false)}
           onCreated={onConferenceCreated}
+        />
+      )}
+
+      {logisticsDrawer && (
+        <ConferencePlanLogisticsDrawer
+          conferenceId={logisticsDrawer.conferenceId}
+          conferenceName={logisticsDrawer.conferenceName}
+          seriesName={logisticsDrawer.seriesName}
+          planYear={logisticsDrawer.planYear}
+          startDate={logisticsDrawer.startDate}
+          endDate={logisticsDrawer.endDate}
+          decision={logisticsDrawer.decision}
+          plannedBudget={logisticsDrawer.plannedBudget}
+          assignedReps={logisticsDrawer.assignedReps}
+          calScore={logisticsDrawer.calScore}
+          isOpen={true}
+          onClose={() => setLogisticsDrawer(null)}
         />
       )}
     </div>
