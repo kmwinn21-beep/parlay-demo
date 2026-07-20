@@ -173,17 +173,23 @@ export function AutoSaveCheckbox({
   );
 }
 
+// Fixed width (rather than shrink-to-content) so this pill's varying text
+// ("Overdue" vs "12 days" vs "Complete") doesn't change how much space is left
+// for the flex-1 label to its left — which would otherwise shift the date
+// column out of alignment row to row.
+const STATUS_PILL_CLASS = 'w-16 text-center py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap flex-shrink-0';
+
 export function DeadlineStatusPill({ deadline }: { deadline: LogisticsDeadline }) {
   if (deadline.completed) {
-    return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700 whitespace-nowrap">Complete</span>;
+    return <span className={`${STATUS_PILL_CLASS} bg-green-100 text-green-700`}>Complete</span>;
   }
   if (deadline.daysUntil < 0) {
-    return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700 whitespace-nowrap">Overdue</span>;
+    return <span className={`${STATUS_PILL_CLASS} bg-red-100 text-red-700`}>Overdue</span>;
   }
   if (deadline.daysUntil <= 14) {
-    return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700 whitespace-nowrap">{deadline.daysUntil} day{deadline.daysUntil !== 1 ? 's' : ''}</span>;
+    return <span className={`${STATUS_PILL_CLASS} bg-amber-100 text-amber-700`}>{deadline.daysUntil} day{deadline.daysUntil !== 1 ? 's' : ''}</span>;
   }
-  return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500 whitespace-nowrap">{deadline.daysUntil} days</span>;
+  return <span className={`${STATUS_PILL_CLASS} bg-gray-100 text-gray-500`}>{deadline.daysUntil} days</span>;
 }
 
 // Generic, editable checklist backed by conference_plan_deadlines rows scoped to a
@@ -296,7 +302,7 @@ export function ChecklistSection({
                 type="date"
                 defaultValue={item.dueDate}
                 onBlur={e => saveDueDate(item, e.target.value)}
-                className="text-[10px] text-gray-400 bg-transparent border-0 focus:ring-0 focus:outline-none w-[92px] flex-shrink-0"
+                className="text-xs text-gray-400 bg-transparent border-0 focus:ring-0 focus:outline-none w-[104px] flex-shrink-0"
               />
               <div className="flex-shrink-0"><DeadlineStatusPill deadline={item} /></div>
             </div>

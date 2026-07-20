@@ -195,7 +195,7 @@ export function LogisticsDeadlinesTab({
                   type="date"
                   defaultValue={d.dueDate}
                   onBlur={e => saveDueDate(d, e.target.value)}
-                  className="text-[10px] text-gray-400 bg-transparent border-0 focus:ring-0 focus:outline-none w-[92px] flex-shrink-0"
+                  className="text-xs text-gray-400 bg-transparent border-0 focus:ring-0 focus:outline-none w-[104px] flex-shrink-0"
                 />
                 <CategoryPill category={d.category} />
                 <div className="flex-shrink-0"><DeadlineStatusPill deadline={d} /></div>
