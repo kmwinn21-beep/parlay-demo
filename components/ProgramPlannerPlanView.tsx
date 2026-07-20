@@ -260,13 +260,17 @@ function StrategyEditPill({
 // Generic click-to-edit dropdown pill, shared by Type and Sponsorship — both are a
 // flat list of string options mapped onto a single scoped conferences.* column.
 function OptionEditPill({
-  value, options, activeClass, placeholder, onSelect,
+  value, options, activeClass, placeholder, onSelect, colorFor,
 }: {
   value: string | null;
   options: string[];
   activeClass: string;
   placeholder: string;
   onSelect: (value: string | null) => Promise<void>;
+  // Optional per-value hex color — when the current value has one, it's
+  // rendered as a full-color border with a lightly tinted fill in that same
+  // color, overriding `activeClass`'s fixed color.
+  colorFor?: (value: string) => string | null;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<DropdownPos | null>(null);
@@ -295,6 +299,8 @@ function OptionEditPill({
     try { await onSelect(v); } finally { setSaving(false); }
   };
 
+  const color = value ? colorFor?.(value) ?? null : null;
+
   return (
     <>
       <button
@@ -303,8 +309,9 @@ function OptionEditPill({
         onClick={openDropdown}
         disabled={saving}
         className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity ${saving ? 'opacity-50' : ''} ${
-          value ? activeClass : 'bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500'
+          color ? 'border' : value ? activeClass : 'bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500'
         }`}
+        style={color ? { borderColor: color, backgroundColor: `${color}26`, color } : undefined}
       >
         {value ?? placeholder}
       </button>
@@ -695,6 +702,20 @@ export function ProgramPlannerPlanView({
     boothHall: string | null;
   } | null>(null);
   const sponsorshipOptions = useConfigWithIds('sponsorship_level');
+  // Per-tier colors — same source (/api/config/sponsorship-levels) the drawer's
+  // Sponsorship tab tier picker uses, so the Plan table pill and the drawer chip
+  // for a given tier always agree on its color.
+  const [sponsorshipColors, setSponsorshipColors] = useState<Record<string, string>>({});
+  useEffect(() => {
+    fetch('/api/config/sponsorship-levels')
+      .then(r => r.json())
+      .then((rows: Array<{ value: string; color: string | null }>) => {
+        const map: Record<string, string> = {};
+        for (const r of rows) if (r.color) map[r.value] = r.color;
+        setSponsorshipColors(map);
+      })
+      .catch(() => {});
+  }, []);
 
   // Effective start date for grouping/conflict math — the plan year's own date once
   // set, falling back to the conference's actual date until then.
@@ -906,6 +927,7 @@ export function ProgramPlannerPlanView({
                             options={sponsorshipOptions.map(o => o.value)}
                             activeClass="bg-green-50 text-green-800 border border-green-300"
                             placeholder="Set sponsorship"
+                            colorFor={v => sponsorshipColors[v] ?? null}
                             onSelect={async v => { onSponsorshipUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/sponsorship`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sponsorshipLevel: v }) }); }}
                           />
                           <BoothEditPopover
@@ -1053,6 +1075,7 @@ export function ProgramPlannerPlanView({
                                 options={sponsorshipOptions.map(o => o.value)}
                                 activeClass="bg-green-50 text-green-800 border border-green-300"
                                 placeholder="Set sponsorship"
+                                colorFor={v => sponsorshipColors[v] ?? null}
                                 onSelect={async v => { onSponsorshipUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/sponsorship`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sponsorshipLevel: v }) }); }}
                               />
                             </td>
