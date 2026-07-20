@@ -1632,4 +1632,114 @@ export const migrations: string[] = [
   // a fallback in the Plan view until the user sets next year's own dates).
   `ALTER TABLE conference_plans ADD COLUMN planned_start_date TEXT`,
   `ALTER TABLE conference_plans ADD COLUMN planned_end_date TEXT`,
+  // 535 — Migration A: per-conference-plan deadlines (registration/booth/sponsorship/
+  // speaking/travel/shipping/marketing/budget/post_show/other), used by the Plan
+  // Logistics drawer's Deadlines tab and also as the storage for the Booth and
+  // Post-show tabs' checklists (rows with category='booth'/'post_show').
+  `CREATE TABLE IF NOT EXISTS conference_plan_deadlines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+    plan_year INTEGER NOT NULL,
+    label TEXT NOT NULL,
+    due_date TEXT NOT NULL,
+    completed INTEGER NOT NULL DEFAULT 0,
+    category TEXT CHECK(category IN (
+      'registration','booth','sponsorship','speaking',
+      'travel','shipping','marketing','budget','post_show','other'
+    )),
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`,
+  // 536 — Migration B: speaking slot tracking for the Plan Logistics drawer's
+  // Speaking tab.
+  `CREATE TABLE IF NOT EXISTS conference_plan_speaking_slots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+    plan_year INTEGER NOT NULL,
+    speaker_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    speaker_name TEXT,
+    session_title TEXT,
+    session_type TEXT CHECK(session_type IN (
+      'keynote','panel','breakout','workshop','fireside_chat','moderator','other'
+    )),
+    session_date TEXT,
+    session_time TEXT,
+    room_stage TEXT,
+    slides_submitted INTEGER NOT NULL DEFAULT 0,
+    bio_submitted INTEGER NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`,
+  // 537 — Migration C: uploaded logistics documents (contracts, floor plans, etc.)
+  // for the Plan Logistics drawer's Files tab — stored in Cloudflare R2, this table
+  // just tracks the key/metadata.
+  `CREATE TABLE IF NOT EXISTS conference_plan_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+    plan_year INTEGER NOT NULL,
+    file_name TEXT NOT NULL,
+    file_size INTEGER,
+    file_type TEXT,
+    storage_key TEXT NOT NULL,
+    uploaded_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`,
+  // 538–554 — Migration D: booth/sponsorship/shipping/registration logistics fields
+  // on conference_plans for the Plan Logistics drawer. Checklist-style items
+  // (booth setup steps, post-show follow-ups) intentionally live in
+  // conference_plan_deadlines instead of boolean columns here, to keep this list
+  // from growing unbounded as more checklist items get added later.
+  `ALTER TABLE conference_plans ADD COLUMN booth_number TEXT`,
+  `ALTER TABLE conference_plans ADD COLUMN booth_size TEXT`,
+  `ALTER TABLE conference_plans ADD COLUMN booth_type TEXT CHECK(booth_type IN ('inline','corner','island','peninsula'))`,
+  `ALTER TABLE conference_plans ADD COLUMN booth_contract_signed TEXT`,
+  `ALTER TABLE conference_plans ADD COLUMN sponsorship_tier TEXT`,
+  `ALTER TABLE conference_plans ADD COLUMN sponsorship_contract_signed TEXT`,
+  `ALTER TABLE conference_plans ADD COLUMN sponsorship_deliverables_due TEXT`,
+  `ALTER TABLE conference_plans ADD COLUMN logo_submitted INTEGER DEFAULT 0`,
+  `ALTER TABLE conference_plans ADD COLUMN preferred_hotel TEXT`,
+  `ALTER TABLE conference_plans ADD COLUMN hotel_block_cutoff TEXT`,
+  `ALTER TABLE conference_plans ADD COLUMN advance_warehouse_address TEXT`,
+  `ALTER TABLE conference_plans ADD COLUMN ship_date TEXT`,
+  `ALTER TABLE conference_plans ADD COLUMN tracking_number TEXT`,
+  `ALTER TABLE conference_plans ADD COLUMN logistics_notes TEXT`,
+  `ALTER TABLE conference_plans ADD COLUMN registration_deadline TEXT`,
+  `ALTER TABLE conference_plans ADD COLUMN early_bird_deadline TEXT`,
+  `ALTER TABLE conference_plans ADD COLUMN registration_confirmation TEXT`,
+  // 555 — Migration E: per-rep flight/hotel booking status for the Plan Logistics
+  // drawer's Travel tab. One row per (conference, plan_year, user) — the assigned
+  // rep list itself lives on conference_plans.assigned_rep_ids; this table only
+  // tracks travel status for reps already in that list.
+  `CREATE TABLE IF NOT EXISTS conference_plan_rep_travel (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+    plan_year INTEGER NOT NULL,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    flight_status TEXT DEFAULT 'not_started'
+      CHECK(flight_status IN ('not_started','booked','pending')),
+    hotel_status TEXT DEFAULT 'not_started'
+      CHECK(hotel_status IN ('not_started','booked','pending')),
+    hotel_confirmation TEXT,
+    flight_confirmation TEXT,
+    notes TEXT,
+    UNIQUE(conference_id, plan_year, user_id)
+  )`,
+  // 556 — Migration F: hosted events (dinners, receptions, etc.) for the Plan
+  // Logistics drawer's Hosted events tab. A separate table, not columns on
+  // conference_plans, since a single conference plan can host more than one event.
+  `CREATE TABLE IF NOT EXISTS conference_plan_hosted_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+    plan_year INTEGER NOT NULL,
+    event_type TEXT CHECK(event_type IN ('dinner','reception','happy_hour','breakfast','other')),
+    venue_name TEXT,
+    event_date TEXT,
+    event_time TEXT,
+    guest_cap INTEGER,
+    catering_confirmed INTEGER DEFAULT 0,
+    invitations_sent_date TEXT,
+    rsvp_deadline TEXT,
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`,
 ];
