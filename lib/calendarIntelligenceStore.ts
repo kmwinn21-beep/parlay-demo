@@ -100,12 +100,33 @@ export function subscribeCalendarStore(listener: () => void): () => void {
 
 let _calendarScoringPromise: Promise<void> | null = null;
 
+// Each per-conference score is a heavy synchronous computation (targeting engine
+// scoring over every company/attendee) that runs on the same single-threaded
+// Node event loop as every other API request. Firing them back-to-back as fast
+// as possible starves unrelated requests on the same server instance — e.g. the
+// Program Planner's Plan tab loading its own conference list at the same time.
+// Spacing iterations out (and backing off further while this scoring isn't the
+// thing the user is actually looking at) keeps that background work from
+// stalling everything else on the page.
+let _scoringDelayMs = 120;
+
+export function setCalendarScoringPriority(foreground: boolean) {
+  _scoringDelayMs = foreground ? 120 : 600;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 export function startCalendarScoring(force = false) {
   const status = _calendarStore.status;
   if (!force && (status === 'loading_basic' || status === 'scoring' || status === 'ready')) return;
   if (_calendarScoringPromise && !force) return;
 
   _calendarScoringPromise = (async () => {
+    // Let whatever triggered this mount (the page's own critical data fetches)
+    // get its requests in flight first, rather than racing them from tick zero.
+    await delay(300);
     setCalendarStore({ status: 'loading_basic', rows: [], scoringProgress: null, fullyScored: new Set() });
     try {
       const res = await fetch('/api/program-intelligence/calendar-intelligence', { cache: 'no-store' });
@@ -118,6 +139,7 @@ export function startCalendarScoring(force = false) {
       setCalendarStore({ status: 'scoring', scoringProgress: { completed: 0, total: basicRows.length } });
       let completed = 0;
       for (const row of basicRows) {
+        if (completed > 0) await delay(_scoringDelayMs);
         let updatedRows = _calendarStore.rows;
         try {
           const r = await fetch(`/api/program-intelligence/calendar-intelligence/${row.conferenceId}`, { cache: 'no-store' });

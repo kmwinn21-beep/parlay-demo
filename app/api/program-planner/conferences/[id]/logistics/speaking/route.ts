@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
-import { resolveUserDisplayName } from '@/lib/initials';
 
 export async function POST(
   request: NextRequest,
@@ -39,10 +38,12 @@ export async function POST(
     });
     const newId = Number(result.rows[0].id);
 
+    // Speakers are picked from the assigned-reps roster, which is sourced from
+    // config_options (category='user'), not `users` logins.
     let speakerDisplayName: string | null = null;
     if (speakerUserId != null) {
-      const userRes = await db.execute({ sql: `SELECT display_name, first_name, last_name FROM users WHERE id = ?`, args: [speakerUserId] });
-      if (userRes.rows[0]) speakerDisplayName = resolveUserDisplayName(userRes.rows[0]);
+      const optRes = await db.execute({ sql: `SELECT value FROM config_options WHERE category = 'user' AND id = ?`, args: [speakerUserId] });
+      if (optRes.rows[0]?.value) speakerDisplayName = String(optRes.rows[0].value);
     }
 
     return NextResponse.json({

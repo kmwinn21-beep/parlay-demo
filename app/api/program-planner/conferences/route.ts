@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
-import { getInitials, resolveUserDisplayName } from '@/lib/initials';
+import { getInitials } from '@/lib/initials';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -151,17 +151,20 @@ export async function GET(request: NextRequest) {
     avgActual: Math.round(sum / count),
   }));
 
-  // Resolve assigned rep user details for every rep referenced across all plans
+  // Resolve assigned rep details for every rep referenced across all plans. Reps
+  // are config_options rows (category='user'), not `users` logins — this is the
+  // convention every other assigned-rep feature in the app follows, and it's
+  // what RepAssignmentPopover's picker list actually sources its IDs from.
   const allRepIds = Array.from(new Set(Array.from(planMap.values()).flatMap(p => p.assignedRepIds)));
   const repMap = new Map<number, { userId: number; displayName: string; initials: string }>();
   if (allRepIds.length > 0) {
     const repPh = allRepIds.map(() => '?').join(',');
     const repsRes = await db.execute({
-      sql: `SELECT id, display_name, first_name, last_name, email FROM users WHERE id IN (${repPh})`,
+      sql: `SELECT id, value FROM config_options WHERE category = 'user' AND id IN (${repPh})`,
       args: allRepIds,
     });
     for (const r of repsRes.rows) {
-      const displayName = resolveUserDisplayName(r);
+      const displayName = String(r.value);
       repMap.set(Number(r.id), { userId: Number(r.id), displayName, initials: getInitials(displayName) });
     }
   }

@@ -10,7 +10,7 @@ import { ConferenceBudgetDrawer } from '@/components/ConferenceBudgetDrawer';
 import { CalendarIntelligenceDrawer } from '@/components/CalendarIntelligenceDrawer';
 import { ConferenceInputPanel } from '@/components/ConferenceInputPanel';
 import { ProgramPlannerPlanView } from '@/components/ProgramPlannerPlanView';
-import { getCalendarStore, subscribeCalendarStore, startCalendarScoring } from '@/lib/calendarIntelligenceStore';
+import { getCalendarStore, subscribeCalendarStore, startCalendarScoring, setCalendarScoringPriority } from '@/lib/calendarIntelligenceStore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -428,6 +428,14 @@ export default function ProgramPlannerPage() {
     startCalendarScoring();
     return unsub;
   }, []);
+
+  // Background scoring only needs to run at full speed while the Program tab
+  // (the one actually showing these scores) is what's on screen — slow it down
+  // whenever the user has navigated to Cost or the Plan tab so it doesn't
+  // compete with those tabs' own data loading and interactions.
+  useEffect(() => {
+    setCalendarScoringPriority(view === 'program');
+  }, [view]);
 
   const handleYearChange = (year: number) => {
     setSelectedYear(year);

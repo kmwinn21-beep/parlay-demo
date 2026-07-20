@@ -3,6 +3,12 @@ import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { getInitials, resolveUserDisplayName } from '@/lib/initials';
 
+// Speakers and assigned reps are picked from the same config_options
+// (category='user') roster RepAssignmentPopover/useUserOptions uses — not
+// `users` logins — so speaker_user_id / assigned_rep_ids values must be
+// resolved against config_options, matching every other assigned-rep
+// feature in the app.
+
 function daysUntil(dueDate: string): number {
   return Math.ceil((new Date(dueDate).getTime() - Date.now()) / 86400000);
 }
@@ -43,9 +49,9 @@ export async function GET(
       db.execute({
         sql: `SELECT s.id, s.speaker_user_id, s.speaker_name, s.session_title, s.session_type,
                      s.session_date, s.session_time, s.room_stage, s.slides_submitted, s.bio_submitted, s.notes,
-                     u.display_name, u.first_name, u.last_name
+                     u.value as speaker_display_name
               FROM conference_plan_speaking_slots s
-              LEFT JOIN users u ON u.id = s.speaker_user_id
+              LEFT JOIN config_options u ON u.id = s.speaker_user_id AND u.category = 'user'
               WHERE s.conference_id = ? AND s.plan_year = ?
               ORDER BY s.session_date ASC, s.id ASC`,
         args: [confId, year],
@@ -102,7 +108,7 @@ export async function GET(
       id: Number(r.id),
       speakerUserId: r.speaker_user_id != null ? Number(r.speaker_user_id) : null,
       speakerName: r.speaker_name ? String(r.speaker_name) : null,
-      speakerDisplayName: r.speaker_user_id != null ? resolveUserDisplayName(r) : null,
+      speakerDisplayName: r.speaker_display_name ? String(r.speaker_display_name) : null,
       sessionTitle: r.session_title ? String(r.session_title) : null,
       sessionType: r.session_type ? String(r.session_type) : null,
       sessionDate: r.session_date ? String(r.session_date) : null,
@@ -154,7 +160,7 @@ export async function GET(
       const ph = assignedRepIds.map(() => '?').join(',');
       const [usersRes, travelRes] = await Promise.all([
         db.execute({
-          sql: `SELECT id, display_name, first_name, last_name, email FROM users WHERE id IN (${ph})`,
+          sql: `SELECT id, value FROM config_options WHERE category = 'user' AND id IN (${ph})`,
           args: assignedRepIds,
         }),
         db.execute({
@@ -177,7 +183,7 @@ export async function GET(
 
       repTravel = usersRes.rows.map(r => {
         const userId = Number(r.id);
-        const displayName = resolveUserDisplayName(r);
+        const displayName = String(r.value);
         const travel = travelMap.get(userId);
         return {
           userId,
