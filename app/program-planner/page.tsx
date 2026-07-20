@@ -9,7 +9,8 @@ import { LineItemCostDrawer } from '@/components/LineItemCostDrawer';
 import { ConferenceBudgetDrawer } from '@/components/ConferenceBudgetDrawer';
 import { CalendarIntelligenceDrawer } from '@/components/CalendarIntelligenceDrawer';
 import { ConferenceInputPanel } from '@/components/ConferenceInputPanel';
-import { getCalendarStore, subscribeCalendarStore, startCalendarScoring } from '@/lib/calendarIntelligenceStore';
+import { ProgramPlannerPlanView } from '@/components/ProgramPlannerPlanView';
+import { getCalendarStore, subscribeCalendarStore, startCalendarScoring, setCalendarScoringPriority } from '@/lib/calendarIntelligenceStore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -17,6 +18,25 @@ interface BudgetLineItem {
   label: string;
   budgeted: number | null;
   actual: number | null;
+}
+
+interface AssignedRep {
+  userId: number;
+  displayName: string;
+  initials: string;
+}
+
+interface PlannedLineItem {
+  label: string;
+  budgeted: number;
+}
+
+interface PlanMeta {
+  plannedBudget: number | null;
+  plannedBudgetLineItems: PlannedLineItem[];
+  assignedReps: AssignedRep[];
+  plannedStartDate: string | null;
+  plannedEndDate: string | null;
 }
 
 interface ConferenceRow {
@@ -34,8 +54,19 @@ interface ConferenceRow {
   closedWon: number | null;
   headcount: number | null;
   decision: string | null;
-  plannedBudget: number | null;
   stageOverride: string | null;
+  strategyTypeId: number | null;
+  strategyTypeName: string | null;
+  plan: PlanMeta;
+  industryFocus: string | null;
+  conferenceType: string | null;
+  sponsorshipLevel: string | null;
+  location: string | null;
+  boothPresent: boolean;
+  boothWidth: number | null;
+  boothLength: number | null;
+  boothNumber: string | null;
+  boothHall: string | null;
 }
 
 interface SeriesGroup {
@@ -62,15 +93,21 @@ interface SummaryData {
   conferencesScored: number;
 }
 
+interface CategoryAverage {
+  label: string;
+  avgActual: number;
+}
+
 interface ConferencesData {
   conferences: ConferenceRow[];
   series: SeriesGroup[];
   standalone: ConferenceRow[];
+  categoryAverages: CategoryAverage[];
 }
 
 type GroupMode = 'series' | 'date' | 'ces';
 type RankMetric = 'ces' | 'pipeline' | 'closedwon' | 'spend' | 'icp';
-type DecisionValue = 'attend' | 'reduce' | 'cut' | 'evaluating' | null;
+type DecisionValue = 'attend' | 'reduce' | 'cut' | 'evaluating' | 'new' | null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -149,7 +186,7 @@ function AnimatedToggle({
         <button
           key={opt.id}
           onClick={() => onChange(opt.id)}
-          className={`relative z-10 flex-1 text-center px-3 py-1.5 text-xs font-medium transition-colors duration-150 whitespace-nowrap ${
+          className={`relative z-10 flex-1 min-w-0 text-center px-3 py-1.5 text-xs font-medium transition-colors duration-150 whitespace-nowrap ${
             opt.id === value ? 'text-white' : 'text-gray-600 hover:text-gray-800'
           }`}
         >
@@ -180,6 +217,15 @@ const DECISION_CONFIG: Record<string, { label: string; bg: string; text: string 
   cut:        { label: 'Cut',        bg: 'bg-red-100',    text: 'text-red-700' },
   evaluating: { label: 'Evaluating', bg: 'bg-gray-100',   text: 'text-gray-600' },
   new:        { label: 'New',        bg: 'bg-purple-100', text: 'text-purple-700' },
+};
+
+// Solid-fill versions of DECISION_CONFIG's badge colors, for the decision filter
+// toggle's active-pill background (badge tints are too pale to read white text on).
+const DECISION_TOGGLE_COLORS: Record<string, string> = {
+  attend: 'bg-green-600',
+  reduce: 'bg-amber-500',
+  cut: 'bg-red-600',
+  evaluating: 'bg-gray-500',
 };
 
 // ── Decision Dropdown ─────────────────────────────────────────────────────────
@@ -293,10 +339,11 @@ export default function ProgramPlannerPage() {
   const [summary, setSummary] = useState<SummaryData | null>(null);
   const [confsData, setConfsData] = useState<ConferencesData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'program' | 'cost'>('program');
+  const [view, setView] = useState<'program' | 'cost' | 'plan'>('program');
   const [statsOpen, setStatsOpen] = useState(true);
   const [groupMode, setGroupMode] = useState<GroupMode>('series');
   const [rankMetric, setRankMetric] = useState<RankMetric>('ces');
+  const [decisionFilter, setDecisionFilter] = useState<'all' | NonNullable<DecisionValue>>('all');
   const [collapsedSeries, setCollapsedSeries] = useState<Set<string>>(new Set());
   const [effectivenessDrawer, setEffectivenessDrawer] = useState<{ conferenceId: number; conferenceName: string } | null>(null);
   type CWTarget = { type: 'conference'; conferenceId: number; conferenceName: string } | { type: 'series'; seriesId: string; seriesName: string };
@@ -382,6 +429,14 @@ export default function ProgramPlannerPage() {
     return unsub;
   }, []);
 
+  // Background scoring only needs to run at full speed while the Program tab
+  // (the one actually showing these scores) is what's on screen — slow it down
+  // whenever the user has navigated to Cost or the Plan tab so it doesn't
+  // compete with those tabs' own data loading and interactions.
+  useEffect(() => {
+    setCalendarScoringPriority(view === 'program');
+  }, [view]);
+
   const handleYearChange = (year: number) => {
     setSelectedYear(year);
     setCollapsedSeries(new Set());
@@ -392,12 +447,77 @@ export default function ProgramPlannerPage() {
       if (!prev) return prev;
       const updateConf = (c: ConferenceRow) => c.conferenceId === confId ? { ...c, decision } : c;
       return {
+        ...prev,
         conferences: prev.conferences.map(updateConf),
         series: prev.series.map(s => ({ ...s, conferences: s.conferences.map(updateConf) })),
         standalone: prev.standalone.map(updateConf),
       };
     });
   }, []);
+
+  // All Plan-tab mutations below update the nested `plan` object (plan_year =
+  // selectedYear + 1), never the top-level fields the Program tab's DecisionPill
+  // reads/writes (plan_year = selectedYear) — the two are separate conference_plans
+  // rows on the same conference.
+  const updatePlanField = useCallback((confId: number, patch: Partial<PlanMeta>) => {
+    setConfsData(prev => {
+      if (!prev) return prev;
+      const updateConf = (c: ConferenceRow) => c.conferenceId === confId ? { ...c, plan: { ...c.plan, ...patch } } : c;
+      return {
+        ...prev,
+        conferences: prev.conferences.map(updateConf),
+        series: prev.series.map(s => ({ ...s, conferences: s.conferences.map(updateConf) })),
+        standalone: prev.standalone.map(updateConf),
+      };
+    });
+  }, []);
+
+  const handleRepsUpdated = useCallback((confId: number, assignedReps: AssignedRep[]) => {
+    updatePlanField(confId, { assignedReps });
+  }, [updatePlanField]);
+
+  const handleBudgetUpdated = useCallback((confId: number, plannedBudget: number, plannedBudgetLineItems: PlannedLineItem[]) => {
+    updatePlanField(confId, { plannedBudget, plannedBudgetLineItems });
+  }, [updatePlanField]);
+
+  const handleDatesUpdated = useCallback((confId: number, plannedStartDate: string | null, plannedEndDate: string | null) => {
+    updatePlanField(confId, { plannedStartDate, plannedEndDate });
+  }, [updatePlanField]);
+
+  // Conference-level field mutations (shared with the conference detail page — these
+  // touch the same conferences row, not conference_plans).
+  const updateConferenceField = useCallback((confId: number, patch: Partial<ConferenceRow>) => {
+    setConfsData(prev => {
+      if (!prev) return prev;
+      const updateConf = (c: ConferenceRow) => c.conferenceId === confId ? { ...c, ...patch } : c;
+      return {
+        ...prev,
+        conferences: prev.conferences.map(updateConf),
+        series: prev.series.map(s => ({ ...s, conferences: s.conferences.map(updateConf) })),
+        standalone: prev.standalone.map(updateConf),
+      };
+    });
+  }, []);
+
+  const handleStrategyUpdated = useCallback((confId: number, strategyTypeId: number | null, strategyTypeName: string | null) => {
+    updateConferenceField(confId, { strategyTypeId, strategyTypeName });
+  }, [updateConferenceField]);
+
+  const handleTypeUpdated = useCallback((confId: number, conferenceType: string | null) => {
+    updateConferenceField(confId, { conferenceType });
+  }, [updateConferenceField]);
+
+  const handleSponsorshipUpdated = useCallback((confId: number, sponsorshipLevel: string | null) => {
+    updateConferenceField(confId, { sponsorshipLevel });
+  }, [updateConferenceField]);
+
+  const handleBoothUpdated = useCallback((confId: number, booth: { boothPresent: boolean; boothWidth: number | null; boothLength: number | null; boothNumber: string | null; boothHall: string | null }) => {
+    updateConferenceField(confId, booth);
+  }, [updateConferenceField]);
+
+  const handleLocationUpdated = useCallback((confId: number, location: string) => {
+    updateConferenceField(confId, { location });
+  }, [updateConferenceField]);
 
   const toggleSeries = (seriesId: string) => {
     setCollapsedSeries(prev => {
@@ -419,8 +539,9 @@ export default function ProgramPlannerPage() {
     ...(confsData?.standalone ?? []),
   ], [confsData]);
 
-  // Rankings
-  const ranked = [...allConfs].sort((a, b) => {
+  // Rankings — excludes decision='new' (Plan tab's "New — never attended" bucket
+  // never surfaces in the Program tab).
+  const ranked = [...allConfs].filter(c => c.decision !== 'new').sort((a, b) => {
     if (rankMetric === 'ces') return (b.ces ?? -1) - (a.ces ?? -1);
     if (rankMetric === 'pipeline') return (b.pipelineInfluenced ?? 0) - (a.pipelineInfluenced ?? 0);
     if (rankMetric === 'closedwon') return (b.closedWon ?? 0) - (a.closedWon ?? 0);
@@ -433,6 +554,7 @@ export default function ProgramPlannerPage() {
     attend: 0, reduce: 0, cut: 0, undecided: 0,
   };
   for (const c of allConfs) {
+    if (c.decision === 'new') continue;
     if (c.decision === 'attend') decisionCounts.attend++;
     else if (c.decision === 'reduce') decisionCounts.reduce++;
     else if (c.decision === 'cut') decisionCounts.cut++;
@@ -445,37 +567,42 @@ export default function ProgramPlannerPage() {
     | { type: 'conference'; conf: ConferenceRow; rowIndex: number; key: string }
     | { type: 'standalone_header'; key: string };
 
+  const matchesDecision = (c: ConferenceRow) => c.decision !== 'new' && (decisionFilter === 'all' || c.decision === decisionFilter);
+
   const buildRows = (): TableRow[] => {
     if (!confsData) return [];
     const rows: TableRow[] = [];
 
     if (groupMode === 'series') {
       for (const s of confsData.series) {
+        const filteredConfs = s.conferences.filter(matchesDecision);
+        if (filteredConfs.length === 0) continue;
         rows.push({ type: 'series', group: s, key: `series-${s.seriesId}` });
         if (!collapsedSeries.has(s.seriesId)) {
           let rowIndex = 0;
-          for (const c of s.conferences) {
+          for (const c of filteredConfs) {
             rows.push({ type: 'conference', conf: c, rowIndex: rowIndex++, key: `conf-${c.conferenceId}` });
           }
         }
       }
-      if (confsData.standalone.length > 0) {
+      const filteredStandalone = confsData.standalone.filter(matchesDecision);
+      if (filteredStandalone.length > 0) {
         rows.push({ type: 'standalone_header', key: 'standalone' });
         if (!collapsedSeries.has('__standalone__')) {
           let rowIndex = 0;
-          for (const c of confsData.standalone) {
+          for (const c of filteredStandalone) {
             rows.push({ type: 'conference', conf: c, rowIndex: rowIndex++, key: `conf-${c.conferenceId}` });
           }
         }
       }
     } else if (groupMode === 'date') {
-      const sorted = [...allConfs].sort((a, b) => a.startDate.localeCompare(b.startDate));
+      const sorted = allConfs.filter(matchesDecision).sort((a, b) => a.startDate.localeCompare(b.startDate));
       for (let i = 0; i < sorted.length; i++) {
         rows.push({ type: 'conference', conf: sorted[i], rowIndex: i, key: `conf-${sorted[i].conferenceId}` });
       }
     } else {
       // CES sort
-      const sorted = [...allConfs].sort((a, b) => (b.ces ?? -1) - (a.ces ?? -1));
+      const sorted = allConfs.filter(matchesDecision).sort((a, b) => (b.ces ?? -1) - (a.ces ?? -1));
       for (let i = 0; i < sorted.length; i++) {
         rows.push({ type: 'conference', conf: sorted[i], rowIndex: i, key: `conf-${sorted[i].conferenceId}` });
       }
@@ -592,15 +719,33 @@ export default function ProgramPlannerPage() {
             {/* View toggle */}
             <div className="flex items-center gap-2">
               <AnimatedToggle
-                options={[{ id: 'program', label: 'Program' }, { id: 'cost', label: 'Cost' }]}
+                options={[{ id: 'program', label: 'Program' }, { id: 'cost', label: 'Cost' }, { id: 'plan', label: `${selectedYear + 1} Plan` }]}
                 value={view}
-                onChange={v => setView(v as 'program' | 'cost')}
-                activeBg={id => id === 'program' ? 'bg-brand-primary' : 'bg-brand-accent'}
-                className="w-[160px]"
+                onChange={v => setView(v as 'program' | 'cost' | 'plan')}
+                activeBg={id => id === 'program' ? 'bg-brand-primary' : id === 'cost' ? 'bg-brand-accent' : 'bg-purple-600'}
+                className="w-[280px]"
               />
             </div>
 
-            {view === 'cost' ? (
+            {view === 'plan' ? (
+              <ProgramPlannerPlanView
+                year={selectedYear + 1}
+                conferences={flattenedConferences}
+                categoryAverages={confsData?.categoryAverages ?? []}
+                teamInputMap={teamInputMap}
+                onOpenInputPanel={(conferenceId, conferenceName) => setInputPanelConference({ conferenceId, conferenceName })}
+                onDecisionUpdated={handleDecisionUpdated}
+                onRepsUpdated={handleRepsUpdated}
+                onBudgetUpdated={handleBudgetUpdated}
+                onStrategyUpdated={handleStrategyUpdated}
+                onDatesUpdated={handleDatesUpdated}
+                onTypeUpdated={handleTypeUpdated}
+                onSponsorshipUpdated={handleSponsorshipUpdated}
+                onBoothUpdated={handleBoothUpdated}
+                onLocationUpdated={handleLocationUpdated}
+                onConferenceCreated={() => fetchData(selectedYear)}
+              />
+            ) : view === 'cost' ? (
               <div className="grid grid-cols-1 lg:grid-cols-6 gap-3 items-start">
                 <div className="lg:col-span-4">
                   <ProgramPlannerCostMatrix
@@ -649,17 +794,32 @@ export default function ProgramPlannerPage() {
                         </div>
                       )}
                     </div>
-                    <AnimatedToggle
-                      options={[
-                        { id: 'series', label: 'Series' },
-                        { id: 'date', label: 'Date' },
-                        { id: 'ces', label: 'CES' },
-                      ]}
-                      value={groupMode}
-                      onChange={v => setGroupMode(v as GroupMode)}
-                      activeBg="bg-brand-primary"
-                      className="w-[200px]"
-                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <AnimatedToggle
+                        options={[
+                          { id: 'all', label: 'All' },
+                          { id: 'attend', label: 'Attend' },
+                          { id: 'reduce', label: 'Reduce' },
+                          { id: 'cut', label: 'Cut' },
+                          { id: 'evaluating', label: 'Evaluating' },
+                        ]}
+                        value={decisionFilter}
+                        onChange={v => setDecisionFilter(v as typeof decisionFilter)}
+                        activeBg={id => (id === 'all' ? 'bg-brand-primary' : DECISION_TOGGLE_COLORS[id] ?? 'bg-brand-primary')}
+                        className="w-[410px]"
+                      />
+                      <AnimatedToggle
+                        options={[
+                          { id: 'series', label: 'Series' },
+                          { id: 'date', label: 'Date' },
+                          { id: 'ces', label: 'CES' },
+                        ]}
+                        value={groupMode}
+                        onChange={v => setGroupMode(v as GroupMode)}
+                        activeBg="bg-brand-primary"
+                        className="w-[200px]"
+                      />
+                    </div>
                   </div>
 
                   {/* Mobile: one card per conference, stacked */}
@@ -744,7 +904,7 @@ export default function ProgramPlannerPage() {
                             <DecisionPill
                               confId={c.conferenceId}
                               value={c.decision}
-                              year={selectedYear}
+                              year={selectedYear + 1}
                               onUpdated={handleDecisionUpdated}
                             />
                           </div>
@@ -1097,7 +1257,7 @@ export default function ProgramPlannerPage() {
                                 <DecisionPill
                                   confId={c.conferenceId}
                                   value={c.decision}
-                                  year={selectedYear}
+                                  year={selectedYear + 1}
                                   onUpdated={handleDecisionUpdated}
                                 />
                               </td>
