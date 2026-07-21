@@ -808,6 +808,16 @@ export function ProgramPlannerPlanView({
     return 'evaluating';
   };
 
+  // Shortened label for the By Rep table view's status pill — the full
+  // "Attending (reduced footprint)" section header is too long for an inline
+  // pill next to the conference name there.
+  const statusPillLabel = (c: PlanConferenceRow): string => {
+    const key = groupOf(c);
+    if (key === 'reduce') return 'Attending (red.)';
+    if (key === 'new') return 'New (Evaluating)';
+    return GROUP_CONFIG[key].label;
+  };
+
   const groups: Record<GroupKey, PlanConferenceRow[]> = { attend: [], reduce: [], new: [], evaluating: [], cut: [] };
   for (const c of conferences) groups[groupOf(c)].push(c);
 
@@ -1087,7 +1097,7 @@ export function ProgramPlannerPlanView({
                               {c.decision === 'new' && <NewBadge />}
                               {groupMode === 'rep' && (
                                 <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${GROUP_CONFIG[groupOf(c)].pillBg} ${GROUP_CONFIG[groupOf(c)].pillText}`}>
-                                  {GROUP_CONFIG[groupOf(c)].label}
+                                  {statusPillLabel(c)}
                                 </span>
                               )}
                             </div>
@@ -1251,7 +1261,7 @@ export function ProgramPlannerPlanView({
                                 {c.decision === 'new' && <NewBadge />}
                                 {groupMode === 'rep' && (
                                   <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${GROUP_CONFIG[groupOf(c)].pillBg} ${GROUP_CONFIG[groupOf(c)].pillText}`}>
-                                    {GROUP_CONFIG[groupOf(c)].label}
+                                    {statusPillLabel(c)}
                                   </span>
                                 )}
                               </div>
