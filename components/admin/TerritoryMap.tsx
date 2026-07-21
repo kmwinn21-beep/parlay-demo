@@ -94,7 +94,22 @@ export function TerritoryMap({ territories, selectedStates, onStateClick, editin
     const owner = territories.find(t => t.id !== editingTerritoryId && t.stateCodes.includes(abbr));
     if (owner) return owner.color;
 
-    return 'var(--surface-1)';
+    // --surface-1 isn't defined anywhere in this app's CSS, so without a
+    // fallback this resolved to black — making state labels (also dark)
+    // unreadable. Fall back to a light neutral gray.
+    return 'var(--surface-1, #F3F4F6)';
+  }
+
+  // Picks white or dark text for a state label based on its fill's relative
+  // luminance, so labels stay legible against both light (unassigned) and
+  // dark/saturated (territory-colored) fills.
+  function getLabelColor(fillColor: string): string {
+    const hex = /^#([0-9a-f]{6})$/i.exec(fillColor)?.[1];
+    if (!hex) return '#374151';
+    const n = parseInt(hex, 16);
+    const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance < 0.6 ? '#FFFFFF' : '#374151';
   }
 
   function getOwner(abbr: string) {
@@ -140,9 +155,10 @@ export function TerritoryMap({ territories, selectedStates, onStateClick, editin
               <text
                 x={centroid[0]}
                 y={centroid[1]}
-                fontSize={9}
+                fontSize={12}
+                fontWeight={500}
                 textAnchor="middle"
-                fill="var(--text-secondary)"
+                fill={getLabelColor(fill)}
                 style={{ pointerEvents: 'none' }}
               >
                 {abbr}
