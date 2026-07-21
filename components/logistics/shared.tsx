@@ -315,13 +315,13 @@ export function ChecklistSection({
                 onBlur={e => saveLabel(item, e.target.value)}
                 className={`flex-1 min-w-0 text-xs bg-transparent border-0 focus:ring-0 focus:outline-none px-0 ${item.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}
               />
+              <div className="flex-shrink-0"><DeadlineStatusPill deadline={item} /></div>
               <input
                 type="date"
                 defaultValue={item.dueDate}
                 onBlur={e => saveDueDate(item, e.target.value)}
                 className="text-xs text-gray-400 bg-transparent border-0 focus:ring-0 focus:outline-none w-[104px] flex-shrink-0"
               />
-              <div className="flex-shrink-0"><DeadlineStatusPill deadline={item} /></div>
             </div>
           ))}
         </div>
