@@ -55,7 +55,11 @@ export const ABBR_TO_NAME: Record<string, string> = {
 // States too small to fit a legible abbreviation label at this map's scale.
 const SKIP_LABELS = new Set(['RI', 'DE', 'CT', 'NJ', 'MA', 'NH', 'VT', 'MD', 'HI', 'DC']);
 
-const projection = geoAlbersUsa().scale(900).translate([480, 300]);
+// d3's tested default for geoAlbersUsa is scale 1070 on a 975×610 canvas —
+// 1050 here is that same calibration scaled down proportionally for this
+// component's 960×600 viewBox, filling the canvas with much less empty
+// margin than the previous 900 without clipping Alaska/Hawaii's insets.
+const projection = geoAlbersUsa().scale(1050).translate([480, 300]);
 const pathGen = geoPath().projection(projection);
 
 // Darkens a hex color by a fraction (0-1) — used for assigned-state borders,
