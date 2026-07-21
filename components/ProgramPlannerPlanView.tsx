@@ -8,6 +8,7 @@ import { AddConferenceModal } from './AddConferenceModal';
 import { LocationAutocompleteInput, type LocationDetails } from './LocationAutocompleteInput';
 import { useConfigWithIds } from '@/lib/useUserOptions';
 import { ConferencePlanLogisticsDrawer } from './logistics';
+import { getPreset } from '@/lib/colors';
 
 interface BudgetLineItem { label: string; budgeted: number | null; actual: number | null }
 interface PlannedLineItem { label: string; budgeted: number }
@@ -784,6 +785,21 @@ export function ProgramPlannerPlanView({
       .catch(() => {});
   }, []);
 
+  // Rep colors — same config_options (category='user') color assigned in the
+  // admin Users config section, resolved through the shared color-preset
+  // system (colors are stored as preset keys like "blue", not raw hex).
+  const [repColors, setRepColors] = useState<Partial<Record<number, string>>>({});
+  useEffect(() => {
+    fetch('/api/config?category=user')
+      .then(r => r.json())
+      .then((rows: Array<{ id: number; color: string | null }>) => {
+        const map: Record<number, string> = {};
+        for (const r of rows) if (r.color) map[r.id] = getPreset(r.color).hex;
+        setRepColors(map);
+      })
+      .catch(() => {});
+  }, []);
+
   // Effective start date for grouping/conflict math — the plan year's own date once
   // set, falling back to the conference's actual date until then.
   const conferencesForConflicts = conferences.map(c => ({
@@ -837,6 +853,11 @@ export function ProgramPlannerPlanView({
     pillText: string;
     rows: PlanConferenceRow[];
     dropKey: GroupKey | null;
+    // Rep sections color their header from that rep's admin-configured color
+    // instead of the fixed decision-group palette — set, this overrides
+    // headerBg/headerText via inline style (lighter tint of the color for the
+    // background, the color itself for text/icon).
+    headerColor?: string | null;
   }
   const statusSections: Section[] = ORDERED_GROUPS.filter(key => !minimizedGroups.has(key)).map(key => {
     const cfg = GROUP_CONFIG[key];
@@ -859,11 +880,12 @@ export function ProgramPlannerPlanView({
       .map(([key, v]) => ({
         key, label: v.label, icon: 'ti-user', headerBg: 'bg-gray-100', headerText: 'text-gray-700',
         pillBg: 'bg-gray-200', pillText: 'text-gray-600', rows: v.rows, dropKey: null,
+        headerColor: repColors[Number(key)] ?? null,
       }));
     if (unassigned.length > 0) {
       entries.push({
         key: 'unassigned', label: 'Unassigned', icon: 'ti-user-question', headerBg: 'bg-gray-50', headerText: 'text-gray-500',
-        pillBg: 'bg-gray-100', pillText: 'text-gray-500', rows: unassigned, dropKey: null,
+        pillBg: 'bg-gray-100', pillText: 'text-gray-500', rows: unassigned, dropKey: null, headerColor: null,
       });
     }
     return entries;
@@ -1022,7 +1044,10 @@ export function ProgramPlannerPlanView({
             onDragLeave={() => setDragOverGroup(prev => prev === section.dropKey ? null : prev)}
             onDrop={e => { e.preventDefault(); if (section.dropKey) handleDrop(section.dropKey); }}
           >
-            <div className={`flex items-center justify-between gap-2 px-4 py-2.5 ${cfg.headerBg}`}>
+            <div
+              className={`flex items-center justify-between gap-2 px-4 py-2.5 ${section.headerColor ? '' : cfg.headerBg}`}
+              style={section.headerColor ? { backgroundColor: `${section.headerColor}26` } : undefined}
+            >
               <div className="flex items-center gap-2">
                 {section.dropKey && (
                   <button
@@ -1036,13 +1061,13 @@ export function ProgramPlannerPlanView({
                     </svg>
                   </button>
                 )}
-                <i className={`ti ${cfg.icon} text-[14px] ${cfg.headerText}`} aria-hidden="true" />
-                <span className={`text-sm font-semibold ${cfg.headerText}`}>{cfg.label}</span>
+                <i className={`ti ${cfg.icon} text-[14px] ${section.headerColor ? '' : cfg.headerText}`} style={section.headerColor ? { color: section.headerColor } : undefined} aria-hidden="true" />
+                <span className={`text-sm font-semibold ${section.headerColor ? '' : cfg.headerText}`} style={section.headerColor ? { color: section.headerColor } : undefined}>{cfg.label}</span>
                 <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${cfg.pillBg} ${cfg.pillText}`}>
                   {rows.length} conference{rows.length !== 1 ? 's' : ''}
                 </span>
               </div>
-              <span className={`text-[11px] font-medium ${cfg.headerText}`}>
+              <span className={`text-[11px] font-medium ${section.headerColor ? '' : cfg.headerText}`} style={section.headerColor ? { color: section.headerColor } : undefined}>
                 {hasBudget ? `${fmtCurrency(groupBudget)} planned · ${groupReps} rep${groupReps !== 1 ? 's' : ''}` : 'No budget committed'}
               </span>
             </div>
@@ -1383,7 +1408,10 @@ export function ProgramPlannerPlanView({
                     onDragLeave={() => setDragOverGroup(prev => prev === section.dropKey ? null : prev)}
                     onDrop={e => { e.preventDefault(); if (section.dropKey) handleDrop(section.dropKey); }}
                   >
-                    <div className={`flex items-center gap-2 px-3 py-2.5 ${cfg.headerBg}`}>
+                    <div
+                      className={`flex items-center gap-2 px-3 py-2.5 ${section.headerColor ? '' : cfg.headerBg}`}
+                      style={section.headerColor ? { backgroundColor: `${section.headerColor}26` } : undefined}
+                    >
                       {section.dropKey && (
                         <button
                           type="button"
@@ -1396,8 +1424,8 @@ export function ProgramPlannerPlanView({
                           </svg>
                         </button>
                       )}
-                      <i className={`ti ${cfg.icon} text-[13px] ${cfg.headerText}`} aria-hidden="true" />
-                      <span className={`text-xs font-semibold ${cfg.headerText} flex-1 truncate`}>{cfg.label}</span>
+                      <i className={`ti ${cfg.icon} text-[13px] ${section.headerColor ? '' : cfg.headerText}`} style={section.headerColor ? { color: section.headerColor } : undefined} aria-hidden="true" />
+                      <span className={`text-xs font-semibold flex-1 truncate ${section.headerColor ? '' : cfg.headerText}`} style={section.headerColor ? { color: section.headerColor } : undefined}>{cfg.label}</span>
                       <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold flex-shrink-0 ${cfg.pillBg} ${cfg.pillText}`}>
                         {rows.length}
                       </span>
