@@ -149,6 +149,38 @@ function KanbanViewIcon() {
   );
 }
 
+function StatusViewIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+
+function RepViewIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+    </svg>
+  );
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+    </svg>
+  );
+}
+
 // Flags a conference sitting in the "New — never attended (Evaluating)" bucket.
 function NewBadge() {
   return (
@@ -703,6 +735,11 @@ export function ProgramPlannerPlanView({
   const [budgetModalConf, setBudgetModalConf] = useState<PlanConferenceRow | null>(null);
   const [showAddDrawer, setShowAddDrawer] = useState(false);
   const [planViewMode, setPlanViewMode] = useState<'table' | 'kanban'>('table');
+  const [groupMode, setGroupMode] = useState<'status' | 'rep'>('status');
+  const kanbanScrollRef = useRef<HTMLDivElement>(null);
+  const scrollKanban = (dir: -1 | 1) => {
+    kanbanScrollRef.current?.scrollBy({ left: dir * 320, behavior: 'smooth' });
+  };
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [dragOverGroup, setDragOverGroup] = useState<GroupKey | null>(null);
   // Decision-group sections can be hidden from view (same minimize/restore
@@ -774,6 +811,55 @@ export function ProgramPlannerPlanView({
   const groups: Record<GroupKey, PlanConferenceRow[]> = { attend: [], reduce: [], new: [], evaluating: [], cut: [] };
   for (const c of conferences) groups[groupOf(c)].push(c);
 
+  // Sections are either the 5 decision groups (status mode — draggable between
+  // groups to change decision, and mergeable/minimizable) or one per assigned
+  // rep (rep mode — a conference can appear in more than one rep's column, and
+  // since dragging a card wouldn't map to a single meaningful action there,
+  // rep sections aren't drop targets or minimizable; each card instead shows
+  // its decision as a status pill, since the section no longer implies it).
+  interface Section {
+    key: string;
+    label: string;
+    icon: string;
+    headerBg: string;
+    headerText: string;
+    pillBg: string;
+    pillText: string;
+    rows: PlanConferenceRow[];
+    dropKey: GroupKey | null;
+  }
+  const statusSections: Section[] = ORDERED_GROUPS.filter(key => !minimizedGroups.has(key)).map(key => {
+    const cfg = GROUP_CONFIG[key];
+    return { key, dropKey: key, ...cfg, rows: groups[key] };
+  });
+  const repSections: Section[] = (() => {
+    const byRep = new Map<string, { label: string; rows: PlanConferenceRow[] }>();
+    const unassigned: PlanConferenceRow[] = [];
+    for (const c of conferences) {
+      if (c.plan.assignedReps.length === 0) { unassigned.push(c); continue; }
+      for (const rep of c.plan.assignedReps) {
+        const key = String(rep.userId);
+        const bucket = byRep.get(key) ?? { label: rep.displayName, rows: [] };
+        bucket.rows.push(c);
+        byRep.set(key, bucket);
+      }
+    }
+    const entries = Array.from(byRep.entries())
+      .sort((a, b) => a[1].label.localeCompare(b[1].label))
+      .map(([key, v]) => ({
+        key, label: v.label, icon: 'ti-user', headerBg: 'bg-gray-100', headerText: 'text-gray-700',
+        pillBg: 'bg-gray-200', pillText: 'text-gray-600', rows: v.rows, dropKey: null,
+      }));
+    if (unassigned.length > 0) {
+      entries.push({
+        key: 'unassigned', label: 'Unassigned', icon: 'ti-user-question', headerBg: 'bg-gray-50', headerText: 'text-gray-500',
+        pillBg: 'bg-gray-100', pillText: 'text-gray-500', rows: unassigned, dropKey: null,
+      });
+    }
+    return entries;
+  })();
+  const sections = groupMode === 'status' ? statusSections : repSections;
+
   const plannedConfs = [...groups.attend, ...groups.reduce, ...groups.new];
   const totalPlannedBudget = plannedConfs.reduce((sum, c) => sum + (c.plan.plannedBudget ?? 0), 0);
   const totalReps = plannedConfs.reduce((sum, c) => sum + c.plan.assignedReps.length, 0);
@@ -825,7 +911,7 @@ export function ProgramPlannerPlanView({
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
-          {ORDERED_GROUPS.filter(key => minimizedGroups.has(key)).map(key => {
+          {groupMode === 'status' && ORDERED_GROUPS.filter(key => minimizedGroups.has(key)).map(key => {
             const cfg = GROUP_CONFIG[key];
             const count = groups[key].length;
             return (
@@ -872,6 +958,30 @@ export function ProgramPlannerPlanView({
               Kanban
             </button>
           </div>
+          <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setGroupMode('status')}
+              title="Group by status"
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                groupMode === 'status' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              <StatusViewIcon />
+              Status
+            </button>
+            <button
+              type="button"
+              onClick={() => setGroupMode('rep')}
+              title="Group by rep"
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+                groupMode === 'rep' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              <RepViewIcon />
+              By Rep
+            </button>
+          </div>
           <button
             type="button"
             onClick={() => setShowAddDrawer(true)}
@@ -884,35 +994,38 @@ export function ProgramPlannerPlanView({
       </div>
 
       {/* Decision groups — always all 5 (unless minimized), even empty, so a row can be dragged into any of them */}
-      {planViewMode === 'table' && ORDERED_GROUPS.filter(key => !minimizedGroups.has(key)).map(key => {
-        const rows = groups[key];
-        const cfg = GROUP_CONFIG[key];
+      {planViewMode === 'table' && sections.map(section => {
+        const rows = section.rows;
+        const cfg = section;
+        const key = section.key;
         const groupBudget = rows.reduce((sum, c) => sum + (c.plan.plannedBudget ?? 0), 0);
         const groupReps = rows.reduce((sum, c) => sum + c.plan.assignedReps.length, 0);
         const hasBudget = groupBudget > 0 || groupReps > 0;
         const dimRows = key === 'cut';
-        const isDragOver = dragOverGroup === key;
+        const isDragOver = dragOverGroup === section.dropKey && section.dropKey != null;
 
         return (
           <div
             key={key}
             className={`card p-0 overflow-hidden transition-shadow ${isDragOver ? 'ring-2 ring-brand-secondary' : ''}`}
-            onDragOver={e => { e.preventDefault(); if (draggedId != null) setDragOverGroup(key); }}
-            onDragLeave={() => setDragOverGroup(prev => prev === key ? null : prev)}
-            onDrop={e => { e.preventDefault(); handleDrop(key); }}
+            onDragOver={e => { e.preventDefault(); if (draggedId != null && section.dropKey) setDragOverGroup(section.dropKey); }}
+            onDragLeave={() => setDragOverGroup(prev => prev === section.dropKey ? null : prev)}
+            onDrop={e => { e.preventDefault(); if (section.dropKey) handleDrop(section.dropKey); }}
           >
             <div className={`flex items-center justify-between gap-2 px-4 py-2.5 ${cfg.headerBg}`}>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => minimizeGroup(key)}
-                  title={`Hide ${cfg.label}`}
-                  className="flex-shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/70 text-gray-500 hover:text-gray-700 hover:bg-white transition-colors"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M18 12H6" />
-                  </svg>
-                </button>
+                {section.dropKey && (
+                  <button
+                    type="button"
+                    onClick={() => minimizeGroup(section.dropKey!)}
+                    title={`Hide ${cfg.label}`}
+                    className="flex-shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/70 text-gray-500 hover:text-gray-700 hover:bg-white transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M18 12H6" />
+                    </svg>
+                  </button>
+                )}
                 <i className={`ti ${cfg.icon} text-[14px] ${cfg.headerText}`} aria-hidden="true" />
                 <span className={`text-sm font-semibold ${cfg.headerText}`}>{cfg.label}</span>
                 <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${cfg.pillBg} ${cfg.pillText}`}>
@@ -937,7 +1050,7 @@ export function ProgramPlannerPlanView({
                     return (
                       <div
                         key={c.conferenceId}
-                        draggable
+                        draggable={!!section.dropKey}
                         onDragStart={() => setDraggedId(c.conferenceId)}
                         onDragEnd={() => setDraggedId(null)}
                         className={`px-4 py-3 space-y-2.5 ${dimRows ? 'opacity-60' : ''} ${draggedId === c.conferenceId ? 'opacity-40' : ''}`}
@@ -972,6 +1085,11 @@ export function ProgramPlannerPlanView({
                                 <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                               </Link>
                               {c.decision === 'new' && <NewBadge />}
+                              {groupMode === 'rep' && (
+                                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${GROUP_CONFIG[groupOf(c)].pillBg} ${GROUP_CONFIG[groupOf(c)].pillText}`}>
+                                  {GROUP_CONFIG[groupOf(c)].label}
+                                </span>
+                              )}
                             </div>
                             <DatesEditCell
                               conferenceId={c.conferenceId}
@@ -1096,7 +1214,7 @@ export function ProgramPlannerPlanView({
                         return (
                           <tr
                             key={c.conferenceId}
-                            draggable
+                            draggable={!!section.dropKey}
                             onDragStart={() => setDraggedId(c.conferenceId)}
                             onDragEnd={() => setDraggedId(null)}
                             style={i % 2 === 1 ? { backgroundColor: 'var(--color-background-secondary, #F9FAFB)' } : {}}
@@ -1131,6 +1249,11 @@ export function ProgramPlannerPlanView({
                                   <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                                 </Link>
                                 {c.decision === 'new' && <NewBadge />}
+                                {groupMode === 'rep' && (
+                                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${GROUP_CONFIG[groupOf(c)].pillBg} ${GROUP_CONFIG[groupOf(c)].pillText}`}>
+                                    {GROUP_CONFIG[groupOf(c)].label}
+                                  </span>
+                                )}
                               </div>
                             </td>
                             <td className="px-3 py-2 text-center whitespace-nowrap">
@@ -1226,127 +1349,153 @@ export function ProgramPlannerPlanView({
       })}
 
       {planViewMode === 'kanban' && (
-        <div className="overflow-x-auto pb-2">
-          <div className="flex items-start gap-3 min-w-max">
-            {ORDERED_GROUPS.filter(key => !minimizedGroups.has(key)).map(key => {
-              const rows = groups[key];
-              const cfg = GROUP_CONFIG[key];
-              const isDragOver = dragOverGroup === key;
-              return (
-                <div
-                  key={key}
-                  className={`w-72 flex-shrink-0 rounded-xl border border-gray-200 overflow-hidden transition-shadow ${isDragOver ? 'ring-2 ring-brand-secondary' : ''}`}
-                  onDragOver={e => { e.preventDefault(); if (draggedId != null) setDragOverGroup(key); }}
-                  onDragLeave={() => setDragOverGroup(prev => prev === key ? null : prev)}
-                  onDrop={e => { e.preventDefault(); handleDrop(key); }}
-                >
-                  <div className={`flex items-center gap-2 px-3 py-2.5 ${cfg.headerBg}`}>
-                    <button
-                      type="button"
-                      onClick={() => minimizeGroup(key)}
-                      title={`Hide ${cfg.label}`}
-                      className="flex-shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/70 text-gray-500 hover:text-gray-700 hover:bg-white transition-colors"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M18 12H6" />
-                      </svg>
-                    </button>
-                    <i className={`ti ${cfg.icon} text-[13px] ${cfg.headerText}`} aria-hidden="true" />
-                    <span className={`text-xs font-semibold ${cfg.headerText} flex-1 truncate`}>{cfg.label}</span>
-                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold flex-shrink-0 ${cfg.pillBg} ${cfg.pillText}`}>
-                      {rows.length}
-                    </span>
-                  </div>
-                  <div className="p-2 space-y-2 min-h-[100px] bg-gray-50/50">
-                    {rows.length === 0 ? (
-                      <div className="px-2 py-6 text-center text-[11px] text-gray-400 border-2 border-dashed border-gray-200 rounded-lg bg-white">
-                        Drag a conference here
-                      </div>
-                    ) : rows.map(c => (
-                      <div
-                        key={c.conferenceId}
-                        draggable
-                        onDragStart={() => setDraggedId(c.conferenceId)}
-                        onDragEnd={() => setDraggedId(null)}
-                        className={`bg-white rounded-lg border border-gray-200 p-2.5 shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow ${
-                          draggedId === c.conferenceId ? 'opacity-40' : ''
-                        } ${key === 'cut' ? 'opacity-70' : ''}`}
-                      >
-                        <div className="flex items-center gap-1 min-w-0 mb-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setLogisticsDrawer({
-                              conferenceId: c.conferenceId,
-                              conferenceName: c.name,
-                              seriesName: null,
-                              planYear: year,
-                              startDate: c.startDate ?? null,
-                              endDate: c.endDate ?? null,
-                              decision: c.decision ?? null,
-                              plannedBudget: c.plan.plannedBudget ?? null,
-                              assignedReps: c.plan.assignedReps ?? [],
-                              calScore: null,
-                              boothPresent: c.boothPresent,
-                              boothWidth: c.boothWidth,
-                              boothLength: c.boothLength,
-                              boothHall: c.boothHall,
-                            })}
-                            className="text-brand-secondary hover:text-brand-primary font-semibold text-xs truncate bg-transparent border-0 p-0 text-left cursor-pointer flex-1 min-w-0"
-                          >
-                            {c.name}
-                          </button>
-                          {c.decision === 'new' && <NewBadge />}
-                          <Link href={`/conferences/${c.conferenceId}`} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Open conference detail">
-                            <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
-                          </Link>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => scrollKanban(-1)}
+            title="Scroll left"
+            className="absolute -left-3 top-1/2 -translate-y-1/2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-white border border-gray-200 shadow-sm text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <ChevronLeftIcon />
+          </button>
+          <div ref={kanbanScrollRef} className="overflow-x-auto pb-2 scroll-smooth">
+            <div className="flex items-start gap-3 min-w-max px-1">
+              {sections.map(section => {
+                const rows = section.rows;
+                const cfg = section;
+                const key = section.key;
+                const isDragOver = dragOverGroup === section.dropKey && section.dropKey != null;
+                return (
+                  <div
+                    key={key}
+                    className={`w-72 flex-shrink-0 rounded-xl border border-gray-200 overflow-hidden transition-shadow ${isDragOver ? 'ring-2 ring-brand-secondary' : ''}`}
+                    onDragOver={e => { e.preventDefault(); if (draggedId != null && section.dropKey) setDragOverGroup(section.dropKey); }}
+                    onDragLeave={() => setDragOverGroup(prev => prev === section.dropKey ? null : prev)}
+                    onDrop={e => { e.preventDefault(); if (section.dropKey) handleDrop(section.dropKey); }}
+                  >
+                    <div className={`flex items-center gap-2 px-3 py-2.5 ${cfg.headerBg}`}>
+                      {section.dropKey && (
+                        <button
+                          type="button"
+                          onClick={() => minimizeGroup(section.dropKey!)}
+                          title={`Hide ${cfg.label}`}
+                          className="flex-shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/70 text-gray-500 hover:text-gray-700 hover:bg-white transition-colors"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M18 12H6" />
+                          </svg>
+                        </button>
+                      )}
+                      <i className={`ti ${cfg.icon} text-[13px] ${cfg.headerText}`} aria-hidden="true" />
+                      <span className={`text-xs font-semibold ${cfg.headerText} flex-1 truncate`}>{cfg.label}</span>
+                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold flex-shrink-0 ${cfg.pillBg} ${cfg.pillText}`}>
+                        {rows.length}
+                      </span>
+                    </div>
+                    <div className="p-2 space-y-2 min-h-[100px] bg-gray-50/50">
+                      {rows.length === 0 ? (
+                        <div className="px-2 py-6 text-center text-[11px] text-gray-400 border-2 border-dashed border-gray-200 rounded-lg bg-white">
+                          Drag a conference here
                         </div>
-                        <p className="text-[10px] text-gray-400 mb-2">
-                          {fmtDateShort(c.plan.plannedStartDate ?? c.startDate)}
-                        </p>
-                        <div className="flex items-center flex-wrap gap-1 mb-2">
-                          <OptionEditPill
-                            value={c.conferenceType}
-                            options={CONFERENCE_TYPE_OPTIONS}
-                            activeClass="bg-amber-50 text-amber-800 border border-amber-300"
-                            placeholder="Set type"
-                            onSelect={async v => { onTypeUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/type`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conferenceType: v }) }); }}
-                          />
-                          <OptionEditPill
-                            value={c.sponsorshipLevel}
-                            options={sponsorshipOptions.map(o => o.value)}
-                            activeClass="bg-green-50 text-green-800 border border-green-300"
-                            placeholder="Set sponsorship"
-                            colorFor={v => sponsorshipColors[v] ?? null}
-                            onSelect={async v => { onSponsorshipUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/sponsorship`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sponsorshipLevel: v }) }); }}
-                          />
-                        </div>
-                        <div className="flex items-center justify-between">
-                          {c.plan.plannedBudget != null ? (
-                            <button type="button" onClick={() => setBudgetModalConf(c)} className="text-[11px] text-gray-700 font-medium tabular-nums hover:text-brand-primary transition-colors">
-                              {fmtCurrency(c.plan.plannedBudget)}
+                      ) : rows.map(c => (
+                        <div
+                          key={c.conferenceId}
+                          draggable={!!section.dropKey}
+                          onDragStart={() => setDraggedId(c.conferenceId)}
+                          onDragEnd={() => setDraggedId(null)}
+                          className={`bg-white rounded-lg border border-gray-200 p-2.5 shadow-sm hover:shadow-md transition-shadow ${section.dropKey ? 'cursor-grab active:cursor-grabbing' : ''} ${
+                            draggedId === c.conferenceId ? 'opacity-40' : ''
+                          } ${key === 'cut' ? 'opacity-70' : ''}`}
+                        >
+                          <div className="flex items-center gap-1 min-w-0 mb-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => setLogisticsDrawer({
+                                conferenceId: c.conferenceId,
+                                conferenceName: c.name,
+                                seriesName: null,
+                                planYear: year,
+                                startDate: c.startDate ?? null,
+                                endDate: c.endDate ?? null,
+                                decision: c.decision ?? null,
+                                plannedBudget: c.plan.plannedBudget ?? null,
+                                assignedReps: c.plan.assignedReps ?? [],
+                                calScore: null,
+                                boothPresent: c.boothPresent,
+                                boothWidth: c.boothWidth,
+                                boothLength: c.boothLength,
+                                boothHall: c.boothHall,
+                              })}
+                              className="text-brand-secondary hover:text-brand-primary font-semibold text-xs truncate bg-transparent border-0 p-0 text-left cursor-pointer flex-1 min-w-0"
+                            >
+                              {c.name}
                             </button>
-                          ) : (
-                            <button type="button" onClick={() => setBudgetModalConf(c)} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors">
-                              + Budget
-                            </button>
-                          )}
-                          <div style={{ position: 'relative' }}>
-                            <RepAssignmentPopover
-                              conferenceId={c.conferenceId}
-                              planYear={year}
-                              assignedReps={c.plan.assignedReps}
-                              allConferences={conferencesForConflicts.map(cc => ({ conferenceId: cc.conferenceId, name: cc.name, startDate: cc.startDate, assignedReps: cc.plan.assignedReps }))}
-                              onUpdate={reps => onRepsUpdated(c.conferenceId, reps)}
+                            {c.decision === 'new' && <NewBadge />}
+                            {groupMode === 'rep' && (
+                              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${GROUP_CONFIG[groupOf(c)].pillBg} ${GROUP_CONFIG[groupOf(c)].pillText}`}>
+                                {GROUP_CONFIG[groupOf(c)].label}
+                              </span>
+                            )}
+                            <Link href={`/conferences/${c.conferenceId}`} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Open conference detail">
+                              <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
+                            </Link>
+                          </div>
+                          <p className="text-[10px] text-gray-400 mb-2">
+                            {fmtDateShort(c.plan.plannedStartDate ?? c.startDate)}
+                          </p>
+                          <div className="flex items-center flex-wrap gap-1 mb-2">
+                            <OptionEditPill
+                              value={c.conferenceType}
+                              options={CONFERENCE_TYPE_OPTIONS}
+                              activeClass="bg-amber-50 text-amber-800 border border-amber-300"
+                              placeholder="Set type"
+                              onSelect={async v => { onTypeUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/type`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conferenceType: v }) }); }}
+                            />
+                            <OptionEditPill
+                              value={c.sponsorshipLevel}
+                              options={sponsorshipOptions.map(o => o.value)}
+                              activeClass="bg-green-50 text-green-800 border border-green-300"
+                              placeholder="Set sponsorship"
+                              colorFor={v => sponsorshipColors[v] ?? null}
+                              onSelect={async v => { onSponsorshipUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/sponsorship`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sponsorshipLevel: v }) }); }}
                             />
                           </div>
+                          <div className="flex items-center justify-between">
+                            {c.plan.plannedBudget != null ? (
+                              <button type="button" onClick={() => setBudgetModalConf(c)} className="text-[11px] text-gray-700 font-medium tabular-nums hover:text-brand-primary transition-colors">
+                                {fmtCurrency(c.plan.plannedBudget)}
+                              </button>
+                            ) : (
+                              <button type="button" onClick={() => setBudgetModalConf(c)} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors">
+                                + Budget
+                              </button>
+                            )}
+                            <div style={{ position: 'relative' }}>
+                              <RepAssignmentPopover
+                                conferenceId={c.conferenceId}
+                                planYear={year}
+                                assignedReps={c.plan.assignedReps}
+                                allConferences={conferencesForConflicts.map(cc => ({ conferenceId: cc.conferenceId, name: cc.name, startDate: cc.startDate, assignedReps: cc.plan.assignedReps }))}
+                                onUpdate={reps => onRepsUpdated(c.conferenceId, reps)}
+                              />
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={() => scrollKanban(1)}
+            title="Scroll right"
+            className="absolute -right-3 top-1/2 -translate-y-1/2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-white border border-gray-200 shadow-sm text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <ChevronRightIcon />
+          </button>
         </div>
       )}
 
