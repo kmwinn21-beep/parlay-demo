@@ -176,9 +176,11 @@ export function LogisticsDeadlinesTab({
               <span className="w-3.5 flex-shrink-0" />
               <span className="w-3.5 flex-shrink-0" />
               <span className="flex-1 min-w-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Checklist Item</span>
-              <span className="w-[74px] flex-shrink-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wide text-center">Category</span>
-              <span className="w-[74px] flex-shrink-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wide text-center">Status</span>
-              <span className="w-[104px] flex-shrink-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Due Date</span>
+              <div className="flex items-center gap-4 flex-shrink-0">
+                <span className="w-[74px] flex-shrink-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wide text-center">Category</span>
+                <span className="w-[74px] flex-shrink-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wide text-center">Status</span>
+                <span className="w-[104px] flex-shrink-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Due Date</span>
+              </div>
             </div>
             {sorted.map(d => (
               <div
@@ -199,14 +201,16 @@ export function LogisticsDeadlinesTab({
                   onBlur={e => saveLabel(d, e.target.value)}
                   className={`flex-1 min-w-0 text-xs bg-transparent border-0 focus:ring-0 focus:outline-none px-0 ${d.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}
                 />
-                <CategoryPill category={d.category} />
-                <div className="flex-shrink-0"><DeadlineStatusPill deadline={d} /></div>
-                <input
-                  type="date"
-                  defaultValue={d.dueDate}
-                  onBlur={e => saveDueDate(d, e.target.value)}
-                  className="text-xs text-gray-400 bg-transparent border-0 focus:ring-0 focus:outline-none w-[104px] flex-shrink-0"
-                />
+                <div className="flex items-center gap-4 flex-shrink-0">
+                  <CategoryPill category={d.category} />
+                  <DeadlineStatusPill deadline={d} />
+                  <input
+                    type="date"
+                    defaultValue={d.dueDate}
+                    onBlur={e => saveDueDate(d, e.target.value)}
+                    className="text-xs text-gray-400 bg-transparent border-0 focus:ring-0 focus:outline-none w-[104px] flex-shrink-0"
+                  />
+                </div>
               </div>
             ))}
           </div>
