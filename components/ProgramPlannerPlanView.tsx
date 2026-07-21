@@ -130,6 +130,25 @@ function GripIcon() {
   );
 }
 
+function TableViewIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="16" rx="1.5" strokeWidth={2} />
+      <path strokeLinecap="round" strokeWidth={2} d="M3 10h18M9 4v16" />
+    </svg>
+  );
+}
+
+function KanbanViewIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="3" y="4" width="5" height="16" rx="1" strokeWidth={2} />
+      <rect x="9.5" y="4" width="5" height="10" rx="1" strokeWidth={2} />
+      <rect x="16" y="4" width="5" height="13" rx="1" strokeWidth={2} />
+    </svg>
+  );
+}
+
 // Flags a conference sitting in the "New — never attended (Evaluating)" bucket.
 function NewBadge() {
   return (
@@ -683,6 +702,7 @@ export function ProgramPlannerPlanView({
   const [priorYearActual, setPriorYearActual] = useState<number | null>(null);
   const [budgetModalConf, setBudgetModalConf] = useState<PlanConferenceRow | null>(null);
   const [showAddDrawer, setShowAddDrawer] = useState(false);
+  const [planViewMode, setPlanViewMode] = useState<'table' | 'kanban'>('table');
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [dragOverGroup, setDragOverGroup] = useState<GroupKey | null>(null);
   // Decision-group sections can be hidden from view (same minimize/restore
@@ -827,18 +847,44 @@ export function ProgramPlannerPlanView({
             );
           })}
         </div>
-        <button
-          type="button"
-          onClick={() => setShowAddDrawer(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-primary text-white hover:opacity-90 transition-opacity flex-shrink-0"
-        >
-          <i className="ti ti-plus text-[13px]" aria-hidden="true" />
-          Add conference
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setPlanViewMode('table')}
+              title="Table view"
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                planViewMode === 'table' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              <TableViewIcon />
+              Table
+            </button>
+            <button
+              type="button"
+              onClick={() => setPlanViewMode('kanban')}
+              title="Kanban view"
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+                planViewMode === 'kanban' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              <KanbanViewIcon />
+              Kanban
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAddDrawer(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-primary text-white hover:opacity-90 transition-opacity flex-shrink-0"
+          >
+            <i className="ti ti-plus text-[13px]" aria-hidden="true" />
+            Add conference
+          </button>
+        </div>
       </div>
 
       {/* Decision groups — always all 5 (unless minimized), even empty, so a row can be dragged into any of them */}
-      {ORDERED_GROUPS.filter(key => !minimizedGroups.has(key)).map(key => {
+      {planViewMode === 'table' && ORDERED_GROUPS.filter(key => !minimizedGroups.has(key)).map(key => {
         const rows = groups[key];
         const cfg = GROUP_CONFIG[key];
         const groupBudget = rows.reduce((sum, c) => sum + (c.plan.plannedBudget ?? 0), 0);
@@ -1178,6 +1224,131 @@ export function ProgramPlannerPlanView({
           </div>
         );
       })}
+
+      {planViewMode === 'kanban' && (
+        <div className="overflow-x-auto pb-2">
+          <div className="flex items-start gap-3 min-w-max">
+            {ORDERED_GROUPS.filter(key => !minimizedGroups.has(key)).map(key => {
+              const rows = groups[key];
+              const cfg = GROUP_CONFIG[key];
+              const isDragOver = dragOverGroup === key;
+              return (
+                <div
+                  key={key}
+                  className={`w-72 flex-shrink-0 rounded-xl border border-gray-200 overflow-hidden transition-shadow ${isDragOver ? 'ring-2 ring-brand-secondary' : ''}`}
+                  onDragOver={e => { e.preventDefault(); if (draggedId != null) setDragOverGroup(key); }}
+                  onDragLeave={() => setDragOverGroup(prev => prev === key ? null : prev)}
+                  onDrop={e => { e.preventDefault(); handleDrop(key); }}
+                >
+                  <div className={`flex items-center gap-2 px-3 py-2.5 ${cfg.headerBg}`}>
+                    <button
+                      type="button"
+                      onClick={() => minimizeGroup(key)}
+                      title={`Hide ${cfg.label}`}
+                      className="flex-shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/70 text-gray-500 hover:text-gray-700 hover:bg-white transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M18 12H6" />
+                      </svg>
+                    </button>
+                    <i className={`ti ${cfg.icon} text-[13px] ${cfg.headerText}`} aria-hidden="true" />
+                    <span className={`text-xs font-semibold ${cfg.headerText} flex-1 truncate`}>{cfg.label}</span>
+                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold flex-shrink-0 ${cfg.pillBg} ${cfg.pillText}`}>
+                      {rows.length}
+                    </span>
+                  </div>
+                  <div className="p-2 space-y-2 min-h-[100px] bg-gray-50/50">
+                    {rows.length === 0 ? (
+                      <div className="px-2 py-6 text-center text-[11px] text-gray-400 border-2 border-dashed border-gray-200 rounded-lg bg-white">
+                        Drag a conference here
+                      </div>
+                    ) : rows.map(c => (
+                      <div
+                        key={c.conferenceId}
+                        draggable
+                        onDragStart={() => setDraggedId(c.conferenceId)}
+                        onDragEnd={() => setDraggedId(null)}
+                        className={`bg-white rounded-lg border border-gray-200 p-2.5 shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow ${
+                          draggedId === c.conferenceId ? 'opacity-40' : ''
+                        } ${key === 'cut' ? 'opacity-70' : ''}`}
+                      >
+                        <div className="flex items-center gap-1 min-w-0 mb-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setLogisticsDrawer({
+                              conferenceId: c.conferenceId,
+                              conferenceName: c.name,
+                              seriesName: null,
+                              planYear: year,
+                              startDate: c.startDate ?? null,
+                              endDate: c.endDate ?? null,
+                              decision: c.decision ?? null,
+                              plannedBudget: c.plan.plannedBudget ?? null,
+                              assignedReps: c.plan.assignedReps ?? [],
+                              calScore: null,
+                              boothPresent: c.boothPresent,
+                              boothWidth: c.boothWidth,
+                              boothLength: c.boothLength,
+                              boothHall: c.boothHall,
+                            })}
+                            className="text-brand-secondary hover:text-brand-primary font-semibold text-xs truncate bg-transparent border-0 p-0 text-left cursor-pointer flex-1 min-w-0"
+                          >
+                            {c.name}
+                          </button>
+                          {c.decision === 'new' && <NewBadge />}
+                          <Link href={`/conferences/${c.conferenceId}`} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Open conference detail">
+                            <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
+                          </Link>
+                        </div>
+                        <p className="text-[10px] text-gray-400 mb-2">
+                          {fmtDateShort(c.plan.plannedStartDate ?? c.startDate)}
+                        </p>
+                        <div className="flex items-center flex-wrap gap-1 mb-2">
+                          <OptionEditPill
+                            value={c.conferenceType}
+                            options={CONFERENCE_TYPE_OPTIONS}
+                            activeClass="bg-amber-50 text-amber-800 border border-amber-300"
+                            placeholder="Set type"
+                            onSelect={async v => { onTypeUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/type`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conferenceType: v }) }); }}
+                          />
+                          <OptionEditPill
+                            value={c.sponsorshipLevel}
+                            options={sponsorshipOptions.map(o => o.value)}
+                            activeClass="bg-green-50 text-green-800 border border-green-300"
+                            placeholder="Set sponsorship"
+                            colorFor={v => sponsorshipColors[v] ?? null}
+                            onSelect={async v => { onSponsorshipUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/sponsorship`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sponsorshipLevel: v }) }); }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          {c.plan.plannedBudget != null ? (
+                            <button type="button" onClick={() => setBudgetModalConf(c)} className="text-[11px] text-gray-700 font-medium tabular-nums hover:text-brand-primary transition-colors">
+                              {fmtCurrency(c.plan.plannedBudget)}
+                            </button>
+                          ) : (
+                            <button type="button" onClick={() => setBudgetModalConf(c)} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors">
+                              + Budget
+                            </button>
+                          )}
+                          <div style={{ position: 'relative' }}>
+                            <RepAssignmentPopover
+                              conferenceId={c.conferenceId}
+                              planYear={year}
+                              assignedReps={c.plan.assignedReps}
+                              allConferences={conferencesForConflicts.map(cc => ({ conferenceId: cc.conferenceId, name: cc.name, startDate: cc.startDate, assignedReps: cc.plan.assignedReps }))}
+                              onUpdate={reps => onRepsUpdated(c.conferenceId, reps)}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {budgetModalConf && (
         <ConferencePlanBudgetModal
