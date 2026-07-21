@@ -179,7 +179,7 @@ export function LogisticsDeadlinesTab({
               <div className="flex items-center gap-4 flex-shrink-0">
                 <span className="w-[74px] flex-shrink-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wide text-center">Category</span>
                 <span className="w-[74px] flex-shrink-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wide text-center">Status</span>
-                <span className="w-[104px] flex-shrink-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Due Date</span>
+                <span className="w-[104px] flex-shrink-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wide text-right">Due Date</span>
               </div>
             </div>
             {sorted.map(d => (
@@ -208,7 +208,7 @@ export function LogisticsDeadlinesTab({
                     type="date"
                     defaultValue={d.dueDate}
                     onBlur={e => saveDueDate(d, e.target.value)}
-                    className="text-xs text-gray-400 bg-transparent border-0 focus:ring-0 focus:outline-none w-[104px] flex-shrink-0"
+                    className="text-xs text-gray-400 bg-transparent border-0 focus:ring-0 focus:outline-none w-[104px] flex-shrink-0 text-right"
                   />
                 </div>
               </div>
