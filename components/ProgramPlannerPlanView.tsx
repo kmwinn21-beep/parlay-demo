@@ -520,7 +520,7 @@ function TerritoryEditCell({ conferenceId, territoryScope, territoryIds, territo
     setOpen(true);
   };
 
-  const persist = async (scope: 'national' | 'regional', ids: number[]) => {
+  const persist = async (scope: 'national' | 'regional' | null, ids: number[]) => {
     setSaving(true);
     onUpdated(scope, ids);
     try {
@@ -588,13 +588,23 @@ function TerritoryEditCell({ conferenceId, territoryScope, territoryIds, territo
               </div>
             </>
           )}
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="w-full mt-3 px-2 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
-          >
-            Done
-          </button>
+          <div className="flex items-center gap-2 mt-3">
+            <button
+              type="button"
+              onClick={() => { persist(null, []); setOpen(false); }}
+              disabled={!territoryScope}
+              className="px-2 py-1.5 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+            >
+              Done
+            </button>
+          </div>
         </div>
       )}
     </>
