@@ -276,11 +276,15 @@ export function SalesRepsTab() {
                         )}
                       </div>
                       {t.assignedUsers.length > 0 && (
-                        <div className="flex items-center mt-2">
-                          {t.assignedUsers.map((u, i) => (
-                            <div key={u.userId} style={{ marginLeft: i === 0 ? 0 : -6, zIndex: t.assignedUsers.length - i }}>
-                              <AvatarCircle name={u.displayName} />
-                            </div>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                          {t.assignedUsers.map(u => (
+                            <span
+                              key={u.userId}
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium text-white"
+                              style={{ backgroundColor: colorForName(u.displayName) }}
+                            >
+                              {u.displayName}
+                            </span>
                           ))}
                         </div>
                       )}
