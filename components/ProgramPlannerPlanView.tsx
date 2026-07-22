@@ -84,7 +84,7 @@ function fmtDateShort(dateStr: string): string {
 }
 
 type GroupKey = 'attend' | 'reduce' | 'new' | 'evaluating' | 'cut';
-type GroupMode = 'status' | 'rep' | 'territory' | 'strategy' | 'type';
+type GroupMode = 'status' | 'rep' | 'territory' | 'strategy' | 'type' | 'date';
 const ORDERED_GROUPS: GroupKey[] = ['evaluating', 'attend', 'reduce', 'new', 'cut'];
 const GROUP_TO_DECISION: Record<GroupKey, GroupKey> = {
   attend: 'attend', reduce: 'reduce', new: 'new', evaluating: 'evaluating', cut: 'cut',
@@ -211,6 +211,14 @@ function TypeViewIcon() {
   return (
     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-5 5a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 9V4a1 1 0 011-1z" />
+    </svg>
+  );
+}
+
+function DateViewIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
     </svg>
   );
 }
@@ -558,7 +566,7 @@ function BoothEditPopover({
   onUpdated: (booth: { boothPresent: boolean; boothWidth: number | null; boothLength: number | null; boothNumber: string | null; boothHall: string | null }) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<DropdownPos | null>(null);
   const [present, setPresent] = useState(boothPresent);
   const [width, setWidth] = useState(boothWidth != null ? String(boothWidth) : '');
   const [length, setLength] = useState(boothLength != null ? String(boothLength) : '');
@@ -584,10 +592,7 @@ function BoothEditPopover({
     setLength(boothLength != null ? String(boothLength) : '');
     setNumber(boothNumber ?? '');
     setHall(boothHall ?? '');
-    if (buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: rect.left });
-    }
+    if (buttonRef.current) setPos(calcDropdownPos(buttonRef.current));
     setOpen(true);
   };
 
@@ -633,7 +638,7 @@ function BoothEditPopover({
         <div
           ref={popoverRef}
           className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 space-y-3"
-          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999, width: 260 }}
+          style={{ ...dropdownStyle(pos), width: 260 }}
         >
           <div className="flex items-center gap-3">
             <button
@@ -682,7 +687,7 @@ function LocationEditCell({ conferenceId, location, onUpdated }: {
   onUpdated: (location: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<DropdownPos | null>(null);
   const [value, setValue] = useState(location ?? '');
   const [details, setDetails] = useState<LocationDetails | null>(null);
   const [saving, setSaving] = useState(false);
@@ -702,10 +707,7 @@ function LocationEditCell({ conferenceId, location, onUpdated }: {
   const openPopover = () => {
     setValue(location ?? '');
     setDetails(null);
-    if (buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: rect.left });
-    }
+    if (buttonRef.current) setPos(calcDropdownPos(buttonRef.current));
     setOpen(true);
   };
 
@@ -752,7 +754,7 @@ function LocationEditCell({ conferenceId, location, onUpdated }: {
         <div
           ref={popoverRef}
           className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 space-y-2"
-          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999, width: 280 }}
+          style={{ ...dropdownStyle(pos), width: 280 }}
         >
           <LocationAutocompleteInput
             value={value}
@@ -785,7 +787,7 @@ function DatesEditCell({
   onUpdated: (plannedStartDate: string | null, plannedEndDate: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<DropdownPos | null>(null);
   const [start, setStart] = useState(plannedStartDate ?? '');
   const [end, setEnd] = useState(plannedEndDate ?? '');
   const [saving, setSaving] = useState(false);
@@ -805,10 +807,7 @@ function DatesEditCell({
   const openPopover = () => {
     setStart(plannedStartDate ?? '');
     setEnd(plannedEndDate ?? '');
-    if (buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: rect.left });
-    }
+    if (buttonRef.current) setPos(calcDropdownPos(buttonRef.current));
     setOpen(true);
   };
 
@@ -848,7 +847,7 @@ function DatesEditCell({
         <div
           ref={popoverRef}
           className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 space-y-2"
-          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999, width: 200 }}
+          style={{ ...dropdownStyle(pos), width: 200 }}
         >
           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">FY{planYear} dates</p>
           <div className="space-y-1.5">
@@ -1169,11 +1168,35 @@ export function ProgramPlannerPlanView({
   const strategySections: Section[] = buildSingleFieldSections(c => c.strategyTypeName, 'ti-target-arrow', 'No Strategy', abbreviateStrategy);
   const typeSections: Section[] = buildSingleFieldSections(c => c.conferenceType, 'ti-category', 'No Type');
 
+  // By Date: one section per calendar month of each conference's effective
+  // start date (the plan year's own date once set, same fallback used
+  // elsewhere on this page), sorted chronologically rather than alphabetically.
+  const dateSections: Section[] = (() => {
+    const byMonth = new Map<string, { label: string; rows: PlanConferenceRow[] }>();
+    for (const c of conferences) {
+      const dateStr = c.plan.plannedStartDate ?? c.startDate;
+      const d = new Date(dateStr + 'T00:00:00');
+      if (isNaN(d.getTime())) continue;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      const bucket = byMonth.get(key) ?? { label, rows: [] };
+      bucket.rows.push(c);
+      byMonth.set(key, bucket);
+    }
+    return Array.from(byMonth.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([key, v]) => ({
+        key, label: v.label, icon: 'ti-calendar', headerBg: 'bg-gray-100', headerText: 'text-gray-700',
+        pillBg: 'bg-gray-200', pillText: 'text-gray-600', rows: v.rows, dropKey: null,
+      }));
+  })();
+
   const sections = groupMode === 'status' ? statusSections
     : groupMode === 'rep' ? repSections
     : groupMode === 'territory' ? territorySections
     : groupMode === 'strategy' ? strategySections
-    : typeSections;
+    : groupMode === 'type' ? typeSections
+    : dateSections;
 
   const plannedConfs = [...groups.attend, ...groups.reduce, ...groups.new];
   const totalPlannedBudget = plannedConfs.reduce((sum, c) => sum + (c.plan.plannedBudget ?? 0), 0);
@@ -1344,6 +1367,17 @@ export function ProgramPlannerPlanView({
         >
           <TypeViewIcon />
           By Type
+        </button>
+        <button
+          type="button"
+          onClick={() => setGroupMode('date')}
+          title="Group by date"
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+            groupMode === 'date' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+          }`}
+        >
+          <DateViewIcon />
+          By Date
         </button>
       </div>
 
