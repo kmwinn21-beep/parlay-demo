@@ -1569,7 +1569,7 @@ export default function ConferenceDetailPage() {
                 />
               </div>
               <div>
-                <label className="label">Conference Territory</label>
+                <label className="label">Market Coverage</label>
                 <select
                   value={editData.territory_scope ?? ''}
                   onChange={(e) => {

@@ -538,7 +538,16 @@ export function ConferenceForm() {
             <label className="label">Start Date *</label>
             <input
               type="date"
-              {...register('start_date', { required: 'Start date is required' })}
+              {...register('start_date', {
+                required: 'Start date is required',
+                onChange: (e) => {
+                  const newStart = e.target.value;
+                  if (!newStart) return;
+                  const d = new Date(newStart + 'T00:00:00');
+                  d.setDate(d.getDate() + 3);
+                  setValue('end_date', d.toISOString().slice(0, 10));
+                },
+              })}
               className="input-field"
             />
             {errors.start_date && <p className="text-red-500 text-xs mt-1">{errors.start_date.message}</p>}
@@ -554,7 +563,7 @@ export function ConferenceForm() {
             {errors.end_date && <p className="text-red-500 text-xs mt-1">{errors.end_date.message}</p>}
           </div>
 
-          <div>
+          <div className="md:col-span-2">
             <label className="label">Location *</label>
             <LocationAutocompleteInput
               value={watch('location') || ''}
@@ -566,7 +575,7 @@ export function ConferenceForm() {
           </div>
 
           <div>
-            <label className="label">Conference Territory</label>
+            <label className="label">Market Coverage</label>
             <select
               value={territoryScope}
               onChange={(e) => {
@@ -582,50 +591,52 @@ export function ConferenceForm() {
             </select>
           </div>
 
-          {territoryScope === 'regional' && (
-            <div className="md:col-span-2" ref={territoryDropdownRef}>
-              <label className="label">Select Territories *</label>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setTerritoryDropdownOpen((o) => !o)}
-                  className="input-field text-left flex items-center justify-between gap-2"
-                >
-                  <span className={selectedTerritoryIds.size === 0 ? 'text-gray-400' : 'text-gray-800'}>
-                    {selectedTerritoryIds.size === 0
+          <div ref={territoryDropdownRef}>
+            <label className="label">Select Territories {territoryScope === 'regional' ? '*' : ''}</label>
+            <div className="relative">
+              <button
+                type="button"
+                disabled={territoryScope !== 'regional'}
+                onClick={() => setTerritoryDropdownOpen((o) => !o)}
+                className={`input-field text-left flex items-center justify-between gap-2 ${
+                  territoryScope !== 'regional' ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : ''
+                }`}
+              >
+                <span className={selectedTerritoryIds.size === 0 ? 'text-gray-400' : 'text-gray-800'}>
+                  {territoryScope !== 'regional'
+                    ? 'Select Regional to choose territories'
+                    : selectedTerritoryIds.size === 0
                       ? 'Select one or more territories...'
                       : territoryOptions.filter((t) => selectedTerritoryIds.has(t.id)).map((t) => t.name).join(', ')}
-                  </span>
-                  <svg className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${territoryDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {territoryDropdownOpen && (
-                  <div className="absolute z-30 top-full mt-1 left-0 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
-                    {territoryOptions.length === 0 ? (
-                      <p className="px-3 py-2 text-xs text-gray-400">No territories configured. Set them up in Admin Settings → Sales Reps.</p>
-                    ) : territoryOptions.map((t) => (
-                      <label key={t.id} className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedTerritoryIds.has(t.id)}
-                          onChange={() => setSelectedTerritoryIds((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(t.id)) next.delete(t.id); else next.add(t.id);
-                            return next;
-                          })}
-                          className="accent-brand-secondary w-3.5 h-3.5 flex-shrink-0"
-                        />
-                        <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: t.color }} />
-                        {t.name}
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {selectedTerritoryIds.size === 0 && <p className="text-xs text-gray-500 mt-1">Select at least one territory for a regional conference.</p>}
+                </span>
+                <svg className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${territoryDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {territoryDropdownOpen && territoryScope === 'regional' && (
+                <div className="absolute z-30 top-full mt-1 left-0 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                  {territoryOptions.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-gray-400">No territories configured. Set them up in Admin Settings → Sales Reps.</p>
+                  ) : territoryOptions.map((t) => (
+                    <label key={t.id} className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedTerritoryIds.has(t.id)}
+                        onChange={() => setSelectedTerritoryIds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(t.id)) next.delete(t.id); else next.add(t.id);
+                          return next;
+                        })}
+                        className="accent-brand-secondary w-3.5 h-3.5 flex-shrink-0"
+                      />
+                      <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: t.color }} />
+                      {t.name}
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+          </div>
 
           {conferenceMode === 'new' && (
           <div className="md:col-span-2">
