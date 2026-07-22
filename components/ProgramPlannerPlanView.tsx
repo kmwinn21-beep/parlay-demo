@@ -17,7 +17,6 @@ import type { ColumnMapping } from '@/lib/columnMapping';
 interface BudgetLineItem { label: string; budgeted: number | null; actual: number | null }
 interface PlannedLineItem { label: string; budgeted: number }
 interface CategoryAverage { label: string; avgActual: number }
-interface TeamInputInfo { hasInput: boolean; hasComments: boolean }
 
 interface PlanMeta {
   plannedBudget: number | null;
@@ -51,6 +50,7 @@ export interface PlanConferenceRow {
   boothHall: string | null;
   territoryScope: string | null;
   territoryIds: number[];
+  committedToProgram: boolean;
   plan: PlanMeta;
 }
 
@@ -58,7 +58,6 @@ interface ProgramPlannerPlanViewProps {
   year: number;
   conferences: PlanConferenceRow[];
   categoryAverages: CategoryAverage[];
-  teamInputMap: Map<number, TeamInputInfo>;
   // Scores already computed for historical/attended conferences by the Program
   // tab's shared Calendar Intelligence store — pulled over as-is here so a
   // conference that's already been scored from real attendee history never
@@ -66,7 +65,6 @@ interface ProgramPlannerPlanViewProps {
   // never attended, no real history yet) fall back to conference_plans'
   // uploaded-list score, or the empty "+" state if neither exists.
   calIntelScores: Map<number, { score: number; tier: string; confidence: string }>;
-  onOpenInputPanel: (conferenceId: number, conferenceName: string) => void;
   onDecisionUpdated: (conferenceId: number, decision: 'attend' | 'reduce' | 'cut' | 'evaluating' | 'new' | null) => void;
   onRepsUpdated: (conferenceId: number, assignedReps: AssignedRep[]) => void;
   onBudgetUpdated: (conferenceId: number, plannedBudget: number, lineItems: PlannedLineItem[]) => void;
@@ -78,6 +76,7 @@ interface ProgramPlannerPlanViewProps {
   onBoothUpdated: (conferenceId: number, booth: { boothPresent: boolean; boothWidth: number | null; boothLength: number | null; boothNumber: string | null; boothHall: string | null }) => void;
   onLocationUpdated: (conferenceId: number, location: string) => void;
   onTerritoryUpdated: (conferenceId: number, territoryScope: string | null, territoryIds: number[]) => void;
+  onConferenceCommitted: (conferenceId: number, startDate: string, endDate: string) => void;
   onConferenceCreated: () => void;
 }
 
@@ -611,6 +610,128 @@ function TerritoryEditCell({ conferenceId, territoryScope, territoryIds, territo
   );
 }
 
+// The Plan table's Commit column (table view only — a Kanban card has no
+// equivalent row of columns to append to). Only ever renders something for
+// conferences the user has actually decided to attend; every other decision
+// leaves the cell blank since "committing" only makes sense once you're
+// going. Promotes the conference from a Plan-tab-only draft (no Conference
+// Details profile, invisible to Go To Conference / the Conferences list)
+// into a real, committed conference via POST .../commit — which requires
+// planned dates to already be set, since those become the new profile's
+// start/end date.
+function CommitCell({ conferenceId, conferenceName, decision, plannedStartDate, planYear, committedToProgram, onCommitted }: {
+  conferenceId: number;
+  conferenceName: string;
+  decision: string | null;
+  plannedStartDate: string | null;
+  planYear: number;
+  committedToProgram: boolean;
+  onCommitted: (startDate: string, endDate: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<DropdownPos | null>(null);
+  const [saving, setSaving] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (buttonRef.current?.contains(e.target as Node) || popoverRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  if (decision !== 'attend' && decision !== 'reduce') return null;
+
+  if (committedToProgram) {
+    return (
+      <span
+        title="Added to program"
+        className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100 border border-green-300 flex-shrink-0"
+      >
+        <svg className="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      </span>
+    );
+  }
+
+  const openPopover = () => {
+    if (buttonRef.current) setPos(calcDropdownPos(buttonRef.current));
+    setOpen(true);
+  };
+
+  const confirm = async () => {
+    if (!plannedStartDate) {
+      toast.error('Set conference dates before adding this conference to your program.');
+      setOpen(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/program-planner/conferences/${conferenceId}/commit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planYear }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? 'Failed to add to program');
+      }
+      const result = await res.json();
+      onCommitted(result.startDate, result.endDate);
+      toast.success(`${conferenceName} added to your ${planYear} program.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add to program');
+    } finally {
+      setSaving(false);
+      setOpen(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={openPopover}
+        disabled={saving}
+        className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-brand-primary/10 text-brand-primary border border-brand-primary/30 hover:bg-brand-primary/20 transition-colors disabled:opacity-50"
+      >
+        + to Program
+      </button>
+      {open && pos && (
+        <div ref={popoverRef} className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 w-64" style={dropdownStyle(pos)}>
+          <p className="text-sm text-gray-700 mb-3">
+            Add <span className="font-semibold">{conferenceName}</span> to your {planYear} Program?
+          </p>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              disabled={saving}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirm}
+              disabled={saving}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-brand-primary text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+            >
+              {saving ? 'Adding…' : 'Confirm'}
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // Shown in By Rep grouping next to a conference that landed in this rep's
 // column via territory auto-placement rather than an actual rep assignment —
 // click reveals why it's here instead of silently implying the rep is
@@ -655,26 +776,6 @@ function RepAssignmentWarning({ repName, conferenceName, scopeLabel }: {
         </div>
       )}
     </div>
-  );
-}
-
-function InputButton({ conferenceId, conferenceName, info, onOpen }: {
-  conferenceId: number; conferenceName: string; info: TeamInputInfo | undefined; onOpen: (id: number, name: string) => void;
-}) {
-  const hasInput = info?.hasInput ?? false;
-  const hasComments = info?.hasComments ?? false;
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen(conferenceId, conferenceName)}
-      className={`relative p-1.5 rounded-full transition-all hover:opacity-75 ${hasInput ? 'bg-brand-primary/10' : ''}`}
-      title="View team input"
-    >
-      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: hasInput ? 'rgb(var(--brand-primary-rgb))' : '#B0B7C3' }}>
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-      </svg>
-      {hasComments && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-red-500 rounded-full" />}
-    </button>
   );
 }
 
@@ -1194,9 +1295,9 @@ function DatesEditCell({
 }
 
 export function ProgramPlannerPlanView({
-  year, conferences, categoryAverages, teamInputMap, calIntelScores, onOpenInputPanel,
+  year, conferences, categoryAverages, calIntelScores,
   onDecisionUpdated, onRepsUpdated, onBudgetUpdated, onStrategyUpdated, onDatesUpdated, onListScoreUpdated,
-  onTypeUpdated, onSponsorshipUpdated, onBoothUpdated, onLocationUpdated, onTerritoryUpdated, onConferenceCreated,
+  onTypeUpdated, onSponsorshipUpdated, onBoothUpdated, onLocationUpdated, onTerritoryUpdated, onConferenceCommitted, onConferenceCreated,
 }: ProgramPlannerPlanViewProps) {
   const [priorYearActual, setPriorYearActual] = useState<number | null>(null);
   const [budgetModalConf, setBudgetModalConf] = useState<PlanConferenceRow | null>(null);
@@ -1847,7 +1948,6 @@ export function ProgramPlannerPlanView({
                 {/* Mobile: one card per conference, stacked */}
                 <div className="sm:hidden divide-y divide-gray-100">
                   {rows.map(c => {
-                    const info = teamInputMap.get(c.conferenceId);
                     return (
                       <div
                         key={c.conferenceId}
@@ -1987,7 +2087,6 @@ export function ProgramPlannerPlanView({
                               onUpdate={reps => onRepsUpdated(c.conferenceId, reps)}
                             />
                           </div>
-                          <InputButton conferenceId={c.conferenceId} conferenceName={c.name} info={info} onOpen={onOpenInputPanel} />
                         </div>
                       </div>
                     );
@@ -2014,7 +2113,7 @@ export function ProgramPlannerPlanView({
                       <col style={{ width: 120 }} />
                       <col style={{ width: 80 }} />
                       <col style={{ width: 110 }} />
-                      <col style={{ width: 52 }} />
+                      <col style={{ width: 116 }} />
                     </colgroup>
                     <thead>
                       <tr className="border-b border-gray-100">
@@ -2037,12 +2136,11 @@ export function ProgramPlannerPlanView({
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Location</th>
                         <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Budget</th>
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Assigned reps</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Input</th>
+                        <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Commit</th>
                       </tr>
                     </thead>
                     <tbody>
                       {rows.map((c, i) => {
-                        const info = teamInputMap.get(c.conferenceId);
                         return (
                           <tr
                             key={c.conferenceId}
@@ -2194,7 +2292,15 @@ export function ProgramPlannerPlanView({
                               />
                             </td>
                             <td className="px-3 py-2 text-center">
-                              <InputButton conferenceId={c.conferenceId} conferenceName={c.name} info={info} onOpen={onOpenInputPanel} />
+                              <CommitCell
+                                conferenceId={c.conferenceId}
+                                conferenceName={c.name}
+                                decision={c.decision}
+                                plannedStartDate={c.plan.plannedStartDate}
+                                planYear={year}
+                                committedToProgram={c.committedToProgram}
+                                onCommitted={(startDate, endDate) => onConferenceCommitted(c.conferenceId, startDate, endDate)}
+                              />
                             </td>
                           </tr>
                         );

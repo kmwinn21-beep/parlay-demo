@@ -24,10 +24,13 @@ export async function GET(request: NextRequest) {
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
   try {
-    // ?nav=1 — lightweight query for the header navigation dropdown (no JOIN/COUNT)
+    // ?nav=1 — lightweight query for the header navigation dropdown (no JOIN/COUNT).
+    // Excludes conferences still only being evaluated in a future year's Plan tab
+    // (committed_to_program = 0) — they don't have a real Conference Details
+    // profile yet, so there's nowhere for this menu to send the user.
     if (request.nextUrl.searchParams.get('nav') === '1') {
       const result = await db.execute({
-        sql: `SELECT id, name, start_date, end_date, internal_attendees FROM conferences ORDER BY start_date DESC`,
+        sql: `SELECT id, name, start_date, end_date, internal_attendees FROM conferences WHERE committed_to_program = 1 ORDER BY start_date DESC`,
         args: [],
       });
       return NextResponse.json(result.rows.map((r) => ({ ...r })), {
@@ -39,6 +42,7 @@ export async function GET(request: NextRequest) {
             FROM conferences c
             LEFT JOIN conference_attendees ca ON c.id = ca.conference_id
             LEFT JOIN conference_series cs ON cs.id = c.series_id
+            WHERE c.committed_to_program = 1
             GROUP BY c.id
             ORDER BY c.start_date DESC`,
       args: [],
@@ -105,6 +109,10 @@ export async function POST(request: NextRequest) {
     const booth_hall = booth_present ? ((formData.get('booth_hall') as string | null) || null) : null;
     const territory_scope = (formData.get('territory_scope') as string | null) || null;
     const territory_ids = territory_scope === 'regional' ? ((formData.get('territory_ids') as string | null) || '[]') : '[]';
+    // Only the Plan tab's minimal Add-to-Plan flow sends '0' — every other
+    // creation path (the main Add Conference form, historical imports) is a
+    // real, committed conference from the moment it's created.
+    const committed_to_program = formData.get('committed_to_program') === '0' ? 0 : 1;
     const file = formData.get('file') as File | null;
     const mappingJson = formData.get('mapping') as string | null;
     const mapping: ColumnMapping | null = mappingJson ? JSON.parse(mappingJson) as ColumnMapping : null;
@@ -135,8 +143,8 @@ export async function POST(request: NextRequest) {
                is_historical, post_conference_days, series_id, season_id,
                industry_focus, conference_type, website, sponsorship_level,
                booth_present, booth_width, booth_length, booth_number, booth_hall,
-               territory_scope, territory_ids)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+               territory_scope, territory_ids, committed_to_program)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       args: [name, start_date, end_date, location,
              location_place_id, location_lat, location_lng, location_city, location_state, location_country, location_timezone,
              notes || null, internal_attendees || null,
@@ -144,7 +152,7 @@ export async function POST(request: NextRequest) {
              is_historical ? 1 : 0, defaultPostConferenceDays, series_id, season_id,
              industry_focus, conference_type, website, sponsorship_level,
              booth_present, booth_width, booth_length, booth_number, booth_hall,
-             territory_scope, territory_ids],
+             territory_scope, territory_ids, committed_to_program],
     });
     const conference = confResult.rows[0] as unknown as {
       id: number | bigint;

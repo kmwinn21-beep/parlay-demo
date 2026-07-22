@@ -47,6 +47,7 @@ export function AddConferenceModal({ planYear, onClose, onCreated }: AddConferen
       formData.append('location', 'TBD');
       formData.append('is_historical', '0');
       formData.append('conference_strategy_type_id', String(strategyOptions[0].id));
+      formData.append('committed_to_program', '0');
       formData.append('series_id', selectedSeries.id);
       if (selectedSeasonId) formData.append('season_id', selectedSeasonId);
 

@@ -1838,4 +1838,14 @@ export const migrations: string[] = [
   `ALTER TABLE conference_plans ADD COLUMN list_score INTEGER`,
   `ALTER TABLE conference_plans ADD COLUMN list_score_tier TEXT`,
   `ALTER TABLE conference_plans ADD COLUMN list_score_confidence TEXT`,
+  // 571 — conferences.committed_to_program: distinguishes a real, committed
+  // conference (has a Conference Details profile, shows up in Go To
+  // Conference / the Conferences list) from a conference that only exists
+  // because it's being evaluated in a future year's Plan tab. DEFAULT 1
+  // means every pre-existing conference is retroactively "committed" (they
+  // already have real detail pages) — only conferences created through the
+  // Plan tab's minimal Add-to-Plan flow are inserted with 0, and stay 0
+  // until the user explicitly commits them via the Plan table's Commit
+  // column (POST .../conferences/[id]/commit).
+  `ALTER TABLE conferences ADD COLUMN committed_to_program INTEGER NOT NULL DEFAULT 1`,
 ];
