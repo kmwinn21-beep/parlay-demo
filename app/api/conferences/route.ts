@@ -113,6 +113,10 @@ export async function POST(request: NextRequest) {
     // creation path (the main Add Conference form, historical imports) is a
     // real, committed conference from the moment it's created.
     const committed_to_program = formData.get('committed_to_program') === '0' ? 0 : 1;
+    // Distinct from committed_to_program — stays true for this conference's
+    // whole lifetime once set, since it flags "no prior-year history exists
+    // at all," which committing doesn't change (see the commit route).
+    const is_new_addition = formData.get('is_new_addition') === '1' ? 1 : 0;
     const file = formData.get('file') as File | null;
     const mappingJson = formData.get('mapping') as string | null;
     const mapping: ColumnMapping | null = mappingJson ? JSON.parse(mappingJson) as ColumnMapping : null;
@@ -143,8 +147,8 @@ export async function POST(request: NextRequest) {
                is_historical, post_conference_days, series_id, season_id,
                industry_focus, conference_type, website, sponsorship_level,
                booth_present, booth_width, booth_length, booth_number, booth_hall,
-               territory_scope, territory_ids, committed_to_program)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+               territory_scope, territory_ids, committed_to_program, is_new_addition)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       args: [name, start_date, end_date, location,
              location_place_id, location_lat, location_lng, location_city, location_state, location_country, location_timezone,
              notes || null, internal_attendees || null,
@@ -152,7 +156,7 @@ export async function POST(request: NextRequest) {
              is_historical ? 1 : 0, defaultPostConferenceDays, series_id, season_id,
              industry_focus, conference_type, website, sponsorship_level,
              booth_present, booth_width, booth_length, booth_number, booth_hall,
-             territory_scope, territory_ids, committed_to_program],
+             territory_scope, territory_ids, committed_to_program, is_new_addition],
     });
     const conference = confResult.rows[0] as unknown as {
       id: number | bigint;

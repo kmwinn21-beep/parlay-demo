@@ -1848,4 +1848,16 @@ export const migrations: string[] = [
   // until the user explicitly commits them via the Plan table's Commit
   // column (POST .../conferences/[id]/commit).
   `ALTER TABLE conferences ADD COLUMN committed_to_program INTEGER NOT NULL DEFAULT 1`,
+  // 572 — conferences.is_new_addition: distinct from committed_to_program.
+  // committed_to_program flips true the moment a Plan-tab draft is
+  // committed, but "new — never attended before" should keep showing after
+  // that (the whole point of the star is to flag the conference has no
+  // prior-year history at all, and committing it doesn't create any). DEFAULT
+  // 0 means every pre-existing conference and every new instance spawned by
+  // the commit route for a recurring conference (POST .../commit's
+  // already-committed branch — it has real prior-year history by
+  // definition) is NOT flagged new; only conferences created through the
+  // Plan tab's minimal Add-to-Plan flow are inserted with 1, and that never
+  // changes for that row afterward.
+  `ALTER TABLE conferences ADD COLUMN is_new_addition INTEGER NOT NULL DEFAULT 0`,
 ];

@@ -51,6 +51,7 @@ export interface PlanConferenceRow {
   territoryScope: string | null;
   territoryIds: number[];
   committedToProgram: boolean;
+  isNewAddition: boolean;
   plan: PlanMeta;
 }
 
@@ -305,11 +306,15 @@ function ChevronRightIcon() {
   );
 }
 
-// Flags a conference that's never actually been committed to the program —
-// driven by committedToProgram (durable, server-side) rather than the
-// decision bucket, so it keeps showing after being dragged out of New into
-// e.g. Attending (decision is single-valued and gets overwritten by the
-// move, but committedToProgram stays false until the Commit column is used).
+// Flags a conference with no prior-year history at all — driven by
+// isNewAddition (durable, server-side, set once at creation and never
+// changed afterward) rather than decision or committedToProgram. Both of
+// those change over the conference's life (decision is single-valued and
+// gets overwritten by a drag; committedToProgram flips true the moment the
+// Commit column is used) but neither one means the conference has actually
+// been attended before, which is the whole point of this star — so it keeps
+// showing even after being moved to Attending and even after being
+// committed to next year's program.
 function NewBadge() {
   return (
     <span
@@ -2013,7 +2018,7 @@ export function ProgramPlannerPlanView({
                               <Link href={`/conferences/${c.conferenceId}`} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Open conference detail">
                                 <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                               </Link>
-                              {!c.committedToProgram && <NewBadge />}
+                              {c.isNewAddition && <NewBadge />}
                               {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                 <RepAssignmentWarning
                                   repName={section.label}
@@ -2210,7 +2215,7 @@ export function ProgramPlannerPlanView({
                                   </Link>
                                 </div>
                                 <div className="flex items-center gap-1 w-[68px] flex-shrink-0 justify-center pt-0.5">
-                                  {!c.committedToProgram && <NewBadge />}
+                                  {c.isNewAddition && <NewBadge />}
                                   {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                     <RepAssignmentWarning
                                       repName={section.label}
@@ -2430,7 +2435,7 @@ export function ProgramPlannerPlanView({
                               {c.name}
                             </button>
                             <div className="flex items-center gap-1 w-[84px] flex-shrink-0 justify-center pt-0.5">
-                              {!c.committedToProgram && <NewBadge />}
+                              {c.isNewAddition && <NewBadge />}
                               {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                 <RepAssignmentWarning
                                   repName={section.label}

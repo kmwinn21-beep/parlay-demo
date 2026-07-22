@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
                  c.conference_strategy_type_id, cs.display_name as series_name, co.value as strategy_type_name,
                  c.industry_focus, c.conference_type, c.sponsorship_level, c.location,
                  c.booth_present, c.booth_width, c.booth_length, c.booth_number, c.booth_hall,
-                 c.territory_scope, c.territory_ids, c.committed_to_program
+                 c.territory_scope, c.territory_ids, c.committed_to_program, c.is_new_addition
           FROM conferences c
           LEFT JOIN conference_series cs ON cs.id = c.series_id
           LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
@@ -268,6 +268,7 @@ export async function GET(request: NextRequest) {
         } catch { return []; }
       })(),
       committedToProgram: Boolean(Number(conf.committed_to_program ?? 1)),
+      isNewAddition: Boolean(Number(conf.is_new_addition ?? 0)),
     };
   });
 

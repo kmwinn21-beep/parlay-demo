@@ -73,6 +73,7 @@ interface ConferenceRow {
   territoryScope: string | null;
   territoryIds: number[];
   committedToProgram: boolean;
+  isNewAddition: boolean;
 }
 
 interface SeriesGroup {
