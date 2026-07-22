@@ -159,21 +159,29 @@ const CONFERENCE_TYPE_OPTIONS = [
 // Shared viewport-aware positioning for the click-to-edit dropdowns (Strategy, Type,
 // Sponsorship) — flips to open upward when there isn't enough room below, same
 // approach as RepMultiSelect's calcPos.
-type DropdownPos = { top?: number; bottom?: number; left: number; above: boolean };
+type DropdownPos = { top?: number; bottom?: number; left?: number; right?: number; above: boolean };
 const DROPDOWN_EST_HEIGHT = 260;
+// Conservative estimate covering the widest dropdown that uses this helper
+// (Strategy's max-w-[320px] menu) — used only to decide whether to flip from
+// left- to right-anchored, so erring wide just means flipping a little
+// earlier than strictly necessary, never actually clipping.
+const DROPDOWN_EST_WIDTH = 320;
 function calcDropdownPos(el: HTMLElement): DropdownPos {
   const rect = el.getBoundingClientRect();
   const spaceBelow = window.innerHeight - rect.bottom;
   const above = spaceBelow < DROPDOWN_EST_HEIGHT && rect.top > spaceBelow;
+  const spaceRight = window.innerWidth - rect.left;
+  const overflowsRight = spaceRight < DROPDOWN_EST_WIDTH && rect.right > DROPDOWN_EST_WIDTH;
   return {
     top: above ? undefined : rect.bottom + 4,
     bottom: above ? window.innerHeight - rect.top + 4 : undefined,
-    left: rect.left,
+    left: overflowsRight ? undefined : rect.left,
+    right: overflowsRight ? window.innerWidth - rect.right : undefined,
     above,
   };
 }
 function dropdownStyle(pos: DropdownPos): CSSProperties {
-  return { position: 'fixed', top: pos.top, bottom: pos.bottom, left: pos.left, zIndex: 9999 };
+  return { position: 'fixed', top: pos.top, bottom: pos.bottom, left: pos.left, right: pos.right, zIndex: 9999 };
 }
 
 // Same viewport-aware flip-up logic as calcDropdownPos, sized for the small
