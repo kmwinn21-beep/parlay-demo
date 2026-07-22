@@ -1521,7 +1521,7 @@ export function ProgramPlannerPlanView({
                           </div>
                           <div className="flex-shrink-0 text-right">
                             {c.plan.plannedBudget != null ? (
-                              <button type="button" onClick={() => setBudgetModalConf(c)} className="text-gray-700 font-semibold text-sm tabular-nums hover:text-brand-primary transition-colors">
+                              <button type="button" onClick={() => setBudgetModalConf(c)} className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold tabular-nums whitespace-nowrap bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors">
                                 {fmtCurrency(c.plan.plannedBudget)}
                               </button>
                             ) : (
@@ -1613,7 +1613,14 @@ export function ProgramPlannerPlanView({
                     <thead>
                       <tr className="border-b border-gray-100">
                         <th className="px-2 py-2"></th>
-                        <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Conference</th>
+                        <th className="px-3 py-2 text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                          <div className="grid grid-cols-[1fr_auto] gap-1.5 items-center">
+                            <span className="text-left">Conference</span>
+                            {groupMode !== 'status' && (
+                              <span className="w-[68px] flex-shrink-0 text-right">Status</span>
+                            )}
+                          </div>
+                        </th>
                         <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Dates</th>
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Strategy</th>
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Type</th>
@@ -1739,7 +1746,7 @@ export function ProgramPlannerPlanView({
                             </td>
                             <td className="px-3 py-2 text-center">
                               {c.plan.plannedBudget != null ? (
-                                <button type="button" onClick={() => setBudgetModalConf(c)} className="text-gray-700 font-medium tabular-nums hover:text-brand-primary transition-colors">
+                                <button type="button" onClick={() => setBudgetModalConf(c)} className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium tabular-nums whitespace-nowrap bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors">
                                   {fmtCurrency(c.plan.plannedBudget)}
                                 </button>
                               ) : (
@@ -1819,6 +1826,11 @@ export function ProgramPlannerPlanView({
                         {rows.length}
                       </span>
                     </div>
+                    {groupMode !== 'status' && rows.length > 0 && (
+                      <div className="px-2 pt-2 flex items-center justify-end bg-gray-50/50">
+                        <span className="w-[84px] flex-shrink-0 text-right text-[10px] font-medium text-gray-400 uppercase tracking-wide pr-[19px]">Status</span>
+                      </div>
+                    )}
                     <div className="p-2 space-y-2 min-h-[100px] bg-gray-50/50">
                       {rows.length === 0 ? (
                         <div className="px-2 py-6 text-center text-[11px] text-gray-400 border-2 border-dashed border-gray-200 rounded-lg bg-white">
@@ -1894,7 +1906,7 @@ export function ProgramPlannerPlanView({
                           </div>
                           <div className="flex items-center justify-between">
                             {c.plan.plannedBudget != null ? (
-                              <button type="button" onClick={() => setBudgetModalConf(c)} className="text-[11px] text-gray-700 font-medium tabular-nums hover:text-brand-primary transition-colors">
+                              <button type="button" onClick={() => setBudgetModalConf(c)} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium tabular-nums whitespace-nowrap bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors">
                                 {fmtCurrency(c.plan.plannedBudget)}
                               </button>
                             ) : (
