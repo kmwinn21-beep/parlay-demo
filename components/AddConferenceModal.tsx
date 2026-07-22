@@ -107,6 +107,7 @@ export function AddConferenceModal({ planYear, onClose, onCreated }: AddConferen
             seasonId={selectedSeasonId}
             onSeriesChange={setSelectedSeries}
             onSeasonChange={setSelectedSeasonId}
+            singleColumn
           />
         </div>
 
