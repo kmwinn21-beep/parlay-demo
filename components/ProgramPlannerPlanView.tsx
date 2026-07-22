@@ -65,6 +65,10 @@ interface ProgramPlannerPlanViewProps {
   // never attended, no real history yet) fall back to conference_plans'
   // uploaded-list score, or the empty "+" state if neither exists.
   calIntelScores: Map<number, { score: number; tier: string; confidence: string }>;
+  // Whether the shared Calendar Intelligence store is still scoring committed
+  // conferences in the background — drives the same three-dot loading state
+  // the Program tab's List Score column shows while waiting on a score.
+  calIntelLoading: boolean;
   onDecisionUpdated: (conferenceId: number, decision: 'attend' | 'reduce' | 'cut' | 'evaluating' | 'new' | null) => void;
   onRepsUpdated: (conferenceId: number, assignedReps: AssignedRep[]) => void;
   onBudgetUpdated: (conferenceId: number, plannedBudget: number, lineItems: PlannedLineItem[]) => void;
@@ -301,7 +305,11 @@ function ChevronRightIcon() {
   );
 }
 
-// Flags a conference sitting in the "New — never attended (Evaluating)" bucket.
+// Flags a conference that's never actually been committed to the program —
+// driven by committedToProgram (durable, server-side) rather than the
+// decision bucket, so it keeps showing after being dragged out of New into
+// e.g. Attending (decision is single-valued and gets overwritten by the
+// move, but committedToProgram stays false until the Commit column is used).
 function NewBadge() {
   return (
     <span
@@ -390,9 +398,23 @@ function listScoreColor(score: number | null): string {
 // empty-state convention as the other "Set [x]" columns) that opens an upload
 // prompt; scored conferences show the numeric score and open the same Cal
 // Intel drawer used in the Program tab (with Gap Analysis/Execution hidden).
-function ListScoreBadge({ size, score, onUpload, onOpenScore }: {
-  size: number; score: number | null; onUpload: () => void; onOpenScore: () => void;
+function ListScoreBadge({ size, score, loading, onUpload, onOpenScore }: {
+  size: number; score: number | null; loading?: boolean; onUpload: () => void; onOpenScore: () => void;
 }) {
+  if (score == null && loading) {
+    // Same three-dot pattern as the Program tab's List Score column while
+    // the shared Calendar Intelligence store is still scoring this
+    // conference in the background.
+    return (
+      <div style={{ width: size, height: size }} className="inline-flex items-center justify-center flex-shrink-0">
+        <div className="flex gap-0.5">
+          {[0, 1, 2].map(i => (
+            <span key={i} className="w-1 h-1 rounded-full bg-blue-300 animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />
+          ))}
+        </div>
+      </div>
+    );
+  }
   if (score == null) {
     return (
       <button
@@ -1310,7 +1332,7 @@ function DatesEditCell({
 }
 
 export function ProgramPlannerPlanView({
-  year, conferences, categoryAverages, calIntelScores,
+  year, conferences, categoryAverages, calIntelScores, calIntelLoading,
   onDecisionUpdated, onRepsUpdated, onBudgetUpdated, onStrategyUpdated, onDatesUpdated, onListScoreUpdated,
   onTypeUpdated, onSponsorshipUpdated, onBoothUpdated, onLocationUpdated, onTerritoryUpdated, onConferenceCreated,
 }: ProgramPlannerPlanViewProps) {
@@ -1405,11 +1427,6 @@ export function ProgramPlannerPlanView({
     kanbanScrollRef.current?.scrollBy({ left: dir * 320, behavior: 'smooth' });
   };
   const [draggedId, setDraggedId] = useState<number | null>(null);
-  // Conferences that were decision='new' at some point this session, tracked
-  // client-side only (not persisted) so the "never attended before" star
-  // keeps showing even after being dragged out of the New section into e.g.
-  // Attending — decision itself is single-valued and overwritten by the move.
-  const [wasNewIds, setWasNewIds] = useState<Set<number>>(new Set());
   const [dragOverGroup, setDragOverGroup] = useState<GroupKey | null>(null);
   // Any section/column in any grouping mode can be hidden from view (same
   // minimize/restore pattern as the tier columns in the pre-conference
@@ -1725,10 +1742,6 @@ export function ProgramPlannerPlanView({
 
   const moveToGroup = async (conferenceId: number, group: GroupKey) => {
     const decision = GROUP_TO_DECISION[group];
-    if (group !== 'new') {
-      const conf = conferences.find(c => c.conferenceId === conferenceId);
-      if (conf?.decision === 'new') setWasNewIds(prev => new Set(prev).add(conferenceId));
-    }
     onDecisionUpdated(conferenceId, decision);
     await fetch(`/api/program-planner/conferences/${conferenceId}/decision`, {
       method: 'PATCH',
@@ -2000,7 +2013,7 @@ export function ProgramPlannerPlanView({
                               <Link href={`/conferences/${c.conferenceId}`} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Open conference detail">
                                 <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                               </Link>
-                              {(c.decision === 'new' || wasNewIds.has(c.conferenceId)) && <NewBadge />}
+                              {!c.committedToProgram && <NewBadge />}
                               {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                 <RepAssignmentWarning
                                   repName={section.label}
@@ -2012,6 +2025,7 @@ export function ProgramPlannerPlanView({
                               <ListScoreBadge
                                 size={22}
                                 score={resolveListScore(c)?.score ?? null}
+                                loading={calIntelLoading && c.committedToProgram && !resolveListScore(c)}
                                 onUpload={() => setListScoreUploadConf(c)}
                                 onOpenScore={() => {
                                   const ls = resolveListScore(c);
@@ -2196,7 +2210,7 @@ export function ProgramPlannerPlanView({
                                   </Link>
                                 </div>
                                 <div className="flex items-center gap-1 w-[68px] flex-shrink-0 justify-center pt-0.5">
-                                  {(c.decision === 'new' || wasNewIds.has(c.conferenceId)) && <NewBadge />}
+                                  {!c.committedToProgram && <NewBadge />}
                                   {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                     <RepAssignmentWarning
                                       repName={section.label}
@@ -2212,6 +2226,7 @@ export function ProgramPlannerPlanView({
                               <ListScoreBadge
                                 size={32}
                                 score={resolveListScore(c)?.score ?? null}
+                                loading={calIntelLoading && c.committedToProgram && !resolveListScore(c)}
                                 onUpload={() => setListScoreUploadConf(c)}
                                 onOpenScore={() => {
                                   const ls = resolveListScore(c);
@@ -2415,7 +2430,7 @@ export function ProgramPlannerPlanView({
                               {c.name}
                             </button>
                             <div className="flex items-center gap-1 w-[84px] flex-shrink-0 justify-center pt-0.5">
-                              {(c.decision === 'new' || wasNewIds.has(c.conferenceId)) && <NewBadge />}
+                              {!c.committedToProgram && <NewBadge />}
                               {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                 <RepAssignmentWarning
                                   repName={section.label}
@@ -2427,6 +2442,7 @@ export function ProgramPlannerPlanView({
                               <ListScoreBadge
                                 size={20}
                                 score={resolveListScore(c)?.score ?? null}
+                                loading={calIntelLoading && c.committedToProgram && !resolveListScore(c)}
                                 onUpload={() => setListScoreUploadConf(c)}
                                 onOpenScore={() => {
                                   const ls = resolveListScore(c);

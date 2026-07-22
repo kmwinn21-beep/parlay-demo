@@ -553,9 +553,19 @@ export default function ProgramPlannerPage() {
     ...(confsData?.standalone ?? []),
   ], [confsData]);
 
-  // Rankings — excludes decision='new' (Plan tab's "New — never attended" bucket
-  // never surfaces in the Program tab).
-  const ranked = [...allConfs].filter(c => c.decision !== 'new').sort((a, b) => {
+  // Cost tab is backward-looking like the Program tab — Plan-tab drafts that
+  // haven't been committed to the program yet shouldn't appear in it either.
+  const committedFlattenedConferences = useMemo(
+    () => flattenedConferences.filter(c => c.committedToProgram),
+    [flattenedConferences]
+  );
+
+  // Rankings — excludes conferences that aren't committed to the program yet
+  // (Plan-tab drafts/evaluations, regardless of which decision bucket they're
+  // sitting in — the Program tab is backward-looking, only for conferences
+  // that have actually been formally added via the Plan tab's Commit action
+  // or already existed as real historical conferences).
+  const ranked = [...allConfs].filter(c => c.committedToProgram).sort((a, b) => {
     if (rankMetric === 'ces') return (b.ces ?? -1) - (a.ces ?? -1);
     if (rankMetric === 'pipeline') return (b.pipelineInfluenced ?? 0) - (a.pipelineInfluenced ?? 0);
     if (rankMetric === 'closedwon') return (b.closedWon ?? 0) - (a.closedWon ?? 0);
@@ -568,7 +578,7 @@ export default function ProgramPlannerPage() {
     attend: 0, reduce: 0, cut: 0, undecided: 0,
   };
   for (const c of allConfs) {
-    if (c.decision === 'new') continue;
+    if (!c.committedToProgram) continue;
     if (c.decision === 'attend') decisionCounts.attend++;
     else if (c.decision === 'reduce') decisionCounts.reduce++;
     else if (c.decision === 'cut') decisionCounts.cut++;
@@ -581,7 +591,7 @@ export default function ProgramPlannerPage() {
     | { type: 'conference'; conf: ConferenceRow; rowIndex: number; key: string }
     | { type: 'standalone_header'; key: string };
 
-  const matchesDecision = (c: ConferenceRow) => c.decision !== 'new' && (decisionFilter === 'all' || c.decision === decisionFilter);
+  const matchesDecision = (c: ConferenceRow) => c.committedToProgram && (decisionFilter === 'all' || c.decision === decisionFilter);
 
   const buildRows = (): TableRow[] => {
     if (!confsData) return [];
@@ -747,6 +757,7 @@ export default function ProgramPlannerPage() {
                 conferences={flattenedConferences}
                 categoryAverages={confsData?.categoryAverages ?? []}
                 calIntelScores={calIntelScores}
+                calIntelLoading={calIntelLoading}
                 onDecisionUpdated={handleDecisionUpdated}
                 onRepsUpdated={handleRepsUpdated}
                 onBudgetUpdated={handleBudgetUpdated}
@@ -764,7 +775,7 @@ export default function ProgramPlannerPage() {
               <div className="grid grid-cols-1 lg:grid-cols-6 gap-3 items-start">
                 <div className="lg:col-span-4">
                   <ProgramPlannerCostMatrix
-                    conferences={flattenedConferences}
+                    conferences={committedFlattenedConferences}
                     year={selectedYear}
                     activeConferenceIds={activeConferenceIds}
                     onActiveConferenceIdsChange={setActiveConferenceIds}
