@@ -184,10 +184,10 @@ export function SalesRepsTab() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4">
-      {/* Left: map + territories list */}
-      <div className="flex-1 min-w-0 space-y-4">
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
+    <div className="space-y-4">
+      <div className="flex flex-col lg:flex-row gap-4 lg:items-stretch">
+        {/* Left: map */}
+        <div className="flex-1 min-w-0 border border-gray-200 rounded-xl overflow-hidden">
           <div className="p-3">
             <TerritoryMap
               territories={territories}
@@ -244,12 +244,65 @@ export function SalesRepsTab() {
           </div>
         </div>
 
-        {/* Existing territories */}
-        <div className="border border-gray-200 rounded-xl">
-          <div className="px-4 py-3 border-b border-gray-100">
-            <p className="text-sm font-semibold text-gray-700">Territories</p>
+        {/* Right: new/edit territory form — stretches to match the map's height */}
+        <div className="w-full lg:w-60 flex-shrink-0 flex">
+          <div className="border border-gray-200 rounded-xl p-3 space-y-3 flex flex-col w-full">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-gray-700">{editingId ? 'Edit territory' : 'New territory'}</p>
+              {editingId && (
+                <button type="button" onClick={resetForm} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+              )}
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-gray-500 block mb-1">Name</label>
+              <input
+                type="text"
+                value={territoryName}
+                onChange={e => setTerritoryName(e.target.value)}
+                placeholder="e.g. Midwest"
+                className="input-field text-sm w-full"
+              />
+            </div>
+
+            <div className="flex-1 min-h-0 flex flex-col">
+              <label className="text-xs font-medium text-gray-500 block mb-1">Assigned reps</label>
+              <div className="space-y-1.5 overflow-y-auto flex-1">
+                {reps.length === 0 ? (
+                  <p className="text-xs text-gray-400 italic">No reps configured yet.</p>
+                ) : reps.map(rep => (
+                  <label key={rep.id} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedRepIds.has(rep.id)}
+                      onChange={() => toggleRep(rep.id)}
+                      className="accent-brand-secondary w-3.5 h-3.5 flex-shrink-0"
+                    />
+                    <AvatarCircle name={rep.value} size={20} />
+                    <span className="truncate">{rep.value}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || !territoryName.trim() || selectedStates.size === 0}
+              className="btn-primary text-sm w-full disabled:opacity-50 flex-shrink-0"
+            >
+              {saving ? 'Saving…' : editingId ? 'Update territory' : 'Save territory'}
+            </button>
           </div>
-          {territories.length === 0 ? (
+        </div>
+      </div>
+
+      {/* Existing territories */}
+      <div className="border border-gray-200 rounded-xl">
+        <div className="px-4 py-3 border-b border-gray-100">
+          <p className="text-sm font-semibold text-gray-700">Territories</p>
+        </div>
+        {territories.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
               <svg style={{ width: 32, height: 32, color: 'var(--text-muted, #9CA3AF)', display: 'block', margin: '0 auto 8px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
@@ -306,59 +359,6 @@ export function SalesRepsTab() {
               })}
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Right: new/edit territory form */}
-      <div className="w-full lg:w-60 flex-shrink-0 space-y-3">
-        <div className="border border-gray-200 rounded-xl p-3 space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-gray-700">{editingId ? 'Edit territory' : 'New territory'}</p>
-            {editingId && (
-              <button type="button" onClick={resetForm} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
-            )}
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-gray-500 block mb-1">Name</label>
-            <input
-              type="text"
-              value={territoryName}
-              onChange={e => setTerritoryName(e.target.value)}
-              placeholder="e.g. Midwest"
-              className="input-field text-sm w-full"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-gray-500 block mb-1">Assigned reps</label>
-            <div className="space-y-1.5 max-h-48 overflow-y-auto">
-              {reps.length === 0 ? (
-                <p className="text-xs text-gray-400 italic">No reps configured yet.</p>
-              ) : reps.map(rep => (
-                <label key={rep.id} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedRepIds.has(rep.id)}
-                    onChange={() => toggleRep(rep.id)}
-                    className="accent-brand-secondary w-3.5 h-3.5 flex-shrink-0"
-                  />
-                  <AvatarCircle name={rep.value} size={20} />
-                  <span className="truncate">{rep.value}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || !territoryName.trim() || selectedStates.size === 0}
-            className="btn-primary text-sm w-full disabled:opacity-50"
-          >
-            {saving ? 'Saving…' : editingId ? 'Update territory' : 'Save territory'}
-          </button>
-        </div>
       </div>
     </div>
   );
