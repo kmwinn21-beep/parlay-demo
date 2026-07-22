@@ -533,10 +533,6 @@ export default function ProgramPlannerPage() {
     updateConferenceField(confId, { territoryScope, territoryIds });
   }, [updateConferenceField]);
 
-  const handleConferenceCommitted = useCallback((confId: number, startDate: string, endDate: string) => {
-    updateConferenceField(confId, { startDate, endDate, committedToProgram: true });
-  }, [updateConferenceField]);
-
   const toggleSeries = (seriesId: string) => {
     setCollapsedSeries(prev => {
       const next = new Set(prev);
@@ -762,7 +758,6 @@ export default function ProgramPlannerPage() {
                 onBoothUpdated={handleBoothUpdated}
                 onLocationUpdated={handleLocationUpdated}
                 onTerritoryUpdated={handleTerritoryUpdated}
-                onConferenceCommitted={handleConferenceCommitted}
                 onConferenceCreated={() => fetchData(selectedYear)}
               />
             ) : view === 'cost' ? (

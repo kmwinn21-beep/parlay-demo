@@ -76,7 +76,6 @@ interface ProgramPlannerPlanViewProps {
   onBoothUpdated: (conferenceId: number, booth: { boothPresent: boolean; boothWidth: number | null; boothLength: number | null; boothNumber: string | null; boothHall: string | null }) => void;
   onLocationUpdated: (conferenceId: number, location: string) => void;
   onTerritoryUpdated: (conferenceId: number, territoryScope: string | null, territoryIds: number[]) => void;
-  onConferenceCommitted: (conferenceId: number, startDate: string, endDate: string) => void;
   onConferenceCreated: () => void;
 }
 
@@ -614,19 +613,26 @@ function TerritoryEditCell({ conferenceId, territoryScope, territoryIds, territo
 // equivalent row of columns to append to). Only ever renders something for
 // conferences the user has actually decided to attend; every other decision
 // leaves the cell blank since "committing" only makes sense once you're
-// going. Promotes the conference from a Plan-tab-only draft (no Conference
-// Details profile, invisible to Go To Conference / the Conferences list)
-// into a real, committed conference via POST .../commit — which requires
-// planned dates to already be set, since those become the new profile's
-// start/end date.
-function CommitCell({ conferenceId, conferenceName, decision, plannedStartDate, planYear, committedToProgram, onCommitted }: {
+// going. Committing means one of two things server-side (see the commit
+// route): promoting a brand-new Plan-tab draft in place, or — for a
+// conference that was already attended in a prior year and is just being
+// re-evaluated — spawning a brand-new conferences row for this plan year
+// (same series) while leaving the old year's row untouched. Either way, the
+// tell for "already committed for THIS plan year" is simply whether the
+// row's own start date now falls in the plan year: a committed brand-new
+// draft gets its placeholder date replaced with a real one in the plan
+// year, and a re-evaluated conference gets re-pointed at a new row whose
+// start date is in the plan year — so this needs no separate "committed"
+// flag, and can't go stale the way one would across the old-row/new-row
+// split.
+function CommitCell({ conferenceId, conferenceName, decision, startDate, plannedStartDate, planYear, onCommitted }: {
   conferenceId: number;
   conferenceName: string;
   decision: string | null;
+  startDate: string;
   plannedStartDate: string | null;
   planYear: number;
-  committedToProgram: boolean;
-  onCommitted: (startDate: string, endDate: string) => void;
+  onCommitted: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<DropdownPos | null>(null);
@@ -646,7 +652,9 @@ function CommitCell({ conferenceId, conferenceName, decision, plannedStartDate, 
 
   if (decision !== 'attend' && decision !== 'reduce') return null;
 
-  if (committedToProgram) {
+  const committedForThisYear = new Date(startDate + 'T00:00:00').getFullYear() === planYear;
+
+  if (committedForThisYear) {
     return (
       <span
         title="Added to program"
@@ -681,8 +689,7 @@ function CommitCell({ conferenceId, conferenceName, decision, plannedStartDate, 
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error ?? 'Failed to add to program');
       }
-      const result = await res.json();
-      onCommitted(result.startDate, result.endDate);
+      onCommitted();
       toast.success(`${conferenceName} added to your ${planYear} program.`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to add to program');
@@ -1297,7 +1304,7 @@ function DatesEditCell({
 export function ProgramPlannerPlanView({
   year, conferences, categoryAverages, calIntelScores,
   onDecisionUpdated, onRepsUpdated, onBudgetUpdated, onStrategyUpdated, onDatesUpdated, onListScoreUpdated,
-  onTypeUpdated, onSponsorshipUpdated, onBoothUpdated, onLocationUpdated, onTerritoryUpdated, onConferenceCommitted, onConferenceCreated,
+  onTypeUpdated, onSponsorshipUpdated, onBoothUpdated, onLocationUpdated, onTerritoryUpdated, onConferenceCreated,
 }: ProgramPlannerPlanViewProps) {
   const [priorYearActual, setPriorYearActual] = useState<number | null>(null);
   const [budgetModalConf, setBudgetModalConf] = useState<PlanConferenceRow | null>(null);
@@ -2296,10 +2303,10 @@ export function ProgramPlannerPlanView({
                                 conferenceId={c.conferenceId}
                                 conferenceName={c.name}
                                 decision={c.decision}
+                                startDate={c.startDate}
                                 plannedStartDate={c.plan.plannedStartDate}
                                 planYear={year}
-                                committedToProgram={c.committedToProgram}
-                                onCommitted={(startDate, endDate) => onConferenceCommitted(c.conferenceId, startDate, endDate)}
+                                onCommitted={onConferenceCreated}
                               />
                             </td>
                           </tr>
