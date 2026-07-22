@@ -132,6 +132,25 @@ function abbreviateStrategy(name: string): string {
   return STRATEGY_ABBREVIATIONS[name] ?? name;
 }
 
+// Territory column abbreviation: two-or-more-word names use the first letter
+// of each of the first two words (e.g. "Great Lakes" -> "GL"). One-word names
+// normally use just their first letter (e.g. "West" -> "W"), except compound
+// direction names like "Southeast"/"Northwest" where "east"/"west" appears
+// after a prefix — those use the prefix's first letter + E/W (e.g.
+// "Southeast" -> "SE", "Northwest" -> "NW").
+function abbreviateTerritory(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '';
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  const word = words[0];
+  const lower = word.toLowerCase();
+  const eastIdx = lower.indexOf('east');
+  const westIdx = lower.indexOf('west');
+  if (eastIdx > 0) return (word[0] + 'E').toUpperCase();
+  if (westIdx > 0) return (word[0] + 'W').toUpperCase();
+  return word[0].toUpperCase();
+}
+
 const CONFERENCE_TYPE_OPTIONS = [
   'Trade show', 'User conference', 'Executive summit', 'Hosted dinner / private event',
   'Roundtable', 'Field event', 'Industry association conference', 'Analyst conference',
@@ -369,6 +388,75 @@ function ListScoreBadge({ size, score, onUpload, onOpenScore }: {
     >
       <span style={{ color, fontSize: size >= 32 ? 12 : 10 }} className="font-bold tabular-nums leading-none">{score}</span>
     </button>
+  );
+}
+
+// Single circular abbreviated-territory pill — full-color border, lighter
+// tint fill. National uses brand-primary instead of a territory color since
+// it isn't any one territory. Hover shows the full name (native title,
+// desktop); click toggles the same name in a small tooltip (mobile).
+function TerritoryChip({ label, name, color, bg }: { label: string; name: string; color: string; bg: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative inline-flex flex-shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        title={name}
+        style={{ width: 24, height: 24, border: `1.5px solid ${color}`, backgroundColor: bg, color }}
+        className="inline-flex items-center justify-center rounded-full text-[10px] font-bold flex-shrink-0"
+      >
+        {label}
+      </button>
+      {open && (
+        <div className="absolute z-40 top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap bg-gray-900 text-white text-[11px] rounded-md shadow-lg px-2 py-1">
+          {name}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The Plan tab's Territory column — Regional conferences show one chip per
+// assigned territory (abbreviated, colored to match that territory); National
+// shows a single "NT" chip in brand-primary since it isn't tied to any one
+// territory.
+function TerritoryCell({ scope, territoryIds, territoryOptions }: {
+  scope: string | null;
+  territoryIds: number[];
+  territoryOptions: Array<{ id: number; name: string; color: string }>;
+}) {
+  if (scope === 'national') {
+    return (
+      <div className="flex items-center justify-center">
+        <TerritoryChip
+          label="NT"
+          name="National"
+          color="rgb(var(--brand-primary-rgb))"
+          bg="rgb(var(--brand-primary-rgb) / 0.12)"
+        />
+      </div>
+    );
+  }
+  const matched = scope === 'regional' ? territoryOptions.filter(t => territoryIds.includes(t.id)) : [];
+  if (matched.length === 0) return <span className="text-gray-300 text-xs">—</span>;
+  return (
+    <div className="flex items-center justify-center flex-wrap gap-1">
+      {matched.map(t => (
+        <TerritoryChip key={t.id} label={abbreviateTerritory(t.name)} name={t.name} color={t.color} bg={t.color + '18'} />
+      ))}
+    </div>
   );
 }
 
@@ -1691,6 +1779,7 @@ export function ProgramPlannerPlanView({
                             strategyTypeName={c.strategyTypeName}
                             onUpdated={(id, name) => onStrategyUpdated(c.conferenceId, id, name)}
                           />
+                          <TerritoryCell scope={c.territoryScope} territoryIds={c.territoryIds} territoryOptions={territoryOptions} />
                           <OptionEditPill
                             value={c.conferenceType}
                             options={CONFERENCE_TYPE_OPTIONS}
@@ -1755,6 +1844,7 @@ export function ProgramPlannerPlanView({
                       <col style={{ width: 76 }} />
                       <col style={{ width: 70 }} />
                       <col style={{ width: 160 }} />
+                      <col style={{ width: 84 }} />
                       <col style={{ width: 110 }} />
                       <col style={{ width: 100 }} />
                       <col style={{ width: 140 }} />
@@ -1777,6 +1867,7 @@ export function ProgramPlannerPlanView({
                         <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">List Score</th>
                         <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Dates</th>
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Strategy</th>
+                        <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Territory</th>
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Type</th>
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Sponsorship</th>
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Booth</th>
@@ -1872,6 +1963,9 @@ export function ProgramPlannerPlanView({
                                 strategyTypeName={c.strategyTypeName}
                                 onUpdated={(id, name) => onStrategyUpdated(c.conferenceId, id, name)}
                               />
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <TerritoryCell scope={c.territoryScope} territoryIds={c.territoryIds} territoryOptions={territoryOptions} />
                             </td>
                             <td className="px-3 py-2">
                               <OptionEditPill
@@ -2064,6 +2158,7 @@ export function ProgramPlannerPlanView({
                             {fmtDateShort(c.plan.plannedStartDate ?? c.startDate)}
                           </p>
                           <div className="flex items-center flex-wrap gap-1 mb-2">
+                            <TerritoryCell scope={c.territoryScope} territoryIds={c.territoryIds} territoryOptions={territoryOptions} />
                             <OptionEditPill
                               value={c.conferenceType}
                               options={CONFERENCE_TYPE_OPTIONS}
