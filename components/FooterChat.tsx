@@ -425,10 +425,57 @@ function GroupChatWindow({
 }
 
 // The main footer messaging hub
+const BAR_POSITION_STORAGE_KEY = 'footerChatBarLeft';
+
 export function FooterChat() {
   const { user, loading: userLoading } = useUser();
   const { panelOpen, setPanelOpen } = useChatPanel();
   const { helpChatOpen } = useFloatingNavHidden();
+  // Horizontal position of the desktop messaging bar along the bottom edge —
+  // null means "anchored to the default bottom-right spot" (right: 16px).
+  // Once dragged, it's pinned to an explicit left offset (persisted across
+  // sessions) instead.
+  const [barLeft, setBarLeft] = useState<number | null>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  const dragMovedRef = useRef(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(BAR_POSITION_STORAGE_KEY);
+    if (saved != null) {
+      const n = Number(saved);
+      if (Number.isFinite(n)) setBarLeft(n);
+    }
+  }, []);
+
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const el = barRef.current;
+    if (!el) return;
+    const startMouseX = e.clientX;
+    const startLeft = el.getBoundingClientRect().left;
+    dragMovedRef.current = false;
+
+    const onMove = (ev: MouseEvent) => {
+      const delta = ev.clientX - startMouseX;
+      if (Math.abs(delta) > 4) dragMovedRef.current = true;
+      const width = el.getBoundingClientRect().width;
+      const next = Math.min(Math.max(8, startLeft + delta), window.innerWidth - width - 8);
+      setBarLeft(next);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (dragMovedRef.current) {
+        setBarLeft(prev => {
+          if (prev != null) localStorage.setItem(BAR_POSITION_STORAGE_KEY, String(prev));
+          return prev;
+        });
+      }
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, []);
+
   // Direct message state
   const [view, setView] = useState<'conversations' | 'new'>('conversations');
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -805,7 +852,11 @@ export function FooterChat() {
       ))}
 
       {/* Desktop layout */}
-      <div className="hidden lg:flex fixed bottom-0 right-4 z-50 flex-row-reverse items-end gap-2">
+      <div
+        ref={barRef}
+        className="hidden lg:flex fixed bottom-0 z-50 flex-row-reverse items-end gap-2"
+        style={barLeft != null ? { left: barLeft } : { right: 16 }}
+      >
       {/* Open DM windows */}
       {openChats.map(other => (
         <ChatWindow key={other.id} other={other} currentUserId={user.id} onClose={() => closeChat(other.id)} onNewMessage={handleNewMessageSent} />
@@ -999,10 +1050,25 @@ export function FooterChat() {
         {/* Tab bar button */}
         <button
           type="button"
-          onClick={() => { setPanelOpen(!panelOpen); if (!panelOpen) { setView('conversations'); setConvLoading(false); } }}
+          onClick={() => {
+            // A drag that moved the bar shouldn't also toggle the panel.
+            if (dragMovedRef.current) { dragMovedRef.current = false; return; }
+            setPanelOpen(!panelOpen); if (!panelOpen) { setView('conversations'); setConvLoading(false); }
+          }}
           className={`flex items-center justify-between gap-2 px-4 py-2.5 border border-b-0 rounded-t-xl shadow-lg hover:opacity-90 transition-all duration-200 select-none ${panelOpen ? 'w-[420px]' : 'w-[160px]'} ${totalUnread > 0 && !panelOpen ? 'bg-brand-highlight/25 border-brand-highlight' : 'bg-white border-gray-200 hover:bg-gray-50'}`}
         >
           <div className="flex items-center gap-2">
+            <span
+              onMouseDown={handleDragStart}
+              title="Drag to move"
+              className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 flex-shrink-0 -ml-1"
+            >
+              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                <circle cx="8" cy="6" r="1.5" /><circle cx="16" cy="6" r="1.5" />
+                <circle cx="8" cy="12" r="1.5" /><circle cx="16" cy="12" r="1.5" />
+                <circle cx="8" cy="18" r="1.5" /><circle cx="16" cy="18" r="1.5" />
+              </svg>
+            </span>
             <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
