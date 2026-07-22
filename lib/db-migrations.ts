@@ -1821,4 +1821,11 @@ export const migrations: string[] = [
     ('Northeast', '["CT","ME","MA","NH","NY","RI","VT","NJ","PA"]', '[1]', '#1D9E75'),
     ('Southeast', '["FL","GA","NC","SC","VA","TN","AL","MS"]', '[1]', '#7F77DD'),
     ('West Coast', '["CA","OR","WA","NV","AZ"]', '[1]', '#D85A30')`,
+  // 569 — conferences.territory_scope / .territory_ids: National vs Regional
+  // conference-territory tagging, set from the Add Conference form and the
+  // conference detail edit form. territory_ids is a JSON array of
+  // sales_territories.id, following the same JSON-array-as-TEXT pattern used
+  // throughout this codebase for multi-value fields.
+  `ALTER TABLE conferences ADD COLUMN territory_scope TEXT CHECK(territory_scope IN ('national','regional'))`,
+  `ALTER TABLE conferences ADD COLUMN territory_ids TEXT DEFAULT '[]'`,
 ];

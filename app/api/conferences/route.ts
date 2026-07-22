@@ -103,6 +103,8 @@ export async function POST(request: NextRequest) {
     const booth_length = booth_present ? (parseInt(formData.get('booth_length') as string) || null) : null;
     const booth_number = booth_present ? ((formData.get('booth_number') as string | null) || null) : null;
     const booth_hall = booth_present ? ((formData.get('booth_hall') as string | null) || null) : null;
+    const territory_scope = (formData.get('territory_scope') as string | null) || null;
+    const territory_ids = territory_scope === 'regional' ? ((formData.get('territory_ids') as string | null) || '[]') : '[]';
     const file = formData.get('file') as File | null;
     const mappingJson = formData.get('mapping') as string | null;
     const mapping: ColumnMapping | null = mappingJson ? JSON.parse(mappingJson) as ColumnMapping : null;
@@ -132,15 +134,17 @@ export async function POST(request: NextRequest) {
                notes, internal_attendees, conference_strategy_type_id,
                is_historical, post_conference_days, series_id, season_id,
                industry_focus, conference_type, website, sponsorship_level,
-               booth_present, booth_width, booth_length, booth_number, booth_hall)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+               booth_present, booth_width, booth_length, booth_number, booth_hall,
+               territory_scope, territory_ids)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       args: [name, start_date, end_date, location,
              location_place_id, location_lat, location_lng, location_city, location_state, location_country, location_timezone,
              notes || null, internal_attendees || null,
              conference_strategy_type_id ? Number(conference_strategy_type_id) : null,
              is_historical ? 1 : 0, defaultPostConferenceDays, series_id, season_id,
              industry_focus, conference_type, website, sponsorship_level,
-             booth_present, booth_width, booth_length, booth_number, booth_hall],
+             booth_present, booth_width, booth_length, booth_number, booth_hall,
+             territory_scope, territory_ids],
     });
     const conference = confResult.rows[0] as unknown as {
       id: number | bigint;
