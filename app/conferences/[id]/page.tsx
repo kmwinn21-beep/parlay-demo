@@ -1584,68 +1584,69 @@ export default function ConferenceDetailPage() {
                   <option value="regional">Regional</option>
                 </select>
               </div>
-              {editData.territory_scope === 'regional' && (
-                <div className="md:col-span-2" ref={territoryDropdownRef}>
-                  <label className="label">Select Territories *</label>
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setTerritoryDropdownOpen((o) => !o)}
-                      className="input-field text-left flex items-center justify-between gap-2"
-                    >
-                      <span className={editTerritoryIds.size === 0 ? 'text-gray-400' : 'text-gray-800'}>
-                        {editTerritoryIds.size === 0
+              <div ref={territoryDropdownRef}>
+                <label className="label">Select Territories {editData.territory_scope === 'regional' ? '*' : ''}</label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    disabled={editData.territory_scope !== 'regional'}
+                    onClick={() => setTerritoryDropdownOpen((o) => !o)}
+                    className={`input-field text-left flex items-center justify-between gap-2 ${
+                      editData.territory_scope !== 'regional' ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    <span className={editTerritoryIds.size === 0 ? 'text-gray-400' : 'text-gray-800'}>
+                      {editData.territory_scope !== 'regional'
+                        ? 'Select Regional to choose territories'
+                        : editTerritoryIds.size === 0
                           ? 'Select one or more territories...'
                           : territoryOptions.filter((t) => editTerritoryIds.has(t.id)).map((t) => t.name).join(', ')}
-                      </span>
-                      <svg className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${territoryDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    {territoryDropdownOpen && (
-                      <div className="absolute z-30 top-full mt-1 left-0 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
-                        {territoryOptions.length === 0 ? (
-                          <p className="px-3 py-2 text-xs text-gray-400">No territories configured. Set them up in Admin Settings → Sales Reps.</p>
-                        ) : territoryOptions.map((t) => (
-                          <label key={t.id} className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={editTerritoryIds.has(t.id)}
-                              onChange={() => setEditTerritoryIds((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(t.id)) next.delete(t.id); else next.add(t.id);
-                                return next;
-                              })}
-                              className="accent-brand-secondary w-3.5 h-3.5 flex-shrink-0"
-                            />
-                            <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: t.color }} />
-                            {t.name}
-                          </label>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                    </span>
+                    <svg className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${territoryDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {territoryDropdownOpen && editData.territory_scope === 'regional' && (
+                    <div className="absolute z-30 top-full mt-1 left-0 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                      {territoryOptions.length === 0 ? (
+                        <p className="px-3 py-2 text-xs text-gray-400">No territories configured. Set them up in Admin Settings → Sales Reps.</p>
+                      ) : territoryOptions.map((t) => (
+                        <label key={t.id} className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={editTerritoryIds.has(t.id)}
+                            onChange={() => setEditTerritoryIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(t.id)) next.delete(t.id); else next.add(t.id);
+                              return next;
+                            })}
+                            className="accent-brand-secondary w-3.5 h-3.5 flex-shrink-0"
+                          />
+                          <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: t.color }} />
+                          {t.name}
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
               <div>
                 <label className="label">Start Date *</label>
                 <input
                   type="date"
                   value={editData.start_date || ''}
-                  onChange={(e) => setEditData((p) => ({ ...p, start_date: e.target.value }))}
+                  onChange={(e) => {
+                    const newStart = e.target.value;
+                    setEditData((p) => {
+                      if (!newStart) return { ...p, start_date: newStart };
+                      const d = new Date(newStart + 'T00:00:00');
+                      d.setDate(d.getDate() + 3);
+                      const newEnd = d.toISOString().slice(0, 10);
+                      return { ...p, start_date: newStart, end_date: newEnd };
+                    });
+                  }}
                   className="input-field"
                 />
-              </div>
-              <div>
-                <label className="label">Conference Strategy</label>
-                <select
-                  value={editData.conference_strategy_type_id ? String(editData.conference_strategy_type_id) : ''}
-                  onChange={(e) => setEditData((p) => ({ ...p, conference_strategy_type_id: e.target.value ? Number(e.target.value) : null }))}
-                  className="input-field"
-                >
-                  <option value="">Select conference strategy...</option>
-                  {conferenceStrategyOptions.map((o) => <option key={o.id} value={String(o.id)}>{o.value}</option>)}
-                </select>
               </div>
               <div>
                 <label className="label">End Date *</label>
@@ -1655,6 +1656,17 @@ export default function ConferenceDetailPage() {
                   onChange={(e) => setEditData((p) => ({ ...p, end_date: e.target.value }))}
                   className="input-field"
                 />
+              </div>
+              <div className="md:col-span-2">
+                <label className="label">Conference Strategy</label>
+                <select
+                  value={editData.conference_strategy_type_id ? String(editData.conference_strategy_type_id) : ''}
+                  onChange={(e) => setEditData((p) => ({ ...p, conference_strategy_type_id: e.target.value ? Number(e.target.value) : null }))}
+                  className="input-field"
+                >
+                  <option value="">Select conference strategy...</option>
+                  {conferenceStrategyOptions.map((o) => <option key={o.id} value={String(o.id)}>{o.value}</option>)}
+                </select>
               </div>
               <div className="md:col-span-2">
                 <SeriesSeasonCombobox
