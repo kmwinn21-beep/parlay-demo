@@ -51,6 +51,11 @@ export function ConferencePlanBudgetModal({
     return initial;
   });
 
+  const [budgetAdjustSign, setBudgetAdjustSign] = useState<'+' | '-'>('+');
+  const [budgetAdjustPct, setBudgetAdjustPct] = useState('');
+  const [actualAdjustSign, setActualAdjustSign] = useState<'+' | '-'>('+');
+  const [actualAdjustPct, setActualAdjustPct] = useState('');
+
   const hasActualData = actualLineItems != null && actualLineItems.some(li => (li.budgeted ?? 0) > 0 || (li.actual ?? 0) > 0);
 
   const labels = costTypes.length > 0
@@ -60,6 +65,21 @@ export function ConferencePlanBudgetModal({
   const setValue = (label: string, raw: string) => {
     const cleaned = raw.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
     setValues(prev => ({ ...prev, [label]: cleaned }));
+  };
+
+  // Applies each line item's budget/actual value to the Planned budget panel,
+  // optionally scaled by a +/- percentage (e.g. +10% to pad every line item,
+  // or -15% to trim). No percentage entered (or 0) applies the numbers as-is.
+  const applyToPlan = (field: 'budgeted' | 'actual', sign: '+' | '-', pctRaw: string) => {
+    const pct = parseFloat(pctRaw);
+    const multiplier = !isNaN(pct) && pct !== 0 ? (sign === '+' ? 1 + pct / 100 : 1 - pct / 100) : 1;
+    const next: Record<string, string> = {};
+    for (const label of labels) {
+      const li = actualLineItems?.find(x => x.label === label);
+      const v = li?.[field];
+      next[label] = v != null && v > 0 ? String(Math.round(v * multiplier)) : '';
+    }
+    setValues(next);
   };
 
   const total = Object.values(values).reduce((sum, v) => sum + (parseFloat(v) || 0), 0);
@@ -116,26 +136,86 @@ export function ConferencePlanBudgetModal({
               {hasActualData ? 'Budget breakdown' : `Category averages (FY${year})`}
             </p>
             {hasActualData ? (
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left text-[10px] font-semibold uppercase tracking-wider text-gray-400 pb-2 pr-2">Item</th>
-                    <th className="text-right text-[10px] font-semibold uppercase tracking-wider text-gray-400 pb-2 px-2">Budget</th>
-                    <th className="text-right text-[10px] font-semibold uppercase tracking-wider text-gray-400 pb-2 px-2">Actual</th>
-                    <th className="text-right text-[10px] font-semibold uppercase tracking-wider text-gray-400 pb-2 pl-2">Var</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {actualLineItems!.filter(li => (li.budgeted ?? 0) > 0 || (li.actual ?? 0) > 0).map((li, i) => (
-                    <tr key={li.label} className={i % 2 === 1 ? 'bg-gray-50' : ''}>
-                      <td className="py-1.5 pr-2 text-[12px] text-gray-700">{li.label}</td>
-                      <td className="py-1.5 px-2 text-right text-[12px] text-gray-600 tabular-nums">{fmtCurrency(li.budgeted)}</td>
-                      <td className="py-1.5 px-2 text-right text-[12px] text-gray-600 tabular-nums">{fmtCurrency(li.actual)}</td>
-                      <td className="py-1.5 pl-2 text-right"><VariancePill variance={calcVariancePct(li.budgeted, li.actual)} /></td>
+              <>
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left text-[10px] font-semibold uppercase tracking-wider text-gray-400 pb-2 pr-2">Item</th>
+                      <th className="text-right text-[10px] font-semibold uppercase tracking-wider text-gray-400 pb-2 px-2">Budget</th>
+                      <th className="text-right text-[10px] font-semibold uppercase tracking-wider text-gray-400 pb-2 px-2">Actual</th>
+                      <th className="text-right text-[10px] font-semibold uppercase tracking-wider text-gray-400 pb-2 pl-2">Var</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {actualLineItems!.filter(li => (li.budgeted ?? 0) > 0 || (li.actual ?? 0) > 0).map((li, i) => (
+                      <tr key={li.label} className={i % 2 === 1 ? 'bg-gray-50' : ''}>
+                        <td className="py-1.5 pr-2 text-[12px] text-gray-700">{li.label}</td>
+                        <td className="py-1.5 px-2 text-right text-[12px] text-gray-600 tabular-nums">{fmtCurrency(li.budgeted)}</td>
+                        <td className="py-1.5 px-2 text-right text-[12px] text-gray-600 tabular-nums">{fmtCurrency(li.actual)}</td>
+                        <td className="py-1.5 pl-2 text-right"><VariancePill variance={calcVariancePct(li.budgeted, li.actual)} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setBudgetAdjustSign(s => s === '+' ? '-' : '+')}
+                      title="Toggle increase/decrease"
+                      className="w-6 h-6 flex-shrink-0 flex items-center justify-center rounded border border-gray-300 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                    >
+                      {budgetAdjustSign}
+                    </button>
+                    <div className="relative w-16 flex-shrink-0">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={budgetAdjustPct}
+                        onChange={e => setBudgetAdjustPct(e.target.value.replace(/[^0-9.]/g, ''))}
+                        placeholder="0"
+                        className="input-field text-[11px] pl-1.5 pr-4 py-1 w-full"
+                      />
+                      <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none">%</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => applyToPlan('budgeted', budgetAdjustSign, budgetAdjustPct)}
+                      className="btn-secondary text-[11px] px-2.5 py-1.5"
+                    >
+                      Apply Budget to Plan
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setActualAdjustSign(s => s === '+' ? '-' : '+')}
+                      title="Toggle increase/decrease"
+                      className="w-6 h-6 flex-shrink-0 flex items-center justify-center rounded border border-gray-300 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                    >
+                      {actualAdjustSign}
+                    </button>
+                    <div className="relative w-16 flex-shrink-0">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={actualAdjustPct}
+                        onChange={e => setActualAdjustPct(e.target.value.replace(/[^0-9.]/g, ''))}
+                        placeholder="0"
+                        className="input-field text-[11px] pl-1.5 pr-4 py-1 w-full"
+                      />
+                      <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none">%</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => applyToPlan('actual', actualAdjustSign, actualAdjustPct)}
+                      className="btn-secondary text-[11px] px-2.5 py-1.5"
+                    >
+                      Apply Actuals to Plan
+                    </button>
+                  </div>
+                </div>
+              </>
             ) : categoryAverages.length === 0 ? (
               <p className="text-[12px] text-gray-400 italic">No historical data available for {year} yet.</p>
             ) : (

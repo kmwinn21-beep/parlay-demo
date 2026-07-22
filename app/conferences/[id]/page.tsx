@@ -158,6 +158,8 @@ interface Conference {
   booth_length?: number | null;
   booth_number?: string | null;
   booth_hall?: string | null;
+  territory_scope?: string | null;
+  territory_ids?: string | null;
   global_agenda_uploaded_at?: string | null;
   global_agenda_uploaded_by_name?: string | null;
   created_at: string;
@@ -316,6 +318,10 @@ export default function ConferenceDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Partial<Conference>>({});
+  const [editTerritoryIds, setEditTerritoryIds] = useState<Set<number>>(new Set());
+  const [territoryOptions, setTerritoryOptions] = useState<Array<{ id: number; name: string; color: string }>>([]);
+  const [territoryDropdownOpen, setTerritoryDropdownOpen] = useState(false);
+  const territoryDropdownRef = useRef<HTMLDivElement>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState<ConferenceTabKey>('attendees');
@@ -756,7 +762,12 @@ export default function ConferenceDetailPage() {
         booth_length: data.booth_length ?? null,
         booth_number: data.booth_number ?? null,
         booth_hall: data.booth_hall ?? null,
+        territory_scope: data.territory_scope ?? null,
       });
+      try {
+        const parsedTerritoryIds = data.territory_ids ? JSON.parse(data.territory_ids) : [];
+        setEditTerritoryIds(new Set(Array.isArray(parsedTerritoryIds) ? parsedTerritoryIds.map(Number) : []));
+      } catch { setEditTerritoryIds(new Set()); }
       setEditSeasonId(data.season_id ?? null);
       setEditInternalAttendees(
         data.internal_attendees ? data.internal_attendees.split(',').filter(Boolean) : []
@@ -799,9 +810,20 @@ export default function ConferenceDetailPage() {
       if (editIndustryDropdownRef.current && !editIndustryDropdownRef.current.contains(e.target as Node)) {
         setEditIndustryDropdownOpen(false);
       }
+      if (territoryDropdownRef.current && !territoryDropdownRef.current.contains(e.target as Node)) {
+        setTerritoryDropdownOpen(false);
+      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/admin/territories')
+      .then((r) => r.json())
+      .then((data: { territories: Array<{ id: number; name: string; color: string }> }) =>
+        setTerritoryOptions((data.territories ?? []).map(t => ({ id: t.id, name: t.name, color: t.color }))))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -936,7 +958,13 @@ export default function ConferenceDetailPage() {
       const res = await fetch(`/api/conferences/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...editData, internal_attendees: editInternalAttendees.join(','), series_id: editSeries?.id ?? editData.series_id ?? null, season_id: editSeasonId ?? null }),
+        body: JSON.stringify({
+          ...editData,
+          internal_attendees: editInternalAttendees.join(','),
+          series_id: editSeries?.id ?? editData.series_id ?? null,
+          season_id: editSeasonId ?? null,
+          territory_ids: Array.from(editTerritoryIds),
+        }),
       });
       if (!res.ok) throw new Error('Update failed');
       const updated = await res.json();
@@ -1541,24 +1569,84 @@ export default function ConferenceDetailPage() {
                 />
               </div>
               <div>
+                <label className="label">Market Coverage</label>
+                <select
+                  value={editData.territory_scope ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value || null;
+                    setEditData((p) => ({ ...p, territory_scope: v }));
+                    if (v !== 'regional') setEditTerritoryIds(new Set());
+                  }}
+                  className="input-field"
+                >
+                  <option value="">Select territory scope...</option>
+                  <option value="national">National</option>
+                  <option value="regional">Regional</option>
+                </select>
+              </div>
+              <div ref={territoryDropdownRef}>
+                <label className="label">Select Territories {editData.territory_scope === 'regional' ? '*' : ''}</label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    disabled={editData.territory_scope !== 'regional'}
+                    onClick={() => setTerritoryDropdownOpen((o) => !o)}
+                    className={`input-field text-left flex items-center justify-between gap-2 ${
+                      editData.territory_scope !== 'regional' ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    <span className={editTerritoryIds.size === 0 ? 'text-gray-400' : 'text-gray-800'}>
+                      {editData.territory_scope !== 'regional'
+                        ? 'Select Regional to choose territories'
+                        : editTerritoryIds.size === 0
+                          ? 'Select one or more territories...'
+                          : territoryOptions.filter((t) => editTerritoryIds.has(t.id)).map((t) => t.name).join(', ')}
+                    </span>
+                    <svg className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${territoryDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {territoryDropdownOpen && editData.territory_scope === 'regional' && (
+                    <div className="absolute z-30 top-full mt-1 left-0 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                      {territoryOptions.length === 0 ? (
+                        <p className="px-3 py-2 text-xs text-gray-400">No territories configured. Set them up in Admin Settings → Sales Reps.</p>
+                      ) : territoryOptions.map((t) => (
+                        <label key={t.id} className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={editTerritoryIds.has(t.id)}
+                            onChange={() => setEditTerritoryIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(t.id)) next.delete(t.id); else next.add(t.id);
+                              return next;
+                            })}
+                            className="accent-brand-secondary w-3.5 h-3.5 flex-shrink-0"
+                          />
+                          <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: t.color }} />
+                          {t.name}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div>
                 <label className="label">Start Date *</label>
                 <input
                   type="date"
                   value={editData.start_date || ''}
-                  onChange={(e) => setEditData((p) => ({ ...p, start_date: e.target.value }))}
+                  onChange={(e) => {
+                    const newStart = e.target.value;
+                    setEditData((p) => {
+                      if (!newStart) return { ...p, start_date: newStart };
+                      const d = new Date(newStart + 'T00:00:00');
+                      d.setDate(d.getDate() + 3);
+                      const newEnd = d.toISOString().slice(0, 10);
+                      return { ...p, start_date: newStart, end_date: newEnd };
+                    });
+                  }}
                   className="input-field"
                 />
-              </div>
-              <div>
-                <label className="label">Conference Strategy</label>
-                <select
-                  value={editData.conference_strategy_type_id ? String(editData.conference_strategy_type_id) : ''}
-                  onChange={(e) => setEditData((p) => ({ ...p, conference_strategy_type_id: e.target.value ? Number(e.target.value) : null }))}
-                  className="input-field"
-                >
-                  <option value="">Select conference strategy...</option>
-                  {conferenceStrategyOptions.map((o) => <option key={o.id} value={String(o.id)}>{o.value}</option>)}
-                </select>
               </div>
               <div>
                 <label className="label">End Date *</label>
@@ -1568,6 +1656,17 @@ export default function ConferenceDetailPage() {
                   onChange={(e) => setEditData((p) => ({ ...p, end_date: e.target.value }))}
                   className="input-field"
                 />
+              </div>
+              <div className="md:col-span-2">
+                <label className="label">Conference Strategy</label>
+                <select
+                  value={editData.conference_strategy_type_id ? String(editData.conference_strategy_type_id) : ''}
+                  onChange={(e) => setEditData((p) => ({ ...p, conference_strategy_type_id: e.target.value ? Number(e.target.value) : null }))}
+                  className="input-field"
+                >
+                  <option value="">Select conference strategy...</option>
+                  {conferenceStrategyOptions.map((o) => <option key={o.id} value={String(o.id)}>{o.value}</option>)}
+                </select>
               </div>
               <div className="md:col-span-2">
                 <SeriesSeasonCombobox
@@ -2172,6 +2271,19 @@ export default function ConferenceDetailPage() {
                     >
                       {conference.name} Website
                     </a>
+                  </span>
+                )}
+                {conference.territory_scope && (
+                  <span className="flex items-center gap-2 text-sm text-gray-600">
+                    <svg className="w-4 h-4 text-brand-secondary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {conference.territory_scope === 'national' ? 'National' : 'Regional'}
+                    {conference.territory_scope === 'regional' && (() => {
+                      const ids: number[] = (() => { try { return JSON.parse(conference.territory_ids ?? '[]'); } catch { return []; } })();
+                      const names = territoryOptions.filter(t => ids.includes(t.id)).map(t => t.name);
+                      return names.length > 0 ? ` — ${names.join(', ')}` : '';
+                    })()}
                   </span>
                 )}
               </div>

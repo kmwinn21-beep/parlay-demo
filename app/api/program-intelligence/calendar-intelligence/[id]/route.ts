@@ -413,6 +413,12 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid conference ID' }, { status: 400 });
   }
 
+  // includeFuture: used only by the Plan tab's List Score feature to score a
+  // conference that hasn't ended yet (and may not have real attendees, just an
+  // uploaded evaluation list imported as attendees). The normal Cal Intel page/
+  // drawer never sets this, so historical-only scoring is unaffected.
+  const includeFuture = new URL(request.url).searchParams.get('includeFuture') === '1';
+
   // Load conference metadata + global config in parallel
   const [confRes, settingsRes, seniorityRes, functionRes, actionsRes, prospectTypeRes, effectivenessRes] = await Promise.all([
     db.execute({
@@ -436,7 +442,7 @@ export async function GET(
             LEFT JOIN conference_attendees ca ON ca.conference_id = c.id
             LEFT JOIN cmp ON cmp.conference_id = c.id
             LEFT JOIN config_options cst ON cst.id = c.conference_strategy_type_id
-            WHERE c.id = ? AND date(c.end_date) <= date('now')
+            WHERE c.id = ? ${includeFuture ? '' : "AND date(c.end_date) <= date('now')"}
             GROUP BY c.id`,
       args: [conferenceId, conferenceId],
     }),

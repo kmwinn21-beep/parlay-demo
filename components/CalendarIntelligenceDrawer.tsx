@@ -13,6 +13,10 @@ interface Props {
   conferenceName: string;
   basicScore: { score: number; tier: string; confidence: string };
   onClose: () => void;
+  // Hides the Gap Analysis and Execution tool buttons — used when this drawer is
+  // opened from the Plan tab's List Score column, where those tools don't apply
+  // yet (the conference hasn't happened, there's no execution to compare against).
+  hideTools?: boolean;
 }
 
 const TIER_LABELS: Record<string, string> = {
@@ -240,7 +244,7 @@ const DRAWER_KEYFRAMES = `
   }
 `;
 
-export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basicScore, onClose }: Props) {
+export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basicScore, onClose, hideTools }: Props) {
   const { panelStyle, handleResizeStart } = useDrawerResize(480);
   const [deepRow, setDeepRow] = useState<CalendarConferenceRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -319,32 +323,36 @@ export function CalendarIntelligenceDrawer({ conferenceId, conferenceName, basic
 
       {/* Tool toggle buttons — independently togglable */}
       <div className="flex-shrink-0 px-5 pb-3 flex gap-2 flex-wrap">
-        <button
-          onClick={() => setPathToTierOpen(v => !v)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-            pathToTierOpen
-              ? 'bg-brand-secondary text-white border-brand-secondary'
-              : 'border-gray-200 text-gray-600 hover:border-brand-secondary hover:text-brand-secondary'
-          }`}
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-          </svg>
-          Gap Analysis
-        </button>
-        <button
-          onClick={() => setExecutionCompOpen(v => !v)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-            executionCompOpen
-              ? 'bg-teal-600 text-white border-teal-600'
-              : 'border-gray-200 text-gray-600 hover:border-teal-600 hover:text-teal-600'
-          }`}
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-          </svg>
-          Execution
-        </button>
+        {!hideTools && (
+          <button
+            onClick={() => setPathToTierOpen(v => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+              pathToTierOpen
+                ? 'bg-brand-secondary text-white border-brand-secondary'
+                : 'border-gray-200 text-gray-600 hover:border-brand-secondary hover:text-brand-secondary'
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+            Gap Analysis
+          </button>
+        )}
+        {!hideTools && (
+          <button
+            onClick={() => setExecutionCompOpen(v => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+              executionCompOpen
+                ? 'bg-teal-600 text-white border-teal-600'
+                : 'border-gray-200 text-gray-600 hover:border-teal-600 hover:text-teal-600'
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            Execution
+          </button>
+        )}
         <button
           onClick={() => setTeamInputOpen(v => !v)}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { buildDefaultTierConfig } from '@/lib/strategyAssessment';
 import toast from 'react-hot-toast';
 import { BackButton } from '@/components/BackButton';
+import { SalesRepsTab } from '@/components/admin/SalesRepsTab';
 import { COLOR_PRESETS, getPreset } from '@/lib/colors';
 import { invalidateConfigColors } from '@/lib/useConfigColors';
 import { invalidateConfigOptions } from '@/lib/useConfigOptions';
@@ -83,7 +84,7 @@ const TABLE_LABELS: Record<string, string> = {
   conference_meetings:   'Conference Detail — Meetings',
 };
 
-type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'icp' | 'products-solutions' | 'forms' | 'users' | 'email-templates' | 'integrations' | 'effectiveness' | 'usage';
+type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'icp' | 'products-solutions' | 'forms' | 'users' | 'sales-reps' | 'email-templates' | 'integrations' | 'effectiveness' | 'usage';
 
 interface IcpRuleDraft {
   id?: number;
@@ -2156,14 +2157,14 @@ export default function AdminPage() {
       {/* Tab bar */}
       <div className="border-b border-gray-200 overflow-x-auto">
         <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
-          {(['types', 'tables', 'sections', 'brand', 'icp', 'products-solutions', 'forms', 'users', 'email-templates', 'integrations', 'effectiveness', 'usage'] as Tab[]).map(t => (
+          {(['types', 'tables', 'sections', 'brand', 'icp', 'products-solutions', 'forms', 'users', 'sales-reps', 'email-templates', 'integrations', 'effectiveness', 'usage'] as Tab[]).map(t => (
             <button
               key={t}
               type="button"
               onClick={() => setTab(t)}
               className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${tab === t ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
-              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'icp' ? 'ICP' : t === 'products-solutions' ? 'Products & Solutions' : t === 'forms' ? 'Custom Forms' : t === 'users' ? 'User Management' : t === 'email-templates' ? 'Email Templates' : t === 'effectiveness' ? 'Effectiveness Defaults' : t === 'usage' ? 'Usage' : 'Integrations'}
+              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'icp' ? 'ICP' : t === 'products-solutions' ? 'Products & Solutions' : t === 'forms' ? 'Custom Forms' : t === 'users' ? 'User Management' : t === 'sales-reps' ? 'Sales Reps' : t === 'email-templates' ? 'Email Templates' : t === 'effectiveness' ? 'Effectiveness Defaults' : t === 'usage' ? 'Usage' : 'Integrations'}
             </button>
           ))}
         </nav>
@@ -4221,6 +4222,8 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+      {tab === 'sales-reps' && <SalesRepsTab />}
     </div>
   );
 }

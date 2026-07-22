@@ -25,7 +25,8 @@ export async function GET(request: NextRequest) {
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.series_id, c.internal_attendees, c.stage_override,
                  c.conference_strategy_type_id, cs.display_name as series_name, co.value as strategy_type_name,
                  c.industry_focus, c.conference_type, c.sponsorship_level, c.location,
-                 c.booth_present, c.booth_width, c.booth_length, c.booth_number, c.booth_hall
+                 c.booth_present, c.booth_width, c.booth_length, c.booth_number, c.booth_hall,
+                 c.territory_scope, c.territory_ids
           FROM conferences c
           LEFT JOIN conference_series cs ON cs.id = c.series_id
           LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
@@ -89,6 +90,7 @@ export async function GET(request: NextRequest) {
   interface PlanRow {
     decision: string | null; planned_budget: number | null; assignedRepIds: number[]; notes: string | null;
     plannedBudgetLineItems: PlannedLineItem[]; plannedStartDate: string | null; plannedEndDate: string | null;
+    listScore: number | null; listScoreTier: string | null; listScoreConfidence: string | null;
   }
   function parsePlanRows(rows: Array<Record<string, unknown>>): Map<number, PlanRow> {
     const map = new Map<number, PlanRow>();
@@ -116,6 +118,9 @@ export async function GET(request: NextRequest) {
         plannedBudgetLineItems,
         plannedStartDate: r.planned_start_date ? String(r.planned_start_date) : null,
         plannedEndDate: r.planned_end_date ? String(r.planned_end_date) : null,
+        listScore: r.list_score != null ? Number(r.list_score) : null,
+        listScoreTier: r.list_score_tier ? String(r.list_score_tier) : null,
+        listScoreConfidence: r.list_score_confidence ? String(r.list_score_confidence) : null,
       });
     }
     return map;
@@ -126,7 +131,9 @@ export async function GET(request: NextRequest) {
   // (both edit the same row); budget/reps/dates/notes stay Plan-tab-only but live on
   // this same row.
   const plansRes = await db.execute({
-    sql: `SELECT conference_id, decision, planned_budget, assigned_rep_ids, notes, planned_budget_line_items, planned_start_date, planned_end_date FROM conference_plans WHERE conference_id IN (${ph}) AND plan_year = ?`,
+    sql: `SELECT conference_id, decision, planned_budget, assigned_rep_ids, notes, planned_budget_line_items, planned_start_date, planned_end_date,
+                 list_score, list_score_tier, list_score_confidence
+          FROM conference_plans WHERE conference_id IN (${ph}) AND plan_year = ?`,
     args: [...confIds, year + 1],
   });
   const planMap = parsePlanRows(plansRes.rows as Array<Record<string, unknown>>);
@@ -240,6 +247,9 @@ export async function GET(request: NextRequest) {
         assignedReps: (plan?.assignedRepIds ?? []).map(id => repMap.get(id)).filter((r): r is { userId: number; displayName: string; initials: string } => r != null),
         plannedStartDate: plan?.plannedStartDate ?? null,
         plannedEndDate: plan?.plannedEndDate ?? null,
+        listScore: plan?.listScore ?? null,
+        listScoreTier: plan?.listScoreTier ?? null,
+        listScoreConfidence: plan?.listScoreConfidence ?? null,
       },
       industryFocus: conf.industry_focus ? String(conf.industry_focus) : null,
       conferenceType: conf.conference_type ? String(conf.conference_type) : null,
@@ -250,6 +260,13 @@ export async function GET(request: NextRequest) {
       boothLength: conf.booth_length != null ? Number(conf.booth_length) : null,
       boothNumber: conf.booth_number ? String(conf.booth_number) : null,
       boothHall: conf.booth_hall ? String(conf.booth_hall) : null,
+      territoryScope: conf.territory_scope ? String(conf.territory_scope) : null,
+      territoryIds: (() => {
+        try {
+          const parsed = JSON.parse(String(conf.territory_ids ?? '[]'));
+          return Array.isArray(parsed) ? parsed.map(Number).filter(n => !isNaN(n)) : [];
+        } catch { return []; }
+      })(),
     };
   });
 

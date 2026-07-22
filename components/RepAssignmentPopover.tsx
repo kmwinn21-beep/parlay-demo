@@ -22,7 +22,8 @@ interface RepAssignmentPopoverProps {
   onUpdate: (updatedReps: AssignedRep[]) => void;
 }
 
-type PopoverPos = { top: number; left: number };
+type PopoverPos = { top?: number; bottom?: number; left: number };
+const POPOVER_EST_HEIGHT = 300;
 
 // Deterministic background color from a name — no shared avatar-color utility
 // exists in the codebase yet, so this is a small local hash into a fixed palette.
@@ -103,7 +104,13 @@ export function RepAssignmentPopover({ conferenceId, planYear, assignedReps, all
   const openPopover = () => {
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: rect.left });
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const above = spaceBelow < POPOVER_EST_HEIGHT && rect.top > spaceBelow;
+      setPos({
+        top: above ? undefined : rect.bottom + 4,
+        bottom: above ? window.innerHeight - rect.top + 4 : undefined,
+        left: rect.left,
+      });
     }
     setSearch('');
     setOpen(true);
@@ -164,7 +171,7 @@ export function RepAssignmentPopover({ conferenceId, planYear, assignedReps, all
         <div
           data-rep-assignment-popover
           style={{
-            position: 'fixed', top: pos.top, left: pos.left, width: 220, zIndex: 50,
+            position: 'fixed', top: pos.top, bottom: pos.bottom, left: pos.left, width: 220, zIndex: 50,
             background: 'var(--surface-2, #fff)', border: '0.5px solid var(--border, #E5E7EB)',
             borderRadius: 12, overflow: 'hidden',
           }}

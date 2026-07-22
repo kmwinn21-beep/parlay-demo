@@ -1797,4 +1797,45 @@ export const migrations: string[] = [
    FROM conference_plan_speaking_slots`,
   `DROP TABLE conference_plan_speaking_slots`,
   `ALTER TABLE conference_plan_speaking_slots_new RENAME TO conference_plan_speaking_slots`,
+  // 567 — sales_territories: state-to-rep territory assignments for the Admin
+  // Settings "Sales reps" tab's territory map builder. state_codes and
+  // assigned_user_ids are JSON arrays stored as TEXT, matching the pattern
+  // used throughout this codebase for multi-value fields (e.g.
+  // conference_plans.assigned_rep_ids). assigned_user_ids holds config_options
+  // ids (category='user') — the same rep roster RepAssignmentPopover and every
+  // other assigned-rep feature in the app uses — not `users` table logins.
+  `CREATE TABLE IF NOT EXISTS sales_territories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    state_codes TEXT NOT NULL DEFAULT '[]',
+    assigned_user_ids TEXT NOT NULL DEFAULT '[]',
+    color TEXT NOT NULL DEFAULT '#185FA5',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`,
+  // 568 — demo territory seed. A plain INSERT is safe here (not INSERT OR
+  // IGNORE / conditional) because every tenant runs each migration exactly
+  // once, tracked by _schema_version — this row set can never be re-inserted
+  // by re-running migrations.
+  `INSERT INTO sales_territories (name, state_codes, assigned_user_ids, color) VALUES
+    ('Northeast', '["CT","ME","MA","NH","NY","RI","VT","NJ","PA"]', '[1]', '#1D9E75'),
+    ('Southeast', '["FL","GA","NC","SC","VA","TN","AL","MS"]', '[1]', '#7F77DD'),
+    ('West Coast', '["CA","OR","WA","NV","AZ"]', '[1]', '#D85A30')`,
+  // 569 — conferences.territory_scope / .territory_ids: National vs Regional
+  // conference-territory tagging, set from the Add Conference form and the
+  // conference detail edit form. territory_ids is a JSON array of
+  // sales_territories.id, following the same JSON-array-as-TEXT pattern used
+  // throughout this codebase for multi-value fields.
+  `ALTER TABLE conferences ADD COLUMN territory_scope TEXT CHECK(territory_scope IN ('national','regional'))`,
+  `ALTER TABLE conferences ADD COLUMN territory_ids TEXT DEFAULT '[]'`,
+  // 570 — conference_plans.list_score / .list_score_tier / .list_score_confidence:
+  // the Plan tab's "List Score" column. Populated by uploading a prospect list for
+  // a not-yet-scored conference — the list is imported as real attendees via the
+  // existing /api/conferences/[id]/attendees/upload pipeline, then run through the
+  // unmodified Calendar Intelligence scoring engine (see the calendar-intelligence
+  // [id] route's `includeFuture` param), so this mirrors the same score shape the
+  // Cal Intel drawer already reads from calendar_intelligence_scores.
+  `ALTER TABLE conference_plans ADD COLUMN list_score INTEGER`,
+  `ALTER TABLE conference_plans ADD COLUMN list_score_tier TEXT`,
+  `ALTER TABLE conference_plans ADD COLUMN list_score_confidence TEXT`,
 ];

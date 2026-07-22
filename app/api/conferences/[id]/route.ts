@@ -77,7 +77,8 @@ export async function PUT(
     const { name, start_date, end_date, location,
             location_place_id, location_lat, location_lng, location_city, location_state, location_country, location_timezone,
             notes, internal_attendees, conference_strategy_type_id, series_id, season_id,
-            industry_focus, conference_type, website, sponsorship_level, booth_present, booth_width, booth_length, booth_number, booth_hall } = body;
+            industry_focus, conference_type, website, sponsorship_level, booth_present, booth_width, booth_length, booth_number, booth_hall,
+            territory_scope, territory_ids } = body;
 
     const existingResult = await db.execute({
       sql: 'SELECT id, name, internal_attendees FROM conferences WHERE id = ?',
@@ -96,6 +97,7 @@ export async function PUT(
               internal_attendees = ?, conference_strategy_type_id = ?, series_id = ?, season_id = ?,
               industry_focus = ?, conference_type = ?, website = ?, sponsorship_level = ?,
               booth_present = ?, booth_width = ?, booth_length = ?, booth_number = ?, booth_hall = ?,
+              territory_scope = ?, territory_ids = ?,
               updated_at = datetime('now')
             WHERE id = ? RETURNING *`,
       args: [name, start_date, end_date, location,
@@ -108,6 +110,7 @@ export async function PUT(
              booth_present ? 1 : 0,
              booth_present ? (booth_width ?? null) : null, booth_present ? (booth_length ?? null) : null,
              booth_present ? (booth_number ?? null) : null, booth_present ? (booth_hall ?? null) : null,
+             territory_scope ?? null, territory_scope === 'regional' ? JSON.stringify(territory_ids ?? []) : '[]',
              params.id],
     });
 
