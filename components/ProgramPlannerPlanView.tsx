@@ -102,8 +102,11 @@ const GROUP_CONFIG: Record<GroupKey, { label: string; icon: string; headerBg: st
 // underlying stored value (and grouping key) is left untouched, only what's
 // rendered in the table/Kanban views is abbreviated.
 const STRATEGY_ABBREVIATIONS: Record<string, string> = {
+  'Customer Retention / Customer Nurture': 'Customer Nurture',
   'Customer Retention': 'Customer Nurture',
   'Customer Nurture': 'Customer Nurture',
+  'Market Presence / Brand Visiblity': 'Brand Visibility',
+  'Market Presence / Brand Visibility': 'Brand Visibility',
   'Market Presence': 'Brand Visibility',
   'Brand Visiblity': 'Brand Visibility',
   'Brand Visibility': 'Brand Visibility',
@@ -239,6 +242,64 @@ function NewBadge() {
         <path d="M10 1l2.6 6.2L19 8.3l-4.9 4.3L15.5 19 10 15.6 4.5 19l1.4-6.4L1 8.3l6.4-1.1L10 1z" />
       </svg>
     </span>
+  );
+}
+
+const STATUS_CIRCLE_CONFIG: Record<GroupKey, { label: string; bg: string; iconColor: string; icon: 'check' | 'question' | 'x' }> = {
+  attend:     { label: 'Attending', bg: 'bg-green-100', iconColor: 'text-green-600', icon: 'check' },
+  reduce:     { label: 'Attending (Reduced)', bg: 'bg-yellow-100', iconColor: 'text-yellow-700', icon: 'check' },
+  new:        { label: 'New — never attended (Evaluating)', bg: 'bg-purple-100', iconColor: 'text-purple-700', icon: 'question' },
+  evaluating: { label: 'Evaluating', bg: 'bg-gray-100', iconColor: 'text-gray-600', icon: 'question' },
+  cut:        { label: 'Not Attending', bg: 'bg-red-100', iconColor: 'text-red-600', icon: 'x' },
+};
+
+// Circular icon replacement for the text status pill shown in any grouping
+// other than Status — hover shows the full label (native title, desktop);
+// click toggles the same label in a small tooltip (mobile, no hover).
+function StatusCircleBadge({ decision }: { decision: string | null }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const key: GroupKey = decision === 'attend' || decision === 'reduce' || decision === 'new' || decision === 'cut' ? decision : 'evaluating';
+  const cfg = STATUS_CIRCLE_CONFIG[key];
+
+  return (
+    <div ref={ref} className="relative inline-flex flex-shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        title={cfg.label}
+        className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${cfg.bg}`}
+      >
+        {cfg.icon === 'check' && (
+          <svg className={`w-3 h-3 ${cfg.iconColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        )}
+        {cfg.icon === 'x' && (
+          <svg className={`w-3 h-3 ${cfg.iconColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        )}
+        {cfg.icon === 'question' && (
+          <span className={`text-[11px] font-extrabold leading-none ${cfg.iconColor}`}>?</span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute z-40 top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap bg-gray-900 text-white text-[11px] rounded-md shadow-lg px-2 py-1">
+          {cfg.label}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -793,7 +854,20 @@ function DatesEditCell({
           <div className="space-y-1.5">
             <div>
               <label className="text-[10px] text-gray-500 block mb-0.5">Start</label>
-              <input type="date" value={start} onChange={e => setStart(e.target.value)} className="input-field text-xs w-full" />
+              <input
+                type="date"
+                value={start}
+                onChange={e => {
+                  const newStart = e.target.value;
+                  setStart(newStart);
+                  if (newStart) {
+                    const d = new Date(newStart + 'T00:00:00');
+                    d.setDate(d.getDate() + 3);
+                    setEnd(d.toISOString().slice(0, 10));
+                  }
+                }}
+                className="input-field text-xs w-full"
+              />
             </div>
             <div>
               <label className="text-[10px] text-gray-500 block mb-0.5">End</label>
@@ -831,6 +905,11 @@ export function ProgramPlannerPlanView({
     kanbanScrollRef.current?.scrollBy({ left: dir * 320, behavior: 'smooth' });
   };
   const [draggedId, setDraggedId] = useState<number | null>(null);
+  // Conferences that were decision='new' at some point this session, tracked
+  // client-side only (not persisted) so the "never attended before" star
+  // keeps showing even after being dragged out of the New section into e.g.
+  // Attending — decision itself is single-valued and overwritten by the move.
+  const [wasNewIds, setWasNewIds] = useState<Set<number>>(new Set());
   const [dragOverGroup, setDragOverGroup] = useState<GroupKey | null>(null);
   // Decision-group sections can be hidden from view (same minimize/restore
   // pattern as the tier columns in the pre-conference Targets tab's kanban) —
@@ -930,16 +1009,6 @@ export function ProgramPlannerPlanView({
     const d = c.decision;
     if (d === 'attend' || d === 'reduce' || d === 'new' || d === 'cut') return d;
     return 'evaluating';
-  };
-
-  // Shortened label for the By Rep table view's status pill — the full
-  // "Attending (reduced footprint)" section header is too long for an inline
-  // pill next to the conference name there.
-  const statusPillLabel = (c: PlanConferenceRow): string => {
-    const key = groupOf(c);
-    if (key === 'reduce') return 'Attending (red.)';
-    if (key === 'new') return 'New (Evaluating)';
-    return GROUP_CONFIG[key].label;
   };
 
   const groups: Record<GroupKey, PlanConferenceRow[]> = { attend: [], reduce: [], new: [], evaluating: [], cut: [] };
@@ -1113,6 +1182,10 @@ export function ProgramPlannerPlanView({
 
   const moveToGroup = async (conferenceId: number, group: GroupKey) => {
     const decision = GROUP_TO_DECISION[group];
+    if (group !== 'new') {
+      const conf = conferences.find(c => c.conferenceId === conferenceId);
+      if (conf?.decision === 'new') setWasNewIds(prev => new Set(prev).add(conferenceId));
+    }
     onDecisionUpdated(conferenceId, decision);
     await fetch(`/api/program-planner/conferences/${conferenceId}/decision`, {
       method: 'PATCH',
@@ -1368,7 +1441,7 @@ export function ProgramPlannerPlanView({
                               <Link href={`/conferences/${c.conferenceId}`} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Open conference detail">
                                 <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                               </Link>
-                              {c.decision === 'new' && <NewBadge />}
+                              {(c.decision === 'new' || wasNewIds.has(c.conferenceId)) && <NewBadge />}
                               {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                 <RepAssignmentWarning
                                   repName={section.label}
@@ -1376,11 +1449,7 @@ export function ProgramPlannerPlanView({
                                   scopeLabel={c.territoryScope === 'national' ? 'National' : 'Regional'}
                                 />
                               )}
-                              {groupMode !== 'status' && (
-                                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${GROUP_CONFIG[groupOf(c)].pillBg} ${GROUP_CONFIG[groupOf(c)].pillText}`}>
-                                  {statusPillLabel(c)}
-                                </span>
-                              )}
+                              {groupMode !== 'status' && <StatusCircleBadge decision={c.decision} />}
                             </div>
                             <DatesEditCell
                               conferenceId={c.conferenceId}
@@ -1513,45 +1582,45 @@ export function ProgramPlannerPlanView({
                           >
                             <td className="px-2 py-2 cursor-grab active:cursor-grabbing"><GripIcon /></td>
                             <td className="px-3 py-2">
-                              <div className="flex items-start gap-1 min-w-0">
-                                <button
-                                  type="button"
-                                  onClick={() => setLogisticsDrawer({
-                                    conferenceId: c.conferenceId,
-                                    conferenceName: c.name,
-                                    seriesName: null,
-                                    planYear: year,
-                                    startDate: c.startDate ?? null,
-                                    endDate: c.endDate ?? null,
-                                    decision: c.decision ?? null,
-                                    plannedBudget: c.plan.plannedBudget ?? null,
-                                    assignedReps: c.plan.assignedReps ?? [],
-                                    calScore: null,
-                                    boothPresent: c.boothPresent,
-                                    boothWidth: c.boothWidth,
-                                    boothLength: c.boothLength,
-                                    boothHall: c.boothHall,
-                                  })}
-                                  className="text-brand-secondary hover:text-brand-primary font-medium whitespace-normal break-words bg-transparent border-0 p-0 text-left cursor-pointer"
-                                >
-                                  {c.name}
-                                </button>
-                                <Link href={`/conferences/${c.conferenceId}`} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Open conference detail">
-                                  <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
-                                </Link>
-                                {c.decision === 'new' && <NewBadge />}
-                                {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
-                                  <RepAssignmentWarning
-                                    repName={section.label}
-                                    conferenceName={c.name}
-                                    scopeLabel={c.territoryScope === 'national' ? 'National' : 'Regional'}
-                                  />
-                                )}
-                                {groupMode !== 'status' && (
-                                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${GROUP_CONFIG[groupOf(c)].pillBg} ${GROUP_CONFIG[groupOf(c)].pillText}`}>
-                                    {statusPillLabel(c)}
-                                  </span>
-                                )}
+                              <div className="grid grid-cols-[1fr_auto] gap-1.5 items-start">
+                                <div className="flex items-start gap-1 min-w-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => setLogisticsDrawer({
+                                      conferenceId: c.conferenceId,
+                                      conferenceName: c.name,
+                                      seriesName: null,
+                                      planYear: year,
+                                      startDate: c.startDate ?? null,
+                                      endDate: c.endDate ?? null,
+                                      decision: c.decision ?? null,
+                                      plannedBudget: c.plan.plannedBudget ?? null,
+                                      assignedReps: c.plan.assignedReps ?? [],
+                                      calScore: null,
+                                      boothPresent: c.boothPresent,
+                                      boothWidth: c.boothWidth,
+                                      boothLength: c.boothLength,
+                                      boothHall: c.boothHall,
+                                    })}
+                                    className="text-brand-secondary hover:text-brand-primary font-medium whitespace-normal break-words bg-transparent border-0 p-0 text-left cursor-pointer"
+                                  >
+                                    {c.name}
+                                  </button>
+                                  <Link href={`/conferences/${c.conferenceId}`} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Open conference detail">
+                                    <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
+                                  </Link>
+                                </div>
+                                <div className="flex items-center gap-1 w-[68px] flex-shrink-0 justify-end pt-0.5">
+                                  {(c.decision === 'new' || wasNewIds.has(c.conferenceId)) && <NewBadge />}
+                                  {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
+                                    <RepAssignmentWarning
+                                      repName={section.label}
+                                      conferenceName={c.name}
+                                      scopeLabel={c.territoryScope === 'national' ? 'National' : 'Regional'}
+                                    />
+                                  )}
+                                  {groupMode !== 'status' && <StatusCircleBadge decision={c.decision} />}
+                                </div>
                               </div>
                             </td>
                             <td className="px-3 py-2 text-center whitespace-nowrap">
@@ -1708,7 +1777,7 @@ export function ProgramPlannerPlanView({
                             draggedId === c.conferenceId ? 'opacity-40' : ''
                           } ${key === 'cut' ? 'opacity-70' : ''}`}
                         >
-                          <div className="flex items-center gap-1 min-w-0 mb-1.5 flex-wrap">
+                          <div className="grid grid-cols-[1fr_auto] gap-1.5 items-start mb-1.5">
                             <button
                               type="button"
                               onClick={() => setLogisticsDrawer({
@@ -1727,26 +1796,24 @@ export function ProgramPlannerPlanView({
                                 boothLength: c.boothLength,
                                 boothHall: c.boothHall,
                               })}
-                              className="text-brand-secondary hover:text-brand-primary font-semibold text-xs whitespace-normal break-words bg-transparent border-0 p-0 text-left cursor-pointer flex-1 min-w-0"
+                              className="text-brand-secondary hover:text-brand-primary font-semibold text-xs whitespace-normal break-words bg-transparent border-0 p-0 text-left cursor-pointer min-w-0"
                             >
                               {c.name}
                             </button>
-                            {c.decision === 'new' && <NewBadge />}
-                            {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
-                              <RepAssignmentWarning
-                                repName={section.label}
-                                conferenceName={c.name}
-                                scopeLabel={c.territoryScope === 'national' ? 'National' : 'Regional'}
-                              />
-                            )}
-                            {groupMode !== 'status' && (
-                              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${GROUP_CONFIG[groupOf(c)].pillBg} ${GROUP_CONFIG[groupOf(c)].pillText}`}>
-                                {statusPillLabel(c)}
-                              </span>
-                            )}
-                            <Link href={`/conferences/${c.conferenceId}`} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Open conference detail">
-                              <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
-                            </Link>
+                            <div className="flex items-center gap-1 w-[84px] flex-shrink-0 justify-end pt-0.5">
+                              {(c.decision === 'new' || wasNewIds.has(c.conferenceId)) && <NewBadge />}
+                              {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
+                                <RepAssignmentWarning
+                                  repName={section.label}
+                                  conferenceName={c.name}
+                                  scopeLabel={c.territoryScope === 'national' ? 'National' : 'Regional'}
+                                />
+                              )}
+                              {groupMode !== 'status' && <StatusCircleBadge decision={c.decision} />}
+                              <Link href={`/conferences/${c.conferenceId}`} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Open conference detail">
+                                <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
+                              </Link>
+                            </div>
                           </div>
                           <p className="text-[10px] text-gray-400 mb-2">
                             {fmtDateShort(c.plan.plannedStartDate ?? c.startDate)}
