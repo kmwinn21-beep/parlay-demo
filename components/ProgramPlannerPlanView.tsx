@@ -774,6 +774,98 @@ function CommitCell({ conferenceId, conferenceName, decision, startDate, planned
   );
 }
 
+// Lets the user remove a conference they added to the Plan tab but never
+// committed — visible everywhere the row is shown (table, Kanban, mobile),
+// unlike Commit which is table-only, since deleting a mistaken draft is
+// useful regardless of view or decision bucket. Scoped server-side to
+// uncommitted conferences only (see the DELETE route), so this never
+// appears once committedToProgram flips true — at that point it's a real
+// conference and removing it belongs on the Conference Details page.
+function DeleteDraftButton({ conferenceId, conferenceName, onDeleted }: {
+  conferenceId: number; conferenceName: string; onDeleted: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<DropdownPos | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (buttonRef.current?.contains(e.target as Node) || popoverRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const openPopover = () => {
+    if (buttonRef.current) setPos(calcDropdownPos(buttonRef.current));
+    setOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/program-planner/conferences/${conferenceId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? 'Failed to delete conference');
+      }
+      onDeleted();
+      toast.success(`${conferenceName} removed.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete conference');
+    } finally {
+      setDeleting(false);
+      setOpen(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={openPopover}
+        disabled={deleting}
+        title="Remove this conference from the plan"
+        className="inline-flex items-center justify-center w-5 h-5 rounded-full text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0 disabled:opacity-50"
+      >
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+      {open && pos && (
+        <div ref={popoverRef} className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 w-64" style={dropdownStyle(pos)}>
+          <p className="text-sm text-gray-700 mb-3">
+            Remove <span className="font-semibold">{conferenceName}</span> from the plan? This can&apos;t be undone.
+          </p>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              disabled={deleting}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmDelete}
+              disabled={deleting}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+            >
+              {deleting ? 'Removing…' : 'Remove'}
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // Shown in By Rep grouping next to a conference that landed in this rep's
 // column via territory auto-placement rather than an actual rep assignment —
 // click reveals why it's here instead of silently implying the rep is
@@ -2019,6 +2111,7 @@ export function ProgramPlannerPlanView({
                                 <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                               </Link>
                               {c.isNewAddition && <NewBadge />}
+                              {!c.committedToProgram && <DeleteDraftButton conferenceId={c.conferenceId} conferenceName={c.name} onDeleted={onConferenceCreated} />}
                               {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                 <RepAssignmentWarning
                                   repName={section.label}
@@ -2216,6 +2309,7 @@ export function ProgramPlannerPlanView({
                                 </div>
                                 <div className="flex items-center gap-1 w-[68px] flex-shrink-0 justify-center pt-0.5">
                                   {c.isNewAddition && <NewBadge />}
+                              {!c.committedToProgram && <DeleteDraftButton conferenceId={c.conferenceId} conferenceName={c.name} onDeleted={onConferenceCreated} />}
                                   {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                     <RepAssignmentWarning
                                       repName={section.label}
@@ -2436,6 +2530,7 @@ export function ProgramPlannerPlanView({
                             </button>
                             <div className="flex items-center gap-1 w-[84px] flex-shrink-0 justify-center pt-0.5">
                               {c.isNewAddition && <NewBadge />}
+                              {!c.committedToProgram && <DeleteDraftButton conferenceId={c.conferenceId} conferenceName={c.name} onDeleted={onConferenceCreated} />}
                               {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                 <RepAssignmentWarning
                                   repName={section.label}
