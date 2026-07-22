@@ -37,6 +37,9 @@ interface PlanMeta {
   assignedReps: AssignedRep[];
   plannedStartDate: string | null;
   plannedEndDate: string | null;
+  listScore: number | null;
+  listScoreTier: string | null;
+  listScoreConfidence: string | null;
 }
 
 interface ConferenceRow {
@@ -486,6 +489,10 @@ export default function ProgramPlannerPage() {
     updatePlanField(confId, { plannedStartDate, plannedEndDate });
   }, [updatePlanField]);
 
+  const handleListScoreUpdated = useCallback((confId: number, listScore: number | null, listScoreTier: string | null, listScoreConfidence: string | null) => {
+    updatePlanField(confId, { listScore, listScoreTier, listScoreConfidence });
+  }, [updatePlanField]);
+
   // Conference-level field mutations (shared with the conference detail page — these
   // touch the same conferences row, not conference_plans).
   const updateConferenceField = useCallback((confId: number, patch: Partial<ConferenceRow>) => {
@@ -741,6 +748,7 @@ export default function ProgramPlannerPage() {
                 onBudgetUpdated={handleBudgetUpdated}
                 onStrategyUpdated={handleStrategyUpdated}
                 onDatesUpdated={handleDatesUpdated}
+                onListScoreUpdated={handleListScoreUpdated}
                 onTypeUpdated={handleTypeUpdated}
                 onSponsorshipUpdated={handleSponsorshipUpdated}
                 onBoothUpdated={handleBoothUpdated}

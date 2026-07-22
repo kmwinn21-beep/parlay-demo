@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
 import { RepAssignmentPopover, type AssignedRep } from './RepAssignmentPopover';
 import { ConferencePlanBudgetModal } from './ConferencePlanBudgetModal';
 import { AddConferenceModal } from './AddConferenceModal';
@@ -9,6 +10,9 @@ import { LocationAutocompleteInput, type LocationDetails } from './LocationAutoc
 import { useConfigWithIds } from '@/lib/useUserOptions';
 import { ConferencePlanLogisticsDrawer } from './logistics';
 import { getPreset } from '@/lib/colors';
+import { CalendarIntelligenceDrawer } from './CalendarIntelligenceDrawer';
+import { ColumnMappingModal } from './ColumnMappingModal';
+import type { ColumnMapping } from '@/lib/columnMapping';
 
 interface BudgetLineItem { label: string; budgeted: number | null; actual: number | null }
 interface PlannedLineItem { label: string; budgeted: number }
@@ -21,6 +25,9 @@ interface PlanMeta {
   assignedReps: AssignedRep[];
   plannedStartDate: string | null;
   plannedEndDate: string | null;
+  listScore: number | null;
+  listScoreTier: string | null;
+  listScoreConfidence: string | null;
 }
 
 export interface PlanConferenceRow {
@@ -58,6 +65,7 @@ interface ProgramPlannerPlanViewProps {
   onBudgetUpdated: (conferenceId: number, plannedBudget: number, lineItems: PlannedLineItem[]) => void;
   onStrategyUpdated: (conferenceId: number, strategyTypeId: number | null, strategyTypeName: string | null) => void;
   onDatesUpdated: (conferenceId: number, plannedStartDate: string | null, plannedEndDate: string | null) => void;
+  onListScoreUpdated: (conferenceId: number, listScore: number | null, listScoreTier: string | null, listScoreConfidence: string | null) => void;
   onTypeUpdated: (conferenceId: number, conferenceType: string | null) => void;
   onSponsorshipUpdated: (conferenceId: number, sponsorshipLevel: string | null) => void;
   onBoothUpdated: (conferenceId: number, booth: { boothPresent: boolean; boothWidth: number | null; boothLength: number | null; boothNumber: string | null; boothHall: string | null }) => void;
@@ -308,6 +316,52 @@ function StatusCircleBadge({ decision }: { decision: string | null }) {
         </div>
       )}
     </div>
+  );
+}
+
+function listScoreColor(score: number | null): string {
+  if (score == null) return '#9ca3af';
+  if (score >= 85) return '#059669';
+  if (score >= 70) return '#0d9488';
+  if (score >= 55) return '#d97706';
+  if (score >= 40) return '#f97316';
+  return '#dc2626';
+}
+
+// The Plan tab's "List Score" column — circular to match the Cal Intel score
+// shape. Unscored conferences show a plus-only circle (same dashed, clickable
+// empty-state convention as the other "Set [x]" columns) that opens an upload
+// prompt; scored conferences show the numeric score and open the same Cal
+// Intel drawer used in the Program tab (with Gap Analysis/Execution hidden).
+function ListScoreBadge({ size, score, onUpload, onOpenScore }: {
+  size: number; score: number | null; onUpload: () => void; onOpenScore: () => void;
+}) {
+  if (score == null) {
+    return (
+      <button
+        type="button"
+        onClick={onUpload}
+        title="Upload a list to evaluate this conference"
+        style={{ width: size, height: size }}
+        className="inline-flex items-center justify-center rounded-full border-2 border-dashed border-gray-300 text-gray-400 hover:border-brand-secondary hover:text-brand-secondary transition-colors flex-shrink-0"
+      >
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+        </svg>
+      </button>
+    );
+  }
+  const color = listScoreColor(score);
+  return (
+    <button
+      type="button"
+      onClick={onOpenScore}
+      title={`List Score: ${score}/100`}
+      style={{ width: size, height: size, backgroundColor: color + '18', border: `1.5px solid ${color}` }}
+      className="inline-flex items-center justify-center rounded-full flex-shrink-0 hover:brightness-95 transition-all"
+    >
+      <span style={{ color, fontSize: size >= 32 ? 12 : 10 }} className="font-bold tabular-nums leading-none">{score}</span>
+    </button>
   );
 }
 
@@ -891,11 +945,81 @@ function DatesEditCell({
 
 export function ProgramPlannerPlanView({
   year, conferences, categoryAverages, teamInputMap, onOpenInputPanel,
-  onDecisionUpdated, onRepsUpdated, onBudgetUpdated, onStrategyUpdated, onDatesUpdated,
+  onDecisionUpdated, onRepsUpdated, onBudgetUpdated, onStrategyUpdated, onDatesUpdated, onListScoreUpdated,
   onTypeUpdated, onSponsorshipUpdated, onBoothUpdated, onLocationUpdated, onConferenceCreated,
 }: ProgramPlannerPlanViewProps) {
   const [priorYearActual, setPriorYearActual] = useState<number | null>(null);
   const [budgetModalConf, setBudgetModalConf] = useState<PlanConferenceRow | null>(null);
+  const [calDrawer, setCalDrawer] = useState<{ conferenceId: number; conferenceName: string; basicScore: { score: number; tier: string; confidence: string } } | null>(null);
+  const [listScoreUploadConf, setListScoreUploadConf] = useState<PlanConferenceRow | null>(null);
+  const [listScorePendingFile, setListScorePendingFile] = useState<File | null>(null);
+  const [listScoreMappingData, setListScoreMappingData] = useState<{ headers: string[]; suggestions: ColumnMapping; sampleRows: Record<string, string>[]; totalRows: number } | null>(null);
+  const [listScoreProcessing, setListScoreProcessing] = useState(false);
+  const listScoreFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleListScoreFilePicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (listScoreFileInputRef.current) listScoreFileInputRef.current.value = '';
+    if (!file || !listScoreUploadConf) return;
+    const ext = file.name.toLowerCase().split('.').pop();
+    if (!['xlsx', 'xls', 'csv'].includes(ext || '')) {
+      toast.error('Please upload an Excel (.xlsx, .xls) or CSV file.');
+      return;
+    }
+    setListScoreProcessing(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/upload-preview', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(res.status === 413 ? 'File is too large. Please try a smaller file.' : (JSON.parse(text)?.error ?? 'Failed to read file'));
+      }
+      const data = await res.json();
+      setListScorePendingFile(file);
+      setListScoreMappingData(data);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to read file');
+    } finally {
+      setListScoreProcessing(false);
+    }
+  };
+
+  const handleListScoreMappingConfirmed = async (mapping: ColumnMapping) => {
+    if (!listScorePendingFile || !listScoreUploadConf) return;
+    setListScoreMappingData(null);
+    setListScoreProcessing(true);
+    const conf = listScoreUploadConf;
+    try {
+      const formData = new FormData();
+      formData.append('file', listScorePendingFile);
+      formData.append('mapping', JSON.stringify(mapping));
+      const uploadRes = await fetch(`/api/conferences/${conf.conferenceId}/attendees/upload`, { method: 'POST', body: formData });
+      if (!uploadRes.ok) {
+        const text = await uploadRes.text().catch(() => '');
+        throw new Error(uploadRes.status === 413 ? 'File is too large. Please try a smaller file.' : (JSON.parse(text)?.error ?? 'Failed to upload list'));
+      }
+
+      const scoreRes = await fetch(`/api/program-planner/conferences/${conf.conferenceId}/list-score`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planYear: year }),
+      });
+      if (!scoreRes.ok) {
+        const err = await scoreRes.json().catch(() => ({}));
+        throw new Error(err.error ?? 'List uploaded, but scoring failed');
+      }
+      const { listScore, listScoreTier, listScoreConfidence } = await scoreRes.json();
+      onListScoreUpdated(conf.conferenceId, listScore, listScoreTier, listScoreConfidence);
+      toast.success('List uploaded and scored.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to score list');
+    } finally {
+      setListScoreProcessing(false);
+      setListScoreUploadConf(null);
+      setListScorePendingFile(null);
+    }
+  };
   const [showAddDrawer, setShowAddDrawer] = useState(false);
   const [planViewMode, setPlanViewMode] = useState<'table' | 'kanban'>('table');
   const [groupMode, setGroupMode] = useState<GroupMode>('status');
@@ -1507,6 +1631,16 @@ export function ProgramPlannerPlanView({
                                 />
                               )}
                               {groupMode !== 'status' && <StatusCircleBadge decision={c.decision} />}
+                              <ListScoreBadge
+                                size={22}
+                                score={c.plan.listScore}
+                                onUpload={() => setListScoreUploadConf(c)}
+                                onOpenScore={() => setCalDrawer({
+                                  conferenceId: c.conferenceId,
+                                  conferenceName: c.name,
+                                  basicScore: { score: c.plan.listScore ?? 0, tier: c.plan.listScoreTier ?? '', confidence: c.plan.listScoreConfidence ?? 'low' },
+                                })}
+                              />
                             </div>
                             <DatesEditCell
                               conferenceId={c.conferenceId}
@@ -1600,6 +1734,7 @@ export function ProgramPlannerPlanView({
                     <colgroup>
                       <col style={{ width: 24 }} />
                       <col style={{ width: 150 }} />
+                      <col style={{ width: 76 }} />
                       <col style={{ width: 70 }} />
                       <col style={{ width: 160 }} />
                       <col style={{ width: 110 }} />
@@ -1621,6 +1756,7 @@ export function ProgramPlannerPlanView({
                             )}
                           </div>
                         </th>
+                        <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">List Score</th>
                         <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Dates</th>
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Strategy</th>
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Type</th>
@@ -1686,6 +1822,18 @@ export function ProgramPlannerPlanView({
                                   {groupMode !== 'status' && <StatusCircleBadge decision={c.decision} />}
                                 </div>
                               </div>
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <ListScoreBadge
+                                size={32}
+                                score={c.plan.listScore}
+                                onUpload={() => setListScoreUploadConf(c)}
+                                onOpenScore={() => setCalDrawer({
+                                  conferenceId: c.conferenceId,
+                                  conferenceName: c.name,
+                                  basicScore: { score: c.plan.listScore ?? 0, tier: c.plan.listScoreTier ?? '', confidence: c.plan.listScoreConfidence ?? 'low' },
+                                })}
+                              />
                             </td>
                             <td className="px-3 py-2 text-center whitespace-nowrap">
                               <DatesEditCell
@@ -1879,6 +2027,16 @@ export function ProgramPlannerPlanView({
                                 />
                               )}
                               {groupMode !== 'status' && <StatusCircleBadge decision={c.decision} />}
+                              <ListScoreBadge
+                                size={20}
+                                score={c.plan.listScore}
+                                onUpload={() => setListScoreUploadConf(c)}
+                                onOpenScore={() => setCalDrawer({
+                                  conferenceId: c.conferenceId,
+                                  conferenceName: c.name,
+                                  basicScore: { score: c.plan.listScore ?? 0, tier: c.plan.listScoreTier ?? '', confidence: c.plan.listScoreConfidence ?? 'low' },
+                                })}
+                              />
                               <Link href={`/conferences/${c.conferenceId}`} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Open conference detail">
                                 <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                               </Link>
@@ -1987,6 +2145,64 @@ export function ProgramPlannerPlanView({
             onBoothUpdated(logisticsDrawer.conferenceId, booth);
             setLogisticsDrawer(d => d && { ...d, boothPresent: booth.boothPresent, boothWidth: booth.boothWidth, boothLength: booth.boothLength, boothHall: booth.boothHall });
           }}
+        />
+      )}
+
+      {calDrawer && (
+        <CalendarIntelligenceDrawer
+          conferenceId={calDrawer.conferenceId}
+          conferenceName={calDrawer.conferenceName}
+          basicScore={calDrawer.basicScore}
+          onClose={() => setCalDrawer(null)}
+          hideTools
+        />
+      )}
+
+      {listScoreUploadConf && !listScoreMappingData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => !listScoreProcessing && setListScoreUploadConf(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl border border-brand-highlight w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-brand-primary font-serif mb-1">Upload a list to evaluate</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Upload a prospect list for &ldquo;{listScoreUploadConf.name}&rdquo; — it&apos;ll be scored through the same Calendar Intelligence engine used for historical conferences.
+            </p>
+            <input
+              ref={listScoreFileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+              onChange={handleListScoreFilePicked}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setListScoreUploadConf(null)}
+                disabled={listScoreProcessing}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => listScoreFileInputRef.current?.click()}
+                disabled={listScoreProcessing}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-brand-secondary text-white hover:bg-brand-primary transition-colors disabled:opacity-50"
+              >
+                {listScoreProcessing ? 'Processing…' : 'Choose file'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {listScoreMappingData && (
+        <ColumnMappingModal
+          fileName={listScorePendingFile?.name ?? ''}
+          totalRows={listScoreMappingData.totalRows}
+          headers={listScoreMappingData.headers}
+          suggestions={listScoreMappingData.suggestions}
+          sampleRows={listScoreMappingData.sampleRows}
+          onConfirm={handleListScoreMappingConfirmed}
+          onCancel={() => { setListScoreMappingData(null); setListScorePendingFile(null); }}
         />
       )}
     </div>

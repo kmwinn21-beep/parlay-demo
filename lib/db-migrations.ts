@@ -1828,4 +1828,14 @@ export const migrations: string[] = [
   // throughout this codebase for multi-value fields.
   `ALTER TABLE conferences ADD COLUMN territory_scope TEXT CHECK(territory_scope IN ('national','regional'))`,
   `ALTER TABLE conferences ADD COLUMN territory_ids TEXT DEFAULT '[]'`,
+  // 570 — conference_plans.list_score / .list_score_tier / .list_score_confidence:
+  // the Plan tab's "List Score" column. Populated by uploading a prospect list for
+  // a not-yet-scored conference — the list is imported as real attendees via the
+  // existing /api/conferences/[id]/attendees/upload pipeline, then run through the
+  // unmodified Calendar Intelligence scoring engine (see the calendar-intelligence
+  // [id] route's `includeFuture` param), so this mirrors the same score shape the
+  // Cal Intel drawer already reads from calendar_intelligence_scores.
+  `ALTER TABLE conference_plans ADD COLUMN list_score INTEGER`,
+  `ALTER TABLE conference_plans ADD COLUMN list_score_tier TEXT`,
+  `ALTER TABLE conference_plans ADD COLUMN list_score_confidence TEXT`,
 ];
