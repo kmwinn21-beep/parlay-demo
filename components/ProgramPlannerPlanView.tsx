@@ -1447,7 +1447,7 @@ export function ProgramPlannerPlanView({
               onClick={() => setPlanViewMode('table')}
               title="Table view"
               className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                planViewMode === 'table' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                planViewMode === 'table' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
               }`}
             >
               <TableViewIcon />
@@ -1458,7 +1458,7 @@ export function ProgramPlannerPlanView({
               onClick={() => setPlanViewMode('kanban')}
               title="Kanban view"
               className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-                planViewMode === 'kanban' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                planViewMode === 'kanban' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
               }`}
             >
               <KanbanViewIcon />
@@ -1483,7 +1483,7 @@ export function ProgramPlannerPlanView({
           onClick={() => setGroupMode('status')}
           title="Group by status"
           className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${
-            groupMode === 'status' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+            groupMode === 'status' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
           }`}
         >
           <StatusViewIcon />
@@ -1494,7 +1494,7 @@ export function ProgramPlannerPlanView({
           onClick={() => setGroupMode('rep')}
           title="Group by rep"
           className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-            groupMode === 'rep' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+            groupMode === 'rep' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
           }`}
         >
           <RepViewIcon />
@@ -1505,7 +1505,7 @@ export function ProgramPlannerPlanView({
           onClick={() => setGroupMode('territory')}
           title="Group by territory"
           className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-            groupMode === 'territory' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+            groupMode === 'territory' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
           }`}
         >
           <TerritoryViewIcon />
@@ -1516,7 +1516,7 @@ export function ProgramPlannerPlanView({
           onClick={() => setGroupMode('strategy')}
           title="Group by strategy"
           className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-            groupMode === 'strategy' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+            groupMode === 'strategy' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
           }`}
         >
           <StrategyViewIcon />
@@ -1527,7 +1527,7 @@ export function ProgramPlannerPlanView({
           onClick={() => setGroupMode('type')}
           title="Group by type"
           className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-            groupMode === 'type' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+            groupMode === 'type' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
           }`}
         >
           <TypeViewIcon />
@@ -1538,7 +1538,7 @@ export function ProgramPlannerPlanView({
           onClick={() => setGroupMode('date')}
           title="Group by date"
           className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-            groupMode === 'date' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+            groupMode === 'date' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
           }`}
         >
           <DateViewIcon />
@@ -1561,7 +1561,7 @@ export function ProgramPlannerPlanView({
         return (
           <div
             key={key}
-            className={`card p-0 overflow-hidden transition-all duration-200 ${isDragOver ? 'ring-2 ring-brand-secondary' : ''} ${closing ? 'opacity-0 scale-[0.98]' : 'opacity-100 scale-100'}`}
+            className={`card p-0 overflow-hidden transition-all duration-200 ${isDragOver ? 'ring-2 ring-brand-secondary' : ''} ${closing ? 'opacity-0 scale-[0.98]' : 'opacity-100'}`}
             style={{ animation: closing ? undefined : 'sectionPopIn 200ms ease-out' }}
             onDragOver={e => { e.preventDefault(); if (draggedId != null && section.dropKey) setDragOverGroup(section.dropKey); }}
             onDragLeave={() => setDragOverGroup(prev => prev === section.dropKey ? null : prev)}
@@ -1770,7 +1770,7 @@ export function ProgramPlannerPlanView({
                           <div className="grid grid-cols-[1fr_auto] gap-1.5 items-center">
                             <span className="text-left">Conference</span>
                             {groupMode !== 'status' && (
-                              <span className="w-[68px] flex-shrink-0 text-right">Status</span>
+                              <span className="w-[68px] flex-shrink-0 text-center">Status</span>
                             )}
                           </div>
                         </th>
@@ -1828,7 +1828,7 @@ export function ProgramPlannerPlanView({
                                     <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                                   </Link>
                                 </div>
-                                <div className="flex items-center gap-1 w-[68px] flex-shrink-0 justify-end pt-0.5">
+                                <div className="flex items-center gap-1 w-[68px] flex-shrink-0 justify-center pt-0.5">
                                   {(c.decision === 'new' || wasNewIds.has(c.conferenceId)) && <NewBadge />}
                                   {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                     <RepAssignmentWarning
@@ -1966,7 +1966,7 @@ export function ProgramPlannerPlanView({
                 return (
                   <div
                     key={key}
-                    className={`w-72 flex-shrink-0 rounded-xl border border-gray-200 overflow-hidden transition-all duration-200 ${isDragOver ? 'ring-2 ring-brand-secondary' : ''} ${closing ? 'opacity-0 scale-[0.98]' : 'opacity-100 scale-100'}`}
+                    className={`w-72 flex-shrink-0 rounded-xl border border-gray-200 overflow-hidden transition-all duration-200 ${isDragOver ? 'ring-2 ring-brand-secondary' : ''} ${closing ? 'opacity-0 scale-[0.98]' : 'opacity-100'}`}
                     style={{ animation: closing ? undefined : 'sectionPopIn 200ms ease-out' }}
                     onDragOver={e => { e.preventDefault(); if (draggedId != null && section.dropKey) setDragOverGroup(section.dropKey); }}
                     onDragLeave={() => setDragOverGroup(prev => prev === section.dropKey ? null : prev)}
@@ -1994,7 +1994,7 @@ export function ProgramPlannerPlanView({
                     </div>
                     {groupMode !== 'status' && rows.length > 0 && (
                       <div className="px-2 pt-2 flex items-center justify-end bg-gray-50/50">
-                        <span className="w-[84px] flex-shrink-0 text-right text-[10px] font-medium text-gray-400 uppercase tracking-wide pr-[19px]">Status</span>
+                        <span className="w-[84px] flex-shrink-0 text-center text-[10px] font-medium text-gray-400 uppercase tracking-wide">Status</span>
                       </div>
                     )}
                     <div className="p-2 space-y-2 min-h-[100px] bg-gray-50/50">
@@ -2035,7 +2035,7 @@ export function ProgramPlannerPlanView({
                             >
                               {c.name}
                             </button>
-                            <div className="flex items-center gap-1 w-[84px] flex-shrink-0 justify-end pt-0.5">
+                            <div className="flex items-center gap-1 w-[84px] flex-shrink-0 justify-center pt-0.5">
                               {(c.decision === 'new' || wasNewIds.has(c.conferenceId)) && <NewBadge />}
                               {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                 <RepAssignmentWarning
