@@ -226,6 +226,49 @@ function NewBadge() {
   );
 }
 
+// Shown in By Rep grouping next to a conference that landed in this rep's
+// column via territory auto-placement rather than an actual rep assignment —
+// click reveals why it's here instead of silently implying the rep is
+// formally on the hook for it.
+function RepAssignmentWarning({ repName, conferenceName, scopeLabel }: {
+  repName: string; conferenceName: string; scopeLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative inline-flex flex-shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-5 h-5 flex items-center justify-center rounded-full bg-amber-50 text-amber-500 hover:bg-amber-100 transition-colors flex-shrink-0"
+        title="Not formally assigned"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          className="absolute z-40 top-full left-0 mt-1 w-64 bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2 leading-snug"
+          onClick={e => e.stopPropagation()}
+        >
+          {repName} has not been formally assigned to {conferenceName}. This is a {scopeLabel} conference that has been designated in their territory.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InputButton({ conferenceId, conferenceName, info, onOpen }: {
   conferenceId: number; conferenceName: string; info: TeamInputInfo | undefined; onOpen: (id: number, name: string) => void;
 }) {
@@ -815,29 +858,36 @@ export function ProgramPlannerPlanView({
       .catch(() => {});
   }, []);
 
-  // Rep colors — same config_options (category='user') color assigned in the
-  // admin Users config section, resolved through the shared color-preset
+  // Rep colors/names — same config_options (category='user') roster assigned in
+  // the admin Users config section, resolved through the shared color-preset
   // system (colors are stored as preset keys like "blue", not raw hex).
   const [repColors, setRepColors] = useState<Partial<Record<number, string>>>({});
+  const [repNames, setRepNames] = useState<Partial<Record<number, string>>>({});
   useEffect(() => {
     fetch('/api/config?category=user')
       .then(r => r.json())
-      .then((rows: Array<{ id: number; color: string | null }>) => {
-        const map: Record<number, string> = {};
-        for (const r of rows) if (r.color) map[r.id] = getPreset(r.color).hex;
-        setRepColors(map);
+      .then((rows: Array<{ id: number; value: string; color: string | null }>) => {
+        const colorMap: Record<number, string> = {};
+        const nameMap: Record<number, string> = {};
+        for (const r of rows) {
+          if (r.color) colorMap[r.id] = getPreset(r.color).hex;
+          nameMap[r.id] = r.value;
+        }
+        setRepColors(colorMap);
+        setRepNames(nameMap);
       })
       .catch(() => {});
   }, []);
 
-  // Sales territories — for By Territory grouping, sourced from the same
-  // territories configured in Admin Settings → Sales Reps.
-  const [territoryOptions, setTerritoryOptions] = useState<Array<{ id: number; name: string; color: string }>>([]);
+  // Sales territories — for By Territory grouping (and for auto-placing
+  // unassigned conferences under their territory's reps in By Rep grouping),
+  // sourced from the territories configured in Admin Settings → Sales Reps.
+  const [territoryOptions, setTerritoryOptions] = useState<Array<{ id: number; name: string; color: string; assignedUserIds: number[] }>>([]);
   useEffect(() => {
     fetch('/api/admin/territories')
       .then(r => r.json())
-      .then((data: { territories: Array<{ id: number; name: string; color: string }> }) => {
-        setTerritoryOptions((data.territories ?? []).map(t => ({ id: t.id, name: t.name, color: t.color })));
+      .then((data: { territories: Array<{ id: number; name: string; color: string; assignedUserIds: number[] }> }) => {
+        setTerritoryOptions((data.territories ?? []).map(t => ({ id: t.id, name: t.name, color: t.color, assignedUserIds: t.assignedUserIds ?? [] })));
       })
       .catch(() => {});
   }, []);
@@ -909,10 +959,30 @@ export function ProgramPlannerPlanView({
     const byRep = new Map<string, { label: string; rows: PlanConferenceRow[] }>();
     const unassigned: PlanConferenceRow[] = [];
     for (const c of conferences) {
-      if (c.plan.assignedReps.length === 0) { unassigned.push(c); continue; }
-      for (const rep of c.plan.assignedReps) {
-        const key = String(rep.userId);
-        const bucket = byRep.get(key) ?? { label: rep.displayName, rows: [] };
+      if (c.plan.assignedReps.length > 0) {
+        for (const rep of c.plan.assignedReps) {
+          const key = String(rep.userId);
+          const bucket = byRep.get(key) ?? { label: rep.displayName, rows: [] };
+          bucket.rows.push(c);
+          byRep.set(key, bucket);
+        }
+        continue;
+      }
+      // No reps assigned — auto-place under whichever reps cover this
+      // conference's territory (national conferences count for every
+      // territory's reps), flagged as unassigned via a warning icon in the
+      // row itself rather than left out of the rep view entirely.
+      let matchedTerritories: typeof territoryOptions = [];
+      if (c.territoryScope === 'national') matchedTerritories = territoryOptions;
+      else if (c.territoryScope === 'regional' && c.territoryIds.length > 0) {
+        matchedTerritories = territoryOptions.filter(t => c.territoryIds.includes(t.id));
+      }
+      const repIds = new Set<number>();
+      for (const t of matchedTerritories) for (const uid of t.assignedUserIds) repIds.add(uid);
+      if (repIds.size === 0) { unassigned.push(c); continue; }
+      for (const uid of Array.from(repIds)) {
+        const key = String(uid);
+        const bucket = byRep.get(key) ?? { label: repNames[uid] ?? `Rep ${uid}`, rows: [] };
         bucket.rows.push(c);
         byRep.set(key, bucket);
       }
@@ -933,30 +1003,43 @@ export function ProgramPlannerPlanView({
     return entries;
   })();
   const territorySections: Section[] = (() => {
-    const byTerritory = new Map<string, { label: string; rows: PlanConferenceRow[] }>();
+    const byTerritory = new Map<number, PlanConferenceRow[]>();
     const national: PlanConferenceRow[] = [];
     const none: PlanConferenceRow[] = [];
     for (const c of conferences) {
       if (c.territoryScope === 'national') { national.push(c); continue; }
       if (c.territoryScope === 'regional' && c.territoryIds.length > 0) {
         for (const tid of c.territoryIds) {
-          const key = String(tid);
-          const label = territoryOptions.find(t => t.id === tid)?.name ?? `Territory ${tid}`;
-          const bucket = byTerritory.get(key) ?? { label, rows: [] };
-          bucket.rows.push(c);
-          byTerritory.set(key, bucket);
+          const arr = byTerritory.get(tid) ?? [];
+          arr.push(c);
+          byTerritory.set(tid, arr);
         }
         continue;
       }
       none.push(c);
     }
-    const entries: Section[] = Array.from(byTerritory.entries())
-      .sort((a, b) => a[1].label.localeCompare(b[1].label))
-      .map(([key, v]) => ({
-        key, label: v.label, icon: 'ti-map-pin', headerBg: 'bg-gray-100', headerText: 'text-gray-700',
-        pillBg: 'bg-gray-200', pillText: 'text-gray-600', rows: v.rows, dropKey: null,
-        headerColor: territoryOptions.find(t => t.id === Number(key))?.color ?? null,
-      }));
+    // National conferences apply to every territory too, alongside their own
+    // National bucket (which stays as-is, unaffected by this).
+    if (national.length > 0) {
+      for (const t of territoryOptions) {
+        byTerritory.set(t.id, [...(byTerritory.get(t.id) ?? []), ...national]);
+      }
+    }
+    // When a national conference exists, every configured territory shows up —
+    // even ones with no conferences of their own yet.
+    const territoryIdsToShow = national.length > 0
+      ? territoryOptions.map(t => t.id)
+      : Array.from(byTerritory.keys());
+    const entries: Section[] = territoryIdsToShow
+      .map(tid => {
+        const t = territoryOptions.find(x => x.id === tid);
+        return {
+          key: String(tid), label: t?.name ?? `Territory ${tid}`, icon: 'ti-map-pin', headerBg: 'bg-gray-100', headerText: 'text-gray-700',
+          pillBg: 'bg-gray-200', pillText: 'text-gray-600', rows: byTerritory.get(tid) ?? [], dropKey: null,
+          headerColor: t?.color ?? null,
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
     if (national.length > 0) {
       entries.unshift({
         key: 'national', label: 'National', icon: 'ti-world', headerBg: 'bg-gray-100', headerText: 'text-gray-700',
@@ -1270,6 +1353,13 @@ export function ProgramPlannerPlanView({
                                 <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                               </Link>
                               {c.decision === 'new' && <NewBadge />}
+                              {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
+                                <RepAssignmentWarning
+                                  repName={section.label}
+                                  conferenceName={c.name}
+                                  scopeLabel={c.territoryScope === 'national' ? 'National' : 'Regional'}
+                                />
+                              )}
                               {groupMode !== 'status' && (
                                 <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${GROUP_CONFIG[groupOf(c)].pillBg} ${GROUP_CONFIG[groupOf(c)].pillText}`}>
                                   {statusPillLabel(c)}
@@ -1407,7 +1497,7 @@ export function ProgramPlannerPlanView({
                           >
                             <td className="px-2 py-2 cursor-grab active:cursor-grabbing"><GripIcon /></td>
                             <td className="px-3 py-2">
-                              <div className="flex items-center gap-1 min-w-0">
+                              <div className="flex items-start gap-1 min-w-0">
                                 <button
                                   type="button"
                                   onClick={() => setLogisticsDrawer({
@@ -1426,7 +1516,7 @@ export function ProgramPlannerPlanView({
                                     boothLength: c.boothLength,
                                     boothHall: c.boothHall,
                                   })}
-                                  className="text-brand-secondary hover:text-brand-primary font-medium truncate max-w-[110px] bg-transparent border-0 p-0 text-left cursor-pointer"
+                                  className="text-brand-secondary hover:text-brand-primary font-medium whitespace-normal break-words bg-transparent border-0 p-0 text-left cursor-pointer"
                                 >
                                   {c.name}
                                 </button>
@@ -1434,6 +1524,13 @@ export function ProgramPlannerPlanView({
                                   <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                                 </Link>
                                 {c.decision === 'new' && <NewBadge />}
+                                {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
+                                  <RepAssignmentWarning
+                                    repName={section.label}
+                                    conferenceName={c.name}
+                                    scopeLabel={c.territoryScope === 'national' ? 'National' : 'Regional'}
+                                  />
+                                )}
                                 {groupMode !== 'status' && (
                                   <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${GROUP_CONFIG[groupOf(c)].pillBg} ${GROUP_CONFIG[groupOf(c)].pillText}`}>
                                     {statusPillLabel(c)}
@@ -1614,11 +1711,18 @@ export function ProgramPlannerPlanView({
                                 boothLength: c.boothLength,
                                 boothHall: c.boothHall,
                               })}
-                              className="text-brand-secondary hover:text-brand-primary font-semibold text-xs truncate bg-transparent border-0 p-0 text-left cursor-pointer flex-1 min-w-0"
+                              className="text-brand-secondary hover:text-brand-primary font-semibold text-xs whitespace-normal break-words bg-transparent border-0 p-0 text-left cursor-pointer flex-1 min-w-0"
                             >
                               {c.name}
                             </button>
                             {c.decision === 'new' && <NewBadge />}
+                            {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
+                              <RepAssignmentWarning
+                                repName={section.label}
+                                conferenceName={c.name}
+                                scopeLabel={c.territoryScope === 'national' ? 'National' : 'Regional'}
+                              />
+                            )}
                             {groupMode !== 'status' && (
                               <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${GROUP_CONFIG[groupOf(c)].pillBg} ${GROUP_CONFIG[groupOf(c)].pillText}`}>
                                 {statusPillLabel(c)}
