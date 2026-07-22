@@ -67,6 +67,8 @@ interface ConferenceRow {
   boothLength: number | null;
   boothNumber: string | null;
   boothHall: string | null;
+  territoryScope: string | null;
+  territoryIds: number[];
 }
 
 interface SeriesGroup {

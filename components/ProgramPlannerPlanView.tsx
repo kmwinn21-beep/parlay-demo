@@ -42,6 +42,8 @@ export interface PlanConferenceRow {
   boothLength: number | null;
   boothNumber: string | null;
   boothHall: string | null;
+  territoryScope: string | null;
+  territoryIds: number[];
   plan: PlanMeta;
 }
 
@@ -82,6 +84,7 @@ function fmtDateShort(dateStr: string): string {
 }
 
 type GroupKey = 'attend' | 'reduce' | 'new' | 'evaluating' | 'cut';
+type GroupMode = 'status' | 'rep' | 'territory' | 'strategy' | 'type';
 const ORDERED_GROUPS: GroupKey[] = ['evaluating', 'attend', 'reduce', 'new', 'cut'];
 const GROUP_TO_DECISION: Record<GroupKey, GroupKey> = {
   attend: 'attend', reduce: 'reduce', new: 'new', evaluating: 'evaluating', cut: 'cut',
@@ -162,6 +165,33 @@ function RepViewIcon() {
   return (
     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+    </svg>
+  );
+}
+
+function TerritoryViewIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  );
+}
+
+function StrategyViewIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" strokeWidth={2} />
+      <circle cx="12" cy="12" r="5" strokeWidth={2} />
+      <circle cx="12" cy="12" r="1" strokeWidth={2} />
+    </svg>
+  );
+}
+
+function TypeViewIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-5 5a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 9V4a1 1 0 011-1z" />
     </svg>
   );
 }
@@ -736,7 +766,7 @@ export function ProgramPlannerPlanView({
   const [budgetModalConf, setBudgetModalConf] = useState<PlanConferenceRow | null>(null);
   const [showAddDrawer, setShowAddDrawer] = useState(false);
   const [planViewMode, setPlanViewMode] = useState<'table' | 'kanban'>('table');
-  const [groupMode, setGroupMode] = useState<'status' | 'rep'>('status');
+  const [groupMode, setGroupMode] = useState<GroupMode>('status');
   const kanbanScrollRef = useRef<HTMLDivElement>(null);
   const scrollKanban = (dir: -1 | 1) => {
     kanbanScrollRef.current?.scrollBy({ left: dir * 320, behavior: 'smooth' });
@@ -796,6 +826,18 @@ export function ProgramPlannerPlanView({
         const map: Record<number, string> = {};
         for (const r of rows) if (r.color) map[r.id] = getPreset(r.color).hex;
         setRepColors(map);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Sales territories — for By Territory grouping, sourced from the same
+  // territories configured in Admin Settings → Sales Reps.
+  const [territoryOptions, setTerritoryOptions] = useState<Array<{ id: number; name: string; color: string }>>([]);
+  useEffect(() => {
+    fetch('/api/admin/territories')
+      .then(r => r.json())
+      .then((data: { territories: Array<{ id: number; name: string; color: string }> }) => {
+        setTerritoryOptions((data.territories ?? []).map(t => ({ id: t.id, name: t.name, color: t.color })));
       })
       .catch(() => {});
   }, []);
@@ -890,7 +932,80 @@ export function ProgramPlannerPlanView({
     }
     return entries;
   })();
-  const sections = groupMode === 'status' ? statusSections : repSections;
+  const territorySections: Section[] = (() => {
+    const byTerritory = new Map<string, { label: string; rows: PlanConferenceRow[] }>();
+    const national: PlanConferenceRow[] = [];
+    const none: PlanConferenceRow[] = [];
+    for (const c of conferences) {
+      if (c.territoryScope === 'national') { national.push(c); continue; }
+      if (c.territoryScope === 'regional' && c.territoryIds.length > 0) {
+        for (const tid of c.territoryIds) {
+          const key = String(tid);
+          const label = territoryOptions.find(t => t.id === tid)?.name ?? `Territory ${tid}`;
+          const bucket = byTerritory.get(key) ?? { label, rows: [] };
+          bucket.rows.push(c);
+          byTerritory.set(key, bucket);
+        }
+        continue;
+      }
+      none.push(c);
+    }
+    const entries: Section[] = Array.from(byTerritory.entries())
+      .sort((a, b) => a[1].label.localeCompare(b[1].label))
+      .map(([key, v]) => ({
+        key, label: v.label, icon: 'ti-map-pin', headerBg: 'bg-gray-100', headerText: 'text-gray-700',
+        pillBg: 'bg-gray-200', pillText: 'text-gray-600', rows: v.rows, dropKey: null,
+        headerColor: territoryOptions.find(t => t.id === Number(key))?.color ?? null,
+      }));
+    if (national.length > 0) {
+      entries.unshift({
+        key: 'national', label: 'National', icon: 'ti-world', headerBg: 'bg-gray-100', headerText: 'text-gray-700',
+        pillBg: 'bg-gray-200', pillText: 'text-gray-600', rows: national, dropKey: null, headerColor: null,
+      });
+    }
+    if (none.length > 0) {
+      entries.push({
+        key: 'no-territory', label: 'No Territory', icon: 'ti-map-pin-off', headerBg: 'bg-gray-50', headerText: 'text-gray-500',
+        pillBg: 'bg-gray-100', pillText: 'text-gray-500', rows: none, dropKey: null, headerColor: null,
+      });
+    }
+    return entries;
+  })();
+
+  // Strategy/Type sections: a conference has exactly one value for each (no
+  // multi-membership like reps/territories), so grouping is a simple bucket-by-value.
+  function buildSingleFieldSections(getValue: (c: PlanConferenceRow) => string | null, icon: string, noneLabel: string): Section[] {
+    const map = new Map<string, PlanConferenceRow[]>();
+    for (const c of conferences) {
+      const key = getValue(c) ?? '__none__';
+      const arr = map.get(key) ?? [];
+      arr.push(c);
+      map.set(key, arr);
+    }
+    const entries: Section[] = Array.from(map.entries())
+      .filter(([key]) => key !== '__none__')
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([key, rows]) => ({
+        key, label: key, icon, headerBg: 'bg-gray-100', headerText: 'text-gray-700',
+        pillBg: 'bg-gray-200', pillText: 'text-gray-600', rows, dropKey: null,
+      }));
+    const none = map.get('__none__');
+    if (none) {
+      entries.push({
+        key: '__none__', label: noneLabel, icon, headerBg: 'bg-gray-50', headerText: 'text-gray-500',
+        pillBg: 'bg-gray-100', pillText: 'text-gray-500', rows: none, dropKey: null,
+      });
+    }
+    return entries;
+  }
+  const strategySections: Section[] = buildSingleFieldSections(c => c.strategyTypeName, 'ti-target-arrow', 'No Strategy');
+  const typeSections: Section[] = buildSingleFieldSections(c => c.conferenceType, 'ti-category', 'No Type');
+
+  const sections = groupMode === 'status' ? statusSections
+    : groupMode === 'rep' ? repSections
+    : groupMode === 'territory' ? territorySections
+    : groupMode === 'strategy' ? strategySections
+    : typeSections;
 
   const plannedConfs = [...groups.attend, ...groups.reduce, ...groups.new];
   const totalPlannedBudget = plannedConfs.reduce((sum, c) => sum + (c.plan.plannedBudget ?? 0), 0);
@@ -990,30 +1105,6 @@ export function ProgramPlannerPlanView({
               Kanban
             </button>
           </div>
-          <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
-            <button
-              type="button"
-              onClick={() => setGroupMode('status')}
-              title="Group by status"
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                groupMode === 'status' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-              }`}
-            >
-              <StatusViewIcon />
-              Status
-            </button>
-            <button
-              type="button"
-              onClick={() => setGroupMode('rep')}
-              title="Group by rep"
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-                groupMode === 'rep' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-              }`}
-            >
-              <RepViewIcon />
-              By Rep
-            </button>
-          </div>
           <button
             type="button"
             onClick={() => setShowAddDrawer(true)}
@@ -1023,6 +1114,65 @@ export function ProgramPlannerPlanView({
             Add conference
           </button>
         </div>
+      </div>
+
+      {/* Grouping toggle — left-aligned to match the section cards below it */}
+      <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+        <button
+          type="button"
+          onClick={() => setGroupMode('status')}
+          title="Group by status"
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${
+            groupMode === 'status' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+          }`}
+        >
+          <StatusViewIcon />
+          Status
+        </button>
+        <button
+          type="button"
+          onClick={() => setGroupMode('rep')}
+          title="Group by rep"
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+            groupMode === 'rep' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+          }`}
+        >
+          <RepViewIcon />
+          By Rep
+        </button>
+        <button
+          type="button"
+          onClick={() => setGroupMode('territory')}
+          title="Group by territory"
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+            groupMode === 'territory' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+          }`}
+        >
+          <TerritoryViewIcon />
+          By Territory
+        </button>
+        <button
+          type="button"
+          onClick={() => setGroupMode('strategy')}
+          title="Group by strategy"
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+            groupMode === 'strategy' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+          }`}
+        >
+          <StrategyViewIcon />
+          By Strategy
+        </button>
+        <button
+          type="button"
+          onClick={() => setGroupMode('type')}
+          title="Group by type"
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+            groupMode === 'type' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+          }`}
+        >
+          <TypeViewIcon />
+          By Type
+        </button>
       </div>
 
       {/* Decision groups — always all 5 (unless minimized), even empty, so a row can be dragged into any of them */}
@@ -1120,7 +1270,7 @@ export function ProgramPlannerPlanView({
                                 <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                               </Link>
                               {c.decision === 'new' && <NewBadge />}
-                              {groupMode === 'rep' && (
+                              {groupMode !== 'status' && (
                                 <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${GROUP_CONFIG[groupOf(c)].pillBg} ${GROUP_CONFIG[groupOf(c)].pillText}`}>
                                   {statusPillLabel(c)}
                                 </span>
@@ -1284,7 +1434,7 @@ export function ProgramPlannerPlanView({
                                   <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                                 </Link>
                                 {c.decision === 'new' && <NewBadge />}
-                                {groupMode === 'rep' && (
+                                {groupMode !== 'status' && (
                                   <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${GROUP_CONFIG[groupOf(c)].pillBg} ${GROUP_CONFIG[groupOf(c)].pillText}`}>
                                     {statusPillLabel(c)}
                                   </span>
@@ -1469,7 +1619,7 @@ export function ProgramPlannerPlanView({
                               {c.name}
                             </button>
                             {c.decision === 'new' && <NewBadge />}
-                            {groupMode === 'rep' && (
+                            {groupMode !== 'status' && (
                               <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${GROUP_CONFIG[groupOf(c)].pillBg} ${GROUP_CONFIG[groupOf(c)].pillText}`}>
                                 {statusPillLabel(c)}
                               </span>

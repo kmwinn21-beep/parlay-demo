@@ -25,7 +25,8 @@ export async function GET(request: NextRequest) {
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.series_id, c.internal_attendees, c.stage_override,
                  c.conference_strategy_type_id, cs.display_name as series_name, co.value as strategy_type_name,
                  c.industry_focus, c.conference_type, c.sponsorship_level, c.location,
-                 c.booth_present, c.booth_width, c.booth_length, c.booth_number, c.booth_hall
+                 c.booth_present, c.booth_width, c.booth_length, c.booth_number, c.booth_hall,
+                 c.territory_scope, c.territory_ids
           FROM conferences c
           LEFT JOIN conference_series cs ON cs.id = c.series_id
           LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
@@ -250,6 +251,13 @@ export async function GET(request: NextRequest) {
       boothLength: conf.booth_length != null ? Number(conf.booth_length) : null,
       boothNumber: conf.booth_number ? String(conf.booth_number) : null,
       boothHall: conf.booth_hall ? String(conf.booth_hall) : null,
+      territoryScope: conf.territory_scope ? String(conf.territory_scope) : null,
+      territoryIds: (() => {
+        try {
+          const parsed = JSON.parse(String(conf.territory_ids ?? '[]'));
+          return Array.isArray(parsed) ? parsed.map(Number).filter(n => !isNaN(n)) : [];
+        } catch { return []; }
+      })(),
     };
   });
 
