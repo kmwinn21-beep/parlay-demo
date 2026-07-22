@@ -59,6 +59,13 @@ interface ProgramPlannerPlanViewProps {
   conferences: PlanConferenceRow[];
   categoryAverages: CategoryAverage[];
   teamInputMap: Map<number, TeamInputInfo>;
+  // Scores already computed for historical/attended conferences by the Program
+  // tab's shared Calendar Intelligence store — pulled over as-is here so a
+  // conference that's already been scored from real attendee history never
+  // shows the "+" upload prompt. Only conferences absent from this map (i.e.
+  // never attended, no real history yet) fall back to conference_plans'
+  // uploaded-list score, or the empty "+" state if neither exists.
+  calIntelScores: Map<number, { score: number; tier: string; confidence: string }>;
   onOpenInputPanel: (conferenceId: number, conferenceName: string) => void;
   onDecisionUpdated: (conferenceId: number, decision: 'attend' | 'reduce' | 'cut' | 'evaluating' | 'new' | null) => void;
   onRepsUpdated: (conferenceId: number, assignedReps: AssignedRep[]) => void;
@@ -944,13 +951,24 @@ function DatesEditCell({
 }
 
 export function ProgramPlannerPlanView({
-  year, conferences, categoryAverages, teamInputMap, onOpenInputPanel,
+  year, conferences, categoryAverages, teamInputMap, calIntelScores, onOpenInputPanel,
   onDecisionUpdated, onRepsUpdated, onBudgetUpdated, onStrategyUpdated, onDatesUpdated, onListScoreUpdated,
   onTypeUpdated, onSponsorshipUpdated, onBoothUpdated, onLocationUpdated, onConferenceCreated,
 }: ProgramPlannerPlanViewProps) {
   const [priorYearActual, setPriorYearActual] = useState<number | null>(null);
   const [budgetModalConf, setBudgetModalConf] = useState<PlanConferenceRow | null>(null);
-  const [calDrawer, setCalDrawer] = useState<{ conferenceId: number; conferenceName: string; basicScore: { score: number; tier: string; confidence: string } } | null>(null);
+  const [calDrawer, setCalDrawer] = useState<{ conferenceId: number; conferenceName: string; basicScore: { score: number; tier: string; confidence: string }; hideTools: boolean } | null>(null);
+
+  // Resolves the score to display for a conference: prefer the Program tab's
+  // already-computed score from real attendee history (never requires an
+  // upload); fall back to a score from an uploaded evaluation list, which is
+  // the only case where the drawer's Gap Analysis/Execution tools are hidden.
+  const resolveListScore = (c: PlanConferenceRow) => {
+    const programScore = calIntelScores.get(c.conferenceId);
+    if (programScore) return { score: programScore.score, tier: programScore.tier, confidence: programScore.confidence, hideTools: false };
+    if (c.plan.listScore != null) return { score: c.plan.listScore, tier: c.plan.listScoreTier ?? '', confidence: c.plan.listScoreConfidence ?? 'low', hideTools: true };
+    return null;
+  };
   const [listScoreUploadConf, setListScoreUploadConf] = useState<PlanConferenceRow | null>(null);
   const [listScorePendingFile, setListScorePendingFile] = useState<File | null>(null);
   const [listScoreMappingData, setListScoreMappingData] = useState<{ headers: string[]; suggestions: ColumnMapping; sampleRows: Record<string, string>[]; totalRows: number } | null>(null);
@@ -1633,13 +1651,13 @@ export function ProgramPlannerPlanView({
                               {groupMode !== 'status' && <StatusCircleBadge decision={c.decision} />}
                               <ListScoreBadge
                                 size={22}
-                                score={c.plan.listScore}
+                                score={resolveListScore(c)?.score ?? null}
                                 onUpload={() => setListScoreUploadConf(c)}
-                                onOpenScore={() => setCalDrawer({
-                                  conferenceId: c.conferenceId,
-                                  conferenceName: c.name,
-                                  basicScore: { score: c.plan.listScore ?? 0, tier: c.plan.listScoreTier ?? '', confidence: c.plan.listScoreConfidence ?? 'low' },
-                                })}
+                                onOpenScore={() => {
+                                  const ls = resolveListScore(c);
+                                  if (!ls) return;
+                                  setCalDrawer({ conferenceId: c.conferenceId, conferenceName: c.name, basicScore: { score: ls.score, tier: ls.tier, confidence: ls.confidence }, hideTools: ls.hideTools });
+                                }}
                               />
                             </div>
                             <DatesEditCell
@@ -1826,13 +1844,13 @@ export function ProgramPlannerPlanView({
                             <td className="px-3 py-2 text-center">
                               <ListScoreBadge
                                 size={32}
-                                score={c.plan.listScore}
+                                score={resolveListScore(c)?.score ?? null}
                                 onUpload={() => setListScoreUploadConf(c)}
-                                onOpenScore={() => setCalDrawer({
-                                  conferenceId: c.conferenceId,
-                                  conferenceName: c.name,
-                                  basicScore: { score: c.plan.listScore ?? 0, tier: c.plan.listScoreTier ?? '', confidence: c.plan.listScoreConfidence ?? 'low' },
-                                })}
+                                onOpenScore={() => {
+                                  const ls = resolveListScore(c);
+                                  if (!ls) return;
+                                  setCalDrawer({ conferenceId: c.conferenceId, conferenceName: c.name, basicScore: { score: ls.score, tier: ls.tier, confidence: ls.confidence }, hideTools: ls.hideTools });
+                                }}
                               />
                             </td>
                             <td className="px-3 py-2 text-center whitespace-nowrap">
@@ -2029,13 +2047,13 @@ export function ProgramPlannerPlanView({
                               {groupMode !== 'status' && <StatusCircleBadge decision={c.decision} />}
                               <ListScoreBadge
                                 size={20}
-                                score={c.plan.listScore}
+                                score={resolveListScore(c)?.score ?? null}
                                 onUpload={() => setListScoreUploadConf(c)}
-                                onOpenScore={() => setCalDrawer({
-                                  conferenceId: c.conferenceId,
-                                  conferenceName: c.name,
-                                  basicScore: { score: c.plan.listScore ?? 0, tier: c.plan.listScoreTier ?? '', confidence: c.plan.listScoreConfidence ?? 'low' },
-                                })}
+                                onOpenScore={() => {
+                                  const ls = resolveListScore(c);
+                                  if (!ls) return;
+                                  setCalDrawer({ conferenceId: c.conferenceId, conferenceName: c.name, basicScore: { score: ls.score, tier: ls.tier, confidence: ls.confidence }, hideTools: ls.hideTools });
+                                }}
                               />
                               <Link href={`/conferences/${c.conferenceId}`} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Open conference detail">
                                 <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
@@ -2154,7 +2172,7 @@ export function ProgramPlannerPlanView({
           conferenceName={calDrawer.conferenceName}
           basicScore={calDrawer.basicScore}
           onClose={() => setCalDrawer(null)}
-          hideTools
+          hideTools={calDrawer.hideTools}
         />
       )}
 

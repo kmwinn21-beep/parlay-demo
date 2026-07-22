@@ -742,6 +742,7 @@ export default function ProgramPlannerPage() {
                 conferences={flattenedConferences}
                 categoryAverages={confsData?.categoryAverages ?? []}
                 teamInputMap={teamInputMap}
+                calIntelScores={calIntelScores}
                 onOpenInputPanel={(conferenceId, conferenceName) => setInputPanelConference({ conferenceId, conferenceName })}
                 onDecisionUpdated={handleDecisionUpdated}
                 onRepsUpdated={handleRepsUpdated}
