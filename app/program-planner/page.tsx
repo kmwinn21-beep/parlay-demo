@@ -528,6 +528,10 @@ export default function ProgramPlannerPage() {
     updateConferenceField(confId, { location });
   }, [updateConferenceField]);
 
+  const handleTerritoryUpdated = useCallback((confId: number, territoryScope: string | null, territoryIds: number[]) => {
+    updateConferenceField(confId, { territoryScope, territoryIds });
+  }, [updateConferenceField]);
+
   const toggleSeries = (seriesId: string) => {
     setCollapsedSeries(prev => {
       const next = new Set(prev);
@@ -754,6 +758,7 @@ export default function ProgramPlannerPage() {
                 onSponsorshipUpdated={handleSponsorshipUpdated}
                 onBoothUpdated={handleBoothUpdated}
                 onLocationUpdated={handleLocationUpdated}
+                onTerritoryUpdated={handleTerritoryUpdated}
                 onConferenceCreated={() => fetchData(selectedYear)}
               />
             ) : view === 'cost' ? (

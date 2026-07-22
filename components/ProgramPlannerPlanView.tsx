@@ -77,6 +77,7 @@ interface ProgramPlannerPlanViewProps {
   onSponsorshipUpdated: (conferenceId: number, sponsorshipLevel: string | null) => void;
   onBoothUpdated: (conferenceId: number, booth: { boothPresent: boolean; boothWidth: number | null; boothLength: number | null; boothNumber: string | null; boothHall: string | null }) => void;
   onLocationUpdated: (conferenceId: number, location: string) => void;
+  onTerritoryUpdated: (conferenceId: number, territoryScope: string | null, territoryIds: number[]) => void;
   onConferenceCreated: () => void;
 }
 
@@ -108,7 +109,7 @@ const GROUP_TO_DECISION: Record<GroupKey, GroupKey> = {
 const GROUP_CONFIG: Record<GroupKey, { label: string; icon: string; headerBg: string; headerText: string; pillBg: string; pillText: string }> = {
   attend:     { label: 'Attending',                     icon: 'ti-check',        headerBg: 'bg-green-50',  headerText: 'text-green-800',  pillBg: 'bg-green-100',  pillText: 'text-green-700' },
   reduce:     { label: 'Attending (reduced footprint)',  icon: 'ti-arrows-minimize', headerBg: 'bg-amber-50',  headerText: 'text-amber-800',  pillBg: 'bg-amber-100',  pillText: 'text-amber-700' },
-  new:        { label: 'New — never attended (Evaluating)', icon: 'ti-sparkles',  headerBg: 'bg-purple-50', headerText: 'text-purple-800', pillBg: 'bg-purple-100', pillText: 'text-purple-700' },
+  new:        { label: 'New (Evaluating)',                  icon: 'ti-sparkles',  headerBg: 'bg-purple-50', headerText: 'text-purple-800', pillBg: 'bg-purple-100', pillText: 'text-purple-700' },
   evaluating: { label: 'Evaluating',                      icon: 'ti-clock',        headerBg: 'bg-gray-100',  headerText: 'text-gray-700',   pillBg: 'bg-gray-200',   pillText: 'text-gray-600' },
   cut:        { label: 'Not attending',                   icon: 'ti-x',            headerBg: 'bg-red-50',    headerText: 'text-red-800',    pillBg: 'bg-red-100',    pillText: 'text-red-700' },
 };
@@ -175,6 +176,27 @@ function calcDropdownPos(el: HTMLElement): DropdownPos {
 }
 function dropdownStyle(pos: DropdownPos): CSSProperties {
   return { position: 'fixed', top: pos.top, bottom: pos.bottom, left: pos.left, zIndex: 9999 };
+}
+
+// Same viewport-aware flip-up logic as calcDropdownPos, sized for the small
+// click/hover-to-reveal label tooltips (status icon, territory chip, rep
+// assignment warning) instead of a full dropdown menu — these previously used
+// plain `absolute` positioning, which a section/card's `overflow-hidden`
+// wrapper clips whenever the tooltip would otherwise overflow it.
+type TooltipPos = { top?: number; bottom?: number; left: number };
+const TOOLTIP_EST_HEIGHT = 40;
+// center=true (the default) returns the trigger's horizontal center, meant to
+// be paired with a `-translate-x-1/2` on the tooltip; pass false for a
+// tooltip that aligns to the trigger's left edge instead.
+function calcTooltipPos(el: HTMLElement, center = true): TooltipPos {
+  const rect = el.getBoundingClientRect();
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const above = spaceBelow < TOOLTIP_EST_HEIGHT + 8 && rect.top > spaceBelow;
+  return {
+    top: above ? undefined : rect.bottom + 4,
+    bottom: above ? window.innerHeight - rect.top + 4 : undefined,
+    left: center ? rect.left + rect.width / 2 : rect.left,
+  };
 }
 
 function GripIcon() {
@@ -290,7 +312,7 @@ function NewBadge() {
 const STATUS_CIRCLE_CONFIG: Record<GroupKey, { label: string; bg: string; iconColor: string; icon: 'check' | 'question' | 'x' }> = {
   attend:     { label: 'Attending', bg: 'bg-green-100', iconColor: 'text-green-600', icon: 'check' },
   reduce:     { label: 'Attending (Reduced)', bg: 'bg-yellow-100', iconColor: 'text-yellow-700', icon: 'check' },
-  new:        { label: 'New — never attended (Evaluating)', bg: 'bg-purple-100', iconColor: 'text-purple-700', icon: 'question' },
+  new:        { label: 'New (Evaluating)', bg: 'bg-purple-100', iconColor: 'text-purple-700', icon: 'question' },
   evaluating: { label: 'Evaluating', bg: 'bg-gray-100', iconColor: 'text-gray-600', icon: 'question' },
   cut:        { label: 'Not Attending', bg: 'bg-red-100', iconColor: 'text-red-600', icon: 'x' },
 };
@@ -300,7 +322,9 @@ const STATUS_CIRCLE_CONFIG: Record<GroupKey, { label: string; bg: string; iconCo
 // click toggles the same label in a small tooltip (mobile, no hover).
 function StatusCircleBadge({ decision }: { decision: string | null }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<TooltipPos | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -317,8 +341,9 @@ function StatusCircleBadge({ decision }: { decision: string | null }) {
   return (
     <div ref={ref} className="relative inline-flex flex-shrink-0">
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => { if (buttonRef.current) setPos(calcTooltipPos(buttonRef.current)); setOpen(o => !o); }}
         title={cfg.label}
         className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${cfg.bg}`}
       >
@@ -336,8 +361,8 @@ function StatusCircleBadge({ decision }: { decision: string | null }) {
           <span className={`text-[11px] font-extrabold leading-none ${cfg.iconColor}`}>?</span>
         )}
       </button>
-      {open && (
-        <div className="absolute z-40 top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap bg-gray-900 text-white text-[11px] rounded-md shadow-lg px-2 py-1">
+      {open && pos && (
+        <div className="fixed z-[9999] -translate-x-1/2 whitespace-nowrap bg-gray-900 text-white text-[11px] rounded-md shadow-lg px-2 py-1" style={{ top: pos.top, bottom: pos.bottom, left: pos.left }}>
           {cfg.label}
         </div>
       )}
@@ -397,7 +422,9 @@ function ListScoreBadge({ size, score, onUpload, onOpenScore }: {
 // desktop); click toggles the same name in a small tooltip (mobile).
 function TerritoryChip({ label, name, color, bg }: { label: string; name: string; color: string; bg: string }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<TooltipPos | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -411,16 +438,17 @@ function TerritoryChip({ label, name, color, bg }: { label: string; name: string
   return (
     <div ref={ref} className="relative inline-flex flex-shrink-0">
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => { if (buttonRef.current) setPos(calcTooltipPos(buttonRef.current)); setOpen(o => !o); }}
         title={name}
         style={{ width: 24, height: 24, border: `1.5px solid ${color}`, backgroundColor: bg, color }}
         className="inline-flex items-center justify-center rounded-full text-[10px] font-bold flex-shrink-0"
       >
         {label}
       </button>
-      {open && (
-        <div className="absolute z-40 top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap bg-gray-900 text-white text-[11px] rounded-md shadow-lg px-2 py-1">
+      {open && pos && (
+        <div className="fixed z-[9999] -translate-x-1/2 whitespace-nowrap bg-gray-900 text-white text-[11px] rounded-md shadow-lg px-2 py-1" style={{ top: pos.top, bottom: pos.bottom, left: pos.left }}>
           {name}
         </div>
       )}
@@ -460,6 +488,119 @@ function TerritoryCell({ scope, territoryIds, territoryOptions }: {
   );
 }
 
+// Click-to-edit wrapper around TerritoryCell — opens a popup to pick Market
+// Coverage (National/Regional) and, for Regional, one or more territories.
+// Each pick persists immediately (same pattern as the other edit pills), so
+// there's no separate Save step; "Done" just closes the popup.
+function TerritoryEditCell({ conferenceId, territoryScope, territoryIds, territoryOptions, onUpdated }: {
+  conferenceId: number;
+  territoryScope: string | null;
+  territoryIds: number[];
+  territoryOptions: Array<{ id: number; name: string; color: string }>;
+  onUpdated: (territoryScope: string | null, territoryIds: number[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<DropdownPos | null>(null);
+  const [saving, setSaving] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (buttonRef.current?.contains(e.target as Node) || dropdownRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const openDropdown = () => {
+    if (buttonRef.current) setPos(calcDropdownPos(buttonRef.current));
+    setOpen(true);
+  };
+
+  const persist = async (scope: 'national' | 'regional', ids: number[]) => {
+    setSaving(true);
+    onUpdated(scope, ids);
+    try {
+      await fetch(`/api/conferences/${conferenceId}/territory`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ territoryScope: scope, territoryIds: ids }),
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleTerritory = (id: number) => {
+    const next = territoryIds.includes(id) ? territoryIds.filter(x => x !== id) : [...territoryIds, id];
+    persist('regional', next);
+  };
+
+  return (
+    <>
+      <button ref={buttonRef} type="button" onClick={openDropdown} disabled={saving} className={`inline-flex ${saving ? 'opacity-50' : ''}`}>
+        {territoryScope ? (
+          <TerritoryCell scope={territoryScope} territoryIds={territoryIds} territoryOptions={territoryOptions} />
+        ) : (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors">
+            Set Territory
+          </span>
+        )}
+      </button>
+      {open && pos && (
+        <div ref={dropdownRef} className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 w-60" style={dropdownStyle(pos)}>
+          <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1.5">Market Coverage</p>
+          <div className="flex gap-2 mb-3">
+            <button
+              type="button"
+              onClick={() => persist('national', [])}
+              className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                territoryScope === 'national' ? 'bg-brand-primary text-white border-brand-primary' : 'border-gray-200 text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              National
+            </button>
+            <button
+              type="button"
+              onClick={() => persist('regional', territoryIds)}
+              className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                territoryScope === 'regional' ? 'bg-brand-primary text-white border-brand-primary' : 'border-gray-200 text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              Regional
+            </button>
+          </div>
+          {territoryScope === 'regional' && (
+            <>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1.5">Select Territories</p>
+              <div className="space-y-0.5 max-h-48 overflow-y-auto">
+                {territoryOptions.length === 0 && <p className="text-xs text-gray-400 px-1.5 py-1">No territories configured.</p>}
+                {territoryOptions.map(t => (
+                  <label key={t.id} className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-gray-50 cursor-pointer">
+                    <input type="checkbox" checked={territoryIds.includes(t.id)} onChange={() => toggleTerritory(t.id)} className="accent-brand-secondary" />
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
+                    <span className="text-xs text-gray-700">{t.name}</span>
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="w-full mt-3 px-2 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+          >
+            Done
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
 // Shown in By Rep grouping next to a conference that landed in this rep's
 // column via territory auto-placement rather than an actual rep assignment —
 // click reveals why it's here instead of silently implying the rep is
@@ -468,7 +609,9 @@ function RepAssignmentWarning({ repName, conferenceName, scopeLabel }: {
   repName: string; conferenceName: string; scopeLabel: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<TooltipPos | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -482,8 +625,9 @@ function RepAssignmentWarning({ repName, conferenceName, scopeLabel }: {
   return (
     <div ref={ref} className="relative inline-flex flex-shrink-0">
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => { if (buttonRef.current) setPos(calcTooltipPos(buttonRef.current, false)); setOpen(o => !o); }}
         className="w-5 h-5 flex items-center justify-center rounded-full bg-amber-50 text-amber-500 hover:bg-amber-100 transition-colors flex-shrink-0"
         title="Not formally assigned"
       >
@@ -491,9 +635,10 @@ function RepAssignmentWarning({ repName, conferenceName, scopeLabel }: {
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
         </svg>
       </button>
-      {open && (
+      {open && pos && (
         <div
-          className="absolute z-40 top-full left-0 mt-1 w-64 bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2 leading-snug"
+          className="fixed z-[9999] w-64 bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2 leading-snug"
+          style={{ top: pos.top, bottom: pos.bottom, left: pos.left }}
           onClick={e => e.stopPropagation()}
         >
           {repName} has not been formally assigned to {conferenceName}. This is a {scopeLabel} conference that has been designated in their territory.
@@ -1041,7 +1186,7 @@ function DatesEditCell({
 export function ProgramPlannerPlanView({
   year, conferences, categoryAverages, teamInputMap, calIntelScores, onOpenInputPanel,
   onDecisionUpdated, onRepsUpdated, onBudgetUpdated, onStrategyUpdated, onDatesUpdated, onListScoreUpdated,
-  onTypeUpdated, onSponsorshipUpdated, onBoothUpdated, onLocationUpdated, onConferenceCreated,
+  onTypeUpdated, onSponsorshipUpdated, onBoothUpdated, onLocationUpdated, onTerritoryUpdated, onConferenceCreated,
 }: ProgramPlannerPlanViewProps) {
   const [priorYearActual, setPriorYearActual] = useState<number | null>(null);
   const [budgetModalConf, setBudgetModalConf] = useState<PlanConferenceRow | null>(null);
@@ -1779,7 +1924,13 @@ export function ProgramPlannerPlanView({
                             strategyTypeName={c.strategyTypeName}
                             onUpdated={(id, name) => onStrategyUpdated(c.conferenceId, id, name)}
                           />
-                          <TerritoryCell scope={c.territoryScope} territoryIds={c.territoryIds} territoryOptions={territoryOptions} />
+                          <TerritoryEditCell
+                            conferenceId={c.conferenceId}
+                            territoryScope={c.territoryScope}
+                            territoryIds={c.territoryIds}
+                            territoryOptions={territoryOptions}
+                            onUpdated={(scope, ids) => onTerritoryUpdated(c.conferenceId, scope, ids)}
+                          />
                           <OptionEditPill
                             value={c.conferenceType}
                             options={CONFERENCE_TYPE_OPTIONS}
@@ -1965,7 +2116,13 @@ export function ProgramPlannerPlanView({
                               />
                             </td>
                             <td className="px-3 py-2 text-center">
-                              <TerritoryCell scope={c.territoryScope} territoryIds={c.territoryIds} territoryOptions={territoryOptions} />
+                              <TerritoryEditCell
+                                conferenceId={c.conferenceId}
+                                territoryScope={c.territoryScope}
+                                territoryIds={c.territoryIds}
+                                territoryOptions={territoryOptions}
+                                onUpdated={(scope, ids) => onTerritoryUpdated(c.conferenceId, scope, ids)}
+                              />
                             </td>
                             <td className="px-3 py-2">
                               <OptionEditPill
@@ -2158,7 +2315,13 @@ export function ProgramPlannerPlanView({
                             {fmtDateShort(c.plan.plannedStartDate ?? c.startDate)}
                           </p>
                           <div className="flex items-center flex-wrap gap-1 mb-2">
-                            <TerritoryCell scope={c.territoryScope} territoryIds={c.territoryIds} territoryOptions={territoryOptions} />
+                            <TerritoryEditCell
+                              conferenceId={c.conferenceId}
+                              territoryScope={c.territoryScope}
+                              territoryIds={c.territoryIds}
+                              territoryOptions={territoryOptions}
+                              onUpdated={(scope, ids) => onTerritoryUpdated(c.conferenceId, scope, ids)}
+                            />
                             <OptionEditPill
                               value={c.conferenceType}
                               options={CONFERENCE_TYPE_OPTIONS}
