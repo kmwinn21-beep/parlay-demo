@@ -98,6 +98,22 @@ const GROUP_CONFIG: Record<GroupKey, { label: string; icon: string; headerBg: st
   cut:        { label: 'Not attending',                   icon: 'ti-x',            headerBg: 'bg-red-50',    headerText: 'text-red-800',    pillBg: 'bg-red-100',    pillText: 'text-red-700' },
 };
 
+// Shortened display text for conference strategy pills/columns — the
+// underlying stored value (and grouping key) is left untouched, only what's
+// rendered in the table/Kanban views is abbreviated.
+const STRATEGY_ABBREVIATIONS: Record<string, string> = {
+  'Customer Retention': 'Customer Nurture',
+  'Customer Nurture': 'Customer Nurture',
+  'Market Presence': 'Brand Visibility',
+  'Brand Visiblity': 'Brand Visibility',
+  'Brand Visibility': 'Brand Visibility',
+  'Strategic Account Relationship Building': 'Relationship Dev.',
+  'Partner / Ecosystem Development': 'Partnership Dev.',
+};
+function abbreviateStrategy(name: string): string {
+  return STRATEGY_ABBREVIATIONS[name] ?? name;
+}
+
 const CONFERENCE_TYPE_OPTIONS = [
   'Trade show', 'User conference', 'Executive summit', 'Hosted dinner / private event',
   'Roundtable', 'Field event', 'Industry association conference', 'Analyst conference',
@@ -351,7 +367,7 @@ function StrategyEditPill({
             : 'bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500'
         }`}
       >
-        {strategyTypeName ?? 'Set strategy'}
+        {strategyTypeName ? abbreviateStrategy(strategyTypeName) : 'Set strategy'}
       </button>
       {open && pos && (
         <div
@@ -1057,7 +1073,7 @@ export function ProgramPlannerPlanView({
 
   // Strategy/Type sections: a conference has exactly one value for each (no
   // multi-membership like reps/territories), so grouping is a simple bucket-by-value.
-  function buildSingleFieldSections(getValue: (c: PlanConferenceRow) => string | null, icon: string, noneLabel: string): Section[] {
+  function buildSingleFieldSections(getValue: (c: PlanConferenceRow) => string | null, icon: string, noneLabel: string, formatLabel?: (v: string) => string): Section[] {
     const map = new Map<string, PlanConferenceRow[]>();
     for (const c of conferences) {
       const key = getValue(c) ?? '__none__';
@@ -1069,7 +1085,7 @@ export function ProgramPlannerPlanView({
       .filter(([key]) => key !== '__none__')
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([key, rows]) => ({
-        key, label: key, icon, headerBg: 'bg-gray-100', headerText: 'text-gray-700',
+        key, label: formatLabel ? formatLabel(key) : key, icon, headerBg: 'bg-gray-100', headerText: 'text-gray-700',
         pillBg: 'bg-gray-200', pillText: 'text-gray-600', rows, dropKey: null,
       }));
     const none = map.get('__none__');
@@ -1081,7 +1097,7 @@ export function ProgramPlannerPlanView({
     }
     return entries;
   }
-  const strategySections: Section[] = buildSingleFieldSections(c => c.strategyTypeName, 'ti-target-arrow', 'No Strategy');
+  const strategySections: Section[] = buildSingleFieldSections(c => c.strategyTypeName, 'ti-target-arrow', 'No Strategy', abbreviateStrategy);
   const typeSections: Section[] = buildSingleFieldSections(c => c.conferenceType, 'ti-category', 'No Type');
 
   const sections = groupMode === 'status' ? statusSections
