@@ -554,19 +554,32 @@ export default function ProgramPlannerPage() {
     ...(confsData?.standalone ?? []),
   ], [confsData]);
 
+  // A conference only belongs in this (backward-looking) Program/Cost view of
+  // `selectedYear` if it's actually committed AND its own real date falls in
+  // that year. committedToProgram alone isn't enough: the API's conferences
+  // query also returns any conference with a conference_plans row for
+  // plan_year = selectedYear + 1 (so the Plan tab can find it), which after
+  // committing includes conferences whose real start_date is next year, not
+  // this one — e.g. a Plan-tab conference just committed to FY2027 has
+  // committedToProgram = true but must not show up while viewing FY2026.
+  const inSelectedYear = (c: ConferenceRow) => new Date(c.startDate + 'T00:00:00').getFullYear() === selectedYear;
+
   // Cost tab is backward-looking like the Program tab — Plan-tab drafts that
-  // haven't been committed to the program yet shouldn't appear in it either.
+  // haven't been committed to the program yet (or that were committed to a
+  // different year) shouldn't appear in it either.
   const committedFlattenedConferences = useMemo(
-    () => flattenedConferences.filter(c => c.committedToProgram),
-    [flattenedConferences]
+    () => flattenedConferences.filter(c => c.committedToProgram && inSelectedYear(c)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [flattenedConferences, selectedYear]
   );
 
   // Rankings — excludes conferences that aren't committed to the program yet
   // (Plan-tab drafts/evaluations, regardless of which decision bucket they're
   // sitting in — the Program tab is backward-looking, only for conferences
   // that have actually been formally added via the Plan tab's Commit action
-  // or already existed as real historical conferences).
-  const ranked = [...allConfs].filter(c => c.committedToProgram).sort((a, b) => {
+  // or already existed as real historical conferences) or that were
+  // committed to a different plan year than the one being viewed.
+  const ranked = [...allConfs].filter(c => c.committedToProgram && inSelectedYear(c)).sort((a, b) => {
     if (rankMetric === 'ces') return (b.ces ?? -1) - (a.ces ?? -1);
     if (rankMetric === 'pipeline') return (b.pipelineInfluenced ?? 0) - (a.pipelineInfluenced ?? 0);
     if (rankMetric === 'closedwon') return (b.closedWon ?? 0) - (a.closedWon ?? 0);
@@ -579,7 +592,7 @@ export default function ProgramPlannerPage() {
     attend: 0, reduce: 0, cut: 0, undecided: 0,
   };
   for (const c of allConfs) {
-    if (!c.committedToProgram) continue;
+    if (!c.committedToProgram || !inSelectedYear(c)) continue;
     if (c.decision === 'attend') decisionCounts.attend++;
     else if (c.decision === 'reduce') decisionCounts.reduce++;
     else if (c.decision === 'cut') decisionCounts.cut++;
@@ -592,7 +605,8 @@ export default function ProgramPlannerPage() {
     | { type: 'conference'; conf: ConferenceRow; rowIndex: number; key: string }
     | { type: 'standalone_header'; key: string };
 
-  const matchesDecision = (c: ConferenceRow) => c.committedToProgram && (decisionFilter === 'all' || c.decision === decisionFilter);
+  const matchesDecision = (c: ConferenceRow) =>
+    c.committedToProgram && inSelectedYear(c) && (decisionFilter === 'all' || c.decision === decisionFilter);
 
   const buildRows = (): TableRow[] => {
     if (!confsData) return [];
