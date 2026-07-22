@@ -1471,7 +1471,7 @@ export function ProgramPlannerPlanView({
                             {c.decision === 'new' && <NewBadge />}
                             {groupMode === 'rep' && (
                               <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap flex-shrink-0 ${GROUP_CONFIG[groupOf(c)].pillBg} ${GROUP_CONFIG[groupOf(c)].pillText}`}>
-                                {GROUP_CONFIG[groupOf(c)].label}
+                                {statusPillLabel(c)}
                               </span>
                             )}
                             <Link href={`/conferences/${c.conferenceId}`} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Open conference detail">
