@@ -1659,7 +1659,7 @@ export function ProgramPlannerPlanView({
         @keyframes minimizedPillIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
         @keyframes sectionPopIn { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
       `}</style>
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      {minimizedSections.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
           {minimizedSections.map(section => (
             <button
@@ -1682,6 +1682,78 @@ export function ProgramPlannerPlanView({
               </span>
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Grouping toggle (left) + view toggle / Add conference (right) — one row */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setGroupMode('status')}
+            title="Group by status"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${
+              groupMode === 'status' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            <StatusViewIcon />
+            Status
+          </button>
+          <button
+            type="button"
+            onClick={() => setGroupMode('rep')}
+            title="Group by rep"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+              groupMode === 'rep' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            <RepViewIcon />
+            By Rep
+          </button>
+          <button
+            type="button"
+            onClick={() => setGroupMode('territory')}
+            title="Group by territory"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+              groupMode === 'territory' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            <TerritoryViewIcon />
+            By Territory
+          </button>
+          <button
+            type="button"
+            onClick={() => setGroupMode('strategy')}
+            title="Group by strategy"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+              groupMode === 'strategy' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            <StrategyViewIcon />
+            By Strategy
+          </button>
+          <button
+            type="button"
+            onClick={() => setGroupMode('type')}
+            title="Group by type"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+              groupMode === 'type' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            <TypeViewIcon />
+            By Type
+          </button>
+          <button
+            type="button"
+            onClick={() => setGroupMode('date')}
+            title="Group by date"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+              groupMode === 'date' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            <DateViewIcon />
+            By Date
+          </button>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
@@ -1717,76 +1789,6 @@ export function ProgramPlannerPlanView({
             Add conference
           </button>
         </div>
-      </div>
-
-      {/* Grouping toggle — left-aligned to match the section cards below it */}
-      <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
-        <button
-          type="button"
-          onClick={() => setGroupMode('status')}
-          title="Group by status"
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${
-            groupMode === 'status' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-          }`}
-        >
-          <StatusViewIcon />
-          Status
-        </button>
-        <button
-          type="button"
-          onClick={() => setGroupMode('rep')}
-          title="Group by rep"
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-            groupMode === 'rep' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-          }`}
-        >
-          <RepViewIcon />
-          By Rep
-        </button>
-        <button
-          type="button"
-          onClick={() => setGroupMode('territory')}
-          title="Group by territory"
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-            groupMode === 'territory' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-          }`}
-        >
-          <TerritoryViewIcon />
-          By Territory
-        </button>
-        <button
-          type="button"
-          onClick={() => setGroupMode('strategy')}
-          title="Group by strategy"
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-            groupMode === 'strategy' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-          }`}
-        >
-          <StrategyViewIcon />
-          By Strategy
-        </button>
-        <button
-          type="button"
-          onClick={() => setGroupMode('type')}
-          title="Group by type"
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-            groupMode === 'type' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-          }`}
-        >
-          <TypeViewIcon />
-          By Type
-        </button>
-        <button
-          type="button"
-          onClick={() => setGroupMode('date')}
-          title="Group by date"
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-            groupMode === 'date' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-          }`}
-        >
-          <DateViewIcon />
-          By Date
-        </button>
       </div>
 
       {/* Decision groups — always all 5 (unless minimized), even empty, so a row can be dragged into any of them */}
