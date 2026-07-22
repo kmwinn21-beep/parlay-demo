@@ -2253,11 +2253,6 @@ export function ProgramPlannerPlanView({
                         {rows.length}
                       </span>
                     </div>
-                    {groupMode !== 'status' && rows.length > 0 && (
-                      <div className="px-2 pt-2 flex items-center justify-end bg-gray-50/50">
-                        <span className="w-[84px] flex-shrink-0 text-center text-[10px] font-medium text-gray-400 uppercase tracking-wide">Status</span>
-                      </div>
-                    )}
                     <div className="p-2 space-y-2 min-h-[100px] bg-gray-50/50">
                       {rows.length === 0 ? (
                         <div className="px-2 py-6 text-center text-[11px] text-gray-400 border-2 border-dashed border-gray-200 rounded-lg bg-white">
