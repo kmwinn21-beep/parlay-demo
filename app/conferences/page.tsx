@@ -422,6 +422,10 @@ function ConferencesPageContent() {
         list = list.filter(c => c.assignedReps.some(r => territory.assignedUserIds.includes(r.userId)));
       }
     }
+    // Upcoming: soonest first (fewest days remaining -> most), left to right.
+    if (programToggle === 'upcoming') {
+      list = [...list].sort((a, b) => a.start_date.localeCompare(b.start_date));
+    }
     return list;
   }, [programConfs, programToggle, programYearFilter, programRepFilter, programTerritoryFilter, territories]);
 
