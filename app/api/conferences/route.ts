@@ -15,9 +15,198 @@ import {
   matchAttendee,
   confirmAttendeeMatch,
 } from '@/lib/matching';
+import { computeConferenceStage, type ConferenceStage } from '@/lib/conference-stage';
+import { getInitials } from '@/lib/initials';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
+
+type Row = Record<string, unknown>;
+
+interface EnrichedRep { userId: number; displayName: string; initials: string }
+interface EnrichedConference {
+  id: number;
+  stage: ConferenceStage | null;
+  assignedReps: EnrichedRep[];
+  outreachProgress: { assigned: number; total: number } | null;
+  attendeeCount: number;
+  hasAttendeeList: boolean;
+  planDecision: string | null;
+  [key: string]: unknown;
+}
+interface NeedsAttentionItem {
+  type: 'missing_list' | 'unassigned_reps' | 'outreach_gap';
+  conferenceId: number;
+  conferenceName: string;
+  message: string;
+  urgency: 'high' | 'medium' | 'low';
+  daysUntil: number | null;
+}
+
+// ?enriched=1 — powers the redesigned /conferences list page (stage grouping,
+// rep avatars, outreach progress, needs-attention strip). Additive/opt-in:
+// the default GET response stays a flat array exactly as before, since 5+
+// other call sites (SetConferenceButton, ExpandedFormModal, NewMeetingModal,
+// AssignFollowUpModal, NewNoteModal) and the ?nav=1 branch depend on that
+// shape and shouldn't need to change for this feature.
+async function getEnrichedConferences(db: Client) {
+  const baseRes = await db.execute({
+    sql: `SELECT c.*, cs.display_name as series_name, COUNT(ca.attendee_id) as attendee_count
+          FROM conferences c
+          LEFT JOIN conference_attendees ca ON c.id = ca.conference_id
+          LEFT JOIN conference_series cs ON cs.id = c.series_id
+          WHERE c.committed_to_program = 1
+          GROUP BY c.id
+          ORDER BY c.start_date DESC`,
+    args: [],
+  });
+  const baseRows = baseRes.rows as Row[];
+  const confIds = baseRows.map(r => Number(r.id));
+  if (confIds.length === 0) {
+    return NextResponse.json({ conferences: [], needsAttention: [] });
+  }
+  const ph = confIds.map(() => '?').join(',');
+  const currentYear = new Date().getFullYear();
+
+  const [plansRes, outreachRes, icpTotalRes] = await Promise.all([
+    db.execute({
+      sql: `SELECT conference_id, decision, assigned_rep_ids FROM conference_plans WHERE conference_id IN (${ph}) AND plan_year = ?`,
+      args: [...confIds, currentYear],
+    }),
+    db.execute({
+      sql: `SELECT conference_id, COUNT(DISTINCT company_id) as assigned_count FROM outreach_assignments WHERE conference_id IN (${ph}) GROUP BY conference_id`,
+      args: confIds,
+    }),
+    db.execute({
+      sql: `SELECT ca.conference_id, COUNT(DISTINCT c.id) as icp_total
+            FROM conference_attendees ca
+            JOIN attendees a ON ca.attendee_id = a.id
+            JOIN companies c ON a.company_id = c.id
+            WHERE ca.conference_id IN (${ph}) AND c.icp = 'Yes'
+            GROUP BY ca.conference_id`,
+      args: confIds,
+    }),
+  ]);
+
+  // conference_plans.assigned_rep_ids stores config_options ids (category='user')
+  // — the same rep roster every other assigned-rep feature in this app resolves
+  // against (see app/api/program-planner/conferences/route.ts:170) — NOT the
+  // `users` login-accounts table. sales_territories.assigned_user_ids uses this
+  // same config_options id space, which the territory filter on the conferences
+  // page depends on.
+  type PlanRow = { decision: string | null; assignedRepIds: number[] };
+  const planMap = new Map<number, PlanRow>();
+  const allRepIds = new Set<number>();
+  for (const r of plansRes.rows as Row[]) {
+    let assignedRepIds: number[] = [];
+    try {
+      const parsed = JSON.parse(String(r.assigned_rep_ids ?? '[]'));
+      if (Array.isArray(parsed)) assignedRepIds = parsed.map(Number).filter(n => !isNaN(n));
+    } catch { /* ignore */ }
+    assignedRepIds.forEach(id => allRepIds.add(id));
+    planMap.set(Number(r.conference_id), { decision: r.decision ? String(r.decision) : null, assignedRepIds });
+  }
+
+  const repMap = new Map<number, EnrichedRep>();
+  if (allRepIds.size > 0) {
+    const repIdsArr = Array.from(allRepIds);
+    const repPh = repIdsArr.map(() => '?').join(',');
+    const repsRes = await db.execute({
+      sql: `SELECT id, value FROM config_options WHERE category = 'user' AND id IN (${repPh})`,
+      args: repIdsArr,
+    });
+    for (const r of repsRes.rows as Row[]) {
+      const displayName = String(r.value);
+      repMap.set(Number(r.id), { userId: Number(r.id), displayName, initials: getInitials(displayName) });
+    }
+  }
+
+  const outreachAssignedMap = new Map<number, number>();
+  for (const r of outreachRes.rows as Row[]) outreachAssignedMap.set(Number(r.conference_id), Number(r.assigned_count));
+  const icpTotalMap = new Map<number, number>();
+  for (const r of icpTotalRes.rows as Row[]) icpTotalMap.set(Number(r.conference_id), Number(r.icp_total));
+
+  const nowMs = Date.now();
+  const conferences: EnrichedConference[] = baseRows.map(r => {
+    const confId = Number(r.id);
+    const attendeeCount = Number(r.attendee_count ?? 0);
+    const hasAttendeeList = attendeeCount > 0;
+    const plan = planMap.get(confId);
+    const assignedReps = (plan?.assignedRepIds ?? []).map(id => repMap.get(id)).filter((x): x is EnrichedRep => x != null);
+
+    let stage: ConferenceStage | null = null;
+    try {
+      stage = computeConferenceStage({
+        start_date: String(r.start_date),
+        end_date: String(r.end_date),
+        post_conference_days: r.post_conference_days != null ? Number(r.post_conference_days) : null,
+        stage_override: r.stage_override ? String(r.stage_override) : null,
+        is_historical: r.is_historical != null ? Number(r.is_historical) : null,
+      }, nowMs);
+    } catch {
+      // Historical conferences have no lifecycle stage — still included in the
+      // response (matches how the existing calendar page treats them), just
+      // with stage: null. Excluded from needsAttention below.
+      stage = null;
+    }
+
+    const outreachProgress = hasAttendeeList
+      ? { assigned: outreachAssignedMap.get(confId) ?? 0, total: icpTotalMap.get(confId) ?? 0 }
+      : null;
+
+    return {
+      ...r,
+      id: confId,
+      stage,
+      assignedReps,
+      outreachProgress,
+      attendeeCount,
+      hasAttendeeList,
+      planDecision: plan?.decision ?? null,
+    };
+  });
+
+  const needsAttention: NeedsAttentionItem[] = [];
+  for (const c of conferences) {
+    if (c.stage == null) continue;
+    const daysUntil = Math.ceil((new Date(String(c.start_date) + 'T00:00:00').getTime() - nowMs) / 86_400_000);
+    const daysUntilOrNull = daysUntil >= 0 ? daysUntil : null;
+    const name = String(c.name);
+
+    if (!c.hasAttendeeList && c.stage === 'planning') {
+      const urgency: NeedsAttentionItem['urgency'] =
+        daysUntilOrNull != null && daysUntilOrNull <= 30 ? 'high' : daysUntilOrNull != null && daysUntilOrNull <= 60 ? 'medium' : 'low';
+      needsAttention.push({
+        type: 'missing_list', conferenceId: c.id, conferenceName: name,
+        message: 'Attendee list not uploaded', urgency, daysUntil: daysUntilOrNull,
+      });
+    }
+    if (c.assignedReps.length === 0 && (c.stage === 'planning' || c.stage === 'in_progress')) {
+      const urgency: NeedsAttentionItem['urgency'] = daysUntilOrNull != null && daysUntilOrNull <= 30 ? 'high' : 'medium';
+      needsAttention.push({
+        type: 'unassigned_reps', conferenceId: c.id, conferenceName: name,
+        message: 'No reps assigned', urgency, daysUntil: daysUntilOrNull,
+      });
+    }
+    if (c.outreachProgress && c.outreachProgress.assigned < c.outreachProgress.total && (c.stage === 'planning' || c.stage === 'in_progress')) {
+      needsAttention.push({
+        type: 'outreach_gap', conferenceId: c.id, conferenceName: name,
+        message: `Outreach gap: ${c.outreachProgress.assigned}/${c.outreachProgress.total} companies assigned`,
+        urgency: 'medium', daysUntil: daysUntilOrNull,
+      });
+    }
+  }
+
+  const URGENCY_ORDER: Record<NeedsAttentionItem['urgency'], number> = { high: 0, medium: 1, low: 2 };
+  needsAttention.sort((a, b) => {
+    const u = URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency];
+    if (u !== 0) return u;
+    const da = a.daysUntil ?? Infinity, db_ = b.daysUntil ?? Infinity;
+    return da - db_;
+  });
+
+  return NextResponse.json({ conferences, needsAttention }, { headers: { 'Cache-Control': 'private, no-cache' } });
+}
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -36,6 +225,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(result.rows.map((r) => ({ ...r })), {
         headers: { 'Cache-Control': 'private, no-cache' },
       });
+    }
+    if (request.nextUrl.searchParams.get('enriched') === '1') {
+      return await getEnrichedConferences(db);
     }
     const result = await db.execute({
       sql: `SELECT c.*, cs.display_name as series_name, COUNT(ca.attendee_id) as attendee_count
