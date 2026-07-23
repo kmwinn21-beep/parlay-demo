@@ -1157,22 +1157,37 @@ function BoothEditPopover({
     }
   };
 
-  const dims = boothWidth != null || boothLength != null ? ` · ${boothWidth ?? '?'}×${boothLength ?? '?'} ft` : '';
-  const label = boothPresent ? `Booth${boothNumber ? ` #${boothNumber}` : ''}${dims}` : 'No Booth';
+  const hasDims = boothWidth != null || boothLength != null;
+  const dimsLabel = `${boothWidth ?? '?'}×${boothLength ?? '?'} ft`;
 
   return (
     <>
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={openPopover}
-        disabled={saving}
-        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity ${saving ? 'opacity-50' : ''} ${
-          boothPresent ? 'bg-purple-50 text-purple-800 border border-purple-300 hover:bg-purple-100' : 'text-gray-400 hover:text-gray-600'
-        }`}
-      >
-        {label}
-      </button>
+      {boothPresent && !hasDims ? (
+        <button
+          ref={buttonRef}
+          type="button"
+          onClick={openPopover}
+          disabled={saving}
+          title="Booth — no dimensions set yet"
+          className={`inline-flex items-center justify-center w-6 h-6 rounded-full bg-purple-100 border border-purple-300 hover:bg-purple-200 transition-colors flex-shrink-0 ${saving ? 'opacity-50' : ''}`}
+        >
+          <svg className="w-3.5 h-3.5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </button>
+      ) : (
+        <button
+          ref={buttonRef}
+          type="button"
+          onClick={openPopover}
+          disabled={saving}
+          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity ${saving ? 'opacity-50' : ''} ${
+            boothPresent ? 'bg-purple-50 text-purple-800 border border-purple-300 hover:bg-purple-100' : 'text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          {boothPresent ? dimsLabel : 'No Booth'}
+        </button>
+      )}
       {open && pos && (
         <div
           ref={popoverRef}
