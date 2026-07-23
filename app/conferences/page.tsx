@@ -8,6 +8,7 @@ import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { ConferenceStageBadge } from '@/components/ConferenceStageBadge';
 import { ConferenceKanbanBoard } from '@/components/ConferenceKanbanBoard';
 import { ProgramConferenceCard, RepAvatarStack, TerritoryPill, ListStatusPill, type ProgramCardConference } from '@/components/ProgramConferenceCard';
+import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { computeConferenceStage, postConferenceDaysRemaining, type ConferenceStage } from '@/lib/conference-stage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -296,6 +297,7 @@ function ConferencesPageContent() {
   const [programYearFilter, setProgramYearFilter]  = useState<string>('');
   const [showAllAttention, setShowAllAttention]    = useState(false);
   const [programLayout, setProgramLayout]          = useState<'grid' | 'list'>('grid');
+  const [quickView, setQuickView]                  = useState<QuickViewTarget | null>(null);
 
   // Read the stored layout preference on mount only (SSR-safe — localStorage
   // isn't available during server render, so this can't run in the initial
@@ -759,8 +761,11 @@ function ConferencesPageContent() {
                             background: i % 2 === 1 ? 'var(--surface-1, #F9FAFB)' : 'transparent',
                           }}
                         >
-                          <td style={{ padding: '8px 10px', fontWeight: 500, color: 'var(--text-primary, #111827)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {conf.name}
+                          <td style={{ padding: '8px 10px', fontWeight: 500, color: 'var(--text-primary, #111827)' }}>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="truncate">{conf.name}</span>
+                              <QuickViewIcon onClick={() => setQuickView({ type: 'conference', id: conf.id, name: conf.name })} />
+                            </div>
                           </td>
                           <td style={{ padding: '8px 10px', color: 'var(--text-secondary, #6B7280)' }}>
                             {formatDate(conf.start_date)}
@@ -803,6 +808,7 @@ function ConferencesPageContent() {
                       planYear={currentYear}
                       allConferences={programAllConferencesForConflicts}
                       onRepsUpdated={handleProgramRepsUpdated}
+                      onQuickView={setQuickView}
                     />
                   ))}
                   {programToggle === 'upcoming' && (
@@ -1040,6 +1046,8 @@ function ConferencesPageContent() {
           </div>
         );
       })}
+
+      {quickView && <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />}
     </div>
   );
 }

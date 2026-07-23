@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ConferenceStageBadge } from './ConferenceStageBadge';
 import { RepAssignmentPopover, type AssignedRep } from './RepAssignmentPopover';
+import { QuickViewIcon, type QuickViewTarget } from './QuickViewDrawer';
 import { postConferenceDaysRemaining, type ConferenceStage } from '@/lib/conference-stage';
 
 export interface ProgramCardRep {
@@ -59,6 +60,7 @@ export function ListStatusPill({ hasAttendeeList, attendeeCount }: { hasAttendee
   const color = hasAttendeeList ? '#059669' : '#DC2626';
   return (
     <span
+      title={hasAttendeeList ? `${attendeeCount?.toLocaleString()} attendees` : undefined}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0,
         padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 500,
@@ -66,7 +68,7 @@ export function ListStatusPill({ hasAttendeeList, attendeeCount }: { hasAttendee
       }}
     >
       {hasAttendeeList && <i className="ti ti-check" style={{ fontSize: 11 }} aria-hidden="true" />}
-      {hasAttendeeList ? `List uploaded · ${attendeeCount?.toLocaleString()} attendees` : 'List not uploaded'}
+      {hasAttendeeList ? 'List uploaded' : 'List not uploaded'}
     </span>
   );
 }
@@ -188,12 +190,13 @@ export function TerritoryPill({ conference, territories }: { conference: Program
   return null;
 }
 
-export function ProgramConferenceCard({ conference, territories, planYear, allConferences, onRepsUpdated }: {
+export function ProgramConferenceCard({ conference, territories, planYear, allConferences, onRepsUpdated, onQuickView }: {
   conference: ProgramCardConference;
   territories: ProgramCardTerritory[];
   planYear: number;
   allConferences: Array<{ conferenceId: number; name: string; startDate: string; assignedReps: AssignedRep[] }>;
   onRepsUpdated: (conferenceId: number, reps: AssignedRep[]) => void;
+  onQuickView: (target: QuickViewTarget) => void;
 }) {
   const daysUntil = Math.max(0, Math.ceil((new Date(conference.start_date + 'T00:00:00').getTime() - Date.now()) / 86_400_000));
   const bar = topBarFor(conference, daysUntil);
@@ -223,6 +226,7 @@ export function ProgramConferenceCard({ conference, territories, planYear, allCo
           <p style={{ fontSize: 13, fontWeight: 500, margin: 0, color: 'var(--text-primary, #111827)' }} className="line-clamp-2 flex-1">
             {conference.name}
           </p>
+          <QuickViewIcon onClick={() => onQuickView({ type: 'conference', id: conference.id, name: conference.name })} />
           <TerritoryPill conference={conference} territories={territories} />
         </div>
         <p style={{ fontSize: 11, color: 'var(--text-secondary, #6B7280)', margin: '2px 0 0' }} className="truncate">
