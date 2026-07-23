@@ -23,9 +23,14 @@ interface Props {
   seasonId: string | null;
   onSeriesChange: (series: SeriesOption | null) => void;
   onSeasonChange: (seasonId: string | null) => void;
+  // Forces Series/Track onto separate rows regardless of viewport width —
+  // for hosts narrower than the md: breakpoint would allow (e.g. a modal
+  // capped at max-w-sm), the default two-column layout gets cramped since
+  // md: responds to the viewport, not the host's own width.
+  singleColumn?: boolean;
 }
 
-export function SeriesSeasonCombobox({ seriesId, seasonId, onSeriesChange, onSeasonChange }: Props) {
+export function SeriesSeasonCombobox({ seriesId, seasonId, onSeriesChange, onSeasonChange, singleColumn }: Props) {
   const [allSeries, setAllSeries] = useState<SeriesOption[]>([]);
   const [seriesQuery, setSeriesQuery] = useState('');
   const [seasonQuery, setSeasonQuery] = useState('');
@@ -149,7 +154,7 @@ export function SeriesSeasonCombobox({ seriesId, seasonId, onSeriesChange, onSea
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:col-span-2">
+    <div className={`grid grid-cols-1 gap-5 ${singleColumn ? '' : 'md:grid-cols-2 md:col-span-2'}`}>
       {/* Series combobox */}
       <div ref={seriesRef} className="relative">
         <label className="label">Conference Series</label>

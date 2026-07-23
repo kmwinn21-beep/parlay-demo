@@ -1838,4 +1838,52 @@ export const migrations: string[] = [
   `ALTER TABLE conference_plans ADD COLUMN list_score INTEGER`,
   `ALTER TABLE conference_plans ADD COLUMN list_score_tier TEXT`,
   `ALTER TABLE conference_plans ADD COLUMN list_score_confidence TEXT`,
+  // 571 — conferences.committed_to_program: distinguishes a real, committed
+  // conference (has a Conference Details profile, shows up in Go To
+  // Conference / the Conferences list) from a conference that only exists
+  // because it's being evaluated in a future year's Plan tab. DEFAULT 1
+  // means every pre-existing conference is retroactively "committed" (they
+  // already have real detail pages) — only conferences created through the
+  // Plan tab's minimal Add-to-Plan flow are inserted with 0, and stay 0
+  // until the user explicitly commits them via the Plan table's Commit
+  // column (POST .../conferences/[id]/commit).
+  `ALTER TABLE conferences ADD COLUMN committed_to_program INTEGER NOT NULL DEFAULT 1`,
+  // 572 — conferences.is_new_addition: distinct from committed_to_program.
+  // committed_to_program flips true the moment a Plan-tab draft is
+  // committed, but "new — never attended before" should keep showing after
+  // that (the whole point of the star is to flag the conference has no
+  // prior-year history at all, and committing it doesn't create any). DEFAULT
+  // 0 means every pre-existing conference and every new instance spawned by
+  // the commit route for a recurring conference (POST .../commit's
+  // already-committed branch — it has real prior-year history by
+  // definition) is NOT flagged new; only conferences created through the
+  // Plan tab's minimal Add-to-Plan flow are inserted with 1, and that never
+  // changes for that row afterward.
+  `ALTER TABLE conferences ADD COLUMN is_new_addition INTEGER NOT NULL DEFAULT 0`,
+  // 573 — outreach_activity: add 'text' (Text Message) as a loggable activity
+  // type alongside phone/email/linkedin. SQLite can't alter a CHECK constraint
+  // in place, so rebuild the table (same rename/recreate/copy/drop dance used
+  // for form_elements_new / conference_plan_rep_travel_new above).
+  `CREATE TABLE outreach_activity_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      attendee_id INTEGER REFERENCES attendees(id) ON DELETE SET NULL,
+      logged_by_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      activity_type TEXT NOT NULL
+        CHECK(activity_type IN ('phone','email','linkedin','text')),
+      notes TEXT,
+      logged_at TEXT DEFAULT (datetime('now'))
+    )`,
+  `INSERT INTO outreach_activity_new
+     (id, conference_id, company_id, attendee_id, logged_by_user_id, activity_type, notes, logged_at)
+   SELECT id, conference_id, company_id, attendee_id, logged_by_user_id, activity_type, notes, logged_at
+   FROM outreach_activity`,
+  `DROP TABLE outreach_activity`,
+  `ALTER TABLE outreach_activity_new RENAME TO outreach_activity`,
+  // 574 — outreach_notes.tagged_users: @mention support for outreach notes,
+  // mirrors entity_notes.tagged_users (comma-separated config_options ids of
+  // users tagged via MentionTextarea, resolved to real users.id and notified
+  // in the notes route's POST handler).
+  `ALTER TABLE outreach_notes ADD COLUMN tagged_users TEXT`,
 ];

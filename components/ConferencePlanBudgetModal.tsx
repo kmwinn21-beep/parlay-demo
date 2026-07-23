@@ -55,6 +55,8 @@ export function ConferencePlanBudgetModal({
   const [budgetAdjustPct, setBudgetAdjustPct] = useState('');
   const [actualAdjustSign, setActualAdjustSign] = useState<'+' | '-'>('+');
   const [actualAdjustPct, setActualAdjustPct] = useState('');
+  const [categoryAdjustSign, setCategoryAdjustSign] = useState<'+' | '-'>('+');
+  const [categoryAdjustPct, setCategoryAdjustPct] = useState('');
 
   const hasActualData = actualLineItems != null && actualLineItems.some(li => (li.budgeted ?? 0) > 0 || (li.actual ?? 0) > 0);
 
@@ -77,6 +79,21 @@ export function ConferencePlanBudgetModal({
     for (const label of labels) {
       const li = actualLineItems?.find(x => x.label === label);
       const v = li?.[field];
+      next[label] = v != null && v > 0 ? String(Math.round(v * multiplier)) : '';
+    }
+    setValues(next);
+  };
+
+  // Same pattern as applyToPlan, sourced from the category-average reference
+  // panel instead — used when there's no prior actual/budgeted history for
+  // this specific conference yet, only the category-wide averages.
+  const applyCategoryAveragesToPlan = (sign: '+' | '-', pctRaw: string) => {
+    const pct = parseFloat(pctRaw);
+    const multiplier = !isNaN(pct) && pct !== 0 ? (sign === '+' ? 1 + pct / 100 : 1 - pct / 100) : 1;
+    const next: Record<string, string> = {};
+    for (const label of labels) {
+      const c = categoryAverages.find(x => x.label === label);
+      const v = c?.avgActual;
       next[label] = v != null && v > 0 ? String(Math.round(v * multiplier)) : '';
     }
     setValues(next);
@@ -219,22 +236,54 @@ export function ConferencePlanBudgetModal({
             ) : categoryAverages.length === 0 ? (
               <p className="text-[12px] text-gray-400 italic">No historical data available for {year} yet.</p>
             ) : (
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left text-[10px] font-semibold uppercase tracking-wider text-gray-400 pb-2 pr-2">Item</th>
-                    <th className="text-right text-[10px] font-semibold uppercase tracking-wider text-gray-400 pb-2 pl-2">Avg. actual</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {categoryAverages.map((c, i) => (
-                    <tr key={c.label} className={i % 2 === 1 ? 'bg-gray-50' : ''}>
-                      <td className="py-1.5 pr-2 text-[12px] text-gray-700">{c.label}</td>
-                      <td className="py-1.5 pl-2 text-right text-[12px] text-gray-600 tabular-nums">{fmtCurrency(c.avgActual)}</td>
+              <>
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left text-[10px] font-semibold uppercase tracking-wider text-gray-400 pb-2 pr-2">Item</th>
+                      <th className="text-right text-[10px] font-semibold uppercase tracking-wider text-gray-400 pb-2 pl-2">Avg. actual</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {categoryAverages.map((c, i) => (
+                      <tr key={c.label} className={i % 2 === 1 ? 'bg-gray-50' : ''}>
+                        <td className="py-1.5 pr-2 text-[12px] text-gray-700">{c.label}</td>
+                        <td className="py-1.5 pl-2 text-right text-[12px] text-gray-600 tabular-nums">{fmtCurrency(c.avgActual)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="mt-3">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setCategoryAdjustSign(s => s === '+' ? '-' : '+')}
+                      title="Toggle increase/decrease"
+                      className="w-6 h-6 flex-shrink-0 flex items-center justify-center rounded border border-gray-300 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                    >
+                      {categoryAdjustSign}
+                    </button>
+                    <div className="relative w-16 flex-shrink-0">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={categoryAdjustPct}
+                        onChange={e => setCategoryAdjustPct(e.target.value.replace(/[^0-9.]/g, ''))}
+                        placeholder="0"
+                        className="input-field text-[11px] pl-1.5 pr-4 py-1 w-full"
+                      />
+                      <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none">%</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => applyCategoryAveragesToPlan(categoryAdjustSign, categoryAdjustPct)}
+                      className="btn-secondary text-[11px] px-2.5 py-1.5"
+                    >
+                      Apply Averages to Plan
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
           </div>
 

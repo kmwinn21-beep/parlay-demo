@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 
-const VALID_ACTIVITY_TYPES = ['phone', 'email', 'linkedin'];
+const VALID_ACTIVITY_TYPES = ['phone', 'email', 'linkedin', 'text'];
 
 // POST /api/conferences/[id]/outreach/[companyId]/activity — logs one outreach
 // touch. attendeeId is optional (a company-level touch with no specific

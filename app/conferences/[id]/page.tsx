@@ -704,6 +704,11 @@ export default function ConferenceDetailPage() {
       ]);
       if (!confRes.ok) throw new Error('Not found');
       const data = await confRes.json();
+      if (!data.committed_to_program) {
+        toast.error('This conference is still being evaluated in the Plan tab and doesn’t have a program profile yet.');
+        router.push('/program-planner');
+        return;
+      }
       const detailsData = detailsRes.ok ? await detailsRes.json() : [];
       const followUpsData = followUpsRes.ok ? await followUpsRes.json() : [];
       const notesData = notesRes.ok ? await notesRes.json() : [];

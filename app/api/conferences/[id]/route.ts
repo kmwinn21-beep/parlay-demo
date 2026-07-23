@@ -200,6 +200,7 @@ export async function DELETE(
         // Tables without ON DELETE CASCADE that must be cleared before deleting the conference row
         { sql: 'DELETE FROM conference_saturation_snapshots WHERE conference_id = ?', args: [params.id] },
         { sql: 'DELETE FROM user_agenda_preferences WHERE conference_id = ?', args: [params.id] },
+        { sql: 'DELETE FROM conference_snapshots WHERE conference_id = ?', args: [params.id] },
         { sql: 'DELETE FROM conferences WHERE id = ?', args: [params.id] },
       ],
       'write'

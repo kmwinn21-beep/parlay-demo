@@ -17,7 +17,6 @@ import type { ColumnMapping } from '@/lib/columnMapping';
 interface BudgetLineItem { label: string; budgeted: number | null; actual: number | null }
 interface PlannedLineItem { label: string; budgeted: number }
 interface CategoryAverage { label: string; avgActual: number }
-interface TeamInputInfo { hasInput: boolean; hasComments: boolean }
 
 interface PlanMeta {
   plannedBudget: number | null;
@@ -51,6 +50,8 @@ export interface PlanConferenceRow {
   boothHall: string | null;
   territoryScope: string | null;
   territoryIds: number[];
+  committedToProgram: boolean;
+  isNewAddition: boolean;
   plan: PlanMeta;
 }
 
@@ -58,7 +59,6 @@ interface ProgramPlannerPlanViewProps {
   year: number;
   conferences: PlanConferenceRow[];
   categoryAverages: CategoryAverage[];
-  teamInputMap: Map<number, TeamInputInfo>;
   // Scores already computed for historical/attended conferences by the Program
   // tab's shared Calendar Intelligence store — pulled over as-is here so a
   // conference that's already been scored from real attendee history never
@@ -66,7 +66,10 @@ interface ProgramPlannerPlanViewProps {
   // never attended, no real history yet) fall back to conference_plans'
   // uploaded-list score, or the empty "+" state if neither exists.
   calIntelScores: Map<number, { score: number; tier: string; confidence: string }>;
-  onOpenInputPanel: (conferenceId: number, conferenceName: string) => void;
+  // Whether the shared Calendar Intelligence store is still scoring committed
+  // conferences in the background — drives the same three-dot loading state
+  // the Program tab's List Score column shows while waiting on a score.
+  calIntelLoading: boolean;
   onDecisionUpdated: (conferenceId: number, decision: 'attend' | 'reduce' | 'cut' | 'evaluating' | 'new' | null) => void;
   onRepsUpdated: (conferenceId: number, assignedReps: AssignedRep[]) => void;
   onBudgetUpdated: (conferenceId: number, plannedBudget: number, lineItems: PlannedLineItem[]) => void;
@@ -77,6 +80,7 @@ interface ProgramPlannerPlanViewProps {
   onSponsorshipUpdated: (conferenceId: number, sponsorshipLevel: string | null) => void;
   onBoothUpdated: (conferenceId: number, booth: { boothPresent: boolean; boothWidth: number | null; boothLength: number | null; boothNumber: string | null; boothHall: string | null }) => void;
   onLocationUpdated: (conferenceId: number, location: string) => void;
+  onTerritoryUpdated: (conferenceId: number, territoryScope: string | null, territoryIds: number[]) => void;
   onConferenceCreated: () => void;
 }
 
@@ -108,7 +112,7 @@ const GROUP_TO_DECISION: Record<GroupKey, GroupKey> = {
 const GROUP_CONFIG: Record<GroupKey, { label: string; icon: string; headerBg: string; headerText: string; pillBg: string; pillText: string }> = {
   attend:     { label: 'Attending',                     icon: 'ti-check',        headerBg: 'bg-green-50',  headerText: 'text-green-800',  pillBg: 'bg-green-100',  pillText: 'text-green-700' },
   reduce:     { label: 'Attending (reduced footprint)',  icon: 'ti-arrows-minimize', headerBg: 'bg-amber-50',  headerText: 'text-amber-800',  pillBg: 'bg-amber-100',  pillText: 'text-amber-700' },
-  new:        { label: 'New — never attended (Evaluating)', icon: 'ti-sparkles',  headerBg: 'bg-purple-50', headerText: 'text-purple-800', pillBg: 'bg-purple-100', pillText: 'text-purple-700' },
+  new:        { label: 'New (Evaluating)',                  icon: 'ti-sparkles',  headerBg: 'bg-purple-50', headerText: 'text-purple-800', pillBg: 'bg-purple-100', pillText: 'text-purple-700' },
   evaluating: { label: 'Evaluating',                      icon: 'ti-clock',        headerBg: 'bg-gray-100',  headerText: 'text-gray-700',   pillBg: 'bg-gray-200',   pillText: 'text-gray-600' },
   cut:        { label: 'Not attending',                   icon: 'ti-x',            headerBg: 'bg-red-50',    headerText: 'text-red-800',    pillBg: 'bg-red-100',    pillText: 'text-red-700' },
 };
@@ -132,6 +136,25 @@ function abbreviateStrategy(name: string): string {
   return STRATEGY_ABBREVIATIONS[name] ?? name;
 }
 
+// Territory column abbreviation: two-or-more-word names use the first letter
+// of each of the first two words (e.g. "Great Lakes" -> "GL"). One-word names
+// normally use just their first letter (e.g. "West" -> "W"), except compound
+// direction names like "Southeast"/"Northwest" where "east"/"west" appears
+// after a prefix — those use the prefix's first letter + E/W (e.g.
+// "Southeast" -> "SE", "Northwest" -> "NW").
+function abbreviateTerritory(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '';
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  const word = words[0];
+  const lower = word.toLowerCase();
+  const eastIdx = lower.indexOf('east');
+  const westIdx = lower.indexOf('west');
+  if (eastIdx > 0) return (word[0] + 'E').toUpperCase();
+  if (westIdx > 0) return (word[0] + 'W').toUpperCase();
+  return word[0].toUpperCase();
+}
+
 const CONFERENCE_TYPE_OPTIONS = [
   'Trade show', 'User conference', 'Executive summit', 'Hosted dinner / private event',
   'Roundtable', 'Field event', 'Industry association conference', 'Analyst conference',
@@ -141,21 +164,50 @@ const CONFERENCE_TYPE_OPTIONS = [
 // Shared viewport-aware positioning for the click-to-edit dropdowns (Strategy, Type,
 // Sponsorship) — flips to open upward when there isn't enough room below, same
 // approach as RepMultiSelect's calcPos.
-type DropdownPos = { top?: number; bottom?: number; left: number; above: boolean };
+type DropdownPos = { top?: number; bottom?: number; left?: number; right?: number; above: boolean };
 const DROPDOWN_EST_HEIGHT = 260;
+// Conservative estimate covering the widest dropdown that uses this helper
+// (Strategy's max-w-[320px] menu) — used only to decide whether to flip from
+// left- to right-anchored, so erring wide just means flipping a little
+// earlier than strictly necessary, never actually clipping.
+const DROPDOWN_EST_WIDTH = 320;
 function calcDropdownPos(el: HTMLElement): DropdownPos {
   const rect = el.getBoundingClientRect();
   const spaceBelow = window.innerHeight - rect.bottom;
   const above = spaceBelow < DROPDOWN_EST_HEIGHT && rect.top > spaceBelow;
+  const spaceRight = window.innerWidth - rect.left;
+  const overflowsRight = spaceRight < DROPDOWN_EST_WIDTH && rect.right > DROPDOWN_EST_WIDTH;
   return {
     top: above ? undefined : rect.bottom + 4,
     bottom: above ? window.innerHeight - rect.top + 4 : undefined,
-    left: rect.left,
+    left: overflowsRight ? undefined : rect.left,
+    right: overflowsRight ? window.innerWidth - rect.right : undefined,
     above,
   };
 }
 function dropdownStyle(pos: DropdownPos): CSSProperties {
-  return { position: 'fixed', top: pos.top, bottom: pos.bottom, left: pos.left, zIndex: 9999 };
+  return { position: 'fixed', top: pos.top, bottom: pos.bottom, left: pos.left, right: pos.right, zIndex: 9999 };
+}
+
+// Same viewport-aware flip-up logic as calcDropdownPos, sized for the small
+// click/hover-to-reveal label tooltips (status icon, territory chip, rep
+// assignment warning) instead of a full dropdown menu — these previously used
+// plain `absolute` positioning, which a section/card's `overflow-hidden`
+// wrapper clips whenever the tooltip would otherwise overflow it.
+type TooltipPos = { top?: number; bottom?: number; left: number };
+const TOOLTIP_EST_HEIGHT = 40;
+// center=true (the default) returns the trigger's horizontal center, meant to
+// be paired with a `-translate-x-1/2` on the tooltip; pass false for a
+// tooltip that aligns to the trigger's left edge instead.
+function calcTooltipPos(el: HTMLElement, center = true): TooltipPos {
+  const rect = el.getBoundingClientRect();
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const above = spaceBelow < TOOLTIP_EST_HEIGHT + 8 && rect.top > spaceBelow;
+  return {
+    top: above ? undefined : rect.bottom + 4,
+    bottom: above ? window.innerHeight - rect.top + 4 : undefined,
+    left: center ? rect.left + rect.width / 2 : rect.left,
+  };
 }
 
 function GripIcon() {
@@ -254,7 +306,15 @@ function ChevronRightIcon() {
   );
 }
 
-// Flags a conference sitting in the "New — never attended (Evaluating)" bucket.
+// Flags a conference with no prior-year history at all — driven by
+// isNewAddition (durable, server-side, set once at creation and never
+// changed afterward) rather than decision or committedToProgram. Both of
+// those change over the conference's life (decision is single-valued and
+// gets overwritten by a drag; committedToProgram flips true the moment the
+// Commit column is used) but neither one means the conference has actually
+// been attended before, which is the whole point of this star — so it keeps
+// showing even after being moved to Attending and even after being
+// committed to next year's program.
 function NewBadge() {
   return (
     <span
@@ -271,7 +331,7 @@ function NewBadge() {
 const STATUS_CIRCLE_CONFIG: Record<GroupKey, { label: string; bg: string; iconColor: string; icon: 'check' | 'question' | 'x' }> = {
   attend:     { label: 'Attending', bg: 'bg-green-100', iconColor: 'text-green-600', icon: 'check' },
   reduce:     { label: 'Attending (Reduced)', bg: 'bg-yellow-100', iconColor: 'text-yellow-700', icon: 'check' },
-  new:        { label: 'New — never attended (Evaluating)', bg: 'bg-purple-100', iconColor: 'text-purple-700', icon: 'question' },
+  new:        { label: 'New (Evaluating)', bg: 'bg-purple-100', iconColor: 'text-purple-700', icon: 'question' },
   evaluating: { label: 'Evaluating', bg: 'bg-gray-100', iconColor: 'text-gray-600', icon: 'question' },
   cut:        { label: 'Not Attending', bg: 'bg-red-100', iconColor: 'text-red-600', icon: 'x' },
 };
@@ -281,7 +341,9 @@ const STATUS_CIRCLE_CONFIG: Record<GroupKey, { label: string; bg: string; iconCo
 // click toggles the same label in a small tooltip (mobile, no hover).
 function StatusCircleBadge({ decision }: { decision: string | null }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<TooltipPos | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -298,8 +360,9 @@ function StatusCircleBadge({ decision }: { decision: string | null }) {
   return (
     <div ref={ref} className="relative inline-flex flex-shrink-0">
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => { if (buttonRef.current) setPos(calcTooltipPos(buttonRef.current)); setOpen(o => !o); }}
         title={cfg.label}
         className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${cfg.bg}`}
       >
@@ -317,8 +380,8 @@ function StatusCircleBadge({ decision }: { decision: string | null }) {
           <span className={`text-[11px] font-extrabold leading-none ${cfg.iconColor}`}>?</span>
         )}
       </button>
-      {open && (
-        <div className="absolute z-40 top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap bg-gray-900 text-white text-[11px] rounded-md shadow-lg px-2 py-1">
+      {open && pos && (
+        <div className="fixed z-[9999] -translate-x-1/2 whitespace-nowrap bg-gray-900 text-white text-[11px] rounded-md shadow-lg px-2 py-1" style={{ top: pos.top, bottom: pos.bottom, left: pos.left }}>
           {cfg.label}
         </div>
       )}
@@ -340,9 +403,23 @@ function listScoreColor(score: number | null): string {
 // empty-state convention as the other "Set [x]" columns) that opens an upload
 // prompt; scored conferences show the numeric score and open the same Cal
 // Intel drawer used in the Program tab (with Gap Analysis/Execution hidden).
-function ListScoreBadge({ size, score, onUpload, onOpenScore }: {
-  size: number; score: number | null; onUpload: () => void; onOpenScore: () => void;
+function ListScoreBadge({ size, score, loading, onUpload, onOpenScore }: {
+  size: number; score: number | null; loading?: boolean; onUpload: () => void; onOpenScore: () => void;
 }) {
+  if (score == null && loading) {
+    // Same three-dot pattern as the Program tab's List Score column while
+    // the shared Calendar Intelligence store is still scoring this
+    // conference in the background.
+    return (
+      <div style={{ width: size, height: size }} className="inline-flex items-center justify-center flex-shrink-0">
+        <div className="flex gap-0.5">
+          {[0, 1, 2].map(i => (
+            <span key={i} className="w-1 h-1 rounded-full bg-blue-300 animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />
+          ))}
+        </div>
+      </div>
+    );
+  }
   if (score == null) {
     return (
       <button
@@ -372,15 +449,15 @@ function ListScoreBadge({ size, score, onUpload, onOpenScore }: {
   );
 }
 
-// Shown in By Rep grouping next to a conference that landed in this rep's
-// column via territory auto-placement rather than an actual rep assignment —
-// click reveals why it's here instead of silently implying the rep is
-// formally on the hook for it.
-function RepAssignmentWarning({ repName, conferenceName, scopeLabel }: {
-  repName: string; conferenceName: string; scopeLabel: string;
-}) {
+// Single circular abbreviated-territory pill — full-color border, lighter
+// tint fill. National uses brand-primary instead of a territory color since
+// it isn't any one territory. Hover shows the full name (native title,
+// desktop); click toggles the same name in a small tooltip (mobile).
+function TerritoryChip({ label, name, color, bg }: { label: string; name: string; color: string; bg: string }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<TooltipPos | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -394,8 +471,428 @@ function RepAssignmentWarning({ repName, conferenceName, scopeLabel }: {
   return (
     <div ref={ref} className="relative inline-flex flex-shrink-0">
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => { if (buttonRef.current) setPos(calcTooltipPos(buttonRef.current)); setOpen(o => !o); }}
+        title={name}
+        style={{ width: 24, height: 24, border: `1.5px solid ${color}`, backgroundColor: bg, color }}
+        className="inline-flex items-center justify-center rounded-full text-[10px] font-bold flex-shrink-0"
+      >
+        {label}
+      </button>
+      {open && pos && (
+        <div className="fixed z-[9999] -translate-x-1/2 whitespace-nowrap bg-gray-900 text-white text-[11px] rounded-md shadow-lg px-2 py-1" style={{ top: pos.top, bottom: pos.bottom, left: pos.left }}>
+          {name}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The Plan tab's Territory column — Regional conferences show one chip per
+// assigned territory (abbreviated, colored to match that territory); National
+// shows a single "NT" chip in brand-primary since it isn't tied to any one
+// territory.
+function TerritoryCell({ scope, territoryIds, territoryOptions }: {
+  scope: string | null;
+  territoryIds: number[];
+  territoryOptions: Array<{ id: number; name: string; color: string }>;
+}) {
+  if (scope === 'national') {
+    return (
+      <div className="flex items-center justify-center">
+        <TerritoryChip
+          label="NT"
+          name="National"
+          color="rgb(var(--brand-primary-rgb))"
+          bg="rgb(var(--brand-primary-rgb) / 0.12)"
+        />
+      </div>
+    );
+  }
+  const matched = scope === 'regional' ? territoryOptions.filter(t => territoryIds.includes(t.id)) : [];
+  if (matched.length === 0) return <span className="text-gray-300 text-xs">—</span>;
+  return (
+    <div className="flex items-center justify-center flex-wrap gap-1">
+      {matched.map(t => (
+        <TerritoryChip key={t.id} label={abbreviateTerritory(t.name)} name={t.name} color={t.color} bg={t.color + '18'} />
+      ))}
+    </div>
+  );
+}
+
+// Click-to-edit wrapper around TerritoryCell — opens a popup to pick Market
+// Coverage (National/Regional) and, for Regional, one or more territories.
+// Each pick persists immediately (same pattern as the other edit pills), so
+// there's no separate Save step; "Done" just closes the popup.
+function TerritoryEditCell({ conferenceId, territoryScope, territoryIds, territoryOptions, onUpdated }: {
+  conferenceId: number;
+  territoryScope: string | null;
+  territoryIds: number[];
+  territoryOptions: Array<{ id: number; name: string; color: string }>;
+  onUpdated: (territoryScope: string | null, territoryIds: number[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<DropdownPos | null>(null);
+  const [saving, setSaving] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (buttonRef.current?.contains(e.target as Node) || dropdownRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const openDropdown = () => {
+    if (buttonRef.current) setPos(calcDropdownPos(buttonRef.current));
+    setOpen(true);
+  };
+
+  const persist = async (scope: 'national' | 'regional' | null, ids: number[]) => {
+    setSaving(true);
+    onUpdated(scope, ids);
+    try {
+      await fetch(`/api/conferences/${conferenceId}/territory`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ territoryScope: scope, territoryIds: ids }),
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleTerritory = (id: number) => {
+    const next = territoryIds.includes(id) ? territoryIds.filter(x => x !== id) : [...territoryIds, id];
+    persist('regional', next);
+  };
+
+  return (
+    <>
+      <button ref={buttonRef} type="button" onClick={openDropdown} disabled={saving} className={`inline-flex ${saving ? 'opacity-50' : ''}`}>
+        {territoryScope ? (
+          <TerritoryCell scope={territoryScope} territoryIds={territoryIds} territoryOptions={territoryOptions} />
+        ) : (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors">
+            Set Territory
+          </span>
+        )}
+      </button>
+      {open && pos && (
+        <div ref={dropdownRef} className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 w-60" style={dropdownStyle(pos)}>
+          <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1.5">Market Coverage</p>
+          <div className="flex gap-2 mb-3">
+            <button
+              type="button"
+              onClick={() => persist('national', [])}
+              className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                territoryScope === 'national' ? 'bg-brand-primary text-white border-brand-primary' : 'border-gray-200 text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              National
+            </button>
+            <button
+              type="button"
+              onClick={() => persist('regional', territoryIds)}
+              className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                territoryScope === 'regional' ? 'bg-brand-primary text-white border-brand-primary' : 'border-gray-200 text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              Regional
+            </button>
+          </div>
+          {territoryScope === 'regional' && (
+            <>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1.5">Select Territories</p>
+              <div className="space-y-0.5 max-h-48 overflow-y-auto">
+                {territoryOptions.length === 0 && <p className="text-xs text-gray-400 px-1.5 py-1">No territories configured.</p>}
+                {territoryOptions.map(t => (
+                  <label key={t.id} className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-gray-50 cursor-pointer">
+                    <input type="checkbox" checked={territoryIds.includes(t.id)} onChange={() => toggleTerritory(t.id)} className="accent-brand-secondary" />
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
+                    <span className="text-xs text-gray-700">{t.name}</span>
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+          <div className="flex items-center gap-2 mt-3">
+            <button
+              type="button"
+              onClick={() => { persist(null, []); setOpen(false); }}
+              disabled={!territoryScope}
+              className="px-2 py-1.5 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// The Plan table's Commit column (table view only — a Kanban card has no
+// equivalent row of columns to append to). Only ever renders something for
+// conferences the user has actually decided to attend; every other decision
+// leaves the cell blank since "committing" only makes sense once you're
+// going. Committing means one of two things server-side (see the commit
+// route): promoting a brand-new Plan-tab draft in place, or — for a
+// conference that was already attended in a prior year and is just being
+// re-evaluated — spawning a brand-new conferences row for this plan year
+// (same series) while leaving the old year's row untouched. Either way, the
+// tell for "already committed for THIS plan year" is simply whether the
+// row's own start date now falls in the plan year: a committed brand-new
+// draft gets its placeholder date replaced with a real one in the plan
+// year, and a re-evaluated conference gets re-pointed at a new row whose
+// start date is in the plan year — so this needs no separate "committed"
+// flag, and can't go stale the way one would across the old-row/new-row
+// split.
+function CommitCell({ conferenceId, conferenceName, decision, startDate, plannedStartDate, planYear, onCommitted }: {
+  conferenceId: number;
+  conferenceName: string;
+  decision: string | null;
+  startDate: string;
+  plannedStartDate: string | null;
+  planYear: number;
+  onCommitted: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<DropdownPos | null>(null);
+  const [saving, setSaving] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (buttonRef.current?.contains(e.target as Node) || popoverRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  if (decision !== 'attend' && decision !== 'reduce') return null;
+
+  const committedForThisYear = new Date(startDate + 'T00:00:00').getFullYear() === planYear;
+
+  if (committedForThisYear) {
+    return (
+      <span
+        title="Added to program"
+        className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100 border border-green-300 flex-shrink-0"
+      >
+        <svg className="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      </span>
+    );
+  }
+
+  const openPopover = () => {
+    if (buttonRef.current) setPos(calcDropdownPos(buttonRef.current));
+    setOpen(true);
+  };
+
+  const confirm = async () => {
+    if (!plannedStartDate) {
+      toast.error('Set conference dates before adding this conference to your program.');
+      setOpen(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/program-planner/conferences/${conferenceId}/commit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planYear }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? 'Failed to add to program');
+      }
+      onCommitted();
+      toast.success(`${conferenceName} added to your ${planYear} program.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add to program');
+    } finally {
+      setSaving(false);
+      setOpen(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={openPopover}
+        disabled={saving}
+        className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-brand-primary/10 text-brand-primary border border-brand-primary/30 hover:bg-brand-primary/20 transition-colors disabled:opacity-50"
+      >
+        + to Program
+      </button>
+      {open && pos && (
+        <div ref={popoverRef} className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 w-64" style={dropdownStyle(pos)}>
+          <p className="text-sm text-gray-700 mb-3">
+            Add <span className="font-semibold">{conferenceName}</span> to your {planYear} Program?
+          </p>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              disabled={saving}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirm}
+              disabled={saving}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-brand-primary text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+            >
+              {saving ? 'Adding…' : 'Confirm'}
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// Lets the user remove a conference they added to the Plan tab but never
+// committed — visible everywhere the row is shown (table, Kanban, mobile),
+// unlike Commit which is table-only, since deleting a mistaken draft is
+// useful regardless of view or decision bucket. Scoped server-side to
+// uncommitted conferences only (see the DELETE route), so this never
+// appears once committedToProgram flips true — at that point it's a real
+// conference and removing it belongs on the Conference Details page.
+function DeleteDraftButton({ conferenceId, conferenceName, onDeleted }: {
+  conferenceId: number; conferenceName: string; onDeleted: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<DropdownPos | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (buttonRef.current?.contains(e.target as Node) || popoverRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const openPopover = () => {
+    if (buttonRef.current) setPos(calcDropdownPos(buttonRef.current));
+    setOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/program-planner/conferences/${conferenceId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? 'Failed to delete conference');
+      }
+      onDeleted();
+      toast.success(`${conferenceName} removed.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete conference');
+    } finally {
+      setDeleting(false);
+      setOpen(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={openPopover}
+        disabled={deleting}
+        title="Remove this conference from the plan"
+        className="inline-flex items-center justify-center w-5 h-5 rounded-full text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0 disabled:opacity-50"
+      >
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+      {open && pos && (
+        <div ref={popoverRef} className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 w-64" style={dropdownStyle(pos)}>
+          <p className="text-sm text-gray-700 mb-3">
+            Remove <span className="font-semibold">{conferenceName}</span> from the plan? This can&apos;t be undone.
+          </p>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              disabled={deleting}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmDelete}
+              disabled={deleting}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+            >
+              {deleting ? 'Removing…' : 'Remove'}
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// Shown in By Rep grouping next to a conference that landed in this rep's
+// column via territory auto-placement rather than an actual rep assignment —
+// click reveals why it's here instead of silently implying the rep is
+// formally on the hook for it.
+function RepAssignmentWarning({ repName, conferenceName, scopeLabel }: {
+  repName: string; conferenceName: string; scopeLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<TooltipPos | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative inline-flex flex-shrink-0">
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => { if (buttonRef.current) setPos(calcTooltipPos(buttonRef.current, false)); setOpen(o => !o); }}
         className="w-5 h-5 flex items-center justify-center rounded-full bg-amber-50 text-amber-500 hover:bg-amber-100 transition-colors flex-shrink-0"
         title="Not formally assigned"
       >
@@ -403,35 +900,16 @@ function RepAssignmentWarning({ repName, conferenceName, scopeLabel }: {
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
         </svg>
       </button>
-      {open && (
+      {open && pos && (
         <div
-          className="absolute z-40 top-full left-0 mt-1 w-64 bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2 leading-snug"
+          className="fixed z-[9999] w-64 bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2 leading-snug"
+          style={{ top: pos.top, bottom: pos.bottom, left: pos.left }}
           onClick={e => e.stopPropagation()}
         >
           {repName} has not been formally assigned to {conferenceName}. This is a {scopeLabel} conference that has been designated in their territory.
         </div>
       )}
     </div>
-  );
-}
-
-function InputButton({ conferenceId, conferenceName, info, onOpen }: {
-  conferenceId: number; conferenceName: string; info: TeamInputInfo | undefined; onOpen: (id: number, name: string) => void;
-}) {
-  const hasInput = info?.hasInput ?? false;
-  const hasComments = info?.hasComments ?? false;
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen(conferenceId, conferenceName)}
-      className={`relative p-1.5 rounded-full transition-all hover:opacity-75 ${hasInput ? 'bg-brand-primary/10' : ''}`}
-      title="View team input"
-    >
-      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: hasInput ? 'rgb(var(--brand-primary-rgb))' : '#B0B7C3' }}>
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-      </svg>
-      {hasComments && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-red-500 rounded-full" />}
-    </button>
   );
 }
 
@@ -679,22 +1157,37 @@ function BoothEditPopover({
     }
   };
 
-  const dims = boothWidth != null || boothLength != null ? ` · ${boothWidth ?? '?'}×${boothLength ?? '?'} ft` : '';
-  const label = boothPresent ? `Booth${boothNumber ? ` #${boothNumber}` : ''}${dims}` : 'No Booth';
+  const hasDims = boothWidth != null || boothLength != null;
+  const dimsLabel = `${boothWidth ?? '?'}×${boothLength ?? '?'} ft`;
 
   return (
     <>
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={openPopover}
-        disabled={saving}
-        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity ${saving ? 'opacity-50' : ''} ${
-          boothPresent ? 'bg-purple-50 text-purple-800 border border-purple-300 hover:bg-purple-100' : 'text-gray-400 hover:text-gray-600'
-        }`}
-      >
-        {label}
-      </button>
+      {boothPresent && !hasDims ? (
+        <button
+          ref={buttonRef}
+          type="button"
+          onClick={openPopover}
+          disabled={saving}
+          title="Booth — no dimensions set yet"
+          className={`inline-flex items-center justify-center w-6 h-6 rounded-full bg-purple-100 border border-purple-300 hover:bg-purple-200 transition-colors flex-shrink-0 ${saving ? 'opacity-50' : ''}`}
+        >
+          <svg className="w-3.5 h-3.5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </button>
+      ) : (
+        <button
+          ref={buttonRef}
+          type="button"
+          onClick={openPopover}
+          disabled={saving}
+          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity ${saving ? 'opacity-50' : ''} ${
+            boothPresent ? 'bg-purple-50 text-purple-800 border border-purple-300 hover:bg-purple-100' : 'text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          {boothPresent ? dimsLabel : 'No Booth'}
+        </button>
+      )}
       {open && pos && (
         <div
           ref={popoverRef}
@@ -951,9 +1444,9 @@ function DatesEditCell({
 }
 
 export function ProgramPlannerPlanView({
-  year, conferences, categoryAverages, teamInputMap, calIntelScores, onOpenInputPanel,
+  year, conferences, categoryAverages, calIntelScores, calIntelLoading,
   onDecisionUpdated, onRepsUpdated, onBudgetUpdated, onStrategyUpdated, onDatesUpdated, onListScoreUpdated,
-  onTypeUpdated, onSponsorshipUpdated, onBoothUpdated, onLocationUpdated, onConferenceCreated,
+  onTypeUpdated, onSponsorshipUpdated, onBoothUpdated, onLocationUpdated, onTerritoryUpdated, onConferenceCreated,
 }: ProgramPlannerPlanViewProps) {
   const [priorYearActual, setPriorYearActual] = useState<number | null>(null);
   const [budgetModalConf, setBudgetModalConf] = useState<PlanConferenceRow | null>(null);
@@ -1046,11 +1539,6 @@ export function ProgramPlannerPlanView({
     kanbanScrollRef.current?.scrollBy({ left: dir * 320, behavior: 'smooth' });
   };
   const [draggedId, setDraggedId] = useState<number | null>(null);
-  // Conferences that were decision='new' at some point this session, tracked
-  // client-side only (not persisted) so the "never attended before" star
-  // keeps showing even after being dragged out of the New section into e.g.
-  // Attending — decision itself is single-valued and overwritten by the move.
-  const [wasNewIds, setWasNewIds] = useState<Set<number>>(new Set());
   const [dragOverGroup, setDragOverGroup] = useState<GroupKey | null>(null);
   // Any section/column in any grouping mode can be hidden from view (same
   // minimize/restore pattern as the tier columns in the pre-conference
@@ -1366,10 +1854,6 @@ export function ProgramPlannerPlanView({
 
   const moveToGroup = async (conferenceId: number, group: GroupKey) => {
     const decision = GROUP_TO_DECISION[group];
-    if (group !== 'new') {
-      const conf = conferences.find(c => c.conferenceId === conferenceId);
-      if (conf?.decision === 'new') setWasNewIds(prev => new Set(prev).add(conferenceId));
-    }
     onDecisionUpdated(conferenceId, decision);
     await fetch(`/api/program-planner/conferences/${conferenceId}/decision`, {
       method: 'PATCH',
@@ -1416,7 +1900,7 @@ export function ProgramPlannerPlanView({
         @keyframes minimizedPillIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
         @keyframes sectionPopIn { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
       `}</style>
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      {minimizedSections.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
           {minimizedSections.map(section => (
             <button
@@ -1440,6 +1924,78 @@ export function ProgramPlannerPlanView({
             </button>
           ))}
         </div>
+      )}
+
+      {/* Grouping toggle (left) + view toggle / Add conference (right) — one row */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setGroupMode('status')}
+            title="Group by status"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${
+              groupMode === 'status' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            <StatusViewIcon />
+            Status
+          </button>
+          <button
+            type="button"
+            onClick={() => setGroupMode('rep')}
+            title="Group by rep"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+              groupMode === 'rep' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            <RepViewIcon />
+            By Rep
+          </button>
+          <button
+            type="button"
+            onClick={() => setGroupMode('territory')}
+            title="Group by territory"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+              groupMode === 'territory' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            <TerritoryViewIcon />
+            By Territory
+          </button>
+          <button
+            type="button"
+            onClick={() => setGroupMode('strategy')}
+            title="Group by strategy"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+              groupMode === 'strategy' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            <StrategyViewIcon />
+            By Strategy
+          </button>
+          <button
+            type="button"
+            onClick={() => setGroupMode('type')}
+            title="Group by type"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+              groupMode === 'type' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            <TypeViewIcon />
+            By Type
+          </button>
+          <button
+            type="button"
+            onClick={() => setGroupMode('date')}
+            title="Group by date"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+              groupMode === 'date' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            <DateViewIcon />
+            By Date
+          </button>
+        </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
             <button
@@ -1447,7 +2003,7 @@ export function ProgramPlannerPlanView({
               onClick={() => setPlanViewMode('table')}
               title="Table view"
               className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                planViewMode === 'table' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                planViewMode === 'table' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
               }`}
             >
               <TableViewIcon />
@@ -1458,7 +2014,7 @@ export function ProgramPlannerPlanView({
               onClick={() => setPlanViewMode('kanban')}
               title="Kanban view"
               className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-                planViewMode === 'kanban' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                planViewMode === 'kanban' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
               }`}
             >
               <KanbanViewIcon />
@@ -1476,76 +2032,6 @@ export function ProgramPlannerPlanView({
         </div>
       </div>
 
-      {/* Grouping toggle — left-aligned to match the section cards below it */}
-      <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
-        <button
-          type="button"
-          onClick={() => setGroupMode('status')}
-          title="Group by status"
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${
-            groupMode === 'status' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-          }`}
-        >
-          <StatusViewIcon />
-          Status
-        </button>
-        <button
-          type="button"
-          onClick={() => setGroupMode('rep')}
-          title="Group by rep"
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-            groupMode === 'rep' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-          }`}
-        >
-          <RepViewIcon />
-          By Rep
-        </button>
-        <button
-          type="button"
-          onClick={() => setGroupMode('territory')}
-          title="Group by territory"
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-            groupMode === 'territory' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-          }`}
-        >
-          <TerritoryViewIcon />
-          By Territory
-        </button>
-        <button
-          type="button"
-          onClick={() => setGroupMode('strategy')}
-          title="Group by strategy"
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-            groupMode === 'strategy' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-          }`}
-        >
-          <StrategyViewIcon />
-          By Strategy
-        </button>
-        <button
-          type="button"
-          onClick={() => setGroupMode('type')}
-          title="Group by type"
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-            groupMode === 'type' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-          }`}
-        >
-          <TypeViewIcon />
-          By Type
-        </button>
-        <button
-          type="button"
-          onClick={() => setGroupMode('date')}
-          title="Group by date"
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-            groupMode === 'date' ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-          }`}
-        >
-          <DateViewIcon />
-          By Date
-        </button>
-      </div>
-
       {/* Decision groups — always all 5 (unless minimized), even empty, so a row can be dragged into any of them */}
       {planViewMode === 'table' && sections.map(section => {
         const rows = section.rows;
@@ -1561,7 +2047,7 @@ export function ProgramPlannerPlanView({
         return (
           <div
             key={key}
-            className={`card p-0 overflow-hidden transition-all duration-200 ${isDragOver ? 'ring-2 ring-brand-secondary' : ''} ${closing ? 'opacity-0 scale-[0.98]' : 'opacity-100 scale-100'}`}
+            className={`card p-0 overflow-hidden transition-all duration-200 ${isDragOver ? 'ring-2 ring-brand-secondary' : ''} ${closing ? 'opacity-0 scale-[0.98]' : 'opacity-100'}`}
             style={{ animation: closing ? undefined : 'sectionPopIn 200ms ease-out' }}
             onDragOver={e => { e.preventDefault(); if (draggedId != null && section.dropKey) setDragOverGroup(section.dropKey); }}
             onDragLeave={() => setDragOverGroup(prev => prev === section.dropKey ? null : prev)}
@@ -1602,7 +2088,6 @@ export function ProgramPlannerPlanView({
                 {/* Mobile: one card per conference, stacked */}
                 <div className="sm:hidden divide-y divide-gray-100">
                   {rows.map(c => {
-                    const info = teamInputMap.get(c.conferenceId);
                     return (
                       <div
                         key={c.conferenceId}
@@ -1640,7 +2125,8 @@ export function ProgramPlannerPlanView({
                               <Link href={`/conferences/${c.conferenceId}`} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Open conference detail">
                                 <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                               </Link>
-                              {(c.decision === 'new' || wasNewIds.has(c.conferenceId)) && <NewBadge />}
+                              {c.isNewAddition && <NewBadge />}
+                              {!c.committedToProgram && <DeleteDraftButton conferenceId={c.conferenceId} conferenceName={c.name} onDeleted={onConferenceCreated} />}
                               {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                 <RepAssignmentWarning
                                   repName={section.label}
@@ -1652,6 +2138,7 @@ export function ProgramPlannerPlanView({
                               <ListScoreBadge
                                 size={22}
                                 score={resolveListScore(c)?.score ?? null}
+                                loading={calIntelLoading && c.committedToProgram && !resolveListScore(c)}
                                 onUpload={() => setListScoreUploadConf(c)}
                                 onOpenScore={() => {
                                   const ls = resolveListScore(c);
@@ -1690,6 +2177,13 @@ export function ProgramPlannerPlanView({
                             strategyTypeId={c.strategyTypeId}
                             strategyTypeName={c.strategyTypeName}
                             onUpdated={(id, name) => onStrategyUpdated(c.conferenceId, id, name)}
+                          />
+                          <TerritoryEditCell
+                            conferenceId={c.conferenceId}
+                            territoryScope={c.territoryScope}
+                            territoryIds={c.territoryIds}
+                            territoryOptions={territoryOptions}
+                            onUpdated={(scope, ids) => onTerritoryUpdated(c.conferenceId, scope, ids)}
                           />
                           <OptionEditPill
                             value={c.conferenceType}
@@ -1735,7 +2229,6 @@ export function ProgramPlannerPlanView({
                               onUpdate={reps => onRepsUpdated(c.conferenceId, reps)}
                             />
                           </div>
-                          <InputButton conferenceId={c.conferenceId} conferenceName={c.name} info={info} onOpen={onOpenInputPanel} />
                         </div>
                       </div>
                     );
@@ -1755,13 +2248,14 @@ export function ProgramPlannerPlanView({
                       <col style={{ width: 76 }} />
                       <col style={{ width: 70 }} />
                       <col style={{ width: 160 }} />
+                      <col style={{ width: 84 }} />
                       <col style={{ width: 110 }} />
                       <col style={{ width: 100 }} />
                       <col style={{ width: 140 }} />
                       <col style={{ width: 120 }} />
                       <col style={{ width: 80 }} />
                       <col style={{ width: 110 }} />
-                      <col style={{ width: 52 }} />
+                      <col style={{ width: 116 }} />
                     </colgroup>
                     <thead>
                       <tr className="border-b border-gray-100">
@@ -1770,25 +2264,25 @@ export function ProgramPlannerPlanView({
                           <div className="grid grid-cols-[1fr_auto] gap-1.5 items-center">
                             <span className="text-left">Conference</span>
                             {groupMode !== 'status' && (
-                              <span className="w-[68px] flex-shrink-0 text-right">Status</span>
+                              <span className="w-[68px] flex-shrink-0 text-center">Status</span>
                             )}
                           </div>
                         </th>
                         <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">List Score</th>
                         <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Dates</th>
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Strategy</th>
+                        <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Territory</th>
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Type</th>
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Sponsorship</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Booth</th>
+                        <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Booth</th>
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Location</th>
                         <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Budget</th>
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Assigned reps</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Input</th>
+                        <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Commit</th>
                       </tr>
                     </thead>
                     <tbody>
                       {rows.map((c, i) => {
-                        const info = teamInputMap.get(c.conferenceId);
                         return (
                           <tr
                             key={c.conferenceId}
@@ -1828,8 +2322,9 @@ export function ProgramPlannerPlanView({
                                     <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                                   </Link>
                                 </div>
-                                <div className="flex items-center gap-1 w-[68px] flex-shrink-0 justify-end pt-0.5">
-                                  {(c.decision === 'new' || wasNewIds.has(c.conferenceId)) && <NewBadge />}
+                                <div className="flex items-center gap-1 w-[68px] flex-shrink-0 justify-center pt-0.5">
+                                  {c.isNewAddition && <NewBadge />}
+                              {!c.committedToProgram && <DeleteDraftButton conferenceId={c.conferenceId} conferenceName={c.name} onDeleted={onConferenceCreated} />}
                                   {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                     <RepAssignmentWarning
                                       repName={section.label}
@@ -1845,6 +2340,7 @@ export function ProgramPlannerPlanView({
                               <ListScoreBadge
                                 size={32}
                                 score={resolveListScore(c)?.score ?? null}
+                                loading={calIntelLoading && c.committedToProgram && !resolveListScore(c)}
                                 onUpload={() => setListScoreUploadConf(c)}
                                 onOpenScore={() => {
                                   const ls = resolveListScore(c);
@@ -1873,6 +2369,15 @@ export function ProgramPlannerPlanView({
                                 onUpdated={(id, name) => onStrategyUpdated(c.conferenceId, id, name)}
                               />
                             </td>
+                            <td className="px-3 py-2 text-center">
+                              <TerritoryEditCell
+                                conferenceId={c.conferenceId}
+                                territoryScope={c.territoryScope}
+                                territoryIds={c.territoryIds}
+                                territoryOptions={territoryOptions}
+                                onUpdated={(scope, ids) => onTerritoryUpdated(c.conferenceId, scope, ids)}
+                              />
+                            </td>
                             <td className="px-3 py-2">
                               <OptionEditPill
                                 value={c.conferenceType}
@@ -1892,7 +2397,7 @@ export function ProgramPlannerPlanView({
                                 onSelect={async v => { onSponsorshipUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/sponsorship`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sponsorshipLevel: v }) }); }}
                               />
                             </td>
-                            <td className="px-3 py-2">
+                            <td className="px-3 py-2 text-center">
                               <BoothEditPopover
                                 conferenceId={c.conferenceId}
                                 boothPresent={c.boothPresent}
@@ -1931,7 +2436,15 @@ export function ProgramPlannerPlanView({
                               />
                             </td>
                             <td className="px-3 py-2 text-center">
-                              <InputButton conferenceId={c.conferenceId} conferenceName={c.name} info={info} onOpen={onOpenInputPanel} />
+                              <CommitCell
+                                conferenceId={c.conferenceId}
+                                conferenceName={c.name}
+                                decision={c.decision}
+                                startDate={c.startDate}
+                                plannedStartDate={c.plan.plannedStartDate}
+                                planYear={year}
+                                onCommitted={onConferenceCreated}
+                              />
                             </td>
                           </tr>
                         );
@@ -1966,7 +2479,7 @@ export function ProgramPlannerPlanView({
                 return (
                   <div
                     key={key}
-                    className={`w-72 flex-shrink-0 rounded-xl border border-gray-200 overflow-hidden transition-all duration-200 ${isDragOver ? 'ring-2 ring-brand-secondary' : ''} ${closing ? 'opacity-0 scale-[0.98]' : 'opacity-100 scale-100'}`}
+                    className={`w-72 flex-shrink-0 rounded-xl border border-gray-200 overflow-hidden transition-all duration-200 ${isDragOver ? 'ring-2 ring-brand-secondary' : ''} ${closing ? 'opacity-0 scale-[0.98]' : 'opacity-100'}`}
                     style={{ animation: closing ? undefined : 'sectionPopIn 200ms ease-out' }}
                     onDragOver={e => { e.preventDefault(); if (draggedId != null && section.dropKey) setDragOverGroup(section.dropKey); }}
                     onDragLeave={() => setDragOverGroup(prev => prev === section.dropKey ? null : prev)}
@@ -1992,11 +2505,6 @@ export function ProgramPlannerPlanView({
                         {rows.length}
                       </span>
                     </div>
-                    {groupMode !== 'status' && rows.length > 0 && (
-                      <div className="px-2 pt-2 flex items-center justify-end bg-gray-50/50">
-                        <span className="w-[84px] flex-shrink-0 text-right text-[10px] font-medium text-gray-400 uppercase tracking-wide pr-[19px]">Status</span>
-                      </div>
-                    )}
                     <div className="p-2 space-y-2 min-h-[100px] bg-gray-50/50">
                       {rows.length === 0 ? (
                         <div className="px-2 py-6 text-center text-[11px] text-gray-400 border-2 border-dashed border-gray-200 rounded-lg bg-white">
@@ -2035,8 +2543,9 @@ export function ProgramPlannerPlanView({
                             >
                               {c.name}
                             </button>
-                            <div className="flex items-center gap-1 w-[84px] flex-shrink-0 justify-end pt-0.5">
-                              {(c.decision === 'new' || wasNewIds.has(c.conferenceId)) && <NewBadge />}
+                            <div className="flex items-center gap-1 w-[84px] flex-shrink-0 justify-center pt-0.5">
+                              {c.isNewAddition && <NewBadge />}
+                              {!c.committedToProgram && <DeleteDraftButton conferenceId={c.conferenceId} conferenceName={c.name} onDeleted={onConferenceCreated} />}
                               {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                 <RepAssignmentWarning
                                   repName={section.label}
@@ -2048,6 +2557,7 @@ export function ProgramPlannerPlanView({
                               <ListScoreBadge
                                 size={20}
                                 score={resolveListScore(c)?.score ?? null}
+                                loading={calIntelLoading && c.committedToProgram && !resolveListScore(c)}
                                 onUpload={() => setListScoreUploadConf(c)}
                                 onOpenScore={() => {
                                   const ls = resolveListScore(c);
@@ -2064,6 +2574,13 @@ export function ProgramPlannerPlanView({
                             {fmtDateShort(c.plan.plannedStartDate ?? c.startDate)}
                           </p>
                           <div className="flex items-center flex-wrap gap-1 mb-2">
+                            <TerritoryEditCell
+                              conferenceId={c.conferenceId}
+                              territoryScope={c.territoryScope}
+                              territoryIds={c.territoryIds}
+                              territoryOptions={territoryOptions}
+                              onUpdated={(scope, ids) => onTerritoryUpdated(c.conferenceId, scope, ids)}
+                            />
                             <OptionEditPill
                               value={c.conferenceType}
                               options={CONFERENCE_TYPE_OPTIONS}

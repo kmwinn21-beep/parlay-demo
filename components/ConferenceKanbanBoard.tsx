@@ -19,6 +19,15 @@ interface Conference {
   is_historical?: number | null;
   post_conference_days?: number | null;
   stage_override?: string | null;
+  territory_scope?: string | null;
+  territory_ids?: string | null;
+  conference_type?: string | null;
+}
+
+interface TerritoryOption {
+  id: number;
+  name: string;
+  color: string;
 }
 
 interface EffData {
@@ -29,14 +38,8 @@ interface EffData {
   ces_tier: string | null;
 }
 
-interface PreData {
-  strategy_fit_score: number | null;
-  primary_strategy: string | null;
-}
-
 // ─── Session-level caches (persist across tab switches) ───────────────────────
 const effCache = new Map<number, EffData | 'error'>();
-const preCache = new Map<number, PreData | 'error'>();
 
 // ─── Column config ────────────────────────────────────────────────────────────
 const COLUMNS: Array<{ stage: ConferenceStage; label: string; headerCls: string; countCls: string }> = [
@@ -56,6 +59,74 @@ function getInitials(name: string): string {
 function formatDate(d: string) {
   if (!d) return '';
   return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// Same abbreviation rule as the Plan tab's Territory column: two-or-more-word
+// names use the first letter of each of the first two words ("Great Lakes" ->
+// "GL"); one-word names use just their first letter ("West" -> "W"), except
+// compound direction names where "east"/"west" follows a prefix ("Southeast"
+// -> "SE", "Northwest" -> "NW").
+function abbreviateTerritory(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '';
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  const word = words[0];
+  const lower = word.toLowerCase();
+  const eastIdx = lower.indexOf('east');
+  const westIdx = lower.indexOf('west');
+  if (eastIdx > 0) return (word[0] + 'E').toUpperCase();
+  if (westIdx > 0) return (word[0] + 'W').toUpperCase();
+  return word[0].toUpperCase();
+}
+
+// Same circular chip style as the Plan tab's Territory column — National in
+// brand-primary, Regional in that territory's own color.
+function TerritoryChip({ conf, territories }: { conf: Conference; territories: TerritoryOption[] }) {
+  if (conf.territory_scope === 'national') {
+    return (
+      <span
+        title="National"
+        style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+          border: '1.5px solid rgb(var(--brand-primary-rgb))',
+          background: 'rgb(var(--brand-primary-rgb) / 0.12)',
+          color: 'rgb(var(--brand-primary-rgb))',
+          fontSize: 9, fontWeight: 700,
+        }}
+      >
+        NT
+      </span>
+    );
+  }
+  if (conf.territory_scope === 'regional') {
+    let territoryIds: number[] = [];
+    try {
+      const parsed = JSON.parse(conf.territory_ids ?? '[]');
+      if (Array.isArray(parsed)) territoryIds = parsed.map(Number).filter((n) => !isNaN(n));
+    } catch { /* ignore */ }
+    const matched = territories.filter((t) => territoryIds.includes(t.id));
+    if (matched.length === 0) return null;
+    return (
+      <div className="flex items-center gap-1 flex-wrap">
+        {matched.map((t) => (
+          <span
+            key={t.id}
+            title={t.name}
+            style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+              border: `1.5px solid ${t.color}`, background: `${t.color}1E`, color: t.color,
+              fontSize: 9, fontWeight: 700,
+            }}
+          >
+            {abbreviateTerritory(t.name)}
+          </span>
+        ))}
+      </div>
+    );
+  }
+  return null;
 }
 
 function scoreTier(score: number | null): string {
@@ -89,28 +160,32 @@ function ScoreCell({ label, score }: { label: string; score: number | null }) {
 }
 
 // ─── Cards ────────────────────────────────────────────────────────────────────
-function PlanningCard({ conf, preData }: { conf: Conference; preData: PreData | 'error' | undefined }) {
+function hasTerritoryData(conf: Conference): boolean {
+  if (conf.territory_scope === 'national') return true;
+  if (conf.territory_scope === 'regional') {
+    try {
+      const parsed = JSON.parse(conf.territory_ids ?? '[]');
+      return Array.isArray(parsed) && parsed.length > 0;
+    } catch { return false; }
+  }
+  return false;
+}
+
+function PlanningCard({ conf, territories }: { conf: Conference; territories: TerritoryOption[] }) {
   const daysRem = undefined; // planning/in_progress don't need countdown
+  if (!hasTerritoryData(conf) && !conf.conference_type) {
+    return <KanbanCard conf={conf} daysRem={daysRem} />;
+  }
   return (
     <KanbanCard conf={conf} daysRem={daysRem}>
-      {preData && preData !== 'error' && (
-        <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-gray-400 uppercase tracking-wide">Strategy Fit</span>
-            <span className="text-sm font-bold text-gray-800">
-              {preData.strategy_fit_score != null ? preData.strategy_fit_score : '—'}
-            </span>
-          </div>
-          {preData.primary_strategy && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-800 truncate max-w-[120px]">
-              {preData.primary_strategy}
-            </span>
-          )}
-        </div>
-      )}
-      {preData === 'error' && (
-        <p className="mt-2 text-[10px] text-red-500">Score unavailable</p>
-      )}
+      <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
+        <TerritoryChip conf={conf} territories={territories} />
+        {conf.conference_type && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-300 truncate max-w-[140px]">
+            {conf.conference_type}
+          </span>
+        )}
+      </div>
     </KanbanCard>
   );
 }
@@ -288,9 +363,16 @@ export function ConferenceKanbanBoard({ conferences }: { conferences: Conference
 
   // Score data state (keyed by conf id)
   const [effData,   setEffData]   = useState<Map<number, EffData | 'error'>>(new Map(effCache));
-  const [preData,   setPreData]   = useState<Map<number, PreData | 'error'>>(new Map(preCache));
   const [effCount,  setEffCount]  = useState(0);
   const effTotalRef = useRef(0);
+  const [territories, setTerritories] = useState<TerritoryOption[]>([]);
+
+  useEffect(() => {
+    fetch('/api/admin/territories')
+      .then(r => r.ok ? r.json() : { territories: [] })
+      .then((data: { territories: TerritoryOption[] }) => setTerritories(data.territories ?? []))
+      .catch(() => {});
+  }, []);
 
   // Derived: separate conferences by stage, excluding historical
   const { byStage, incomplete } = useMemo(() => {
@@ -356,41 +438,6 @@ export function ConferenceKanbanBoard({ conferences }: { conferences: Conference
       closed:          byStage.closed.filter(keep),
     };
   }, [byStage, filterRep, filterYear, filterSearch]);
-
-  // Load pre-conference scores for planning + in_progress
-  useEffect(() => {
-    const targets = [...byStage.planning, ...byStage.in_progress].filter(
-      (c) => !preCache.has(c.id)
-    );
-    if (targets.length === 0) return;
-
-    Promise.all(
-      targets.map(async (c) => {
-        try {
-          const res = await fetch(`/api/conferences/${c.id}/pre-conference`);
-          if (!res.ok) throw new Error('failed');
-          const data = await res.json();
-          const sa = data?.strategyAssessment;
-          const parsed: PreData = {
-            strategy_fit_score: sa?.strategyFitScore ?? null,
-            primary_strategy: sa?.primaryStrategy ?? null,
-          };
-          preCache.set(c.id, parsed);
-          return [c.id, parsed] as const;
-        } catch {
-          preCache.set(c.id, 'error');
-          return [c.id, 'error' as const] as const;
-        }
-      })
-    ).then((results) => {
-      setPreData((prev) => {
-        const next = new Map(prev);
-        for (const [id, val] of results) next.set(id, val);
-        return next;
-      });
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [byStage.planning.length, byStage.in_progress.length]);
 
   // Lazy load effectiveness scores for post_conference + closed
   useEffect(() => {
@@ -550,7 +597,7 @@ export function ConferenceKanbanBoard({ conferences }: { conferences: Conference
                         <PlanningCard
                           key={conf.id}
                           conf={conf}
-                          preData={preData.get(conf.id)}
+                          territories={territories}
                         />
                       );
                     }

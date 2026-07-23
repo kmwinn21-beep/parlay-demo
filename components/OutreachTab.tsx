@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { OutreachCompanyCard, type OutreachCompany, type OutreachAttendeeFilter } from './OutreachCompanyCard';
-import { OutreachDrawer } from './OutreachDrawer';
+import { OutreachDrawer, type TimelineActivity, type ThreadNote } from './OutreachDrawer';
 import { OutreachAssignModal } from './OutreachAssignModal';
 
 interface OutreachResponse {
@@ -41,6 +41,12 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
 
   const [assigneeFilter, setAssigneeFilter] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+
+  // Holds the most recently logged activity/note so the open OutreachDrawer
+  // (a sibling of the card that logged it) can fold it into its timeline/notes
+  // immediately instead of waiting for a page refresh.
+  const [pendingActivity, setPendingActivity] = useState<{ companyId: number; activity: TimelineActivity } | null>(null);
+  const [pendingNote, setPendingNote] = useState<{ companyId: number; note: ThreadNote } | null>(null);
 
   const loadOutreach = useCallback(async () => {
     try {
@@ -170,6 +176,8 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
                     drawerState?.companyId === company.companyId ? drawerState.attendeeFilter?.id ?? null : null
                   }
                   onActivityLogged={loadOutreach}
+                  onActivityCreated={(companyId, activity) => setPendingActivity({ companyId, activity })}
+                  onNoteCreated={(companyId, note) => setPendingNote({ companyId, note })}
                   onOpenDrawer={(tab, attendee) => setDrawerState({
                     companyId: company.companyId,
                     companyName: company.companyName,
@@ -192,6 +200,8 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
                   companyName={drawerState.companyName}
                   initialTab={drawerState.initialTab}
                   attendeeFilter={drawerState.attendeeFilter}
+                  pendingActivity={pendingActivity?.companyId === drawerState.companyId ? pendingActivity.activity : null}
+                  pendingNote={pendingNote?.companyId === drawerState.companyId ? pendingNote.note : null}
                   onClose={() => setDrawerState(null)}
                 />
               </div>

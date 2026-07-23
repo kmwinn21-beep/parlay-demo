@@ -17,7 +17,7 @@ interface AttendeeEntry {
   phone: string | null;
   linkedinUrl: string | null;
   activityCount: number;
-  activityCounts: { phone: number; email: number; linkedin: number };
+  activityCounts: { phone: number; email: number; linkedin: number; text: number };
   meetingId: number | null;
 }
 
@@ -137,17 +137,17 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const activityByAttendee = new Map<number, number>();
     const activityByCompany = new Map<number, number>();
-    const activityByAttendeeType = new Map<number, { phone: number; email: number; linkedin: number }>();
+    const activityByAttendeeType = new Map<number, { phone: number; text: number; email: number; linkedin: number }>();
     for (const r of activityRows.rows) {
       const cnt = Number(r.cnt);
       const companyId = Number(r.company_id);
-      const activityType = String(r.activity_type) as 'phone' | 'email' | 'linkedin';
+      const activityType = String(r.activity_type) as 'phone' | 'text' | 'email' | 'linkedin';
       activityByCompany.set(companyId, (activityByCompany.get(companyId) || 0) + cnt);
       if (r.attendee_id != null) {
         const attendeeId = Number(r.attendee_id);
         activityByAttendee.set(attendeeId, (activityByAttendee.get(attendeeId) || 0) + cnt);
         if (!activityByAttendeeType.has(attendeeId)) {
-          activityByAttendeeType.set(attendeeId, { phone: 0, email: 0, linkedin: 0 });
+          activityByAttendeeType.set(attendeeId, { phone: 0, text: 0, email: 0, linkedin: 0 });
         }
         activityByAttendeeType.get(attendeeId)![activityType] = cnt;
       }
@@ -180,7 +180,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         phone: r.phone ? String(r.phone) : null,
         linkedinUrl: r.linkedin_url ? String(r.linkedin_url) : null,
         activityCount: activityByAttendee.get(attendeeId) || 0,
-        activityCounts: activityByAttendeeType.get(attendeeId) || { phone: 0, email: 0, linkedin: 0 },
+        activityCounts: activityByAttendeeType.get(attendeeId) || { phone: 0, text: 0, email: 0, linkedin: 0 },
         meetingId: meetingIdByAttendee.get(attendeeId) ?? null,
       });
     }

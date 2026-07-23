@@ -14,6 +14,7 @@ import { LogisticsHostedEventsTab } from './LogisticsHostedEventsTab';
 import { LogisticsShippingTab } from './LogisticsShippingTab';
 import { LogisticsPostShowTab } from './LogisticsPostShowTab';
 import { LogisticsFilesTab } from './LogisticsFilesTab';
+import { TeamInputPanel } from '../calendar-intelligence/TeamInputPanel';
 
 export interface ConferencePlanLogisticsDrawerProps {
   conferenceId: number;
@@ -37,6 +38,7 @@ export interface ConferencePlanLogisticsDrawerProps {
 }
 
 const TABS = [
+  { id: 'input', label: 'Input' },
   { id: 'deadlines', label: 'Deadlines' },
   { id: 'registration', label: 'Registration' },
   { id: 'booth', label: 'Booth' },
@@ -75,6 +77,7 @@ export function ConferencePlanLogisticsDrawer({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>('deadlines');
+  const [teamInputRequestFormOpen, setTeamInputRequestFormOpen] = useState(false);
   const lastConferenceIdRef = useRef<number | null>(null);
   const tabBarRef = useRef<HTMLDivElement>(null);
 
@@ -214,6 +217,36 @@ export function ConferencePlanLogisticsDrawer({
             </div>
           ) : data ? (
             <div className="px-4 py-4">
+              {activeTab === 'input' && (
+                <div>
+                  <div className="flex justify-end mb-3">
+                    <button
+                      type="button"
+                      onClick={() => setTeamInputRequestFormOpen(v => !v)}
+                      className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors"
+                      style={{
+                        color: 'rgb(var(--brand-secondary-rgb, 27 118 188))',
+                        border: '1px solid rgb(var(--brand-secondary-rgb, 27 118 188))',
+                        background: teamInputRequestFormOpen
+                          ? 'rgb(var(--brand-secondary-rgb, 27 118 188))'
+                          : 'rgb(var(--brand-secondary-rgb, 27 118 188) / 0.1)',
+                        ...(teamInputRequestFormOpen ? { color: '#fff' } : {}),
+                      }}
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Request Input
+                    </button>
+                  </div>
+                  <TeamInputPanel
+                    conferenceId={conferenceId}
+                    conferenceName={conferenceName}
+                    requestFormOpen={teamInputRequestFormOpen}
+                    onRequestFormChange={setTeamInputRequestFormOpen}
+                  />
+                </div>
+              )}
               {activeTab === 'deadlines' && (
                 <LogisticsDeadlinesTab
                   conferenceId={conferenceId} planYear={planYear}

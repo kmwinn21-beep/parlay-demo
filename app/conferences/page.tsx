@@ -7,7 +7,9 @@ import { BackButton } from '@/components/BackButton';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { ConferenceStageBadge } from '@/components/ConferenceStageBadge';
 import { ConferenceKanbanBoard } from '@/components/ConferenceKanbanBoard';
-import { computeConferenceStage, postConferenceDaysRemaining } from '@/lib/conference-stage';
+import { ProgramConferenceCard, RepAvatarStack, TerritoryPill, ListStatusPill, type ProgramCardConference } from '@/components/ProgramConferenceCard';
+import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
+import { computeConferenceStage, postConferenceDaysRemaining, type ConferenceStage } from '@/lib/conference-stage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Conference {
@@ -25,6 +27,56 @@ interface Conference {
   stage_override?: string | null;
   series_id?: string | null;
   series_name?: string | null;
+}
+
+// Enriched shape returned by GET /api/conferences?enriched=1 — only used by
+// the Program tab. Extends the base row with everything ProgramConferenceCard
+// needs; ConferenceStage import above is reused so this stays in sync with
+// the lib source of truth rather than redeclaring the union.
+interface EnrichedConference extends ProgramCardConference {
+  stage: ConferenceStage | null;
+}
+
+interface NeedsAttentionItem {
+  type: 'missing_list' | 'unassigned_reps' | 'outreach_gap';
+  conferenceId: number;
+  conferenceName: string;
+  message: string;
+  urgency: 'high' | 'medium' | 'low';
+  daysUntil: number | null;
+}
+
+interface TerritoryOption {
+  id: number;
+  name: string;
+  color: string;
+  assignedUserIds: number[];
+}
+
+// Inline SVGs (matching the rest of the app's icon convention) rather than the
+// `ti ti-*` icon-font classes used elsewhere on this page — that font isn't
+// actually loaded anywhere in the app, so those classes render nothing.
+function AttentionIconPath({ type }: { type: NeedsAttentionItem['type'] }) {
+  if (type === 'unassigned_reps') {
+    return <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />;
+  }
+  if (type === 'missing_list') {
+    return <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />;
+  }
+  if (type === 'outreach_gap') {
+    return <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />;
+  }
+  return <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />;
+}
+
+// Each attention type gets its own color regardless of urgency, so the card's
+// color communicates *what kind* of action is needed (missing list vs.
+// unassigned reps vs. an outreach gap) rather than just how urgent it is.
+function colorsForAttentionType(type: NeedsAttentionItem['type']): { bg: string; border: string; text: string } {
+  if (type === 'missing_list') return { bg: '#FEF2F2', border: '#FECACA', text: '#B91C1C' };
+  if (type === 'unassigned_reps') return { bg: '#EFF6FF', border: '#BFDBFE', text: '#1D4ED8' };
+  if (type === 'outreach_gap') return { bg: '#F5F3FF', border: '#DDD6FE', text: '#6D28D9' };
+  return { bg: '#FFFBEB', border: '#FDE68A', text: '#B45309' };
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -239,7 +291,7 @@ function MonthCalendar({ year, month, dates, selected, onPick, today }: {
 function ConferencesPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const view = searchParams.get('view') ?? 'calendar';
+  const view = searchParams.get('view') ?? 'program';
   const now          = new Date();
   const todayStr     = buildDS(now.getFullYear(), now.getMonth(), now.getDate());
   const currentYear  = now.getFullYear();
@@ -248,6 +300,55 @@ function ConferencesPageContent() {
   // Data
   const [conferences, setConferences] = useState<Conference[]>([]);
   const [isLoading, setIsLoading]     = useState(true);
+
+  // Program tab — separate data source (?enriched=1), fetched lazily on first
+  // activation and cached; the Calendar/By Stage views keep using the plain
+  // `conferences` state above untouched.
+  const [programConfs, setProgramConfs]           = useState<EnrichedConference[]>([]);
+  const [needsAttention, setNeedsAttention]        = useState<NeedsAttentionItem[]>([]);
+  const [programLoaded, setProgramLoaded]          = useState(false);
+  const [programLoading, setProgramLoading]        = useState(false);
+  const [territories, setTerritories]              = useState<TerritoryOption[]>([]);
+  const [territoriesLoaded, setTerritoriesLoaded]  = useState(false);
+  const [programToggle, setProgramToggle]          = useState<'upcoming' | 'active' | 'past'>('upcoming');
+  const [programRepFilter, setProgramRepFilter]           = useState<string>('');
+  const [programTerritoryFilter, setProgramTerritoryFilter] = useState<string>('');
+  const [programYearFilter, setProgramYearFilter]  = useState<string>('');
+  const [showAllAttention, setShowAllAttention]    = useState(false);
+  const [programLayout, setProgramLayout]          = useState<'grid' | 'list'>('grid');
+  const [quickView, setQuickView]                  = useState<QuickViewTarget | null>(null);
+
+  // Read the stored layout preference on mount only (SSR-safe — localStorage
+  // isn't available during server render, so this can't run in the initial
+  // useState initializer).
+  useEffect(() => {
+    const stored = localStorage.getItem('parlay-conferences-layout');
+    if (stored === 'grid' || stored === 'list') setProgramLayout(stored);
+  }, []);
+
+  useEffect(() => {
+    if (view !== 'program' || programLoaded) return;
+    setProgramLoading(true);
+    fetch('/api/conferences?enriched=1')
+      .then(r => r.json())
+      .then((data: { conferences: EnrichedConference[]; needsAttention: NeedsAttentionItem[] }) => {
+        setProgramConfs(data.conferences ?? []);
+        setNeedsAttention(data.needsAttention ?? []);
+        setProgramLoaded(true);
+      })
+      .finally(() => setProgramLoading(false));
+  }, [view, programLoaded]);
+
+  useEffect(() => {
+    if (view !== 'program' || territoriesLoaded) return;
+    fetch('/api/admin/territories')
+      .then(r => r.ok ? r.json() : { territories: [] })
+      .then((data: { territories: TerritoryOption[] }) => {
+        setTerritories(data.territories ?? []);
+        setTerritoriesLoaded(true);
+      })
+      .catch(() => setTerritoriesLoaded(true));
+  }, [view, territoriesLoaded]);
 
   // Filter pane
   const [filtersOpen, setFiltersOpen]                         = useState(false);
@@ -310,6 +411,61 @@ function ConferencesPageContent() {
     conferences.forEach((c) => (c.internal_attendees || '').split(',').map((v) => v.trim()).filter(Boolean).forEach((v) => s.add(v)));
     return Array.from(s).sort();
   }, [conferences]);
+
+  // ── Program tab derived state ──────────────────────────────────────────────
+  const programRepOptions = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const c of programConfs) for (const rep of c.assignedReps) map.set(rep.userId, rep.displayName);
+    return Array.from(map.entries()).map(([userId, displayName]) => ({ userId, displayName })).sort((a, b) => a.displayName.localeCompare(b.displayName));
+  }, [programConfs]);
+
+  const programYearOptions = useMemo(
+    () => Array.from(new Set(programConfs.map(c => new Date(c.start_date + 'T00:00:00').getFullYear().toString()))).sort((a, b) => Number(b) - Number(a)),
+    [programConfs]
+  );
+
+  const programStageFiltered = useMemo(() => {
+    let list = programConfs.filter(c => {
+      if (programToggle === 'upcoming') return c.stage === 'planning';
+      if (programToggle === 'active') return c.stage === 'in_progress' || c.stage === 'post_conference';
+      return c.stage === 'closed';
+    });
+    if (programYearFilter) {
+      list = list.filter(c => new Date(c.start_date + 'T00:00:00').getFullYear().toString() === programYearFilter);
+    }
+    if (programRepFilter) {
+      const repId = Number(programRepFilter);
+      list = list.filter(c => c.assignedReps.some(r => r.userId === repId));
+    }
+    if (programTerritoryFilter) {
+      const territory = territories.find(t => String(t.id) === programTerritoryFilter);
+      if (territory) {
+        list = list.filter(c => c.assignedReps.some(r => territory.assignedUserIds.includes(r.userId)));
+      }
+    }
+    // Upcoming: soonest first (fewest days remaining -> most), left to right.
+    if (programToggle === 'upcoming') {
+      list = [...list].sort((a, b) => a.start_date.localeCompare(b.start_date));
+    }
+    return list;
+  }, [programConfs, programToggle, programYearFilter, programRepFilter, programTerritoryFilter, territories]);
+
+  const programCounts = useMemo(() => ({
+    upcoming: programConfs.filter(c => c.stage === 'planning').length,
+    active: programConfs.filter(c => c.stage === 'in_progress' || c.stage === 'post_conference').length,
+    past: programConfs.filter(c => c.stage === 'closed').length,
+  }), [programConfs]);
+
+  const visibleAttention = showAllAttention ? needsAttention : needsAttention.slice(0, 4);
+
+  const programAllConferencesForConflicts = useMemo(
+    () => programConfs.map(c => ({ conferenceId: c.id, name: c.name, startDate: c.start_date, assignedReps: c.assignedReps })),
+    [programConfs]
+  );
+
+  const handleProgramRepsUpdated = (conferenceId: number, reps: EnrichedConference['assignedReps']) => {
+    setProgramConfs(prev => prev.map(c => c.id === conferenceId ? { ...c, assignedReps: reps } : c));
+  };
 
   // Calendar derived
   const calMonths  = useMemo(() => ([0, 1, 2] as const).map((o) => addMonths(calAnchor[0], calAnchor[1], o)), [calAnchor]);
@@ -408,6 +564,7 @@ function ConferencesPageContent() {
   // ── JSX ──────────────────────────────────────────────────────────────────────
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      <style>{`@keyframes togglePop { from { opacity: 0.5; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }`}</style>
       <BackButton />
 
       {/* Header */}
@@ -434,12 +591,23 @@ function ConferencesPageContent() {
               type="button"
               onClick={() => router.push('/conferences')}
               className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
+                view === 'program'
+                  ? 'border-brand-secondary text-brand-secondary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <span style={{ display: 'inline-block', animation: view === 'program' ? 'togglePop 180ms ease-out' : undefined }}>Program</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push('/conferences?view=calendar')}
+              className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
                 view === 'calendar'
                   ? 'border-brand-secondary text-brand-secondary'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              Calendar
+              <span style={{ display: 'inline-block', animation: view === 'calendar' ? 'togglePop 180ms ease-out' : undefined }}>Calendar</span>
             </button>
             <button
               type="button"
@@ -450,86 +618,246 @@ function ConferencesPageContent() {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              By Stage
+              <span style={{ display: 'inline-block', animation: view === 'by-stage' ? 'togglePop 180ms ease-out' : undefined }}>By Stage</span>
             </button>
           </nav>
+        </div>
+      )}
+
+      {/* ── Program view ── */}
+      {view === 'program' && (
+        <div className="space-y-4">
+          {programLoading && !programLoaded ? (
+            <div className="flex items-center justify-center h-48">
+              <div className="animate-spin w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full" />
+            </div>
+          ) : (
+            <>
+              {visibleAttention.length > 0 && (
+                <div className="card space-y-3">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                    </svg>
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Needs Attention</span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">
+                      {needsAttention.length} item{needsAttention.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {visibleAttention.map((item, i) => {
+                      const colors = colorsForAttentionType(item.type);
+                      return (
+                      <div
+                        key={`${item.type}-${item.conferenceId}-${i}`}
+                        onClick={() => router.push(`/conferences/${item.conferenceId}`)}
+                        style={{
+                          display: 'flex', alignItems: 'stretch', gap: 10,
+                          padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
+                          background: colors.bg,
+                          border: `0.5px solid ${colors.border}`,
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <svg className="w-5 h-5" fill="none" stroke={colors.text} viewBox="0 0 24 24" aria-hidden="true">
+                            <AttentionIconPath type={item.type} />
+                          </svg>
+                        </div>
+                        <div>
+                          <p style={{ fontSize: 12, fontWeight: 500, margin: 0, color: colors.text }}>
+                            {item.message}
+                          </p>
+                          <p style={{ fontSize: 11, margin: '1px 0 0', opacity: .8, color: colors.text }}>
+                            {item.conferenceName}{item.daysUntil !== null ? ` · in ${item.daysUntil} days` : ''}
+                          </p>
+                        </div>
+                      </div>
+                      );
+                    })}
+                  </div>
+                  {needsAttention.length > 4 && (
+                    <button type="button" onClick={() => setShowAllAttention(v => !v)} className="text-xs text-brand-secondary hover:underline">
+                      {showAllAttention ? 'Show fewer' : `View all ${needsAttention.length} items`}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+                    {([
+                      { key: 'upcoming', label: 'Upcoming', count: programCounts.upcoming },
+                      { key: 'active', label: 'Active', count: programCounts.active },
+                      { key: 'past', label: 'Past', count: programCounts.past },
+                    ] as const).map((t, i) => (
+                      <button
+                        key={t.key}
+                        type="button"
+                        onClick={() => setProgramToggle(t.key)}
+                        style={{ animation: programToggle === t.key ? 'togglePop 180ms ease-out' : undefined }}
+                        className={`px-3 py-1.5 text-xs font-medium transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
+                          programToggle === t.key ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                        }`}
+                      >
+                        {t.label} {t.count}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => { setProgramLayout('grid'); localStorage.setItem('parlay-conferences-layout', 'grid'); }}
+                      title="Card view"
+                      aria-label="Card view"
+                      style={{ animation: programLayout === 'grid' ? 'togglePop 180ms ease-out' : undefined }}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
+                        programLayout === 'grid' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      <i className="ti ti-layout-grid" style={{ fontSize: 14 }} aria-hidden="true" />
+                      Card View
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setProgramLayout('list'); localStorage.setItem('parlay-conferences-layout', 'list'); }}
+                      title="Table view"
+                      aria-label="Table view"
+                      style={{ animation: programLayout === 'list' ? 'togglePop 180ms ease-out' : undefined }}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap border-l border-gray-200 transition-colors ${
+                        programLayout === 'list' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      <i className="ti ti-list" style={{ fontSize: 14 }} aria-hidden="true" />
+                      Table View
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <select value={programYearFilter} onChange={e => setProgramYearFilter(e.target.value)} className="input-field text-sm">
+                    <option value="">All years</option>
+                    {programYearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                  <select value={programRepFilter} onChange={e => setProgramRepFilter(e.target.value)} className="input-field text-sm">
+                    <option value="">All reps</option>
+                    {programRepOptions.map(r => <option key={r.userId} value={r.userId}>{r.displayName}</option>)}
+                  </select>
+                  <select value={programTerritoryFilter} onChange={e => setProgramTerritoryFilter(e.target.value)} className="input-field text-sm min-w-[170px] pr-8">
+                    <option value="">All territories</option>
+                    {territories.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {programStageFiltered.length === 0 ? (
+                <div className="card text-center py-10">
+                  <p className="text-gray-500 text-sm">No conferences in this group.</p>
+                </div>
+              ) : programLayout === 'list' ? (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 12 }}>
+                    <colgroup>
+                      <col style={{ width: 200 }} />
+                      <col style={{ width: 100 }} />
+                      <col style={{ width: 110 }} />
+                      <col style={{ width: 120 }} />
+                      <col style={{ width: 130 }} />
+                      <col style={{ width: 110 }} />
+                      <col style={{ width: 160 }} />
+                    </colgroup>
+                    <thead>
+                      <tr style={{ borderBottom: '0.5px solid var(--border, #E5E7EB)' }}>
+                        {['Conference', 'Dates', 'Stage', 'Territory', 'Reps', 'Outreach', 'List status'].map(h => (
+                          <th key={h} style={{ padding: '7px 10px', textAlign: 'left', fontSize: 10, fontWeight: 500, color: 'var(--text-secondary, #6B7280)', textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {programStageFiltered.map((conf, i) => (
+                        <tr
+                          key={conf.id}
+                          onClick={() => router.push(`/conferences/${conf.id}`)}
+                          style={{
+                            borderBottom: '0.5px solid var(--border, #E5E7EB)',
+                            cursor: 'pointer',
+                            background: i % 2 === 1 ? 'var(--surface-1, #F9FAFB)' : 'transparent',
+                          }}
+                        >
+                          <td style={{ padding: '8px 10px', fontWeight: 500, color: 'var(--text-primary, #111827)' }}>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="truncate">{conf.name}</span>
+                              <QuickViewIcon onClick={() => setQuickView({ type: 'conference', id: conf.id, name: conf.name })} />
+                            </div>
+                          </td>
+                          <td style={{ padding: '8px 10px', color: 'var(--text-secondary, #6B7280)' }}>
+                            {formatDate(conf.start_date)}
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            {conf.stage && (
+                              <ConferenceStageBadge
+                                stage={conf.stage}
+                                daysRemaining={conf.stage === 'post_conference' ? postConferenceDaysRemaining({ end_date: conf.end_date, post_conference_days: conf.post_conference_days ?? null }) : undefined}
+                              />
+                            )}
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            <TerritoryPill conference={conf} territories={territories} />
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            <RepAvatarStack reps={conf.assignedReps} />
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            {conf.outreachProgress
+                              ? `${conf.outreachProgress.assigned} / ${conf.outreachProgress.total}`
+                              : <span style={{ color: 'var(--text-muted, #9CA3AF)' }}>—</span>
+                            }
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            <ListStatusPill hasAttendeeList={conf.hasAttendeeList} attendeeCount={conf.attendeeCount} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
+                  {programStageFiltered.map(c => (
+                    <ProgramConferenceCard
+                      key={c.id}
+                      conference={c}
+                      territories={territories}
+                      planYear={currentYear}
+                      allConferences={programAllConferencesForConflicts}
+                      onRepsUpdated={handleProgramRepsUpdated}
+                      onQuickView={setQuickView}
+                    />
+                  ))}
+                  {programToggle === 'upcoming' && (
+                    <Link
+                      href="/conferences/new"
+                      className="card border-2 border-dashed border-gray-200 hover:border-brand-secondary flex flex-col items-center justify-center text-gray-400 hover:text-brand-secondary transition-colors py-8"
+                    >
+                      <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      <span className="text-xs font-medium">Add conference</span>
+                    </Link>
+                  )}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 
       {/* ── By Stage view ── */}
       {!isLoading && view === 'by-stage' && (
         <ConferenceKanbanBoard conferences={conferences} />
-      )}
-
-      {/* ── Calendar section ── */}
-      {!isLoading && view === 'calendar' && conferences.length > 0 && calExpanded !== null && (
-        <div className="card">
-          <div className="flex items-center justify-between mb-1">
-            <button
-              type="button"
-              onClick={() => setCalExpanded((v) => !v)}
-              className="flex items-center gap-1.5 text-sm font-semibold text-brand-primary hover:text-brand-secondary transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-              </svg>
-              Calendar
-              <svg className={`w-3 h-3 transition-transform ${calExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
-              </svg>
-            </button>
-            {selectedDate && (
-              <button onClick={() => setSelectedDate(null)} className="text-xs text-brand-secondary hover:underline">
-                Showing {selectedDate} — clear
-              </button>
-            )}
-          </div>
-
-          {calExpanded && (
-            <div className="flex items-start gap-1 mt-3">
-              {/* Left chevron */}
-              <button
-                type="button"
-                onClick={handleCalLeft}
-                disabled={!canGoLeft}
-                className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0 mt-6"
-                aria-label="Previous month"
-              >
-                <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
-                </svg>
-              </button>
-
-              {/* 3 calendars — mobile shows only first */}
-              <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {calMonths.map(([y, m], idx) => (
-                  <div key={`${y}-${m}`} className={idx === 0 ? '' : 'hidden lg:block'}>
-                    <MonthCalendar
-                      year={y} month={m}
-                      dates={calDateSets[idx]}
-                      selected={selectedDate}
-                      onPick={handleDatePick}
-                      today={todayStr}
-                    />
-                  </div>
-                ))}
-              </div>
-
-              {/* Right chevron */}
-              <button
-                type="button"
-                onClick={handleCalRight}
-                disabled={!canGoRight}
-                className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0 mt-6"
-                aria-label="Next month"
-              >
-                <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
-                </svg>
-              </button>
-            </div>
-          )}
-        </div>
       )}
 
       {/* ── Filter pane ── */}
@@ -615,6 +943,77 @@ function ConferencesPageContent() {
         </div>
       )}
 
+      {/* ── Calendar section ── */}
+      {!isLoading && view === 'calendar' && conferences.length > 0 && calExpanded !== null && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-1">
+            <button
+              type="button"
+              onClick={() => setCalExpanded((v) => !v)}
+              className="flex items-center gap-1.5 text-sm font-semibold text-brand-primary hover:text-brand-secondary transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+              </svg>
+              Calendar
+              <svg className={`w-3 h-3 transition-transform ${calExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
+              </svg>
+            </button>
+            {selectedDate && (
+              <button onClick={() => setSelectedDate(null)} className="text-xs text-brand-secondary hover:underline">
+                Showing {selectedDate} — clear
+              </button>
+            )}
+          </div>
+
+          {calExpanded && (
+            <div className="flex items-start gap-1 mt-3">
+              {/* Left chevron */}
+              <button
+                type="button"
+                onClick={handleCalLeft}
+                disabled={!canGoLeft}
+                className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0 mt-6"
+                aria-label="Previous month"
+              >
+                <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
+                </svg>
+              </button>
+
+              {/* 3 calendars — mobile shows only first */}
+              <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {calMonths.map(([y, m], idx) => (
+                  <div key={`${y}-${m}`} className={idx === 0 ? '' : 'hidden lg:block'}>
+                    <MonthCalendar
+                      year={y} month={m}
+                      dates={calDateSets[idx]}
+                      selected={selectedDate}
+                      onPick={handleDatePick}
+                      today={todayStr}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* Right chevron */}
+              <button
+                type="button"
+                onClick={handleCalRight}
+                disabled={!canGoRight}
+                className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0 mt-6"
+                aria-label="Next month"
+              >
+                <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
+                </svg>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Loading ── */}
       {isLoading && (
         <div className="flex items-center justify-center h-48">
@@ -673,6 +1072,8 @@ function ConferencesPageContent() {
           </div>
         );
       })}
+
+      {quickView && <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />}
     </div>
   );
 }
