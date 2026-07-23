@@ -53,11 +53,20 @@ interface TerritoryOption {
   assignedUserIds: number[];
 }
 
-function iconForAttentionType(type: NeedsAttentionItem['type']): string {
-  if (type === 'missing_list') return 'ti-clipboard-list';
-  if (type === 'unassigned_reps') return 'ti-user';
-  if (type === 'outreach_gap') return 'ti-message-circle';
-  return 'ti-alert-triangle';
+// Inline SVGs (matching the rest of the app's icon convention) rather than the
+// `ti ti-*` icon-font classes used elsewhere on this page — that font isn't
+// actually loaded anywhere in the app, so those classes render nothing.
+function AttentionIconPath({ type }: { type: NeedsAttentionItem['type'] }) {
+  if (type === 'unassigned_reps') {
+    return <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />;
+  }
+  if (type === 'missing_list') {
+    return <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />;
+  }
+  if (type === 'outreach_gap') {
+    return <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />;
+  }
+  return <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />;
 }
 
 // Each attention type gets its own color regardless of urgency, so the card's
@@ -627,7 +636,9 @@ function ConferencesPageContent() {
               {visibleAttention.length > 0 && (
                 <div className="card space-y-3">
                   <div className="flex items-center gap-2">
-                    <i className="ti ti-alert-circle text-gray-400" style={{ fontSize: 14 }} aria-hidden="true" />
+                    <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                    </svg>
                     <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Needs Attention</span>
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">
                       {needsAttention.length} item{needsAttention.length !== 1 ? 's' : ''}
@@ -648,11 +659,9 @@ function ConferencesPageContent() {
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <i
-                            className={`ti ${iconForAttentionType(item.type)}`}
-                            style={{ color: colors.text, fontSize: 20 }}
-                            aria-hidden="true"
-                          />
+                          <svg className="w-5 h-5" fill="none" stroke={colors.text} viewBox="0 0 24 24" aria-hidden="true">
+                            <AttentionIconPath type={item.type} />
+                          </svg>
                         </div>
                         <div>
                           <p style={{ fontSize: 12, fontWeight: 500, margin: 0, color: colors.text }}>
