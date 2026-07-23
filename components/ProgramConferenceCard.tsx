@@ -52,6 +52,25 @@ function colorForName(name: string): string {
   return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
 }
 
+// Green (full-color border, lighter fill) when a list has been uploaded, red
+// in the same style otherwise — shared between the card and the list-view
+// table so both stay in sync.
+export function ListStatusPill({ hasAttendeeList, attendeeCount }: { hasAttendeeList: boolean; attendeeCount: number }) {
+  const color = hasAttendeeList ? '#059669' : '#DC2626';
+  return (
+    <span
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0,
+        padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 500,
+        border: `1px solid ${color}`, background: `${color}18`, color,
+      }}
+    >
+      {hasAttendeeList && <i className="ti ti-check" style={{ fontSize: 11 }} aria-hidden="true" />}
+      {hasAttendeeList ? `List uploaded · ${attendeeCount?.toLocaleString()} attendees` : 'List not uploaded'}
+    </span>
+  );
+}
+
 function formatDate(d: string): string {
   if (!d) return '';
   return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -130,7 +149,7 @@ export function RepAvatarStack({ reps }: { reps: ProgramCardRep[] }) {
 // Small colored pill showing the conference's Market Coverage — "National" in
 // brand-primary, or the resolved territory name(s) in that territory's own
 // color, matching the same convention the Plan tab's Territory column uses.
-function TerritoryPill({ conference, territories }: { conference: ProgramCardConference; territories: ProgramCardTerritory[] }) {
+export function TerritoryPill({ conference, territories }: { conference: ProgramCardConference; territories: ProgramCardTerritory[] }) {
   if (conference.territoryScope === 'national') {
     return (
       <span
@@ -264,17 +283,8 @@ export function ProgramConferenceCard({ conference, territories, planYear, allCo
                 </div>
               </div>
             )}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 8 }}>
-              {conference.hasAttendeeList ? (
-                <>
-                  <i className="ti ti-check" style={{ fontSize: 12, color: 'var(--text-success, #047857)' }} aria-hidden="true" />
-                  <span style={{ fontSize: 11, color: 'var(--text-success, #047857)' }}>
-                    List uploaded · {conference.attendeeCount?.toLocaleString()} attendees
-                  </span>
-                </>
-              ) : (
-                <span style={{ fontSize: 11, color: 'var(--text-muted, #9CA3AF)' }}>List not uploaded</span>
-              )}
+            <div style={{ marginTop: 8 }}>
+              <ListStatusPill hasAttendeeList={conference.hasAttendeeList} attendeeCount={conference.attendeeCount} />
             </div>
           </>
         )}

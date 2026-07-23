@@ -7,7 +7,7 @@ import { BackButton } from '@/components/BackButton';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { ConferenceStageBadge } from '@/components/ConferenceStageBadge';
 import { ConferenceKanbanBoard } from '@/components/ConferenceKanbanBoard';
-import { ProgramConferenceCard, RepAvatarStack, type ProgramCardConference } from '@/components/ProgramConferenceCard';
+import { ProgramConferenceCard, RepAvatarStack, TerritoryPill, ListStatusPill, type ProgramCardConference } from '@/components/ProgramConferenceCard';
 import { computeConferenceStage, postConferenceDaysRemaining, type ConferenceStage } from '@/lib/conference-stage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -732,15 +732,16 @@ function ConferencesPageContent() {
                   <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 12 }}>
                     <colgroup>
                       <col style={{ width: 200 }} />
+                      <col style={{ width: 100 }} />
                       <col style={{ width: 110 }} />
-                      <col style={{ width: 110 }} />
+                      <col style={{ width: 120 }} />
                       <col style={{ width: 130 }} />
                       <col style={{ width: 110 }} />
-                      <col style={{ width: 130 }} />
+                      <col style={{ width: 160 }} />
                     </colgroup>
                     <thead>
                       <tr style={{ borderBottom: '0.5px solid var(--border, #E5E7EB)' }}>
-                        {['Conference', 'Dates', 'Stage', 'Reps', 'Outreach', 'List status'].map(h => (
+                        {['Conference', 'Dates', 'Stage', 'Territory', 'Reps', 'Outreach', 'List status'].map(h => (
                           <th key={h} style={{ padding: '7px 10px', textAlign: 'left', fontSize: 10, fontWeight: 500, color: 'var(--text-secondary, #6B7280)', textTransform: 'uppercase', letterSpacing: '.05em' }}>
                             {h}
                           </th>
@@ -773,6 +774,9 @@ function ConferencesPageContent() {
                             )}
                           </td>
                           <td style={{ padding: '8px 10px' }}>
+                            <TerritoryPill conference={conf} territories={territories} />
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
                             <RepAvatarStack reps={conf.assignedReps} />
                           </td>
                           <td style={{ padding: '8px 10px' }}>
@@ -782,10 +786,7 @@ function ConferencesPageContent() {
                             }
                           </td>
                           <td style={{ padding: '8px 10px' }}>
-                            {conf.hasAttendeeList
-                              ? <span style={{ color: 'var(--text-success, #15803D)', fontSize: 11 }}>✓ {conf.attendeeCount?.toLocaleString()}</span>
-                              : <span style={{ color: 'var(--text-muted, #9CA3AF)', fontSize: 11 }}>Not uploaded</span>
-                            }
+                            <ListStatusPill hasAttendeeList={conf.hasAttendeeList} attendeeCount={conf.attendeeCount} />
                           </td>
                         </tr>
                       ))}
