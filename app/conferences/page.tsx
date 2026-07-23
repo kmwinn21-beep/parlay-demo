@@ -545,6 +545,7 @@ function ConferencesPageContent() {
   // ── JSX ──────────────────────────────────────────────────────────────────────
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      <style>{`@keyframes togglePop { from { opacity: 0.5; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }`}</style>
       <BackButton />
 
       {/* Header */}
@@ -576,7 +577,7 @@ function ConferencesPageContent() {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              Program
+              <span style={{ display: 'inline-block', animation: view === 'program' ? 'togglePop 180ms ease-out' : undefined }}>Program</span>
             </button>
             <button
               type="button"
@@ -587,7 +588,7 @@ function ConferencesPageContent() {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              Calendar
+              <span style={{ display: 'inline-block', animation: view === 'calendar' ? 'togglePop 180ms ease-out' : undefined }}>Calendar</span>
             </button>
             <button
               type="button"
@@ -598,7 +599,7 @@ function ConferencesPageContent() {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              By Stage
+              <span style={{ display: 'inline-block', animation: view === 'by-stage' ? 'togglePop 180ms ease-out' : undefined }}>By Stage</span>
             </button>
           </nav>
         </div>
@@ -670,6 +671,7 @@ function ConferencesPageContent() {
                         key={t.key}
                         type="button"
                         onClick={() => setProgramToggle(t.key)}
+                        style={{ animation: programToggle === t.key ? 'togglePop 180ms ease-out' : undefined }}
                         className={`px-3 py-1.5 text-xs font-medium transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
                           programToggle === t.key ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
                         }`}
@@ -685,6 +687,7 @@ function ConferencesPageContent() {
                       onClick={() => { setProgramLayout('grid'); localStorage.setItem('parlay-conferences-layout', 'grid'); }}
                       title="Card view"
                       aria-label="Card view"
+                      style={{ animation: programLayout === 'grid' ? 'togglePop 180ms ease-out' : undefined }}
                       className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
                         programLayout === 'grid' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
                       }`}
@@ -697,6 +700,7 @@ function ConferencesPageContent() {
                       onClick={() => { setProgramLayout('list'); localStorage.setItem('parlay-conferences-layout', 'list'); }}
                       title="Table view"
                       aria-label="Table view"
+                      style={{ animation: programLayout === 'list' ? 'togglePop 180ms ease-out' : undefined }}
                       className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap border-l border-gray-200 transition-colors ${
                         programLayout === 'list' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
                       }`}
