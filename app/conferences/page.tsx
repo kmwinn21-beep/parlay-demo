@@ -700,7 +700,7 @@ function ConferencesPageContent() {
                     <option value="">All reps</option>
                     {programRepOptions.map(r => <option key={r.userId} value={r.userId}>{r.displayName}</option>)}
                   </select>
-                  <select value={programTerritoryFilter} onChange={e => setProgramTerritoryFilter(e.target.value)} className="input-field text-sm">
+                  <select value={programTerritoryFilter} onChange={e => setProgramTerritoryFilter(e.target.value)} className="input-field text-sm min-w-[170px] pr-8">
                     <option value="">All territories</option>
                     {territories.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
