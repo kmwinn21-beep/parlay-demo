@@ -7,7 +7,8 @@ import { BackButton } from '@/components/BackButton';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { ConferenceStageBadge } from '@/components/ConferenceStageBadge';
 import { ConferenceKanbanBoard } from '@/components/ConferenceKanbanBoard';
-import { computeConferenceStage, postConferenceDaysRemaining } from '@/lib/conference-stage';
+import { ProgramConferenceCard, type ProgramCardConference } from '@/components/ProgramConferenceCard';
+import { computeConferenceStage, postConferenceDaysRemaining, type ConferenceStage } from '@/lib/conference-stage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Conference {
@@ -25,6 +26,37 @@ interface Conference {
   stage_override?: string | null;
   series_id?: string | null;
   series_name?: string | null;
+}
+
+// Enriched shape returned by GET /api/conferences?enriched=1 — only used by
+// the Program tab. Extends the base row with everything ProgramConferenceCard
+// needs; ConferenceStage import above is reused so this stays in sync with
+// the lib source of truth rather than redeclaring the union.
+interface EnrichedConference extends ProgramCardConference {
+  stage: ConferenceStage | null;
+}
+
+interface NeedsAttentionItem {
+  type: 'missing_list' | 'unassigned_reps' | 'outreach_gap';
+  conferenceId: number;
+  conferenceName: string;
+  message: string;
+  urgency: 'high' | 'medium' | 'low';
+  daysUntil: number | null;
+}
+
+interface TerritoryOption {
+  id: number;
+  name: string;
+  color: string;
+  assignedUserIds: number[];
+}
+
+function iconForAttentionType(type: NeedsAttentionItem['type']): string {
+  if (type === 'missing_list') return 'ti-users';
+  if (type === 'unassigned_reps') return 'ti-user-plus';
+  if (type === 'outreach_gap') return 'ti-mail';
+  return 'ti-alert-circle';
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -239,7 +271,7 @@ function MonthCalendar({ year, month, dates, selected, onPick, today }: {
 function ConferencesPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const view = searchParams.get('view') ?? 'calendar';
+  const view = searchParams.get('view') ?? 'program';
   const now          = new Date();
   const todayStr     = buildDS(now.getFullYear(), now.getMonth(), now.getDate());
   const currentYear  = now.getFullYear();
@@ -248,6 +280,44 @@ function ConferencesPageContent() {
   // Data
   const [conferences, setConferences] = useState<Conference[]>([]);
   const [isLoading, setIsLoading]     = useState(true);
+
+  // Program tab — separate data source (?enriched=1), fetched lazily on first
+  // activation and cached; the Calendar/By Stage views keep using the plain
+  // `conferences` state above untouched.
+  const [programConfs, setProgramConfs]           = useState<EnrichedConference[]>([]);
+  const [needsAttention, setNeedsAttention]        = useState<NeedsAttentionItem[]>([]);
+  const [programLoaded, setProgramLoaded]          = useState(false);
+  const [programLoading, setProgramLoading]        = useState(false);
+  const [territories, setTerritories]              = useState<TerritoryOption[]>([]);
+  const [territoriesLoaded, setTerritoriesLoaded]  = useState(false);
+  const [programToggle, setProgramToggle]          = useState<'upcoming' | 'active' | 'past'>('upcoming');
+  const [programRepFilter, setProgramRepFilter]           = useState<string>('');
+  const [programTerritoryFilter, setProgramTerritoryFilter] = useState<string>('');
+  const [showAllAttention, setShowAllAttention]    = useState(false);
+
+  useEffect(() => {
+    if (view !== 'program' || programLoaded) return;
+    setProgramLoading(true);
+    fetch('/api/conferences?enriched=1')
+      .then(r => r.json())
+      .then((data: { conferences: EnrichedConference[]; needsAttention: NeedsAttentionItem[] }) => {
+        setProgramConfs(data.conferences ?? []);
+        setNeedsAttention(data.needsAttention ?? []);
+        setProgramLoaded(true);
+      })
+      .finally(() => setProgramLoading(false));
+  }, [view, programLoaded]);
+
+  useEffect(() => {
+    if (view !== 'program' || territoriesLoaded) return;
+    fetch('/api/admin/territories')
+      .then(r => r.ok ? r.json() : { territories: [] })
+      .then((data: { territories: TerritoryOption[] }) => {
+        setTerritories(data.territories ?? []);
+        setTerritoriesLoaded(true);
+      })
+      .catch(() => setTerritoriesLoaded(true));
+  }, [view, territoriesLoaded]);
 
   // Filter pane
   const [filtersOpen, setFiltersOpen]                         = useState(false);
@@ -310,6 +380,40 @@ function ConferencesPageContent() {
     conferences.forEach((c) => (c.internal_attendees || '').split(',').map((v) => v.trim()).filter(Boolean).forEach((v) => s.add(v)));
     return Array.from(s).sort();
   }, [conferences]);
+
+  // ── Program tab derived state ──────────────────────────────────────────────
+  const programRepOptions = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const c of programConfs) for (const rep of c.assignedReps) map.set(rep.userId, rep.displayName);
+    return Array.from(map.entries()).map(([userId, displayName]) => ({ userId, displayName })).sort((a, b) => a.displayName.localeCompare(b.displayName));
+  }, [programConfs]);
+
+  const programStageFiltered = useMemo(() => {
+    let list = programConfs.filter(c => {
+      if (programToggle === 'upcoming') return c.stage === 'planning';
+      if (programToggle === 'active') return c.stage === 'in_progress' || c.stage === 'post_conference';
+      return c.stage === 'closed';
+    });
+    if (programRepFilter) {
+      const repId = Number(programRepFilter);
+      list = list.filter(c => c.assignedReps.some(r => r.userId === repId));
+    }
+    if (programTerritoryFilter) {
+      const territory = territories.find(t => String(t.id) === programTerritoryFilter);
+      if (territory) {
+        list = list.filter(c => c.assignedReps.some(r => territory.assignedUserIds.includes(r.userId)));
+      }
+    }
+    return list;
+  }, [programConfs, programToggle, programRepFilter, programTerritoryFilter, territories]);
+
+  const programCounts = useMemo(() => ({
+    upcoming: programConfs.filter(c => c.stage === 'planning').length,
+    active: programConfs.filter(c => c.stage === 'in_progress' || c.stage === 'post_conference').length,
+    past: programConfs.filter(c => c.stage === 'closed').length,
+  }), [programConfs]);
+
+  const visibleAttention = showAllAttention ? needsAttention : needsAttention.slice(0, 4);
 
   // Calendar derived
   const calMonths  = useMemo(() => ([0, 1, 2] as const).map((o) => addMonths(calAnchor[0], calAnchor[1], o)), [calAnchor]);
@@ -434,6 +538,17 @@ function ConferencesPageContent() {
               type="button"
               onClick={() => router.push('/conferences')}
               className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
+                view === 'program'
+                  ? 'border-brand-secondary text-brand-secondary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Program
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push('/conferences?view=calendar')}
+              className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
                 view === 'calendar'
                   ? 'border-brand-secondary text-brand-secondary'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -453,6 +568,110 @@ function ConferencesPageContent() {
               By Stage
             </button>
           </nav>
+        </div>
+      )}
+
+      {/* ── Program view ── */}
+      {view === 'program' && (
+        <div className="space-y-4">
+          {programLoading && !programLoaded ? (
+            <div className="flex items-center justify-center h-48">
+              <div className="animate-spin w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full" />
+            </div>
+          ) : (
+            <>
+              {visibleAttention.length > 0 && (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {visibleAttention.map((item, i) => (
+                      <div
+                        key={`${item.type}-${item.conferenceId}-${i}`}
+                        onClick={() => router.push(`/conferences/${item.conferenceId}`)}
+                        style={{
+                          display: 'flex', alignItems: 'flex-start', gap: 8,
+                          padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
+                          background: item.urgency === 'high' ? 'var(--bg-warning, #FFFBEB)' : 'var(--bg-accent, #EFF6FF)',
+                          border: `0.5px solid ${item.urgency === 'high' ? 'var(--border-warning, #FDE68A)' : 'var(--border-accent, #BFDBFE)'}`,
+                        }}
+                      >
+                        <i
+                          className={`ti ${iconForAttentionType(item.type)}`}
+                          style={{ color: item.urgency === 'high' ? 'var(--text-warning, #B45309)' : 'var(--text-accent, #1D4ED8)', flexShrink: 0, marginTop: 1 }}
+                          aria-hidden="true"
+                        />
+                        <div>
+                          <p style={{ fontSize: 12, fontWeight: 500, margin: 0, color: item.urgency === 'high' ? 'var(--text-warning, #B45309)' : 'var(--text-accent, #1D4ED8)' }}>
+                            {item.message}
+                          </p>
+                          <p style={{ fontSize: 11, margin: '1px 0 0', opacity: .8, color: item.urgency === 'high' ? 'var(--text-warning, #B45309)' : 'var(--text-accent, #1D4ED8)' }}>
+                            {item.conferenceName}{item.daysUntil !== null ? ` · in ${item.daysUntil} days` : ''}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {needsAttention.length > 4 && (
+                    <button type="button" onClick={() => setShowAllAttention(v => !v)} className="text-xs text-brand-secondary hover:underline">
+                      {showAllAttention ? 'Show fewer' : `View all ${needsAttention.length} items`}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+                  {([
+                    { key: 'upcoming', label: 'Upcoming', count: programCounts.upcoming },
+                    { key: 'active', label: 'Active', count: programCounts.active },
+                    { key: 'past', label: 'Past', count: programCounts.past },
+                  ] as const).map((t, i) => (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => setProgramToggle(t.key)}
+                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
+                        programToggle === t.key ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      {t.label} {t.count}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <select value={programRepFilter} onChange={e => setProgramRepFilter(e.target.value)} className="input-field text-sm">
+                    <option value="">All reps</option>
+                    {programRepOptions.map(r => <option key={r.userId} value={r.userId}>{r.displayName}</option>)}
+                  </select>
+                  <select value={programTerritoryFilter} onChange={e => setProgramTerritoryFilter(e.target.value)} className="input-field text-sm">
+                    <option value="">All territories</option>
+                    {territories.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {programStageFiltered.length === 0 ? (
+                <div className="card text-center py-10">
+                  <p className="text-gray-500 text-sm">No conferences in this group.</p>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
+                  {programStageFiltered.map(c => <ProgramConferenceCard key={c.id} conference={c} />)}
+                  {programToggle === 'upcoming' && (
+                    <Link
+                      href="/conferences/new"
+                      className="card border-2 border-dashed border-gray-200 hover:border-brand-secondary flex flex-col items-center justify-center text-gray-400 hover:text-brand-secondary transition-colors py-8"
+                    >
+                      <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      <span className="text-xs font-medium">Add conference</span>
+                    </Link>
+                  )}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 
