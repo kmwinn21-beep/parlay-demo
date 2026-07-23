@@ -60,6 +60,16 @@ function iconForAttentionType(type: NeedsAttentionItem['type']): string {
   return 'ti-alert-circle';
 }
 
+// Each attention type gets its own color regardless of urgency, so the card's
+// color communicates *what kind* of action is needed (missing list vs.
+// unassigned reps vs. an outreach gap) rather than just how urgent it is.
+function colorsForAttentionType(type: NeedsAttentionItem['type']): { bg: string; border: string; text: string } {
+  if (type === 'missing_list') return { bg: '#FEF2F2', border: '#FECACA', text: '#B91C1C' };
+  if (type === 'unassigned_reps') return { bg: '#EFF6FF', border: '#BFDBFE', text: '#1D4ED8' };
+  if (type === 'outreach_gap') return { bg: '#F5F3FF', border: '#DDD6FE', text: '#6D28D9' };
+  return { bg: '#FFFBEB', border: '#FDE68A', text: '#B45309' };
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 const MONTH_NAMES = [
   'January','February','March','April','May','June',
@@ -623,33 +633,36 @@ function ConferencesPageContent() {
                       {needsAttention.length} item{needsAttention.length !== 1 ? 's' : ''}
                     </span>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {visibleAttention.map((item, i) => (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {visibleAttention.map((item, i) => {
+                      const colors = colorsForAttentionType(item.type);
+                      return (
                       <div
                         key={`${item.type}-${item.conferenceId}-${i}`}
                         onClick={() => router.push(`/conferences/${item.conferenceId}`)}
                         style={{
                           display: 'flex', alignItems: 'flex-start', gap: 8,
                           padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
-                          background: item.urgency === 'high' ? 'var(--bg-warning, #FFFBEB)' : 'var(--bg-accent, #EFF6FF)',
-                          border: `0.5px solid ${item.urgency === 'high' ? 'var(--border-warning, #FDE68A)' : 'var(--border-accent, #BFDBFE)'}`,
+                          background: colors.bg,
+                          border: `0.5px solid ${colors.border}`,
                         }}
                       >
                         <i
                           className={`ti ${iconForAttentionType(item.type)}`}
-                          style={{ color: item.urgency === 'high' ? 'var(--text-warning, #B45309)' : 'var(--text-accent, #1D4ED8)', flexShrink: 0, marginTop: 1 }}
+                          style={{ color: colors.text, flexShrink: 0, marginTop: 1 }}
                           aria-hidden="true"
                         />
                         <div>
-                          <p style={{ fontSize: 12, fontWeight: 500, margin: 0, color: item.urgency === 'high' ? 'var(--text-warning, #B45309)' : 'var(--text-accent, #1D4ED8)' }}>
+                          <p style={{ fontSize: 12, fontWeight: 500, margin: 0, color: colors.text }}>
                             {item.message}
                           </p>
-                          <p style={{ fontSize: 11, margin: '1px 0 0', opacity: .8, color: item.urgency === 'high' ? 'var(--text-warning, #B45309)' : 'var(--text-accent, #1D4ED8)' }}>
+                          <p style={{ fontSize: 11, margin: '1px 0 0', opacity: .8, color: colors.text }}>
                             {item.conferenceName}{item.daysUntil !== null ? ` · in ${item.daysUntil} days` : ''}
                           </p>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   {needsAttention.length > 4 && (
                     <button type="button" onClick={() => setShowAllAttention(v => !v)} className="text-xs text-brand-secondary hover:underline">
