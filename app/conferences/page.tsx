@@ -679,32 +679,30 @@ function ConferencesPageContent() {
                     ))}
                   </div>
 
-                  <div style={{ display: 'flex', border: '0.5px solid var(--border, #E5E7EB)', borderRadius: 8, overflow: 'hidden' }}>
+                  <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
                     <button
                       type="button"
                       onClick={() => { setProgramLayout('grid'); localStorage.setItem('parlay-conferences-layout', 'grid'); }}
-                      style={{
-                        padding: '5px 9px', border: 'none', cursor: 'pointer',
-                        background: programLayout === 'grid' ? '#223A5E' : 'transparent',
-                        color: programLayout === 'grid' ? '#fff' : 'var(--text-secondary, #6B7280)',
-                      }}
-                      title="Grid view"
-                      aria-label="Grid view"
+                      title="Card view"
+                      aria-label="Card view"
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
+                        programLayout === 'grid' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                      }`}
                     >
                       <i className="ti ti-layout-grid" style={{ fontSize: 14 }} aria-hidden="true" />
+                      Card View
                     </button>
                     <button
                       type="button"
                       onClick={() => { setProgramLayout('list'); localStorage.setItem('parlay-conferences-layout', 'list'); }}
-                      style={{
-                        padding: '5px 9px', border: 'none', borderLeft: '0.5px solid var(--border, #E5E7EB)', cursor: 'pointer',
-                        background: programLayout === 'list' ? '#223A5E' : 'transparent',
-                        color: programLayout === 'list' ? '#fff' : 'var(--text-secondary, #6B7280)',
-                      }}
-                      title="List view"
-                      aria-label="List view"
+                      title="Table view"
+                      aria-label="Table view"
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap border-l border-gray-200 transition-colors ${
+                        programLayout === 'list' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                      }`}
                     >
                       <i className="ti ti-list" style={{ fontSize: 14 }} aria-hidden="true" />
+                      Table View
                     </button>
                   </div>
                 </div>
