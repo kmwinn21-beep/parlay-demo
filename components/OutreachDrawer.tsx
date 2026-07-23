@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { getBadgeClass } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
+import { useUserOptions } from '@/lib/useUserOptions';
+import { MentionTextarea } from './MentionTextarea';
 import { type OutreachAttendeeFilter } from './OutreachCompanyCard';
 
-interface TimelineActivity {
+export interface TimelineActivity {
   id: string;
-  activityType: 'phone' | 'email' | 'linkedin' | 'meeting';
+  activityType: 'phone' | 'text' | 'email' | 'linkedin' | 'meeting';
   loggedByName: string;
   attendeeId: number | null;
   attendeeName: string | null;
@@ -17,19 +19,20 @@ interface TimelineActivity {
   supersededById: string | null;
 }
 
-interface ThreadNote {
+export interface ThreadNote {
   id: number;
   body: string;
   userName: string;
   userInitials: string;
   createdAt: string;
-  activityType: 'phone' | 'email' | 'linkedin' | null;
+  activityType: 'phone' | 'text' | 'email' | 'linkedin' | null;
   attendeeId: number | null;
   attendeeName: string | null;
 }
 
 const DOT_COLOR: Record<TimelineActivity['activityType'], string> = {
   phone: 'bg-green-500',
+  text: 'bg-teal-500',
   email: 'bg-blue-500',
   linkedin: 'bg-purple-500',
   meeting: 'bg-amber-500',
@@ -37,6 +40,7 @@ const DOT_COLOR: Record<TimelineActivity['activityType'], string> = {
 
 const ACTIVITY_LABEL: Record<TimelineActivity['activityType'], string> = {
   phone: 'Phone call',
+  text: 'Text Message',
   email: 'Email',
   linkedin: 'LinkedIn touch',
   meeting: 'Meeting scheduled',
@@ -61,6 +65,8 @@ export function OutreachDrawer({
   companyName,
   initialTab = 'timeline',
   attendeeFilter,
+  pendingActivity,
+  pendingNote,
   onClose,
 }: {
   conferenceId: number;
@@ -68,13 +74,20 @@ export function OutreachDrawer({
   companyName: string;
   initialTab?: 'timeline' | 'notes';
   attendeeFilter?: OutreachAttendeeFilter;
+  /** A just-logged activity from OutreachCompanyCard's row icons (for this same
+   * company), prepended into the timeline without waiting on a refetch. */
+  pendingActivity?: TimelineActivity | null;
+  /** A just-posted activity note from OutreachCompanyCard's note popover. */
+  pendingNote?: ThreadNote | null;
   onClose: () => void;
 }) {
   const colorMaps = useConfigColors();
+  const userOptions = useUserOptions();
   const [tab, setTab] = useState<'timeline' | 'notes'>(initialTab);
   const [activities, setActivities] = useState<TimelineActivity[] | null>(null);
   const [notes, setNotes] = useState<ThreadNote[] | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
+  const [taggedUserIds, setTaggedUserIds] = useState<number[]>([]);
   const [posting, setPosting] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
   // Reveal top-down on mount, collapse bottom-up on close — 'closed' is the
@@ -144,6 +157,33 @@ export function OutreachDrawer({
     return () => { cancelled = true; };
   }, [conferenceId, companyId]);
 
+  // Optimistically fold in an activity/note logged from OutreachCompanyCard's
+  // row icons elsewhere in the tree (this drawer's own fetch effects above are
+  // keyed only on [conferenceId, companyId], so they never see it otherwise).
+  // Dedup by id in case the drawer remounts after the server round trip already
+  // completed and its fresh fetch already includes the same row.
+  useEffect(() => {
+    if (!pendingActivity) return;
+    setActivities(prev => {
+      const base = prev ?? [];
+      if (base.some(a => a.id === pendingActivity.id)) return base;
+      return [pendingActivity, ...base];
+    });
+  }, [pendingActivity]);
+
+  useEffect(() => {
+    if (!pendingNote) return;
+    setNotes(prev => {
+      const base = prev ?? [];
+      if (base.some(n => n.id === pendingNote.id)) return base;
+      return [...base, pendingNote];
+    });
+  }, [pendingNote]);
+
+  const handleMentionAdd = (configId: number) => {
+    setTaggedUserIds(prev => prev.includes(configId) ? prev : [...prev, configId]);
+  };
+
   const handlePostNote = async () => {
     const body = noteDraft.trim();
     if (!body || posting) return;
@@ -152,12 +192,13 @@ export function OutreachDrawer({
       const res = await fetch(`/api/conferences/${conferenceId}/outreach/${companyId}/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body }),
+        body: JSON.stringify({ body, taggedUsers: taggedUserIds.length > 0 ? taggedUserIds.join(',') : null }),
       });
       if (!res.ok) throw new Error();
       const created = await res.json() as ThreadNote;
       setNotes(prev => [...(prev ?? []), created]);
       setNoteDraft('');
+      setTaggedUserIds([]);
     } catch {
       // best-effort — leave the draft text so the user can retry
     } finally {
@@ -344,23 +385,26 @@ export function OutreachDrawer({
       </div>
 
       {tab === 'notes' && (
-        <div className="border-t border-gray-100 p-2.5 flex gap-1.5 flex-shrink-0">
-          <input
-            type="text"
-            value={noteDraft}
-            onChange={e => setNoteDraft(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handlePostNote(); }}
-            placeholder="Add a note…"
-            className="input-field text-xs flex-1 py-1.5"
-          />
-          <button
-            type="button"
-            onClick={handlePostNote}
-            disabled={posting || !noteDraft.trim()}
-            className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
-          >
-            Post
-          </button>
+        <div className="border-t border-gray-100 p-2.5 flex flex-col gap-1.5 flex-shrink-0">
+          <div className="flex gap-1.5 items-end">
+            <MentionTextarea
+              value={noteDraft}
+              onChange={setNoteDraft}
+              onMentionAdd={handleMentionAdd}
+              userOptions={userOptions}
+              rows={1}
+              placeholder="Add a note… (type @ to mention a user)"
+              className="input-field text-xs flex-1 py-1.5 resize-none"
+            />
+            <button
+              type="button"
+              onClick={handlePostNote}
+              disabled={posting || !noteDraft.trim()}
+              className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50 flex-shrink-0"
+            >
+              Post
+            </button>
+          </div>
         </div>
       )}
       </div>

@@ -5,11 +5,17 @@ import toast from 'react-hot-toast';
 import { getBadgeClass, getHex } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
+import { useUserOptions } from '@/lib/useUserOptions';
+import { useUser } from './UserContext';
+import { MentionTextarea } from './MentionTextarea';
 import { NewMeetingModal } from './NewMeetingModal';
 import { EditOutreachMeetingModal } from './EditOutreachMeetingModal';
 import { AttendeeQuickViewDrawer } from './AttendeeQuickViewDrawer';
 import { QuickViewIcon } from './QuickViewDrawer';
+import { type TimelineActivity, type ThreadNote } from './OutreachDrawer';
 import { type Meeting } from './MeetingsTable';
+
+type ActivityType = 'phone' | 'text' | 'email' | 'linkedin';
 
 export interface OutreachAssignee {
   userId: number;
@@ -27,7 +33,7 @@ export interface OutreachAttendee {
   phone: string | null;
   linkedinUrl: string | null;
   activityCount: number;
-  activityCounts: { phone: number; email: number; linkedin: number };
+  activityCounts: { phone: number; text: number; email: number; linkedin: number };
   meetingId: number | null;
 }
 
@@ -72,12 +78,18 @@ const TIER_STYLES: Record<string, { label: string; className: string }> = {
   unassigned: { label: 'Monitor', className: 'bg-gray-50 text-gray-500 border border-gray-200' },
 };
 
-export const ACTIVITY_ICONS: Record<'phone' | 'email' | 'linkedin', { title: string; label: string; hoverClass: string; path: React.ReactNode }> = {
+export const ACTIVITY_ICONS: Record<ActivityType, { title: string; label: string; hoverClass: string; path: React.ReactNode }> = {
   phone: {
     title: 'Log phone call',
     label: 'Phone call',
     hoverClass: 'hover:border-green-400 hover:text-green-600 hover:bg-green-50',
     path: <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />,
+  },
+  text: {
+    title: 'Log text message',
+    label: 'Text Message',
+    hoverClass: 'hover:border-teal-400 hover:text-teal-600 hover:bg-teal-50',
+    path: <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />,
   },
   email: {
     title: 'Log email',
@@ -95,8 +107,9 @@ export const ACTIVITY_ICONS: Record<'phone' | 'email' | 'linkedin', { title: str
 
 // Matches OutreachDrawer's DOT_COLOR so a note tagged with an activity shows the
 // same colored dot in the notes thread as that activity gets in the timeline.
-export const ACTIVITY_DOT_CLASS: Record<'phone' | 'email' | 'linkedin', string> = {
+export const ACTIVITY_DOT_CLASS: Record<ActivityType, string> = {
   phone: 'bg-green-500',
+  text: 'bg-teal-500',
   email: 'bg-blue-500',
   linkedin: 'bg-purple-500',
 };
@@ -112,12 +125,17 @@ function ActivityNotePopover({
 }: {
   anchorRef: React.RefObject<HTMLElement>;
   onClose: () => void;
-  onSubmit: (body: string) => Promise<void>;
+  onSubmit: (body: string, taggedUsers: string | null) => Promise<void>;
 }) {
+  const userOptions = useUserOptions();
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const [text, setText] = useState('');
+  const [taggedUserIds, setTaggedUserIds] = useState<number[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const handleMentionAdd = (configId: number) => {
+    setTaggedUserIds(prev => prev.includes(configId) ? prev : [...prev, configId]);
+  };
 
   useEffect(() => {
     if (!anchorRef.current) return;
@@ -143,7 +161,7 @@ function ActivityNotePopover({
     const body = text.trim();
     if (!body || submitting) return;
     setSubmitting(true);
-    await onSubmit(body);
+    await onSubmit(body, taggedUserIds.length > 0 ? taggedUserIds.join(',') : null);
     setSubmitting(false);
   };
 
@@ -156,12 +174,14 @@ function ActivityNotePopover({
       className="bg-white rounded-lg shadow-xl border border-gray-200 p-2.5"
       onClick={e => e.stopPropagation()}
     >
-      <textarea
+      <MentionTextarea
         value={text}
-        onChange={e => setText(e.target.value)}
+        onChange={setText}
+        onMentionAdd={handleMentionAdd}
+        userOptions={userOptions}
         rows={3}
         autoFocus
-        placeholder="Add a note about this…"
+        placeholder="Add a note about this… (@ to mention)"
         className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary resize-none"
       />
       <div className="flex items-center justify-end gap-2 mt-1.5">
@@ -185,6 +205,8 @@ export function OutreachCompanyCard({
   targetTier,
   selectedAttendeeId,
   onActivityLogged,
+  onActivityCreated,
+  onNoteCreated,
   onOpenDrawer,
   onOpenAssign,
 }: {
@@ -195,16 +217,22 @@ export function OutreachCompanyCard({
   /** The attendee the timeline/notes drawer is currently filtered to, if any — highlights that row. */
   selectedAttendeeId?: number | null;
   onActivityLogged: () => void;
+  /** Fires with a freshly-logged activity so an open OutreachDrawer for this
+   * company can show it immediately instead of waiting on a page refresh. */
+  onActivityCreated?: (companyId: number, activity: TimelineActivity) => void;
+  /** Same, for a note posted via the per-activity note popover. */
+  onNoteCreated?: (companyId: number, note: ThreadNote) => void;
   onOpenDrawer: (tab: 'timeline' | 'notes', attendee?: OutreachAttendeeFilter) => void;
   onOpenAssign: () => void;
 }) {
+  const { user: currentUser } = useUser();
   const colorMaps = useConfigColors();
   const avgCostPerUnit = useAvgCostPerUnit();
   const [expanded, setExpanded] = useState(false);
   const [flashKey, setFlashKey] = useState<string | null>(null);
   const [hoverKey, setHoverKey] = useState<string | null>(null);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
-  const [localCounts, setLocalCounts] = useState<Record<number, { phone: number; email: number; linkedin: number }>>({});
+  const [localCounts, setLocalCounts] = useState<Record<number, { phone: number; text: number; email: number; linkedin: number }>>({});
   const [localTotal, setLocalTotal] = useState(company.totalActivityCount);
   const [localNoteCount, setLocalNoteCount] = useState(company.noteCount);
   const [localStatus, setLocalStatus] = useState<OutreachStatus>(company.status);
@@ -266,7 +294,7 @@ export function OutreachCompanyCard({
   const countsFor = (attendee: OutreachAttendee) => localCounts[attendee.attendeeId] ?? attendee.activityCounts;
   const meetingIdFor = (attendee: OutreachAttendee) => localMeetingIds[attendee.attendeeId] ?? attendee.meetingId;
 
-  const logActivity = async (attendee: OutreachAttendee, activityType: 'phone' | 'email' | 'linkedin') => {
+  const logActivity = async (attendee: OutreachAttendee, activityType: ActivityType) => {
     const key = `${attendee.attendeeId}-${activityType}`;
     try {
       const res = await fetch(`/api/conferences/${conferenceId}/outreach/${company.companyId}/activity`, {
@@ -275,6 +303,7 @@ export function OutreachCompanyCard({
         body: JSON.stringify({ attendeeId: attendee.attendeeId, activityType }),
       });
       if (!res.ok) throw new Error('Failed to log activity');
+      const created = await res.json() as { id: number; logged_at: string };
 
       setFlashKey(key);
       setTimeout(() => setFlashKey(k => (k === key ? null : k)), 1000);
@@ -296,13 +325,23 @@ export function OutreachCompanyCard({
         }).catch(() => {});
       }
       onActivityLogged();
+      onActivityCreated?.(company.companyId, {
+        id: `activity-${created.id}`,
+        activityType,
+        loggedByName: currentUser?.displayName || currentUser?.repName || currentUser?.firstName || 'You',
+        attendeeId: attendee.attendeeId,
+        attendeeName: `${attendee.firstName} ${attendee.lastName}`,
+        notes: null,
+        loggedAt: created.logged_at,
+        supersededById: null,
+      });
     } catch {
       // Silent — matches the "no confirmation modal" instant-log spec; a failed log
       // just doesn't flash/increment, which is signal enough for a rapid-fire action.
     }
   };
 
-  const removeActivity = async (attendee: OutreachAttendee, activityType: 'phone' | 'email' | 'linkedin') => {
+  const removeActivity = async (attendee: OutreachAttendee, activityType: ActivityType) => {
     const key = `${attendee.attendeeId}-${activityType}`;
     const base = countsFor(attendee);
     if (base[activityType] === 0 || pendingKey === key) return;
@@ -324,7 +363,7 @@ export function OutreachCompanyCard({
     }
   };
 
-  const submitActivityNote = async (attendee: OutreachAttendee, activityType: 'phone' | 'email' | 'linkedin', body: string) => {
+  const submitActivityNote = async (attendee: OutreachAttendee, activityType: ActivityType, body: string, taggedUsers: string | null) => {
     // Adding a note about an activity logs that activity too — the note popover
     // is reached by hovering an activity icon, so submitting it is a statement
     // that the touch happened, same as clicking the icon itself would be.
@@ -333,12 +372,14 @@ export function OutreachCompanyCard({
       const res = await fetch(`/api/conferences/${conferenceId}/outreach/${company.companyId}/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body, activityType, attendeeId: attendee.attendeeId }),
+        body: JSON.stringify({ body, activityType, attendeeId: attendee.attendeeId, taggedUsers }),
       });
       if (!res.ok) throw new Error();
+      const created = await res.json() as ThreadNote;
       setLocalNoteCount(n => n + 1);
       toast.success('Note added');
       onActivityLogged();
+      onNoteCreated?.(company.companyId, created);
     } catch {
       toast.error('Failed to add note');
     } finally {
@@ -530,7 +571,7 @@ export function OutreachCompanyCard({
           )}
           {visibleAttendees.map((attendee, idx) => {
             const counts = countsFor(attendee);
-            const total = counts.phone + counts.email + counts.linkedin;
+            const total = counts.phone + counts.text + counts.email + counts.linkedin;
             const meetingId = meetingIdFor(attendee);
             const hasMeeting = meetingId != null;
 
@@ -563,7 +604,7 @@ export function OutreachCompanyCard({
 
             const activityIconsBlock = (
               <div className="flex items-center gap-3 flex-shrink-0" onClick={e => e.stopPropagation()}>
-                {(['phone', 'email', 'linkedin'] as const).map(type => {
+                {(['phone', 'text', 'email', 'linkedin'] as const).map(type => {
                     const key = `${attendee.attendeeId}-${type}`;
                     const flashed = flashKey === key;
                     const hovered = hoverKey === key;
@@ -622,7 +663,7 @@ export function OutreachCompanyCard({
                           <ActivityNotePopover
                             anchorRef={{ current: activityIconRefs.current[key] }}
                             onClose={() => setNotePopoverKey(null)}
-                            onSubmit={(body) => submitActivityNote(attendee, type, body)}
+                            onSubmit={(body, taggedUsers) => submitActivityNote(attendee, type, body, taggedUsers)}
                           />
                         )}
                       </div>

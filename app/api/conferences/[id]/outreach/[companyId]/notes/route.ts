@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { getInitials, resolveUserDisplayName } from '@/lib/initials';
+import { getConfigIdByEmail, notifyMentionedUsers } from '@/lib/notifications';
 
 // GET/POST /api/conferences/[id]/outreach/[companyId]/notes — a per-company
 // outreach notes thread. Modeled on app/api/calendar-intelligence/notes/route.ts
@@ -64,23 +65,46 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   try {
     const body = await request.json();
-    const { body: content, activityType, attendeeId } = body as { body: string; activityType?: string; attendeeId?: number };
+    const { body: content, activityType, attendeeId, taggedUsers } = body as {
+      body: string; activityType?: string; attendeeId?: number; taggedUsers?: string | null;
+    };
     if (!content?.trim()) return NextResponse.json({ error: 'body is required' }, { status: 400 });
 
-    const [insertRes, userRow, attendeeRow] = await Promise.all([
+    const [insertRes, userRow, attendeeRow, companyRow] = await Promise.all([
       db.execute({
-        sql: `INSERT INTO outreach_notes (conference_id, company_id, user_id, body, activity_type, attendee_id)
-              VALUES (?, ?, ?, ?, ?, ?) RETURNING id, created_at`,
-        args: [conferenceId, companyId, authResult.id, content.trim(), activityType || null, attendeeId ?? null],
+        sql: `INSERT INTO outreach_notes (conference_id, company_id, user_id, body, activity_type, attendee_id, tagged_users)
+              VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id, created_at`,
+        args: [conferenceId, companyId, authResult.id, content.trim(), activityType || null, attendeeId ?? null, taggedUsers || null],
       }),
       db.execute({ sql: `SELECT display_name, first_name, last_name, email FROM users WHERE id = ?`, args: [authResult.id] }),
       attendeeId
         ? db.execute({ sql: `SELECT first_name, last_name FROM attendees WHERE id = ?`, args: [attendeeId] })
         : Promise.resolve({ rows: [] as { first_name?: unknown; last_name?: unknown }[] }),
+      db.execute({ sql: `SELECT name FROM companies WHERE id = ?`, args: [companyId] }),
     ]);
 
     const userName = userRow.rows.length > 0 ? resolveUserDisplayName(userRow.rows[0]) : authResult.email;
     const attendeeName = attendeeRow.rows.length > 0 ? `${attendeeRow.rows[0].first_name} ${attendeeRow.rows[0].last_name}` : null;
+    const companyName = companyRow.rows.length > 0 ? String(companyRow.rows[0].name) : `Company #${companyId}`;
+
+    // Fire @mention notifications — always, regardless of any other pref, same
+    // as app/api/notes/route.ts's "note_tagged" handling.
+    const taggedConfigIds = String(taggedUsers || '')
+      .split(',')
+      .map(s => parseInt(s.trim(), 10))
+      .filter(n => !isNaN(n) && n > 0);
+    if (taggedConfigIds.length > 0) {
+      const changedByConfigId = await getConfigIdByEmail(authResult.email, db);
+      notifyMentionedUsers({
+        taggedConfigIds,
+        mentionerName: userName,
+        mentionerEmail: authResult.email,
+        mentionerConfigId: changedByConfigId,
+        entityName: attendeeName ? `${companyName} (${attendeeName})` : companyName,
+        entityType: 'company',
+        entityId: companyId,
+      });
+    }
 
     return NextResponse.json({
       id: Number(insertRes.rows[0].id),
