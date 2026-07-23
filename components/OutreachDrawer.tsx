@@ -386,25 +386,23 @@ export function OutreachDrawer({
 
       {tab === 'notes' && (
         <div className="border-t border-gray-100 p-2.5 flex flex-col gap-1.5 flex-shrink-0">
-          <div className="flex gap-1.5 items-end">
-            <MentionTextarea
-              value={noteDraft}
-              onChange={setNoteDraft}
-              onMentionAdd={handleMentionAdd}
-              userOptions={userOptions}
-              rows={1}
-              placeholder="Add a note… (type @ to mention a user)"
-              className="input-field text-xs flex-1 py-1.5 resize-none"
-            />
-            <button
-              type="button"
-              onClick={handlePostNote}
-              disabled={posting || !noteDraft.trim()}
-              className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50 flex-shrink-0"
-            >
-              Post
-            </button>
-          </div>
+          <MentionTextarea
+            value={noteDraft}
+            onChange={setNoteDraft}
+            onMentionAdd={handleMentionAdd}
+            userOptions={userOptions}
+            rows={4}
+            placeholder="Add a note… (type @ to mention a user)"
+            className="input-field text-xs w-full py-1.5 resize-y min-h-[88px]"
+          />
+          <button
+            type="button"
+            onClick={handlePostNote}
+            disabled={posting || !noteDraft.trim()}
+            className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50 self-end"
+          >
+            Post
+          </button>
         </div>
       )}
       </div>
