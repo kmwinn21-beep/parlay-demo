@@ -54,10 +54,10 @@ interface TerritoryOption {
 }
 
 function iconForAttentionType(type: NeedsAttentionItem['type']): string {
-  if (type === 'missing_list') return 'ti-users';
-  if (type === 'unassigned_reps') return 'ti-user-plus';
-  if (type === 'outreach_gap') return 'ti-mail';
-  return 'ti-alert-circle';
+  if (type === 'missing_list') return 'ti-clipboard-list';
+  if (type === 'unassigned_reps') return 'ti-user';
+  if (type === 'outreach_gap') return 'ti-message-circle';
+  return 'ti-alert-triangle';
 }
 
 // Each attention type gets its own color regardless of urgency, so the card's
@@ -641,17 +641,19 @@ function ConferencesPageContent() {
                         key={`${item.type}-${item.conferenceId}-${i}`}
                         onClick={() => router.push(`/conferences/${item.conferenceId}`)}
                         style={{
-                          display: 'flex', alignItems: 'flex-start', gap: 8,
+                          display: 'flex', alignItems: 'stretch', gap: 10,
                           padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
                           background: colors.bg,
                           border: `0.5px solid ${colors.border}`,
                         }}
                       >
-                        <i
-                          className={`ti ${iconForAttentionType(item.type)}`}
-                          style={{ color: colors.text, flexShrink: 0, marginTop: 1 }}
-                          aria-hidden="true"
-                        />
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <i
+                            className={`ti ${iconForAttentionType(item.type)}`}
+                            style={{ color: colors.text, fontSize: 20 }}
+                            aria-hidden="true"
+                          />
+                        </div>
                         <div>
                           <p style={{ fontSize: 12, fontWeight: 500, margin: 0, color: colors.text }}>
                             {item.message}
