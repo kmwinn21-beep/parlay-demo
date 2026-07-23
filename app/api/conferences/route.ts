@@ -32,6 +32,8 @@ interface EnrichedConference {
   attendeeCount: number;
   hasAttendeeList: boolean;
   planDecision: string | null;
+  territoryScope: string | null;
+  territoryIds: number[];
   [key: string]: unknown;
 }
 interface NeedsAttentionItem {
@@ -154,6 +156,12 @@ async function getEnrichedConferences(db: Client) {
       ? { assigned: outreachAssignedMap.get(confId) ?? 0, total: icpTotalMap.get(confId) ?? 0 }
       : null;
 
+    let territoryIds: number[] = [];
+    try {
+      const parsed = JSON.parse(String(r.territory_ids ?? '[]'));
+      if (Array.isArray(parsed)) territoryIds = parsed.map(Number).filter(n => !isNaN(n));
+    } catch { /* ignore */ }
+
     return {
       ...r,
       id: confId,
@@ -163,6 +171,8 @@ async function getEnrichedConferences(db: Client) {
       attendeeCount,
       hasAttendeeList,
       planDecision: plan?.decision ?? null,
+      territoryScope: r.territory_scope ? String(r.territory_scope) : null,
+      territoryIds,
     };
   });
 

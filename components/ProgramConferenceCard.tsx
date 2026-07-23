@@ -2,12 +2,19 @@
 
 import Link from 'next/link';
 import { ConferenceStageBadge } from './ConferenceStageBadge';
+import { RepAssignmentPopover, type AssignedRep } from './RepAssignmentPopover';
 import { postConferenceDaysRemaining, type ConferenceStage } from '@/lib/conference-stage';
 
 export interface ProgramCardRep {
   userId: number;
   displayName: string;
   initials: string;
+}
+
+export interface ProgramCardTerritory {
+  id: number;
+  name: string;
+  color: string;
 }
 
 export interface ProgramCardConference {
@@ -22,6 +29,8 @@ export interface ProgramCardConference {
   outreachProgress: { assigned: number; total: number } | null;
   attendeeCount: number;
   hasAttendeeList: boolean;
+  territoryScope: string | null;
+  territoryIds: number[];
   // Not yet on the enriched API response (see the ?enriched=1 route) — closed
   // cards fall back to '—' for these until a future pass adds them.
   pipelineInfluenced?: number | null;
@@ -118,10 +127,62 @@ export function RepAvatarStack({ reps }: { reps: ProgramCardRep[] }) {
   );
 }
 
-export function ProgramConferenceCard({ conference }: { conference: ProgramCardConference }) {
+// Small colored pill showing the conference's Market Coverage — "National" in
+// brand-primary, or the resolved territory name(s) in that territory's own
+// color, matching the same convention the Plan tab's Territory column uses.
+function TerritoryPill({ conference, territories }: { conference: ProgramCardConference; territories: ProgramCardTerritory[] }) {
+  if (conference.territoryScope === 'national') {
+    return (
+      <span
+        style={{
+          display: 'inline-flex', alignItems: 'center', flexShrink: 0,
+          padding: '1px 7px', borderRadius: 999, fontSize: 10, fontWeight: 600,
+          border: '1px solid rgb(var(--brand-primary-rgb))',
+          background: 'rgb(var(--brand-primary-rgb) / 0.1)',
+          color: 'rgb(var(--brand-primary-rgb))',
+        }}
+      >
+        National
+      </span>
+    );
+  }
+  if (conference.territoryScope === 'regional' && conference.territoryIds.length > 0) {
+    const matched = territories.filter(t => conference.territoryIds.includes(t.id));
+    if (matched.length === 0) return null;
+    return (
+      <>
+        {matched.map(t => (
+          <span
+            key={t.id}
+            style={{
+              display: 'inline-flex', alignItems: 'center', flexShrink: 0,
+              padding: '1px 7px', borderRadius: 999, fontSize: 10, fontWeight: 600,
+              border: `1px solid ${t.color}`, background: `${t.color}18`, color: t.color,
+            }}
+          >
+            {t.name}
+          </span>
+        ))}
+      </>
+    );
+  }
+  return null;
+}
+
+export function ProgramConferenceCard({ conference, territories, planYear, allConferences, onRepsUpdated }: {
+  conference: ProgramCardConference;
+  territories: ProgramCardTerritory[];
+  planYear: number;
+  allConferences: Array<{ conferenceId: number; name: string; startDate: string; assignedReps: AssignedRep[] }>;
+  onRepsUpdated: (conferenceId: number, reps: AssignedRep[]) => void;
+}) {
   const daysUntil = Math.max(0, Math.ceil((new Date(conference.start_date + 'T00:00:00').getTime() - Date.now()) / 86_400_000));
   const bar = topBarFor(conference, daysUntil);
   const isClosed = conference.stage === 'closed';
+  // Direct rep assignment from the card is only offered for conferences still
+  // being planned — once a conference is underway or done, reassigning reps
+  // from the Program tab's overview isn't the right place for that edit.
+  const canAssignReps = conference.stage === 'planning';
 
   return (
     <Link
@@ -139,17 +200,30 @@ export function ProgramConferenceCard({ conference }: { conference: ProgramCardC
       </div>
 
       <div style={{ padding: '10px 12px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <p style={{ fontSize: 13, fontWeight: 500, margin: 0, color: 'var(--text-primary, #111827)' }} className="line-clamp-2">
-          {conference.name}
-        </p>
+        <div className="flex items-start gap-1.5">
+          <p style={{ fontSize: 13, fontWeight: 500, margin: 0, color: 'var(--text-primary, #111827)' }} className="line-clamp-2 flex-1">
+            {conference.name}
+          </p>
+          <TerritoryPill conference={conference} territories={territories} />
+        </div>
         <p style={{ fontSize: 11, color: 'var(--text-secondary, #6B7280)', margin: '2px 0 0' }} className="truncate">
           {formatDate(conference.start_date)}
           {conference.end_date && conference.end_date !== conference.start_date ? ` – ${formatDate(conference.end_date)}` : ''}
           {conference.location ? ` · ${conference.location}` : ''}
         </p>
 
-        <div style={{ marginTop: 8 }}>
-          <RepAvatarStack reps={conference.assignedReps} />
+        <div style={{ marginTop: 8 }} onClick={e => { if (canAssignReps) { e.preventDefault(); e.stopPropagation(); } }}>
+          {canAssignReps ? (
+            <RepAssignmentPopover
+              conferenceId={conference.id}
+              planYear={planYear}
+              assignedReps={conference.assignedReps}
+              allConferences={allConferences}
+              onUpdate={reps => onRepsUpdated(conference.id, reps)}
+            />
+          ) : (
+            <RepAvatarStack reps={conference.assignedReps} />
+          )}
         </div>
 
         {isClosed ? (

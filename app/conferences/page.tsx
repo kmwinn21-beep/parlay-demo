@@ -437,6 +437,15 @@ function ConferencesPageContent() {
 
   const visibleAttention = showAllAttention ? needsAttention : needsAttention.slice(0, 4);
 
+  const programAllConferencesForConflicts = useMemo(
+    () => programConfs.map(c => ({ conferenceId: c.id, name: c.name, startDate: c.start_date, assignedReps: c.assignedReps })),
+    [programConfs]
+  );
+
+  const handleProgramRepsUpdated = (conferenceId: number, reps: EnrichedConference['assignedReps']) => {
+    setProgramConfs(prev => prev.map(c => c.id === conferenceId ? { ...c, assignedReps: reps } : c));
+  };
+
   // Calendar derived
   const calMonths  = useMemo(() => ([0, 1, 2] as const).map((o) => addMonths(calAnchor[0], calAnchor[1], o)), [calAnchor]);
   const windowStart = useMemo(() => mFirst(calMonths[0][0], calMonths[0][1]), [calMonths]);
@@ -603,7 +612,14 @@ function ConferencesPageContent() {
           ) : (
             <>
               {visibleAttention.length > 0 && (
-                <div className="space-y-2">
+                <div className="card space-y-3">
+                  <div className="flex items-center gap-2">
+                    <i className="ti ti-alert-circle text-gray-400" style={{ fontSize: 14 }} aria-hidden="true" />
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Needs Attention</span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">
+                      {needsAttention.length} item{needsAttention.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {visibleAttention.map((item, i) => (
                       <div
@@ -778,7 +794,16 @@ function ConferencesPageContent() {
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
-                  {programStageFiltered.map(c => <ProgramConferenceCard key={c.id} conference={c} />)}
+                  {programStageFiltered.map(c => (
+                    <ProgramConferenceCard
+                      key={c.id}
+                      conference={c}
+                      territories={territories}
+                      planYear={currentYear}
+                      allConferences={programAllConferencesForConflicts}
+                      onRepsUpdated={handleProgramRepsUpdated}
+                    />
+                  ))}
                   {programToggle === 'upcoming' && (
                     <Link
                       href="/conferences/new"
@@ -800,77 +825,6 @@ function ConferencesPageContent() {
       {/* ── By Stage view ── */}
       {!isLoading && view === 'by-stage' && (
         <ConferenceKanbanBoard conferences={conferences} />
-      )}
-
-      {/* ── Calendar section ── */}
-      {!isLoading && view === 'calendar' && conferences.length > 0 && calExpanded !== null && (
-        <div className="card">
-          <div className="flex items-center justify-between mb-1">
-            <button
-              type="button"
-              onClick={() => setCalExpanded((v) => !v)}
-              className="flex items-center gap-1.5 text-sm font-semibold text-brand-primary hover:text-brand-secondary transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-              </svg>
-              Calendar
-              <svg className={`w-3 h-3 transition-transform ${calExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
-              </svg>
-            </button>
-            {selectedDate && (
-              <button onClick={() => setSelectedDate(null)} className="text-xs text-brand-secondary hover:underline">
-                Showing {selectedDate} — clear
-              </button>
-            )}
-          </div>
-
-          {calExpanded && (
-            <div className="flex items-start gap-1 mt-3">
-              {/* Left chevron */}
-              <button
-                type="button"
-                onClick={handleCalLeft}
-                disabled={!canGoLeft}
-                className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0 mt-6"
-                aria-label="Previous month"
-              >
-                <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
-                </svg>
-              </button>
-
-              {/* 3 calendars — mobile shows only first */}
-              <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {calMonths.map(([y, m], idx) => (
-                  <div key={`${y}-${m}`} className={idx === 0 ? '' : 'hidden lg:block'}>
-                    <MonthCalendar
-                      year={y} month={m}
-                      dates={calDateSets[idx]}
-                      selected={selectedDate}
-                      onPick={handleDatePick}
-                      today={todayStr}
-                    />
-                  </div>
-                ))}
-              </div>
-
-              {/* Right chevron */}
-              <button
-                type="button"
-                onClick={handleCalRight}
-                disabled={!canGoRight}
-                className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0 mt-6"
-                aria-label="Next month"
-              >
-                <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
-                </svg>
-              </button>
-            </div>
-          )}
-        </div>
       )}
 
       {/* ── Filter pane ── */}
@@ -953,6 +907,77 @@ function ConferencesPageContent() {
               </select>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Calendar section ── */}
+      {!isLoading && view === 'calendar' && conferences.length > 0 && calExpanded !== null && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-1">
+            <button
+              type="button"
+              onClick={() => setCalExpanded((v) => !v)}
+              className="flex items-center gap-1.5 text-sm font-semibold text-brand-primary hover:text-brand-secondary transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+              </svg>
+              Calendar
+              <svg className={`w-3 h-3 transition-transform ${calExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
+              </svg>
+            </button>
+            {selectedDate && (
+              <button onClick={() => setSelectedDate(null)} className="text-xs text-brand-secondary hover:underline">
+                Showing {selectedDate} — clear
+              </button>
+            )}
+          </div>
+
+          {calExpanded && (
+            <div className="flex items-start gap-1 mt-3">
+              {/* Left chevron */}
+              <button
+                type="button"
+                onClick={handleCalLeft}
+                disabled={!canGoLeft}
+                className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0 mt-6"
+                aria-label="Previous month"
+              >
+                <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
+                </svg>
+              </button>
+
+              {/* 3 calendars — mobile shows only first */}
+              <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {calMonths.map(([y, m], idx) => (
+                  <div key={`${y}-${m}`} className={idx === 0 ? '' : 'hidden lg:block'}>
+                    <MonthCalendar
+                      year={y} month={m}
+                      dates={calDateSets[idx]}
+                      selected={selectedDate}
+                      onPick={handleDatePick}
+                      today={todayStr}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* Right chevron */}
+              <button
+                type="button"
+                onClick={handleCalRight}
+                disabled={!canGoRight}
+                className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0 mt-6"
+                aria-label="Next month"
+              >
+                <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
       )}
 
