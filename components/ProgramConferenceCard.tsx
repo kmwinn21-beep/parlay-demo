@@ -74,7 +74,7 @@ function topBarFor(conference: ProgramCardConference, daysUntil: number): TopBar
   return { bg: 'var(--surface-1, #F9FAFB)', border: 'var(--border, #E5E7EB)', textColor: 'var(--text-muted, #9CA3AF)', label: `Completed · ${formatMonthYear(conference.end_date)}` };
 }
 
-function RepAvatarStack({ reps }: { reps: ProgramCardRep[] }) {
+export function RepAvatarStack({ reps }: { reps: ProgramCardRep[] }) {
   if (reps.length === 0) {
     return <span style={{ fontSize: 11, color: 'var(--text-muted, #9CA3AF)' }}>No reps assigned</span>;
   }

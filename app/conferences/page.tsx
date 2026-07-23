@@ -7,7 +7,7 @@ import { BackButton } from '@/components/BackButton';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { ConferenceStageBadge } from '@/components/ConferenceStageBadge';
 import { ConferenceKanbanBoard } from '@/components/ConferenceKanbanBoard';
-import { ProgramConferenceCard, type ProgramCardConference } from '@/components/ProgramConferenceCard';
+import { ProgramConferenceCard, RepAvatarStack, type ProgramCardConference } from '@/components/ProgramConferenceCard';
 import { computeConferenceStage, postConferenceDaysRemaining, type ConferenceStage } from '@/lib/conference-stage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -293,7 +293,17 @@ function ConferencesPageContent() {
   const [programToggle, setProgramToggle]          = useState<'upcoming' | 'active' | 'past'>('upcoming');
   const [programRepFilter, setProgramRepFilter]           = useState<string>('');
   const [programTerritoryFilter, setProgramTerritoryFilter] = useState<string>('');
+  const [programYearFilter, setProgramYearFilter]  = useState<string>('');
   const [showAllAttention, setShowAllAttention]    = useState(false);
+  const [programLayout, setProgramLayout]          = useState<'grid' | 'list'>('grid');
+
+  // Read the stored layout preference on mount only (SSR-safe — localStorage
+  // isn't available during server render, so this can't run in the initial
+  // useState initializer).
+  useEffect(() => {
+    const stored = localStorage.getItem('parlay-conferences-layout');
+    if (stored === 'grid' || stored === 'list') setProgramLayout(stored);
+  }, []);
 
   useEffect(() => {
     if (view !== 'program' || programLoaded) return;
@@ -388,12 +398,20 @@ function ConferencesPageContent() {
     return Array.from(map.entries()).map(([userId, displayName]) => ({ userId, displayName })).sort((a, b) => a.displayName.localeCompare(b.displayName));
   }, [programConfs]);
 
+  const programYearOptions = useMemo(
+    () => Array.from(new Set(programConfs.map(c => new Date(c.start_date + 'T00:00:00').getFullYear().toString()))).sort((a, b) => Number(b) - Number(a)),
+    [programConfs]
+  );
+
   const programStageFiltered = useMemo(() => {
     let list = programConfs.filter(c => {
       if (programToggle === 'upcoming') return c.stage === 'planning';
       if (programToggle === 'active') return c.stage === 'in_progress' || c.stage === 'post_conference';
       return c.stage === 'closed';
     });
+    if (programYearFilter) {
+      list = list.filter(c => new Date(c.start_date + 'T00:00:00').getFullYear().toString() === programYearFilter);
+    }
     if (programRepFilter) {
       const repId = Number(programRepFilter);
       list = list.filter(c => c.assignedReps.some(r => r.userId === repId));
@@ -405,7 +423,7 @@ function ConferencesPageContent() {
       }
     }
     return list;
-  }, [programConfs, programToggle, programRepFilter, programTerritoryFilter, territories]);
+  }, [programConfs, programToggle, programYearFilter, programRepFilter, programTerritoryFilter, territories]);
 
   const programCounts = useMemo(() => ({
     upcoming: programConfs.filter(c => c.stage === 'planning').length,
@@ -619,26 +637,61 @@ function ConferencesPageContent() {
               )}
 
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
-                  {([
-                    { key: 'upcoming', label: 'Upcoming', count: programCounts.upcoming },
-                    { key: 'active', label: 'Active', count: programCounts.active },
-                    { key: 'past', label: 'Past', count: programCounts.past },
-                  ] as const).map((t, i) => (
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+                    {([
+                      { key: 'upcoming', label: 'Upcoming', count: programCounts.upcoming },
+                      { key: 'active', label: 'Active', count: programCounts.active },
+                      { key: 'past', label: 'Past', count: programCounts.past },
+                    ] as const).map((t, i) => (
+                      <button
+                        key={t.key}
+                        type="button"
+                        onClick={() => setProgramToggle(t.key)}
+                        className={`px-3 py-1.5 text-xs font-medium transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
+                          programToggle === t.key ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                        }`}
+                      >
+                        {t.label} {t.count}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div style={{ display: 'flex', border: '0.5px solid var(--border, #E5E7EB)', borderRadius: 8, overflow: 'hidden' }}>
                     <button
-                      key={t.key}
                       type="button"
-                      onClick={() => setProgramToggle(t.key)}
-                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
-                        programToggle === t.key ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-                      }`}
+                      onClick={() => { setProgramLayout('grid'); localStorage.setItem('parlay-conferences-layout', 'grid'); }}
+                      style={{
+                        padding: '5px 9px', border: 'none', cursor: 'pointer',
+                        background: programLayout === 'grid' ? '#223A5E' : 'transparent',
+                        color: programLayout === 'grid' ? '#fff' : 'var(--text-secondary, #6B7280)',
+                      }}
+                      title="Grid view"
+                      aria-label="Grid view"
                     >
-                      {t.label} {t.count}
+                      <i className="ti ti-layout-grid" style={{ fontSize: 14 }} aria-hidden="true" />
                     </button>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={() => { setProgramLayout('list'); localStorage.setItem('parlay-conferences-layout', 'list'); }}
+                      style={{
+                        padding: '5px 9px', border: 'none', borderLeft: '0.5px solid var(--border, #E5E7EB)', cursor: 'pointer',
+                        background: programLayout === 'list' ? '#223A5E' : 'transparent',
+                        color: programLayout === 'list' ? '#fff' : 'var(--text-secondary, #6B7280)',
+                      }}
+                      title="List view"
+                      aria-label="List view"
+                    >
+                      <i className="ti ti-list" style={{ fontSize: 14 }} aria-hidden="true" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <select value={programYearFilter} onChange={e => setProgramYearFilter(e.target.value)} className="input-field text-sm">
+                    <option value="">All years</option>
+                    {programYearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
                   <select value={programRepFilter} onChange={e => setProgramRepFilter(e.target.value)} className="input-field text-sm">
                     <option value="">All reps</option>
                     {programRepOptions.map(r => <option key={r.userId} value={r.userId}>{r.displayName}</option>)}
@@ -653,6 +706,71 @@ function ConferencesPageContent() {
               {programStageFiltered.length === 0 ? (
                 <div className="card text-center py-10">
                   <p className="text-gray-500 text-sm">No conferences in this group.</p>
+                </div>
+              ) : programLayout === 'list' ? (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 12 }}>
+                    <colgroup>
+                      <col style={{ width: 200 }} />
+                      <col style={{ width: 110 }} />
+                      <col style={{ width: 110 }} />
+                      <col style={{ width: 130 }} />
+                      <col style={{ width: 110 }} />
+                      <col style={{ width: 130 }} />
+                    </colgroup>
+                    <thead>
+                      <tr style={{ borderBottom: '0.5px solid var(--border, #E5E7EB)' }}>
+                        {['Conference', 'Dates', 'Stage', 'Reps', 'Outreach', 'List status'].map(h => (
+                          <th key={h} style={{ padding: '7px 10px', textAlign: 'left', fontSize: 10, fontWeight: 500, color: 'var(--text-secondary, #6B7280)', textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {programStageFiltered.map((conf, i) => (
+                        <tr
+                          key={conf.id}
+                          onClick={() => router.push(`/conferences/${conf.id}`)}
+                          style={{
+                            borderBottom: '0.5px solid var(--border, #E5E7EB)',
+                            cursor: 'pointer',
+                            background: i % 2 === 1 ? 'var(--surface-1, #F9FAFB)' : 'transparent',
+                          }}
+                        >
+                          <td style={{ padding: '8px 10px', fontWeight: 500, color: 'var(--text-primary, #111827)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {conf.name}
+                          </td>
+                          <td style={{ padding: '8px 10px', color: 'var(--text-secondary, #6B7280)' }}>
+                            {formatDate(conf.start_date)}
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            {conf.stage && (
+                              <ConferenceStageBadge
+                                stage={conf.stage}
+                                daysRemaining={conf.stage === 'post_conference' ? postConferenceDaysRemaining({ end_date: conf.end_date, post_conference_days: conf.post_conference_days ?? null }) : undefined}
+                              />
+                            )}
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            <RepAvatarStack reps={conf.assignedReps} />
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            {conf.outreachProgress
+                              ? `${conf.outreachProgress.assigned} / ${conf.outreachProgress.total}`
+                              : <span style={{ color: 'var(--text-muted, #9CA3AF)' }}>—</span>
+                            }
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            {conf.hasAttendeeList
+                              ? <span style={{ color: 'var(--text-success, #15803D)', fontSize: 11 }}>✓ {conf.attendeeCount?.toLocaleString()}</span>
+                              : <span style={{ color: 'var(--text-muted, #9CA3AF)', fontSize: 11 }}>Not uploaded</span>
+                            }
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
