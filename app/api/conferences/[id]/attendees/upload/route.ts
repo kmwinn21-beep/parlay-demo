@@ -17,6 +17,7 @@ import {
   matchAttendee,
   confirmAttendeeMatch,
 } from '@/lib/matching';
+import { normalizeNameKey, normalizeReversedNameKey, splitOwnerTokens } from '@/lib/normalize';
 
 function normalizeConsentValue(raw: string | undefined | null): string {
   if (!raw) return 'Consent Not Recorded';
@@ -132,34 +133,6 @@ export async function POST(
       }
     }
 
-    const normalizeOwnerName = (value: string): string =>
-      value
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/[,.'’`-]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-    const normalizeNameKey = (value: string): string => {
-      const tokens = normalizeOwnerName(value).split(' ').filter(Boolean);
-      if (tokens.length === 0) return '';
-      if (tokens.length === 1) return tokens[0];
-      return `${tokens[0]} ${tokens[tokens.length - 1]}`;
-    };
-    const normalizeReversedNameKey = (value: string): string => {
-      const v = value.trim();
-      if (!v.includes(',')) return '';
-      const parts = v.split(',').map(s => s.trim()).filter(Boolean);
-      if (parts.length < 2) return '';
-      const rejoined = `${parts.slice(1).join(' ')} ${parts[0]}`;
-      return normalizeNameKey(rejoined);
-    };
-    const splitOwnerTokens = (raw: string): string[] => (
-      raw
-        .split(/\s*(?:;|\||\/|&|\band\b)\s*/i)
-        .map(s => s.trim())
-        .filter(Boolean)
-    );
     const userNameIndex = new Map<string, Set<number>>();
     for (const r of usersWithConfig.rows) {
       const id = Number(r.config_id);
