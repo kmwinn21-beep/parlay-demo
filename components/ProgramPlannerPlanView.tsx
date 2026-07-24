@@ -90,6 +90,15 @@ interface ProgramPlannerPlanViewProps {
 // token Admin → Brand's "Accent #1" swatch controls.
 const COMMITTED_FILL_STYLE: CSSProperties = { backgroundColor: 'rgb(var(--brand-accent-rgb, 52 211 153) / 0.08)' };
 
+// Same "committed for this plan year" test as CommitCell's checkmark-vs-"+ to
+// Program" branch (line ~694 below) — NOT conferences.committed_to_program,
+// which is true for nearly every pre-existing conference regardless of
+// whether it's been added to *this* year's program yet.
+function isCommittedForYear(c: { decision: string | null; startDate: string }, year: number): boolean {
+  return (c.decision === 'attend' || c.decision === 'reduce')
+    && new Date(c.startDate + 'T00:00:00').getFullYear() === year;
+}
+
 function fmtCurrency(v: number | null | undefined): string {
   if (v == null) return '—';
   if (Math.abs(v) >= 1000) return '$' + (v / 1000).toFixed(v % 1000 === 0 ? 0 : 1) + 'K';
@@ -2102,7 +2111,7 @@ export function ProgramPlannerPlanView({
                         draggable={!!section.dropKey}
                         onDragStart={() => setDraggedId(c.conferenceId)}
                         onDragEnd={() => setDraggedId(null)}
-                        style={c.committedToProgram ? COMMITTED_FILL_STYLE : undefined}
+                        style={isCommittedForYear(c, year) ? COMMITTED_FILL_STYLE : undefined}
                         className={`px-4 py-3 space-y-2.5 ${dimRows ? 'opacity-60' : ''} ${draggedId === c.conferenceId ? 'opacity-40' : ''}`}
                       >
                         <div className="flex items-start gap-2">
@@ -2300,7 +2309,7 @@ export function ProgramPlannerPlanView({
                             draggable={!!section.dropKey}
                             onDragStart={() => setDraggedId(c.conferenceId)}
                             onDragEnd={() => setDraggedId(null)}
-                            style={c.committedToProgram ? COMMITTED_FILL_STYLE : (i % 2 === 1 ? { backgroundColor: 'var(--color-background-secondary, #F9FAFB)' } : {})}
+                            style={isCommittedForYear(c, year) ? COMMITTED_FILL_STYLE : (i % 2 === 1 ? { backgroundColor: 'var(--color-background-secondary, #F9FAFB)' } : {})}
                             className={`hover:bg-blue-50/30 transition-colors ${draggedId === c.conferenceId ? 'opacity-40' : ''}`}
                           >
                             <td className="px-2 py-2 cursor-grab active:cursor-grabbing"><GripIcon /></td>
@@ -2529,7 +2538,7 @@ export function ProgramPlannerPlanView({
                           draggable={!!section.dropKey}
                           onDragStart={() => setDraggedId(c.conferenceId)}
                           onDragEnd={() => setDraggedId(null)}
-                          style={c.committedToProgram ? COMMITTED_FILL_STYLE : undefined}
+                          style={isCommittedForYear(c, year) ? COMMITTED_FILL_STYLE : undefined}
                           className={`bg-white rounded-lg border border-gray-200 p-2.5 shadow-sm hover:shadow-md transition-shadow ${section.dropKey ? 'cursor-grab active:cursor-grabbing' : ''} ${
                             draggedId === c.conferenceId ? 'opacity-40' : ''
                           } ${key === 'cut' ? 'opacity-70' : ''}`}
