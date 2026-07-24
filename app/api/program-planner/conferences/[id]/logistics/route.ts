@@ -46,7 +46,7 @@ export async function GET(
       // Those are the source of truth for display here — this drawer's own edits
       // write back to both places, but a table-side edit only touches this one.
       db.execute({
-        sql: `SELECT sponsorship_level, booth_number FROM conferences WHERE id = ?`,
+        sql: `SELECT sponsorship_level, booth_number, internal_attendees FROM conferences WHERE id = ?`,
         args: [confId],
       }),
       db.execute({
@@ -167,6 +167,32 @@ export async function GET(
       const parsed = JSON.parse(String(planRow?.assigned_rep_ids ?? '[]'));
       if (Array.isArray(parsed)) assignedRepIds = parsed.map(Number).filter(n => !isNaN(n));
     } catch { /* ignore */ }
+
+    // Conference Details' "internal attendees" is a separate rep-assignment
+    // concept (comma-separated config_options.value names, not ids) that is
+    // never synced into conference_plans.assigned_rep_ids. When no Program
+    // Planner assignment exists yet, fall back to resolving those names
+    // against config_options so the Travel tab isn't empty just because the
+    // conference was only ever managed from Conference Details.
+    if (assignedRepIds.length === 0) {
+      const internalAttendeeNames = String(confRow?.internal_attendees ?? '')
+        .split(',')
+        .map(n => n.trim())
+        .filter(Boolean);
+      if (internalAttendeeNames.length > 0) {
+        const allUsersRes = await db.execute({
+          sql: `SELECT id, value FROM config_options WHERE category = 'user'`,
+          args: [],
+        });
+        const nameToId = new Map<string, number>();
+        for (const r of allUsersRes.rows) {
+          nameToId.set(String(r.value).trim().toLowerCase(), Number(r.id));
+        }
+        assignedRepIds = internalAttendeeNames
+          .map(name => nameToId.get(name.toLowerCase()))
+          .filter((n): n is number => n !== undefined);
+      }
+    }
 
     let repTravel: Array<{
       userId: number; displayName: string; initials: string;
