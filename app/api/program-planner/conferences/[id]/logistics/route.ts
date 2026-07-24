@@ -30,7 +30,7 @@ export async function GET(
   if (isNaN(year)) return NextResponse.json({ error: 'year is required' }, { status: 400 });
 
   try {
-    const [planRes, confRes, deadlinesRes, speakingRes, filesRes, hostedEventsRes] = await Promise.all([
+    const [planRes, confRes, deadlinesRes, speakingRes, filesRes, hostedEventsRes, notesRes] = await Promise.all([
       db.execute({
         sql: `SELECT booth_number, booth_size, booth_type, booth_contract_signed,
                      sponsorship_tier, sponsorship_contract_signed, sponsorship_deliverables_due,
@@ -78,6 +78,15 @@ export async function GET(
                      catering_confirmed, invitations_sent_date, rsvp_deadline, notes
               FROM conference_plan_hosted_events WHERE conference_id = ? AND plan_year = ?
               ORDER BY event_date ASC, id ASC`,
+        args: [confId, year],
+      }),
+      db.execute({
+        sql: `SELECT n.id, n.section, n.body, n.created_at,
+                     u.display_name, u.first_name, u.last_name, u.email
+              FROM conference_plan_notes n
+              JOIN users u ON u.id = n.user_id
+              WHERE n.conference_id = ? AND n.plan_year = ?
+              ORDER BY n.created_at DESC, n.id DESC`,
         args: [confId, year],
       }),
     ]);
@@ -207,7 +216,19 @@ export async function GET(
       });
     }
 
-    return NextResponse.json({ plan, deadlines, speakingSlots, repTravel, files, hostedEvents });
+    const notes = notesRes.rows.map(r => {
+      const userName = resolveUserDisplayName(r);
+      return {
+        id: Number(r.id),
+        section: String(r.section),
+        body: String(r.body),
+        userName,
+        userInitials: getInitials(userName),
+        createdAt: String(r.created_at),
+      };
+    });
+
+    return NextResponse.json({ plan, deadlines, speakingSlots, repTravel, files, hostedEvents, notes });
   } catch (error) {
     console.error('GET /api/program-planner/conferences/[id]/logistics error:', error);
     return NextResponse.json({ error: 'Failed to fetch logistics data' }, { status: 500 });

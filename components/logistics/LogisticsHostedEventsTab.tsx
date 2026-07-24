@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { type LogisticsHostedEvent, fmtDate } from './types';
+import { type LogisticsHostedEvent, type PlanNote, type PlanNoteSection, fmtDate } from './types';
 import { EmptyState } from './shared';
+import { PlanSectionNotes } from './PlanSectionNotes';
 
 const EVENT_TYPE_OPTIONS = [
   { value: 'dinner', label: 'Dinner' },
@@ -18,6 +19,9 @@ interface Props {
   planYear: number;
   hostedEvents: LogisticsHostedEvent[];
   onChange: (events: LogisticsHostedEvent[]) => void;
+  notes: PlanNote[];
+  onNoteCreated: (note: PlanNote) => void;
+  onShowAllNotes: (section: PlanNoteSection) => void;
 }
 
 interface Draft {
@@ -33,7 +37,7 @@ function toDraft(e: LogisticsHostedEvent): Draft {
   };
 }
 
-export function LogisticsHostedEventsTab({ conferenceId, planYear, hostedEvents, onChange }: Props) {
+export function LogisticsHostedEventsTab({ conferenceId, planYear, hostedEvents, onChange, notes, onNoteCreated, onShowAllNotes }: Props) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
@@ -99,9 +103,12 @@ export function LogisticsHostedEventsTab({ conferenceId, planYear, hostedEvents,
 
   if (hostedEvents.length === 0) {
     return (
-      <div>
-        <EmptyState icon="ti-confetti" headline="No hosted events planned" subtext="Add a dinner, reception, or other event" />
-        <button type="button" onClick={addEvent} className="btn-primary text-xs px-3 py-1.5 mx-auto block">+ Add hosted event</button>
+      <div className="space-y-4">
+        <div>
+          <EmptyState icon="ti-confetti" headline="No hosted events planned" subtext="Add a dinner, reception, or other event" />
+          <button type="button" onClick={addEvent} className="btn-primary text-xs px-3 py-1.5 mx-auto block">+ Add hosted event</button>
+        </div>
+        <PlanSectionNotes conferenceId={conferenceId} planYear={planYear} section="hosted" notes={notes} onNoteCreated={onNoteCreated} onShowAll={onShowAllNotes} />
       </div>
     );
   }
@@ -193,6 +200,7 @@ export function LogisticsHostedEventsTab({ conferenceId, planYear, hostedEvents,
       <button type="button" onClick={addEvent} className="w-full text-center text-xs text-brand-secondary hover:text-brand-primary font-medium py-2">
         + Add hosted event
       </button>
+      <PlanSectionNotes conferenceId={conferenceId} planYear={planYear} section="hosted" notes={notes} onNoteCreated={onNoteCreated} onShowAll={onShowAllNotes} />
     </div>
   );
 }

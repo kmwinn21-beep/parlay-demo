@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useDrawerResize } from '@/lib/useDrawerResize';
-import { type LogisticsResponse, type AssignedRepOption } from './types';
+import { type LogisticsResponse, type AssignedRepOption, type PlanNote, type PlanNoteSection } from './types';
 import { Spinner, ChevronLeftIcon, ChevronRightIcon } from './shared';
+import { AllSectionNotesDrawer } from './PlanSectionNotes';
 import { LogisticsDeadlinesTab } from './LogisticsDeadlinesTab';
 import { LogisticsRegistrationTab } from './LogisticsRegistrationTab';
 import { LogisticsBoothTab } from './LogisticsBoothTab';
@@ -86,8 +87,11 @@ export function ConferencePlanLogisticsDrawer({
   // sections don't apply to a conference that isn't actually on the program yet.
   const visibleTabsForConference = committedToProgram ? VISIBLE_TABS : VISIBLE_TABS.filter(t => t.id === 'input');
   const [teamInputRequestFormOpen, setTeamInputRequestFormOpen] = useState(false);
+  const [notesDrawerSection, setNotesDrawerSection] = useState<PlanNoteSection | null>(null);
   const lastConferenceIdRef = useRef<number | null>(null);
   const tabBarRef = useRef<HTMLDivElement>(null);
+
+  const onNoteCreated = (note: PlanNote) => setData(d => d && { ...d, notes: [note, ...d.notes] });
 
   const scrollTabs = (dir: -1 | 1) => {
     tabBarRef.current?.scrollBy({ left: dir * 140, behavior: 'smooth' });
@@ -114,6 +118,7 @@ export function ConferencePlanLogisticsDrawer({
     // for a different conference; preserve tab when reopening for the same one.
     if (lastConferenceIdRef.current !== conferenceId) {
       setActiveTab(committedToProgram ? 'deadlines' : 'input');
+      setNotesDrawerSection(null);
       lastConferenceIdRef.current = conferenceId;
     } else if (!committedToProgram) {
       setActiveTab('input');
@@ -200,7 +205,7 @@ export function ConferencePlanLogisticsDrawer({
               <button
                 key={t.id}
                 type="button"
-                onClick={() => setActiveTab(t.id)}
+                onClick={() => { setActiveTab(t.id); setNotesDrawerSection(null); }}
                 className={`px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
                   activeTab === t.id ? 'bg-brand-primary text-white' : 'text-gray-500 hover:bg-gray-100'
                 }`}
@@ -221,7 +226,14 @@ export function ConferencePlanLogisticsDrawer({
         )}
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto relative">
+          {notesDrawerSection && data && (
+            <AllSectionNotesDrawer
+              section={notesDrawerSection}
+              notes={data.notes.filter(n => n.section === notesDrawerSection)}
+              onClose={() => setNotesDrawerSection(null)}
+            />
+          )}
           {loading ? (
             <div className="flex items-center justify-center py-16"><Spinner /></div>
           ) : error ? (
@@ -269,6 +281,7 @@ export function ConferencePlanLogisticsDrawer({
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
                   onSpeakingSlotsChange={speakingSlots => setData(d => d && { ...d, speakingSlots })}
                   onFilesChange={files => setData(d => d && { ...d, files })}
+                  notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
                 />
               )}
               {activeTab === 'registration' && (
@@ -276,6 +289,7 @@ export function ConferencePlanLogisticsDrawer({
                   conferenceId={conferenceId} planYear={planYear} plan={data.plan}
                   deadlines={data.deadlines}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
+                  notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
                 />
               )}
               {activeTab === 'booth' && (
@@ -285,6 +299,7 @@ export function ConferencePlanLogisticsDrawer({
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
                   boothPresent={boothPresent} boothWidth={boothWidth} boothLength={boothLength} boothHall={boothHall}
                   onBoothUpdated={onBoothUpdated}
+                  notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
                 />
               )}
               {activeTab === 'sponsorship' && (
@@ -293,6 +308,7 @@ export function ConferencePlanLogisticsDrawer({
                   deadlines={data.deadlines}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
                   onSponsorshipUpdated={onSponsorshipUpdated}
+                  notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
                 />
               )}
               {activeTab === 'speaking' && (
@@ -302,6 +318,7 @@ export function ConferencePlanLogisticsDrawer({
                   deadlines={data.deadlines}
                   onChange={speakingSlots => setData(d => d && { ...d, speakingSlots })}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
+                  notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
                 />
               )}
               {activeTab === 'travel' && (
@@ -311,6 +328,7 @@ export function ConferencePlanLogisticsDrawer({
                   deadlines={data.deadlines}
                   onChange={repTravel => setData(d => d && { ...d, repTravel })}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
+                  notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
                 />
               )}
               {activeTab === 'hosted' && (
@@ -318,6 +336,7 @@ export function ConferencePlanLogisticsDrawer({
                   conferenceId={conferenceId} planYear={planYear}
                   hostedEvents={data.hostedEvents}
                   onChange={hostedEvents => setData(d => d && { ...d, hostedEvents })}
+                  notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
                 />
               )}
               {activeTab === 'shipping' && (
@@ -325,6 +344,7 @@ export function ConferencePlanLogisticsDrawer({
                   conferenceId={conferenceId} planYear={planYear} plan={data.plan}
                   deadlines={data.deadlines}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
+                  notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
                 />
               )}
               {activeTab === 'postshow' && (
@@ -332,6 +352,7 @@ export function ConferencePlanLogisticsDrawer({
                   conferenceId={conferenceId} planYear={planYear}
                   deadlines={data.deadlines} startDate={startDate} endDate={endDate}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
+                  notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
                 />
               )}
               {activeTab === 'files' && (
@@ -339,6 +360,7 @@ export function ConferencePlanLogisticsDrawer({
                   conferenceId={conferenceId} planYear={planYear}
                   files={data.files}
                   onChange={files => setData(d => d && { ...d, files })}
+                  notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
                 />
               )}
             </div>

@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { type LogisticsDeadline, type LogisticsSpeakingSlot, type LogisticsFile, type AssignedRepOption } from './types';
+import { type LogisticsDeadline, type LogisticsSpeakingSlot, type LogisticsFile, type AssignedRepOption, type PlanNote, type PlanNoteSection } from './types';
 import { FileRow, FileUploadZone, DeadlineStatusPill, TrashIcon } from './shared';
+import { PlanSectionNotes } from './PlanSectionNotes';
 
 const CATEGORY_LABELS: Record<string, string> = {
   registration: 'Registration',
@@ -52,6 +53,9 @@ interface Props {
   onDeadlinesChange: (deadlines: LogisticsDeadline[]) => void;
   onSpeakingSlotsChange: (slots: LogisticsSpeakingSlot[]) => void;
   onFilesChange: (files: LogisticsFile[]) => void;
+  notes: PlanNote[];
+  onNoteCreated: (note: PlanNote) => void;
+  onShowAllNotes: (section: PlanNoteSection) => void;
 }
 
 function sortDeadlines(deadlines: LogisticsDeadline[]): LogisticsDeadline[] {
@@ -69,6 +73,7 @@ function sortDeadlines(deadlines: LogisticsDeadline[]): LogisticsDeadline[] {
 export function LogisticsDeadlinesTab({
   conferenceId, planYear, deadlines, speakingSlots, files, assignedReps,
   onDeadlinesChange, onSpeakingSlotsChange, onFilesChange,
+  notes, onNoteCreated, onShowAllNotes,
 }: Props) {
   const [newLabel, setNewLabel] = useState('');
   const [newDueDate, setNewDueDate] = useState('');
@@ -261,6 +266,8 @@ export function LogisticsDeadlinesTab({
         )}
         <FileUploadZone conferenceId={conferenceId} planYear={planYear} onUploaded={f => onFilesChange([f, ...files])} />
       </div>
+
+      <PlanSectionNotes conferenceId={conferenceId} planYear={planYear} section="deadlines" notes={notes} onNoteCreated={onNoteCreated} onShowAll={onShowAllNotes} />
     </div>
   );
 }

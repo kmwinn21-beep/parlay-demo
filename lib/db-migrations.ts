@@ -1935,4 +1935,26 @@ export const migrations: string[] = [
     )`,
   `CREATE INDEX IF NOT EXISTS idx_master_account_list_upload ON master_account_list(upload_id)`,
   `CREATE INDEX IF NOT EXISTS idx_master_account_list_normalized ON master_account_list(company_name_normalized)`,
+  // 578 — conference_plan_notes: per-section threaded notes for the Plan
+  // Logistics drawer (Deadlines/Registration/Booth/Sponsorship/Speaking/
+  // Travel/Hosted/Shipping/Post-show/Files tabs — NOT Input, which keeps its
+  // existing calendar_notes-backed CalendarNotesPanel thread). Replaces the
+  // old shared, unthreaded conference_plans.logistics_notes text field
+  // (still present, just no longer written to by the drawer) with a real
+  // per-user, per-section, timestamped, @mention-taggable thread — same
+  // conference_id/plan_year scoping convention as conference_plan_deadlines.
+  `CREATE TABLE IF NOT EXISTS conference_plan_notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+      plan_year INTEGER NOT NULL,
+      section TEXT NOT NULL CHECK(section IN (
+        'deadlines','registration','booth','sponsorship','speaking',
+        'travel','hosted','shipping','postshow','files'
+      )),
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      body TEXT NOT NULL,
+      tagged_users TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+  `CREATE INDEX IF NOT EXISTS idx_conference_plan_notes_lookup ON conference_plan_notes(conference_id, plan_year, section)`,
 ];

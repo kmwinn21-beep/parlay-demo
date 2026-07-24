@@ -1,10 +1,17 @@
 'use client';
 
-import { type LogisticsFile } from './types';
+import { type LogisticsFile, type PlanNote, type PlanNoteSection } from './types';
 import { FileRow, FileUploadZone, EmptyState } from './shared';
+import { PlanSectionNotes } from './PlanSectionNotes';
 
-export function LogisticsFilesTab({ conferenceId, planYear, files, onChange }: {
-  conferenceId: number; planYear: number; files: LogisticsFile[]; onChange: (files: LogisticsFile[]) => void;
+export function LogisticsFilesTab({ conferenceId, planYear, files, onChange, notes, onNoteCreated, onShowAllNotes }: {
+  conferenceId: number;
+  planYear: number;
+  files: LogisticsFile[];
+  onChange: (files: LogisticsFile[]) => void;
+  notes: PlanNote[];
+  onNoteCreated: (note: PlanNote) => void;
+  onShowAllNotes: (section: PlanNoteSection) => void;
 }) {
   return (
     <div className="space-y-4">
@@ -16,6 +23,7 @@ export function LogisticsFilesTab({ conferenceId, planYear, files, onChange }: {
           {files.map(f => <FileRow key={f.id} conferenceId={conferenceId} file={f} onDeleted={id => onChange(files.filter(x => x.id !== id))} />)}
         </div>
       )}
+      <PlanSectionNotes conferenceId={conferenceId} planYear={planYear} section="files" notes={notes} onNoteCreated={onNoteCreated} onShowAll={onShowAllNotes} />
     </div>
   );
 }

@@ -79,6 +79,19 @@ export interface LogisticsHostedEvent {
   notes: string | null;
 }
 
+// Every tab except Input can carry notes — Input keeps its existing,
+// separate CalendarNotesPanel/calendar_notes thread.
+export type PlanNoteSection = 'deadlines' | 'registration' | 'booth' | 'sponsorship' | 'speaking' | 'travel' | 'hosted' | 'shipping' | 'postshow' | 'files';
+
+export interface PlanNote {
+  id: number;
+  section: PlanNoteSection;
+  body: string;
+  userName: string;
+  userInitials: string;
+  createdAt: string;
+}
+
 export interface LogisticsResponse {
   plan: LogisticsPlan;
   deadlines: LogisticsDeadline[];
@@ -86,6 +99,7 @@ export interface LogisticsResponse {
   repTravel: LogisticsRepTravel[];
   files: LogisticsFile[];
   hostedEvents: LogisticsHostedEvent[];
+  notes: PlanNote[];
 }
 
 export interface AssignedRepOption {
