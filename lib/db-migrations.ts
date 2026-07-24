@@ -1891,4 +1891,48 @@ export const migrations: string[] = [
   // form. Single territory per company (unlike conferences' multi-select
   // territory_ids), since a company's territory is just where it lives.
   `ALTER TABLE companies ADD COLUMN territory_id INTEGER REFERENCES sales_territories(id) ON DELETE SET NULL`,
+  // 576 — master_account_list_uploads: one row per Master Accounts upload
+  // event (Admin → Master Accounts tab). Tracks the uploaded file's storage
+  // location, the column mapping used, and whether this upload is the
+  // currently-active list or has been archived by a later upload —
+  // 'replace' mode archives every prior upload before inserting a new one,
+  // 'merge' mode leaves prior uploads' status untouched (their rows just get
+  // updated/added to in place, see master_account_list below).
+  `CREATE TABLE IF NOT EXISTS master_account_list_uploads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uploaded_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      uploaded_at TEXT DEFAULT (datetime('now')),
+      file_name TEXT NOT NULL,
+      file_size INTEGER,
+      storage_key TEXT NOT NULL,
+      row_count INTEGER,
+      status TEXT NOT NULL DEFAULT 'active'
+        CHECK(status IN ('active', 'archived')),
+      upload_mode TEXT NOT NULL DEFAULT 'replace'
+        CHECK(upload_mode IN ('replace', 'merge')),
+      column_mapping TEXT NOT NULL DEFAULT '{}',
+      notes TEXT
+    )`,
+  // 577 — master_account_list: the actual uploaded account rows, one per
+  // company. company_name_normalized (lowercased, legal-suffix-stripped,
+  // punctuation-stripped) is precomputed on upload so later fuzzy matching
+  // doesn't have to renormalize on every read. domain is likewise
+  // precomputed from website for exact-domain matching. raw_row preserves
+  // the original mapped row as JSON for reference/debugging.
+  `CREATE TABLE IF NOT EXISTS master_account_list (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      upload_id INTEGER NOT NULL REFERENCES master_account_list_uploads(id) ON DELETE CASCADE,
+      company_name TEXT NOT NULL,
+      company_name_normalized TEXT NOT NULL,
+      website TEXT,
+      domain TEXT,
+      assigned_rep_id INTEGER,
+      assigned_rep_name TEXT,
+      hq_state TEXT,
+      raw_row TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )`,
+  `CREATE INDEX IF NOT EXISTS idx_master_account_list_upload ON master_account_list(upload_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_master_account_list_normalized ON master_account_list(company_name_normalized)`,
 ];
