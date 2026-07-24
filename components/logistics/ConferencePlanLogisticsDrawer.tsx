@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useDrawerResize } from '@/lib/useDrawerResize';
 import { type LogisticsResponse, type AssignedRepOption, type PlanNote, type PlanNoteSection } from './types';
 import { Spinner, ChevronLeftIcon, ChevronRightIcon } from './shared';
-import { AllSectionNotesDrawer } from './PlanSectionNotes';
+import { AllSectionNotesDrawer, NoteCard } from './PlanSectionNotes';
 import { LogisticsDeadlinesTab } from './LogisticsDeadlinesTab';
 import { LogisticsRegistrationTab } from './LogisticsRegistrationTab';
 import { LogisticsBoothTab } from './LogisticsBoothTab';
@@ -45,6 +45,7 @@ export interface ConferencePlanLogisticsDrawerProps {
 
 const TABS = [
   { id: 'input', label: 'Input' },
+  { id: 'all-notes', label: 'All Notes' },
   { id: 'deadlines', label: 'Deadlines' },
   { id: 'registration', label: 'Registration' },
   { id: 'booth', label: 'Booth' },
@@ -270,7 +271,17 @@ export function ConferencePlanLogisticsDrawer({
                     conferenceName={conferenceName}
                     requestFormOpen={teamInputRequestFormOpen}
                     onRequestFormChange={setTeamInputRequestFormOpen}
+                    layout="kanban"
                   />
+                </div>
+              )}
+              {activeTab === 'all-notes' && (
+                <div className="space-y-2">
+                  {data.notes.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-8">No notes logged for this conference yet.</p>
+                  ) : (
+                    data.notes.map(n => <NoteCard key={n.id} note={n} showSectionPill />)
+                  )}
                 </div>
               )}
               {activeTab === 'deadlines' && (

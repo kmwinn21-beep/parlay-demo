@@ -42,6 +42,11 @@ export type ConferenceInputPanelProps = {
   conferenceName: string;
   requestFormOpen?: boolean;
   onRequestFormChange?: (open: boolean) => void;
+  /** 'kanban' lays the decision buckets out as side-by-side columns instead of
+   * stacked sections — used by the Plan Logistics drawer's Input tab, which
+   * has the width (900px) for it. Defaults to 'stacked' so the narrower Cal
+   * Intel drawer / ConferenceInputPanel usages are unaffected. */
+  layout?: 'stacked' | 'kanban';
 };
 
 const DECISION_KEYS: DecisionKey[] = ['confirmed', 'attend_but_reduce', 'watching', 'passed', 'pending_approval'];
@@ -238,6 +243,65 @@ function AwaitingRow({
   );
 }
 
+function OpinionCard({ op, decisionKey, color, currentUserEmail, onEdit }: {
+  op: UserOpinion;
+  decisionKey: DecisionKey;
+  color: string;
+  currentUserEmail: string;
+  onEdit: () => void;
+}) {
+  const isCurrentUser = !op.isGuest && op.email === currentUserEmail;
+  return (
+    <div style={{ borderLeft: `2px solid ${color}`, paddingLeft: 10, marginBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-500 flex-shrink-0">
+          {op.displayName.charAt(0).toUpperCase()}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <p className="text-sm font-medium text-gray-800 leading-tight truncate">{op.displayName}</p>
+            {op.isGuest && (
+              <span style={{ fontSize: 9, fontWeight: 600, color: '#6b7280', background: '#f3f4f6', borderRadius: 4, padding: '1px 4px', flexShrink: 0 }}>
+                External
+              </span>
+            )}
+          </div>
+          <p className="text-[10px] text-gray-400">{timeAgo(op.updatedAt)}</p>
+        </div>
+        {isCurrentUser && (
+          <button
+            type="button"
+            onClick={onEdit}
+            title="Change your input"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 3,
+              padding: '2px 6px', borderRadius: 5, fontSize: 9, fontWeight: 600,
+              border: `1px solid ${color}`, background: color + '18',
+              color, cursor: 'pointer', flexShrink: 0,
+            }}
+          >
+            <svg width="9" height="9" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            Edit
+          </button>
+        )}
+        <span
+          className="flex-shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-semibold text-white"
+          style={{ backgroundColor: color }}
+        >
+          {DECISION_LABEL[decisionKey]}
+        </span>
+      </div>
+      {op.note && (
+        <p className="text-xs text-gray-500 italic mt-1.5 bg-gray-50 rounded px-2 py-1.5">
+          &ldquo;{op.note}&rdquo;
+        </p>
+      )}
+    </div>
+  );
+}
+
 function AwaitingInputSection({ pendingRequests, conferenceId }: { pendingRequests: PendingRequest[]; conferenceId: number }) {
   const pending = pendingRequests.filter(r => r.status === 'pending');
   if (pending.length === 0) return null;
@@ -372,6 +436,7 @@ export function TeamInputPanel({
   conferenceName,
   requestFormOpen: requestFormOpenProp,
   onRequestFormChange,
+  layout = 'stacked',
 }: ConferenceInputPanelProps) {
   const { user } = useUser();
   const currentUserEmail = user?.email ?? '';
@@ -564,76 +629,70 @@ export function TeamInputPanel({
         ))}
       </div>
 
-      {/* Opinions grouped by decision */}
-      <div className="space-y-5 mb-2">
-        {DECISION_KEYS.filter(k => groupCounts[k] > 0).map(k => {
-          const color = DECISION_COLOR[k];
-          const opinions = data!.opinionsByDecision[k];
-          return (
-            <div key={k}>
-              <p className="text-[10px] font-bold uppercase tracking-wide mb-2" style={{ color }}>
-                {DECISION_LABEL[k]} · {opinions.length}
-              </p>
-              {opinions.map(op => {
-                const isCurrentUser = !op.isGuest && op.email === currentUserEmail;
+      {/* Opinions grouped by decision — side-by-side Kanban columns when
+          layout='kanban' (Plan Logistics drawer, which has the width for
+          it), stacked sections everywhere else. No drag-and-drop between
+          columns: dragging a card would mean editing someone else's
+          attendance decision, so the only way to move a card is still the
+          existing per-person "Edit" button on your own opinion. */}
+      {layout === 'kanban' ? (
+        <div className="relative -mx-1 mb-2">
+          <div className="overflow-x-auto pb-2 px-1">
+            <div className="flex items-start gap-3 min-w-max">
+              {DECISION_KEYS.filter(k => groupCounts[k] > 0).map(k => {
+                const color = DECISION_COLOR[k];
+                const opinions = data!.opinionsByDecision[k];
                 return (
-                  <div
-                    key={op.userId}
-                    style={{ borderLeft: `2px solid ${color}`, paddingLeft: 10, marginBottom: 8 }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-500 flex-shrink-0">
-                        {op.displayName.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <p className="text-sm font-medium text-gray-800 leading-tight truncate">{op.displayName}</p>
-                          {op.isGuest && (
-                            <span style={{ fontSize: 9, fontWeight: 600, color: '#6b7280', background: '#f3f4f6', borderRadius: 4, padding: '1px 4px', flexShrink: 0 }}>
-                              External
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-gray-400">{timeAgo(op.updatedAt)}</p>
-                      </div>
-                      {/* Edit button for current user's opinion — left of the pill */}
-                      {isCurrentUser && (
-                        <button
-                          type="button"
-                          onClick={() => setEditTarget({ fromKey: k, op })}
-                          title="Change your input"
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 3,
-                            padding: '2px 6px', borderRadius: 5, fontSize: 9, fontWeight: 600,
-                            border: `1px solid ${color}`, background: color + '18',
-                            color, cursor: 'pointer', flexShrink: 0,
-                          }}
-                        >
-                          <svg width="9" height="9" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                          Edit
-                        </button>
-                      )}
-                      <span
-                        className="flex-shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-semibold text-white"
-                        style={{ backgroundColor: color }}
-                      >
-                        {DECISION_LABEL[k]}
+                  <div key={k} className="w-64 flex-shrink-0 rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="flex items-center gap-2 px-3 py-2" style={{ backgroundColor: color + '18' }}>
+                      <span className="text-xs font-semibold flex-1 truncate" style={{ color }}>{DECISION_LABEL[k]}</span>
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold text-white flex-shrink-0" style={{ backgroundColor: color }}>
+                        {opinions.length}
                       </span>
                     </div>
-                    {op.note && (
-                      <p className="text-xs text-gray-500 italic mt-1.5 bg-gray-50 rounded px-2 py-1.5">
-                        &ldquo;{op.note}&rdquo;
-                      </p>
-                    )}
+                    <div className="p-2 space-y-2 min-h-[80px] bg-gray-50/50">
+                      {opinions.map(op => (
+                        <OpinionCard
+                          key={op.userId}
+                          op={op}
+                          decisionKey={k}
+                          color={color}
+                          currentUserEmail={currentUserEmail}
+                          onEdit={() => setEditTarget({ fromKey: k, op })}
+                        />
+                      ))}
+                    </div>
                   </div>
                 );
               })}
             </div>
-          );
-        })}
-      </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-5 mb-2">
+          {DECISION_KEYS.filter(k => groupCounts[k] > 0).map(k => {
+            const color = DECISION_COLOR[k];
+            const opinions = data!.opinionsByDecision[k];
+            return (
+              <div key={k}>
+                <p className="text-[10px] font-bold uppercase tracking-wide mb-2" style={{ color }}>
+                  {DECISION_LABEL[k]} · {opinions.length}
+                </p>
+                {opinions.map(op => (
+                  <OpinionCard
+                    key={op.userId}
+                    op={op}
+                    decisionKey={k}
+                    color={color}
+                    currentUserEmail={currentUserEmail}
+                    onEdit={() => setEditTarget({ fromKey: k, op })}
+                  />
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Awaiting input */}
       <AwaitingInputSection pendingRequests={pendingRequests} conferenceId={conferenceId} />
