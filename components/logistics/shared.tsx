@@ -1,8 +1,40 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import toast from 'react-hot-toast';
 import { colorForName, fmtFileSize, fmtDate, type LogisticsFile, type LogisticsDeadline } from './types';
+
+// Below this container width, a 2-column field grid gets cramped enough that a
+// single column reads better — measured live via ResizeObserver so the layout
+// keeps up as the drawer itself is resized (see useDrawerResize), not just at
+// mount.
+const TWO_COL_MIN_WIDTH = 460;
+
+// Wraps a group of plain form fields (AutoSaveField/select/etc. — NOT the
+// checklist, notes, sponsorship-tier-picker, or speaking-slots sections,
+// which stay their own full-width blocks) in a 2-column grid that collapses
+// to 1 column once the drawer is resized narrower than it comfortably fits.
+export function TwoColFieldGrid({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [twoCol, setTwoCol] = useState(true);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new ResizeObserver(entries => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      setTwoCol(width >= TWO_COL_MIN_WIDTH);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} className={`grid gap-4 ${twoCol ? 'grid-cols-2' : 'grid-cols-1'}`}>
+      {children}
+    </div>
+  );
+}
 
 // No Tabler icon font is loaded anywhere in this app, so `ti ti-*` classes render
 // nothing — these inline SVGs (same pattern as BudgetVsActualModal.tsx /

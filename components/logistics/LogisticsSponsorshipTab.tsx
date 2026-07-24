@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { type LogisticsPlan, type LogisticsDeadline } from './types';
-import { AutoSaveField, AutoSaveCheckbox, SavedCheckmark, patchPlanField, ChecklistSection } from './shared';
+import { AutoSaveField, AutoSaveCheckbox, SavedCheckmark, patchPlanField, ChecklistSection, TwoColFieldGrid } from './shared';
 
 interface SponsorshipOption { id: number; value: string; color: string | null; is_system: number }
 
@@ -115,8 +115,10 @@ export function LogisticsSponsorshipTab({ conferenceId, planYear, plan, deadline
   return (
     <div className="space-y-4">
       <SponsorshipTierPicker conferenceId={conferenceId} planYear={planYear} initialValue={plan.sponsorshipTier} onSponsorshipUpdated={onSponsorshipUpdated} />
-      <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="sponsorshipContractSigned" label="Contract signed date" type="date" initialValue={plan.sponsorshipContractSigned ?? ''} />
-      <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="sponsorshipDeliverablesDue" label="Deliverables due date" type="date" initialValue={plan.sponsorshipDeliverablesDue ?? ''} />
+      <TwoColFieldGrid>
+        <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="sponsorshipContractSigned" label="Contract signed date" type="date" initialValue={plan.sponsorshipContractSigned ?? ''} />
+        <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="sponsorshipDeliverablesDue" label="Deliverables due date" type="date" initialValue={plan.sponsorshipDeliverablesDue ?? ''} />
+      </TwoColFieldGrid>
       <AutoSaveCheckbox conferenceId={conferenceId} planYear={planYear} field="logoSubmitted" label="Logo submitted" initialChecked={plan.logoSubmitted} />
       <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="logisticsNotes" label="Notes" type="textarea" initialValue={plan.logisticsNotes ?? ''} placeholder="Sponsorship: ..." />
 

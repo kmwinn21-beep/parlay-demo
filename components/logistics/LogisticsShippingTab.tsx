@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { type LogisticsPlan, type LogisticsDeadline } from './types';
-import { AutoSaveField, ChecklistSection } from './shared';
+import { AutoSaveField, ChecklistSection, TwoColFieldGrid } from './shared';
 
 const SHIPPING_CHECKLIST_LABELS = ['Packing list confirmed', 'Return shipment arranged'];
 
@@ -42,8 +42,10 @@ export function LogisticsShippingTab({ conferenceId, planYear, plan, deadlines, 
   return (
     <div className="space-y-4">
       <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="advanceWarehouseAddress" label="Advance warehouse address" type="textarea" initialValue={plan.advanceWarehouseAddress ?? ''} />
-      <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="shipDate" label="Ship date" type="date" initialValue={plan.shipDate ?? ''} />
-      <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="trackingNumber" label="Tracking number" initialValue={plan.trackingNumber ?? ''} />
+      <TwoColFieldGrid>
+        <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="shipDate" label="Ship date" type="date" initialValue={plan.shipDate ?? ''} />
+        <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="trackingNumber" label="Tracking number" initialValue={plan.trackingNumber ?? ''} />
+      </TwoColFieldGrid>
       <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="logisticsNotes" label="Notes" type="textarea" initialValue={plan.logisticsNotes ?? ''} />
 
       <ChecklistSection

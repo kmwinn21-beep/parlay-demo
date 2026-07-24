@@ -1,7 +1,7 @@
 'use client';
 
 import { type LogisticsPlan, type LogisticsDeadline } from './types';
-import { AutoSaveField, ChecklistSection } from './shared';
+import { AutoSaveField, ChecklistSection, TwoColFieldGrid } from './shared';
 
 export function LogisticsRegistrationTab({ conferenceId, planYear, plan, deadlines, onDeadlinesChange }: {
   conferenceId: number;
@@ -12,9 +12,11 @@ export function LogisticsRegistrationTab({ conferenceId, planYear, plan, deadlin
 }) {
   return (
     <div className="space-y-4">
-      <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="registrationDeadline" label="Registration deadline" type="date" initialValue={plan.registrationDeadline ?? ''} />
-      <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="earlyBirdDeadline" label="Early bird deadline" type="date" initialValue={plan.earlyBirdDeadline ?? ''} />
-      <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="registrationConfirmation" label="Registration confirmation number" initialValue={plan.registrationConfirmation ?? ''} placeholder="e.g., CONF-12345" />
+      <TwoColFieldGrid>
+        <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="registrationDeadline" label="Registration deadline" type="date" initialValue={plan.registrationDeadline ?? ''} />
+        <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="earlyBirdDeadline" label="Early bird deadline" type="date" initialValue={plan.earlyBirdDeadline ?? ''} />
+        <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="registrationConfirmation" label="Registration confirmation number" initialValue={plan.registrationConfirmation ?? ''} placeholder="e.g., CONF-12345" />
+      </TwoColFieldGrid>
       <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="logisticsNotes" label="Notes" type="textarea" initialValue={plan.logisticsNotes ?? ''} />
 
       <ChecklistSection
