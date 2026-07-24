@@ -75,6 +75,7 @@ interface Company {
   icp?: string;
   industry?: string;
   territory_id?: number | null;
+  hq_state?: string | null;
   created_at: string;
   my_user_status_ids?: number[];
   status_markers?: StatusMarker[];
@@ -275,6 +276,7 @@ export default function CompanyDetailPage() {
         icp: data.icp || null,
         industry: data.industry || '',
         territory_id: data.territory_id ?? null,
+        hq_state: data.hq_state ?? null,
       });
       if (statusRes.ok) {
         const statusData = await statusRes.json() as StatusOptionMeta[];
@@ -946,6 +948,16 @@ export default function CompanyDetailPage() {
                     <option key={opt} value={opt}>{opt}</option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="label">HQ State</label>
+                <input
+                  value={editData.hq_state || ''}
+                  onChange={(e) => setEditData((p) => ({ ...p, hq_state: e.target.value.toUpperCase().slice(0, 2) }))}
+                  className="input-field uppercase"
+                  placeholder="e.g. TX"
+                  maxLength={2}
+                />
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3">

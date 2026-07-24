@@ -253,7 +253,7 @@ export async function PUT(
   const db = await getDb(user?.accountId);
   try {
     const body = await request.json();
-    const { name, website, profit_type, company_type, notes, assigned_user, entity_structure, wse, services, icp, industry, territory_id } = body;
+    const { name, website, profit_type, company_type, notes, assigned_user, entity_structure, wse, services, icp, industry, territory_id, hq_state } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Company name is required' }, { status: 400 });
@@ -269,8 +269,8 @@ export async function PUT(
     const prevAssignedUser = existingResult.rows[0].assigned_user as string | null;
 
     const updatedResult = await db.execute({
-      sql: 'UPDATE companies SET name = ?, website = ?, profit_type = ?, company_type = ?, notes = ?, assigned_user = ?, entity_structure = ?, wse = ?, services = ?, icp = ?, industry = ?, territory_id = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
-      args: [name, website || null, profit_type || null, company_type || null, notes || null, assigned_user || null, entity_structure || null, wse != null && wse !== '' ? Number(wse) : null, serializeServices(services), icp || null, industry || null, territory_id != null && territory_id !== '' ? Number(territory_id) : null, params.id],
+      sql: 'UPDATE companies SET name = ?, website = ?, profit_type = ?, company_type = ?, notes = ?, assigned_user = ?, entity_structure = ?, wse = ?, services = ?, icp = ?, industry = ?, territory_id = ?, hq_state = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
+      args: [name, website || null, profit_type || null, company_type || null, notes || null, assigned_user || null, entity_structure || null, wse != null && wse !== '' ? Number(wse) : null, serializeServices(services), icp || null, industry || null, territory_id != null && territory_id !== '' ? Number(territory_id) : null, hq_state || null, params.id],
     });
 
     // Cascade assigned_user to all child companies

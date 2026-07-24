@@ -1957,4 +1957,14 @@ export const migrations: string[] = [
       created_at TEXT DEFAULT (datetime('now'))
     )`,
   `CREATE INDEX IF NOT EXISTS idx_conference_plan_notes_lookup ON conference_plan_notes(conference_id, plan_year, section)`,
+  // 579 — companies.hq_state: 2-letter US state code for the company's
+  // headquarters, editable from the Edit Company form. Lets the attendee-list
+  // upload route's territory-based rep-assignment fallback (see
+  // app/api/conferences/[id]/attendees/upload/route.ts) resolve a rep for a
+  // company via sales_territories.state_codes when neither an assigned-rep
+  // column nor a master-account-list match is available — for companies that
+  // already exist, this is read directly off the row; for brand-new
+  // companies, it's populated from the uploaded file's own state column (see
+  // ParsedAttendee.state / lib/columnMapping.ts) at insert time.
+  `ALTER TABLE companies ADD COLUMN hq_state TEXT`,
 ];
