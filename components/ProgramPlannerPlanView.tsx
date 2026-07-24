@@ -84,6 +84,12 @@ interface ProgramPlannerPlanViewProps {
   onConferenceCreated: () => void;
 }
 
+// Light brand-accent-#1 fill for rows/cards whose conference has been
+// committed to the program — a subtle visual cue distinguishing them from
+// still-draft (Plan-tab-only) conferences, using the same --brand-accent-rgb
+// token Admin → Brand's "Accent #1" swatch controls.
+const COMMITTED_FILL_STYLE: CSSProperties = { backgroundColor: 'rgb(var(--brand-accent-rgb, 52 211 153) / 0.08)' };
+
 function fmtCurrency(v: number | null | undefined): string {
   if (v == null) return '—';
   if (Math.abs(v) >= 1000) return '$' + (v / 1000).toFixed(v % 1000 === 0 ? 0 : 1) + 'K';
@@ -1572,6 +1578,7 @@ export function ProgramPlannerPlanView({
     planYear: number;
     startDate: string | null;
     endDate: string | null;
+    location: string | null;
     decision: string | null;
     plannedBudget: number | null;
     assignedReps: AssignedRep[];
@@ -1580,6 +1587,7 @@ export function ProgramPlannerPlanView({
     boothWidth: number | null;
     boothLength: number | null;
     boothHall: string | null;
+    committedToProgram: boolean;
   } | null>(null);
   const sponsorshipOptions = useConfigWithIds('sponsorship_level');
   // Per-tier colors — same source (/api/config/sponsorship-levels) the drawer's
@@ -2094,6 +2102,7 @@ export function ProgramPlannerPlanView({
                         draggable={!!section.dropKey}
                         onDragStart={() => setDraggedId(c.conferenceId)}
                         onDragEnd={() => setDraggedId(null)}
+                        style={c.committedToProgram ? COMMITTED_FILL_STYLE : undefined}
                         className={`px-4 py-3 space-y-2.5 ${dimRows ? 'opacity-60' : ''} ${draggedId === c.conferenceId ? 'opacity-40' : ''}`}
                       >
                         <div className="flex items-start gap-2">
@@ -2109,6 +2118,7 @@ export function ProgramPlannerPlanView({
                                   planYear: year,
                                   startDate: c.startDate ?? null,
                                   endDate: c.endDate ?? null,
+                                  location: c.location,
                                   decision: c.decision ?? null,
                                   plannedBudget: c.plan.plannedBudget ?? null,
                                   assignedReps: c.plan.assignedReps ?? [],
@@ -2117,6 +2127,7 @@ export function ProgramPlannerPlanView({
                                   boothWidth: c.boothWidth,
                                   boothLength: c.boothLength,
                                   boothHall: c.boothHall,
+                                  committedToProgram: c.committedToProgram,
                                 })}
                                 className="text-brand-secondary hover:text-brand-primary font-medium text-sm truncate bg-transparent border-0 p-0 text-left cursor-pointer"
                               >
@@ -2289,7 +2300,7 @@ export function ProgramPlannerPlanView({
                             draggable={!!section.dropKey}
                             onDragStart={() => setDraggedId(c.conferenceId)}
                             onDragEnd={() => setDraggedId(null)}
-                            style={i % 2 === 1 ? { backgroundColor: 'var(--color-background-secondary, #F9FAFB)' } : {}}
+                            style={c.committedToProgram ? COMMITTED_FILL_STYLE : (i % 2 === 1 ? { backgroundColor: 'var(--color-background-secondary, #F9FAFB)' } : {})}
                             className={`hover:bg-blue-50/30 transition-colors ${draggedId === c.conferenceId ? 'opacity-40' : ''}`}
                           >
                             <td className="px-2 py-2 cursor-grab active:cursor-grabbing"><GripIcon /></td>
@@ -2305,6 +2316,7 @@ export function ProgramPlannerPlanView({
                                       planYear: year,
                                       startDate: c.startDate ?? null,
                                       endDate: c.endDate ?? null,
+                                      location: c.location,
                                       decision: c.decision ?? null,
                                       plannedBudget: c.plan.plannedBudget ?? null,
                                       assignedReps: c.plan.assignedReps ?? [],
@@ -2313,6 +2325,7 @@ export function ProgramPlannerPlanView({
                                       boothWidth: c.boothWidth,
                                       boothLength: c.boothLength,
                                       boothHall: c.boothHall,
+                                      committedToProgram: c.committedToProgram,
                                     })}
                                     className="text-brand-secondary hover:text-brand-primary font-medium whitespace-normal break-words bg-transparent border-0 p-0 text-left cursor-pointer"
                                   >
@@ -2516,6 +2529,7 @@ export function ProgramPlannerPlanView({
                           draggable={!!section.dropKey}
                           onDragStart={() => setDraggedId(c.conferenceId)}
                           onDragEnd={() => setDraggedId(null)}
+                          style={c.committedToProgram ? COMMITTED_FILL_STYLE : undefined}
                           className={`bg-white rounded-lg border border-gray-200 p-2.5 shadow-sm hover:shadow-md transition-shadow ${section.dropKey ? 'cursor-grab active:cursor-grabbing' : ''} ${
                             draggedId === c.conferenceId ? 'opacity-40' : ''
                           } ${key === 'cut' ? 'opacity-70' : ''}`}
@@ -2530,6 +2544,7 @@ export function ProgramPlannerPlanView({
                                 planYear: year,
                                 startDate: c.startDate ?? null,
                                 endDate: c.endDate ?? null,
+                                location: c.location,
                                 decision: c.decision ?? null,
                                 plannedBudget: c.plan.plannedBudget ?? null,
                                 assignedReps: c.plan.assignedReps ?? [],
@@ -2538,6 +2553,7 @@ export function ProgramPlannerPlanView({
                                 boothWidth: c.boothWidth,
                                 boothLength: c.boothLength,
                                 boothHall: c.boothHall,
+                                committedToProgram: c.committedToProgram,
                               })}
                               className="text-brand-secondary hover:text-brand-primary font-semibold text-xs whitespace-normal break-words bg-transparent border-0 p-0 text-left cursor-pointer min-w-0"
                             >
@@ -2665,6 +2681,7 @@ export function ProgramPlannerPlanView({
           planYear={logisticsDrawer.planYear}
           startDate={logisticsDrawer.startDate}
           endDate={logisticsDrawer.endDate}
+          location={logisticsDrawer.location}
           decision={logisticsDrawer.decision}
           plannedBudget={logisticsDrawer.plannedBudget}
           assignedReps={logisticsDrawer.assignedReps}
@@ -2673,6 +2690,7 @@ export function ProgramPlannerPlanView({
           boothWidth={logisticsDrawer.boothWidth}
           boothLength={logisticsDrawer.boothLength}
           boothHall={logisticsDrawer.boothHall}
+          committedToProgram={logisticsDrawer.committedToProgram}
           isOpen={true}
           onClose={() => setLogisticsDrawer(null)}
           onSponsorshipUpdated={v => onSponsorshipUpdated(logisticsDrawer.conferenceId, v)}

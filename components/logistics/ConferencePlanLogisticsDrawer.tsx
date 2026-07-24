@@ -23,6 +23,7 @@ export interface ConferencePlanLogisticsDrawerProps {
   planYear: number;
   startDate: string | null;
   endDate: string | null;
+  location: string | null;
   decision: string | null;
   plannedBudget: number | null;
   assignedReps: AssignedRepOption[];
@@ -31,6 +32,10 @@ export interface ConferencePlanLogisticsDrawerProps {
   boothWidth: number | null;
   boothLength: number | null;
   boothHall: string | null;
+  /** Uncommitted (Plan-tab-only draft) conferences only get the Input tab —
+   * logistics data (booth, sponsorship, deadlines, etc.) doesn't apply until
+   * a conference is actually committed to the program. */
+  committedToProgram: boolean;
   isOpen: boolean;
   onClose: () => void;
   onSponsorshipUpdated?: (sponsorshipLevel: string | null) => void;
@@ -67,16 +72,19 @@ const DECISION_LABEL: Record<string, string> = {
 };
 
 export function ConferencePlanLogisticsDrawer({
-  conferenceId, conferenceName, seriesName, planYear, startDate, endDate,
+  conferenceId, conferenceName, seriesName, planYear, startDate, endDate, location,
   decision, plannedBudget, assignedReps, calScore,
-  boothPresent, boothWidth, boothLength, boothHall,
+  boothPresent, boothWidth, boothLength, boothHall, committedToProgram,
   isOpen, onClose, onSponsorshipUpdated, onBoothUpdated,
 }: ConferencePlanLogisticsDrawerProps) {
-  const { panelStyle, handleResizeStart } = useDrawerResize(800, 380, 800);
+  const { panelStyle, handleResizeStart } = useDrawerResize(900, 380, 900);
   const [data, setData] = useState<LogisticsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabId>('deadlines');
+  const [activeTab, setActiveTab] = useState<TabId>(committedToProgram ? 'deadlines' : 'input');
+  // Draft (not-yet-committed) conferences only ever show the Input tab — logistics
+  // sections don't apply to a conference that isn't actually on the program yet.
+  const visibleTabsForConference = committedToProgram ? VISIBLE_TABS : VISIBLE_TABS.filter(t => t.id === 'input');
   const [teamInputRequestFormOpen, setTeamInputRequestFormOpen] = useState(false);
   const lastConferenceIdRef = useRef<number | null>(null);
   const tabBarRef = useRef<HTMLDivElement>(null);
@@ -102,15 +110,17 @@ export function ConferencePlanLogisticsDrawer({
 
   useEffect(() => {
     if (!isOpen) return;
-    // Reset to Deadlines when opening for a different conference; preserve tab
-    // when reopening for the same one.
+    // Reset to Deadlines (or Input, for a still-draft conference) when opening
+    // for a different conference; preserve tab when reopening for the same one.
     if (lastConferenceIdRef.current !== conferenceId) {
-      setActiveTab('deadlines');
+      setActiveTab(committedToProgram ? 'deadlines' : 'input');
       lastConferenceIdRef.current = conferenceId;
+    } else if (!committedToProgram) {
+      setActiveTab('input');
     }
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, conferenceId, planYear]);
+  }, [isOpen, conferenceId, planYear, committedToProgram]);
 
   if (!isOpen) return null;
 
@@ -141,7 +151,7 @@ export function ConferencePlanLogisticsDrawer({
       />
 
       <div
-        className="logistics-panel relative w-full sm:w-[460px] h-[92vh] sm:h-full bg-white shadow-2xl flex flex-col border-t sm:border-t-0 sm:border-l border-gray-200 overflow-hidden rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none"
+        className="logistics-panel relative w-full sm:w-[900px] h-[92vh] sm:h-full bg-white shadow-2xl flex flex-col border-t sm:border-t-0 sm:border-l border-gray-200 overflow-hidden rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none"
         style={panelStyle}
       >
         <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={handleResizeStart}>
@@ -157,6 +167,7 @@ export function ConferencePlanLogisticsDrawer({
               </p>
               <p style={{ fontSize: 14, fontWeight: 500, color: '#fff' }} className="truncate">{conferenceName}</p>
               {dateRange && <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)' }} className="mt-0.5">{dateRange}</p>}
+              {location && <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)' }} className="mt-0.5 truncate">{location}</p>}
             </div>
             <button onClick={onClose} className="text-white/60 hover:text-white text-xl leading-none flex-shrink-0" aria-label="Close">×</button>
           </div>
@@ -172,7 +183,9 @@ export function ConferencePlanLogisticsDrawer({
           {calScore != null && <span className="text-[11px] text-gray-500 whitespace-nowrap">Cal. Intel {Math.round(calScore)}</span>}
         </div>
 
-        {/* Tab bar */}
+        {/* Tab bar — hidden entirely for draft conferences, which only ever
+            have the one (Input) tab available */}
+        {committedToProgram && (
         <div className="flex-shrink-0 flex items-center border-b border-gray-200">
           <button
             type="button"
@@ -183,7 +196,7 @@ export function ConferencePlanLogisticsDrawer({
             <ChevronLeftIcon className="w-3.5 h-3.5" />
           </button>
           <div ref={tabBarRef} className="logistics-tabbar flex-1 min-w-0 flex gap-1 px-1 py-1.5 whitespace-nowrap">
-            {VISIBLE_TABS.map(t => (
+            {visibleTabsForConference.map(t => (
               <button
                 key={t.id}
                 type="button"
@@ -205,6 +218,7 @@ export function ConferencePlanLogisticsDrawer({
             <ChevronRightIcon className="w-3.5 h-3.5" />
           </button>
         </div>
+        )}
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto">
