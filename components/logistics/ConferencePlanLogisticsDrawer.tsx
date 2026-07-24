@@ -109,7 +109,12 @@ export function ConferencePlanLogisticsDrawer({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/program-planner/conferences/${conferenceId}/logistics?year=${planYear}`, { cache: 'no-store' });
+      // hideInputTab means this drawer was opened from Conference Details,
+      // which has no Program-Planner planning-cycle year concept — ask the
+      // route to resolve the conference's actual conference_plans row
+      // instead of trusting our start_date-derived guess.
+      const modeParam = hideInputTab ? '&mode=details' : '';
+      const res = await fetch(`/api/program-planner/conferences/${conferenceId}/logistics?year=${planYear}${modeParam}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`Failed to load logistics (${res.status})`);
       const json = await res.json() as LogisticsResponse;
       setData(json);
@@ -136,6 +141,11 @@ export function ConferencePlanLogisticsDrawer({
   }, [isOpen, conferenceId, planYear, committedToProgram, hideInputTab]);
 
   if (!isOpen) return null;
+
+  // Once the route resolves an actual conference_plans row (Conference
+  // Details entry point), use that year for display and all downstream
+  // tab reads/writes instead of the start_date-derived guess passed in.
+  const effectiveYear = data?.resolvedPlanYear ?? planYear;
 
   const dateRange = startDate
     ? `${startDate}${endDate && endDate !== startDate ? ` – ${endDate}` : ''}`
@@ -176,7 +186,7 @@ export function ConferencePlanLogisticsDrawer({
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)' }}>
-                {seriesName ? `${seriesName} · ` : ''}FY{planYear}
+                {seriesName ? `${seriesName} · ` : ''}FY{effectiveYear}
               </p>
               <p style={{ fontSize: 14, fontWeight: 500, color: '#fff' }} className="truncate">{conferenceName}</p>
               {dateRange && <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)' }} className="mt-0.5">{dateRange}</p>}
@@ -293,7 +303,7 @@ export function ConferencePlanLogisticsDrawer({
               )}
               {activeTab === 'deadlines' && (
                 <LogisticsDeadlinesTab
-                  conferenceId={conferenceId} planYear={planYear}
+                  conferenceId={conferenceId} planYear={effectiveYear}
                   deadlines={data.deadlines} speakingSlots={data.speakingSlots} files={data.files}
                   assignedReps={assignedReps}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
@@ -304,7 +314,7 @@ export function ConferencePlanLogisticsDrawer({
               )}
               {activeTab === 'registration' && (
                 <LogisticsRegistrationTab
-                  conferenceId={conferenceId} planYear={planYear} plan={data.plan}
+                  conferenceId={conferenceId} planYear={effectiveYear} plan={data.plan}
                   deadlines={data.deadlines}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
                   notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
@@ -312,7 +322,7 @@ export function ConferencePlanLogisticsDrawer({
               )}
               {activeTab === 'booth' && (
                 <LogisticsBoothTab
-                  conferenceId={conferenceId} planYear={planYear} plan={data.plan}
+                  conferenceId={conferenceId} planYear={effectiveYear} plan={data.plan}
                   deadlines={data.deadlines} startDate={startDate}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
                   boothPresent={boothPresent} boothWidth={boothWidth} boothLength={boothLength} boothHall={boothHall}
@@ -322,7 +332,7 @@ export function ConferencePlanLogisticsDrawer({
               )}
               {activeTab === 'sponsorship' && (
                 <LogisticsSponsorshipTab
-                  conferenceId={conferenceId} planYear={planYear} plan={data.plan}
+                  conferenceId={conferenceId} planYear={effectiveYear} plan={data.plan}
                   deadlines={data.deadlines}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
                   onSponsorshipUpdated={onSponsorshipUpdated}
@@ -331,7 +341,7 @@ export function ConferencePlanLogisticsDrawer({
               )}
               {activeTab === 'speaking' && (
                 <LogisticsSpeakingTab
-                  conferenceId={conferenceId} planYear={planYear}
+                  conferenceId={conferenceId} planYear={effectiveYear}
                   speakingSlots={data.speakingSlots} assignedReps={assignedReps}
                   deadlines={data.deadlines}
                   onChange={speakingSlots => setData(d => d && { ...d, speakingSlots })}
@@ -341,7 +351,7 @@ export function ConferencePlanLogisticsDrawer({
               )}
               {activeTab === 'travel' && (
                 <LogisticsTravelTab
-                  conferenceId={conferenceId} planYear={planYear}
+                  conferenceId={conferenceId} planYear={effectiveYear}
                   repTravel={data.repTravel} plan={data.plan}
                   deadlines={data.deadlines}
                   onChange={repTravel => setData(d => d && { ...d, repTravel })}
@@ -351,7 +361,7 @@ export function ConferencePlanLogisticsDrawer({
               )}
               {activeTab === 'hosted' && (
                 <LogisticsHostedEventsTab
-                  conferenceId={conferenceId} planYear={planYear}
+                  conferenceId={conferenceId} planYear={effectiveYear}
                   hostedEvents={data.hostedEvents}
                   onChange={hostedEvents => setData(d => d && { ...d, hostedEvents })}
                   notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
@@ -359,7 +369,7 @@ export function ConferencePlanLogisticsDrawer({
               )}
               {activeTab === 'shipping' && (
                 <LogisticsShippingTab
-                  conferenceId={conferenceId} planYear={planYear} plan={data.plan}
+                  conferenceId={conferenceId} planYear={effectiveYear} plan={data.plan}
                   deadlines={data.deadlines}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
                   notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
@@ -367,7 +377,7 @@ export function ConferencePlanLogisticsDrawer({
               )}
               {activeTab === 'postshow' && (
                 <LogisticsPostShowTab
-                  conferenceId={conferenceId} planYear={planYear}
+                  conferenceId={conferenceId} planYear={effectiveYear}
                   deadlines={data.deadlines} startDate={startDate} endDate={endDate}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
                   notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
@@ -375,7 +385,7 @@ export function ConferencePlanLogisticsDrawer({
               )}
               {activeTab === 'files' && (
                 <LogisticsFilesTab
-                  conferenceId={conferenceId} planYear={planYear}
+                  conferenceId={conferenceId} planYear={effectiveYear}
                   files={data.files}
                   onChange={files => setData(d => d && { ...d, files })}
                   notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}

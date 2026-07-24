@@ -26,10 +26,27 @@ export async function GET(
   if (isNaN(confId)) return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
 
   const url = new URL(request.url);
-  const year = parseInt(url.searchParams.get('year') ?? '', 10);
-  if (isNaN(year)) return NextResponse.json({ error: 'year is required' }, { status: 400 });
+  const requestedYear = parseInt(url.searchParams.get('year') ?? '', 10);
+  const mode = url.searchParams.get('mode');
+  if (isNaN(requestedYear)) return NextResponse.json({ error: 'year is required' }, { status: 400 });
 
+  let year = requestedYear;
   try {
+    // Conference Details' Logistics button (mode=details) has no concept of
+    // a Program Planner planning-cycle year — a conference can be committed
+    // under a plan_year that differs from its own start_date's year. Resolve
+    // to whichever conference_plans row actually exists (most recent) so the
+    // drawer always shows the same data regardless of entry point, instead
+    // of the start_date-derived year landing on an empty/wrong row.
+    if (mode === 'details') {
+      const latestPlanRes = await db.execute({
+        sql: `SELECT plan_year FROM conference_plans WHERE conference_id = ? ORDER BY plan_year DESC LIMIT 1`,
+        args: [confId],
+      });
+      const latestYear = latestPlanRes.rows[0]?.plan_year;
+      if (latestYear != null) year = Number(latestYear);
+    }
+
     const [planRes, confRes, deadlinesRes, speakingRes, filesRes, hostedEventsRes, notesRes] = await Promise.all([
       db.execute({
         sql: `SELECT booth_number, booth_size, booth_type, booth_contract_signed,
@@ -254,7 +271,7 @@ export async function GET(
       };
     });
 
-    return NextResponse.json({ plan, deadlines, speakingSlots, repTravel, files, hostedEvents, notes });
+    return NextResponse.json({ plan, deadlines, speakingSlots, repTravel, files, hostedEvents, notes, resolvedPlanYear: year });
   } catch (error) {
     console.error('GET /api/program-planner/conferences/[id]/logistics error:', error);
     return NextResponse.json({ error: 'Failed to fetch logistics data' }, { status: 500 });

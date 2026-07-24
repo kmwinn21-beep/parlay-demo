@@ -100,6 +100,13 @@ export interface LogisticsResponse {
   files: LogisticsFile[];
   hostedEvents: LogisticsHostedEvent[];
   notes: PlanNote[];
+  /** The plan_year the response was actually resolved against — only differs
+   * from the requested `year` when the request used `mode=details` (Conference
+   * Details' Logistics button), which resolves to the conference's most
+   * recent conference_plans row instead of a Program-Planner planning-cycle
+   * year, so the same conference always shows the same data regardless of
+   * which fiscal cycle Program Planner currently has selected. */
+  resolvedPlanYear: number;
 }
 
 export interface AssignedRepOption {

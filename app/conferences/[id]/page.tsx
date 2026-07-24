@@ -3777,7 +3777,12 @@ export default function ConferenceDetailPage() {
           location={conference.location}
           decision={null}
           plannedBudget={null}
-          assignedReps={[]}
+          assignedReps={
+            (conference.internal_attendees?.split(',').map(n => n.trim()).filter(Boolean) ?? [])
+              .map(name => userOptions.find(u => u.value.toLowerCase() === name.toLowerCase()))
+              .filter((u): u is UserOption => !!u)
+              .map(u => ({ userId: u.id, displayName: u.value, initials: getRepInitials(u.value) }))
+          }
           calScore={null}
           boothPresent={!!conference.booth_present}
           boothWidth={conference.booth_width ?? null}
