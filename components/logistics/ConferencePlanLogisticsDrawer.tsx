@@ -37,6 +37,10 @@ export interface ConferencePlanLogisticsDrawerProps {
    * logistics data (booth, sponsorship, deadlines, etc.) doesn't apply until
    * a conference is actually committed to the program. */
   committedToProgram: boolean;
+  /** Conference Details' "Logistics" button opens this same drawer without
+   * the Input tab (team-decision input belongs to the Program Planner
+   * context, not the conference record itself). */
+  hideInputTab?: boolean;
   isOpen: boolean;
   onClose: () => void;
   onSponsorshipUpdated?: (sponsorshipLevel: string | null) => void;
@@ -76,17 +80,20 @@ const DECISION_LABEL: Record<string, string> = {
 export function ConferencePlanLogisticsDrawer({
   conferenceId, conferenceName, seriesName, planYear, startDate, endDate, location,
   decision, plannedBudget, assignedReps, calScore,
-  boothPresent, boothWidth, boothLength, boothHall, committedToProgram,
+  boothPresent, boothWidth, boothLength, boothHall, committedToProgram, hideInputTab,
   isOpen, onClose, onSponsorshipUpdated, onBoothUpdated,
 }: ConferencePlanLogisticsDrawerProps) {
   const { panelStyle, handleResizeStart } = useDrawerResize(900, 380, 900);
   const [data, setData] = useState<LogisticsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabId>(committedToProgram ? 'deadlines' : 'input');
+  const [activeTab, setActiveTab] = useState<TabId>(!committedToProgram && !hideInputTab ? 'input' : 'deadlines');
   // Draft (not-yet-committed) conferences only ever show the Input tab — logistics
   // sections don't apply to a conference that isn't actually on the program yet.
-  const visibleTabsForConference = committedToProgram ? VISIBLE_TABS : VISIBLE_TABS.filter(t => t.id === 'input');
+  // hideInputTab (Conference Details' Logistics button) drops Input regardless.
+  const visibleTabsForConference = !committedToProgram
+    ? VISIBLE_TABS.filter(t => t.id === 'input')
+    : VISIBLE_TABS.filter(t => !hideInputTab || t.id !== 'input');
   const [teamInputRequestFormOpen, setTeamInputRequestFormOpen] = useState(false);
   const [notesDrawerSection, setNotesDrawerSection] = useState<PlanNoteSection | null>(null);
   const lastConferenceIdRef = useRef<number | null>(null);
@@ -118,15 +125,15 @@ export function ConferencePlanLogisticsDrawer({
     // Reset to Deadlines (or Input, for a still-draft conference) when opening
     // for a different conference; preserve tab when reopening for the same one.
     if (lastConferenceIdRef.current !== conferenceId) {
-      setActiveTab(committedToProgram ? 'deadlines' : 'input');
+      setActiveTab(!committedToProgram && !hideInputTab ? 'input' : 'deadlines');
       setNotesDrawerSection(null);
       lastConferenceIdRef.current = conferenceId;
-    } else if (!committedToProgram) {
+    } else if (!committedToProgram && !hideInputTab) {
       setActiveTab('input');
     }
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, conferenceId, planYear, committedToProgram]);
+  }, [isOpen, conferenceId, planYear, committedToProgram, hideInputTab]);
 
   if (!isOpen) return null;
 

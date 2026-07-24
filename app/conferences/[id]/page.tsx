@@ -49,6 +49,7 @@ import { getConferencePermissions } from '@/lib/conference-permissions';
 import { shouldWarnForTitleMetadata, type TitleMatchMetadata } from '@/lib/titleNormalization';
 import { ClassifyTitleModal } from '@/components/ClassifyTitleModal';
 import { BulkClassifyTitlesModal } from '@/components/BulkClassifyTitlesModal';
+import { ConferencePlanLogisticsDrawer } from '@/components/logistics';
 import { MergeModal } from '@/components/MergeModal';
 import { SeriesSeasonCombobox, type SeriesOption } from '@/components/SeriesSeasonCombobox';
 import { MyDebriefDrawer } from '@/components/MyDebriefDrawer';
@@ -478,6 +479,7 @@ export default function ConferenceDetailPage() {
 
   const [showBatchScan, setShowBatchScan] = useState(false);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [showLogisticsDrawer, setShowLogisticsDrawer] = useState(false);
   const [showDebrief, setShowDebrief] = useState(false);
   const [activityMapOpen, setActivityMapOpen] = useState(false);
   const [mobileReportMenuOpen, setMobileReportMenuOpen] = useState(false);
@@ -2051,6 +2053,16 @@ export default function ConferenceDetailPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 11h.01M12 11h.01M15 11h.01M4 19h16a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
                 Budget vs. Actual
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowLogisticsDrawer(true)}
+                className="flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-brand-accent cursor-pointer transition-colors flex-shrink-0"
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                </svg>
+                Logistics
               </button>
               </div>
               {/* Pinned right: divider + stacked Field Report / Activity map / Executive brief / Export CRM Files.
@@ -3751,6 +3763,39 @@ export default function ConferenceDetailPage() {
           conferenceName={conference.name}
           onClose={() => setShowBudgetModal(false)}
           readOnly={stagePermissions != null && !stagePermissions.canEditBudget}
+        />
+      )}
+
+      {showLogisticsDrawer && conference && (
+        <ConferencePlanLogisticsDrawer
+          conferenceId={conference.id}
+          conferenceName={conference.name}
+          seriesName={null}
+          planYear={new Date(conference.start_date).getFullYear()}
+          startDate={conference.start_date}
+          endDate={conference.end_date}
+          location={conference.location}
+          decision={null}
+          plannedBudget={null}
+          assignedReps={[]}
+          calScore={null}
+          boothPresent={!!conference.booth_present}
+          boothWidth={conference.booth_width ?? null}
+          boothLength={conference.booth_length ?? null}
+          boothHall={conference.booth_hall ?? null}
+          committedToProgram={true}
+          hideInputTab
+          isOpen={true}
+          onClose={() => setShowLogisticsDrawer(false)}
+          onSponsorshipUpdated={sponsorshipLevel => setConference(prev => prev && { ...prev, sponsorship_level: sponsorshipLevel ?? undefined })}
+          onBoothUpdated={booth => setConference(prev => prev && {
+            ...prev,
+            booth_present: booth.boothPresent,
+            booth_width: booth.boothWidth,
+            booth_length: booth.boothLength,
+            booth_number: booth.boothNumber,
+            booth_hall: booth.boothHall,
+          })}
         />
       )}
 
