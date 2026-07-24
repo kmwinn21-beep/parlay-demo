@@ -1886,4 +1886,9 @@ export const migrations: string[] = [
   // users tagged via MentionTextarea, resolved to real users.id and notified
   // in the notes route's POST handler).
   `ALTER TABLE outreach_notes ADD COLUMN tagged_users TEXT`,
+  // 575 — companies.territory_id: lets a company be assigned to one of the
+  // sales_territories set up in Admin → Sales Reps, from the Edit Company
+  // form. Single territory per company (unlike conferences' multi-select
+  // territory_ids), since a company's territory is just where it lives.
+  `ALTER TABLE companies ADD COLUMN territory_id INTEGER REFERENCES sales_territories(id) ON DELETE SET NULL`,
 ];

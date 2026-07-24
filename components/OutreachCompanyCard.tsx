@@ -56,6 +56,7 @@ export interface OutreachCompany {
   wse: number | null;
   status: OutreachStatus;
   assignees: OutreachAssignee[];
+  territory: { id: number; name: string; color: string } | null;
   attendees: OutreachAttendee[];
   totalActivityCount: number;
   noteCount: number;
@@ -421,6 +422,15 @@ export function OutreachCompanyCard({
     </button>
   );
 
+  const territoryPill = company.territory && (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0"
+      style={{ border: `1px solid ${company.territory.color}`, background: `${company.territory.color}18`, color: company.territory.color }}
+    >
+      {company.territory.name}
+    </span>
+  );
+
   const badgesRow = (
     <>
       {company.companyType && (
@@ -451,6 +461,7 @@ export function OutreachCompanyCard({
         )
       )}
       {assigneePill}
+      {territoryPill}
     </>
   );
 
