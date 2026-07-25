@@ -243,9 +243,8 @@ function AwaitingRow({
   );
 }
 
-function OpinionCard({ op, decisionKey, color, currentUserEmail, onEdit }: {
+function OpinionCard({ op, color, currentUserEmail, onEdit }: {
   op: UserOpinion;
-  decisionKey: DecisionKey;
   color: string;
   currentUserEmail: string;
   onEdit: () => void;
@@ -286,12 +285,6 @@ function OpinionCard({ op, decisionKey, color, currentUserEmail, onEdit }: {
             Edit
           </button>
         )}
-        <span
-          className="flex-shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-semibold text-white"
-          style={{ backgroundColor: color }}
-        >
-          {DECISION_LABEL[decisionKey]}
-        </span>
       </div>
       {op.note && (
         <p className="text-xs text-gray-500 italic mt-1.5 bg-gray-50 rounded px-2 py-1.5">
@@ -655,7 +648,6 @@ export function TeamInputPanel({
                         <OpinionCard
                           key={op.userId}
                           op={op}
-                          decisionKey={k}
                           color={color}
                           currentUserEmail={currentUserEmail}
                           onEdit={() => setEditTarget({ fromKey: k, op })}
@@ -682,7 +674,6 @@ export function TeamInputPanel({
                   <OpinionCard
                     key={op.userId}
                     op={op}
-                    decisionKey={k}
                     color={color}
                     currentUserEmail={currentUserEmail}
                     onEdit={() => setEditTarget({ fromKey: k, op })}
