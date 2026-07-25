@@ -2136,7 +2136,7 @@ export function ProgramPlannerPlanView({
                                   boothWidth: c.boothWidth,
                                   boothLength: c.boothLength,
                                   boothHall: c.boothHall,
-                                  committedToProgram: c.committedToProgram,
+                                  committedToProgram: isCommittedForYear(c, year),
                                 })}
                                 className="text-brand-secondary hover:text-brand-primary font-medium text-sm truncate bg-transparent border-0 p-0 text-left cursor-pointer"
                               >
@@ -2334,7 +2334,7 @@ export function ProgramPlannerPlanView({
                                       boothWidth: c.boothWidth,
                                       boothLength: c.boothLength,
                                       boothHall: c.boothHall,
-                                      committedToProgram: c.committedToProgram,
+                                      committedToProgram: isCommittedForYear(c, year),
                                     })}
                                     className="text-brand-secondary hover:text-brand-primary font-medium whitespace-normal break-words bg-transparent border-0 p-0 text-left cursor-pointer"
                                   >
@@ -2562,7 +2562,7 @@ export function ProgramPlannerPlanView({
                                 boothWidth: c.boothWidth,
                                 boothLength: c.boothLength,
                                 boothHall: c.boothHall,
-                                committedToProgram: c.committedToProgram,
+                                committedToProgram: isCommittedForYear(c, year),
                               })}
                               className="text-brand-secondary hover:text-brand-primary font-semibold text-xs whitespace-normal break-words bg-transparent border-0 p-0 text-left cursor-pointer min-w-0"
                             >
