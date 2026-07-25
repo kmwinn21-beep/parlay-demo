@@ -479,6 +479,7 @@ export default function ConferenceDetailPage() {
 
   const [showBatchScan, setShowBatchScan] = useState(false);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [conferenceBudgetTotal, setConferenceBudgetTotal] = useState<number | null>(null);
   const [showLogisticsDrawer, setShowLogisticsDrawer] = useState(false);
   const [showDebrief, setShowDebrief] = useState(false);
   const [activityMapOpen, setActivityMapOpen] = useState(false);
@@ -689,7 +690,7 @@ export default function ConferenceDetailPage() {
 
   const fetchConference = useCallback(async () => {
     try {
-      const [confRes, detailsRes, followUpsRes, notesRes, meetingsRes, actionRes, userRes, socialRes, eventTypeRes, companyTypeRes, seniorityRes, conferenceStrategyRes, allSeriesRes] = await Promise.all([
+      const [confRes, detailsRes, followUpsRes, notesRes, meetingsRes, actionRes, userRes, socialRes, eventTypeRes, companyTypeRes, seniorityRes, conferenceStrategyRes, allSeriesRes, budgetRes] = await Promise.all([
         fetch(`/api/conferences/${id}`),
         fetch(`/api/conference-details?conference_id=${id}`),
         fetch(`/api/follow-ups?conference_id=${id}`),
@@ -703,6 +704,7 @@ export default function ConferenceDetailPage() {
         fetch('/api/config?category=seniority&form=conference_detail'),
         fetch('/api/config?category=conference_strategy_type&form=conference_detail'),
         fetch('/api/conference-series'),
+        fetch(`/api/conferences/${id}/budget`),
       ]);
       if (!confRes.ok) throw new Error('Not found');
       const data = await confRes.json();
@@ -723,6 +725,8 @@ export default function ConferenceDetailPage() {
       const seniorityData = seniorityRes.ok ? await seniorityRes.json() : [];
       const conferenceStrategyData = conferenceStrategyRes.ok ? await conferenceStrategyRes.json() : [];
       const allSeriesData: SeriesOption[] = allSeriesRes.ok ? await allSeriesRes.json() : [];
+      const budgetData = budgetRes.ok ? await budgetRes.json() : null;
+      setConferenceBudgetTotal(budgetData?.budget_total ?? null);
       setConference(data);
       if (data.series_id) {
         setEditSeries(allSeriesData.find((s) => s.id === data.series_id) ?? null);
@@ -3762,6 +3766,9 @@ export default function ConferenceDetailPage() {
           conferenceId={conference.id}
           conferenceName={conference.name}
           onClose={() => setShowBudgetModal(false)}
+          onSaved={data => setConferenceBudgetTotal(
+            data.line_items.reduce((sum, it) => sum + (Number(String(it.budget ?? '').replace(/[^0-9.]/g, '')) || 0), 0)
+          )}
           readOnly={stagePermissions != null && !stagePermissions.canEditBudget}
         />
       )}
@@ -3776,7 +3783,7 @@ export default function ConferenceDetailPage() {
           endDate={conference.end_date}
           location={conference.location}
           decision={null}
-          plannedBudget={null}
+          plannedBudget={conferenceBudgetTotal}
           assignedReps={
             (conference.internal_attendees?.split(',').map(n => n.trim()).filter(Boolean) ?? [])
               .map(name => userOptions.find(u => u.value.toLowerCase() === name.toLowerCase()))
