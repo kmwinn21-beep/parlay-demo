@@ -2355,13 +2355,13 @@ export function ProgramPlannerPlanView({
                           <div className="grid grid-cols-[1fr_auto] gap-1.5 items-center">
                             <span className="text-left">Conference</span>
                             {groupMode !== 'status' && (
-                              <span className="w-[92px] flex-shrink-0 text-left pl-2">Status</span>
+                              <span className="w-[116px] flex-shrink-0 text-left pl-3">Status</span>
                             )}
                           </div>
                         </th>
                         <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">List Score</th>
                         <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Dates</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Strategy</th>
+                        <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Strategy</th>
                         <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Territory</th>
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Type</th>
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Sponsorship</th>
@@ -2418,7 +2418,7 @@ export function ProgramPlannerPlanView({
                                     <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                                   </Link>
                                 </div>
-                                <div className="flex items-center gap-1 w-[92px] flex-shrink-0 justify-start pl-2 pt-0.5">
+                                <div className="flex items-center gap-1 w-[116px] flex-shrink-0 justify-start pl-3 pt-0.5">
                                   {c.isNewAddition && <NewBadge />}
                                   {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                     <RepAssignmentWarning
