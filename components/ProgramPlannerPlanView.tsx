@@ -2335,7 +2335,7 @@ export function ProgramPlannerPlanView({
                         with table-layout:auto, minWidth-only columns drift per table instead. */}
                     <colgroup>
                       <col style={{ width: 24 }} />
-                      <col style={{ width: 150 }} />
+                      <col style={{ width: 260 }} />
                       <col style={{ width: 76 }} />
                       <col style={{ width: 70 }} />
                       <col style={{ width: 160 }} />
