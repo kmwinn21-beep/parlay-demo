@@ -1472,6 +1472,14 @@ function LocationEditCell({ conferenceId, location, onUpdated }: {
     }
   };
 
+  // "TBD" is a real stored value (the placeholder a newly-committed
+  // conference gets when no location was set) — treat it the same as no
+  // location at all rather than displaying it as literal text.
+  const isEmptyLocation = !location || location.trim().toUpperCase() === 'TBD';
+  // Google Places addresses inside the US always end in ", USA" — redundant
+  // in a table that's otherwise mostly US conferences, so strip it for display.
+  const displayLocation = location ? location.replace(/,\s*USA$/i, '') : '';
+
   return (
     <>
       <button
@@ -1479,9 +1487,13 @@ function LocationEditCell({ conferenceId, location, onUpdated }: {
         type="button"
         onClick={openPopover}
         disabled={saving}
-        className={`text-[11px] text-left truncate max-w-[110px] transition-opacity ${saving ? 'opacity-50' : ''} ${location ? 'text-gray-600 hover:text-brand-primary' : 'text-gray-400 hover:text-brand-secondary'}`}
+        className={`text-left transition-opacity ${saving ? 'opacity-50' : ''} ${
+          isEmptyLocation
+            ? 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors'
+            : 'text-[11px] truncate max-w-[110px] text-gray-600 hover:text-brand-primary'
+        }`}
       >
-        {location || 'Set location'}
+        {isEmptyLocation ? '+ Location' : displayLocation}
       </button>
       {open && pos && (
         <div
