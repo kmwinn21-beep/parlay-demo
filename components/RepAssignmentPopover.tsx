@@ -20,6 +20,9 @@ interface RepAssignmentPopoverProps {
     assignedReps: Array<{ userId: number }>;
   }>;
   onUpdate: (updatedReps: AssignedRep[]) => void;
+  // Program tab keeps "Assign reps"; the Plan tab's other empty-state pills
+  // all read "+ <field>", so it passes "+ Reps" here to match.
+  emptyLabel?: string;
 }
 
 type PopoverPos = { top?: number; bottom?: number; left: number };
@@ -75,7 +78,7 @@ function getConflicts(
     .map(c => c.name);
 }
 
-export function RepAssignmentPopover({ conferenceId, planYear, assignedReps, allConferences, onUpdate }: RepAssignmentPopoverProps) {
+export function RepAssignmentPopover({ conferenceId, planYear, assignedReps, allConferences, onUpdate, emptyLabel = 'Assign reps' }: RepAssignmentPopoverProps) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<PopoverPos | null>(null);
   const [search, setSearch] = useState('');
@@ -144,7 +147,7 @@ export function RepAssignmentPopover({ conferenceId, planYear, assignedReps, all
         {assignedReps.length === 0 ? (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors">
             <i className="ti ti-user-plus text-[12px]" aria-hidden="true" />
-            Assign reps
+            {emptyLabel}
           </span>
         ) : (
           <div className="flex items-center">

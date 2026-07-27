@@ -667,21 +667,21 @@ export default function ProgramPlannerPage() {
 
       <div className="max-w-screen-2xl mx-auto px-6 py-6 space-y-6">
 
-        {/* Year selector */}
-        <div className="flex items-center gap-2">
-          {yearOptions.map(y => (
-            <button
-              key={y}
-              onClick={() => handleYearChange(y)}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                y === selectedYear
-                  ? 'bg-brand-primary text-white'
-                  : 'bg-white border border-gray-300 text-gray-600 hover:border-brand-secondary hover:text-brand-primary'
-              }`}
-            >
-              {y}
-            </button>
-          ))}
+        {/* Year selector — same underline-tab format as Conference Details' tab bar */}
+        <div className="border-b border-gray-200 overflow-x-auto">
+          <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
+            {yearOptions.map(y => (
+              <button
+                key={y}
+                onClick={() => handleYearChange(y)}
+                className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${
+                  y === selectedYear ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {y}
+              </button>
+            ))}
+          </nav>
         </div>
 
         {loading ? <Skeleton /> : (

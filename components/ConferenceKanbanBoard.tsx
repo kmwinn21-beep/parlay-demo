@@ -216,7 +216,7 @@ function EffectivenessCard({
         <div className="mt-2 pt-2 border-t border-gray-100">
           <div className="grid grid-cols-4 gap-1 mb-1.5">
             <ScoreCell label="CES"  score={effData.ces_score} />
-            <ScoreCell label="AMS"  score={effData.ams_score} />
+            <ScoreCell label="MEF"  score={effData.ams_score} />
             <ScoreCell label="CEF"  score={effData.cef_score} />
             <ScoreCell label="SES"  score={effData.ses_score} />
           </div>
@@ -241,7 +241,7 @@ function EffectivenessCard({
       {effData === undefined && (
         <div className="mt-2 pt-2 border-t border-gray-100">
           <div className="grid grid-cols-4 gap-1">
-            {['CES','AMS','CEF','SES'].map((l) => (
+            {['CES','MEF','CEF','SES'].map((l) => (
               <div key={l} className="flex flex-col items-center">
                 <span className="text-[10px] text-gray-400 uppercase tracking-wide leading-none mb-0.5">{l}</span>
                 <div className="w-6 h-3 bg-gray-100 rounded animate-pulse" />
@@ -452,26 +452,15 @@ export function ConferenceKanbanBoard({ conferences }: { conferences: Conference
     (async () => {
       for (const c of targets) {
         try {
-          const res = await fetch(`/api/conferences/${c.id}/effectiveness`);
+          const res = await fetch(`/api/conferences/${c.id}/effectiveness-scores`);
           if (!res.ok) throw new Error('failed');
           const data = await res.json();
-          const repCesScores: number[] = (data?.operational?.rep_ces ?? [])
-            .map((r: Record<string, unknown>) => r.rep_ces_score)
-            .filter((v: unknown): v is number => typeof v === 'number');
-          const ses =
-            repCesScores.length > 0
-              ? Math.round(repCesScores.reduce((a, b) => a + b, 0) / repCesScores.length)
-              : null;
-          const cesScore = data?.ces?.score != null ? Math.round(Number(data.ces.score)) : null;
+          const cesScore = data?.ces_score != null ? Math.round(Number(data.ces_score)) : null;
           const parsed: EffData = {
             ces_score: cesScore,
-            ams_score: data?.marketing_audience?.marketing_audience_signal_score != null
-              ? Math.round(Number(data.marketing_audience.marketing_audience_signal_score))
-              : null,
-            cef_score: data?.operational?.cost_efficiency?.cost_efficiency_score != null
-              ? Math.round(Number(data.operational.cost_efficiency.cost_efficiency_score))
-              : null,
-            ses_score: ses,
+            ams_score: data?.ams_score != null ? Math.round(Number(data.ams_score)) : null,
+            cef_score: data?.cef_score != null ? Math.round(Number(data.cef_score)) : null,
+            ses_score: data?.ses_score != null ? Math.round(Number(data.ses_score)) : null,
             ces_tier: cesScore != null ? scoreTier(cesScore) : null,
           };
           effCache.set(c.id, parsed);
@@ -497,26 +486,15 @@ export function ConferenceKanbanBoard({ conferences }: { conferences: Conference
     setEffData((prev) => { const next = new Map(prev); next.delete(id); return next; });
     // Re-trigger the effect by bumping a counter would need external state;
     // simplest: just refetch directly
-    fetch(`/api/conferences/${id}/effectiveness`)
+    fetch(`/api/conferences/${id}/effectiveness-scores`)
       .then((r) => { if (!r.ok) throw new Error('failed'); return r.json(); })
       .then((data) => {
-        const repCesScores: number[] = (data?.operational?.rep_ces ?? [])
-          .map((r: Record<string, unknown>) => r.rep_ces_score)
-          .filter((v: unknown): v is number => typeof v === 'number');
-        const ses =
-          repCesScores.length > 0
-            ? Math.round(repCesScores.reduce((a, b) => a + b, 0) / repCesScores.length)
-            : null;
-        const cesScore = data?.ces?.score != null ? Math.round(Number(data.ces.score)) : null;
+        const cesScore = data?.ces_score != null ? Math.round(Number(data.ces_score)) : null;
         const parsed: EffData = {
           ces_score: cesScore,
-          ams_score: data?.marketing_audience?.marketing_audience_signal_score != null
-            ? Math.round(Number(data.marketing_audience.marketing_audience_signal_score))
-            : null,
-          cef_score: data?.operational?.cost_efficiency?.cost_efficiency_score != null
-            ? Math.round(Number(data.operational.cost_efficiency.cost_efficiency_score))
-            : null,
-          ses_score: ses,
+          ams_score: data?.ams_score != null ? Math.round(Number(data.ams_score)) : null,
+          cef_score: data?.cef_score != null ? Math.round(Number(data.cef_score)) : null,
+          ses_score: data?.ses_score != null ? Math.round(Number(data.ses_score)) : null,
           ces_tier: cesScore != null ? scoreTier(cesScore) : null,
         };
         effCache.set(id, parsed);

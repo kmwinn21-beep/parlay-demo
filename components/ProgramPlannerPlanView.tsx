@@ -161,15 +161,15 @@ function abbreviateStrategy(name: string): string {
 // same visual format as TerritoryChip. Matched by substring so the handful
 // of legacy spelling variants (see STRATEGY_ABBREVIATIONS above) all resolve
 // to the same pill instead of needing every variant listed separately.
-const STRATEGY_PILL_MAP: Array<{ code: string; color: string; test: RegExp }> = [
-  { code: 'PG', color: '#2563EB', test: /pipeline generation/i },
-  { code: 'PA', color: '#0891B2', test: /pipeline acceleration/i },
-  { code: 'CN', color: '#059669', test: /customer (retention|nurture)/i },
-  { code: 'BV', color: '#7C3AED', test: /brand visib|market presence/i },
-  { code: 'SA', color: '#DB2777', test: /strategic account/i },
-  { code: 'PD', color: '#D97706', test: /partner|ecosystem/i },
-  { code: 'CD', color: '#DC2626', test: /competitive defense/i },
-  { code: 'TL', color: '#4F46E5', test: /thought leadership/i },
+const STRATEGY_PILL_MAP: Array<{ code: string; color: string; label: string; test: RegExp }> = [
+  { code: 'PG', color: '#2563EB', label: 'Pipeline Generation', test: /pipeline generation/i },
+  { code: 'PA', color: '#0891B2', label: 'Pipeline Acceleration', test: /pipeline acceleration/i },
+  { code: 'CN', color: '#059669', label: 'Customer Retention / Customer Nurture', test: /customer (retention|nurture)/i },
+  { code: 'BV', color: '#7C3AED', label: 'Brand Visibility', test: /brand visib|market presence/i },
+  { code: 'SA', color: '#DB2777', label: 'Strategic Account Relationship Building', test: /strategic account/i },
+  { code: 'PD', color: '#D97706', label: 'Partner / Ecosystem Development', test: /partner|ecosystem/i },
+  { code: 'CD', color: '#DC2626', label: 'Competitive Defense', test: /competitive defense/i },
+  { code: 'TL', color: '#4F46E5', label: 'Thought Leadership', test: /thought leadership/i },
 ];
 function resolveStrategyPill(name: string): { code: string; color: string } {
   const found = STRATEGY_PILL_MAP.find(m => m.test.test(name));
@@ -194,6 +194,84 @@ function abbreviateTerritory(name: string): string {
   if (eastIdx > 0) return (word[0] + 'E').toUpperCase();
   if (westIdx > 0) return (word[0] + 'W').toUpperCase();
   return word[0].toUpperCase();
+}
+
+// Toolbar "Legend" popover — explains the Strategy/Territory pill
+// abbreviations used throughout the Plan tab's table and kanban cards.
+function LegendButton({ territoryOptions }: { territoryOptions: Array<{ id: number; name: string; color: string }> }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<DropdownPos | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (buttonRef.current?.contains(e.target as Node) || popoverRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const openPopover = () => {
+    if (buttonRef.current) setPos(calcDropdownPos(buttonRef.current));
+    setOpen(o => !o);
+  };
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={openPopover}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors flex-shrink-0"
+      >
+        <LegendIcon />
+        Legend
+      </button>
+      {open && pos && (
+        <div
+          ref={popoverRef}
+          className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 max-h-[70vh] overflow-y-auto"
+          style={{ ...dropdownStyle(pos), width: 325 }}
+        >
+          <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2">Strategy</p>
+          <div className="space-y-1.5 mb-4">
+            {STRATEGY_PILL_MAP.map(s => (
+              <div key={s.code} className="flex items-center gap-2">
+                <span
+                  style={{ width: 24, height: 24, border: `1.5px solid ${s.color}`, backgroundColor: `${s.color}18`, color: s.color }}
+                  className="inline-flex items-center justify-center rounded-full text-[10px] font-bold flex-shrink-0"
+                >
+                  {s.code}
+                </span>
+                <span className="text-xs text-gray-700">{s.label}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2">Territory</p>
+          <div className="space-y-1.5">
+            {territoryOptions.length === 0 ? (
+              <p className="text-xs text-gray-400">No territories configured.</p>
+            ) : (
+              territoryOptions.map(t => (
+                <div key={t.id} className="flex items-center gap-2">
+                  <span
+                    style={{ width: 24, height: 24, border: `1.5px solid ${t.color}`, backgroundColor: `${t.color}18`, color: t.color }}
+                    className="inline-flex items-center justify-center rounded-md text-[10px] font-bold flex-shrink-0"
+                  >
+                    {abbreviateTerritory(t.name)}
+                  </span>
+                  <span className="text-xs text-gray-700">{t.name}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 const CONFERENCE_TYPE_OPTIONS = [
@@ -327,6 +405,19 @@ function DateViewIcon() {
   return (
     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
+  );
+}
+
+// Inline SVG signpost — matches the reference icon without depending on the
+// `ti-*` icon font, whose availability/exact icon names couldn't be
+// confirmed for this app.
+function LegendIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 21V4" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5h6l2 2-2 2h-6" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11H6l-2 2 2 2h6" />
     </svg>
   );
 }
@@ -517,7 +608,7 @@ function TerritoryChip({ label, name, color, bg }: { label: string; name: string
         onClick={() => { if (buttonRef.current) setPos(calcTooltipPos(buttonRef.current)); setOpen(o => !o); }}
         title={name}
         style={{ width: 24, height: 24, border: `1.5px solid ${color}`, backgroundColor: bg, color }}
-        className="inline-flex items-center justify-center rounded-full text-[10px] font-bold flex-shrink-0"
+        className="inline-flex items-center justify-center rounded-md text-[10px] font-bold flex-shrink-0"
       >
         {label}
       </button>
@@ -620,7 +711,7 @@ function TerritoryEditCell({ conferenceId, territoryScope, territoryIds, territo
           <TerritoryCell scope={territoryScope} territoryIds={territoryIds} territoryOptions={territoryOptions} />
         ) : (
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors">
-            Set Territory
+            + Territory
           </span>
         )}
       </button>
@@ -782,7 +873,7 @@ function CommitCell({ conferenceId, conferenceName, decision, startDate, planned
         type="button"
         onClick={openPopover}
         disabled={saving}
-        className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-brand-primary/10 text-brand-primary border border-brand-primary/30 hover:bg-brand-primary/20 transition-colors disabled:opacity-50"
+        className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors disabled:opacity-50"
       >
         + to Program
       </button>
@@ -1050,7 +1141,7 @@ function StrategyEditPill({
           : `inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 ${saving ? 'opacity-50' : ''}`
         }
       >
-        {pill ? pill.code : 'Set strategy'}
+        {pill ? pill.code : '+ Strategy'}
       </button>
       {open && pos && (
         <div
@@ -1084,7 +1175,7 @@ function StrategyEditPill({
 // Generic click-to-edit dropdown pill, shared by Type and Sponsorship — both are a
 // flat list of string options mapped onto a single scoped conferences.* column.
 function OptionEditPill({
-  value, options, activeClass, placeholder, onSelect, colorFor,
+  value, options, activeClass, placeholder, onSelect, colorFor, truncateWidth,
 }: {
   value: string | null;
   options: string[];
@@ -1095,6 +1186,9 @@ function OptionEditPill({
   // rendered as a full-color border with a lightly tinted fill in that same
   // color, overriding `activeClass`'s fixed color.
   colorFor?: (value: string) => string | null;
+  // Optional px cap on the pill's text — truncates with an ellipsis and
+  // shows the full value via the native title tooltip on hover.
+  truncateWidth?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<DropdownPos | null>(null);
@@ -1132,12 +1226,20 @@ function OptionEditPill({
         type="button"
         onClick={openDropdown}
         disabled={saving}
+        title={truncateWidth && value ? value : undefined}
         className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity ${saving ? 'opacity-50' : ''} ${
           color ? 'border' : value ? activeClass : 'bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500'
         }`}
         style={color ? { borderColor: color, backgroundColor: `${color}26`, color } : undefined}
       >
-        {value ?? placeholder}
+        {/* max-width + truncate need to live on a nested block-level span, not
+            the inline-flex button itself — text-overflow:ellipsis doesn't
+            reliably clip a flex container's own inline text content. */}
+        {truncateWidth ? (
+          <span className="block truncate" style={{ maxWidth: truncateWidth }}>{value ?? placeholder}</span>
+        ) : (
+          value ?? placeholder
+        )}
       </button>
       {open && pos && (
         <div
@@ -1256,11 +1358,13 @@ function BoothEditPopover({
           type="button"
           onClick={openPopover}
           disabled={saving}
-          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity ${saving ? 'opacity-50' : ''} ${
-            boothPresent ? 'bg-purple-50 text-purple-800 border border-purple-300 hover:bg-purple-100' : 'text-gray-400 hover:text-gray-600'
+          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-colors ${saving ? 'opacity-50' : ''} ${
+            boothPresent
+              ? 'bg-purple-50 text-purple-800 border border-purple-300 hover:bg-purple-100'
+              : 'bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500'
           }`}
         >
-          {boothPresent ? dimsLabel : 'No Booth'}
+          {boothPresent ? dimsLabel : '+ Booth'}
         </button>
       )}
       {open && pos && (
@@ -1368,6 +1472,14 @@ function LocationEditCell({ conferenceId, location, onUpdated }: {
     }
   };
 
+  // "TBD" is a real stored value (the placeholder a newly-committed
+  // conference gets when no location was set) — treat it the same as no
+  // location at all rather than displaying it as literal text.
+  const isEmptyLocation = !location || location.trim().toUpperCase() === 'TBD';
+  // Google Places addresses inside the US always end in ", USA" — redundant
+  // in a table that's otherwise mostly US conferences, so strip it for display.
+  const displayLocation = location ? location.replace(/,\s*USA$/i, '') : '';
+
   return (
     <>
       <button
@@ -1375,9 +1487,13 @@ function LocationEditCell({ conferenceId, location, onUpdated }: {
         type="button"
         onClick={openPopover}
         disabled={saving}
-        className={`text-[11px] text-left truncate max-w-[110px] transition-opacity ${saving ? 'opacity-50' : ''} ${location ? 'text-gray-600 hover:text-brand-primary' : 'text-gray-400 hover:text-brand-secondary'}`}
+        className={`text-left transition-opacity ${saving ? 'opacity-50' : ''} ${
+          isEmptyLocation
+            ? 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors'
+            : 'text-[11px] truncate max-w-[110px] text-gray-600 hover:text-brand-primary'
+        }`}
       >
-        {location || 'Set location'}
+        {isEmptyLocation ? '+ Location' : displayLocation}
       </button>
       {open && pos && (
         <div
@@ -1470,7 +1586,7 @@ function DatesEditCell({
             : 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors'
         }`}
       >
-        {displayStartDate ? fmtDateShort(displayStartDate) : 'Set dates'}
+        {displayStartDate ? fmtDateShort(displayStartDate) : '+ Dates'}
       </button>
       {open && pos && (
         <div
@@ -2075,6 +2191,7 @@ export function ProgramPlannerPlanView({
           </button>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          <LegendButton territoryOptions={territoryOptions} />
           <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
             <button
               type="button"
@@ -2217,7 +2334,7 @@ export function ProgramPlannerPlanView({
                                   scopeLabel={c.territoryScope === 'national' ? 'National' : 'Regional'}
                                 />
                               )}
-                              {groupMode !== 'status' && <StatusCircleBadge decision={c.decision} />}
+                              <StatusCircleBadge decision={c.decision} />
                               {teamInputMap.get(c.conferenceId)?.hasInput && (
                                 <TeamInputStatusIcon
                                   conferenceId={c.conferenceId}
@@ -2280,14 +2397,15 @@ export function ProgramPlannerPlanView({
                             value={c.conferenceType}
                             options={CONFERENCE_TYPE_OPTIONS}
                             activeClass="bg-amber-50 text-amber-800 border border-amber-300"
-                            placeholder="Set type"
+                            placeholder="+ Type"
+                            truncateWidth={90}
                             onSelect={async v => { onTypeUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/type`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conferenceType: v }) }); }}
                           />
                           <OptionEditPill
                             value={c.sponsorshipLevel}
                             options={sponsorshipOptions.map(o => o.value)}
                             activeClass="bg-green-50 text-green-800 border border-green-300"
-                            placeholder="Set sponsorship"
+                            placeholder="+ Sponsorship"
                             colorFor={v => sponsorshipColors[v] ?? null}
                             onSelect={async v => { onSponsorshipUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/sponsorship`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sponsorshipLevel: v }) }); }}
                           />
@@ -2318,6 +2436,7 @@ export function ProgramPlannerPlanView({
                               assignedReps={c.plan.assignedReps}
                               allConferences={conferencesForConflicts.map(cc => ({ conferenceId: cc.conferenceId, name: cc.name, startDate: cc.startDate, assignedReps: cc.plan.assignedReps }))}
                               onUpdate={reps => onRepsUpdated(c.conferenceId, reps)}
+                              emptyLabel="+ Reps"
                             />
                           </div>
                         </div>
@@ -2336,16 +2455,16 @@ export function ProgramPlannerPlanView({
                     <colgroup>
                       <col style={{ width: 24 }} />
                       <col style={{ width: 260 }} />
-                      <col style={{ width: 76 }} />
-                      <col style={{ width: 70 }} />
-                      <col style={{ width: 160 }} />
-                      <col style={{ width: 84 }} />
-                      <col style={{ width: 110 }} />
                       <col style={{ width: 100 }} />
-                      <col style={{ width: 140 }} />
+                      <col style={{ width: 100 }} />
+                      <col style={{ width: 100 }} />
+                      <col style={{ width: 100 }} />
                       <col style={{ width: 120 }} />
-                      <col style={{ width: 80 }} />
-                      <col style={{ width: 110 }} />
+                      <col style={{ width: 100 }} />
+                      <col style={{ width: 100 }} />
+                      <col style={{ width: 120 }} />
+                      <col style={{ width: 100 }} />
+                      <col style={{ width: 100 }} />
                       <col style={{ width: 116 }} />
                     </colgroup>
                     <thead>
@@ -2354,9 +2473,7 @@ export function ProgramPlannerPlanView({
                         <th className="px-3 py-2 text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
                           <div className="grid grid-cols-[1fr_auto] gap-1.5 items-center">
                             <span className="text-left">Conference</span>
-                            {groupMode !== 'status' && (
-                              <span className="w-[116px] flex-shrink-0 text-left pl-3">Status</span>
-                            )}
+                            <span className="w-[116px] flex-shrink-0 text-left pl-3">Status</span>
                           </div>
                         </th>
                         <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">List Score</th>
@@ -2427,7 +2544,7 @@ export function ProgramPlannerPlanView({
                                       scopeLabel={c.territoryScope === 'national' ? 'National' : 'Regional'}
                                     />
                                   )}
-                                  {groupMode !== 'status' && <StatusCircleBadge decision={c.decision} />}
+                                  <StatusCircleBadge decision={c.decision} />
                                   {teamInputMap.get(c.conferenceId)?.hasInput && (
                                     <TeamInputStatusIcon
                                       conferenceId={c.conferenceId}
@@ -2486,7 +2603,8 @@ export function ProgramPlannerPlanView({
                                 value={c.conferenceType}
                                 options={CONFERENCE_TYPE_OPTIONS}
                                 activeClass="bg-amber-50 text-amber-800 border border-amber-300"
-                                placeholder="Set type"
+                                placeholder="+ Type"
+                                truncateWidth={90}
                                 onSelect={async v => { onTypeUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/type`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conferenceType: v }) }); }}
                               />
                             </td>
@@ -2495,7 +2613,7 @@ export function ProgramPlannerPlanView({
                                 value={c.sponsorshipLevel}
                                 options={sponsorshipOptions.map(o => o.value)}
                                 activeClass="bg-green-50 text-green-800 border border-green-300"
-                                placeholder="Set sponsorship"
+                                placeholder="+ Sponsorship"
                                 colorFor={v => sponsorshipColors[v] ?? null}
                                 onSelect={async v => { onSponsorshipUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/sponsorship`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sponsorshipLevel: v }) }); }}
                               />
@@ -2536,6 +2654,7 @@ export function ProgramPlannerPlanView({
                                 assignedReps={c.plan.assignedReps}
                                 allConferences={conferencesForConflicts.map(cc => ({ conferenceId: cc.conferenceId, name: cc.name, startDate: cc.startDate, assignedReps: cc.plan.assignedReps }))}
                                 onUpdate={reps => onRepsUpdated(c.conferenceId, reps)}
+                                emptyLabel="+ Reps"
                               />
                             </td>
                             <td className="px-3 py-2 text-center">
@@ -2663,7 +2782,7 @@ export function ProgramPlannerPlanView({
                                   scopeLabel={c.territoryScope === 'national' ? 'National' : 'Regional'}
                                 />
                               )}
-                              {groupMode !== 'status' && <StatusCircleBadge decision={c.decision} />}
+                              <StatusCircleBadge decision={c.decision} />
                               {teamInputMap.get(c.conferenceId)?.hasInput && (
                                 <TeamInputStatusIcon
                                   conferenceId={c.conferenceId}
@@ -2709,14 +2828,15 @@ export function ProgramPlannerPlanView({
                               value={c.conferenceType}
                               options={CONFERENCE_TYPE_OPTIONS}
                               activeClass="bg-amber-50 text-amber-800 border border-amber-300"
-                              placeholder="Set type"
+                              placeholder="+ Type"
+                              truncateWidth={90}
                               onSelect={async v => { onTypeUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/type`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conferenceType: v }) }); }}
                             />
                             <OptionEditPill
                               value={c.sponsorshipLevel}
                               options={sponsorshipOptions.map(o => o.value)}
                               activeClass="bg-green-50 text-green-800 border border-green-300"
-                              placeholder="Set sponsorship"
+                              placeholder="+ Sponsorship"
                               colorFor={v => sponsorshipColors[v] ?? null}
                               onSelect={async v => { onSponsorshipUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/sponsorship`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sponsorshipLevel: v }) }); }}
                             />
@@ -2738,6 +2858,7 @@ export function ProgramPlannerPlanView({
                                 assignedReps={c.plan.assignedReps}
                                 allConferences={conferencesForConflicts.map(cc => ({ conferenceId: cc.conferenceId, name: cc.name, startDate: cc.startDate, assignedReps: cc.plan.assignedReps }))}
                                 onUpdate={reps => onRepsUpdated(c.conferenceId, reps)}
+                                emptyLabel="+ Reps"
                               />
                             </div>
                           </div>
