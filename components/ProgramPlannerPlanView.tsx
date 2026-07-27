@@ -620,7 +620,7 @@ function TerritoryEditCell({ conferenceId, territoryScope, territoryIds, territo
           <TerritoryCell scope={territoryScope} territoryIds={territoryIds} territoryOptions={territoryOptions} />
         ) : (
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors">
-            Set Territory
+            + Territory
           </span>
         )}
       </button>
@@ -1050,7 +1050,7 @@ function StrategyEditPill({
           : `inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 ${saving ? 'opacity-50' : ''}`
         }
       >
-        {pill ? pill.code : 'Set strategy'}
+        {pill ? pill.code : '+ Strategy'}
       </button>
       {open && pos && (
         <div
@@ -1267,11 +1267,13 @@ function BoothEditPopover({
           type="button"
           onClick={openPopover}
           disabled={saving}
-          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity ${saving ? 'opacity-50' : ''} ${
-            boothPresent ? 'bg-purple-50 text-purple-800 border border-purple-300 hover:bg-purple-100' : 'text-gray-400 hover:text-gray-600'
+          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-colors ${saving ? 'opacity-50' : ''} ${
+            boothPresent
+              ? 'bg-purple-50 text-purple-800 border border-purple-300 hover:bg-purple-100'
+              : 'bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500'
           }`}
         >
-          {boothPresent ? dimsLabel : 'No Booth'}
+          {boothPresent ? dimsLabel : '+ Booth'}
         </button>
       )}
       {open && pos && (
@@ -1481,7 +1483,7 @@ function DatesEditCell({
             : 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors'
         }`}
       >
-        {displayStartDate ? fmtDateShort(displayStartDate) : 'Set dates'}
+        {displayStartDate ? fmtDateShort(displayStartDate) : '+ Dates'}
       </button>
       {open && pos && (
         <div
@@ -2299,7 +2301,7 @@ export function ProgramPlannerPlanView({
                             value={c.sponsorshipLevel}
                             options={sponsorshipOptions.map(o => o.value)}
                             activeClass="bg-green-50 text-green-800 border border-green-300"
-                            placeholder="Set sponsorship"
+                            placeholder="+ Sponsorship"
                             colorFor={v => sponsorshipColors[v] ?? null}
                             onSelect={async v => { onSponsorshipUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/sponsorship`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sponsorshipLevel: v }) }); }}
                           />
@@ -2330,6 +2332,7 @@ export function ProgramPlannerPlanView({
                               assignedReps={c.plan.assignedReps}
                               allConferences={conferencesForConflicts.map(cc => ({ conferenceId: cc.conferenceId, name: cc.name, startDate: cc.startDate, assignedReps: cc.plan.assignedReps }))}
                               onUpdate={reps => onRepsUpdated(c.conferenceId, reps)}
+                              emptyLabel="+ Reps"
                             />
                           </div>
                         </div>
@@ -2506,7 +2509,7 @@ export function ProgramPlannerPlanView({
                                 value={c.sponsorshipLevel}
                                 options={sponsorshipOptions.map(o => o.value)}
                                 activeClass="bg-green-50 text-green-800 border border-green-300"
-                                placeholder="Set sponsorship"
+                                placeholder="+ Sponsorship"
                                 colorFor={v => sponsorshipColors[v] ?? null}
                                 onSelect={async v => { onSponsorshipUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/sponsorship`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sponsorshipLevel: v }) }); }}
                               />
@@ -2547,6 +2550,7 @@ export function ProgramPlannerPlanView({
                                 assignedReps={c.plan.assignedReps}
                                 allConferences={conferencesForConflicts.map(cc => ({ conferenceId: cc.conferenceId, name: cc.name, startDate: cc.startDate, assignedReps: cc.plan.assignedReps }))}
                                 onUpdate={reps => onRepsUpdated(c.conferenceId, reps)}
+                                emptyLabel="+ Reps"
                               />
                             </td>
                             <td className="px-3 py-2 text-center">
@@ -2728,7 +2732,7 @@ export function ProgramPlannerPlanView({
                               value={c.sponsorshipLevel}
                               options={sponsorshipOptions.map(o => o.value)}
                               activeClass="bg-green-50 text-green-800 border border-green-300"
-                              placeholder="Set sponsorship"
+                              placeholder="+ Sponsorship"
                               colorFor={v => sponsorshipColors[v] ?? null}
                               onSelect={async v => { onSponsorshipUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/sponsorship`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sponsorshipLevel: v }) }); }}
                             />
@@ -2750,6 +2754,7 @@ export function ProgramPlannerPlanView({
                                 assignedReps={c.plan.assignedReps}
                                 allConferences={conferencesForConflicts.map(cc => ({ conferenceId: cc.conferenceId, name: cc.name, startDate: cc.startDate, assignedReps: cc.plan.assignedReps }))}
                                 onUpdate={reps => onRepsUpdated(c.conferenceId, reps)}
+                                emptyLabel="+ Reps"
                               />
                             </div>
                           </div>
