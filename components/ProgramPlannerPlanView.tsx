@@ -782,7 +782,7 @@ function CommitCell({ conferenceId, conferenceName, decision, startDate, planned
         type="button"
         onClick={openPopover}
         disabled={saving}
-        className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-brand-primary/10 text-brand-primary border border-brand-primary/30 hover:bg-brand-primary/20 transition-colors disabled:opacity-50"
+        className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors disabled:opacity-50"
       >
         + to Program
       </button>
@@ -1084,7 +1084,7 @@ function StrategyEditPill({
 // Generic click-to-edit dropdown pill, shared by Type and Sponsorship — both are a
 // flat list of string options mapped onto a single scoped conferences.* column.
 function OptionEditPill({
-  value, options, activeClass, placeholder, onSelect, colorFor,
+  value, options, activeClass, placeholder, onSelect, colorFor, truncateWidth,
 }: {
   value: string | null;
   options: string[];
@@ -1095,6 +1095,9 @@ function OptionEditPill({
   // rendered as a full-color border with a lightly tinted fill in that same
   // color, overriding `activeClass`'s fixed color.
   colorFor?: (value: string) => string | null;
+  // Optional px cap on the pill's text — truncates with an ellipsis and
+  // shows the full value via the native title tooltip on hover.
+  truncateWidth?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<DropdownPos | null>(null);
@@ -1132,10 +1135,14 @@ function OptionEditPill({
         type="button"
         onClick={openDropdown}
         disabled={saving}
-        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity ${saving ? 'opacity-50' : ''} ${
+        title={truncateWidth && value ? value : undefined}
+        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity ${truncateWidth ? 'truncate' : ''} ${saving ? 'opacity-50' : ''} ${
           color ? 'border' : value ? activeClass : 'bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500'
         }`}
-        style={color ? { borderColor: color, backgroundColor: `${color}26`, color } : undefined}
+        style={{
+          ...(color ? { borderColor: color, backgroundColor: `${color}26`, color } : {}),
+          ...(truncateWidth ? { maxWidth: truncateWidth } : {}),
+        }}
       >
         {value ?? placeholder}
       </button>
@@ -2281,6 +2288,7 @@ export function ProgramPlannerPlanView({
                             options={CONFERENCE_TYPE_OPTIONS}
                             activeClass="bg-amber-50 text-amber-800 border border-amber-300"
                             placeholder="Set type"
+                            truncateWidth={90}
                             onSelect={async v => { onTypeUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/type`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conferenceType: v }) }); }}
                           />
                           <OptionEditPill
@@ -2485,6 +2493,7 @@ export function ProgramPlannerPlanView({
                                 options={CONFERENCE_TYPE_OPTIONS}
                                 activeClass="bg-amber-50 text-amber-800 border border-amber-300"
                                 placeholder="Set type"
+                                truncateWidth={90}
                                 onSelect={async v => { onTypeUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/type`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conferenceType: v }) }); }}
                               />
                             </td>
@@ -2708,6 +2717,7 @@ export function ProgramPlannerPlanView({
                               options={CONFERENCE_TYPE_OPTIONS}
                               activeClass="bg-amber-50 text-amber-800 border border-amber-300"
                               placeholder="Set type"
+                              truncateWidth={90}
                               onSelect={async v => { onTypeUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/type`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conferenceType: v }) }); }}
                             />
                             <OptionEditPill
