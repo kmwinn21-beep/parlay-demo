@@ -157,6 +157,26 @@ function abbreviateStrategy(name: string): string {
   return STRATEGY_ABBREVIATIONS[name] ?? name;
 }
 
+// Strategy column pill: a 2-letter code + distinct fill color per category,
+// same visual format as TerritoryChip. Matched by substring so the handful
+// of legacy spelling variants (see STRATEGY_ABBREVIATIONS above) all resolve
+// to the same pill instead of needing every variant listed separately.
+const STRATEGY_PILL_MAP: Array<{ code: string; color: string; test: RegExp }> = [
+  { code: 'PG', color: '#2563EB', test: /pipeline generation/i },
+  { code: 'PA', color: '#0891B2', test: /pipeline acceleration/i },
+  { code: 'CN', color: '#059669', test: /customer (retention|nurture)/i },
+  { code: 'BV', color: '#7C3AED', test: /brand visib|market presence/i },
+  { code: 'SA', color: '#DB2777', test: /strategic account/i },
+  { code: 'PD', color: '#D97706', test: /partner|ecosystem/i },
+  { code: 'CD', color: '#DC2626', test: /competitive defense/i },
+  { code: 'TL', color: '#4F46E5', test: /thought leadership/i },
+];
+function resolveStrategyPill(name: string): { code: string; color: string } {
+  const found = STRATEGY_PILL_MAP.find(m => m.test.test(name));
+  if (found) return found;
+  return { code: name.slice(0, 2).toUpperCase(), color: '#6B7280' };
+}
+
 // Territory column abbreviation: two-or-more-word names use the first letter
 // of each of the first two words (e.g. "Great Lakes" -> "GL"). One-word names
 // normally use just their first letter (e.g. "West" -> "W"), except compound
@@ -1014,6 +1034,8 @@ function StrategyEditPill({
     }
   };
 
+  const pill = strategyTypeName ? resolveStrategyPill(strategyTypeName) : null;
+
   return (
     <>
       <button
@@ -1021,13 +1043,14 @@ function StrategyEditPill({
         type="button"
         onClick={openDropdown}
         disabled={saving}
-        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity ${saving ? 'opacity-50' : ''} ${
-          strategyTypeName
-            ? 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'
-            : 'bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500'
-        }`}
+        title={strategyTypeName ?? undefined}
+        style={pill ? { width: 24, height: 24, border: `1.5px solid ${pill.color}`, backgroundColor: pill.color + '18', color: pill.color } : undefined}
+        className={pill
+          ? `inline-flex items-center justify-center rounded-full text-[10px] font-bold flex-shrink-0 transition-opacity ${saving ? 'opacity-50' : ''}`
+          : `inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 ${saving ? 'opacity-50' : ''}`
+        }
       >
-        {strategyTypeName ? abbreviateStrategy(strategyTypeName) : 'Set strategy'}
+        {pill ? pill.code : 'Set strategy'}
       </button>
       {open && pos && (
         <div
@@ -2332,7 +2355,7 @@ export function ProgramPlannerPlanView({
                           <div className="grid grid-cols-[1fr_auto] gap-1.5 items-center">
                             <span className="text-left">Conference</span>
                             {groupMode !== 'status' && (
-                              <span className="w-[92px] flex-shrink-0 text-center">Status</span>
+                              <span className="w-[92px] flex-shrink-0 text-left pl-2">Status</span>
                             )}
                           </div>
                         </th>
@@ -2395,7 +2418,7 @@ export function ProgramPlannerPlanView({
                                     <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                                   </Link>
                                 </div>
-                                <div className="flex items-center gap-1 w-[92px] flex-shrink-0 justify-center pt-0.5">
+                                <div className="flex items-center gap-1 w-[92px] flex-shrink-0 justify-start pl-2 pt-0.5">
                                   {c.isNewAddition && <NewBadge />}
                                   {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                     <RepAssignmentWarning
@@ -2441,7 +2464,7 @@ export function ProgramPlannerPlanView({
                                 onUpdated={(start, end) => onDatesUpdated(c.conferenceId, start, end)}
                               />
                             </td>
-                            <td className="px-3 py-2">
+                            <td className="px-3 py-2 text-center">
                               <StrategyEditPill
                                 conferenceId={c.conferenceId}
                                 strategyTypeId={c.strategyTypeId}
@@ -2669,6 +2692,12 @@ export function ProgramPlannerPlanView({
                             {fmtDateShort(c.plan.plannedStartDate ?? c.startDate)}
                           </p>
                           <div className="flex items-center flex-wrap gap-1 mb-2">
+                            <StrategyEditPill
+                              conferenceId={c.conferenceId}
+                              strategyTypeId={c.strategyTypeId}
+                              strategyTypeName={c.strategyTypeName}
+                              onUpdated={(id, name) => onStrategyUpdated(c.conferenceId, id, name)}
+                            />
                             <TerritoryEditCell
                               conferenceId={c.conferenceId}
                               territoryScope={c.territoryScope}
