@@ -785,6 +785,8 @@ export default function ProgramPlannerPage() {
                 onLocationUpdated={handleLocationUpdated}
                 onTerritoryUpdated={handleTerritoryUpdated}
                 onConferenceCreated={() => fetchData(selectedYear)}
+                teamInputMap={teamInputMap}
+                onOpenTeamInput={(conferenceId, conferenceName) => setInputPanelConference({ conferenceId, conferenceName })}
               />
             ) : view === 'cost' ? (
               <div className="grid grid-cols-1 lg:grid-cols-6 gap-3 items-start">

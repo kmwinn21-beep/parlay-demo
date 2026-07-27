@@ -82,6 +82,12 @@ interface ProgramPlannerPlanViewProps {
   onLocationUpdated: (conferenceId: number, location: string) => void;
   onTerritoryUpdated: (conferenceId: number, territoryScope: string | null, territoryIds: number[]) => void;
   onConferenceCreated: () => void;
+  // Same team-input presence map and drawer opener the Program tab's own
+  // Input column uses — passed down so the Status column here can show the
+  // identical icon without duplicating the /api/calendar-intelligence/decisions/board
+  // fetch.
+  teamInputMap: Map<number, { hasInput: boolean; hasComments: boolean }>;
+  onOpenTeamInput: (conferenceId: number, conferenceName: string) => void;
 }
 
 // Light brand-accent-#1 fill for rows/cards whose conference has been
@@ -888,6 +894,30 @@ function DeleteDraftButton({ conferenceId, conferenceName, onDeleted, alwaysVisi
   );
 }
 
+// Same icon/behavior as the Program tab's Input column — shown in the Status
+// column here only once someone has actually logged input for the conference
+// (the Program tab shows a dimmed version even with no input; here it's
+// simply omitted, since Status is otherwise blank for a conference with
+// nothing to flag).
+function TeamInputStatusIcon({ conferenceId, conferenceName, hasComments, onOpenTeamInput }: {
+  conferenceId: number; conferenceName: string; hasComments: boolean;
+  onOpenTeamInput: (conferenceId: number, conferenceName: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onOpenTeamInput(conferenceId, conferenceName)}
+      className="relative w-5 h-5 flex items-center justify-center rounded-full bg-brand-primary/10 hover:bg-brand-primary/20 transition-colors flex-shrink-0"
+      title="View team input"
+    >
+      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} style={{ color: 'rgb(var(--brand-primary-rgb))' }}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+      {hasComments && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-red-500 rounded-full" />}
+    </button>
+  );
+}
+
 // Shown in By Rep grouping next to a conference that landed in this rep's
 // column via territory auto-placement rather than an actual rep assignment —
 // click reveals why it's here instead of silently implying the rep is
@@ -1469,6 +1499,7 @@ export function ProgramPlannerPlanView({
   year, conferences, categoryAverages, calIntelScores, calIntelLoading,
   onDecisionUpdated, onRepsUpdated, onBudgetUpdated, onStrategyUpdated, onDatesUpdated, onListScoreUpdated,
   onTypeUpdated, onSponsorshipUpdated, onBoothUpdated, onLocationUpdated, onTerritoryUpdated, onConferenceCreated,
+  teamInputMap, onOpenTeamInput,
 }: ProgramPlannerPlanViewProps) {
   const [priorYearActual, setPriorYearActual] = useState<number | null>(null);
   const [budgetModalConf, setBudgetModalConf] = useState<PlanConferenceRow | null>(null);
@@ -2164,6 +2195,14 @@ export function ProgramPlannerPlanView({
                                 />
                               )}
                               {groupMode !== 'status' && <StatusCircleBadge decision={c.decision} />}
+                              {teamInputMap.get(c.conferenceId)?.hasInput && (
+                                <TeamInputStatusIcon
+                                  conferenceId={c.conferenceId}
+                                  conferenceName={c.name}
+                                  hasComments={teamInputMap.get(c.conferenceId)?.hasComments ?? false}
+                                  onOpenTeamInput={onOpenTeamInput}
+                                />
+                              )}
                               <ListScoreBadge
                                 size={22}
                                 score={resolveListScore(c)?.score ?? null}
@@ -2293,7 +2332,7 @@ export function ProgramPlannerPlanView({
                           <div className="grid grid-cols-[1fr_auto] gap-1.5 items-center">
                             <span className="text-left">Conference</span>
                             {groupMode !== 'status' && (
-                              <span className="w-[68px] flex-shrink-0 text-center">Status</span>
+                              <span className="w-[92px] flex-shrink-0 text-center">Status</span>
                             )}
                           </div>
                         </th>
@@ -2356,7 +2395,7 @@ export function ProgramPlannerPlanView({
                                     <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                                   </Link>
                                 </div>
-                                <div className="flex items-center gap-1 w-[68px] flex-shrink-0 justify-center pt-0.5">
+                                <div className="flex items-center gap-1 w-[92px] flex-shrink-0 justify-center pt-0.5">
                                   {c.isNewAddition && <NewBadge />}
                                   {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                     <RepAssignmentWarning
@@ -2366,6 +2405,14 @@ export function ProgramPlannerPlanView({
                                     />
                                   )}
                                   {groupMode !== 'status' && <StatusCircleBadge decision={c.decision} />}
+                                  {teamInputMap.get(c.conferenceId)?.hasInput && (
+                                    <TeamInputStatusIcon
+                                      conferenceId={c.conferenceId}
+                                      conferenceName={c.name}
+                                      hasComments={teamInputMap.get(c.conferenceId)?.hasComments ?? false}
+                                      onOpenTeamInput={onOpenTeamInput}
+                                    />
+                                  )}
                                 </div>
                               </div>
                             </td>
@@ -2584,7 +2631,7 @@ export function ProgramPlannerPlanView({
                                 {c.name}
                               </button>
                             </div>
-                            <div className="flex items-center gap-1 w-[84px] flex-shrink-0 justify-center pt-0.5">
+                            <div className="flex items-center gap-1 w-[108px] flex-shrink-0 justify-center pt-0.5">
                               {c.isNewAddition && <NewBadge />}
                               {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                 <RepAssignmentWarning
@@ -2594,6 +2641,14 @@ export function ProgramPlannerPlanView({
                                 />
                               )}
                               {groupMode !== 'status' && <StatusCircleBadge decision={c.decision} />}
+                              {teamInputMap.get(c.conferenceId)?.hasInput && (
+                                <TeamInputStatusIcon
+                                  conferenceId={c.conferenceId}
+                                  conferenceName={c.name}
+                                  hasComments={teamInputMap.get(c.conferenceId)?.hasComments ?? false}
+                                  onOpenTeamInput={onOpenTeamInput}
+                                />
+                              )}
                               <ListScoreBadge
                                 size={20}
                                 score={resolveListScore(c)?.score ?? null}
