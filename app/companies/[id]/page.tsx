@@ -74,6 +74,8 @@ interface Company {
   services?: string[];
   icp?: string;
   industry?: string;
+  territory_id?: number | null;
+  hq_state?: string | null;
   created_at: string;
   my_user_status_ids?: number[];
   status_markers?: StatusMarker[];
@@ -165,6 +167,7 @@ export default function CompanyDetailPage() {
   const [profitTypeOptions, setProfitTypeOptions] = useState<string[]>([]);
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [entityStructureOptions, setEntityStructureOptions] = useState<string[]>([]);
+  const [territoryOptions, setTerritoryOptions] = useState<{ id: number; name: string; color: string }[]>([]);
   const [servicesOptions, setServicesOptions] = useState<string[]>([]);
   const [industryOptions, setIndustryOptions] = useState<string[]>([]);
   const [icpOptions, setIcpOptions] = useState<string[]>([]);
@@ -239,7 +242,7 @@ export default function CompanyDetailPage() {
 
   const fetchCompany = useCallback(async () => {
     try {
-      const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, entityStructureRes, servicesRes, icpRes, allCompaniesRes, relTypeRes, icpConfigRes, industryRes, productsRes] = await Promise.all([
+      const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, entityStructureRes, servicesRes, icpRes, allCompaniesRes, relTypeRes, icpConfigRes, industryRes, productsRes, territoriesRes] = await Promise.all([
         fetch(`/api/companies/${id}`),
         fetch('/api/config?category=status&form=company_detail'),
         fetch('/api/config?category=company_type&form=company_detail'),
@@ -254,6 +257,7 @@ export default function CompanyDetailPage() {
         fetch('/api/admin/icp-rules'),
         fetch('/api/config?category=industries&form=company_detail'),
         fetch('/api/config?category=products'),
+        fetch('/api/admin/territories'),
       ]);
       if (!compRes.ok) throw new Error('Not found');
       const data = await compRes.json();
@@ -271,6 +275,8 @@ export default function CompanyDetailPage() {
         services: Array.isArray(data.services) ? data.services : [],
         icp: data.icp || null,
         industry: data.industry || '',
+        territory_id: data.territory_id ?? null,
+        hq_state: data.hq_state ?? null,
       });
       if (statusRes.ok) {
         const statusData = await statusRes.json() as StatusOptionMeta[];
@@ -287,6 +293,10 @@ export default function CompanyDetailPage() {
       if (entityStructureRes.ok) setEntityStructureOptions((await entityStructureRes.json()).map((o: { value: string }) => o.value));
       if (servicesRes.ok) setServicesOptions((await servicesRes.json()).map((o: { value: string }) => o.value));
       if (industryRes.ok) setIndustryOptions((await industryRes.json()).map((o: { value: string }) => o.value));
+      if (territoriesRes.ok) {
+        const territoriesData = await territoriesRes.json() as { territories: { id: number; name: string; color: string }[] };
+        setTerritoryOptions(territoriesData.territories.map(t => ({ id: t.id, name: t.name, color: t.color })));
+      }
       if (icpRes.ok) setIcpOptions((await icpRes.json()).map((o: { value: string }) => o.value).filter((v: string) => v !== 'True' && v !== 'False'));
       if (icpConfigRes.ok) setIcpConfig(await icpConfigRes.json() as IcpConfig);
       if (relTypeRes.ok) setRelTypeOptions((await relTypeRes.json()).map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
@@ -903,7 +913,20 @@ export default function CompanyDetailPage() {
                   ))}
                 </select>
               </div>
-              <div className="md:col-span-2">
+              <div>
+                <label className="label">Territory</label>
+                <select
+                  value={editData.territory_id ?? ''}
+                  onChange={(e) => setEditData((p) => ({ ...p, territory_id: e.target.value ? Number(e.target.value) : null }))}
+                  className="input-field"
+                >
+                  <option value="">Select territory...</option>
+                  {territoryOptions.map(opt => (
+                    <option key={opt.id} value={opt.id}>{opt.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <MultiSelectDropdown
                   label="Services"
                   options={servicesOptions}
@@ -925,6 +948,16 @@ export default function CompanyDetailPage() {
                     <option key={opt} value={opt}>{opt}</option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="label">HQ State</label>
+                <input
+                  value={editData.hq_state || ''}
+                  onChange={(e) => setEditData((p) => ({ ...p, hq_state: e.target.value.toUpperCase().slice(0, 2) }))}
+                  className="input-field uppercase"
+                  placeholder="e.g. TX"
+                  maxLength={2}
+                />
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3">

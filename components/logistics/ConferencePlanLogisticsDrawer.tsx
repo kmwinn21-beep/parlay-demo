@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useDrawerResize } from '@/lib/useDrawerResize';
-import { type LogisticsResponse, type AssignedRepOption } from './types';
+import { type LogisticsResponse, type AssignedRepOption, type PlanNote, type PlanNoteSection } from './types';
 import { Spinner, ChevronLeftIcon, ChevronRightIcon } from './shared';
+import { AllSectionNotesDrawer, NoteCard } from './PlanSectionNotes';
 import { LogisticsDeadlinesTab } from './LogisticsDeadlinesTab';
 import { LogisticsRegistrationTab } from './LogisticsRegistrationTab';
 import { LogisticsBoothTab } from './LogisticsBoothTab';
@@ -23,6 +24,7 @@ export interface ConferencePlanLogisticsDrawerProps {
   planYear: number;
   startDate: string | null;
   endDate: string | null;
+  location: string | null;
   decision: string | null;
   plannedBudget: number | null;
   assignedReps: AssignedRepOption[];
@@ -31,6 +33,14 @@ export interface ConferencePlanLogisticsDrawerProps {
   boothWidth: number | null;
   boothLength: number | null;
   boothHall: string | null;
+  /** Uncommitted (Plan-tab-only draft) conferences only get the Input tab —
+   * logistics data (booth, sponsorship, deadlines, etc.) doesn't apply until
+   * a conference is actually committed to the program. */
+  committedToProgram: boolean;
+  /** Conference Details' "Logistics" button opens this same drawer without
+   * the Input tab (team-decision input belongs to the Program Planner
+   * context, not the conference record itself). */
+  hideInputTab?: boolean;
   isOpen: boolean;
   onClose: () => void;
   onSponsorshipUpdated?: (sponsorshipLevel: string | null) => void;
@@ -39,6 +49,7 @@ export interface ConferencePlanLogisticsDrawerProps {
 
 const TABS = [
   { id: 'input', label: 'Input' },
+  { id: 'all-notes', label: 'All Notes' },
   { id: 'deadlines', label: 'Deadlines' },
   { id: 'registration', label: 'Registration' },
   { id: 'booth', label: 'Booth' },
@@ -67,19 +78,28 @@ const DECISION_LABEL: Record<string, string> = {
 };
 
 export function ConferencePlanLogisticsDrawer({
-  conferenceId, conferenceName, seriesName, planYear, startDate, endDate,
+  conferenceId, conferenceName, seriesName, planYear, startDate, endDate, location,
   decision, plannedBudget, assignedReps, calScore,
-  boothPresent, boothWidth, boothLength, boothHall,
+  boothPresent, boothWidth, boothLength, boothHall, committedToProgram, hideInputTab,
   isOpen, onClose, onSponsorshipUpdated, onBoothUpdated,
 }: ConferencePlanLogisticsDrawerProps) {
-  const { panelStyle, handleResizeStart } = useDrawerResize(800, 380, 800);
+  const { panelStyle, handleResizeStart } = useDrawerResize(900, 380, 900);
   const [data, setData] = useState<LogisticsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabId>('deadlines');
+  const [activeTab, setActiveTab] = useState<TabId>(!committedToProgram && !hideInputTab ? 'input' : 'deadlines');
+  // Draft (not-yet-committed) conferences only ever show the Input tab — logistics
+  // sections don't apply to a conference that isn't actually on the program yet.
+  // hideInputTab (Conference Details' Logistics button) drops Input regardless.
+  const visibleTabsForConference = !committedToProgram
+    ? VISIBLE_TABS.filter(t => t.id === 'input')
+    : VISIBLE_TABS.filter(t => !hideInputTab || t.id !== 'input');
   const [teamInputRequestFormOpen, setTeamInputRequestFormOpen] = useState(false);
+  const [notesDrawerSection, setNotesDrawerSection] = useState<PlanNoteSection | null>(null);
   const lastConferenceIdRef = useRef<number | null>(null);
   const tabBarRef = useRef<HTMLDivElement>(null);
+
+  const onNoteCreated = (note: PlanNote) => setData(d => d && { ...d, notes: [note, ...d.notes] });
 
   const scrollTabs = (dir: -1 | 1) => {
     tabBarRef.current?.scrollBy({ left: dir * 140, behavior: 'smooth' });
@@ -89,7 +109,12 @@ export function ConferencePlanLogisticsDrawer({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/program-planner/conferences/${conferenceId}/logistics?year=${planYear}`, { cache: 'no-store' });
+      // hideInputTab means this drawer was opened from Conference Details,
+      // which has no Program-Planner planning-cycle year concept — ask the
+      // route to resolve the conference's actual conference_plans row
+      // instead of trusting our start_date-derived guess.
+      const modeParam = hideInputTab ? '&mode=details' : '';
+      const res = await fetch(`/api/program-planner/conferences/${conferenceId}/logistics?year=${planYear}${modeParam}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`Failed to load logistics (${res.status})`);
       const json = await res.json() as LogisticsResponse;
       setData(json);
@@ -102,17 +127,25 @@ export function ConferencePlanLogisticsDrawer({
 
   useEffect(() => {
     if (!isOpen) return;
-    // Reset to Deadlines when opening for a different conference; preserve tab
-    // when reopening for the same one.
+    // Reset to Deadlines (or Input, for a still-draft conference) when opening
+    // for a different conference; preserve tab when reopening for the same one.
     if (lastConferenceIdRef.current !== conferenceId) {
-      setActiveTab('deadlines');
+      setActiveTab(!committedToProgram && !hideInputTab ? 'input' : 'deadlines');
+      setNotesDrawerSection(null);
       lastConferenceIdRef.current = conferenceId;
+    } else if (!committedToProgram && !hideInputTab) {
+      setActiveTab('input');
     }
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, conferenceId, planYear]);
+  }, [isOpen, conferenceId, planYear, committedToProgram, hideInputTab]);
 
   if (!isOpen) return null;
+
+  // Once the route resolves an actual conference_plans row (Conference
+  // Details entry point), use that year for display and all downstream
+  // tab reads/writes instead of the start_date-derived guess passed in.
+  const effectiveYear = data?.resolvedPlanYear ?? planYear;
 
   const dateRange = startDate
     ? `${startDate}${endDate && endDate !== startDate ? ` – ${endDate}` : ''}`
@@ -141,7 +174,7 @@ export function ConferencePlanLogisticsDrawer({
       />
 
       <div
-        className="logistics-panel relative w-full sm:w-[460px] h-[92vh] sm:h-full bg-white shadow-2xl flex flex-col border-t sm:border-t-0 sm:border-l border-gray-200 overflow-hidden rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none"
+        className="logistics-panel relative w-full sm:w-[900px] h-[92vh] sm:h-full bg-white shadow-2xl flex flex-col border-t sm:border-t-0 sm:border-l border-gray-200 overflow-hidden rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none"
         style={panelStyle}
       >
         <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={handleResizeStart}>
@@ -153,10 +186,11 @@ export function ConferencePlanLogisticsDrawer({
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)' }}>
-                {seriesName ? `${seriesName} · ` : ''}FY{planYear}
+                {seriesName ? `${seriesName} · ` : ''}FY{effectiveYear}
               </p>
               <p style={{ fontSize: 14, fontWeight: 500, color: '#fff' }} className="truncate">{conferenceName}</p>
               {dateRange && <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)' }} className="mt-0.5">{dateRange}</p>}
+              {location && <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)' }} className="mt-0.5 truncate">{location}</p>}
             </div>
             <button onClick={onClose} className="text-white/60 hover:text-white text-xl leading-none flex-shrink-0" aria-label="Close">×</button>
           </div>
@@ -172,7 +206,9 @@ export function ConferencePlanLogisticsDrawer({
           {calScore != null && <span className="text-[11px] text-gray-500 whitespace-nowrap">Cal. Intel {Math.round(calScore)}</span>}
         </div>
 
-        {/* Tab bar */}
+        {/* Tab bar — hidden entirely for draft conferences, which only ever
+            have the one (Input) tab available */}
+        {committedToProgram && (
         <div className="flex-shrink-0 flex items-center border-b border-gray-200">
           <button
             type="button"
@@ -183,11 +219,11 @@ export function ConferencePlanLogisticsDrawer({
             <ChevronLeftIcon className="w-3.5 h-3.5" />
           </button>
           <div ref={tabBarRef} className="logistics-tabbar flex-1 min-w-0 flex gap-1 px-1 py-1.5 whitespace-nowrap">
-            {VISIBLE_TABS.map(t => (
+            {visibleTabsForConference.map(t => (
               <button
                 key={t.id}
                 type="button"
-                onClick={() => setActiveTab(t.id)}
+                onClick={() => { setActiveTab(t.id); setNotesDrawerSection(null); }}
                 className={`px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
                   activeTab === t.id ? 'bg-brand-primary text-white' : 'text-gray-500 hover:bg-gray-100'
                 }`}
@@ -205,9 +241,17 @@ export function ConferencePlanLogisticsDrawer({
             <ChevronRightIcon className="w-3.5 h-3.5" />
           </button>
         </div>
+        )}
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto relative">
+          {notesDrawerSection && data && (
+            <AllSectionNotesDrawer
+              section={notesDrawerSection}
+              notes={data.notes.filter(n => n.section === notesDrawerSection)}
+              onClose={() => setNotesDrawerSection(null)}
+            />
+          )}
           {loading ? (
             <div className="flex items-center justify-center py-16"><Spinner /></div>
           ) : error ? (
@@ -244,87 +288,107 @@ export function ConferencePlanLogisticsDrawer({
                     conferenceName={conferenceName}
                     requestFormOpen={teamInputRequestFormOpen}
                     onRequestFormChange={setTeamInputRequestFormOpen}
+                    layout="kanban"
                   />
+                </div>
+              )}
+              {activeTab === 'all-notes' && (
+                <div className="space-y-2">
+                  {data.notes.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-8">No notes logged for this conference yet.</p>
+                  ) : (
+                    data.notes.map(n => <NoteCard key={n.id} note={n} showSectionPill />)
+                  )}
                 </div>
               )}
               {activeTab === 'deadlines' && (
                 <LogisticsDeadlinesTab
-                  conferenceId={conferenceId} planYear={planYear}
+                  conferenceId={conferenceId} planYear={effectiveYear}
                   deadlines={data.deadlines} speakingSlots={data.speakingSlots} files={data.files}
                   assignedReps={assignedReps}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
                   onSpeakingSlotsChange={speakingSlots => setData(d => d && { ...d, speakingSlots })}
                   onFilesChange={files => setData(d => d && { ...d, files })}
+                  notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
                 />
               )}
               {activeTab === 'registration' && (
                 <LogisticsRegistrationTab
-                  conferenceId={conferenceId} planYear={planYear} plan={data.plan}
+                  conferenceId={conferenceId} planYear={effectiveYear} plan={data.plan}
                   deadlines={data.deadlines}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
+                  notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
                 />
               )}
               {activeTab === 'booth' && (
                 <LogisticsBoothTab
-                  conferenceId={conferenceId} planYear={planYear} plan={data.plan}
+                  conferenceId={conferenceId} planYear={effectiveYear} plan={data.plan}
                   deadlines={data.deadlines} startDate={startDate}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
                   boothPresent={boothPresent} boothWidth={boothWidth} boothLength={boothLength} boothHall={boothHall}
                   onBoothUpdated={onBoothUpdated}
+                  notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
                 />
               )}
               {activeTab === 'sponsorship' && (
                 <LogisticsSponsorshipTab
-                  conferenceId={conferenceId} planYear={planYear} plan={data.plan}
+                  conferenceId={conferenceId} planYear={effectiveYear} plan={data.plan}
                   deadlines={data.deadlines}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
                   onSponsorshipUpdated={onSponsorshipUpdated}
+                  notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
                 />
               )}
               {activeTab === 'speaking' && (
                 <LogisticsSpeakingTab
-                  conferenceId={conferenceId} planYear={planYear}
+                  conferenceId={conferenceId} planYear={effectiveYear}
                   speakingSlots={data.speakingSlots} assignedReps={assignedReps}
                   deadlines={data.deadlines}
                   onChange={speakingSlots => setData(d => d && { ...d, speakingSlots })}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
+                  notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
                 />
               )}
               {activeTab === 'travel' && (
                 <LogisticsTravelTab
-                  conferenceId={conferenceId} planYear={planYear}
+                  conferenceId={conferenceId} planYear={effectiveYear}
                   repTravel={data.repTravel} plan={data.plan}
                   deadlines={data.deadlines}
                   onChange={repTravel => setData(d => d && { ...d, repTravel })}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
+                  notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
                 />
               )}
               {activeTab === 'hosted' && (
                 <LogisticsHostedEventsTab
-                  conferenceId={conferenceId} planYear={planYear}
+                  conferenceId={conferenceId} planYear={effectiveYear}
                   hostedEvents={data.hostedEvents}
                   onChange={hostedEvents => setData(d => d && { ...d, hostedEvents })}
+                  notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
                 />
               )}
               {activeTab === 'shipping' && (
                 <LogisticsShippingTab
-                  conferenceId={conferenceId} planYear={planYear} plan={data.plan}
+                  conferenceId={conferenceId} planYear={effectiveYear} plan={data.plan}
                   deadlines={data.deadlines}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
+                  notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
                 />
               )}
               {activeTab === 'postshow' && (
                 <LogisticsPostShowTab
-                  conferenceId={conferenceId} planYear={planYear}
+                  conferenceId={conferenceId} planYear={effectiveYear}
                   deadlines={data.deadlines} startDate={startDate} endDate={endDate}
                   onDeadlinesChange={deadlines => setData(d => d && { ...d, deadlines })}
+                  notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
                 />
               )}
               {activeTab === 'files' && (
                 <LogisticsFilesTab
-                  conferenceId={conferenceId} planYear={planYear}
+                  conferenceId={conferenceId} planYear={effectiveYear}
                   files={data.files}
                   onChange={files => setData(d => d && { ...d, files })}
+                  notes={data.notes} onNoteCreated={onNoteCreated} onShowAllNotes={setNotesDrawerSection}
                 />
               )}
             </div>

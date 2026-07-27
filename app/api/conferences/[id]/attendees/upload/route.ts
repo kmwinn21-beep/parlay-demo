@@ -16,7 +16,10 @@ import {
   matchCompany,
   matchAttendee,
   confirmAttendeeMatch,
+  deepNormalizeCompanyName,
+  extractDomainFromWebsite,
 } from '@/lib/matching';
+import { normalizeNameKey, normalizeReversedNameKey, splitOwnerTokens } from '@/lib/normalize';
 
 function normalizeConsentValue(raw: string | undefined | null): string {
   if (!raw) return 'Consent Not Recorded';
@@ -132,34 +135,6 @@ export async function POST(
       }
     }
 
-    const normalizeOwnerName = (value: string): string =>
-      value
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/[,.'’`-]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-    const normalizeNameKey = (value: string): string => {
-      const tokens = normalizeOwnerName(value).split(' ').filter(Boolean);
-      if (tokens.length === 0) return '';
-      if (tokens.length === 1) return tokens[0];
-      return `${tokens[0]} ${tokens[tokens.length - 1]}`;
-    };
-    const normalizeReversedNameKey = (value: string): string => {
-      const v = value.trim();
-      if (!v.includes(',')) return '';
-      const parts = v.split(',').map(s => s.trim()).filter(Boolean);
-      if (parts.length < 2) return '';
-      const rejoined = `${parts.slice(1).join(' ')} ${parts[0]}`;
-      return normalizeNameKey(rejoined);
-    };
-    const splitOwnerTokens = (raw: string): string[] => (
-      raw
-        .split(/\s*(?:;|\||\/|&|\band\b)\s*/i)
-        .map(s => s.trim())
-        .filter(Boolean)
-    );
     const userNameIndex = new Map<string, Set<number>>();
     for (const r of usersWithConfig.rows) {
       const id = Number(r.config_id);
@@ -172,6 +147,90 @@ export async function POST(
         userNameIndex.set(key, set);
       }
     }
+    // id → display name, for attributing a territory-fallback resolution
+    // (which only yields a rep id, not a name) in the same shape as the
+    // other resolution paths.
+    const configIdToDisplayName = new Map<number, string>();
+    for (const r of usersWithConfig.rows) {
+      const id = Number(r.config_id);
+      const display = String(r.display_name ?? '').trim();
+      if (id && display) configIdToDisplayName.set(id, display);
+    }
+
+    // ── Master account list fallback lookup ──────────────────────────
+    // Load the active master account list into memory once, up front, for
+    // rep-assignment fallback when a row's own assigned_user column is
+    // missing or unresolved. Only queries master_account_list_uploads /
+    // master_account_list — both already exist from the Master Accounts
+    // admin feature (lib/db-migrations.ts #576-577).
+    interface MasterAccountRow {
+      companyNameNormalized: string;
+      domain: string | null;
+      assignedRepId: number | null;
+      assignedRepName: string | null;
+      hqState: string | null;
+    }
+
+    const masterByDomain = new Map<string, MasterAccountRow>();
+    // undefined = not seen yet, null = ambiguous (two master rows normalize
+    // to the same key — don't guess which one applies), otherwise the row.
+    const masterByNormalizedName = new Map<string, MasterAccountRow | null>();
+
+    const activeUploadIds = await db.execute({
+      sql: `SELECT id FROM master_account_list_uploads WHERE status = 'active'`,
+      args: [],
+    });
+
+    if (activeUploadIds.rows.length > 0) {
+      const ids = activeUploadIds.rows.map(r => Number(r.id));
+      const placeholders = ids.map(() => '?').join(',');
+
+      const masterRows = await db.execute({
+        sql: `SELECT company_name_normalized, domain, assigned_rep_id, assigned_rep_name, hq_state
+              FROM master_account_list
+              WHERE upload_id IN (${placeholders})`,
+        args: ids,
+      });
+
+      for (const row of masterRows.rows) {
+        const entry: MasterAccountRow = {
+          companyNameNormalized: String(row.company_name_normalized),
+          domain: row.domain != null ? String(row.domain) : null,
+          assignedRepId: row.assigned_rep_id != null ? Number(row.assigned_rep_id) : null,
+          assignedRepName: row.assigned_rep_name != null ? String(row.assigned_rep_name) : null,
+          hqState: row.hq_state != null ? String(row.hq_state) : null,
+        };
+        if (entry.domain) {
+          masterByDomain.set(entry.domain.toLowerCase(), entry);
+        }
+        if (masterByNormalizedName.has(entry.companyNameNormalized)) {
+          masterByNormalizedName.set(entry.companyNameNormalized, null);
+        } else {
+          masterByNormalizedName.set(entry.companyNameNormalized, entry);
+        }
+      }
+    }
+
+    // ── Territory fallback lookup ─────────────────────────────────────
+    // Maps a 2-letter state code to a single rep id when that territory has
+    // exactly one assigned rep. Multi-rep (or zero-rep) territories are
+    // never used for fallback — ambiguous, don't guess.
+    const territoryByState = new Map<string, number>();
+
+    const territories = await db.execute({ sql: `SELECT state_codes, assigned_user_ids FROM sales_territories`, args: [] });
+    for (const terr of territories.rows) {
+      let stateCodes: string[] = [];
+      let userIds: number[] = [];
+      try {
+        stateCodes = JSON.parse(String(terr.state_codes ?? '[]'));
+        userIds = JSON.parse(String(terr.assigned_user_ids ?? '[]'));
+      } catch { continue; }
+      if (!Array.isArray(stateCodes) || !Array.isArray(userIds) || userIds.length !== 1) continue;
+      for (const state of stateCodes) {
+        territoryByState.set(String(state).toUpperCase(), Number(userIds[0]));
+      }
+    }
+
     const unmatchedAssignedUsers = new Set<string>();
     const ambiguousAssignedUsers = new Set<string>();
     // Resolve file values to stored user ID strings (comma-separated for multi-owner cells).
@@ -212,6 +271,47 @@ export async function POST(
       if (ids.size === 0) return null;
       return Array.from(ids).join(',');
     };
+
+    interface MasterRepResolution {
+      assignedRepId: number | null;
+      assignedRepName: string | null;
+      source: 'master_domain' | 'master_name' | 'territory' | 'unresolved';
+    }
+
+    // Three-tier fallback for a company whose assigned-rep column is missing
+    // or unresolved: exact domain match against the active master account
+    // list, then normalized-name match against it, then (if the company's
+    // HQ state is known) the single-rep territory that covers that state.
+    // Closes over the maps built just above, so it must be defined here —
+    // after they're populated, inside the request handler (they're rebuilt
+    // fresh per upload, not shared across requests).
+    const resolveMasterAccountRep = (
+      companyNameNormalized: string,
+      domain: string | null,
+      hqState: string | null,
+    ): MasterRepResolution => {
+      if (domain) {
+        const domainMatch = masterByDomain.get(domain.toLowerCase());
+        if (domainMatch && domainMatch.assignedRepId !== null) {
+          return { assignedRepId: domainMatch.assignedRepId, assignedRepName: domainMatch.assignedRepName, source: 'master_domain' };
+        }
+      }
+
+      const nameMatch = masterByNormalizedName.get(companyNameNormalized);
+      if (nameMatch != null && nameMatch.assignedRepId !== null) {
+        return { assignedRepId: nameMatch.assignedRepId, assignedRepName: nameMatch.assignedRepName, source: 'master_name' };
+      }
+
+      if (hqState) {
+        const terrRepId = territoryByState.get(hqState.toUpperCase());
+        if (terrRepId !== undefined) {
+          return { assignedRepId: terrRepId, assignedRepName: configIdToDisplayName.get(terrRepId) ?? null, source: 'territory' };
+        }
+      }
+
+      return { assignedRepId: null, assignedRepName: null, source: 'unresolved' };
+    };
+
     const mappingJson = formData.get('mapping') as string | null;
     const mapping: ColumnMapping | null = mappingJson ? JSON.parse(mappingJson) as ColumnMapping : null;
 
@@ -315,7 +415,7 @@ export async function POST(
 
     // Load all existing companies and attendees for matching
     const [existingCoRes, existingAtRes] = await Promise.all([
-      db.execute({ sql: 'SELECT id, name, website, parent_company_id, company_type, wse, services, assigned_user FROM companies', args: [] }),
+      db.execute({ sql: 'SELECT id, name, website, parent_company_id, company_type, wse, services, assigned_user, hq_state FROM companies', args: [] }),
       db.execute({
         sql: `SELECT a.id, a.first_name, a.last_name, a.email,
                      c.name AS company_name, c.website AS company_website
@@ -326,7 +426,7 @@ export async function POST(
     ]);
 
     // Build company lookup (exact + normalised + domain + fuzzy)
-    type CoRow = { id: number; name: string; website?: string | null; parent_company_id?: number | null; company_type?: string | null; wse?: number | null; services?: string | null; assigned_user?: string | null };
+    type CoRow = { id: number; name: string; website?: string | null; parent_company_id?: number | null; company_type?: string | null; wse?: number | null; services?: string | null; assigned_user?: string | null; hq_state?: string | null };
     const existingCompanies: CoRow[] = existingCoRes.rows.map((r) => ({
       id: Number(r.id),
       name: String(r.name ?? ''),
@@ -336,6 +436,7 @@ export async function POST(
       wse: r.wse ? Number(r.wse) : null,
       services: r.services ? String(r.services) : null,
       assigned_user: r.assigned_user ? String(r.assigned_user) : null,
+      hq_state: r.hq_state ? String(r.hq_state) : null,
     }));
     const companyMatcher = buildCompanyMatcher(existingCompanies);
 
@@ -349,6 +450,11 @@ export async function POST(
       assigned_user?: string;
       assigned_user_supplied?: boolean;
       has_unresolved_assigned_user?: boolean;
+      /** How assigned_user was resolved — set once, after company matching
+       * (see the fallback-resolution pass below), and included in the
+       * match report's per-tier counts. */
+      assigned_user_source?: 'file' | 'master_domain' | 'master_name' | 'territory';
+      hqState?: string;
       wse?: number;
       services?: string;
       icp?: string;
@@ -369,6 +475,8 @@ export async function POST(
             assigned_user: resolvedAssigned ?? undefined,
             assigned_user_supplied: Boolean(rawAssigned),
             has_unresolved_assigned_user: Boolean(rawAssigned) && !resolvedAssigned,
+            assigned_user_source: resolvedAssigned ? 'file' : undefined,
+            hqState: p.state?.trim() || undefined,
             wse: p.wse?.trim() ? parseInt(p.wse.trim(), 10) || undefined : undefined,
             services: p.services?.trim() || undefined,
             icp: p.icp?.trim() || undefined,
@@ -380,10 +488,11 @@ export async function POST(
           if (!existing.email && p.email?.trim()) existing.email = p.email.trim();
           if (!existing.website && p.website?.trim()) existing.website = p.website.trim();
           if (!existing.company_type && p.company_type?.trim()) existing.company_type = p.company_type.trim();
+          if (!existing.hqState && p.state?.trim()) existing.hqState = p.state.trim();
           if (!existing.assigned_user) {
             const rawAssigned = p.assigned_user?.trim();
             const uid = resolveUserId(rawAssigned);
-            if (uid) existing.assigned_user = uid;
+            if (uid) { existing.assigned_user = uid; existing.assigned_user_source = 'file'; }
             if (rawAssigned) {
               existing.assigned_user_supplied = true;
               if (!uid) existing.has_unresolved_assigned_user = true;
@@ -415,6 +524,42 @@ export async function POST(
         companyIdCache.set(coName, -1);
       }
     });
+
+    // Master account / territory fallback for rep assignment. Runs after
+    // company matching (not inline during aggregation above) specifically so
+    // it can fall back to a matched existing company's own stored hq_state
+    // when the uploaded file didn't supply one — that data isn't known until
+    // matching has resolved companyIdCache.
+    const hasFallbackData = masterByDomain.size > 0 || masterByNormalizedName.size > 0 || territoryByState.size > 0;
+    if (hasFallbackData) {
+      companyEntries.forEach((entry, coName) => {
+        const shouldUseFallback = !entry.assigned_user_supplied || entry.has_unresolved_assigned_user;
+        if (!shouldUseFallback) return;
+
+        const coId = companyIdCache.get(coName);
+        const existingCompany = coId && coId > 0 ? existingCompanies.find(c => c.id === coId) : undefined;
+
+        const companyDomain = entry.website ? extractDomainFromWebsite(entry.website) : null;
+        const normalizedName = deepNormalizeCompanyName(entry.name);
+        const hqState = entry.hqState || existingCompany?.hq_state || null;
+
+        const resolution = resolveMasterAccountRep(normalizedName, companyDomain, hqState);
+        if (resolution.assignedRepId !== null) {
+          entry.assigned_user = String(resolution.assignedRepId);
+          entry.assigned_user_source = resolution.source as CompanyEntry['assigned_user_source'];
+          // A fallback-resolved rep is a real resolution — clear the
+          // unresolved flag so the write path (and match report) don't also
+          // treat this as a failure alongside the successful fallback.
+          entry.has_unresolved_assigned_user = false;
+        }
+        // Opportunistically pick up hqState from the matched existing
+        // company too, so it flows into the write path below even when it
+        // wasn't the thing that resolved a rep (e.g. Tier 1/2 matched, but
+        // the file also happened to omit state and the company has one on
+        // file already — keep it rather than clobbering with null on write).
+        if (!entry.hqState && existingCompany?.hq_state) entry.hqState = existingCompany.hq_state;
+      });
+    }
 
     // Redirect WSE values from child companies to their parent companies
     const parentWseUpdates = new Map<number, number>(); // parent company id -> wse value
@@ -465,7 +610,7 @@ export async function POST(
     // Update existing matched companies with CSV-provided fields
     const existingToUpdate = Array.from(companyEntries.entries()).filter(([n, entry]) => {
       const id = companyIdCache.get(n);
-      return id !== undefined && id > 0 && (entry.company_type || entry.assigned_user || entry.website || entry.wse || entry.services);
+      return id !== undefined && id > 0 && (entry.company_type || entry.assigned_user || entry.website || entry.wse || entry.services || entry.hqState);
     });
     if (existingToUpdate.length > 0) {
       const updateStmts: { sql: string; args: (string | number | null)[] }[] = [];
@@ -492,6 +637,7 @@ export async function POST(
         addCoField('website', 'website', entry.website || null);
         addCoField('wse', 'wse', entry.wse ?? null);
         addCoField('industry', 'industry', entry.industry || null);
+        addCoField('hq_state', 'hq_state', entry.hqState || null);
 
         // assigned_user: preserve if already has valid user (no conflict resolution for this field)
         const existingValidUserIds = existingCompany?.assigned_user
@@ -542,9 +688,10 @@ export async function POST(
         const wse = entry.wse ?? null;
         const services = entry.services || null;
         const industry = entry.industry || null;
+        const hqState = entry.hqState || null;
         return {
-          sql: 'INSERT INTO companies (name, company_type, website, assigned_user, wse, services, industry) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id',
-          args: [n, detectedType || null, website, assignedUser, wse, services, industry],
+          sql: 'INSERT INTO companies (name, company_type, website, assigned_user, wse, services, industry, hq_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+          args: [n, detectedType || null, website, assignedUser, wse, services, industry, hqState],
         };
       });
       for (let i = 0; i < newCoNames.length; i++) {
@@ -882,6 +1029,19 @@ export async function POST(
       );
     }
 
+    // Fallback-attribution counts across all processed companies, for the
+    // match report below.
+    let masterDomainMatched = 0;
+    let masterNameMatched = 0;
+    let territoryMatched = 0;
+    let stillUnresolved = 0;
+    for (const entry of Array.from(companyEntries.values())) {
+      if (entry.assigned_user_source === 'master_domain') masterDomainMatched++;
+      else if (entry.assigned_user_source === 'master_name') masterNameMatched++;
+      else if (entry.assigned_user_source === 'territory') territoryMatched++;
+      else if (!entry.assigned_user) stillUnresolved++;
+    }
+
     return {
       total_in_file: valid.length,
       new_count: attendeeIdsToLink.length,
@@ -892,6 +1052,10 @@ export async function POST(
         ambiguous_count: ambiguousAssignedUsers.size,
         unmatched_values: Array.from(unmatchedAssignedUsers).slice(0, 25),
         ambiguous_values: Array.from(ambiguousAssignedUsers).slice(0, 25),
+        master_domain_matched: masterDomainMatched,
+        master_name_matched: masterNameMatched,
+        territory_matched: territoryMatched,
+        still_unresolved: stillUnresolved,
       },
     };
     } // end run()

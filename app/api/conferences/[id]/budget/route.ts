@@ -19,19 +19,32 @@ export async function GET(
       args: [conferenceId],
     });
     if (result.rows.length === 0) {
-      return NextResponse.json({ line_items: [], return_on_cost: null, required_pipeline_multiple: '3.5', required_pipeline_amount: null });
+      return NextResponse.json({ line_items: [], return_on_cost: null, required_pipeline_multiple: '3.5', required_pipeline_amount: null, budget_total: 0 });
     }
     const raw = String(result.rows[0].line_items ?? '[]');
+    const lineItems = JSON.parse(raw);
     return NextResponse.json({
-      line_items: JSON.parse(raw),
+      line_items: lineItems,
       return_on_cost: result.rows[0].return_on_cost ?? null,
       required_pipeline_multiple: result.rows[0].required_pipeline_multiple ?? '3.5',
       required_pipeline_amount: result.rows[0].required_pipeline_amount != null ? Number(result.rows[0].required_pipeline_amount) : null,
+      budget_total: sumLineItemBudgets(lineItems),
     });
   } catch (error) {
     console.error('GET /api/conferences/[id]/budget error:', error);
-    return NextResponse.json({ line_items: [], return_on_cost: null, required_pipeline_multiple: '3.5', required_pipeline_amount: null });
+    return NextResponse.json({ line_items: [], return_on_cost: null, required_pipeline_multiple: '3.5', required_pipeline_amount: null, budget_total: 0 });
   }
+}
+
+// Mirrors BudgetVsActualModal's own client-side total so the Logistics drawer
+// (and anywhere else that needs a single "planned budget" figure for this
+// Conference-Details-only table) doesn't have to duplicate the parsing logic.
+function sumLineItemBudgets(lineItems: unknown[]): number {
+  return Array.isArray(lineItems) ? lineItems.reduce<number>((sum: number, item: unknown) => {
+    const raw = String((item as Record<string, unknown>)?.budget ?? '').replace(/[^0-9.]/g, '');
+    const n = Number(raw);
+    return sum + (Number.isFinite(n) ? n : 0);
+  }, 0) : 0;
 }
 
 export async function PUT(

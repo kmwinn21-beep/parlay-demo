@@ -29,6 +29,7 @@ interface CompanyAgg {
   wse: number | null;
   status: string;
   assignees: { userId: number; displayName: string; initials: string }[];
+  territory: { id: number; name: string; color: string } | null;
 }
 
 // GET /api/conferences/[id]/outreach — companies assigned for outreach at this
@@ -50,11 +51,13 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const assignRows = await db.execute({
       sql: `SELECT oa.company_id, oa.status, oa.assigned_user_id,
-                   c.name as company_name, c.company_type, c.icp, c.wse,
+                   c.name as company_name, c.company_type, c.icp, c.wse, c.territory_id,
+                   st.name as territory_name, st.color as territory_color,
                    u.display_name, u.first_name, u.last_name, u.email
             FROM outreach_assignments oa
             JOIN companies c ON c.id = oa.company_id
             JOIN users u ON u.id = oa.assigned_user_id
+            LEFT JOIN sales_territories st ON st.id = c.territory_id
             WHERE oa.conference_id = ?
             ORDER BY c.name ASC`,
       args: [conferenceId],
@@ -75,6 +78,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
           wse: r.wse != null ? Number(r.wse) : null,
           status: String(r.status),
           assignees: [],
+          territory: r.territory_id != null
+            ? { id: Number(r.territory_id), name: String(r.territory_name), color: String(r.territory_color) }
+            : null,
         });
       }
       companyMap.get(companyId)!.assignees.push({
@@ -193,6 +199,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       wse: c.wse,
       status: c.status === 'not_started' && isPastEnd ? 'overdue' : c.status,
       assignees: c.assignees,
+      territory: c.territory,
       attendees: attendeesByCompany.get(c.companyId) || [],
       totalActivityCount: activityByCompany.get(c.companyId) || 0,
       noteCount: noteCountByCompany.get(c.companyId) || 0,

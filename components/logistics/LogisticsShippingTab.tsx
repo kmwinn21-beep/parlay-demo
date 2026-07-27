@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { type LogisticsPlan, type LogisticsDeadline } from './types';
-import { AutoSaveField, ChecklistSection } from './shared';
+import { type LogisticsPlan, type LogisticsDeadline, type PlanNote, type PlanNoteSection } from './types';
+import { AutoSaveField, ChecklistSection, TwoColFieldGrid } from './shared';
+import { PlanSectionNotes } from './PlanSectionNotes';
 
 const SHIPPING_CHECKLIST_LABELS = ['Packing list confirmed', 'Return shipment arranged'];
 
@@ -12,9 +13,12 @@ interface Props {
   plan: LogisticsPlan;
   deadlines: LogisticsDeadline[];
   onDeadlinesChange: (deadlines: LogisticsDeadline[]) => void;
+  notes: PlanNote[];
+  onNoteCreated: (note: PlanNote) => void;
+  onShowAllNotes: (section: PlanNoteSection) => void;
 }
 
-export function LogisticsShippingTab({ conferenceId, planYear, plan, deadlines, onDeadlinesChange }: Props) {
+export function LogisticsShippingTab({ conferenceId, planYear, plan, deadlines, onDeadlinesChange, notes, onNoteCreated, onShowAllNotes }: Props) {
   const createdRef = useRef(false);
 
   useEffect(() => {
@@ -42,14 +46,16 @@ export function LogisticsShippingTab({ conferenceId, planYear, plan, deadlines, 
   return (
     <div className="space-y-4">
       <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="advanceWarehouseAddress" label="Advance warehouse address" type="textarea" initialValue={plan.advanceWarehouseAddress ?? ''} />
-      <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="shipDate" label="Ship date" type="date" initialValue={plan.shipDate ?? ''} />
-      <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="trackingNumber" label="Tracking number" initialValue={plan.trackingNumber ?? ''} />
-      <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="logisticsNotes" label="Notes" type="textarea" initialValue={plan.logisticsNotes ?? ''} />
-
+      <TwoColFieldGrid>
+        <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="shipDate" label="Ship date" type="date" initialValue={plan.shipDate ?? ''} />
+        <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="trackingNumber" label="Tracking number" initialValue={plan.trackingNumber ?? ''} />
+      </TwoColFieldGrid>
       <ChecklistSection
         conferenceId={conferenceId} planYear={planYear} category="shipping"
         deadlines={deadlines} onDeadlinesChange={onDeadlinesChange}
       />
+
+      <PlanSectionNotes conferenceId={conferenceId} planYear={planYear} section="shipping" notes={notes} onNoteCreated={onNoteCreated} onShowAll={onShowAllNotes} />
     </div>
   );
 }

@@ -1886,4 +1886,85 @@ export const migrations: string[] = [
   // users tagged via MentionTextarea, resolved to real users.id and notified
   // in the notes route's POST handler).
   `ALTER TABLE outreach_notes ADD COLUMN tagged_users TEXT`,
+  // 575 — companies.territory_id: lets a company be assigned to one of the
+  // sales_territories set up in Admin → Sales Reps, from the Edit Company
+  // form. Single territory per company (unlike conferences' multi-select
+  // territory_ids), since a company's territory is just where it lives.
+  `ALTER TABLE companies ADD COLUMN territory_id INTEGER REFERENCES sales_territories(id) ON DELETE SET NULL`,
+  // 576 — master_account_list_uploads: one row per Master Accounts upload
+  // event (Admin → Master Accounts tab). Tracks the uploaded file's storage
+  // location, the column mapping used, and whether this upload is the
+  // currently-active list or has been archived by a later upload —
+  // 'replace' mode archives every prior upload before inserting a new one,
+  // 'merge' mode leaves prior uploads' status untouched (their rows just get
+  // updated/added to in place, see master_account_list below).
+  `CREATE TABLE IF NOT EXISTS master_account_list_uploads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uploaded_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      uploaded_at TEXT DEFAULT (datetime('now')),
+      file_name TEXT NOT NULL,
+      file_size INTEGER,
+      storage_key TEXT NOT NULL,
+      row_count INTEGER,
+      status TEXT NOT NULL DEFAULT 'active'
+        CHECK(status IN ('active', 'archived')),
+      upload_mode TEXT NOT NULL DEFAULT 'replace'
+        CHECK(upload_mode IN ('replace', 'merge')),
+      column_mapping TEXT NOT NULL DEFAULT '{}',
+      notes TEXT
+    )`,
+  // 577 — master_account_list: the actual uploaded account rows, one per
+  // company. company_name_normalized (lowercased, legal-suffix-stripped,
+  // punctuation-stripped) is precomputed on upload so later fuzzy matching
+  // doesn't have to renormalize on every read. domain is likewise
+  // precomputed from website for exact-domain matching. raw_row preserves
+  // the original mapped row as JSON for reference/debugging.
+  `CREATE TABLE IF NOT EXISTS master_account_list (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      upload_id INTEGER NOT NULL REFERENCES master_account_list_uploads(id) ON DELETE CASCADE,
+      company_name TEXT NOT NULL,
+      company_name_normalized TEXT NOT NULL,
+      website TEXT,
+      domain TEXT,
+      assigned_rep_id INTEGER,
+      assigned_rep_name TEXT,
+      hq_state TEXT,
+      raw_row TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )`,
+  `CREATE INDEX IF NOT EXISTS idx_master_account_list_upload ON master_account_list(upload_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_master_account_list_normalized ON master_account_list(company_name_normalized)`,
+  // 578 — conference_plan_notes: per-section threaded notes for the Plan
+  // Logistics drawer (Deadlines/Registration/Booth/Sponsorship/Speaking/
+  // Travel/Hosted/Shipping/Post-show/Files tabs — NOT Input, which keeps its
+  // existing calendar_notes-backed CalendarNotesPanel thread). Replaces the
+  // old shared, unthreaded conference_plans.logistics_notes text field
+  // (still present, just no longer written to by the drawer) with a real
+  // per-user, per-section, timestamped, @mention-taggable thread — same
+  // conference_id/plan_year scoping convention as conference_plan_deadlines.
+  `CREATE TABLE IF NOT EXISTS conference_plan_notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+      plan_year INTEGER NOT NULL,
+      section TEXT NOT NULL CHECK(section IN (
+        'deadlines','registration','booth','sponsorship','speaking',
+        'travel','hosted','shipping','postshow','files'
+      )),
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      body TEXT NOT NULL,
+      tagged_users TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+  `CREATE INDEX IF NOT EXISTS idx_conference_plan_notes_lookup ON conference_plan_notes(conference_id, plan_year, section)`,
+  // 579 — companies.hq_state: 2-letter US state code for the company's
+  // headquarters, editable from the Edit Company form. Lets the attendee-list
+  // upload route's territory-based rep-assignment fallback (see
+  // app/api/conferences/[id]/attendees/upload/route.ts) resolve a rep for a
+  // company via sales_territories.state_codes when neither an assigned-rep
+  // column nor a master-account-list match is available — for companies that
+  // already exist, this is read directly off the row; for brand-new
+  // companies, it's populated from the uploaded file's own state column (see
+  // ParsedAttendee.state / lib/columnMapping.ts) at insert time.
+  `ALTER TABLE companies ADD COLUMN hq_state TEXT`,
 ];

@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { type LogisticsPlan, type LogisticsDeadline, addDays } from './types';
-import { AutoSaveField, patchPlanField, SavedCheckmark, ChecklistSection } from './shared';
+import { type LogisticsPlan, type LogisticsDeadline, type PlanNote, type PlanNoteSection, addDays } from './types';
+import { AutoSaveField, patchPlanField, SavedCheckmark, ChecklistSection, TwoColFieldGrid } from './shared';
+import { PlanSectionNotes } from './PlanSectionNotes';
 
 const BOOTH_CHECKLIST_LABELS = [
   'Exhibitor services order submitted',
@@ -30,11 +31,15 @@ interface Props {
   boothLength: number | null;
   boothHall: string | null;
   onBoothUpdated?: (booth: { boothPresent: boolean; boothWidth: number | null; boothLength: number | null; boothNumber: string | null; boothHall: string | null }) => void;
+  notes: PlanNote[];
+  onNoteCreated: (note: PlanNote) => void;
+  onShowAllNotes: (section: PlanNoteSection) => void;
 }
 
 export function LogisticsBoothTab({
   conferenceId, planYear, plan, deadlines, startDate, onDeadlinesChange,
   boothPresent, boothWidth, boothLength, boothHall, onBoothUpdated,
+  notes, onNoteCreated, onShowAllNotes,
 }: Props) {
   const [boothType, setBoothType] = useState(plan.boothType ?? '');
   const [boothTypeSaved, setBoothTypeSaved] = useState(false);
@@ -91,31 +96,35 @@ export function LogisticsBoothTab({
 
   return (
     <div className="space-y-4">
-      <div>
-        <label className="label flex items-center">Booth number<SavedCheckmark show={boothNumberSaved} /></label>
-        <input
-          className="input-field"
-          value={boothNumber}
-          onChange={e => setBoothNumber(e.target.value)}
-          onBlur={saveBoothNumber}
-        />
-      </div>
-      <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="boothSize" label="Booth size" initialValue={plan.boothSize ?? ''} placeholder="10×20" />
+      <TwoColFieldGrid>
+        <div>
+          <label className="label flex items-center">Booth number<SavedCheckmark show={boothNumberSaved} /></label>
+          <input
+            className="input-field"
+            value={boothNumber}
+            onChange={e => setBoothNumber(e.target.value)}
+            onBlur={saveBoothNumber}
+          />
+        </div>
+        <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="boothSize" label="Booth size" initialValue={plan.boothSize ?? ''} placeholder="10×20" />
 
-      <div>
-        <label className="label flex items-center">Booth type<SavedCheckmark show={boothTypeSaved} /></label>
-        <select value={boothType} onChange={e => saveBoothType(e.target.value)} className="input-field">
-          <option value="">Select...</option>
-          {BOOTH_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-      </div>
+        <div>
+          <label className="label flex items-center">Booth type<SavedCheckmark show={boothTypeSaved} /></label>
+          <select value={boothType} onChange={e => saveBoothType(e.target.value)} className="input-field">
+            <option value="">Select...</option>
+            {BOOTH_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
 
-      <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="boothContractSigned" label="Contract signed date" type="date" initialValue={plan.boothContractSigned ?? ''} />
+        <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="boothContractSigned" label="Contract signed date" type="date" initialValue={plan.boothContractSigned ?? ''} />
+      </TwoColFieldGrid>
 
       <ChecklistSection
         conferenceId={conferenceId} planYear={planYear} category="booth"
         deadlines={deadlines} onDeadlinesChange={onDeadlinesChange}
       />
+
+      <PlanSectionNotes conferenceId={conferenceId} planYear={planYear} section="booth" notes={notes} onNoteCreated={onNoteCreated} onShowAll={onShowAllNotes} />
     </div>
   );
 }

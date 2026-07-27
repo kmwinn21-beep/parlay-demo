@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { type LogisticsSpeakingSlot, type AssignedRepOption, type LogisticsDeadline } from './types';
+import { type LogisticsSpeakingSlot, type AssignedRepOption, type LogisticsDeadline, type PlanNote, type PlanNoteSection } from './types';
 import { EmptyState, ChecklistSection } from './shared';
+import { PlanSectionNotes } from './PlanSectionNotes';
 
 const SESSION_TYPE_OPTIONS = [
   { value: 'keynote', label: 'Keynote' },
@@ -23,6 +24,9 @@ interface Props {
   deadlines: LogisticsDeadline[];
   onChange: (slots: LogisticsSpeakingSlot[]) => void;
   onDeadlinesChange: (deadlines: LogisticsDeadline[]) => void;
+  notes: PlanNote[];
+  onNoteCreated: (note: PlanNote) => void;
+  onShowAllNotes: (section: PlanNoteSection) => void;
 }
 
 interface DraftSlot {
@@ -51,7 +55,7 @@ function toDraft(s: LogisticsSpeakingSlot): DraftSlot {
   };
 }
 
-export function LogisticsSpeakingTab({ conferenceId, planYear, speakingSlots, assignedReps, deadlines, onChange, onDeadlinesChange }: Props) {
+export function LogisticsSpeakingTab({ conferenceId, planYear, speakingSlots, assignedReps, deadlines, onChange, onDeadlinesChange, notes, onNoteCreated, onShowAllNotes }: Props) {
   const [editingSlotId, setEditingSlotId] = useState<number | null>(null);
   const [draft, setDraft] = useState<DraftSlot | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
@@ -140,6 +144,7 @@ export function LogisticsSpeakingTab({ conferenceId, planYear, speakingSlots, as
           <button type="button" onClick={addSlot} className="btn-primary text-xs px-3 py-1.5 mx-auto block">+ Add speaking slot</button>
         </div>
         <ChecklistSection conferenceId={conferenceId} planYear={planYear} category="speaking" deadlines={deadlines} onDeadlinesChange={onDeadlinesChange} />
+        <PlanSectionNotes conferenceId={conferenceId} planYear={planYear} section="speaking" notes={notes} onNoteCreated={onNoteCreated} onShowAll={onShowAllNotes} />
       </div>
     );
   }
@@ -269,6 +274,7 @@ export function LogisticsSpeakingTab({ conferenceId, planYear, speakingSlots, as
       </button>
     </div>
     <ChecklistSection conferenceId={conferenceId} planYear={planYear} category="speaking" deadlines={deadlines} onDeadlinesChange={onDeadlinesChange} />
+    <PlanSectionNotes conferenceId={conferenceId} planYear={planYear} section="speaking" notes={notes} onNoteCreated={onNoteCreated} onShowAll={onShowAllNotes} />
     </div>
   );
 }

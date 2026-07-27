@@ -1,8 +1,40 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import toast from 'react-hot-toast';
 import { colorForName, fmtFileSize, fmtDate, type LogisticsFile, type LogisticsDeadline } from './types';
+
+// Below this container width, a 2-column field grid gets cramped enough that a
+// single column reads better — measured live via ResizeObserver so the layout
+// keeps up as the drawer itself is resized (see useDrawerResize), not just at
+// mount.
+const TWO_COL_MIN_WIDTH = 460;
+
+// Wraps a group of plain form fields (AutoSaveField/select/etc. — NOT the
+// checklist, notes, sponsorship-tier-picker, or speaking-slots sections,
+// which stay their own full-width blocks) in a 2-column grid that collapses
+// to 1 column once the drawer is resized narrower than it comfortably fits.
+export function TwoColFieldGrid({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [twoCol, setTwoCol] = useState(true);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new ResizeObserver(entries => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      setTwoCol(width >= TWO_COL_MIN_WIDTH);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} className={`grid gap-4 ${twoCol ? 'grid-cols-2' : 'grid-cols-1'}`}>
+      {children}
+    </div>
+  );
+}
 
 // No Tabler icon font is loaded anywhere in this app, so `ti ti-*` classes render
 // nothing — these inline SVGs (same pattern as BudgetVsActualModal.tsx /
@@ -290,38 +322,47 @@ export function ChecklistSection({
       {items.length === 0 ? (
         <p className="text-xs text-gray-400 italic mb-2">No items yet.</p>
       ) : (
-        <div className="space-y-1 mb-2">
+        <div className="space-y-2 sm:space-y-1 mb-2">
           {items.map(item => (
+            // Mobile: a bordered card with the checkbox/label on one line and the
+            // status pill/date on the next — the single-line layout below sm
+            // squeezed five controls too tight to read comfortably. sm and up
+            // keeps the original compact single-row layout via sm:contents,
+            // which drops the mobile-only wrapper divs from the flex tree.
             <div
               key={item.id}
-              className="flex items-center gap-1.5 rounded-md px-1.5 py-1 border border-dashed border-transparent focus-within:border-gray-400"
+              className="flex flex-col gap-2 rounded-lg border border-gray-200 p-2.5 shadow-sm sm:flex-row sm:items-center sm:gap-1.5 sm:rounded-md sm:border-dashed sm:border-transparent sm:p-0 sm:px-1.5 sm:py-1 sm:shadow-none focus-within:border-gray-400"
             >
-              <button
-                type="button"
-                onClick={() => deleteItem(item.id)}
-                className="text-red-500 hover:text-red-600 flex-shrink-0"
-                title="Delete item"
-              >
-                <TrashIcon />
-              </button>
-              <input
-                type="checkbox"
-                checked={item.completed}
-                onChange={() => toggleComplete(item)}
-                className="accent-brand-secondary w-3.5 h-3.5 flex-shrink-0"
-              />
-              <input
-                defaultValue={item.label}
-                onBlur={e => saveLabel(item, e.target.value)}
-                className={`flex-1 min-w-0 text-xs bg-transparent border-0 focus:ring-0 focus:outline-none px-0 ${item.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}
-              />
-              <div className="flex-shrink-0"><DeadlineStatusPill deadline={item} /></div>
-              <input
-                type="date"
-                defaultValue={item.dueDate}
-                onBlur={e => saveDueDate(item, e.target.value)}
-                className="text-xs text-gray-400 bg-transparent border-0 focus:ring-0 focus:outline-none w-[104px] flex-shrink-0"
-              />
+              <div className="flex items-center gap-1.5 sm:contents">
+                <button
+                  type="button"
+                  onClick={() => deleteItem(item.id)}
+                  className="text-red-500 hover:text-red-600 flex-shrink-0"
+                  title="Delete item"
+                >
+                  <TrashIcon />
+                </button>
+                <input
+                  type="checkbox"
+                  checked={item.completed}
+                  onChange={() => toggleComplete(item)}
+                  className="accent-brand-secondary w-3.5 h-3.5 flex-shrink-0"
+                />
+                <input
+                  defaultValue={item.label}
+                  onBlur={e => saveLabel(item, e.target.value)}
+                  className={`flex-1 min-w-0 text-sm sm:text-xs bg-transparent border-0 focus:ring-0 focus:outline-none px-0 ${item.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-1.5 pl-9 sm:pl-0 sm:contents">
+                <div className="flex-shrink-0"><DeadlineStatusPill deadline={item} /></div>
+                <input
+                  type="date"
+                  defaultValue={item.dueDate}
+                  onBlur={e => saveDueDate(item, e.target.value)}
+                  className="text-xs text-gray-400 bg-transparent border-0 focus:ring-0 focus:outline-none w-[104px] flex-shrink-0"
+                />
+              </div>
             </div>
           ))}
         </div>

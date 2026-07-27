@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { type LogisticsRepTravel, type TravelStatus, type LogisticsPlan, type LogisticsDeadline } from './types';
-import { AvatarCircle, AutoSaveField, ChecklistSection } from './shared';
+import { type LogisticsRepTravel, type TravelStatus, type LogisticsPlan, type LogisticsDeadline, type PlanNote, type PlanNoteSection } from './types';
+import { AvatarCircle, AutoSaveField, ChecklistSection, TwoColFieldGrid } from './shared';
+import { PlanSectionNotes } from './PlanSectionNotes';
 
 const STATUS_OPTIONS: { value: TravelStatus; label: string }[] = [
   { value: 'not_started', label: 'Not started' },
@@ -19,6 +20,9 @@ interface Props {
   deadlines: LogisticsDeadline[];
   onChange: (repTravel: LogisticsRepTravel[]) => void;
   onDeadlinesChange: (deadlines: LogisticsDeadline[]) => void;
+  notes: PlanNote[];
+  onNoteCreated: (note: PlanNote) => void;
+  onShowAllNotes: (section: PlanNoteSection) => void;
 }
 
 function TravelRow({ conferenceId, planYear, rep, onUpdate }: {
@@ -95,7 +99,7 @@ function TravelRow({ conferenceId, planYear, rep, onUpdate }: {
   );
 }
 
-export function LogisticsTravelTab({ conferenceId, planYear, repTravel, plan, deadlines, onChange, onDeadlinesChange }: Props) {
+export function LogisticsTravelTab({ conferenceId, planYear, repTravel, plan, deadlines, onChange, onDeadlinesChange, notes, onNoteCreated, onShowAllNotes }: Props) {
   return (
     <div className="space-y-4">
       {repTravel.length === 0 ? (
@@ -116,11 +120,15 @@ export function LogisticsTravelTab({ conferenceId, planYear, repTravel, plan, de
 
       <div className="pt-4 border-t border-gray-100 space-y-4">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Hotel block</p>
-        <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="preferredHotel" label="Preferred hotel" initialValue={plan.preferredHotel ?? ''} />
-        <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="hotelBlockCutoff" label="Block cutoff date" type="date" initialValue={plan.hotelBlockCutoff ?? ''} />
+        <TwoColFieldGrid>
+          <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="preferredHotel" label="Preferred hotel" initialValue={plan.preferredHotel ?? ''} />
+          <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="hotelBlockCutoff" label="Block cutoff date" type="date" initialValue={plan.hotelBlockCutoff ?? ''} />
+        </TwoColFieldGrid>
       </div>
 
       <ChecklistSection conferenceId={conferenceId} planYear={planYear} category="travel" deadlines={deadlines} onDeadlinesChange={onDeadlinesChange} />
+
+      <PlanSectionNotes conferenceId={conferenceId} planYear={planYear} section="travel" notes={notes} onNoteCreated={onNoteCreated} onShowAll={onShowAllNotes} />
     </div>
   );
 }

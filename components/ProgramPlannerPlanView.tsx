@@ -82,6 +82,27 @@ interface ProgramPlannerPlanViewProps {
   onLocationUpdated: (conferenceId: number, location: string) => void;
   onTerritoryUpdated: (conferenceId: number, territoryScope: string | null, territoryIds: number[]) => void;
   onConferenceCreated: () => void;
+  // Same team-input presence map and drawer opener the Program tab's own
+  // Input column uses — passed down so the Status column here can show the
+  // identical icon without duplicating the /api/calendar-intelligence/decisions/board
+  // fetch.
+  teamInputMap: Map<number, { hasInput: boolean; hasComments: boolean }>;
+  onOpenTeamInput: (conferenceId: number, conferenceName: string) => void;
+}
+
+// Light brand-accent-#1 fill for rows/cards whose conference has been
+// committed to the program — a subtle visual cue distinguishing them from
+// still-draft (Plan-tab-only) conferences, using the same --brand-accent-rgb
+// token Admin → Brand's "Accent #1" swatch controls.
+const COMMITTED_FILL_STYLE: CSSProperties = { backgroundColor: 'rgb(var(--brand-accent-rgb, 52 211 153) / 0.08)' };
+
+// Same "committed for this plan year" test as CommitCell's checkmark-vs-"+ to
+// Program" branch (line ~694 below) — NOT conferences.committed_to_program,
+// which is true for nearly every pre-existing conference regardless of
+// whether it's been added to *this* year's program yet.
+function isCommittedForYear(c: { decision: string | null; startDate: string }, year: number): boolean {
+  return (c.decision === 'attend' || c.decision === 'reduce')
+    && new Date(c.startDate + 'T00:00:00').getFullYear() === year;
 }
 
 function fmtCurrency(v: number | null | undefined): string {
@@ -134,6 +155,26 @@ const STRATEGY_ABBREVIATIONS: Record<string, string> = {
 };
 function abbreviateStrategy(name: string): string {
   return STRATEGY_ABBREVIATIONS[name] ?? name;
+}
+
+// Strategy column pill: a 2-letter code + distinct fill color per category,
+// same visual format as TerritoryChip. Matched by substring so the handful
+// of legacy spelling variants (see STRATEGY_ABBREVIATIONS above) all resolve
+// to the same pill instead of needing every variant listed separately.
+const STRATEGY_PILL_MAP: Array<{ code: string; color: string; test: RegExp }> = [
+  { code: 'PG', color: '#2563EB', test: /pipeline generation/i },
+  { code: 'PA', color: '#0891B2', test: /pipeline acceleration/i },
+  { code: 'CN', color: '#059669', test: /customer (retention|nurture)/i },
+  { code: 'BV', color: '#7C3AED', test: /brand visib|market presence/i },
+  { code: 'SA', color: '#DB2777', test: /strategic account/i },
+  { code: 'PD', color: '#D97706', test: /partner|ecosystem/i },
+  { code: 'CD', color: '#DC2626', test: /competitive defense/i },
+  { code: 'TL', color: '#4F46E5', test: /thought leadership/i },
+];
+function resolveStrategyPill(name: string): { code: string; color: string } {
+  const found = STRATEGY_PILL_MAP.find(m => m.test.test(name));
+  if (found) return found;
+  return { code: name.slice(0, 2).toUpperCase(), color: '#6B7280' };
 }
 
 // Territory column abbreviation: two-or-more-word names use the first letter
@@ -781,8 +822,11 @@ function CommitCell({ conferenceId, conferenceName, decision, startDate, planned
 // uncommitted conferences only (see the DELETE route), so this never
 // appears once committedToProgram flips true — at that point it's a real
 // conference and removing it belongs on the Conference Details page.
-function DeleteDraftButton({ conferenceId, conferenceName, onDeleted }: {
+function DeleteDraftButton({ conferenceId, conferenceName, onDeleted, alwaysVisible }: {
   conferenceId: number; conferenceName: string; onDeleted: () => void;
+  /** Mobile cards have no hover affordance, so they keep the icon always
+   * visible instead of the desktop/kanban group-hover reveal. */
+  alwaysVisible?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<DropdownPos | null>(null);
@@ -831,10 +875,14 @@ function DeleteDraftButton({ conferenceId, conferenceName, onDeleted }: {
         onClick={openPopover}
         disabled={deleting}
         title="Remove this conference from the plan"
-        className="inline-flex items-center justify-center w-5 h-5 rounded-full text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0 disabled:opacity-50"
+        className={`inline-flex items-center justify-center h-5 rounded-full text-red-500 hover:text-red-600 hover:bg-red-50 transition-all flex-shrink-0 overflow-hidden disabled:opacity-50 ${
+          alwaysVisible || open
+            ? 'w-5 opacity-100 mr-1'
+            : 'w-0 opacity-0 mr-0 group-hover:w-5 group-hover:opacity-100 group-hover:mr-1 group-focus-within:w-5 group-focus-within:opacity-100 group-focus-within:mr-1'
+        }`}
       >
-        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
         </svg>
       </button>
       {open && pos && (
@@ -863,6 +911,30 @@ function DeleteDraftButton({ conferenceId, conferenceName, onDeleted }: {
         </div>
       )}
     </>
+  );
+}
+
+// Same icon/behavior as the Program tab's Input column — shown in the Status
+// column here only once someone has actually logged input for the conference
+// (the Program tab shows a dimmed version even with no input; here it's
+// simply omitted, since Status is otherwise blank for a conference with
+// nothing to flag).
+function TeamInputStatusIcon({ conferenceId, conferenceName, hasComments, onOpenTeamInput }: {
+  conferenceId: number; conferenceName: string; hasComments: boolean;
+  onOpenTeamInput: (conferenceId: number, conferenceName: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onOpenTeamInput(conferenceId, conferenceName)}
+      className="relative w-5 h-5 flex items-center justify-center rounded-full bg-brand-primary/10 hover:bg-brand-primary/20 transition-colors flex-shrink-0"
+      title="View team input"
+    >
+      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} style={{ color: 'rgb(var(--brand-primary-rgb))' }}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+      {hasComments && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-red-500 rounded-full" />}
+    </button>
   );
 }
 
@@ -962,6 +1034,8 @@ function StrategyEditPill({
     }
   };
 
+  const pill = strategyTypeName ? resolveStrategyPill(strategyTypeName) : null;
+
   return (
     <>
       <button
@@ -969,13 +1043,14 @@ function StrategyEditPill({
         type="button"
         onClick={openDropdown}
         disabled={saving}
-        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity ${saving ? 'opacity-50' : ''} ${
-          strategyTypeName
-            ? 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'
-            : 'bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500'
-        }`}
+        title={strategyTypeName ?? undefined}
+        style={pill ? { width: 24, height: 24, border: `1.5px solid ${pill.color}`, backgroundColor: pill.color + '18', color: pill.color } : undefined}
+        className={pill
+          ? `inline-flex items-center justify-center rounded-full text-[10px] font-bold flex-shrink-0 transition-opacity ${saving ? 'opacity-50' : ''}`
+          : `inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 ${saving ? 'opacity-50' : ''}`
+        }
       >
-        {strategyTypeName ? abbreviateStrategy(strategyTypeName) : 'Set strategy'}
+        {pill ? pill.code : 'Set strategy'}
       </button>
       {open && pos && (
         <div
@@ -1447,6 +1522,7 @@ export function ProgramPlannerPlanView({
   year, conferences, categoryAverages, calIntelScores, calIntelLoading,
   onDecisionUpdated, onRepsUpdated, onBudgetUpdated, onStrategyUpdated, onDatesUpdated, onListScoreUpdated,
   onTypeUpdated, onSponsorshipUpdated, onBoothUpdated, onLocationUpdated, onTerritoryUpdated, onConferenceCreated,
+  teamInputMap, onOpenTeamInput,
 }: ProgramPlannerPlanViewProps) {
   const [priorYearActual, setPriorYearActual] = useState<number | null>(null);
   const [budgetModalConf, setBudgetModalConf] = useState<PlanConferenceRow | null>(null);
@@ -1572,6 +1648,7 @@ export function ProgramPlannerPlanView({
     planYear: number;
     startDate: string | null;
     endDate: string | null;
+    location: string | null;
     decision: string | null;
     plannedBudget: number | null;
     assignedReps: AssignedRep[];
@@ -1580,6 +1657,7 @@ export function ProgramPlannerPlanView({
     boothWidth: number | null;
     boothLength: number | null;
     boothHall: string | null;
+    committedToProgram: boolean;
   } | null>(null);
   const sponsorshipOptions = useConfigWithIds('sponsorship_level');
   // Per-tier colors — same source (/api/config/sponsorship-levels) the drawer's
@@ -2094,12 +2172,16 @@ export function ProgramPlannerPlanView({
                         draggable={!!section.dropKey}
                         onDragStart={() => setDraggedId(c.conferenceId)}
                         onDragEnd={() => setDraggedId(null)}
+                        style={isCommittedForYear(c, year) ? COMMITTED_FILL_STYLE : undefined}
                         className={`px-4 py-3 space-y-2.5 ${dimRows ? 'opacity-60' : ''} ${draggedId === c.conferenceId ? 'opacity-40' : ''}`}
                       >
                         <div className="flex items-start gap-2">
                           <span className="cursor-grab active:cursor-grabbing mt-1 flex-shrink-0"><GripIcon /></span>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1 min-w-0">
+                              {!c.committedToProgram && (
+                                <DeleteDraftButton conferenceId={c.conferenceId} conferenceName={c.name} onDeleted={onConferenceCreated} alwaysVisible />
+                              )}
                               <button
                                 type="button"
                                 onClick={() => setLogisticsDrawer({
@@ -2109,6 +2191,7 @@ export function ProgramPlannerPlanView({
                                   planYear: year,
                                   startDate: c.startDate ?? null,
                                   endDate: c.endDate ?? null,
+                                  location: c.location,
                                   decision: c.decision ?? null,
                                   plannedBudget: c.plan.plannedBudget ?? null,
                                   assignedReps: c.plan.assignedReps ?? [],
@@ -2117,6 +2200,7 @@ export function ProgramPlannerPlanView({
                                   boothWidth: c.boothWidth,
                                   boothLength: c.boothLength,
                                   boothHall: c.boothHall,
+                                  committedToProgram: isCommittedForYear(c, year),
                                 })}
                                 className="text-brand-secondary hover:text-brand-primary font-medium text-sm truncate bg-transparent border-0 p-0 text-left cursor-pointer"
                               >
@@ -2126,7 +2210,6 @@ export function ProgramPlannerPlanView({
                                 <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                               </Link>
                               {c.isNewAddition && <NewBadge />}
-                              {!c.committedToProgram && <DeleteDraftButton conferenceId={c.conferenceId} conferenceName={c.name} onDeleted={onConferenceCreated} />}
                               {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                 <RepAssignmentWarning
                                   repName={section.label}
@@ -2135,6 +2218,14 @@ export function ProgramPlannerPlanView({
                                 />
                               )}
                               {groupMode !== 'status' && <StatusCircleBadge decision={c.decision} />}
+                              {teamInputMap.get(c.conferenceId)?.hasInput && (
+                                <TeamInputStatusIcon
+                                  conferenceId={c.conferenceId}
+                                  conferenceName={c.name}
+                                  hasComments={teamInputMap.get(c.conferenceId)?.hasComments ?? false}
+                                  onOpenTeamInput={onOpenTeamInput}
+                                />
+                              )}
                               <ListScoreBadge
                                 size={22}
                                 score={resolveListScore(c)?.score ?? null}
@@ -2244,7 +2335,7 @@ export function ProgramPlannerPlanView({
                         with table-layout:auto, minWidth-only columns drift per table instead. */}
                     <colgroup>
                       <col style={{ width: 24 }} />
-                      <col style={{ width: 150 }} />
+                      <col style={{ width: 260 }} />
                       <col style={{ width: 76 }} />
                       <col style={{ width: 70 }} />
                       <col style={{ width: 160 }} />
@@ -2264,13 +2355,13 @@ export function ProgramPlannerPlanView({
                           <div className="grid grid-cols-[1fr_auto] gap-1.5 items-center">
                             <span className="text-left">Conference</span>
                             {groupMode !== 'status' && (
-                              <span className="w-[68px] flex-shrink-0 text-center">Status</span>
+                              <span className="w-[116px] flex-shrink-0 text-left pl-3">Status</span>
                             )}
                           </div>
                         </th>
                         <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">List Score</th>
                         <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Dates</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Strategy</th>
+                        <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Strategy</th>
                         <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Territory</th>
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Type</th>
                         <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">Sponsorship</th>
@@ -2289,13 +2380,16 @@ export function ProgramPlannerPlanView({
                             draggable={!!section.dropKey}
                             onDragStart={() => setDraggedId(c.conferenceId)}
                             onDragEnd={() => setDraggedId(null)}
-                            style={i % 2 === 1 ? { backgroundColor: 'var(--color-background-secondary, #F9FAFB)' } : {}}
-                            className={`hover:bg-blue-50/30 transition-colors ${draggedId === c.conferenceId ? 'opacity-40' : ''}`}
+                            style={isCommittedForYear(c, year) ? COMMITTED_FILL_STYLE : (i % 2 === 1 ? { backgroundColor: 'var(--color-background-secondary, #F9FAFB)' } : {})}
+                            className={`group hover:bg-blue-50/30 transition-colors ${draggedId === c.conferenceId ? 'opacity-40' : ''}`}
                           >
                             <td className="px-2 py-2 cursor-grab active:cursor-grabbing"><GripIcon /></td>
                             <td className="px-3 py-2">
                               <div className="grid grid-cols-[1fr_auto] gap-1.5 items-start">
-                                <div className="flex items-start gap-1 min-w-0">
+                                <div className="flex items-start min-w-0">
+                                  {!c.committedToProgram && (
+                                    <DeleteDraftButton conferenceId={c.conferenceId} conferenceName={c.name} onDeleted={onConferenceCreated} />
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() => setLogisticsDrawer({
@@ -2305,6 +2399,7 @@ export function ProgramPlannerPlanView({
                                       planYear: year,
                                       startDate: c.startDate ?? null,
                                       endDate: c.endDate ?? null,
+                                      location: c.location,
                                       decision: c.decision ?? null,
                                       plannedBudget: c.plan.plannedBudget ?? null,
                                       assignedReps: c.plan.assignedReps ?? [],
@@ -2313,18 +2408,18 @@ export function ProgramPlannerPlanView({
                                       boothWidth: c.boothWidth,
                                       boothLength: c.boothLength,
                                       boothHall: c.boothHall,
+                                      committedToProgram: isCommittedForYear(c, year),
                                     })}
                                     className="text-brand-secondary hover:text-brand-primary font-medium whitespace-normal break-words bg-transparent border-0 p-0 text-left cursor-pointer"
                                   >
                                     {c.name}
                                   </button>
-                                  <Link href={`/conferences/${c.conferenceId}`} className="text-gray-400 hover:text-gray-600 flex-shrink-0" title="Open conference detail">
+                                  <Link href={`/conferences/${c.conferenceId}`} className="text-gray-400 hover:text-gray-600 flex-shrink-0 ml-1" title="Open conference detail">
                                     <i className="ti ti-external-link text-[11px]" aria-hidden="true" />
                                   </Link>
                                 </div>
-                                <div className="flex items-center gap-1 w-[68px] flex-shrink-0 justify-center pt-0.5">
+                                <div className="flex items-center gap-1 w-[116px] flex-shrink-0 justify-start pl-3 pt-0.5">
                                   {c.isNewAddition && <NewBadge />}
-                              {!c.committedToProgram && <DeleteDraftButton conferenceId={c.conferenceId} conferenceName={c.name} onDeleted={onConferenceCreated} />}
                                   {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                     <RepAssignmentWarning
                                       repName={section.label}
@@ -2333,6 +2428,14 @@ export function ProgramPlannerPlanView({
                                     />
                                   )}
                                   {groupMode !== 'status' && <StatusCircleBadge decision={c.decision} />}
+                                  {teamInputMap.get(c.conferenceId)?.hasInput && (
+                                    <TeamInputStatusIcon
+                                      conferenceId={c.conferenceId}
+                                      conferenceName={c.name}
+                                      hasComments={teamInputMap.get(c.conferenceId)?.hasComments ?? false}
+                                      onOpenTeamInput={onOpenTeamInput}
+                                    />
+                                  )}
                                 </div>
                               </div>
                             </td>
@@ -2361,7 +2464,7 @@ export function ProgramPlannerPlanView({
                                 onUpdated={(start, end) => onDatesUpdated(c.conferenceId, start, end)}
                               />
                             </td>
-                            <td className="px-3 py-2">
+                            <td className="px-3 py-2 text-center">
                               <StrategyEditPill
                                 conferenceId={c.conferenceId}
                                 strategyTypeId={c.strategyTypeId}
@@ -2516,36 +2619,43 @@ export function ProgramPlannerPlanView({
                           draggable={!!section.dropKey}
                           onDragStart={() => setDraggedId(c.conferenceId)}
                           onDragEnd={() => setDraggedId(null)}
-                          className={`bg-white rounded-lg border border-gray-200 p-2.5 shadow-sm hover:shadow-md transition-shadow ${section.dropKey ? 'cursor-grab active:cursor-grabbing' : ''} ${
+                          style={isCommittedForYear(c, year) ? COMMITTED_FILL_STYLE : undefined}
+                          className={`group bg-white rounded-lg border border-gray-200 p-2.5 shadow-sm hover:shadow-md transition-shadow ${section.dropKey ? 'cursor-grab active:cursor-grabbing' : ''} ${
                             draggedId === c.conferenceId ? 'opacity-40' : ''
                           } ${key === 'cut' ? 'opacity-70' : ''}`}
                         >
                           <div className="grid grid-cols-[1fr_auto] gap-1.5 items-start mb-1.5">
-                            <button
-                              type="button"
-                              onClick={() => setLogisticsDrawer({
-                                conferenceId: c.conferenceId,
-                                conferenceName: c.name,
-                                seriesName: null,
-                                planYear: year,
-                                startDate: c.startDate ?? null,
-                                endDate: c.endDate ?? null,
-                                decision: c.decision ?? null,
-                                plannedBudget: c.plan.plannedBudget ?? null,
-                                assignedReps: c.plan.assignedReps ?? [],
-                                calScore: null,
-                                boothPresent: c.boothPresent,
-                                boothWidth: c.boothWidth,
-                                boothLength: c.boothLength,
-                                boothHall: c.boothHall,
-                              })}
-                              className="text-brand-secondary hover:text-brand-primary font-semibold text-xs whitespace-normal break-words bg-transparent border-0 p-0 text-left cursor-pointer min-w-0"
-                            >
-                              {c.name}
-                            </button>
-                            <div className="flex items-center gap-1 w-[84px] flex-shrink-0 justify-center pt-0.5">
+                            <div className="flex items-start min-w-0">
+                              {!c.committedToProgram && (
+                                <DeleteDraftButton conferenceId={c.conferenceId} conferenceName={c.name} onDeleted={onConferenceCreated} />
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setLogisticsDrawer({
+                                  conferenceId: c.conferenceId,
+                                  conferenceName: c.name,
+                                  seriesName: null,
+                                  planYear: year,
+                                  startDate: c.startDate ?? null,
+                                  endDate: c.endDate ?? null,
+                                  location: c.location,
+                                  decision: c.decision ?? null,
+                                  plannedBudget: c.plan.plannedBudget ?? null,
+                                  assignedReps: c.plan.assignedReps ?? [],
+                                  calScore: null,
+                                  boothPresent: c.boothPresent,
+                                  boothWidth: c.boothWidth,
+                                  boothLength: c.boothLength,
+                                  boothHall: c.boothHall,
+                                  committedToProgram: isCommittedForYear(c, year),
+                                })}
+                                className="text-brand-secondary hover:text-brand-primary font-semibold text-xs whitespace-normal break-words bg-transparent border-0 p-0 text-left cursor-pointer min-w-0"
+                              >
+                                {c.name}
+                              </button>
+                            </div>
+                            <div className="flex items-center gap-1 w-[108px] flex-shrink-0 justify-center pt-0.5">
                               {c.isNewAddition && <NewBadge />}
-                              {!c.committedToProgram && <DeleteDraftButton conferenceId={c.conferenceId} conferenceName={c.name} onDeleted={onConferenceCreated} />}
                               {groupMode === 'rep' && c.plan.assignedReps.length === 0 && (
                                 <RepAssignmentWarning
                                   repName={section.label}
@@ -2554,6 +2664,14 @@ export function ProgramPlannerPlanView({
                                 />
                               )}
                               {groupMode !== 'status' && <StatusCircleBadge decision={c.decision} />}
+                              {teamInputMap.get(c.conferenceId)?.hasInput && (
+                                <TeamInputStatusIcon
+                                  conferenceId={c.conferenceId}
+                                  conferenceName={c.name}
+                                  hasComments={teamInputMap.get(c.conferenceId)?.hasComments ?? false}
+                                  onOpenTeamInput={onOpenTeamInput}
+                                />
+                              )}
                               <ListScoreBadge
                                 size={20}
                                 score={resolveListScore(c)?.score ?? null}
@@ -2574,6 +2692,12 @@ export function ProgramPlannerPlanView({
                             {fmtDateShort(c.plan.plannedStartDate ?? c.startDate)}
                           </p>
                           <div className="flex items-center flex-wrap gap-1 mb-2">
+                            <StrategyEditPill
+                              conferenceId={c.conferenceId}
+                              strategyTypeId={c.strategyTypeId}
+                              strategyTypeName={c.strategyTypeName}
+                              onUpdated={(id, name) => onStrategyUpdated(c.conferenceId, id, name)}
+                            />
                             <TerritoryEditCell
                               conferenceId={c.conferenceId}
                               territoryScope={c.territoryScope}
@@ -2665,6 +2789,7 @@ export function ProgramPlannerPlanView({
           planYear={logisticsDrawer.planYear}
           startDate={logisticsDrawer.startDate}
           endDate={logisticsDrawer.endDate}
+          location={logisticsDrawer.location}
           decision={logisticsDrawer.decision}
           plannedBudget={logisticsDrawer.plannedBudget}
           assignedReps={logisticsDrawer.assignedReps}
@@ -2673,6 +2798,7 @@ export function ProgramPlannerPlanView({
           boothWidth={logisticsDrawer.boothWidth}
           boothLength={logisticsDrawer.boothLength}
           boothHall={logisticsDrawer.boothHall}
+          committedToProgram={logisticsDrawer.committedToProgram}
           isOpen={true}
           onClose={() => setLogisticsDrawer(null)}
           onSponsorshipUpdated={v => onSponsorshipUpdated(logisticsDrawer.conferenceId, v)}

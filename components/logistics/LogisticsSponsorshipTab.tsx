@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { type LogisticsPlan, type LogisticsDeadline } from './types';
-import { AutoSaveField, AutoSaveCheckbox, SavedCheckmark, patchPlanField, ChecklistSection } from './shared';
+import { type LogisticsPlan, type LogisticsDeadline, type PlanNote, type PlanNoteSection } from './types';
+import { AutoSaveField, AutoSaveCheckbox, SavedCheckmark, patchPlanField, ChecklistSection, TwoColFieldGrid } from './shared';
+import { PlanSectionNotes } from './PlanSectionNotes';
 
 interface SponsorshipOption { id: number; value: string; color: string | null; is_system: number }
 
@@ -104,26 +105,32 @@ function SponsorshipTierPicker({ conferenceId, planYear, initialValue, onSponsor
   );
 }
 
-export function LogisticsSponsorshipTab({ conferenceId, planYear, plan, deadlines, onDeadlinesChange, onSponsorshipUpdated }: {
+export function LogisticsSponsorshipTab({ conferenceId, planYear, plan, deadlines, onDeadlinesChange, onSponsorshipUpdated, notes, onNoteCreated, onShowAllNotes }: {
   conferenceId: number;
   planYear: number;
   plan: LogisticsPlan;
   deadlines: LogisticsDeadline[];
   onDeadlinesChange: (deadlines: LogisticsDeadline[]) => void;
   onSponsorshipUpdated?: (sponsorshipLevel: string | null) => void;
+  notes: PlanNote[];
+  onNoteCreated: (note: PlanNote) => void;
+  onShowAllNotes: (section: PlanNoteSection) => void;
 }) {
   return (
     <div className="space-y-4">
       <SponsorshipTierPicker conferenceId={conferenceId} planYear={planYear} initialValue={plan.sponsorshipTier} onSponsorshipUpdated={onSponsorshipUpdated} />
-      <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="sponsorshipContractSigned" label="Contract signed date" type="date" initialValue={plan.sponsorshipContractSigned ?? ''} />
-      <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="sponsorshipDeliverablesDue" label="Deliverables due date" type="date" initialValue={plan.sponsorshipDeliverablesDue ?? ''} />
+      <TwoColFieldGrid>
+        <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="sponsorshipContractSigned" label="Contract signed date" type="date" initialValue={plan.sponsorshipContractSigned ?? ''} />
+        <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="sponsorshipDeliverablesDue" label="Deliverables due date" type="date" initialValue={plan.sponsorshipDeliverablesDue ?? ''} />
+      </TwoColFieldGrid>
       <AutoSaveCheckbox conferenceId={conferenceId} planYear={planYear} field="logoSubmitted" label="Logo submitted" initialChecked={plan.logoSubmitted} />
-      <AutoSaveField conferenceId={conferenceId} planYear={planYear} field="logisticsNotes" label="Notes" type="textarea" initialValue={plan.logisticsNotes ?? ''} placeholder="Sponsorship: ..." />
 
       <ChecklistSection
         conferenceId={conferenceId} planYear={planYear} category="sponsorship"
         deadlines={deadlines} onDeadlinesChange={onDeadlinesChange}
       />
+
+      <PlanSectionNotes conferenceId={conferenceId} planYear={planYear} section="sponsorship" notes={notes} onNoteCreated={onNoteCreated} onShowAll={onShowAllNotes} />
     </div>
   );
 }

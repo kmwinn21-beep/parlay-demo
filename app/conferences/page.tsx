@@ -7,7 +7,7 @@ import { BackButton } from '@/components/BackButton';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { ConferenceStageBadge } from '@/components/ConferenceStageBadge';
 import { ConferenceKanbanBoard } from '@/components/ConferenceKanbanBoard';
-import { ProgramConferenceCard, RepAvatarStack, TerritoryPill, ListStatusPill, type ProgramCardConference } from '@/components/ProgramConferenceCard';
+import { ProgramConferenceCard, RepAvatarStack, TerritoryPill, ListStatusPill, OutreachStatusPill, type ProgramCardConference } from '@/components/ProgramConferenceCard';
 import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { computeConferenceStage, postConferenceDaysRemaining, type ConferenceStage } from '@/lib/conference-stage';
 
@@ -811,10 +811,7 @@ function ConferencesPageContent() {
                             <RepAvatarStack reps={conf.assignedReps} />
                           </td>
                           <td style={{ padding: '8px 10px' }}>
-                            {conf.outreachProgress
-                              ? `${conf.outreachProgress.assigned} / ${conf.outreachProgress.total}`
-                              : <span style={{ color: 'var(--text-muted, #9CA3AF)' }}>—</span>
-                            }
+                            <OutreachStatusPill outreachProgress={conf.outreachProgress} showPrefix={false} />
                           </td>
                           <td style={{ padding: '8px 10px' }}>
                             <ListStatusPill hasAttendeeList={conf.hasAttendeeList} attendeeCount={conf.attendeeCount} />

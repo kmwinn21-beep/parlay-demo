@@ -605,7 +605,7 @@ export function FloatingNav() {
                   <Link
                     href={item.href}
                     onClick={() => { setOpen(false); setIntelOpen(false); }}
-                    className="block whitespace-nowrap text-xs font-medium text-blue-100 bg-brand-primary/90 hover:bg-brand-secondary/90 backdrop-blur-sm rounded-2xl px-3 py-1.5 border border-blue-700/40 shadow-lg transition-colors text-left"
+                    className="flex items-center whitespace-nowrap text-sm font-semibold text-brand-primary bg-brand-primary/10 hover:bg-brand-primary/20 backdrop-blur-sm rounded-2xl px-4 py-2.5 border-2 border-brand-primary shadow-lg transition-colors text-left min-w-[152px]"
                   >
                     {item.label}
                   </Link>

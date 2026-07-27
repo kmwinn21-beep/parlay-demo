@@ -26,11 +26,28 @@ export async function GET(
   if (isNaN(confId)) return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
 
   const url = new URL(request.url);
-  const year = parseInt(url.searchParams.get('year') ?? '', 10);
-  if (isNaN(year)) return NextResponse.json({ error: 'year is required' }, { status: 400 });
+  const requestedYear = parseInt(url.searchParams.get('year') ?? '', 10);
+  const mode = url.searchParams.get('mode');
+  if (isNaN(requestedYear)) return NextResponse.json({ error: 'year is required' }, { status: 400 });
 
+  let year = requestedYear;
   try {
-    const [planRes, confRes, deadlinesRes, speakingRes, filesRes, hostedEventsRes] = await Promise.all([
+    // Conference Details' Logistics button (mode=details) has no concept of
+    // a Program Planner planning-cycle year — a conference can be committed
+    // under a plan_year that differs from its own start_date's year. Resolve
+    // to whichever conference_plans row actually exists (most recent) so the
+    // drawer always shows the same data regardless of entry point, instead
+    // of the start_date-derived year landing on an empty/wrong row.
+    if (mode === 'details') {
+      const latestPlanRes = await db.execute({
+        sql: `SELECT plan_year FROM conference_plans WHERE conference_id = ? ORDER BY plan_year DESC LIMIT 1`,
+        args: [confId],
+      });
+      const latestYear = latestPlanRes.rows[0]?.plan_year;
+      if (latestYear != null) year = Number(latestYear);
+    }
+
+    const [planRes, confRes, deadlinesRes, speakingRes, filesRes, hostedEventsRes, notesRes] = await Promise.all([
       db.execute({
         sql: `SELECT booth_number, booth_size, booth_type, booth_contract_signed,
                      sponsorship_tier, sponsorship_contract_signed, sponsorship_deliverables_due,
@@ -46,7 +63,7 @@ export async function GET(
       // Those are the source of truth for display here — this drawer's own edits
       // write back to both places, but a table-side edit only touches this one.
       db.execute({
-        sql: `SELECT sponsorship_level, booth_number FROM conferences WHERE id = ?`,
+        sql: `SELECT sponsorship_level, booth_number, internal_attendees FROM conferences WHERE id = ?`,
         args: [confId],
       }),
       db.execute({
@@ -78,6 +95,15 @@ export async function GET(
                      catering_confirmed, invitations_sent_date, rsvp_deadline, notes
               FROM conference_plan_hosted_events WHERE conference_id = ? AND plan_year = ?
               ORDER BY event_date ASC, id ASC`,
+        args: [confId, year],
+      }),
+      db.execute({
+        sql: `SELECT n.id, n.section, n.body, n.created_at,
+                     u.display_name, u.first_name, u.last_name, u.email
+              FROM conference_plan_notes n
+              JOIN users u ON u.id = n.user_id
+              WHERE n.conference_id = ? AND n.plan_year = ?
+              ORDER BY n.created_at DESC, n.id DESC`,
         args: [confId, year],
       }),
     ]);
@@ -159,6 +185,32 @@ export async function GET(
       if (Array.isArray(parsed)) assignedRepIds = parsed.map(Number).filter(n => !isNaN(n));
     } catch { /* ignore */ }
 
+    // Conference Details' "internal attendees" is a separate rep-assignment
+    // concept (comma-separated config_options.value names, not ids) that is
+    // never synced into conference_plans.assigned_rep_ids. When no Program
+    // Planner assignment exists yet, fall back to resolving those names
+    // against config_options so the Travel tab isn't empty just because the
+    // conference was only ever managed from Conference Details.
+    if (assignedRepIds.length === 0) {
+      const internalAttendeeNames = String(confRow?.internal_attendees ?? '')
+        .split(',')
+        .map(n => n.trim())
+        .filter(Boolean);
+      if (internalAttendeeNames.length > 0) {
+        const allUsersRes = await db.execute({
+          sql: `SELECT id, value FROM config_options WHERE category = 'user'`,
+          args: [],
+        });
+        const nameToId = new Map<string, number>();
+        for (const r of allUsersRes.rows) {
+          nameToId.set(String(r.value).trim().toLowerCase(), Number(r.id));
+        }
+        assignedRepIds = internalAttendeeNames
+          .map(name => nameToId.get(name.toLowerCase()))
+          .filter((n): n is number => n !== undefined);
+      }
+    }
+
     let repTravel: Array<{
       userId: number; displayName: string; initials: string;
       flightStatus: string; hotelStatus: string;
@@ -207,7 +259,19 @@ export async function GET(
       });
     }
 
-    return NextResponse.json({ plan, deadlines, speakingSlots, repTravel, files, hostedEvents });
+    const notes = notesRes.rows.map(r => {
+      const userName = resolveUserDisplayName(r);
+      return {
+        id: Number(r.id),
+        section: String(r.section),
+        body: String(r.body),
+        userName,
+        userInitials: getInitials(userName),
+        createdAt: String(r.created_at),
+      };
+    });
+
+    return NextResponse.json({ plan, deadlines, speakingSlots, repTravel, files, hostedEvents, notes, resolvedPlanYear: year });
   } catch (error) {
     console.error('GET /api/program-planner/conferences/[id]/logistics error:', error);
     return NextResponse.json({ error: 'Failed to fetch logistics data' }, { status: 500 });

@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { type LogisticsDeadline, type LogisticsSpeakingSlot, type LogisticsFile, type AssignedRepOption } from './types';
+import { type LogisticsDeadline, type LogisticsSpeakingSlot, type LogisticsFile, type AssignedRepOption, type PlanNote, type PlanNoteSection } from './types';
 import { FileRow, FileUploadZone, DeadlineStatusPill, TrashIcon } from './shared';
+import { PlanSectionNotes } from './PlanSectionNotes';
 
 const CATEGORY_LABELS: Record<string, string> = {
   registration: 'Registration',
@@ -52,6 +53,9 @@ interface Props {
   onDeadlinesChange: (deadlines: LogisticsDeadline[]) => void;
   onSpeakingSlotsChange: (slots: LogisticsSpeakingSlot[]) => void;
   onFilesChange: (files: LogisticsFile[]) => void;
+  notes: PlanNote[];
+  onNoteCreated: (note: PlanNote) => void;
+  onShowAllNotes: (section: PlanNoteSection) => void;
 }
 
 function sortDeadlines(deadlines: LogisticsDeadline[]): LogisticsDeadline[] {
@@ -69,6 +73,7 @@ function sortDeadlines(deadlines: LogisticsDeadline[]): LogisticsDeadline[] {
 export function LogisticsDeadlinesTab({
   conferenceId, planYear, deadlines, speakingSlots, files, assignedReps,
   onDeadlinesChange, onSpeakingSlotsChange, onFilesChange,
+  notes, onNoteCreated, onShowAllNotes,
 }: Props) {
   const [newLabel, setNewLabel] = useState('');
   const [newDueDate, setNewDueDate] = useState('');
@@ -171,8 +176,10 @@ export function LogisticsDeadlinesTab({
         {sorted.length === 0 ? (
           <p className="text-xs text-gray-400 italic mb-2">No deadlines yet.</p>
         ) : (
-          <div className="space-y-1 mb-3">
-            <div className="flex items-center gap-1.5 px-1.5 pb-1">
+          <div className="space-y-2 sm:space-y-1 mb-3">
+            {/* Column header only makes sense against the sm+ single-row layout —
+                below sm each item renders as a two-line card instead. */}
+            <div className="hidden sm:flex items-center gap-1.5 px-1.5 pb-1">
               <span className="w-3.5 flex-shrink-0" />
               <span className="w-3.5 flex-shrink-0" />
               <span className="flex-1 min-w-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Checklist Item</span>
@@ -185,23 +192,25 @@ export function LogisticsDeadlinesTab({
             {sorted.map(d => (
               <div
                 key={d.id}
-                className="flex items-center gap-1.5 py-1 px-1.5 rounded-md border border-dashed border-transparent focus-within:border-gray-400"
+                className="flex flex-col gap-2 rounded-lg border border-gray-200 p-2.5 shadow-sm sm:flex-row sm:items-center sm:gap-1.5 sm:rounded-md sm:border-dashed sm:border-transparent sm:p-0 sm:px-1.5 sm:py-1 sm:shadow-none focus-within:border-gray-400"
               >
-                <button type="button" onClick={() => deleteDeadline(d.id)} className="text-red-500 hover:text-red-600 flex-shrink-0" title="Delete deadline">
-                  <TrashIcon />
-                </button>
-                <input
-                  type="checkbox"
-                  checked={d.completed}
-                  onChange={() => toggleComplete(d)}
-                  className="accent-brand-secondary w-3.5 h-3.5 flex-shrink-0"
-                />
-                <input
-                  defaultValue={d.label}
-                  onBlur={e => saveLabel(d, e.target.value)}
-                  className={`flex-1 min-w-0 text-xs bg-transparent border-0 focus:ring-0 focus:outline-none px-0 ${d.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}
-                />
-                <div className="flex items-center gap-4 flex-shrink-0">
+                <div className="flex items-center gap-1.5 sm:contents">
+                  <button type="button" onClick={() => deleteDeadline(d.id)} className="text-red-500 hover:text-red-600 flex-shrink-0" title="Delete deadline">
+                    <TrashIcon />
+                  </button>
+                  <input
+                    type="checkbox"
+                    checked={d.completed}
+                    onChange={() => toggleComplete(d)}
+                    className="accent-brand-secondary w-3.5 h-3.5 flex-shrink-0"
+                  />
+                  <input
+                    defaultValue={d.label}
+                    onBlur={e => saveLabel(d, e.target.value)}
+                    className={`flex-1 min-w-0 text-sm sm:text-xs bg-transparent border-0 focus:ring-0 focus:outline-none px-0 ${d.completed ? 'text-gray-400 line-through' : 'text-gray-700'}`}
+                  />
+                </div>
+                <div className="flex items-center flex-wrap gap-2 sm:gap-4 flex-shrink-0 pl-9 sm:pl-0">
                   <CategoryPill category={d.category} />
                   <DeadlineStatusPill deadline={d} />
                   <input
@@ -261,6 +270,8 @@ export function LogisticsDeadlinesTab({
         )}
         <FileUploadZone conferenceId={conferenceId} planYear={planYear} onUploaded={f => onFilesChange([f, ...files])} />
       </div>
+
+      <PlanSectionNotes conferenceId={conferenceId} planYear={planYear} section="deadlines" notes={notes} onNoteCreated={onNoteCreated} onShowAll={onShowAllNotes} />
     </div>
   );
 }
