@@ -227,14 +227,14 @@ function LegendButton({ territoryOptions }: { territoryOptions: Array<{ id: numb
         onClick={openPopover}
         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors flex-shrink-0"
       >
-        <i className="ti ti-direction-sign text-[14px]" aria-hidden="true" />
+        <LegendIcon />
         Legend
       </button>
       {open && pos && (
         <div
           ref={popoverRef}
           className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 max-h-[70vh] overflow-y-auto"
-          style={{ ...dropdownStyle(pos), width: 115 }}
+          style={{ ...dropdownStyle(pos), width: 325 }}
         >
           <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2">Strategy</p>
           <div className="space-y-1.5 mb-4">
@@ -405,6 +405,19 @@ function DateViewIcon() {
   return (
     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
+  );
+}
+
+// Inline SVG signpost — matches the reference icon without depending on the
+// `ti-*` icon font, whose availability/exact icon names couldn't be
+// confirmed for this app.
+function LegendIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 21V4" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5h6l2 2-2 2h-6" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11H6l-2 2 2 2h6" />
     </svg>
   );
 }
