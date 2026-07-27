@@ -48,6 +48,7 @@ export function suggestMapping(headers: string[]): ColumnMapping {
     website:       findColumn(headers, 'website', 'web', 'url', 'site', 'web_site', 'web site', 'homepage', 'home_page', 'company_website', 'company website'),
     company_type:  findColumn(headers, 'company_type', 'company type', 'registration_type', 'registration type', 'reg_type', 'reg type', 'attendee_type', 'attendee type', 'type'),
     assigned_user: findColumn(headers, 'assigned_user', 'assigned user', 'salesforce_owner', 'salesforce owner', 'sf_owner', 'sf owner', 'account_owner', 'account owner', 'owner', 'rep', 'sales_rep', 'sales rep', 'account_rep', 'account rep', 'sales_representative', 'sales representative', 'account_manager', 'account manager'),
+    state:         findColumn(headers, 'state', 'hq_state', 'hq state', 'headquarters_state', 'headquarters state', 'company_state', 'company state', 'state_province', 'state/province', 'state_or_province', 'st'),
     wse:           findColumn(headers, 'wse', 'wses', 'units', 'fte', 'ftes', 'employee_count', 'employee count', 'number_of_employees', 'number of employees', '# of employees', 'num_employees', 'num employees', 'employees', 'headcount', 'head_count', 'head count', 'staff_count', 'staff count', 'workforce', 'workforce_size', 'workforce size', 'worksite_employees', 'worksite employees', 'worksite_employee_count', 'worksite employee count', 'total_employees', 'total employees', 'employee_size', 'employee size', 'company_size', 'company size', 'ee_count', 'ee count', 'no_of_employees', 'no of employees', 'number_employees', 'number employees'),
     services:      findColumn(headers, 'services', 'care_settings', 'care settings', 'care_types', 'care types', 'services_provided', 'services provided', 'community_type', 'community type', 'service_type', 'service type', 'service_types', 'service types', 'care_type', 'care type', 'level_of_care', 'level of care', 'levels_of_care', 'levels of care', 'care_level', 'care level', 'care_levels', 'care levels', 'service_offering', 'service offering', 'service_offerings', 'service offerings', 'setting', 'settings', 'care_setting', 'care setting'),
     icp:           findColumn(headers, 'icp', 'ideal_customer_profile', 'ideal customer profile', 'is_icp', 'is icp'),
@@ -98,6 +99,7 @@ function parseRowsWithMapping(rows: Record<string, unknown>[], mapping: ColumnMa
     if (mapping.website       && row[mapping.website])       attendee.website        = String(row[mapping.website]).trim();
     if (mapping.company_type  && row[mapping.company_type])  attendee.company_type   = String(row[mapping.company_type]).trim();
     if (mapping.assigned_user && row[mapping.assigned_user]) attendee.assigned_user  = String(row[mapping.assigned_user]).trim();
+    if (mapping.state && row[mapping.state]) attendee.state = String(row[mapping.state]).trim();
     if (mapping.wse && row[mapping.wse]) {
       const rawWse = String(row[mapping.wse]).trim().replace(/[^0-9]/g, '');
       if (rawWse) attendee.wse = rawWse;
@@ -152,6 +154,7 @@ function parseRows(rows: Record<string, unknown>[]): ParsedAttendee[] {
   const websiteCol = findColumn(headers, 'website', 'web', 'url', 'site', 'web_site', 'web site', 'homepage', 'home_page', 'company_website', 'company website');
   const companyTypeCol = findColumn(headers, 'company_type', 'company type', 'registration_type', 'registration type', 'reg_type', 'reg type', 'attendee_type', 'attendee type', 'type');
   const assignedUserCol = findColumn(headers, 'assigned_user', 'assigned user', 'salesforce_owner', 'salesforce owner', 'sf_owner', 'sf owner', 'account_owner', 'account owner', 'owner', 'rep', 'sales_rep', 'sales rep', 'account_rep', 'account rep', 'sales_representative', 'sales representative', 'account_manager', 'account manager');
+  const stateCol = findColumn(headers, 'state', 'hq_state', 'hq state', 'headquarters_state', 'headquarters state', 'company_state', 'company state', 'state_province', 'state/province', 'state_or_province', 'st');
   const wseCol = findColumn(headers, 'wse', 'wses', 'units', 'fte', 'ftes', 'employee_count', 'employee count', 'number_of_employees', 'number of employees', '# of employees', 'num_employees', 'num employees', 'employees', 'headcount', 'head_count', 'head count', 'staff_count', 'staff count', 'workforce', 'workforce_size', 'workforce size', 'worksite_employees', 'worksite employees', 'worksite_employee_count', 'worksite employee count', 'total_employees', 'total employees', 'employee_size', 'employee size', 'company_size', 'company size', 'ee_count', 'ee count', 'no_of_employees', 'no of employees', 'number_employees', 'number employees');
   const servicesCol = findColumn(headers, 'services', 'care_settings', 'care settings', 'care_types', 'care types', 'services_provided', 'services provided', 'community_type', 'community type', 'service_type', 'service type', 'service_types', 'service types', 'care_type', 'care type', 'level_of_care', 'level of care', 'levels_of_care', 'levels of care', 'care_level', 'care level', 'care_levels', 'care levels', 'service_offering', 'service offering', 'service_offerings', 'service offerings', 'setting', 'settings', 'care_setting', 'care setting');
   const icpCol = findColumn(headers, 'icp', 'ideal_customer_profile', 'ideal customer profile', 'is_icp', 'is icp');
@@ -211,6 +214,9 @@ function parseRows(rows: Record<string, unknown>[]): ParsedAttendee[] {
     }
     if (assignedUserCol && row[assignedUserCol]) {
       attendee.assigned_user = String(row[assignedUserCol]).trim();
+    }
+    if (stateCol && row[stateCol]) {
+      attendee.state = String(row[stateCol]).trim();
     }
     if (wseCol && row[wseCol]) {
       const rawWse = String(row[wseCol]).trim().replace(/[^0-9]/g, '');

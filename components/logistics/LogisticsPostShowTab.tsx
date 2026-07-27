@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { type LogisticsDeadline, addDays } from './types';
+import { type LogisticsDeadline, type PlanNote, type PlanNoteSection, addDays } from './types';
 import { ChecklistSection } from './shared';
+import { PlanSectionNotes } from './PlanSectionNotes';
 
 const POST_SHOW_ITEMS = [
   { label: 'Lead list downloaded', offset: 1 },
@@ -19,9 +20,12 @@ interface Props {
   startDate: string | null;
   endDate: string | null;
   onDeadlinesChange: (deadlines: LogisticsDeadline[]) => void;
+  notes: PlanNote[];
+  onNoteCreated: (note: PlanNote) => void;
+  onShowAllNotes: (section: PlanNoteSection) => void;
 }
 
-export function LogisticsPostShowTab({ conferenceId, planYear, deadlines, startDate, endDate, onDeadlinesChange }: Props) {
+export function LogisticsPostShowTab({ conferenceId, planYear, deadlines, startDate, endDate, onDeadlinesChange, notes, onNoteCreated, onShowAllNotes }: Props) {
   const createdRef = useRef(false);
 
   useEffect(() => {
@@ -47,9 +51,12 @@ export function LogisticsPostShowTab({ conferenceId, planYear, deadlines, startD
   }, []);
 
   return (
-    <ChecklistSection
-      conferenceId={conferenceId} planYear={planYear} category="post_show"
-      deadlines={deadlines} onDeadlinesChange={onDeadlinesChange} title="Post-show checklist"
-    />
+    <div className="space-y-4">
+      <ChecklistSection
+        conferenceId={conferenceId} planYear={planYear} category="post_show"
+        deadlines={deadlines} onDeadlinesChange={onDeadlinesChange} title="Post-show checklist"
+      />
+      <PlanSectionNotes conferenceId={conferenceId} planYear={planYear} section="postshow" notes={notes} onNoteCreated={onNoteCreated} onShowAll={onShowAllNotes} />
+    </div>
   );
 }

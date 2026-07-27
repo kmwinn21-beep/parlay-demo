@@ -3,7 +3,7 @@
 
 export type SystemFieldKey =
   | 'first_name' | 'last_name' | 'full_name' | 'title' | 'company'
-  | 'email' | 'website' | 'company_type' | 'assigned_user' | 'wse'
+  | 'email' | 'website' | 'company_type' | 'assigned_user' | 'state' | 'wse'
   | 'services' | 'icp' | 'industry' | 'function' | 'product' | 'consent';
 
 export interface ColumnMapping {
@@ -16,6 +16,7 @@ export interface ColumnMapping {
   website: string | null;
   company_type: string | null;
   assigned_user: string | null;
+  state: string | null;
   wse: string | null;
   services: string | null;
   icp: string | null;
@@ -41,6 +42,7 @@ export const SYSTEM_FIELD_LABELS: Record<SystemFieldKey, SystemFieldMeta> = {
   website:       { label: 'Website',             description: 'Company website URL' },
   company_type:  { label: 'Company Type',        description: 'e.g. Operator, Vendor, Capital' },
   assigned_user: { label: 'Assigned Rep',        description: 'Sales rep assigned to this company — matched by name' },
+  state:         { label: 'HQ State',            description: "Company headquarters state — used to assign a rep by territory when no rep is otherwise matched" },
   wse:           { label: 'Employee Count (WSE)', description: 'Number of worksite employees' },
   services:      { label: 'Services',            description: 'Care types: AL, MC, IL, SNF, CCRC' },
   icp:           { label: 'ICP',                 description: 'Ideal Customer Profile — Yes / No' },
@@ -52,6 +54,6 @@ export const SYSTEM_FIELD_LABELS: Record<SystemFieldKey, SystemFieldMeta> = {
 
 export const FIELD_ORDER: SystemFieldKey[] = [
   'first_name', 'last_name', 'full_name', 'title', 'company',
-  'email', 'website', 'company_type', 'assigned_user', 'wse', 'services', 'icp',
+  'email', 'website', 'company_type', 'assigned_user', 'state', 'wse', 'services', 'icp',
   'industry', 'function', 'product', 'consent',
 ];

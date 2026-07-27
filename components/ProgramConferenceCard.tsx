@@ -73,6 +73,37 @@ export function ListStatusPill({ hasAttendeeList, attendeeCount }: { hasAttendee
   );
 }
 
+// Green (full-color border, lighter fill) when at least one company has been
+// assigned for outreach, red otherwise — same visual convention as
+// ListStatusPill, shared between the card and the list-view table.
+export function OutreachStatusPill({
+  outreachProgress,
+  showPrefix = true,
+}: {
+  outreachProgress: { assigned: number; total: number } | null;
+  /** Card view spells out "Outreach Assigned/Not Assigned"; the table's own
+   * "Outreach" column header already says that, so it just needs "Assigned". */
+  showPrefix?: boolean;
+}) {
+  const isAssigned = !!outreachProgress && outreachProgress.assigned > 0;
+  const color = isAssigned ? '#059669' : '#DC2626';
+  const label = showPrefix
+    ? (isAssigned ? 'Outreach Assigned' : 'Outreach Not Assigned')
+    : (isAssigned ? 'Assigned' : 'Not Assigned');
+  return (
+    <span
+      title={outreachProgress ? `${outreachProgress.assigned} / ${outreachProgress.total} companies assigned` : undefined}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0,
+        padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 500,
+        border: `1px solid ${color}`, background: `${color}18`, color,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
 function formatDate(d: string): string {
   if (!d) return '';
   return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -266,31 +297,10 @@ export function ProgramConferenceCard({ conference, territories, planYear, allCo
             ))}
           </div>
         ) : (
-          <>
-            {conference.outreachProgress !== null && (
-              <div style={{ borderTop: '0.5px solid var(--border, #E5E7EB)', paddingTop: 8, marginTop: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                  <span style={{ fontSize: 11, color: 'var(--text-secondary, #6B7280)' }}>Outreach</span>
-                  <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-primary, #111827)' }}>
-                    {conference.outreachProgress.assigned} / {conference.outreachProgress.total}
-                  </span>
-                </div>
-                <div style={{ height: 4, background: 'var(--border, #E5E7EB)', borderRadius: 2, overflow: 'hidden' }}>
-                  <div
-                    style={{
-                      height: '100%',
-                      width: `${Math.round(conference.outreachProgress.assigned / Math.max(conference.outreachProgress.total, 1) * 100)}%`,
-                      background: 'var(--fill-accent, rgb(var(--brand-secondary-rgb, 27 118 188)))',
-                      borderRadius: 2,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-            <div style={{ marginTop: 8 }}>
-              <ListStatusPill hasAttendeeList={conference.hasAttendeeList} attendeeCount={conference.attendeeCount} />
-            </div>
-          </>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', borderTop: '0.5px solid var(--border, #E5E7EB)', paddingTop: 8, marginTop: 8 }}>
+            <OutreachStatusPill outreachProgress={conference.outreachProgress} />
+            <ListStatusPill hasAttendeeList={conference.hasAttendeeList} attendeeCount={conference.attendeeCount} />
+          </div>
         )}
       </div>
     </Link>

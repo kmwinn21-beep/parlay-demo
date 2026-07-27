@@ -79,6 +79,19 @@ export interface LogisticsHostedEvent {
   notes: string | null;
 }
 
+// Every tab except Input can carry notes — Input keeps its existing,
+// separate CalendarNotesPanel/calendar_notes thread.
+export type PlanNoteSection = 'deadlines' | 'registration' | 'booth' | 'sponsorship' | 'speaking' | 'travel' | 'hosted' | 'shipping' | 'postshow' | 'files';
+
+export interface PlanNote {
+  id: number;
+  section: PlanNoteSection;
+  body: string;
+  userName: string;
+  userInitials: string;
+  createdAt: string;
+}
+
 export interface LogisticsResponse {
   plan: LogisticsPlan;
   deadlines: LogisticsDeadline[];
@@ -86,6 +99,14 @@ export interface LogisticsResponse {
   repTravel: LogisticsRepTravel[];
   files: LogisticsFile[];
   hostedEvents: LogisticsHostedEvent[];
+  notes: PlanNote[];
+  /** The plan_year the response was actually resolved against — only differs
+   * from the requested `year` when the request used `mode=details` (Conference
+   * Details' Logistics button), which resolves to the conference's most
+   * recent conference_plans row instead of a Program-Planner planning-cycle
+   * year, so the same conference always shows the same data regardless of
+   * which fiscal cycle Program Planner currently has selected. */
+  resolvedPlanYear: number;
 }
 
 export interface AssignedRepOption {
