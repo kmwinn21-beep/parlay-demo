@@ -1136,15 +1136,19 @@ function OptionEditPill({
         onClick={openDropdown}
         disabled={saving}
         title={truncateWidth && value ? value : undefined}
-        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity ${truncateWidth ? 'truncate' : ''} ${saving ? 'opacity-50' : ''} ${
+        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-opacity ${saving ? 'opacity-50' : ''} ${
           color ? 'border' : value ? activeClass : 'bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500'
         }`}
-        style={{
-          ...(color ? { borderColor: color, backgroundColor: `${color}26`, color } : {}),
-          ...(truncateWidth ? { maxWidth: truncateWidth } : {}),
-        }}
+        style={color ? { borderColor: color, backgroundColor: `${color}26`, color } : undefined}
       >
-        {value ?? placeholder}
+        {/* max-width + truncate need to live on a nested block-level span, not
+            the inline-flex button itself — text-overflow:ellipsis doesn't
+            reliably clip a flex container's own inline text content. */}
+        {truncateWidth ? (
+          <span className="block truncate" style={{ maxWidth: truncateWidth }}>{value ?? placeholder}</span>
+        ) : (
+          value ?? placeholder
+        )}
       </button>
       {open && pos && (
         <div
