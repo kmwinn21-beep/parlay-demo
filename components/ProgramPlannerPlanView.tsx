@@ -227,14 +227,14 @@ function LegendButton({ territoryOptions }: { territoryOptions: Array<{ id: numb
         onClick={openPopover}
         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors flex-shrink-0"
       >
+        <i className="ti ti-direction-sign text-[14px]" aria-hidden="true" />
         Legend
-        <i className="ti ti-map-2 text-[14px]" aria-hidden="true" />
       </button>
       {open && pos && (
         <div
           ref={popoverRef}
-          className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 w-72 max-h-[70vh] overflow-y-auto"
-          style={dropdownStyle(pos)}
+          className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 max-h-[70vh] overflow-y-auto"
+          style={{ ...dropdownStyle(pos), width: 115 }}
         >
           <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2">Strategy</p>
           <div className="space-y-1.5 mb-4">
@@ -246,7 +246,7 @@ function LegendButton({ territoryOptions }: { territoryOptions: Array<{ id: numb
                 >
                   {s.code}
                 </span>
-                <span className="text-xs text-gray-700">: {s.label}</span>
+                <span className="text-xs text-gray-700">{s.label}</span>
               </div>
             ))}
           </div>
@@ -263,7 +263,7 @@ function LegendButton({ territoryOptions }: { territoryOptions: Array<{ id: numb
                   >
                     {abbreviateTerritory(t.name)}
                   </span>
-                  <span className="text-xs text-gray-700">: {t.name}</span>
+                  <span className="text-xs text-gray-700">{t.name}</span>
                 </div>
               ))
             )}
@@ -2166,6 +2166,7 @@ export function ProgramPlannerPlanView({
           </button>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          <LegendButton territoryOptions={territoryOptions} />
           <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
             <button
               type="button"
@@ -2190,7 +2191,6 @@ export function ProgramPlannerPlanView({
               Kanban
             </button>
           </div>
-          <LegendButton territoryOptions={territoryOptions} />
           <button
             type="button"
             onClick={() => setShowAddDrawer(true)}
