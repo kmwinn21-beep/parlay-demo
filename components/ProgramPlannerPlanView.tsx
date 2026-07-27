@@ -161,15 +161,15 @@ function abbreviateStrategy(name: string): string {
 // same visual format as TerritoryChip. Matched by substring so the handful
 // of legacy spelling variants (see STRATEGY_ABBREVIATIONS above) all resolve
 // to the same pill instead of needing every variant listed separately.
-const STRATEGY_PILL_MAP: Array<{ code: string; color: string; test: RegExp }> = [
-  { code: 'PG', color: '#2563EB', test: /pipeline generation/i },
-  { code: 'PA', color: '#0891B2', test: /pipeline acceleration/i },
-  { code: 'CN', color: '#059669', test: /customer (retention|nurture)/i },
-  { code: 'BV', color: '#7C3AED', test: /brand visib|market presence/i },
-  { code: 'SA', color: '#DB2777', test: /strategic account/i },
-  { code: 'PD', color: '#D97706', test: /partner|ecosystem/i },
-  { code: 'CD', color: '#DC2626', test: /competitive defense/i },
-  { code: 'TL', color: '#4F46E5', test: /thought leadership/i },
+const STRATEGY_PILL_MAP: Array<{ code: string; color: string; label: string; test: RegExp }> = [
+  { code: 'PG', color: '#2563EB', label: 'Pipeline Generation', test: /pipeline generation/i },
+  { code: 'PA', color: '#0891B2', label: 'Pipeline Acceleration', test: /pipeline acceleration/i },
+  { code: 'CN', color: '#059669', label: 'Customer Retention / Customer Nurture', test: /customer (retention|nurture)/i },
+  { code: 'BV', color: '#7C3AED', label: 'Brand Visibility', test: /brand visib|market presence/i },
+  { code: 'SA', color: '#DB2777', label: 'Strategic Account Relationship Building', test: /strategic account/i },
+  { code: 'PD', color: '#D97706', label: 'Partner / Ecosystem Development', test: /partner|ecosystem/i },
+  { code: 'CD', color: '#DC2626', label: 'Competitive Defense', test: /competitive defense/i },
+  { code: 'TL', color: '#4F46E5', label: 'Thought Leadership', test: /thought leadership/i },
 ];
 function resolveStrategyPill(name: string): { code: string; color: string } {
   const found = STRATEGY_PILL_MAP.find(m => m.test.test(name));
@@ -194,6 +194,84 @@ function abbreviateTerritory(name: string): string {
   if (eastIdx > 0) return (word[0] + 'E').toUpperCase();
   if (westIdx > 0) return (word[0] + 'W').toUpperCase();
   return word[0].toUpperCase();
+}
+
+// Toolbar "Legend" popover — explains the Strategy/Territory pill
+// abbreviations used throughout the Plan tab's table and kanban cards.
+function LegendButton({ territoryOptions }: { territoryOptions: Array<{ id: number; name: string; color: string }> }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<DropdownPos | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (buttonRef.current?.contains(e.target as Node) || popoverRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const openPopover = () => {
+    if (buttonRef.current) setPos(calcDropdownPos(buttonRef.current));
+    setOpen(o => !o);
+  };
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={openPopover}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors flex-shrink-0"
+      >
+        Legend
+        <i className="ti ti-map-2 text-[14px]" aria-hidden="true" />
+      </button>
+      {open && pos && (
+        <div
+          ref={popoverRef}
+          className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 w-72 max-h-[70vh] overflow-y-auto"
+          style={dropdownStyle(pos)}
+        >
+          <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2">Strategy</p>
+          <div className="space-y-1.5 mb-4">
+            {STRATEGY_PILL_MAP.map(s => (
+              <div key={s.code} className="flex items-center gap-2">
+                <span
+                  style={{ width: 24, height: 24, border: `1.5px solid ${s.color}`, backgroundColor: `${s.color}18`, color: s.color }}
+                  className="inline-flex items-center justify-center rounded-full text-[10px] font-bold flex-shrink-0"
+                >
+                  {s.code}
+                </span>
+                <span className="text-xs text-gray-700">: {s.label}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2">Territory</p>
+          <div className="space-y-1.5">
+            {territoryOptions.length === 0 ? (
+              <p className="text-xs text-gray-400">No territories configured.</p>
+            ) : (
+              territoryOptions.map(t => (
+                <div key={t.id} className="flex items-center gap-2">
+                  <span
+                    style={{ width: 24, height: 24, border: `1.5px solid ${t.color}`, backgroundColor: `${t.color}18`, color: t.color }}
+                    className="inline-flex items-center justify-center rounded-full text-[10px] font-bold flex-shrink-0"
+                  >
+                    {abbreviateTerritory(t.name)}
+                  </span>
+                  <span className="text-xs text-gray-700">: {t.name}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 const CONFERENCE_TYPE_OPTIONS = [
@@ -2112,6 +2190,7 @@ export function ProgramPlannerPlanView({
               Kanban
             </button>
           </div>
+          <LegendButton territoryOptions={territoryOptions} />
           <button
             type="button"
             onClick={() => setShowAddDrawer(true)}
@@ -2293,7 +2372,7 @@ export function ProgramPlannerPlanView({
                             value={c.conferenceType}
                             options={CONFERENCE_TYPE_OPTIONS}
                             activeClass="bg-amber-50 text-amber-800 border border-amber-300"
-                            placeholder="Set type"
+                            placeholder="+ Type"
                             truncateWidth={90}
                             onSelect={async v => { onTypeUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/type`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conferenceType: v }) }); }}
                           />
@@ -2499,7 +2578,7 @@ export function ProgramPlannerPlanView({
                                 value={c.conferenceType}
                                 options={CONFERENCE_TYPE_OPTIONS}
                                 activeClass="bg-amber-50 text-amber-800 border border-amber-300"
-                                placeholder="Set type"
+                                placeholder="+ Type"
                                 truncateWidth={90}
                                 onSelect={async v => { onTypeUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/type`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conferenceType: v }) }); }}
                               />
@@ -2724,7 +2803,7 @@ export function ProgramPlannerPlanView({
                               value={c.conferenceType}
                               options={CONFERENCE_TYPE_OPTIONS}
                               activeClass="bg-amber-50 text-amber-800 border border-amber-300"
-                              placeholder="Set type"
+                              placeholder="+ Type"
                               truncateWidth={90}
                               onSelect={async v => { onTypeUpdated(c.conferenceId, v); await fetch(`/api/conferences/${c.conferenceId}/type`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conferenceType: v }) }); }}
                             />
