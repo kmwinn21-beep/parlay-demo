@@ -2217,7 +2217,7 @@ export function ProgramPlannerPlanView({
                                   scopeLabel={c.territoryScope === 'national' ? 'National' : 'Regional'}
                                 />
                               )}
-                              {groupMode !== 'status' && <StatusCircleBadge decision={c.decision} />}
+                              <StatusCircleBadge decision={c.decision} />
                               {teamInputMap.get(c.conferenceId)?.hasInput && (
                                 <TeamInputStatusIcon
                                   conferenceId={c.conferenceId}
@@ -2354,9 +2354,7 @@ export function ProgramPlannerPlanView({
                         <th className="px-3 py-2 text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
                           <div className="grid grid-cols-[1fr_auto] gap-1.5 items-center">
                             <span className="text-left">Conference</span>
-                            {groupMode !== 'status' && (
-                              <span className="w-[116px] flex-shrink-0 text-left pl-3">Status</span>
-                            )}
+                            <span className="w-[116px] flex-shrink-0 text-left pl-3">Status</span>
                           </div>
                         </th>
                         <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">List Score</th>
@@ -2427,7 +2425,7 @@ export function ProgramPlannerPlanView({
                                       scopeLabel={c.territoryScope === 'national' ? 'National' : 'Regional'}
                                     />
                                   )}
-                                  {groupMode !== 'status' && <StatusCircleBadge decision={c.decision} />}
+                                  <StatusCircleBadge decision={c.decision} />
                                   {teamInputMap.get(c.conferenceId)?.hasInput && (
                                     <TeamInputStatusIcon
                                       conferenceId={c.conferenceId}
@@ -2663,7 +2661,7 @@ export function ProgramPlannerPlanView({
                                   scopeLabel={c.territoryScope === 'national' ? 'National' : 'Regional'}
                                 />
                               )}
-                              {groupMode !== 'status' && <StatusCircleBadge decision={c.decision} />}
+                              <StatusCircleBadge decision={c.decision} />
                               {teamInputMap.get(c.conferenceId)?.hasInput && (
                                 <TeamInputStatusIcon
                                   conferenceId={c.conferenceId}
