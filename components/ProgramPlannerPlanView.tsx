@@ -2455,16 +2455,16 @@ export function ProgramPlannerPlanView({
                     <colgroup>
                       <col style={{ width: 24 }} />
                       <col style={{ width: 260 }} />
-                      <col style={{ width: 76 }} />
-                      <col style={{ width: 70 }} />
-                      <col style={{ width: 160 }} />
-                      <col style={{ width: 84 }} />
-                      <col style={{ width: 110 }} />
                       <col style={{ width: 100 }} />
-                      <col style={{ width: 140 }} />
+                      <col style={{ width: 100 }} />
+                      <col style={{ width: 100 }} />
+                      <col style={{ width: 100 }} />
                       <col style={{ width: 120 }} />
-                      <col style={{ width: 80 }} />
-                      <col style={{ width: 110 }} />
+                      <col style={{ width: 100 }} />
+                      <col style={{ width: 100 }} />
+                      <col style={{ width: 120 }} />
+                      <col style={{ width: 100 }} />
+                      <col style={{ width: 100 }} />
                       <col style={{ width: 116 }} />
                     </colgroup>
                     <thead>
