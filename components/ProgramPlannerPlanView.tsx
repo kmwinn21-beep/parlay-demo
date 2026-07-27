@@ -259,7 +259,7 @@ function LegendButton({ territoryOptions }: { territoryOptions: Array<{ id: numb
                 <div key={t.id} className="flex items-center gap-2">
                   <span
                     style={{ width: 24, height: 24, border: `1.5px solid ${t.color}`, backgroundColor: `${t.color}18`, color: t.color }}
-                    className="inline-flex items-center justify-center rounded-full text-[10px] font-bold flex-shrink-0"
+                    className="inline-flex items-center justify-center rounded-md text-[10px] font-bold flex-shrink-0"
                   >
                     {abbreviateTerritory(t.name)}
                   </span>
@@ -608,7 +608,7 @@ function TerritoryChip({ label, name, color, bg }: { label: string; name: string
         onClick={() => { if (buttonRef.current) setPos(calcTooltipPos(buttonRef.current)); setOpen(o => !o); }}
         title={name}
         style={{ width: 24, height: 24, border: `1.5px solid ${color}`, backgroundColor: bg, color }}
-        className="inline-flex items-center justify-center rounded-full text-[10px] font-bold flex-shrink-0"
+        className="inline-flex items-center justify-center rounded-md text-[10px] font-bold flex-shrink-0"
       >
         {label}
       </button>
