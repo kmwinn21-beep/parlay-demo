@@ -684,8 +684,8 @@ function ConferencesPageContent() {
               )}
 
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+                <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2">
+                  <div className="flex w-full sm:w-auto sm:inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
                     {([
                       { key: 'upcoming', label: 'Upcoming', count: programCounts.upcoming },
                       { key: 'active', label: 'Active', count: programCounts.active },
@@ -696,7 +696,7 @@ function ConferencesPageContent() {
                         type="button"
                         onClick={() => setProgramToggle(t.key)}
                         style={{ animation: programToggle === t.key ? 'togglePop 180ms ease-out' : undefined }}
-                        className={`px-3 py-1.5 text-xs font-medium transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
+                        className={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-medium transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
                           programToggle === t.key ? 'bg-brand-primary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
                         }`}
                       >
@@ -705,14 +705,14 @@ function ConferencesPageContent() {
                     ))}
                   </div>
 
-                  <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+                  <div className="flex w-full sm:w-auto sm:inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
                     <button
                       type="button"
                       onClick={() => { setProgramLayout('grid'); localStorage.setItem('parlay-conferences-layout', 'grid'); }}
                       title="Card view"
                       aria-label="Card view"
                       style={{ animation: programLayout === 'grid' ? 'togglePop 180ms ease-out' : undefined }}
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
+                      className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
                         programLayout === 'grid' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
                       }`}
                     >
@@ -725,7 +725,7 @@ function ConferencesPageContent() {
                       title="Table view"
                       aria-label="Table view"
                       style={{ animation: programLayout === 'list' ? 'togglePop 180ms ease-out' : undefined }}
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap border-l border-gray-200 transition-colors ${
+                      className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap border-l border-gray-200 transition-colors ${
                         programLayout === 'list' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
                       }`}
                     >
