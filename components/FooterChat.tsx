@@ -182,7 +182,7 @@ function ChatWindow({
   };
 
   return (
-    <div className={`flex flex-col ${mobile ? 'w-full rounded-xl' : 'w-[420px] rounded-t-xl'} bg-white shadow-2xl border border-gray-200 overflow-hidden`}>
+    <div className={`flex flex-col ${mobile ? 'w-full h-full rounded-xl' : 'w-[420px] rounded-t-xl'} bg-white shadow-2xl border border-gray-200 overflow-hidden`}>
       {/* Header */}
       <div
         className="flex items-center gap-2 px-3 py-2.5 bg-white border-b border-gray-100 cursor-pointer select-none"
@@ -215,7 +215,7 @@ function ChatWindow({
       {!minimized && (
         <>
           {/* Messages */}
-          <div className={`flex-1 overflow-y-auto px-3 py-2 space-y-1.5 bg-gray-50 ${mobile ? 'h-[50vh]' : 'h-64'}`}>
+          <div className={`flex-1 overflow-y-auto px-3 py-2 space-y-1.5 bg-gray-50 ${mobile ? '' : 'h-64'}`}>
             {loading && (
               <div className="flex justify-center items-center h-full">
                 <div className="w-5 h-5 animate-spin rounded-full border-2 border-brand-secondary border-t-transparent" />
@@ -344,7 +344,7 @@ function GroupChatWindow({
   };
 
   return (
-    <div className={`flex flex-col ${mobile ? 'w-full rounded-xl' : 'w-[420px] rounded-t-xl'} bg-white shadow-2xl border border-gray-200 overflow-hidden`}>
+    <div className={`flex flex-col ${mobile ? 'w-full h-full rounded-xl' : 'w-[420px] rounded-t-xl'} bg-white shadow-2xl border border-gray-200 overflow-hidden`}>
       {/* Header */}
       <div
         className="flex items-center gap-2 px-3 py-2.5 bg-white border-b border-gray-100 cursor-pointer select-none"
@@ -370,7 +370,7 @@ function GroupChatWindow({
 
       {!minimized && (
         <>
-          <div className={`flex-1 overflow-y-auto px-3 py-2 space-y-1.5 bg-gray-50 ${mobile ? 'h-[50vh]' : 'h-64'}`}>
+          <div className={`flex-1 overflow-y-auto px-3 py-2 space-y-1.5 bg-gray-50 ${mobile ? '' : 'h-64'}`}>
             {loading && (
               <div className="flex justify-center items-center h-full">
                 <div className="w-5 h-5 animate-spin rounded-full border-2 border-brand-secondary border-t-transparent" />
@@ -836,7 +836,7 @@ export function FooterChat() {
       {openChats.map(other => (
         <div key={other.id} className="lg:hidden fixed inset-0 z-[60]">
           <div className="absolute inset-0 bg-black/20" onClick={() => closeChat(other.id)} />
-          <div className="absolute top-16 left-4 right-4">
+          <div className="absolute top-16 left-4 right-4 bottom-4">
             <ChatWindow other={other} currentUserId={user.id} onClose={() => closeChat(other.id)} onNewMessage={handleNewMessageSent} mobile />
           </div>
         </div>
@@ -846,7 +846,7 @@ export function FooterChat() {
       {openGroups.map(group => (
         <div key={group.id} className="lg:hidden fixed inset-0 z-[60]">
           <div className="absolute inset-0 bg-black/20" onClick={() => closeGroupChat(group.id)} />
-          <div className="absolute top-16 left-4 right-4">
+          <div className="absolute top-16 left-4 right-4 bottom-4">
             <GroupChatWindow group={group} currentUserId={user.id} onClose={() => closeGroupChat(group.id)} onNewMessage={handleNewMessageSent} mobile />
           </div>
         </div>
