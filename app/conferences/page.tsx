@@ -683,8 +683,8 @@ function ConferencesPageContent() {
                 </div>
               )}
 
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
                   <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
                     {([
                       { key: 'upcoming', label: 'Upcoming', count: programCounts.upcoming },
@@ -735,16 +735,16 @@ function ConferencesPageContent() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <select value={programYearFilter} onChange={e => setProgramYearFilter(e.target.value)} className="input-field text-sm">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <select value={programYearFilter} onChange={e => setProgramYearFilter(e.target.value)} className="input-field text-sm w-full sm:w-auto">
                     <option value="">All years</option>
                     {programYearOptions.map(y => <option key={y} value={y}>{y}</option>)}
                   </select>
-                  <select value={programRepFilter} onChange={e => setProgramRepFilter(e.target.value)} className="input-field text-sm">
+                  <select value={programRepFilter} onChange={e => setProgramRepFilter(e.target.value)} className="input-field text-sm w-full sm:w-auto">
                     <option value="">All reps</option>
                     {programRepOptions.map(r => <option key={r.userId} value={r.userId}>{r.displayName}</option>)}
                   </select>
-                  <select value={programTerritoryFilter} onChange={e => setProgramTerritoryFilter(e.target.value)} className="input-field text-sm min-w-[170px] pr-8">
+                  <select value={programTerritoryFilter} onChange={e => setProgramTerritoryFilter(e.target.value)} className="input-field text-sm w-full sm:w-auto sm:min-w-[170px] sm:pr-8">
                     <option value="">All territories</option>
                     {territories.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
