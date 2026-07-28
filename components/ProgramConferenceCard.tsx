@@ -253,11 +253,13 @@ export function ProgramConferenceCard({ conference, territories, planYear, allCo
       </div>
 
       <div style={{ padding: '10px 12px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <div className="flex items-start gap-1.5">
-          <p style={{ fontSize: 13, fontWeight: 500, margin: 0, color: 'var(--text-primary, #111827)' }} className="line-clamp-2 flex-1">
-            {conference.name}
-          </p>
-          <QuickViewIcon onClick={() => onQuickView({ type: 'conference', id: conference.id, name: conference.name })} />
+        <div className="flex items-start justify-between gap-1.5">
+          <div className="flex items-start gap-2 min-w-0">
+            <p style={{ fontSize: 13, fontWeight: 500, margin: 0, color: 'var(--text-primary, #111827)' }} className="line-clamp-2">
+              {conference.name}
+            </p>
+            <QuickViewIcon onClick={() => onQuickView({ type: 'conference', id: conference.id, name: conference.name })} />
+          </div>
           <TerritoryPill conference={conference} territories={territories} />
         </div>
         <p style={{ fontSize: 11, color: 'var(--text-secondary, #6B7280)', margin: '2px 0 0' }} className="truncate">

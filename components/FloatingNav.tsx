@@ -545,22 +545,22 @@ export function FloatingNav() {
             whiteSpace: 'nowrap',
           }}
         >
+          {/* Intelligence — reveals Program Planner / Calendar Intelligence / Program Intelligence
+              stacked above this button, using the same staggered animation as the main menu items. */}
+          <button
+            type="button"
+            onClick={() => setIntelOpen(v => !v)}
+            className="text-xs font-medium text-brand-primary bg-brand-accent hover:bg-brand-accent/90 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20 shadow-lg transition-colors"
+          >
+            Intelligence
+          </button>
+
           <button
             type="button"
             onClick={() => { setOpen(false); void handleSignOut(); }}
             className="text-xs font-medium text-white/75 hover:text-white bg-brand-primary/80 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20 shadow-lg transition-colors"
           >
             Sign out
-          </button>
-
-          {/* Intelligence — reveals Program Planner / Calendar Intelligence / Program Intelligence
-              stacked above this button, using the same staggered animation as the main menu items. */}
-          <button
-            type="button"
-            onClick={() => setIntelOpen(v => !v)}
-            className="text-xs font-medium text-white/75 hover:text-white bg-brand-primary/80 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20 shadow-lg transition-colors"
-          >
-            Intelligence
           </button>
 
           <button
@@ -571,7 +571,7 @@ export function FloatingNav() {
             Hide
           </button>
 
-          {/* Submenu items — anchored to this whole row's own left edge (= Sign out
+          {/* Submenu items — anchored to this whole row's own left edge (= Intelligence
               button's left edge), which keeps it clear of the main floating nav menu
               (anchored near the FAB, to the right) without running off the left edge
               of narrow mobile viewports. Always in DOM so closing can animate out,
@@ -605,7 +605,7 @@ export function FloatingNav() {
                   <Link
                     href={item.href}
                     onClick={() => { setOpen(false); setIntelOpen(false); }}
-                    className="flex items-center whitespace-nowrap text-sm font-semibold text-brand-primary bg-brand-primary/10 hover:bg-brand-primary/20 backdrop-blur-sm rounded-2xl px-4 py-2.5 border-2 border-brand-primary shadow-lg transition-colors text-left min-w-[152px]"
+                    className="flex items-center whitespace-nowrap text-sm font-semibold text-brand-primary bg-brand-accent hover:bg-brand-accent/90 backdrop-blur-sm rounded-2xl px-4 py-2.5 border border-white/20 shadow-lg transition-colors text-left min-w-[152px]"
                   >
                     {item.label}
                   </Link>
