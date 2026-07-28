@@ -558,7 +558,7 @@ export function FloatingNav() {
           <button
             type="button"
             onClick={() => setIntelOpen(v => !v)}
-            className="text-xs font-medium text-white bg-brand-primary/40 hover:bg-brand-primary/50 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20 shadow-lg transition-colors"
+            className="text-xs font-medium text-brand-primary bg-brand-accent hover:bg-brand-accent/90 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20 shadow-lg transition-colors"
           >
             Intelligence
           </button>
@@ -605,7 +605,7 @@ export function FloatingNav() {
                   <Link
                     href={item.href}
                     onClick={() => { setOpen(false); setIntelOpen(false); }}
-                    className="flex items-center whitespace-nowrap text-sm font-semibold text-white bg-brand-primary/40 hover:bg-brand-primary/50 backdrop-blur-sm rounded-2xl px-4 py-2.5 border border-white/20 shadow-lg transition-colors text-left min-w-[152px]"
+                    className="flex items-center whitespace-nowrap text-sm font-semibold text-brand-primary bg-brand-accent hover:bg-brand-accent/90 backdrop-blur-sm rounded-2xl px-4 py-2.5 border border-white/20 shadow-lg transition-colors text-left min-w-[152px]"
                   >
                     {item.label}
                   </Link>
