@@ -643,13 +643,14 @@ export function FooterChat() {
 
   return (
     <>
-      {/* Mobile bottom-sheet overlay */}
+      {/* Mobile bottom-sheet overlay — same slide-up action/height as the
+          site's other mobile drawers (see .drawer-mobile-responsive). */}
       {panelOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 flex flex-col justify-end">
+        <div className="lg:hidden fixed inset-0 z-50">
           {/* Backdrop */}
           <div className="absolute inset-0 bg-black/30" onClick={() => setPanelOpen(false)} />
           {/* Sheet */}
-          <div className="relative bg-white rounded-t-2xl shadow-2xl flex flex-col max-h-[80vh]">
+          <div className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 h-[90vh] w-full bg-white rounded-t-2xl shadow-2xl flex flex-col z-50">
             {/* Sheet header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
               {(view === 'new' || groupView === 'new-group') ? (
