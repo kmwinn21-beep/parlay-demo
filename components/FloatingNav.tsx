@@ -558,7 +558,7 @@ export function FloatingNav() {
           <button
             type="button"
             onClick={() => setIntelOpen(v => !v)}
-            className="text-xs font-medium text-white/75 hover:text-white bg-brand-primary/80 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20 shadow-lg transition-colors"
+            className="text-xs font-medium text-white bg-brand-primary/40 hover:bg-brand-primary/50 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20 shadow-lg transition-colors"
           >
             Intelligence
           </button>
