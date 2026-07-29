@@ -22,7 +22,7 @@ export const SECTION_DEFS: Record<string, SectionDef[]> = {
     { key: 'conferences', label: 'Conferences' },
     { key: 'communities', label: 'Communities' },
     { key: 'relationships', label: 'Internal Relationships' },
-    { key: 'operator_capital', label: 'Operator / Capital Relationships' },
+    { key: 'operator_capital', label: 'Vendor / Other Relationships' },
     { key: 'products', label: 'Products' },
   ],
   conference_details: [
