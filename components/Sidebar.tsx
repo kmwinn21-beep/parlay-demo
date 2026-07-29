@@ -13,6 +13,7 @@ import { LogoImage } from './LogoImage';
 import { useLogoConfig } from '@/lib/useLogoConfig';
 import { OnboardingChecklist } from './onboarding/OnboardingChecklist';
 import { clearActiveConferenceStorage } from '@/components/ActiveConferenceContext';
+import { useSidebarCollapse, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_EXPANDED_WIDTH } from './SidebarCollapseContext';
 
 const operationsItems = [
   {
@@ -111,6 +112,7 @@ export function Sidebar() {
   const appName = useAppName();
   const tagline = useTagline();
   const { faviconUrl } = useLogoConfig();
+  const { collapsed, toggleCollapsed } = useSidebarCollapse();
 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
@@ -138,7 +140,7 @@ export function Sidebar() {
   const showIntelligenceSection = hasCalendarIntelligence || (hasProgramIntelligence && !isStakeholder);
 
   const navLinkClass = (href: string) =>
-    `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+    `flex items-center ${collapsed ? 'justify-center px-2' : 'gap-3 px-4'} py-3 rounded-lg text-sm font-medium transition-all ${
       isActive(href)
         ? 'bg-brand-highlight text-brand-primary'
         : 'text-sidebar-font/70 hover:bg-white/10 hover:text-sidebar-font'
@@ -146,24 +148,47 @@ export function Sidebar() {
 
   return (
     <>
-      <aside className="w-64 bg-brand-primary flex flex-col flex-shrink-0 h-full">
+      <aside
+        className={`${collapsed ? 'w-20' : 'w-64'} bg-brand-primary flex flex-col flex-shrink-0 h-full relative transition-[width] duration-300 ease-in-out`}
+      >
+      {/* Collapse/expand toggle */}
+      <button
+        type="button"
+        onClick={toggleCollapsed}
+        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        className="absolute top-6 -right-3 w-6 h-6 rounded-full bg-white border border-gray-200 shadow-md flex items-center justify-center text-gray-500 hover:text-brand-primary hover:border-brand-secondary transition-colors z-10"
+      >
+        <svg
+          className={`w-3.5 h-3.5 transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+
       {/* Logo area */}
-      <div className="p-5 border-b border-white/20 flex flex-col justify-center min-h-[76px]">
+      <div className={`p-5 border-b border-white/20 flex flex-col justify-center min-h-[76px] ${collapsed ? 'items-center px-2' : ''}`}>
         <div className="flex items-center gap-3">
-          <LogoImage variant="sidebar" width={140} height={42} className="object-contain" alt="Logo" />
+          {collapsed ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={faviconUrl || '/WhiteLetterMarkParlay.png'} alt="Logo" width={32} height={32} className="object-contain" />
+          ) : (
+            <LogoImage variant="sidebar" width={140} height={42} className="object-contain" alt="Logo" />
+          )}
         </div>
-        {tagline && <p className="text-sidebar-font/60 text-xs mt-2 italic">{tagline}</p>}
+        {!collapsed && tagline && <p className="text-sidebar-font/60 text-xs mt-2 italic">{tagline}</p>}
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 overflow-y-auto">
+      <nav className="flex-1 p-4 overflow-y-auto overflow-x-hidden">
         {/* Operations section — only visible to non-stakeholders */}
         {!isStakeholder && (
           <>
-            <p className="text-sidebar-font/40 text-[10px] font-bold uppercase tracking-widest px-4 pt-2 pb-1">Operations</p>
+            {!collapsed && <p className="text-sidebar-font/40 text-[10px] font-bold uppercase tracking-widest px-4 pt-2 pb-1">Operations</p>}
             <div className="space-y-1 mb-2">
               {operationsItems.map((item) => (
-                <Link key={item.href} href={item.href} className={navLinkClass(item.href)}>
+                <Link key={item.href} href={item.href} title={collapsed ? item.label : undefined} className={navLinkClass(item.href)}>
                   {(item.href === '/notifications' && unreadCount > 0) || (item.href === '/follow-ups' && needsAttentionCount > 0) ? (
                     <span className="relative flex-shrink-0">
                       {item.icon}
@@ -172,7 +197,7 @@ export function Sidebar() {
                       </span>
                     </span>
                   ) : item.icon}
-                  {item.label}
+                  {!collapsed && item.label}
                 </Link>
               ))}
             </div>
@@ -182,16 +207,16 @@ export function Sidebar() {
         {/* Intelligence section */}
         {showIntelligenceSection && (
           <>
-            <p className="text-sidebar-font/40 text-[10px] font-bold uppercase tracking-widest px-4 pt-4 pb-1">Intelligence</p>
+            {!collapsed && <p className="text-sidebar-font/40 text-[10px] font-bold uppercase tracking-widest px-4 pt-4 pb-1">Intelligence</p>}
             <div className="space-y-1">
               {!isStakeholder && hasProgramIntelligence && (
-                <Link href={programIntelligenceItem.href} className={navLinkClass(programIntelligenceItem.href)}>
+                <Link href={programIntelligenceItem.href} title={collapsed ? programIntelligenceItem.label : undefined} className={navLinkClass(programIntelligenceItem.href)}>
                   {programIntelligenceItem.icon}
-                  {programIntelligenceItem.label}
+                  {!collapsed && programIntelligenceItem.label}
                 </Link>
               )}
               {hasCalendarIntelligence && (
-                <Link href={calendarIntelligenceItem.href} className={navLinkClass(calendarIntelligenceItem.href)}>
+                <Link href={calendarIntelligenceItem.href} title={collapsed ? calendarIntelligenceItem.label : undefined} className={navLinkClass(calendarIntelligenceItem.href)}>
                   {pendingInputCount > 0 ? (
                     <span className="relative flex-shrink-0">
                       {calendarIntelligenceItem.icon}
@@ -200,13 +225,13 @@ export function Sidebar() {
                       </span>
                     </span>
                   ) : calendarIntelligenceItem.icon}
-                  {calendarIntelligenceItem.label}
+                  {!collapsed && calendarIntelligenceItem.label}
                 </Link>
               )}
               {!isStakeholder && (
-                <Link href={programPlannerItem.href} className={navLinkClass(programPlannerItem.href)}>
+                <Link href={programPlannerItem.href} title={collapsed ? programPlannerItem.label : undefined} className={navLinkClass(programPlannerItem.href)}>
                   {programPlannerItem.icon}
-                  {programPlannerItem.label}
+                  {!collapsed && programPlannerItem.label}
                 </Link>
               )}
             </div>
@@ -216,41 +241,48 @@ export function Sidebar() {
       </nav>
 
       {/* Footer — admin settings + logout + app version */}
-      <div className="p-4 border-t border-white/20 space-y-3">
+      <div className={`p-4 border-t border-white/20 space-y-3 ${collapsed ? 'px-2' : ''}`}>
         {user?.role === 'administrator' && (
           <Link
             href="/admin"
+            title={collapsed ? 'Admin Settings' : undefined}
             className={navLinkClass('/admin')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            Admin Settings
+            {!collapsed && 'Admin Settings'}
           </Link>
         )}
         <button
           onClick={handleLogout}
-          className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-sidebar-font/60 hover:text-sidebar-font hover:bg-white/10 transition-colors text-xs"
+          title={collapsed ? 'Sign Out' : undefined}
+          className={`flex items-center ${collapsed ? 'justify-center' : 'gap-2'} w-full px-2 py-1.5 rounded-lg text-sidebar-font/60 hover:text-sidebar-font hover:bg-white/10 transition-colors text-xs`}
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
           </svg>
-          Sign Out
+          {!collapsed && 'Sign Out'}
         </button>
-        <div className="flex items-center gap-2 pt-1">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={faviconUrl || '/WhiteLetterMarkParlay.png'} alt="App emblem" width={24} height={24} className="object-contain opacity-60" />
-          <div>
-            <p className="text-sidebar-font/60 text-xs">{appName}</p>
-            <p className="text-sidebar-font/50 text-xs">v1.0</p>
+        {!collapsed && (
+          <div className="flex items-center gap-2 pt-1">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={faviconUrl || '/WhiteLetterMarkParlay.png'} alt="App emblem" width={24} height={24} className="object-contain opacity-60" />
+            <div>
+              <p className="text-sidebar-font/60 text-xs">{appName}</p>
+              <p className="text-sidebar-font/50 text-xs">v1.0</p>
+            </div>
           </div>
-        </div>
+        )}
       </div>
       </aside>
 
       {/* Onboarding checklist — only for trial users */}
-      <div className="fixed left-[calc(16rem+1rem)] bottom-4 z-40 w-56">
+      <div
+        className="fixed bottom-4 z-40 w-56 transition-[left] duration-300 ease-in-out"
+        style={{ left: (collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH) + 16 }}
+      >
         <OnboardingChecklist />
       </div>
     </>
