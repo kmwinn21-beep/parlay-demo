@@ -27,6 +27,7 @@ import { ConferenceReviewModalsProvider, useConferenceReviewModals } from '@/lib
 import { PreConferenceReviewModal } from '@/components/PreConferenceReview';
 import { PostConferenceReviewModal } from '@/components/PostConferenceReview';
 import { ConferenceEffectivenessModalBody } from '@/components/ConferenceEffectivenessModal';
+import { SidebarCollapseProvider, useSidebarCollapse, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_EXPANDED_WIDTH } from '@/components/SidebarCollapseContext';
 
 function GlobalMeetingDrawer() {
   const { meetingId, closeMeetingNotes } = useMeetingNotesDrawer();
@@ -35,11 +36,12 @@ function GlobalMeetingDrawer() {
 
 function GlobalClosedDealBar() {
   const { isOpen, isMinimized, draftLabel, expandDeal, closeDeal } = useClosedDealDraft();
+  const { collapsed } = useSidebarCollapse();
   if (!isOpen || !isMinimized) return null;
   return (
     <div
-      className="hidden lg:flex fixed bottom-0 left-64 ml-2 z-[60] items-center gap-2.5 px-4 py-2.5 bg-white border border-b-0 rounded-t-xl shadow-lg w-[200px] select-none"
-      style={{ borderColor: 'rgb(var(--brand-accent-rgb))' }}
+      className="hidden lg:flex fixed bottom-0 ml-2 z-[60] items-center gap-2.5 px-4 py-2.5 bg-white border border-b-0 rounded-t-xl shadow-lg w-[200px] select-none transition-[left] duration-300 ease-in-out"
+      style={{ borderColor: 'rgb(var(--brand-accent-rgb))', left: collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH }}
     >
       <svg className="w-4 h-4 text-brand-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
@@ -75,10 +77,14 @@ function GlobalReviewModalsBar() {
     },
   ].filter((p): p is { key: string; label: string; expand: () => void; close: () => void } => Boolean(p));
 
+  const { collapsed } = useSidebarCollapse();
   if (pills.length === 0) return null;
 
   return (
-    <div className="hidden lg:flex fixed bottom-0 left-64 ml-2 z-[60] flex-col-reverse gap-2 items-start">
+    <div
+      className="hidden lg:flex fixed bottom-0 ml-2 z-[60] flex-col-reverse gap-2 items-start transition-[left] duration-300 ease-in-out"
+      style={{ left: collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH }}
+    >
       {pills.map(p => (
         <div
           key={p.key}
@@ -240,9 +246,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <MeetingNotesDrawerProvider>
       <ClosedDealDraftProvider>
       <ConferenceReviewModalsProvider>
+      <SidebarCollapseProvider>
         <Suspense fallback={<AppShellInner>{children}</AppShellInner>}>
           <EmbedChecker>{children}</EmbedChecker>
         </Suspense>
+      </SidebarCollapseProvider>
       </ConferenceReviewModalsProvider>
       </ClosedDealDraftProvider>
       </MeetingNotesDrawerProvider>
