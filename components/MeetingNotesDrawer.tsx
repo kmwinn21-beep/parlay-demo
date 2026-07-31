@@ -78,20 +78,36 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
 
   return createPortal(
     <>
+      {/* Mobile-only slide-up entrance — can't reuse the shared
+          .drawer-mobile-responsive class since its sm+ variant slides in
+          from the right, which would fight this drawer's centered desktop
+          modal (unlike other drawers, this one isn't a right-edge panel
+          on desktop). */}
+      <style>{`
+        @keyframes meetingNotesSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .meeting-notes-mobile-slide { animation: meetingNotesSlideUp 0.25s ease-out; }
+        @media (min-width: 640px) { .meeting-notes-mobile-slide { animation: none; } }
+      `}</style>
+
       {/* Overlay — click minimizes, not closes */}
       <div
         className={`fixed inset-0 z-[499] bg-black/50 transition-opacity duration-200 ${minimized ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
         onClick={() => setMinimized(true)}
       />
 
-      {/* Modal panel — always mounted to preserve recording state */}
+      {/* Modal panel — always mounted to preserve recording state.
+          Mobile: bottom sheet sliding up (h-[90vh], rounded top corners),
+          same action/height as the site's other mobile drawers. Desktop
+          (sm+): unchanged centered, resizable modal. */}
       <div
-        className={`fixed inset-0 z-[500] flex items-center justify-center p-3 pointer-events-none transition-all duration-200 ${minimized ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}
+        className={`fixed inset-0 z-[500] pointer-events-none transition-opacity duration-200 sm:flex sm:items-center sm:justify-center sm:p-3 sm:transition-all ${
+          minimized ? 'opacity-0 sm:scale-95' : 'opacity-100 sm:scale-100'
+        }`}
         style={{ visibility: minimized ? 'hidden' : 'visible' }}
       >
         <div
-          className="pointer-events-auto flex flex-col bg-white rounded-xl shadow-2xl overflow-hidden relative h-full"
-          style={{ width: Math.min(modalWidth, window.innerWidth - 24) }}
+          className="meeting-notes-mobile-slide pointer-events-auto flex flex-col bg-white shadow-2xl overflow-hidden relative fixed bottom-0 left-0 right-0 h-[90vh] w-full rounded-t-2xl sm:static sm:h-full sm:rounded-xl"
+          style={{ width: window.innerWidth >= 640 ? Math.min(modalWidth, window.innerWidth - 24) : undefined }}
           onClick={e => e.stopPropagation()}
         >
           {/* Left-edge resize handle */}
@@ -107,7 +123,7 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
           />
           {/* Right-edge resize handle */}
           <div
-            className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize z-10 hover:bg-brand-secondary/30 transition-colors rounded-r-xl"
+            className="hidden sm:block absolute right-0 top-0 bottom-0 w-2 cursor-col-resize z-10 hover:bg-brand-secondary/30 transition-colors rounded-r-xl"
             onMouseDown={handleResizeMouseDown}
           />
         </div>
