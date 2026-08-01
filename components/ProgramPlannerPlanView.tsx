@@ -232,11 +232,16 @@ function LegendButton({ territoryOptions }: { territoryOptions: Array<{ id: numb
         <span className="hidden sm:inline">Legend</span>
       </button>
       {open && pos && (
-        <div
-          ref={popoverRef}
-          className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 max-h-[70vh] overflow-y-auto"
-          style={{ ...dropdownStyle(pos), width: 325 }}
-        >
+        <>
+          {/* Mobile: dim backdrop + centered popup (button-anchored positioning
+              would run the wide content off the right edge of a narrow
+              viewport). Desktop (sm+): unchanged button-anchored dropdown. */}
+          <div className="sm:hidden fixed inset-0 z-[9998] bg-black/30" onClick={() => setOpen(false)} />
+          <div
+            ref={popoverRef}
+            className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 overflow-y-auto fixed inset-x-4 top-1/2 -translate-y-1/2 max-h-[80vh] z-[9999] sm:inset-x-auto sm:top-auto sm:translate-y-0 sm:max-h-[70vh] sm:w-[325px]"
+            style={typeof window !== 'undefined' && window.innerWidth >= 640 ? { ...dropdownStyle(pos), width: 325 } : undefined}
+          >
           <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2">Strategy</p>
           <div className="space-y-1.5 mb-4">
             {STRATEGY_PILL_MAP.map(s => (
@@ -269,7 +274,8 @@ function LegendButton({ territoryOptions }: { territoryOptions: Array<{ id: numb
               ))
             )}
           </div>
-        </div>
+          </div>
+        </>
       )}
     </>
   );
@@ -2196,42 +2202,43 @@ export function ProgramPlannerPlanView({
             </button>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0 ml-auto sm:ml-0">
+        <div className="w-full sm:w-auto flex items-center gap-2">
           {/* Table/Kanban comes before Legend on mobile, after it at sm+.
-              Icon-only (no label) below sm so the whole right-hand group
-              fits without pushing the Add button past the card edge. */}
-          <div className="order-1 sm:order-2 inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+              Stretches (flex-1) to fill the row on mobile — its left edge
+              lands at the row's own left edge (same as the card content
+              below), while Legend/Add stay fixed-width at the right. */}
+          <div className="order-1 sm:order-2 flex-1 sm:flex-none inline-flex rounded-lg border border-gray-200 overflow-hidden">
             <button
               type="button"
               onClick={() => setPlanViewMode('table')}
               title="Table view"
-              className={`inline-flex items-center justify-center sm:justify-start gap-1.5 w-9 h-9 sm:w-auto sm:h-auto px-0 sm:px-2.5 py-0 sm:py-1.5 text-xs font-medium transition-colors ${
+              className={`flex-1 sm:flex-none inline-flex items-center justify-center sm:justify-start gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${
                 planViewMode === 'table' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
               }`}
             >
               <TableViewIcon />
-              <span className="hidden sm:inline">Table</span>
+              Table
             </button>
             <button
               type="button"
               onClick={() => setPlanViewMode('kanban')}
               title="Kanban view"
-              className={`inline-flex items-center justify-center sm:justify-start gap-1.5 w-9 h-9 sm:w-auto sm:h-auto px-0 sm:px-2.5 py-0 sm:py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+              className={`flex-1 sm:flex-none inline-flex items-center justify-center sm:justify-start gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
                 planViewMode === 'kanban' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
               }`}
             >
               <KanbanViewIcon />
-              <span className="hidden sm:inline">Kanban</span>
+              Kanban
             </button>
           </div>
-          <div className="order-2 sm:order-1">
+          <div className="order-2 sm:order-1 flex-shrink-0">
             <LegendButton territoryOptions={territoryOptions} />
           </div>
           <button
             type="button"
             onClick={() => setShowAddDrawer(true)}
             title="Add conference"
-            className="order-3 inline-flex items-center justify-center gap-1.5 w-9 h-9 sm:w-auto sm:h-auto px-0 sm:px-3 py-0 sm:py-1.5 rounded-lg text-xs font-medium bg-brand-primary text-white hover:opacity-90 transition-opacity flex-shrink-0"
+            className="order-3 flex-shrink-0 inline-flex items-center justify-center gap-1.5 w-9 h-9 sm:w-auto sm:h-auto px-0 sm:px-3 py-0 sm:py-1.5 rounded-lg text-xs font-medium bg-brand-primary text-white hover:opacity-90 transition-opacity"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
