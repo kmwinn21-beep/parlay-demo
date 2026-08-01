@@ -2196,30 +2196,32 @@ export function ProgramPlannerPlanView({
             </button>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {/* Table/Kanban comes before Legend on mobile, after it at sm+ */}
+        <div className="flex items-center gap-2 flex-shrink-0 ml-auto sm:ml-0">
+          {/* Table/Kanban comes before Legend on mobile, after it at sm+.
+              Icon-only (no label) below sm so the whole right-hand group
+              fits without pushing the Add button past the card edge. */}
           <div className="order-1 sm:order-2 inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
             <button
               type="button"
               onClick={() => setPlanViewMode('table')}
               title="Table view"
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${
+              className={`inline-flex items-center justify-center sm:justify-start gap-1.5 w-9 h-9 sm:w-auto sm:h-auto px-0 sm:px-2.5 py-0 sm:py-1.5 text-xs font-medium transition-colors ${
                 planViewMode === 'table' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
               }`}
             >
               <TableViewIcon />
-              Table
+              <span className="hidden sm:inline">Table</span>
             </button>
             <button
               type="button"
               onClick={() => setPlanViewMode('kanban')}
               title="Kanban view"
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+              className={`inline-flex items-center justify-center sm:justify-start gap-1.5 w-9 h-9 sm:w-auto sm:h-auto px-0 sm:px-2.5 py-0 sm:py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
                 planViewMode === 'kanban' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
               }`}
             >
               <KanbanViewIcon />
-              Kanban
+              <span className="hidden sm:inline">Kanban</span>
             </button>
           </div>
           <div className="order-2 sm:order-1">
@@ -2231,7 +2233,9 @@ export function ProgramPlannerPlanView({
             title="Add conference"
             className="order-3 inline-flex items-center justify-center gap-1.5 w-9 h-9 sm:w-auto sm:h-auto px-0 sm:px-3 py-0 sm:py-1.5 rounded-lg text-xs font-medium bg-brand-primary text-white hover:opacity-90 transition-opacity flex-shrink-0"
           >
-            <i className="ti ti-plus text-[13px]" aria-hidden="true" />
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+            </svg>
             <span className="hidden sm:inline">Add conference</span>
           </button>
         </div>
