@@ -13,6 +13,7 @@ import { getPreset } from '@/lib/colors';
 import { CalendarIntelligenceDrawer } from './CalendarIntelligenceDrawer';
 import { ColumnMappingModal } from './ColumnMappingModal';
 import type { ColumnMapping } from '@/lib/columnMapping';
+import { MobileStatCarousel } from './MobileStatCarousel';
 
 interface BudgetLineItem { label: string; budgeted: number | null; actual: number | null }
 interface PlannedLineItem { label: string; budgeted: number }
@@ -2071,30 +2072,32 @@ export function ProgramPlannerPlanView({
 
   return (
     <div className="space-y-4">
-      {/* Summary stat strip */}
+      {/* Summary stat strip — one-at-a-time swipeable carousel on mobile, unchanged grid at sm+ */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="card">
-          <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Planned conferences</p>
-          <p className="text-2xl font-bold text-brand-primary">{plannedConfs.length}</p>
-          <p className="text-[11px] text-gray-400 mt-0.5">{groups.attend.length} returning · {groups.new.length} new · {groups.reduce.length} reduced</p>
-        </div>
-        <div className="card">
-          <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Total planned budget</p>
-          <p className="text-2xl font-bold text-brand-primary">{fmtCurrencyFull(totalPlannedBudget)}</p>
-          <p className="text-[11px] text-gray-400 mt-0.5">
-            {priorYearActual != null ? `vs ${fmtCurrencyFull(priorYearActual)} actuals ${year - 1}` : ' '}
-          </p>
-        </div>
-        <div className="card">
-          <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Total headcount</p>
-          <p className="text-2xl font-bold text-brand-primary">{totalReps} reps</p>
-          <p className="text-[11px] text-gray-400 mt-0.5">across all planned conferences</p>
-        </div>
-        <div className="card">
-          <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Pipeline target</p>
-          <p className="text-2xl font-bold text-brand-primary">{fmtCurrencyFull(pipelineTarget)}</p>
-          <p className="text-[11px] text-gray-400 mt-0.5">3.5x planned spend</p>
-        </div>
+        <MobileStatCarousel>
+          <div className="card">
+            <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Planned conferences</p>
+            <p className="text-2xl font-bold text-brand-primary">{plannedConfs.length}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">{groups.attend.length} returning · {groups.new.length} new · {groups.reduce.length} reduced</p>
+          </div>
+          <div className="card">
+            <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Total planned budget</p>
+            <p className="text-2xl font-bold text-brand-primary">{fmtCurrencyFull(totalPlannedBudget)}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              {priorYearActual != null ? `vs ${fmtCurrencyFull(priorYearActual)} actuals ${year - 1}` : ' '}
+            </p>
+          </div>
+          <div className="card">
+            <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Total headcount</p>
+            <p className="text-2xl font-bold text-brand-primary">{totalReps} reps</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">across all planned conferences</p>
+          </div>
+          <div className="card">
+            <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Pipeline target</p>
+            <p className="text-2xl font-bold text-brand-primary">{fmtCurrencyFull(pipelineTarget)}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">3.5x planned spend</p>
+          </div>
+        </MobileStatCarousel>
       </div>
 
       <style>{`
