@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
+import { ConflictResolutionModal, type ConflictItem } from '@/components/ConflictResolutionModal';
 
 interface UploadRecord {
   id: number;
@@ -90,6 +91,7 @@ export function MasterAccountsTab() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
   const [allRecordsCache, setAllRecordsCache] = useState<AccountRecord[] | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const [uploadStep, setUploadStep] = useState<UploadStep>('idle');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -103,6 +105,11 @@ export function MasterAccountsTab() {
   const [showUnresolved, setShowUnresolved] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [syncing, setSyncing] = useState(false);
+  const [syncConflicts, setSyncConflicts] = useState<ConflictItem[] | null>(null);
+  const [syncPreviewCounts, setSyncPreviewCounts] = useState<{ matchedCount: number; directUpdateCount: number } | null>(null);
+  const [syncApplying, setSyncApplying] = useState(false);
 
   const hasActiveUpload = uploads.some(u => u.status === 'active');
   const isLargeList = totalActiveRecords >= LARGE_LIST_THRESHOLD;
@@ -145,7 +152,7 @@ export function MasterAccountsTab() {
       if (!cancelled) setAllRecordsCache(all);
     })();
     return () => { cancelled = true; };
-  }, [isLargeList, totalActiveRecords]);
+  }, [isLargeList, totalActiveRecords, refreshKey]);
 
   useEffect(() => {
     if (isLargeList || allRecordsCache == null) return;
@@ -170,7 +177,7 @@ export function MasterAccountsTab() {
       setRecordsTotal(data.total);
     })();
     return () => { cancelled = true; };
-  }, [isLargeList, page, debouncedSearch]);
+  }, [isLargeList, page, debouncedSearch, refreshKey]);
 
   // ── Upload workflow ──────────────────────────────────────────────────────
 
@@ -274,17 +281,80 @@ export function MasterAccountsTab() {
     }
   };
 
+  // ── Sync to master list ──────────────────────────────────────────────────
+
+  const handleSyncClick = async () => {
+    setSyncing(true);
+    try {
+      const res = await fetch('/api/admin/master-accounts/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+      if (!res.ok) throw new Error();
+      const data = await res.json() as { matchedCount: number; directUpdateCount: number; conflicts: ConflictItem[] };
+      if (data.matchedCount === 0) {
+        toast.error('No companies matched the active master account list');
+        return;
+      }
+      setSyncPreviewCounts({ matchedCount: data.matchedCount, directUpdateCount: data.directUpdateCount });
+      if (data.conflicts.length > 0) {
+        setSyncConflicts(data.conflicts);
+      } else {
+        await applySync({});
+      }
+    } catch {
+      toast.error('Failed to check companies against the master account list');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const applySync = async (resolutions: Record<string, 'accept' | 'ignore'>) => {
+    setSyncApplying(true);
+    try {
+      const res = await fetch('/api/admin/master-accounts/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apply: true, resolutions }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json() as { updated: number; repUpdated: number; repSkipped: number };
+      toast.success(`Synced ${data.updated.toLocaleString()} companies to the master account list`);
+      setRefreshKey(k => k + 1);
+    } catch {
+      toast.error('Failed to apply master account sync');
+    } finally {
+      setSyncApplying(false);
+      setSyncConflicts(null);
+      setSyncPreviewCounts(null);
+    }
+  };
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div className="max-w-4xl space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-brand-primary font-serif">Master Accounts</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          Upload a company/territory account list to bulk-set assigned reps. Each upload is tracked
-          with a full history — replace the active list entirely, or merge in updates from a new file.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-brand-primary font-serif">Master Accounts</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Upload a company/territory account list to bulk-set assigned reps. Each upload is tracked
+            with a full history — replace the active list entirely, or merge in updates from a new file.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleSyncClick}
+          disabled={syncing || !hasActiveUpload}
+          className="btn-secondary text-xs px-3 py-1.5 flex-shrink-0 disabled:opacity-50 whitespace-nowrap"
+          title={hasActiveUpload ? 'Match companies in the system to the active master account list and update their fields' : 'Upload a master account list first'}
+        >
+          {syncing ? 'Checking…' : 'Sync Companies to Master List'}
+        </button>
       </div>
+
+      {syncPreviewCounts && syncConflicts && syncConflicts.length > 0 && (
+        <p className="text-xs text-gray-500 -mt-2">
+          {syncPreviewCounts.matchedCount.toLocaleString()} companies matched the master list — {syncPreviewCounts.directUpdateCount.toLocaleString()} have field updates to apply, {syncConflicts.length} need a rep conflict resolved below.
+        </p>
+      )}
 
       {/* ── Upload workflow ── */}
       <div className="border border-gray-200 rounded-xl p-4">
@@ -641,6 +711,22 @@ export function MasterAccountsTab() {
           </>
         )}
       </div>
+
+      {syncConflicts && (
+        <ConflictResolutionModal
+          conflicts={syncConflicts}
+          onResolve={(resolutions) => { void applySync(resolutions); }}
+          onCancel={() => { setSyncConflicts(null); setSyncPreviewCounts(null); }}
+        />
+      )}
+      {syncApplying && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.3)' }}>
+          <div className="bg-white rounded-xl px-6 py-5 shadow-2xl flex items-center gap-3">
+            <div className="animate-spin w-5 h-5 border-2 border-brand-secondary border-t-transparent rounded-full" />
+            <p className="text-sm text-gray-600">Applying master account sync…</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
