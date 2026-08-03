@@ -1967,4 +1967,18 @@ export const migrations: string[] = [
   // companies, it's populated from the uploaded file's own state column (see
   // ParsedAttendee.state / lib/columnMapping.ts) at insert time.
   `ALTER TABLE companies ADD COLUMN hq_state TEXT`,
+  // 580 — master_account_list: Territory / Entity Structure / Services / Units
+  // (Units = the companies.wse column under whatever label Admin → Types →
+  // Unit Type currently configures) so the Master Accounts upload can map and
+  // store these alongside the existing website/assigned-rep/hq-state fields,
+  // for use both as displayed columns and as an upload-time fallback source
+  // for the conference list upload routes. Territory mirrors the
+  // assigned_rep_id/assigned_rep_name split — the uploaded text is kept
+  // as-is (territory_name) alongside the resolved sales_territories.id
+  // (territory_id, matched by name at upload time), same as companies.territory_id.
+  `ALTER TABLE master_account_list ADD COLUMN territory_id INTEGER REFERENCES sales_territories(id) ON DELETE SET NULL`,
+  `ALTER TABLE master_account_list ADD COLUMN territory_name TEXT`,
+  `ALTER TABLE master_account_list ADD COLUMN entity_structure TEXT`,
+  `ALTER TABLE master_account_list ADD COLUMN services TEXT`,
+  `ALTER TABLE master_account_list ADD COLUMN wse INTEGER`,
 ];
