@@ -772,7 +772,7 @@ function ClientCompetitorPanel({ data }: { data: LandscapeData }) {
       fullWidth
       options={[
         { key: 'clients', label: `Clients (${data.clientCompanies.length})`, activeColor: 'rgb(var(--brand-primary-rgb))' },
-        { key: 'competitors', label: `Competitors (${data.competitorCompanies.length})`, activeColor: '#dc2626' },
+        { key: 'competitors', label: `Comp. (${data.competitorCompanies.length})`, activeColor: '#dc2626' },
       ]}
       active={mode}
       onChange={key => setMode(key as 'clients' | 'competitors')}
