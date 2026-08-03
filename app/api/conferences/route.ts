@@ -414,7 +414,11 @@ export async function POST(request: NextRequest) {
       if (servicesOptions.length > 0) {
         for (const p of valid) {
           if (p.services) {
-            const matched = p.services.split(',').map(s => s.trim()).filter(Boolean)
+            // Same splitter as the existing-conference attendee-list upload
+            // route (app/api/conferences/[id]/attendees/upload/route.ts) —
+            // kept in sync so a services CSV column parses identically
+            // whether attached to a new conference or an existing one.
+            const matched = p.services.split(/[;,:\\/|]+|\s+-\s+/).map(s => s.trim()).filter(Boolean)
               .map(s => matchConfigOption(s, servicesOptions)).filter((v): v is string => v !== null);
             p.services = matched.length > 0 ? matched.join(',') : undefined;
           }
