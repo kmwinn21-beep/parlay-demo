@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { TargetBtn } from './TargetBtn';
 import { useRecordDrawer } from './RecordDrawerContext';
 import type { LandscapeData, TargetEntry, ClientCompanyEntry, ByRepEntry, IcpCompany, RelationshipRow } from '../PreConferenceReview';
@@ -675,11 +675,13 @@ function CompanyCard({ co, accentColor }: { co: ClientCompanyEntry; accentColor:
 
 function CompanyPanel({
   title,
+  headerContent,
   companies,
   accentColor,
   emptyText,
 }: {
-  title: string;
+  title?: string;
+  headerContent?: ReactNode;
   companies: ClientCompanyEntry[];
   accentColor: string | null;
   emptyText: string;
@@ -693,22 +695,26 @@ function CompanyPanel({
       >
         {/* Panel header — matches tier-card header style */}
         <div
-          className="px-3 py-2.5 border-b flex items-center justify-between flex-shrink-0"
+          className="px-3 py-2.5 border-b flex-shrink-0"
           style={{
             backgroundColor: hexAlpha(color, 0.12),
             borderBottom: `1px solid ${hexAlpha(color, 0.3)}`,
           }}
         >
-          <h3
-            className="text-xs font-bold uppercase tracking-wider"
-            style={{ color }}
-          >
-            {title}
-          </h3>
-          {companies.length > 0 && (
-            <span className="text-xs font-bold" style={{ color }}>
-              {companies.length}
-            </span>
+          {headerContent ?? (
+            <div className="flex items-center justify-between">
+              <h3
+                className="text-xs font-bold uppercase tracking-wider"
+                style={{ color }}
+              >
+                {title}
+              </h3>
+              {companies.length > 0 && (
+                <span className="text-xs font-bold" style={{ color }}>
+                  {companies.length}
+                </span>
+              )}
+            </div>
           )}
         </div>
         {/* Card list */}
@@ -733,19 +739,21 @@ function ToggleGroup({
   options,
   active,
   onChange,
+  fullWidth,
 }: {
   options: { key: string; label: string; activeColor: string }[];
   active: string;
   onChange: (key: string) => void;
+  fullWidth?: boolean;
 }) {
   return (
-    <div className="inline-flex rounded-full border border-gray-200 bg-gray-100 p-0.5 gap-0.5">
+    <div className={`${fullWidth ? 'flex w-full' : 'inline-flex'} rounded-full border border-gray-200 bg-gray-100 p-0.5 gap-0.5`}>
       {options.map(opt => (
         <button
           key={opt.key}
           type="button"
           onClick={() => onChange(opt.key)}
-          className="px-3 py-1 rounded-full text-xs font-semibold transition-colors"
+          className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${fullWidth ? 'flex-1' : ''}`}
           style={active === opt.key ? { backgroundColor: opt.activeColor, color: '#fff' } : { color: '#6b7280' }}
         >
           {opt.label}
@@ -759,36 +767,32 @@ function ClientCompetitorPanel({ data }: { data: LandscapeData }) {
   const [mode, setMode] = useState<'clients' | 'competitors'>('clients');
   const isClients = mode === 'clients';
 
-  return (
-    <div className="flex flex-col gap-2 h-full">
-      <div className="flex items-center justify-start flex-shrink-0">
-        <ToggleGroup
-          options={[
-            { key: 'clients', label: 'Clients', activeColor: 'rgb(var(--brand-primary-rgb))' },
-            { key: 'competitors', label: 'Competitors', activeColor: '#dc2626' },
-          ]}
-          active={mode}
-          onChange={key => setMode(key as 'clients' | 'competitors')}
-        />
-      </div>
-      <div className="flex-1 min-h-0">
-        {isClients ? (
-          <CompanyPanel
-            title="Client Attendees"
-            companies={data.clientCompanies}
-            accentColor={data.clientColor}
-            emptyText="No client companies attending"
-          />
-        ) : (
-          <CompanyPanel
-            title="Competitors Attending"
-            companies={data.competitorCompanies}
-            accentColor={data.competitorColor}
-            emptyText="No competitor companies attending"
-          />
-        )}
-      </div>
-    </div>
+  const toggle = (
+    <ToggleGroup
+      fullWidth
+      options={[
+        { key: 'clients', label: `Clients (${data.clientCompanies.length})`, activeColor: 'rgb(var(--brand-primary-rgb))' },
+        { key: 'competitors', label: `Competitors (${data.competitorCompanies.length})`, activeColor: '#dc2626' },
+      ]}
+      active={mode}
+      onChange={key => setMode(key as 'clients' | 'competitors')}
+    />
+  );
+
+  return isClients ? (
+    <CompanyPanel
+      headerContent={toggle}
+      companies={data.clientCompanies}
+      accentColor={data.clientColor}
+      emptyText="No client companies attending"
+    />
+  ) : (
+    <CompanyPanel
+      headerContent={toggle}
+      companies={data.competitorCompanies}
+      accentColor={data.competitorColor}
+      emptyText="No competitor companies attending"
+    />
   );
 }
 
