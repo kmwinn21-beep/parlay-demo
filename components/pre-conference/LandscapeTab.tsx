@@ -761,7 +761,7 @@ function ClientCompetitorPanel({ data }: { data: LandscapeData }) {
 
   return (
     <div className="flex flex-col gap-2 h-full">
-      <div className="flex items-center justify-center flex-shrink-0">
+      <div className="flex items-center justify-start flex-shrink-0">
         <ToggleGroup
           options={[
             { key: 'clients', label: 'Clients', activeColor: 'rgb(var(--brand-primary-rgb))' },
@@ -808,11 +808,13 @@ function PipelineChartsPanel({
   targetMap,
   meetingAttendeeIds,
   icpCompanies,
+  onSelectRep,
 }: {
   conferenceId: number;
   targetMap: Map<number, TargetEntry>;
   meetingAttendeeIds: Set<number>;
   icpCompanies: IcpCompany[];
+  onSelectRep: (rep: RepChartEntry) => void;
 }) {
   const avgCostPerUnit = useAvgCostPerUnit();
   const [meetingsConvPct, setMeetingsConvPct] = useState(60);
@@ -900,7 +902,7 @@ function PipelineChartsPanel({
     <div className="flex flex-col gap-4 h-full">
       {/* Targeted Pipeline / Meetings Pipeline (toggle) */}
       <div className="rounded-xl border border-gray-200 bg-white p-4 flex-1 flex flex-col overflow-y-auto">
-        <div className="flex items-center justify-center mb-3 flex-shrink-0">
+        <div className="flex items-center justify-start mb-3 flex-shrink-0">
           <ToggleGroup
             options={[
               { key: 'targeted', label: 'Targeted Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
@@ -967,24 +969,34 @@ function PipelineChartsPanel({
         )}
       </div>
 
-      <CompaniesByRepChart icpCompanies={icpCompanies} />
+      <CompaniesByRepChart icpCompanies={icpCompanies} onSelectRep={onSelectRep} />
     </div>
   );
 }
 
 const REP_CHART_COLORS = ['#1B76BC', '#dc2626', '#059669', '#9333ea', '#ea580c', '#db2777', '#0891b2', '#ca8a04', '#4f46e5', '#6b7280'];
 
-function CompaniesByRepChart({ icpCompanies }: { icpCompanies: IcpCompany[] }) {
-  const repData = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const c of icpCompanies) {
-      const rep = c.assigned_user_names?.[0] || 'Unassigned';
-      counts.set(rep, (counts.get(rep) ?? 0) + 1);
-    }
-    return Array.from(counts.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(([name, count], i) => ({ name, count, color: REP_CHART_COLORS[i % REP_CHART_COLORS.length] }));
-  }, [icpCompanies]);
+interface RepChartEntry {
+  name: string;
+  companies: IcpCompany[];
+  count: number;
+  color: string;
+}
+
+function computeRepData(icpCompanies: IcpCompany[]): RepChartEntry[] {
+  const groups = new Map<string, IcpCompany[]>();
+  for (const c of icpCompanies) {
+    const rep = c.assigned_user_names?.[0] || 'Unassigned';
+    if (!groups.has(rep)) groups.set(rep, []);
+    groups.get(rep)!.push(c);
+  }
+  return Array.from(groups.entries())
+    .sort((a, b) => b[1].length - a[1].length)
+    .map(([name, companies], i) => ({ name, companies, count: companies.length, color: REP_CHART_COLORS[i % REP_CHART_COLORS.length] }));
+}
+
+function CompaniesByRepChart({ icpCompanies, onSelectRep }: { icpCompanies: IcpCompany[]; onSelectRep: (rep: RepChartEntry) => void }) {
+  const repData = useMemo(() => computeRepData(icpCompanies), [icpCompanies]);
 
   const total = icpCompanies.length;
 
@@ -997,8 +1009,11 @@ function CompaniesByRepChart({ icpCompanies }: { icpCompanies: IcpCompany[] }) {
         <>
           <div className="flex w-full h-6 rounded-full overflow-hidden">
             {repData.map(r => (
-              <div
+              <button
                 key={r.name}
+                type="button"
+                onClick={() => onSelectRep(r)}
+                className="cursor-pointer hover:brightness-110 transition-[filter]"
                 style={{ width: `${(r.count / total) * 100}%`, backgroundColor: r.color }}
                 title={`${r.name}: ${r.count} (${Math.round((r.count / total) * 100)}%)`}
               />
@@ -1006,18 +1021,128 @@ function CompaniesByRepChart({ icpCompanies }: { icpCompanies: IcpCompany[] }) {
           </div>
           <div className="flex flex-wrap gap-2">
             {repData.map(r => (
-              <span
+              <button
                 key={r.name}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+                type="button"
+                onClick={() => onSelectRep(r)}
+                title={r.name}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium hover:brightness-95 transition-[filter]"
                 style={{ backgroundColor: hexAlpha(r.color, 0.12), color: r.color, border: `1px solid ${hexAlpha(r.color, 0.3)}` }}
               >
                 <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: r.color }} />
-                {r.name} ({Math.round((r.count / total) * 100)}%)
-              </span>
+                {repInitials(r.name)} ({Math.round((r.count / total) * 100)}%)
+              </button>
             ))}
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function IcpCompanyCard({ co, accentColor }: { co: IcpCompany; accentColor: string }) {
+  const openRecord = useRecordDrawer();
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div
+      className="rounded-lg overflow-hidden bg-white"
+      style={{ border: `1px solid ${hexAlpha(accentColor, 0.3)}` }}
+    >
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="w-full flex items-center justify-between px-3 py-2 text-left gap-2 transition-colors"
+        style={{ backgroundColor: hexAlpha(accentColor, 0.07) }}
+      >
+        <span className="text-xs font-semibold text-gray-800 truncate flex-1">{co.name}</span>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="text-xs font-bold" style={{ color: accentColor }}>{co.attendees.length}</span>
+          <svg
+            className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`}
+            style={{ color: accentColor }}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </button>
+
+      {expanded && co.attendees.length > 0 && (
+        <div
+          className="divide-y"
+          style={{ borderTop: `1px solid ${hexAlpha(accentColor, 0.2)}`, borderColor: hexAlpha(accentColor, 0.1) }}
+        >
+          {co.attendees.map(a => (
+            <div key={a.id} className="px-3 py-1.5 bg-white">
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); openRecord('attendee', a.id); }}
+                className="text-xs font-medium text-gray-800 hover:text-brand-secondary transition-colors block truncate text-left w-full"
+              >
+                {a.first_name} {a.last_name}
+              </button>
+              {a.title && <p className="text-xs text-gray-400 truncate">{a.title}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RepDetailPanel({
+  rep,
+  totalIcp,
+  onClose,
+}: {
+  rep: RepChartEntry;
+  totalIcp: number;
+  onClose: () => void;
+}) {
+  const pct = totalIcp > 0 ? Math.round((rep.count / totalIcp) * 100) : 0;
+  return (
+    <div className="absolute inset-0 z-10 flex flex-col rounded-xl border border-gray-200 bg-white shadow-2xl overflow-hidden animate-[slideInRight_0.25s_ease-out]">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-gray-100 bg-gray-50 flex-shrink-0">
+        <span
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium truncate"
+          style={{ backgroundColor: hexAlpha(rep.color, 0.12), color: rep.color, border: `1px solid ${hexAlpha(rep.color, 0.3)}` }}
+        >
+          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: rep.color }} />
+          <span className="truncate">{rep.name}</span>
+        </span>
+        <button
+          onClick={onClose}
+          className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+          aria-label="Close"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 gap-2 p-3 flex-shrink-0">
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-2.5 text-center">
+          <p className="text-lg font-bold text-gray-800">{rep.count}</p>
+          <p className="text-[10px] text-gray-400 uppercase tracking-wide">Companies</p>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-2.5 text-center">
+          <p className="text-lg font-bold text-gray-800">{pct}%</p>
+          <p className="text-[10px] text-gray-400 uppercase tracking-wide">of ICP Total</p>
+        </div>
+      </div>
+
+      {/* Company cards */}
+      <div className="flex-1 overflow-y-auto p-2 space-y-1.5 min-h-0">
+        {rep.companies.length === 0 ? (
+          <p className="text-xs text-gray-400 text-center py-6">No companies assigned</p>
+        ) : (
+          rep.companies.map(co => (
+            <IcpCompanyCard key={co.id} co={co} accentColor={rep.color} />
+          ))
+        )}
+      </div>
     </div>
   );
 }
@@ -1495,6 +1620,8 @@ export function LandscapeTab({
   relationships: RelationshipRow[];
   onStrategyUpdated: () => void;
 }) {
+  const [selectedRep, setSelectedRep] = useState<RepChartEntry | null>(null);
+
   return (
     <div className="space-y-8">
       {/* Strategy Assessment (above existing charts) */}
@@ -1519,17 +1646,25 @@ export function LandscapeTab({
             targetMap={targetMap}
             meetingAttendeeIds={meetingAttendeeIds}
             icpCompanies={icpCompanies}
+            onSelectRep={setSelectedRep}
           />
         </div>
 
-        {/* Cols 4-5: Relationship Heatmap */}
-        <div className="md:col-span-2 h-full">
+        {/* Cols 4-5: Relationship Heatmap (Companies by Rep detail slides in on top) */}
+        <div className="relative md:col-span-2 h-full">
           <RelationshipHeatmapPanel
             byRep={byRep}
             icpCompanies={icpCompanies}
             targetMap={targetMap}
             relationships={relationships}
           />
+          {selectedRep && (
+            <RepDetailPanel
+              rep={selectedRep}
+              totalIcp={icpCompanies.length}
+              onClose={() => setSelectedRep(null)}
+            />
+          )}
         </div>
       </div>
     </div>
