@@ -1119,17 +1119,19 @@ function IcpCompanyCard({ co, accentColor }: { co: IcpCompany; accentColor: stri
           style={{ borderTop: `1px solid ${hexAlpha(accentColor, 0.2)}`, borderColor: hexAlpha(accentColor, 0.1) }}
         >
           {co.attendees.map(a => (
-            <div key={a.id} className="px-3 py-1.5 bg-white">
-              <button
-                type="button"
-                onClick={e => { e.stopPropagation(); openRecord('attendee', a.id); }}
-                className="text-xs font-medium text-gray-800 hover:text-brand-secondary transition-colors block truncate text-left w-full"
-              >
-                {a.first_name} {a.last_name}
-              </button>
-              {a.title && <p className="text-xs text-gray-400 truncate">{a.title}</p>}
+            <div key={a.id} className="px-3 py-1.5 bg-white flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <button
+                  type="button"
+                  onClick={e => { e.stopPropagation(); openRecord('attendee', a.id); }}
+                  className="text-xs font-medium text-gray-800 hover:text-brand-secondary transition-colors block truncate text-left w-full"
+                >
+                  {a.first_name} {a.last_name}
+                </button>
+                {a.title && <p className="text-xs text-gray-400 truncate">{a.title}</p>}
+              </div>
               {a.seniority && (
-                <div className="mt-1">
+                <div className="flex-shrink-0">
                   <SeniorityPill seniority={a.seniority} />
                 </div>
               )}
