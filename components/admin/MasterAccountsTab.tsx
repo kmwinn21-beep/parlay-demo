@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
+import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
+import { ConflictResolutionModal, type ConflictItem } from '@/components/ConflictResolutionModal';
 
 interface UploadRecord {
   id: number;
@@ -25,6 +27,11 @@ interface AccountRecord {
   assignedRepId: number | null;
   assignedRepName: string | null;
   hqState: string | null;
+  territoryId: number | null;
+  territoryName: string | null;
+  entityStructure: string | null;
+  services: string | null;
+  wse: number | null;
 }
 
 interface ColumnMapping {
@@ -32,6 +39,10 @@ interface ColumnMapping {
   website?: string;
   assignedRep?: string;
   hqState?: string;
+  territory?: string;
+  entityStructure?: string;
+  services?: string;
+  units?: string;
 }
 
 interface UploadResult {
@@ -49,12 +60,18 @@ type UploadStep = 'idle' | 'mapping' | 'mode' | 'uploading' | 'complete';
 const PAGE_SIZE = 50;
 const LARGE_LIST_THRESHOLD = 500;
 
-const MAPPING_FIELDS: { key: keyof ColumnMapping; label: string; required: boolean }[] = [
-  { key: 'companyName', label: 'Company name', required: true },
-  { key: 'website', label: 'Website', required: false },
-  { key: 'assignedRep', label: 'Assigned rep', required: false },
-  { key: 'hqState', label: 'HQ state', required: false },
-];
+function getMappingFields(unitLabel: string): { key: keyof ColumnMapping; label: string; required: boolean }[] {
+  return [
+    { key: 'companyName', label: 'Company name', required: true },
+    { key: 'website', label: 'Website', required: false },
+    { key: 'assignedRep', label: 'Assigned rep', required: false },
+    { key: 'hqState', label: 'HQ state', required: false },
+    { key: 'territory', label: 'Territory', required: false },
+    { key: 'entityStructure', label: 'Entity structure', required: false },
+    { key: 'services', label: 'Services', required: false },
+    { key: 'units', label: unitLabel, required: false },
+  ];
+}
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('en-US', {
@@ -64,6 +81,8 @@ function formatDateTime(iso: string): string {
 }
 
 export function MasterAccountsTab() {
+  const unitLabel = useUnitTypeLabel();
+  const mappingFields = getMappingFields(unitLabel);
   const [uploads, setUploads] = useState<UploadRecord[]>([]);
   const [totalActiveRecords, setTotalActiveRecords] = useState(0);
   const [records, setRecords] = useState<AccountRecord[]>([]);
@@ -72,6 +91,7 @@ export function MasterAccountsTab() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
   const [allRecordsCache, setAllRecordsCache] = useState<AccountRecord[] | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const [uploadStep, setUploadStep] = useState<UploadStep>('idle');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -85,6 +105,11 @@ export function MasterAccountsTab() {
   const [showUnresolved, setShowUnresolved] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [syncing, setSyncing] = useState(false);
+  const [syncConflicts, setSyncConflicts] = useState<ConflictItem[] | null>(null);
+  const [syncPreviewCounts, setSyncPreviewCounts] = useState<{ matchedCount: number; directUpdateCount: number } | null>(null);
+  const [syncApplying, setSyncApplying] = useState(false);
 
   const hasActiveUpload = uploads.some(u => u.status === 'active');
   const isLargeList = totalActiveRecords >= LARGE_LIST_THRESHOLD;
@@ -127,13 +152,13 @@ export function MasterAccountsTab() {
       if (!cancelled) setAllRecordsCache(all);
     })();
     return () => { cancelled = true; };
-  }, [isLargeList, totalActiveRecords]);
+  }, [isLargeList, totalActiveRecords, refreshKey]);
 
   useEffect(() => {
     if (isLargeList || allRecordsCache == null) return;
     const term = debouncedSearch.trim().toLowerCase();
     const filtered = term
-      ? allRecordsCache.filter(r => [r.companyName, r.domain, r.assignedRepName, r.hqState].some(v => (v ?? '').toLowerCase().includes(term)))
+      ? allRecordsCache.filter(r => [r.companyName, r.domain, r.assignedRepName, r.hqState, r.territoryName, r.entityStructure, r.services].some(v => (v ?? '').toLowerCase().includes(term)))
       : allRecordsCache;
     setRecordsTotal(filtered.length);
     setRecords(filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE));
@@ -152,7 +177,7 @@ export function MasterAccountsTab() {
       setRecordsTotal(data.total);
     })();
     return () => { cancelled = true; };
-  }, [isLargeList, page, debouncedSearch]);
+  }, [isLargeList, page, debouncedSearch, refreshKey]);
 
   // ── Upload workflow ──────────────────────────────────────────────────────
 
@@ -256,17 +281,80 @@ export function MasterAccountsTab() {
     }
   };
 
+  // ── Sync to master list ──────────────────────────────────────────────────
+
+  const handleSyncClick = async () => {
+    setSyncing(true);
+    try {
+      const res = await fetch('/api/admin/master-accounts/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+      if (!res.ok) throw new Error();
+      const data = await res.json() as { matchedCount: number; directUpdateCount: number; conflicts: ConflictItem[] };
+      if (data.matchedCount === 0) {
+        toast.error('No companies matched the active master account list');
+        return;
+      }
+      setSyncPreviewCounts({ matchedCount: data.matchedCount, directUpdateCount: data.directUpdateCount });
+      if (data.conflicts.length > 0) {
+        setSyncConflicts(data.conflicts);
+      } else {
+        await applySync({});
+      }
+    } catch {
+      toast.error('Failed to check companies against the master account list');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const applySync = async (resolutions: Record<string, 'accept' | 'ignore'>) => {
+    setSyncApplying(true);
+    try {
+      const res = await fetch('/api/admin/master-accounts/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apply: true, resolutions }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json() as { updated: number; repUpdated: number; repSkipped: number };
+      toast.success(`Synced ${data.updated.toLocaleString()} companies to the master account list`);
+      setRefreshKey(k => k + 1);
+    } catch {
+      toast.error('Failed to apply master account sync');
+    } finally {
+      setSyncApplying(false);
+      setSyncConflicts(null);
+      setSyncPreviewCounts(null);
+    }
+  };
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div className="max-w-4xl space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-brand-primary font-serif">Master Accounts</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          Upload a company/territory account list to bulk-set assigned reps. Each upload is tracked
-          with a full history — replace the active list entirely, or merge in updates from a new file.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-brand-primary font-serif">Master Accounts</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Upload a company/territory account list to bulk-set assigned reps. Each upload is tracked
+            with a full history — replace the active list entirely, or merge in updates from a new file.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleSyncClick}
+          disabled={syncing || !hasActiveUpload}
+          className="btn-secondary text-xs px-3 py-1.5 flex-shrink-0 disabled:opacity-50 whitespace-nowrap"
+          title={hasActiveUpload ? 'Match companies in the system to the active master account list and update their fields' : 'Upload a master account list first'}
+        >
+          {syncing ? 'Checking…' : 'Sync Companies to Master List'}
+        </button>
       </div>
+
+      {syncPreviewCounts && syncConflicts && syncConflicts.length > 0 && (
+        <p className="text-xs text-gray-500 -mt-2">
+          {syncPreviewCounts.matchedCount.toLocaleString()} companies matched the master list — {syncPreviewCounts.directUpdateCount.toLocaleString()} have field updates to apply, {syncConflicts.length} need a rep conflict resolved below.
+        </p>
+      )}
 
       {/* ── Upload workflow ── */}
       <div className="border border-gray-200 rounded-xl p-4">
@@ -290,7 +378,7 @@ export function MasterAccountsTab() {
               Drop your account list here or browse
             </p>
             <p style={{ fontSize: 12, color: 'var(--text-muted, #9CA3AF)', margin: 0 }}>
-              CSV or Excel (.xlsx) · Company name, website, assigned rep, HQ state
+              CSV or Excel (.xlsx) · Company name, website, assigned rep, territory, entity structure, services, {unitLabel.toLowerCase()}, HQ state
             </p>
             <input
               ref={fileInputRef}
@@ -308,7 +396,7 @@ export function MasterAccountsTab() {
               <p className="text-sm font-semibold text-gray-700">Map columns — {selectedFile?.name}</p>
             </div>
             <div className="space-y-2">
-              {MAPPING_FIELDS.map(field => (
+              {mappingFields.map(field => (
                 <div key={field.key} className="flex items-center gap-3">
                   <div style={{ width: 140, flexShrink: 0 }} className="flex items-center gap-1.5">
                     <span className="text-xs font-medium text-gray-700">{field.label}</span>
@@ -338,12 +426,12 @@ export function MasterAccountsTab() {
             {/* Live preview — updates as mapping selects change */}
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Preview</p>
-              {MAPPING_FIELDS.some(f => columnMapping[f.key]) ? (
+              {mappingFields.some(f => columnMapping[f.key]) ? (
                 <div className="border border-gray-200 rounded-lg overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="border-b border-gray-100 bg-gray-50">
-                        {MAPPING_FIELDS.filter(f => columnMapping[f.key]).map(f => (
+                        {mappingFields.filter(f => columnMapping[f.key]).map(f => (
                           <th key={f.key} className="px-2.5 py-1.5 text-left font-medium text-gray-500 whitespace-nowrap">{f.label}</th>
                         ))}
                       </tr>
@@ -351,7 +439,7 @@ export function MasterAccountsTab() {
                     <tbody>
                       {parsedPreviewRows.slice(0, 5).map((row, i) => (
                         <tr key={i} className="border-b border-gray-50 last:border-0">
-                          {MAPPING_FIELDS.filter(f => columnMapping[f.key]).map(f => (
+                          {mappingFields.filter(f => columnMapping[f.key]).map(f => (
                             <td key={f.key} className="px-2.5 py-1.5 text-gray-700 truncate max-w-[200px]">{cellFor(row, columnMapping[f.key])}</td>
                           ))}
                         </tr>
@@ -574,6 +662,10 @@ export function MasterAccountsTab() {
                     <th className="px-2.5 py-1.5 text-left font-medium text-gray-500">Company name</th>
                     <th className="px-2.5 py-1.5 text-left font-medium text-gray-500">Domain</th>
                     <th className="px-2.5 py-1.5 text-left font-medium text-gray-500">Assigned rep</th>
+                    <th className="px-2.5 py-1.5 text-left font-medium text-gray-500">Territory</th>
+                    <th className="px-2.5 py-1.5 text-left font-medium text-gray-500">Entity structure</th>
+                    <th className="px-2.5 py-1.5 text-left font-medium text-gray-500">Services</th>
+                    <th className="px-2.5 py-1.5 text-left font-medium text-gray-500">{unitLabel}</th>
                     <th className="px-2.5 py-1.5 text-left font-medium text-gray-500">HQ state</th>
                   </tr>
                 </thead>
@@ -583,6 +675,10 @@ export function MasterAccountsTab() {
                       <td className="px-2.5 py-1.5 text-gray-700">{r.companyName}</td>
                       <td className="px-2.5 py-1.5 text-gray-500">{r.domain ?? '—'}</td>
                       <td className="px-2.5 py-1.5 text-gray-700">{r.assignedRepName ?? '—'}</td>
+                      <td className="px-2.5 py-1.5 text-gray-500">{r.territoryName ?? '—'}</td>
+                      <td className="px-2.5 py-1.5 text-gray-500">{r.entityStructure ?? '—'}</td>
+                      <td className="px-2.5 py-1.5 text-gray-500 truncate max-w-[160px]">{r.services ?? '—'}</td>
+                      <td className="px-2.5 py-1.5 text-gray-500">{r.wse ?? '—'}</td>
                       <td className="px-2.5 py-1.5 text-gray-500">{r.hqState ?? '—'}</td>
                     </tr>
                   ))}
@@ -615,6 +711,22 @@ export function MasterAccountsTab() {
           </>
         )}
       </div>
+
+      {syncConflicts && (
+        <ConflictResolutionModal
+          conflicts={syncConflicts}
+          onResolve={(resolutions) => { void applySync(resolutions); }}
+          onCancel={() => { setSyncConflicts(null); setSyncPreviewCounts(null); }}
+        />
+      )}
+      {syncApplying && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.3)' }}>
+          <div className="bg-white rounded-xl px-6 py-5 shadow-2xl flex items-center gap-3">
+            <div className="animate-spin w-5 h-5 border-2 border-brand-secondary border-t-transparent rounded-full" />
+            <p className="text-sm text-gray-600">Applying master account sync…</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { getConfigOptionValues } from '@/lib/db';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { randomBytes } from 'crypto';
 import type { Client } from '@libsql/client';
-import { extractRawRows } from '@/lib/parsers';
+import { extractRawRows, matchConfigOption } from '@/lib/parsers';
 import { deepNormalizeCompanyName, extractDomainFromWebsite } from '@/lib/matching';
 import { normalizeNameKey, normalizeReversedNameKey } from '@/lib/normalize';
 
@@ -20,6 +21,10 @@ interface MasterAccountColumnMapping {
   website?: string;
   assignedRep?: string;
   hqState?: string;
+  territory?: string;
+  entityStructure?: string;
+  services?: string;
+  units?: string;
 }
 
 function r2Client() {
@@ -97,10 +102,21 @@ export async function POST(request: NextRequest) {
     // ─── Build the rep lookup tables — identical construction to
     // resolveUserId in attendees/upload/route.ts, adapted for a single-value
     // (not multi-owner) cell since master account list reps are one-per-row. ───
-    const [userRows, usersWithConfig] = await Promise.all([
+    const [userRows, usersWithConfig, servicesOptions, territoryRows] = await Promise.all([
       db.execute({ sql: `SELECT id, value FROM config_options WHERE category = ?`, args: ['user'] }),
       db.execute({ sql: `SELECT config_id, display_name, email FROM users WHERE config_id IS NOT NULL`, args: [] }),
+      getConfigOptionValues('services', db),
+      db.execute({ sql: `SELECT id, name FROM sales_territories`, args: [] }),
     ]);
+
+    // Territory name → id, exact case-insensitive match (small, fixed list —
+    // no fuzzy matching needed, unlike services/company_type which come from
+    // free-text CSV values against a larger canonical config_options list).
+    const territoryByName = new Map<string, number>();
+    for (const r of territoryRows.rows) {
+      const name = String(r.name ?? '').trim();
+      if (name) territoryByName.set(name.toLowerCase(), Number(r.id));
+    }
 
     const userOptions: Array<{ id: number; value: string }> = userRows.rows.map(r => ({
       id: Number(r.id),
@@ -185,6 +201,11 @@ export async function POST(request: NextRequest) {
       assignedRepId: number | null;
       assignedRepName: string | null;
       hqState: string | null;
+      territoryId: number | null;
+      territoryName: string | null;
+      entityStructure: string | null;
+      services: string | null;
+      wse: number | null;
       rawRow: Record<string, unknown>;
     }
 
@@ -199,6 +220,10 @@ export async function POST(request: NextRequest) {
       const website = mapping.website ? String(row[mapping.website] ?? '').trim() || null : null;
       const repRaw = mapping.assignedRep ? String(row[mapping.assignedRep] ?? '').trim() : '';
       const hqState = mapping.hqState ? String(row[mapping.hqState] ?? '').trim() || null : null;
+      const territoryRaw = mapping.territory ? String(row[mapping.territory] ?? '').trim() || null : null;
+      const entityStructureRaw = mapping.entityStructure ? String(row[mapping.entityStructure] ?? '').trim() || null : null;
+      const servicesRaw = mapping.services ? String(row[mapping.services] ?? '').trim() || null : null;
+      const unitsRaw = mapping.units ? String(row[mapping.units] ?? '').trim() : '';
 
       let assignedRepId: number | null = null;
       let assignedRepName: string | null = null;
@@ -214,6 +239,24 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      const territoryId = territoryRaw ? territoryByName.get(territoryRaw.toLowerCase()) ?? null : null;
+
+      // Same splitter as the conference attendee-list upload route
+      // (app/api/conferences/[id]/attendees/upload/route.ts) — matched
+      // fuzzily against the canonical services config option values.
+      let services: string | null = null;
+      if (servicesRaw && servicesOptions.length > 0) {
+        const matched = servicesRaw.split(/[;,:\\/|]+|\s+-\s+/).map(s => s.trim()).filter(Boolean)
+          .map(s => matchConfigOption(s, servicesOptions)).filter((v): v is string => v !== null);
+        services = matched.length > 0 ? matched.join(',') : null;
+      }
+
+      let wse: number | null = null;
+      if (unitsRaw) {
+        const parsed = parseInt(unitsRaw, 10);
+        if (!isNaN(parsed) && parsed >= 0) wse = parsed;
+      }
+
       processedRows.push({
         companyName,
         companyNameNormalized: deepNormalizeCompanyName(companyName),
@@ -222,6 +265,11 @@ export async function POST(request: NextRequest) {
         assignedRepId,
         assignedRepName,
         hqState,
+        territoryId,
+        territoryName: territoryRaw,
+        entityStructure: entityStructureRaw,
+        services,
+        wse,
         rawRow: row,
       });
     }
@@ -260,11 +308,13 @@ export async function POST(request: NextRequest) {
     if (uploadMode === 'replace') {
       const insertStmts = processedRows.map(r => ({
         sql: `INSERT INTO master_account_list
-                (upload_id, company_name, company_name_normalized, website, domain, assigned_rep_id, assigned_rep_name, hq_state, raw_row)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                (upload_id, company_name, company_name_normalized, website, domain, assigned_rep_id, assigned_rep_name, hq_state,
+                 territory_id, territory_name, entity_structure, services, wse, raw_row)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           uploadId, r.companyName, r.companyNameNormalized, r.website, r.domain,
-          r.assignedRepId, r.assignedRepName, r.hqState, JSON.stringify(r.rawRow),
+          r.assignedRepId, r.assignedRepName, r.hqState,
+          r.territoryId, r.territoryName, r.entityStructure, r.services, r.wse, JSON.stringify(r.rawRow),
         ] as (string | number | null)[],
       }));
       await batchExec(db, insertStmts);
@@ -272,12 +322,16 @@ export async function POST(request: NextRequest) {
       // merge: match against every currently-active row (across all active
       // uploads, not just the most recent one) by normalized company name.
       const activeRows = await db.execute({
-        sql: `SELECT id, company_name_normalized, website, domain, assigned_rep_id, assigned_rep_name, hq_state
+        sql: `SELECT id, company_name_normalized, website, domain, assigned_rep_id, assigned_rep_name, hq_state,
+                     territory_id, territory_name, entity_structure, services, wse
               FROM master_account_list
               WHERE upload_id IN (SELECT id FROM master_account_list_uploads WHERE status = 'active' AND id != ?)`,
         args: [uploadId],
       });
-      const existingByNormalized = new Map<string, { id: number; website: string | null; domain: string | null; assignedRepId: number | null; assignedRepName: string | null; hqState: string | null }>();
+      const existingByNormalized = new Map<string, {
+        id: number; website: string | null; domain: string | null; assignedRepId: number | null; assignedRepName: string | null; hqState: string | null;
+        territoryId: number | null; territoryName: string | null; entityStructure: string | null; services: string | null; wse: number | null;
+      }>();
       for (const r of activeRows.rows) {
         existingByNormalized.set(String(r.company_name_normalized), {
           id: Number(r.id),
@@ -286,6 +340,11 @@ export async function POST(request: NextRequest) {
           assignedRepId: r.assigned_rep_id != null ? Number(r.assigned_rep_id) : null,
           assignedRepName: r.assigned_rep_name != null ? String(r.assigned_rep_name) : null,
           hqState: r.hq_state != null ? String(r.hq_state) : null,
+          territoryId: r.territory_id != null ? Number(r.territory_id) : null,
+          territoryName: r.territory_name != null ? String(r.territory_name) : null,
+          entityStructure: r.entity_structure != null ? String(r.entity_structure) : null,
+          services: r.services != null ? String(r.services) : null,
+          wse: r.wse != null ? Number(r.wse) : null,
         });
       }
 
@@ -299,9 +358,13 @@ export async function POST(request: NextRequest) {
           added++;
           insertStmts.push({
             sql: `INSERT INTO master_account_list
-                    (upload_id, company_name, company_name_normalized, website, domain, assigned_rep_id, assigned_rep_name, hq_state, raw_row)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            args: [uploadId, r.companyName, r.companyNameNormalized, r.website, r.domain, r.assignedRepId, r.assignedRepName, r.hqState, JSON.stringify(r.rawRow)],
+                    (upload_id, company_name, company_name_normalized, website, domain, assigned_rep_id, assigned_rep_name, hq_state,
+                     territory_id, territory_name, entity_structure, services, wse, raw_row)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            args: [
+              uploadId, r.companyName, r.companyNameNormalized, r.website, r.domain, r.assignedRepId, r.assignedRepName, r.hqState,
+              r.territoryId, r.territoryName, r.entityStructure, r.services, r.wse, JSON.stringify(r.rawRow),
+            ],
           });
           continue;
         }
@@ -310,16 +373,25 @@ export async function POST(request: NextRequest) {
           || existing.domain !== r.domain
           || existing.assignedRepId !== r.assignedRepId
           || existing.assignedRepName !== r.assignedRepName
-          || existing.hqState !== r.hqState;
+          || existing.hqState !== r.hqState
+          || existing.territoryId !== r.territoryId
+          || existing.territoryName !== r.territoryName
+          || existing.entityStructure !== r.entityStructure
+          || existing.services !== r.services
+          || existing.wse !== r.wse;
 
         if (!changed) { unchanged++; continue; }
 
         updated++;
         updateStmts.push({
           sql: `UPDATE master_account_list
-                SET company_name = ?, website = ?, domain = ?, assigned_rep_id = ?, assigned_rep_name = ?, hq_state = ?, raw_row = ?, updated_at = datetime('now')
+                SET company_name = ?, website = ?, domain = ?, assigned_rep_id = ?, assigned_rep_name = ?, hq_state = ?,
+                    territory_id = ?, territory_name = ?, entity_structure = ?, services = ?, wse = ?, raw_row = ?, updated_at = datetime('now')
                 WHERE id = ?`,
-          args: [r.companyName, r.website, r.domain, r.assignedRepId, r.assignedRepName, r.hqState, JSON.stringify(r.rawRow), existing.id],
+          args: [
+            r.companyName, r.website, r.domain, r.assignedRepId, r.assignedRepName, r.hqState,
+            r.territoryId, r.territoryName, r.entityStructure, r.services, r.wse, JSON.stringify(r.rawRow), existing.id,
+          ],
         });
       }
 

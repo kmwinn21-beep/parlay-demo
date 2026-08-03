@@ -169,6 +169,10 @@ export async function POST(
       assignedRepId: number | null;
       assignedRepName: string | null;
       hqState: string | null;
+      territoryId: number | null;
+      entityStructure: string | null;
+      services: string | null;
+      wse: number | null;
     }
 
     const masterByDomain = new Map<string, MasterAccountRow>();
@@ -186,7 +190,8 @@ export async function POST(
       const placeholders = ids.map(() => '?').join(',');
 
       const masterRows = await db.execute({
-        sql: `SELECT company_name_normalized, domain, assigned_rep_id, assigned_rep_name, hq_state
+        sql: `SELECT company_name_normalized, domain, assigned_rep_id, assigned_rep_name, hq_state,
+                     territory_id, entity_structure, services, wse
               FROM master_account_list
               WHERE upload_id IN (${placeholders})`,
         args: ids,
@@ -199,6 +204,10 @@ export async function POST(
           assignedRepId: row.assigned_rep_id != null ? Number(row.assigned_rep_id) : null,
           assignedRepName: row.assigned_rep_name != null ? String(row.assigned_rep_name) : null,
           hqState: row.hq_state != null ? String(row.hq_state) : null,
+          territoryId: row.territory_id != null ? Number(row.territory_id) : null,
+          entityStructure: row.entity_structure != null ? String(row.entity_structure) : null,
+          services: row.services != null ? String(row.services) : null,
+          wse: row.wse != null ? Number(row.wse) : null,
         };
         if (entry.domain) {
           masterByDomain.set(entry.domain.toLowerCase(), entry);
@@ -312,6 +321,19 @@ export async function POST(
       return { assignedRepId: null, assignedRepName: null, source: 'unresolved' };
     };
 
+    // Domain match (preferred), falling back to normalized-name match — same
+    // precedence as resolveMasterAccountRep, but for the non-rep company
+    // fields (Territory / Entity Structure / Services / Units) that have no
+    // CSV column of their own today, so the master account list is their
+    // only upload-time source rather than one of several fallback tiers.
+    const lookupMasterAccountFields = (companyNameNormalized: string, domain: string | null): MasterAccountRow | null => {
+      if (domain) {
+        const domainMatch = masterByDomain.get(domain.toLowerCase());
+        if (domainMatch) return domainMatch;
+      }
+      return masterByNormalizedName.get(companyNameNormalized) ?? null;
+    };
+
     const mappingJson = formData.get('mapping') as string | null;
     const mapping: ColumnMapping | null = mappingJson ? JSON.parse(mappingJson) as ColumnMapping : null;
 
@@ -415,7 +437,7 @@ export async function POST(
 
     // Load all existing companies and attendees for matching
     const [existingCoRes, existingAtRes] = await Promise.all([
-      db.execute({ sql: 'SELECT id, name, website, parent_company_id, company_type, wse, services, assigned_user, hq_state FROM companies', args: [] }),
+      db.execute({ sql: 'SELECT id, name, website, parent_company_id, company_type, wse, services, assigned_user, hq_state, entity_structure, territory_id FROM companies', args: [] }),
       db.execute({
         sql: `SELECT a.id, a.first_name, a.last_name, a.email,
                      c.name AS company_name, c.website AS company_website
@@ -426,7 +448,7 @@ export async function POST(
     ]);
 
     // Build company lookup (exact + normalised + domain + fuzzy)
-    type CoRow = { id: number; name: string; website?: string | null; parent_company_id?: number | null; company_type?: string | null; wse?: number | null; services?: string | null; assigned_user?: string | null; hq_state?: string | null };
+    type CoRow = { id: number; name: string; website?: string | null; parent_company_id?: number | null; company_type?: string | null; wse?: number | null; services?: string | null; assigned_user?: string | null; hq_state?: string | null; entity_structure?: string | null; territory_id?: number | null };
     const existingCompanies: CoRow[] = existingCoRes.rows.map((r) => ({
       id: Number(r.id),
       name: String(r.name ?? ''),
@@ -437,6 +459,8 @@ export async function POST(
       services: r.services ? String(r.services) : null,
       assigned_user: r.assigned_user ? String(r.assigned_user) : null,
       hq_state: r.hq_state ? String(r.hq_state) : null,
+      entity_structure: r.entity_structure ? String(r.entity_structure) : null,
+      territory_id: r.territory_id ? Number(r.territory_id) : null,
     }));
     const companyMatcher = buildCompanyMatcher(existingCompanies);
 
@@ -459,6 +483,11 @@ export async function POST(
       services?: string;
       icp?: string;
       industry?: string;
+      /** Master-account-list fallback only — no CSV column maps to these
+       * today (see lib/columnMapping.ts), so the master account list is
+       * their only upload-time source rather than one of several tiers. */
+      entityStructure?: string;
+      territoryId?: number;
     };
     const companyEntries = new Map<string, CompanyEntry>();
     for (const p of valid) {
@@ -533,9 +562,6 @@ export async function POST(
     const hasFallbackData = masterByDomain.size > 0 || masterByNormalizedName.size > 0 || territoryByState.size > 0;
     if (hasFallbackData) {
       companyEntries.forEach((entry, coName) => {
-        const shouldUseFallback = !entry.assigned_user_supplied || entry.has_unresolved_assigned_user;
-        if (!shouldUseFallback) return;
-
         const coId = companyIdCache.get(coName);
         const existingCompany = coId && coId > 0 ? existingCompanies.find(c => c.id === coId) : undefined;
 
@@ -543,14 +569,17 @@ export async function POST(
         const normalizedName = deepNormalizeCompanyName(entry.name);
         const hqState = entry.hqState || existingCompany?.hq_state || null;
 
-        const resolution = resolveMasterAccountRep(normalizedName, companyDomain, hqState);
-        if (resolution.assignedRepId !== null) {
-          entry.assigned_user = String(resolution.assignedRepId);
-          entry.assigned_user_source = resolution.source as CompanyEntry['assigned_user_source'];
-          // A fallback-resolved rep is a real resolution — clear the
-          // unresolved flag so the write path (and match report) don't also
-          // treat this as a failure alongside the successful fallback.
-          entry.has_unresolved_assigned_user = false;
+        const shouldUseFallback = !entry.assigned_user_supplied || entry.has_unresolved_assigned_user;
+        if (shouldUseFallback) {
+          const resolution = resolveMasterAccountRep(normalizedName, companyDomain, hqState);
+          if (resolution.assignedRepId !== null) {
+            entry.assigned_user = String(resolution.assignedRepId);
+            entry.assigned_user_source = resolution.source as CompanyEntry['assigned_user_source'];
+            // A fallback-resolved rep is a real resolution — clear the
+            // unresolved flag so the write path (and match report) don't also
+            // treat this as a failure alongside the successful fallback.
+            entry.has_unresolved_assigned_user = false;
+          }
         }
         // Opportunistically pick up hqState from the matched existing
         // company too, so it flows into the write path below even when it
@@ -558,6 +587,28 @@ export async function POST(
         // the file also happened to omit state and the company has one on
         // file already — keep it rather than clobbering with null on write).
         if (!entry.hqState && existingCompany?.hq_state) entry.hqState = existingCompany.hq_state;
+
+        // Territory / Entity Structure / Services / Units: no CSV column
+        // maps to these (Territory and Entity Structure have never had one;
+        // Services/Units backfill only when the file itself supplied
+        // nothing), so this runs regardless of whether a rep needed
+        // resolving — the master account list is the only upload-time
+        // source for them, not a last-resort fallback tier.
+        const masterFields = lookupMasterAccountFields(normalizedName, companyDomain);
+        if (masterFields) {
+          if (entry.territoryId == null && existingCompany?.territory_id == null && masterFields.territoryId != null) {
+            entry.territoryId = masterFields.territoryId;
+          }
+          if (!entry.entityStructure && !existingCompany?.entity_structure && masterFields.entityStructure) {
+            entry.entityStructure = masterFields.entityStructure;
+          }
+          if (!entry.services && !existingCompany?.services && masterFields.services) {
+            entry.services = masterFields.services;
+          }
+          if (!entry.wse && !existingCompany?.wse && masterFields.wse) {
+            entry.wse = masterFields.wse;
+          }
+        }
       });
     }
 
@@ -610,7 +661,7 @@ export async function POST(
     // Update existing matched companies with CSV-provided fields
     const existingToUpdate = Array.from(companyEntries.entries()).filter(([n, entry]) => {
       const id = companyIdCache.get(n);
-      return id !== undefined && id > 0 && (entry.company_type || entry.assigned_user || entry.website || entry.wse || entry.services || entry.hqState);
+      return id !== undefined && id > 0 && (entry.company_type || entry.assigned_user || entry.website || entry.wse || entry.services || entry.hqState || entry.entityStructure || entry.territoryId != null);
     });
     if (existingToUpdate.length > 0) {
       const updateStmts: { sql: string; args: (string | number | null)[] }[] = [];
@@ -638,6 +689,8 @@ export async function POST(
         addCoField('wse', 'wse', entry.wse ?? null);
         addCoField('industry', 'industry', entry.industry || null);
         addCoField('hq_state', 'hq_state', entry.hqState || null);
+        addCoField('entity_structure', 'entity_structure', entry.entityStructure || null);
+        addCoField('territory_id', 'territory_id', entry.territoryId ?? null);
 
         // assigned_user: preserve if already has valid user (no conflict resolution for this field)
         const existingValidUserIds = existingCompany?.assigned_user
@@ -689,9 +742,11 @@ export async function POST(
         const services = entry.services || null;
         const industry = entry.industry || null;
         const hqState = entry.hqState || null;
+        const entityStructure = entry.entityStructure || null;
+        const territoryId = entry.territoryId ?? null;
         return {
-          sql: 'INSERT INTO companies (name, company_type, website, assigned_user, wse, services, industry, hq_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
-          args: [n, detectedType || null, website, assignedUser, wse, services, industry, hqState],
+          sql: 'INSERT INTO companies (name, company_type, website, assigned_user, wse, services, industry, hq_state, entity_structure, territory_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+          args: [n, detectedType || null, website, assignedUser, wse, services, industry, hqState, entityStructure, territoryId],
         };
       });
       for (let i = 0; i < newCoNames.length; i++) {
