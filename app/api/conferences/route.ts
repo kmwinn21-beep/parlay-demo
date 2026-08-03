@@ -14,6 +14,8 @@ import {
   matchCompany,
   matchAttendee,
   confirmAttendeeMatch,
+  deepNormalizeCompanyName,
+  extractDomainFromWebsite,
 } from '@/lib/matching';
 import { computeConferenceStage, type ConferenceStage } from '@/lib/conference-stage';
 import { getInitials } from '@/lib/initials';
@@ -441,7 +443,7 @@ export async function POST(request: NextRequest) {
         const run = async (bgJobId?: string): Promise<number> => {
         // ── Step 1: Load ALL existing companies and attendees in two queries ──
         const [existingCoRes, existingAtRes, userRows, usersWithConfig] = await Promise.all([
-          db.execute({ sql: 'SELECT id, name, website, parent_company_id, assigned_user FROM companies', args: [] }),
+          db.execute({ sql: 'SELECT id, name, website, parent_company_id, assigned_user, hq_state, wse, services, entity_structure, territory_id FROM companies', args: [] }),
           db.execute({
             sql: `SELECT a.id, a.first_name, a.last_name, a.email,
                          c.name AS company_name, c.website AS company_website
@@ -523,14 +525,125 @@ export async function POST(request: NextRequest) {
           return Array.from(ids).join(',');
         };
 
+        // ── Step 1c: Master account list + territory fallback lookup ──
+        // Same construction as app/api/conferences/[id]/attendees/upload/route.ts —
+        // used both to fill in a missing/unresolved assigned rep and to backfill
+        // Territory/Entity Structure/Services/Units, which have no CSV column of
+        // their own, when the uploaded file and the existing company both leave
+        // them blank.
+        const configIdToDisplayName = new Map<number, string>();
+        for (const r of usersWithConfig.rows) {
+          const id = Number(r.config_id);
+          const display = String(r.display_name ?? '').trim();
+          if (id && display) configIdToDisplayName.set(id, display);
+        }
+
+        interface MasterAccountRow {
+          companyNameNormalized: string;
+          domain: string | null;
+          assignedRepId: number | null;
+          assignedRepName: string | null;
+          hqState: string | null;
+          territoryId: number | null;
+          entityStructure: string | null;
+          services: string | null;
+          wse: number | null;
+        }
+        const masterByDomain = new Map<string, MasterAccountRow>();
+        const masterByNormalizedName = new Map<string, MasterAccountRow | null>();
+
+        const activeUploadIds = await db.execute({
+          sql: `SELECT id FROM master_account_list_uploads WHERE status = 'active'`,
+          args: [],
+        });
+        if (activeUploadIds.rows.length > 0) {
+          const ids = activeUploadIds.rows.map(r => Number(r.id));
+          const placeholders = ids.map(() => '?').join(',');
+          const masterRows = await db.execute({
+            sql: `SELECT company_name_normalized, domain, assigned_rep_id, assigned_rep_name, hq_state,
+                         territory_id, entity_structure, services, wse
+                  FROM master_account_list
+                  WHERE upload_id IN (${placeholders})`,
+            args: ids,
+          });
+          for (const row of masterRows.rows) {
+            const entry: MasterAccountRow = {
+              companyNameNormalized: String(row.company_name_normalized),
+              domain: row.domain != null ? String(row.domain) : null,
+              assignedRepId: row.assigned_rep_id != null ? Number(row.assigned_rep_id) : null,
+              assignedRepName: row.assigned_rep_name != null ? String(row.assigned_rep_name) : null,
+              hqState: row.hq_state != null ? String(row.hq_state) : null,
+              territoryId: row.territory_id != null ? Number(row.territory_id) : null,
+              entityStructure: row.entity_structure != null ? String(row.entity_structure) : null,
+              services: row.services != null ? String(row.services) : null,
+              wse: row.wse != null ? Number(row.wse) : null,
+            };
+            if (entry.domain) masterByDomain.set(entry.domain.toLowerCase(), entry);
+            if (masterByNormalizedName.has(entry.companyNameNormalized)) {
+              masterByNormalizedName.set(entry.companyNameNormalized, null);
+            } else {
+              masterByNormalizedName.set(entry.companyNameNormalized, entry);
+            }
+          }
+        }
+
+        const territoryByState = new Map<string, number>();
+        const territories = await db.execute({ sql: `SELECT state_codes, assigned_user_ids FROM sales_territories`, args: [] });
+        for (const terr of territories.rows) {
+          let stateCodes: string[] = [];
+          let userIds: number[] = [];
+          try {
+            stateCodes = JSON.parse(String(terr.state_codes ?? '[]'));
+            userIds = JSON.parse(String(terr.assigned_user_ids ?? '[]'));
+          } catch { continue; }
+          if (!Array.isArray(stateCodes) || !Array.isArray(userIds) || userIds.length !== 1) continue;
+          for (const state of stateCodes) territoryByState.set(String(state).toUpperCase(), Number(userIds[0]));
+        }
+
+        interface MasterRepResolution {
+          assignedRepId: number | null;
+          assignedRepName: string | null;
+        }
+        const resolveMasterAccountRep = (companyNameNormalized: string, domain: string | null, hqState: string | null): MasterRepResolution => {
+          if (domain) {
+            const domainMatch = masterByDomain.get(domain.toLowerCase());
+            if (domainMatch && domainMatch.assignedRepId !== null) {
+              return { assignedRepId: domainMatch.assignedRepId, assignedRepName: domainMatch.assignedRepName };
+            }
+          }
+          const nameMatch = masterByNormalizedName.get(companyNameNormalized);
+          if (nameMatch != null && nameMatch.assignedRepId !== null) {
+            return { assignedRepId: nameMatch.assignedRepId, assignedRepName: nameMatch.assignedRepName };
+          }
+          if (hqState) {
+            const terrRepId = territoryByState.get(hqState.toUpperCase());
+            if (terrRepId !== undefined) {
+              return { assignedRepId: terrRepId, assignedRepName: configIdToDisplayName.get(terrRepId) ?? null };
+            }
+          }
+          return { assignedRepId: null, assignedRepName: null };
+        };
+        const lookupMasterAccountFields = (companyNameNormalized: string, domain: string | null): MasterAccountRow | null => {
+          if (domain) {
+            const domainMatch = masterByDomain.get(domain.toLowerCase());
+            if (domainMatch) return domainMatch;
+          }
+          return masterByNormalizedName.get(companyNameNormalized) ?? null;
+        };
+
         // ── Step 2: Build company lookup (exact + normalised + fuzzy) ──
-        type CoRow = { id: number; name: string; website?: string | null; parent_company_id?: number | null; assigned_user?: string | null };
+        type CoRow = { id: number; name: string; website?: string | null; parent_company_id?: number | null; assigned_user?: string | null; hq_state?: string | null; wse?: number | null; services?: string | null; entity_structure?: string | null; territory_id?: number | null };
         const existingCompanies: CoRow[] = existingCoRes.rows.map((r) => ({
           id: Number(r.id),
           name: String(r.name ?? ''),
           website: r.website ? String(r.website) : null,
           parent_company_id: r.parent_company_id ? Number(r.parent_company_id) : null,
           assigned_user: r.assigned_user ? String(r.assigned_user) : null,
+          hq_state: r.hq_state ? String(r.hq_state) : null,
+          wse: r.wse ? Number(r.wse) : null,
+          services: r.services ? String(r.services) : null,
+          entity_structure: r.entity_structure ? String(r.entity_structure) : null,
+          territory_id: r.territory_id ? Number(r.territory_id) : null,
         }));
         const companyMatcher = buildCompanyMatcher(existingCompanies);
 
@@ -542,6 +655,9 @@ export async function POST(request: NextRequest) {
         const companyWseMap = new Map<string, number>(); // company name -> wse from file
         const companyServicesMap = new Map<string, string>(); // company name -> services from file
         const companyIcpMap = new Map<string, string>(); // company name -> icp from file
+        const companyHqStateMap = new Map<string, string>(); // company name -> HQ state, from file or master-account fallback
+        const companyTerritoryIdMap = new Map<string, number>(); // company name -> territory_id, master-account fallback only
+        const companyEntityStructureMap = new Map<string, string>(); // company name -> entity_structure, master-account fallback only
         const companyNameSet = new Set<string>();
         valid.forEach((p) => {
           if (p.company?.trim()) {
@@ -566,6 +682,9 @@ export async function POST(request: NextRequest) {
             if (p.icp?.trim() && !companyIcpMap.has(p.company.trim())) {
               companyIcpMap.set(p.company.trim(), p.icp.trim());
             }
+            if (p.state?.trim() && !companyHqStateMap.has(p.company.trim())) {
+              companyHqStateMap.set(p.company.trim(), p.state.trim());
+            }
           }
         });
         const uniqueCompanyNames = Array.from(companyNameSet);
@@ -576,6 +695,38 @@ export async function POST(request: NextRequest) {
             companyIdCache.set(coName, hit.match.id);
           } else {
             companyIdCache.set(coName, -1); // new company
+          }
+        }
+
+        // ── Step 2a2: Master account / territory fallback — fills a missing
+        // assigned rep, and backfills Territory/Entity Structure/Services/Units
+        // when the file and the matched existing company both leave them blank.
+        // Territory and Entity Structure have no CSV column of their own.
+        const hasFallbackData = masterByDomain.size > 0 || masterByNormalizedName.size > 0 || territoryByState.size > 0;
+        if (hasFallbackData) {
+          for (const coName of uniqueCompanyNames) {
+            const coId = companyIdCache.get(coName);
+            const existingCompany = coId && coId > 0 ? existingCompanies.find(c => c.id === coId) : undefined;
+            const website = companyWebsiteMap.get(coName) || existingCompany?.website || undefined;
+            const companyDomain = website ? extractDomainFromWebsite(website) : null;
+            const normalizedName = deepNormalizeCompanyName(coName);
+            const hqState = companyHqStateMap.get(coName) || existingCompany?.hq_state || null;
+
+            const hasAssignedUser = companyAssignedUserMap.has(coName)
+              || (existingCompany?.assigned_user ? existingCompany.assigned_user.split(',').map(s => parseInt(s.trim(), 10)).some(n => !isNaN(n) && n > 0) : false);
+            if (!hasAssignedUser) {
+              const resolution = resolveMasterAccountRep(normalizedName, companyDomain, hqState);
+              if (resolution.assignedRepId !== null) companyAssignedUserMap.set(coName, String(resolution.assignedRepId));
+            }
+
+            const masterFields = lookupMasterAccountFields(normalizedName, companyDomain);
+            if (masterFields) {
+              if (!companyHqStateMap.has(coName) && !existingCompany?.hq_state && masterFields.hqState) companyHqStateMap.set(coName, masterFields.hqState);
+              if (existingCompany?.territory_id == null && masterFields.territoryId != null) companyTerritoryIdMap.set(coName, masterFields.territoryId);
+              if (!existingCompany?.entity_structure && masterFields.entityStructure) companyEntityStructureMap.set(coName, masterFields.entityStructure);
+              if (!companyServicesMap.has(coName) && !existingCompany?.services && masterFields.services) companyServicesMap.set(coName, masterFields.services);
+              if (!companyWseMap.has(coName) && !existingCompany?.wse && masterFields.wse) companyWseMap.set(coName, masterFields.wse);
+            }
           }
         }
 
@@ -606,7 +757,7 @@ export async function POST(request: NextRequest) {
         // ── Step 3a: Update existing companies with CSV-provided fields ──
         const existingToUpdate = uniqueCompanyNames.filter((n) => {
           const id = companyIdCache.get(n);
-          return id !== undefined && id > 0 && (companyTypeMap.has(n) || companyAssignedUserMap.has(n) || companyWebsiteMap.has(n) || companyWseMap.has(n) || companyServicesMap.has(n));
+          return id !== undefined && id > 0 && (companyTypeMap.has(n) || companyAssignedUserMap.has(n) || companyWebsiteMap.has(n) || companyWseMap.has(n) || companyServicesMap.has(n) || companyHqStateMap.has(n) || companyTerritoryIdMap.has(n) || companyEntityStructureMap.has(n));
         });
         if (existingToUpdate.length > 0) {
           await batchInsert(db, existingToUpdate, (n) => {
@@ -623,9 +774,16 @@ export async function POST(request: NextRequest) {
                 assigned_user = COALESCE(?, assigned_user),
                 website = COALESCE(?, website),
                 wse = COALESCE(?, wse),
-                services = COALESCE(?, services)
+                services = COALESCE(?, services),
+                hq_state = COALESCE(?, hq_state),
+                territory_id = COALESCE(?, territory_id),
+                entity_structure = COALESCE(?, entity_structure)
                 WHERE id = ?`,
-              args: [companyTypeMap.get(n) || null, assignedUserArg, companyWebsiteMap.get(n) || null, companyWseMap.get(n) ?? null, companyServicesMap.get(n) || null, coId],
+              args: [
+                companyTypeMap.get(n) || null, assignedUserArg, companyWebsiteMap.get(n) || null, companyWseMap.get(n) ?? null, companyServicesMap.get(n) || null,
+                companyHqStateMap.get(n) || null, companyTerritoryIdMap.get(n) ?? null, companyEntityStructureMap.get(n) || null,
+                coId,
+              ],
             };
           });
         }
@@ -639,9 +797,12 @@ export async function POST(request: NextRequest) {
             const website = companyWebsiteMap.get(n) || null;
             const wse = companyWseMap.get(n) ?? null;
             const services = companyServicesMap.get(n) || null;
+            const hqState = companyHqStateMap.get(n) || null;
+            const territoryId = companyTerritoryIdMap.get(n) ?? null;
+            const entityStructure = companyEntityStructureMap.get(n) || null;
             return {
-              sql: 'INSERT INTO companies (name, company_type, assigned_user, website, wse, services) VALUES (?, ?, ?, ?, ?, ?) RETURNING id',
-              args: [n, detectedType || null, assignedUser, website, wse, services],
+              sql: 'INSERT INTO companies (name, company_type, assigned_user, website, wse, services, hq_state, territory_id, entity_structure) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+              args: [n, detectedType || null, assignedUser, website, wse, services, hqState, territoryId, entityStructure],
             };
           });
           for (let i = 0; i < newCoNames.length; i++) {
