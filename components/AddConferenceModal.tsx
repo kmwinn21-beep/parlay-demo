@@ -85,13 +85,13 @@ export function AddConferenceModal({ planYear, onClose, onCreated }: AddConferen
       style={{ background: 'rgba(0,0,0,0.5)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-white w-full sm:max-w-sm flex flex-col rounded-t-2xl sm:rounded-2xl shadow-2xl">
-        <div className="px-5 py-4 border-b border-gray-200">
+      <div className="bg-white w-full sm:max-w-sm flex flex-col rounded-t-2xl sm:rounded-2xl shadow-2xl h-[50vh] sm:h-auto">
+        <div className="px-5 py-4 border-b border-gray-200 flex-shrink-0">
           <h2 className="text-base font-bold text-brand-primary font-serif">Add to Plan</h2>
           <p className="text-xs text-gray-500 mt-0.5">FY{planYear} · New — never attended (Evaluating)</p>
         </div>
 
-        <div className="px-5 py-4 space-y-4">
+        <div className="px-5 py-4 space-y-4 flex-1 overflow-y-auto">
           <div>
             <label className="label">Conference Name *</label>
             <input
@@ -112,7 +112,7 @@ export function AddConferenceModal({ planYear, onClose, onCreated }: AddConferen
           />
         </div>
 
-        <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-gray-200">
+        <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-gray-200 flex-shrink-0">
           <button type="button" onClick={onClose} className="btn-secondary text-sm" disabled={isSubmitting}>Cancel</button>
           <button type="button" onClick={onSubmit} disabled={isSubmitting} className="btn-primary text-sm">
             {isSubmitting ? 'Adding…' : 'Add to Plan'}

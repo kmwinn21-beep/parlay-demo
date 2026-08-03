@@ -181,7 +181,7 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 overflow-y-auto overflow-x-hidden">
+      <nav className="flex-1 p-4 overflow-y-auto overflow-x-hidden scrollbar-hide">
         {/* Operations section — only visible to non-stakeholders */}
         {!isStakeholder && (
           <>

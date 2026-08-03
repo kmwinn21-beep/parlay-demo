@@ -10,6 +10,7 @@ import { ConferenceBudgetDrawer } from '@/components/ConferenceBudgetDrawer';
 import { CalendarIntelligenceDrawer } from '@/components/CalendarIntelligenceDrawer';
 import { ConferenceInputPanel } from '@/components/ConferenceInputPanel';
 import { ProgramPlannerPlanView } from '@/components/ProgramPlannerPlanView';
+import { MobileStatCarousel } from '@/components/MobileStatCarousel';
 import { getCalendarStore, subscribeCalendarStore, startCalendarScoring, setCalendarScoringPriority } from '@/lib/calendarIntelligenceStore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -701,58 +702,60 @@ export default function ProgramPlannerPage() {
               </button>
             </div>
             <div className={`grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 sm:grid ${statsOpen ? 'grid' : 'hidden'}`}>
-              {/* Conferences attended */}
-              <div className="card text-center">
-                <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Conferences attended</p>
-                <p className="text-3xl font-bold text-brand-primary">{summary?.conferencesAttended ?? 0}</p>
-              </div>
+              <MobileStatCarousel>
+                {/* Conferences attended */}
+                <div className="card text-center">
+                  <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Conferences attended</p>
+                  <p className="text-3xl font-bold text-brand-primary">{summary?.conferencesAttended ?? 0}</p>
+                </div>
 
-              {/* Total actual spend */}
-              <div className="card text-center">
-                <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Total actual spend</p>
-                <p className="text-2xl font-bold text-brand-primary">{fmtCurrency(summary?.totalActualSpend)}</p>
-                {summary && summary.totalBudget > 0 && (
-                  <>
-                    <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-brand-secondary rounded-full"
-                        style={{ width: `${Math.min(summary.budgetUtilizationPercent, 100)}%` }}
-                      />
-                    </div>
-                    <p className="text-[10px] text-gray-400 mt-1">{summary.budgetUtilizationPercent}% of {fmtCurrency(summary.totalBudget)} budget</p>
-                  </>
-                )}
-              </div>
+                {/* Total actual spend */}
+                <div className="card text-center">
+                  <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Total actual spend</p>
+                  <p className="text-2xl font-bold text-brand-primary">{fmtCurrency(summary?.totalActualSpend)}</p>
+                  {summary && summary.totalBudget > 0 && (
+                    <>
+                      <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-brand-secondary rounded-full"
+                          style={{ width: `${Math.min(summary.budgetUtilizationPercent, 100)}%` }}
+                        />
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-1">{summary.budgetUtilizationPercent}% of {fmtCurrency(summary.totalBudget)} budget</p>
+                    </>
+                  )}
+                </div>
 
-              {/* Avg cost */}
-              <div className="card text-center">
-                <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Avg cost per conference</p>
-                <p className="text-2xl font-bold text-brand-primary">{fmtCurrency(summary?.avgCostPerConference)}</p>
-              </div>
+                {/* Avg cost */}
+                <div className="card text-center">
+                  <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Avg cost per conference</p>
+                  <p className="text-2xl font-bold text-brand-primary">{fmtCurrency(summary?.avgCostPerConference)}</p>
+                </div>
 
-              {/* Total closed/won */}
-              <div className="card text-center">
-                <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Total closed/won</p>
-                <p className="text-2xl font-bold text-green-600">{fmtCurrency(summary?.totalClosedWon)}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">Conference attributed</p>
-              </div>
+                {/* Total closed/won */}
+                <div className="card text-center">
+                  <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Total closed/won</p>
+                  <p className="text-2xl font-bold text-green-600">{fmtCurrency(summary?.totalClosedWon)}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">Conference attributed</p>
+                </div>
 
-              {/* Avg closed/won */}
-              <div className="card text-center">
-                <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Avg closed/won per conf</p>
-                <p className="text-2xl font-bold text-green-600">{fmtCurrency(summary?.avgClosedWonPerConference)}</p>
-              </div>
+                {/* Avg closed/won */}
+                <div className="card text-center">
+                  <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Avg closed/won per conf</p>
+                  <p className="text-2xl font-bold text-green-600">{fmtCurrency(summary?.avgClosedWonPerConference)}</p>
+                </div>
 
-              {/* Avg CES */}
-              <div className="card text-center">
-                <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Avg CES score</p>
-                <p className={`text-3xl font-bold ${cesColor(summary?.avgCES ?? null)}`}>
-                  {summary?.avgCES != null ? summary.avgCES : '—'}
-                </p>
-                {summary && summary.conferencesScored > 0 && (
-                  <p className="text-[10px] text-gray-400 mt-0.5">Across {summary.conferencesScored} scored</p>
-                )}
-              </div>
+                {/* Avg CES */}
+                <div className="card text-center">
+                  <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Avg CES score</p>
+                  <p className={`text-3xl font-bold ${cesColor(summary?.avgCES ?? null)}`}>
+                    {summary?.avgCES != null ? summary.avgCES : '—'}
+                  </p>
+                  {summary && summary.conferencesScored > 0 && (
+                    <p className="text-[10px] text-gray-400 mt-0.5">Across {summary.conferencesScored} scored</p>
+                  )}
+                </div>
+              </MobileStatCarousel>
             </div>
 
             {/* View toggle */}

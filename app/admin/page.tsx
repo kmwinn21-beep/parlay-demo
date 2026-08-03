@@ -900,6 +900,12 @@ export default function AdminPage() {
   const { planId } = useCapabilities();
   const { onboardingTrack, onboardingProgress } = useOnboarding();
 
+  // Admin Settings tab bar — scroll via chevrons instead of a visible scrollbar
+  const tabBarRef = useRef<HTMLDivElement>(null);
+  const scrollTabBar = (dir: -1 | 1) => {
+    tabBarRef.current?.scrollBy({ left: dir * 160, behavior: 'smooth' });
+  };
+
   // Types tab
   const [optionsByCategory, setOptionsByCategory] = useState<Record<string, ConfigOption[]>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -2155,20 +2161,42 @@ export default function AdminPage() {
         <p className="text-sm text-gray-500 mt-1">Manage dropdown options, table column visibility, and user permissions.</p>
       </div>
 
-      {/* Tab bar */}
-      <div className="border-b border-gray-200 overflow-x-auto">
-        <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
-          {(['types', 'tables', 'sections', 'brand', 'icp', 'products-solutions', 'forms', 'users', 'sales-reps', 'master-accounts', 'email-templates', 'integrations', 'effectiveness', 'usage'] as Tab[]).map(t => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${tab === t ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-            >
-              {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'icp' ? 'ICP' : t === 'products-solutions' ? 'Products & Solutions' : t === 'forms' ? 'Custom Forms' : t === 'users' ? 'User Management' : t === 'sales-reps' ? 'Sales Reps' : t === 'master-accounts' ? 'Master accounts' : t === 'email-templates' ? 'Email Templates' : t === 'effectiveness' ? 'Effectiveness Defaults' : t === 'usage' ? 'Usage' : 'Integrations'}
-            </button>
-          ))}
-        </nav>
+      {/* Tab bar — chevrons scroll it instead of a visible scrollbar */}
+      <div className="flex items-center border-b border-gray-200">
+        <button
+          type="button"
+          onClick={() => scrollTabBar(-1)}
+          className="flex-shrink-0 px-1 py-3 text-gray-400 hover:text-gray-700"
+          aria-label="Scroll tabs left"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <div ref={tabBarRef} className="flex-1 min-w-0 overflow-x-auto scrollbar-hide">
+          <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
+            {(['types', 'tables', 'sections', 'brand', 'icp', 'products-solutions', 'forms', 'users', 'sales-reps', 'master-accounts', 'email-templates', 'integrations', 'effectiveness', 'usage'] as Tab[]).map(t => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${tab === t ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              >
+                {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'icp' ? 'ICP' : t === 'products-solutions' ? 'Products & Solutions' : t === 'forms' ? 'Custom Forms' : t === 'users' ? 'User Management' : t === 'sales-reps' ? 'Sales Reps' : t === 'master-accounts' ? 'Master accounts' : t === 'email-templates' ? 'Email Templates' : t === 'effectiveness' ? 'Effectiveness Defaults' : t === 'usage' ? 'Usage' : 'Integrations'}
+              </button>
+            ))}
+          </nav>
+        </div>
+        <button
+          type="button"
+          onClick={() => scrollTabBar(1)}
+          className="flex-shrink-0 px-1 py-3 text-gray-400 hover:text-gray-700"
+          aria-label="Scroll tabs right"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
       </div>
 
       {/* ── Types tab ── */}

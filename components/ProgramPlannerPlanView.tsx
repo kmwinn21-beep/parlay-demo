@@ -13,6 +13,7 @@ import { getPreset } from '@/lib/colors';
 import { CalendarIntelligenceDrawer } from './CalendarIntelligenceDrawer';
 import { ColumnMappingModal } from './ColumnMappingModal';
 import type { ColumnMapping } from '@/lib/columnMapping';
+import { MobileStatCarousel } from './MobileStatCarousel';
 
 interface BudgetLineItem { label: string; budgeted: number | null; actual: number | null }
 interface PlannedLineItem { label: string; budgeted: number }
@@ -225,17 +226,23 @@ function LegendButton({ territoryOptions }: { territoryOptions: Array<{ id: numb
         ref={buttonRef}
         type="button"
         onClick={openPopover}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors flex-shrink-0"
+        title="Legend"
+        className="inline-flex items-center justify-center gap-1.5 w-9 h-9 sm:w-auto sm:h-auto px-0 sm:px-2.5 py-0 sm:py-1.5 text-xs font-medium bg-brand-accent sm:bg-transparent text-brand-primary sm:text-gray-500 hover:bg-brand-accent/90 sm:hover:bg-gray-50 sm:hover:text-gray-700 rounded-lg transition-colors flex-shrink-0"
       >
         <LegendIcon />
-        Legend
+        <span className="hidden sm:inline">Legend</span>
       </button>
       {open && pos && (
-        <div
-          ref={popoverRef}
-          className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 max-h-[70vh] overflow-y-auto"
-          style={{ ...dropdownStyle(pos), width: 325 }}
-        >
+        <>
+          {/* Mobile: dim backdrop + centered popup (button-anchored positioning
+              would run the wide content off the right edge of a narrow
+              viewport). Desktop (sm+): unchanged button-anchored dropdown. */}
+          <div className="sm:hidden fixed inset-0 z-[9998] bg-black/30" onClick={() => setOpen(false)} />
+          <div
+            ref={popoverRef}
+            className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 overflow-y-auto fixed inset-x-4 top-1/2 -translate-y-1/2 max-h-[80vh] z-[9999] sm:inset-x-auto sm:top-auto sm:translate-y-0 sm:max-h-[70vh] sm:w-[325px]"
+            style={typeof window !== 'undefined' && window.innerWidth >= 640 ? { ...dropdownStyle(pos), width: 325 } : undefined}
+          >
           <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2">Strategy</p>
           <div className="space-y-1.5 mb-4">
             {STRATEGY_PILL_MAP.map(s => (
@@ -268,7 +275,8 @@ function LegendButton({ territoryOptions }: { territoryOptions: Array<{ id: numb
               ))
             )}
           </div>
-        </div>
+          </div>
+        </>
       )}
     </>
   );
@@ -2064,30 +2072,32 @@ export function ProgramPlannerPlanView({
 
   return (
     <div className="space-y-4">
-      {/* Summary stat strip */}
+      {/* Summary stat strip — one-at-a-time swipeable carousel on mobile, unchanged grid at sm+ */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="card">
-          <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Planned conferences</p>
-          <p className="text-2xl font-bold text-brand-primary">{plannedConfs.length}</p>
-          <p className="text-[11px] text-gray-400 mt-0.5">{groups.attend.length} returning · {groups.new.length} new · {groups.reduce.length} reduced</p>
-        </div>
-        <div className="card">
-          <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Total planned budget</p>
-          <p className="text-2xl font-bold text-brand-primary">{fmtCurrencyFull(totalPlannedBudget)}</p>
-          <p className="text-[11px] text-gray-400 mt-0.5">
-            {priorYearActual != null ? `vs ${fmtCurrencyFull(priorYearActual)} actuals ${year - 1}` : ' '}
-          </p>
-        </div>
-        <div className="card">
-          <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Total headcount</p>
-          <p className="text-2xl font-bold text-brand-primary">{totalReps} reps</p>
-          <p className="text-[11px] text-gray-400 mt-0.5">across all planned conferences</p>
-        </div>
-        <div className="card">
-          <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Pipeline target</p>
-          <p className="text-2xl font-bold text-brand-primary">{fmtCurrencyFull(pipelineTarget)}</p>
-          <p className="text-[11px] text-gray-400 mt-0.5">3.5x planned spend</p>
-        </div>
+        <MobileStatCarousel>
+          <div className="card">
+            <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Planned conferences</p>
+            <p className="text-2xl font-bold text-brand-primary">{plannedConfs.length}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">{groups.attend.length} returning · {groups.new.length} new · {groups.reduce.length} reduced</p>
+          </div>
+          <div className="card">
+            <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Total planned budget</p>
+            <p className="text-2xl font-bold text-brand-primary">{fmtCurrencyFull(totalPlannedBudget)}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              {priorYearActual != null ? `vs ${fmtCurrencyFull(priorYearActual)} actuals ${year - 1}` : ' '}
+            </p>
+          </div>
+          <div className="card">
+            <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Total headcount</p>
+            <p className="text-2xl font-bold text-brand-primary">{totalReps} reps</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">across all planned conferences</p>
+          </div>
+          <div className="card">
+            <p className="text-[12px] text-gray-500 uppercase tracking-wide mb-1">Pipeline target</p>
+            <p className="text-2xl font-bold text-brand-primary">{fmtCurrencyFull(pipelineTarget)}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">3.5x planned spend</p>
+          </div>
+        </MobileStatCarousel>
       </div>
 
       <style>{`
@@ -2122,82 +2132,90 @@ export function ProgramPlannerPlanView({
 
       {/* Grouping toggle (left) + view toggle / Add conference (right) — one row */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
-          <button
-            type="button"
-            onClick={() => setGroupMode('status')}
-            title="Group by status"
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${
-              groupMode === 'status' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-            }`}
-          >
-            <StatusViewIcon />
-            Status
-          </button>
-          <button
-            type="button"
-            onClick={() => setGroupMode('rep')}
-            title="Group by rep"
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-              groupMode === 'rep' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-            }`}
-          >
-            <RepViewIcon />
-            By Rep
-          </button>
-          <button
-            type="button"
-            onClick={() => setGroupMode('territory')}
-            title="Group by territory"
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-              groupMode === 'territory' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-            }`}
-          >
-            <TerritoryViewIcon />
-            By Territory
-          </button>
-          <button
-            type="button"
-            onClick={() => setGroupMode('strategy')}
-            title="Group by strategy"
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-              groupMode === 'strategy' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-            }`}
-          >
-            <StrategyViewIcon />
-            By Strategy
-          </button>
-          <button
-            type="button"
-            onClick={() => setGroupMode('type')}
-            title="Group by type"
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-              groupMode === 'type' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-            }`}
-          >
-            <TypeViewIcon />
-            By Type
-          </button>
-          <button
-            type="button"
-            onClick={() => setGroupMode('date')}
-            title="Group by date"
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-              groupMode === 'date' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-            }`}
-          >
-            <DateViewIcon />
-            By Date
-          </button>
+        {/* Horizontally scrollable on mobile (no visible scrollbar) so it
+            never overflows the viewport — some options stay off-screen
+            until the user scrolls to them. Unchanged at sm+. */}
+        <div className="w-full sm:w-auto overflow-x-auto scrollbar-hide">
+          <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setGroupMode('status')}
+              title="Group by status"
+              className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                groupMode === 'status' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              <StatusViewIcon />
+              Status
+            </button>
+            <button
+              type="button"
+              onClick={() => setGroupMode('rep')}
+              title="Group by rep"
+              className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+                groupMode === 'rep' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              <RepViewIcon />
+              By Rep
+            </button>
+            <button
+              type="button"
+              onClick={() => setGroupMode('territory')}
+              title="Group by territory"
+              className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+                groupMode === 'territory' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              <TerritoryViewIcon />
+              By Territory
+            </button>
+            <button
+              type="button"
+              onClick={() => setGroupMode('strategy')}
+              title="Group by strategy"
+              className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+                groupMode === 'strategy' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              <StrategyViewIcon />
+              By Strategy
+            </button>
+            <button
+              type="button"
+              onClick={() => setGroupMode('type')}
+              title="Group by type"
+              className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+                groupMode === 'type' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              <TypeViewIcon />
+              By Type
+            </button>
+            <button
+              type="button"
+              onClick={() => setGroupMode('date')}
+              title="Group by date"
+              className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+                groupMode === 'date' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              <DateViewIcon />
+              By Date
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <LegendButton territoryOptions={territoryOptions} />
-          <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+        <div className="w-full sm:w-auto flex items-center gap-2">
+          {/* Table/Kanban comes before Legend on mobile, after it at sm+.
+              Stretches (flex-1) to fill the row on mobile — its left edge
+              lands at the row's own left edge (same as the card content
+              below), while Legend/Add stay fixed-width at the right. */}
+          <div className="order-1 sm:order-2 flex-1 sm:flex-none inline-flex rounded-lg border border-gray-200 overflow-hidden">
             <button
               type="button"
               onClick={() => setPlanViewMode('table')}
               title="Table view"
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${
+              className={`flex-1 sm:flex-none inline-flex items-center justify-center sm:justify-start gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${
                 planViewMode === 'table' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
               }`}
             >
@@ -2208,7 +2226,7 @@ export function ProgramPlannerPlanView({
               type="button"
               onClick={() => setPlanViewMode('kanban')}
               title="Kanban view"
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+              className={`flex-1 sm:flex-none inline-flex items-center justify-center sm:justify-start gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
                 planViewMode === 'kanban' ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
               }`}
             >
@@ -2216,13 +2234,19 @@ export function ProgramPlannerPlanView({
               Kanban
             </button>
           </div>
+          <div className="order-2 sm:order-1 flex-shrink-0">
+            <LegendButton territoryOptions={territoryOptions} />
+          </div>
           <button
             type="button"
             onClick={() => setShowAddDrawer(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-primary text-white hover:opacity-90 transition-opacity flex-shrink-0"
+            title="Add conference"
+            className="order-3 flex-shrink-0 inline-flex items-center justify-center gap-1.5 w-9 h-9 sm:w-auto sm:h-auto px-0 sm:px-3 py-0 sm:py-1.5 rounded-lg text-xs font-medium bg-brand-primary text-white hover:opacity-90 transition-opacity"
           >
-            <i className="ti ti-plus text-[13px]" aria-hidden="true" />
-            Add conference
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+            </svg>
+            <span className="hidden sm:inline">Add conference</span>
           </button>
         </div>
       </div>
@@ -2266,11 +2290,16 @@ export function ProgramPlannerPlanView({
                 <i className={`ti ${cfg.icon} text-[14px] ${section.headerColor ? '' : cfg.headerText}`} style={section.headerColor ? { color: section.headerColor } : undefined} aria-hidden="true" />
                 <span className={`text-sm font-semibold ${section.headerColor ? '' : cfg.headerText}`} style={section.headerColor ? { color: section.headerColor } : undefined}>{cfg.label}</span>
                 <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${cfg.pillBg} ${cfg.pillText}`}>
-                  {rows.length} conference{rows.length !== 1 ? 's' : ''}
+                  <span className="sm:hidden">{rows.length} conf</span>
+                  <span className="hidden sm:inline">{rows.length} conference{rows.length !== 1 ? 's' : ''}</span>
                 </span>
               </div>
               <span className={`text-[11px] font-medium ${section.headerColor ? '' : cfg.headerText}`} style={section.headerColor ? { color: section.headerColor } : undefined}>
-                {hasBudget ? `${fmtCurrency(groupBudget)} planned · ${groupReps} rep${groupReps !== 1 ? 's' : ''}` : 'No budget committed'}
+                {hasBudget ? (
+                  <>
+                    {fmtCurrency(groupBudget)}<span className="hidden sm:inline"> planned</span> · {groupReps} rep{groupReps !== 1 ? 's' : ''}
+                  </>
+                ) : 'No budget committed'}
               </span>
             </div>
 
