@@ -809,12 +809,14 @@ function PipelineChartsPanel({
   meetingAttendeeIds,
   icpCompanies,
   onSelectRep,
+  selectedRepName,
 }: {
   conferenceId: number;
   targetMap: Map<number, TargetEntry>;
   meetingAttendeeIds: Set<number>;
   icpCompanies: IcpCompany[];
   onSelectRep: (rep: RepChartEntry) => void;
+  selectedRepName: string | null;
 }) {
   const avgCostPerUnit = useAvgCostPerUnit();
   const [meetingsConvPct, setMeetingsConvPct] = useState(60);
@@ -900,6 +902,8 @@ function PipelineChartsPanel({
 
   return (
     <div className="flex flex-col gap-4 h-full">
+      <CompaniesByRepChart icpCompanies={icpCompanies} onSelectRep={onSelectRep} selectedRepName={selectedRepName} />
+
       {/* Targeted Pipeline / Meetings Pipeline (toggle) */}
       <div className="rounded-xl border border-gray-200 bg-white p-4 flex-1 flex flex-col overflow-y-auto">
         <div className="flex items-center justify-start mb-3 flex-shrink-0">
@@ -968,8 +972,6 @@ function PipelineChartsPanel({
           <p className="text-xs text-gray-400">{emptyText}</p>
         )}
       </div>
-
-      <CompaniesByRepChart icpCompanies={icpCompanies} onSelectRep={onSelectRep} />
     </div>
   );
 }
@@ -995,48 +997,93 @@ function computeRepData(icpCompanies: IcpCompany[]): RepChartEntry[] {
     .map(([name, companies], i) => ({ name, companies, count: companies.length, color: REP_CHART_COLORS[i % REP_CHART_COLORS.length] }));
 }
 
-function CompaniesByRepChart({ icpCompanies, onSelectRep }: { icpCompanies: IcpCompany[]; onSelectRep: (rep: RepChartEntry) => void }) {
+function CompaniesByRepChart({
+  icpCompanies,
+  onSelectRep,
+  selectedRepName,
+}: {
+  icpCompanies: IcpCompany[];
+  onSelectRep: (rep: RepChartEntry) => void;
+  selectedRepName: string | null;
+}) {
   const repData = useMemo(() => computeRepData(icpCompanies), [icpCompanies]);
 
   const total = icpCompanies.length;
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 flex flex-col gap-3 flex-shrink-0">
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">Companies by Assigned Rep</p>
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">
+        <span className="hidden sm:inline">Prospect Companies by Assigned Rep Breakdown</span>
+        <span className="sm:hidden">Prospects by Assigned Rep</span>
+      </p>
       {total === 0 ? (
         <p className="text-xs text-gray-400">No ICP companies attending.</p>
       ) : (
         <>
           <div className="flex w-full h-6 rounded-full overflow-hidden">
-            {repData.map(r => (
-              <button
-                key={r.name}
-                type="button"
-                onClick={() => onSelectRep(r)}
-                className="cursor-pointer hover:brightness-110 transition-[filter]"
-                style={{ width: `${(r.count / total) * 100}%`, backgroundColor: r.color }}
-                title={`${r.name}: ${r.count} (${Math.round((r.count / total) * 100)}%)`}
-              />
-            ))}
+            {repData.map(r => {
+              const isDimmed = selectedRepName != null && selectedRepName !== r.name;
+              return (
+                <button
+                  key={r.name}
+                  type="button"
+                  onClick={() => onSelectRep(r)}
+                  className="cursor-pointer hover:brightness-110 transition-all duration-150"
+                  style={{
+                    width: `${(r.count / total) * 100}%`,
+                    backgroundColor: r.color,
+                    filter: isDimmed ? 'grayscale(1)' : undefined,
+                    opacity: isDimmed ? 0.35 : 1,
+                  }}
+                  title={`${r.name}: ${r.count} (${Math.round((r.count / total) * 100)}%)`}
+                />
+              );
+            })}
           </div>
           <div className="flex flex-wrap gap-2">
-            {repData.map(r => (
-              <button
-                key={r.name}
-                type="button"
-                onClick={() => onSelectRep(r)}
-                title={r.name}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium hover:brightness-95 transition-[filter]"
-                style={{ backgroundColor: hexAlpha(r.color, 0.12), color: r.color, border: `1px solid ${hexAlpha(r.color, 0.3)}` }}
-              >
-                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: r.color }} />
-                {repInitials(r.name)} ({Math.round((r.count / total) * 100)}%)
-              </button>
-            ))}
+            {repData.map(r => {
+              const isDimmed = selectedRepName != null && selectedRepName !== r.name;
+              return (
+                <button
+                  key={r.name}
+                  type="button"
+                  onClick={() => onSelectRep(r)}
+                  title={r.name}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium hover:brightness-95 transition-all duration-150"
+                  style={{
+                    backgroundColor: hexAlpha(r.color, 0.12),
+                    color: r.color,
+                    border: `1px solid ${hexAlpha(r.color, 0.3)}`,
+                    filter: isDimmed ? 'grayscale(1)' : undefined,
+                    opacity: isDimmed ? 0.4 : 1,
+                  }}
+                >
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: r.color }} />
+                  {repInitials(r.name)} ({Math.round((r.count / total) * 100)}%)
+                </button>
+              );
+            })}
           </div>
         </>
       )}
     </div>
+  );
+}
+
+const SENIORITY_COLORS: Record<string, string> = {
+  'C-Suite': '#7c3aed', 'VP/SVP': '#1B76BC', 'Director': '#059669', 'Manager': '#f59e0b', 'Other': '#6b7280',
+};
+
+function SeniorityPill({ seniority }: { seniority: string | null }) {
+  if (!seniority) return null;
+  const color = SENIORITY_COLORS[seniority] ?? '#6b7280';
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border"
+      style={{ color, borderColor: `${color}60`, backgroundColor: `${color}14` }}
+    >
+      {seniority}
+    </span>
   );
 }
 
@@ -1081,6 +1128,11 @@ function IcpCompanyCard({ co, accentColor }: { co: IcpCompany; accentColor: stri
                 {a.first_name} {a.last_name}
               </button>
               {a.title && <p className="text-xs text-gray-400 truncate">{a.title}</p>}
+              {a.seniority && (
+                <div className="mt-1">
+                  <SeniorityPill seniority={a.seniority} />
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -1647,6 +1699,7 @@ export function LandscapeTab({
             meetingAttendeeIds={meetingAttendeeIds}
             icpCompanies={icpCompanies}
             onSelectRep={setSelectedRep}
+            selectedRepName={selectedRep?.name ?? null}
           />
         </div>
 
