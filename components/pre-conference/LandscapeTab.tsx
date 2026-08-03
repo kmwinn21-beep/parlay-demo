@@ -729,6 +729,69 @@ function CompanyPanel({
   );
 }
 
+function ToggleGroup({
+  options,
+  active,
+  onChange,
+}: {
+  options: { key: string; label: string; activeColor: string }[];
+  active: string;
+  onChange: (key: string) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-full border border-gray-200 bg-gray-100 p-0.5 gap-0.5">
+      {options.map(opt => (
+        <button
+          key={opt.key}
+          type="button"
+          onClick={() => onChange(opt.key)}
+          className="px-3 py-1 rounded-full text-xs font-semibold transition-colors"
+          style={active === opt.key ? { backgroundColor: opt.activeColor, color: '#fff' } : { color: '#6b7280' }}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ClientCompetitorPanel({ data }: { data: LandscapeData }) {
+  const [mode, setMode] = useState<'clients' | 'competitors'>('clients');
+  const isClients = mode === 'clients';
+
+  return (
+    <div className="flex flex-col gap-2 h-full">
+      <div className="flex items-center justify-center flex-shrink-0">
+        <ToggleGroup
+          options={[
+            { key: 'clients', label: 'Clients', activeColor: 'rgb(var(--brand-primary-rgb))' },
+            { key: 'competitors', label: 'Competitors', activeColor: '#dc2626' },
+          ]}
+          active={mode}
+          onChange={key => setMode(key as 'clients' | 'competitors')}
+        />
+      </div>
+      <div className="flex-1 min-h-0">
+        {isClients ? (
+          <CompanyPanel
+            title="Client Attendees"
+            companies={data.clientCompanies}
+            accentColor={data.clientColor}
+            emptyText="No client companies attending"
+          />
+        ) : (
+          <CompanyPanel
+            title="Competitors Attending"
+            companies={data.competitorCompanies}
+            accentColor={data.competitorColor}
+            emptyText="No competitor companies attending"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Pipeline Charts Panel ─────────────────────────────────────────────────────
 
 const TIER_DATA = [
@@ -744,16 +807,17 @@ function PipelineChartsPanel({
   conferenceId,
   targetMap,
   meetingAttendeeIds,
+  icpCompanies,
 }: {
   conferenceId: number;
   targetMap: Map<number, TargetEntry>;
   meetingAttendeeIds: Set<number>;
+  icpCompanies: IcpCompany[];
 }) {
   const avgCostPerUnit = useAvgCostPerUnit();
   const [meetingsConvPct, setMeetingsConvPct] = useState(60);
   const [requiredPipeline, setRequiredPipeline] = useState<number | null>(null);
-  const [pipelineOpen, setPipelineOpen] = useState(true);
-  const [meetingPipelineOpen, setMeetingPipelineOpen] = useState(true);
+  const [pipelineMode, setPipelineMode] = useState<'targeted' | 'meetings'>('targeted');
 
   // Fixed conversion rate matching ConferenceTargetsTab default — not user-adjustable here
   const conversionPct = 60;
@@ -820,17 +884,35 @@ function PipelineChartsPanel({
   const maxMeetingTierValue = Math.max(1, ...Object.values(meetingTierValueSum));
   const hasMeetingValues = avgCostPerUnit > 0 && meetingCompanyBestTier.size > 0;
 
+  const isTargeted = pipelineMode === 'targeted';
+  const activeTierValueSum = isTargeted ? tierValueSum : meetingTierValueSum;
+  const activeConvertedValue = isTargeted ? convertedValue : convertedMeetingValue;
+  const activeCoverageRatio = isTargeted ? coverageRatio : meetingsCoverageRatio;
+  const activeMaxTierValue = isTargeted ? maxTierValue : maxMeetingTierValue;
+  const activeHasValues = isTargeted ? hasValues : hasMeetingValues;
+  const emptyText = avgCostPerUnit > 0
+    ? (isTargeted
+      ? 'No target companies yet.'
+      : (meetingAttendeeIds.size === 0 ? 'No meetings scheduled yet.' : 'No target companies with meetings.'))
+    : 'Set avg. cost per unit in Admin Settings to see values.';
+
   return (
     <div className="flex flex-col gap-4 h-full">
-      {/* Targeted Pipeline Value */}
+      {/* Targeted Pipeline / Meetings Pipeline (toggle) */}
       <div className="rounded-xl border border-gray-200 bg-white p-4 flex-1 flex flex-col overflow-y-auto">
-        <button type="button" onClick={() => setPipelineOpen(o => !o)} className="flex items-center justify-between w-full mb-3 flex-shrink-0">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">Targeted Pipeline Value</p>
-          <svg className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${pipelineOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-        </button>
+        <div className="flex items-center justify-center mb-3 flex-shrink-0">
+          <ToggleGroup
+            options={[
+              { key: 'targeted', label: 'Targeted Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
+              { key: 'meetings', label: 'Meetings Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
+            ]}
+            active={pipelineMode}
+            onChange={key => setPipelineMode(key as 'targeted' | 'meetings')}
+          />
+        </div>
 
         {requiredPipeline != null && (
-          <div className={`pb-3 ${pipelineOpen ? 'mb-3 border-b border-gray-100' : ''}`}>
+          <div className="pb-3 mb-3 border-b border-gray-100">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs text-gray-500 font-medium">Required Pipeline</span>
               <span className="text-xs text-gray-400">${requiredPipeline.toLocaleString('en-US')}</span>
@@ -839,124 +921,103 @@ function PipelineChartsPanel({
               <div
                 className="h-2.5 rounded-full transition-all duration-300"
                 style={{
-                  width: `${Math.min((coverageRatio ?? 0) * 100, 100)}%`,
-                  backgroundColor: (coverageRatio ?? 0) >= 1 ? '#059669' : (coverageRatio ?? 0) >= 0.6 ? '#f59e0b' : '#dc2626',
+                  width: `${Math.min((activeCoverageRatio ?? 0) * 100, 100)}%`,
+                  backgroundColor: (activeCoverageRatio ?? 0) >= 1 ? '#059669' : (activeCoverageRatio ?? 0) >= 0.6 ? '#f59e0b' : '#dc2626',
                 }}
               />
             </div>
             <div className="flex items-center gap-1.5 mt-1">
               <span className="text-xs text-gray-400">
-                Projected: <span className="font-medium text-gray-600">${convertedValue.toLocaleString('en-US')}</span>
+                Projected: <span className="font-medium text-gray-600">${activeConvertedValue.toLocaleString('en-US')}</span>
               </span>
-              {coverageRatio != null && (
-                <span className={`text-xs font-medium ${(coverageRatio ?? 0) >= 1 ? 'text-emerald-600' : (coverageRatio ?? 0) >= 0.6 ? 'text-amber-600' : 'text-red-500'}`}>
-                  ({Math.round((coverageRatio ?? 0) * 100)}%)
+              {activeCoverageRatio != null && (
+                <span className={`text-xs font-medium ${(activeCoverageRatio ?? 0) >= 1 ? 'text-emerald-600' : (activeCoverageRatio ?? 0) >= 0.6 ? 'text-amber-600' : 'text-red-500'}`}>
+                  ({Math.round((activeCoverageRatio ?? 0) * 100)}%)
                 </span>
               )}
             </div>
           </div>
         )}
 
-        {pipelineOpen && (
-          hasValues ? (
-            <div className="space-y-2">
-              {TIER_DATA.map(tier => {
-                const val = tierValueSum[tier.key] ?? 0;
-                return (
-                  <div key={tier.key} className="flex items-start gap-2">
-                    <span className="text-xs text-gray-600 w-24 flex-shrink-0 leading-tight">{tier.label}</span>
-                    <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                      <div
-                        className="h-2 rounded-full"
-                        style={{
-                          width: val > 0 ? `${Math.round((val / maxTierValue) * 100)}%` : '0%',
-                          backgroundColor: tier.hex,
-                        }}
-                      />
-                    </div>
-                    <span className="text-xs text-gray-500 w-16 text-right flex-shrink-0">
-                      {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
-                    </span>
+        {activeHasValues ? (
+          <div className="space-y-2">
+            {TIER_DATA.map(tier => {
+              const val = activeTierValueSum[tier.key] ?? 0;
+              return (
+                <div key={tier.key} className="flex items-start gap-2">
+                  <span className="text-xs text-gray-600 w-24 flex-shrink-0 leading-tight">{tier.label}</span>
+                  <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="h-2 rounded-full"
+                      style={{
+                        width: val > 0 ? `${Math.round((val / activeMaxTierValue) * 100)}%` : '0%',
+                        backgroundColor: tier.hex,
+                      }}
+                    />
                   </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-xs text-gray-400">Set avg. cost per unit in Admin Settings to see values.</p>
-          )
+                  <span className="text-xs text-gray-500 w-16 text-right flex-shrink-0">
+                    {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400">{emptyText}</p>
         )}
       </div>
 
-      {/* Meetings Pipeline Value */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4 flex-1 flex flex-col overflow-y-auto">
-        <button type="button" onClick={() => setMeetingPipelineOpen(o => !o)} className="flex items-center justify-between w-full mb-3 flex-shrink-0">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">Meetings Pipeline</p>
-          <svg className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${meetingPipelineOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-        </button>
+      <CompaniesByRepChart icpCompanies={icpCompanies} />
+    </div>
+  );
+}
 
-        {requiredPipeline != null && (
-          <div className={`pb-3 ${meetingPipelineOpen ? 'mb-3 border-b border-gray-100' : ''}`}>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs text-gray-500 font-medium">Required Pipeline</span>
-              <span className="text-xs text-gray-400">${requiredPipeline.toLocaleString('en-US')}</span>
-            </div>
-            <div className="bg-gray-100 rounded-full h-2.5 overflow-hidden">
+const REP_CHART_COLORS = ['#1B76BC', '#dc2626', '#059669', '#9333ea', '#ea580c', '#db2777', '#0891b2', '#ca8a04', '#4f46e5', '#6b7280'];
+
+function CompaniesByRepChart({ icpCompanies }: { icpCompanies: IcpCompany[] }) {
+  const repData = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const c of icpCompanies) {
+      const rep = c.assigned_user_names?.[0] || 'Unassigned';
+      counts.set(rep, (counts.get(rep) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count], i) => ({ name, count, color: REP_CHART_COLORS[i % REP_CHART_COLORS.length] }));
+  }, [icpCompanies]);
+
+  const total = icpCompanies.length;
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 flex flex-col gap-3 flex-shrink-0">
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">Companies by Assigned Rep</p>
+      {total === 0 ? (
+        <p className="text-xs text-gray-400">No ICP companies attending.</p>
+      ) : (
+        <>
+          <div className="flex w-full h-6 rounded-full overflow-hidden">
+            {repData.map(r => (
               <div
-                className="h-2.5 rounded-full transition-all duration-300"
-                style={{
-                  width: `${Math.min((meetingsCoverageRatio ?? 0) * 100, 100)}%`,
-                  backgroundColor: (meetingsCoverageRatio ?? 0) >= 1 ? '#059669' : (meetingsCoverageRatio ?? 0) >= 0.6 ? '#f59e0b' : '#dc2626',
-                }}
+                key={r.name}
+                style={{ width: `${(r.count / total) * 100}%`, backgroundColor: r.color }}
+                title={`${r.name}: ${r.count} (${Math.round((r.count / total) * 100)}%)`}
               />
-            </div>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className="text-xs text-gray-400">
-                Projected: <span className="font-medium text-gray-600">${convertedMeetingValue.toLocaleString('en-US')}</span>
-              </span>
-              {meetingsCoverageRatio != null && (
-                <span className={`text-xs font-medium ${(meetingsCoverageRatio ?? 0) >= 1 ? 'text-emerald-600' : (meetingsCoverageRatio ?? 0) >= 0.6 ? 'text-amber-600' : 'text-red-500'}`}>
-                  ({Math.round((meetingsCoverageRatio ?? 0) * 100)}%)
-                </span>
-              )}
-            </div>
+            ))}
           </div>
-        )}
-
-        {meetingPipelineOpen && (
-          hasMeetingValues ? (
-            <div className="space-y-2">
-              {TIER_DATA.map(tier => {
-                const val = meetingTierValueSum[tier.key] ?? 0;
-                return (
-                  <div key={tier.key} className="flex items-start gap-2">
-                    <span className="text-xs text-gray-600 w-24 flex-shrink-0 leading-tight">{tier.label}</span>
-                    <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                      <div
-                        className="h-2 rounded-full"
-                        style={{
-                          width: val > 0 ? `${Math.round((val / maxMeetingTierValue) * 100)}%` : '0%',
-                          backgroundColor: tier.hex,
-                        }}
-                      />
-                    </div>
-                    <span className="text-xs text-gray-500 w-16 text-right flex-shrink-0">
-                      {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-xs text-gray-400">
-              {avgCostPerUnit > 0
-                ? meetingAttendeeIds.size === 0
-                  ? 'No meetings scheduled yet.'
-                  : 'No target companies with meetings.'
-                : 'Set avg. cost per unit in Admin Settings to see values.'}
-            </p>
-          )
-        )}
-      </div>
+          <div className="flex flex-wrap gap-2">
+            {repData.map(r => (
+              <span
+                key={r.name}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+                style={{ backgroundColor: hexAlpha(r.color, 0.12), color: r.color, border: `1px solid ${hexAlpha(r.color, 0.3)}` }}
+              >
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: r.color }} />
+                {r.name} ({Math.round((r.count / total) * 100)}%)
+              </span>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1446,30 +1507,18 @@ export function LandscapeTab({
         />
       )}
 
-      {/* 5-column layout: client | competitors | pipeline charts | relationship heatmap */}
+      {/* 5-column layout: client/competitors | pipeline charts | relationship heatmap */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-stretch">
-        {/* Col 1: Client Attendees */}
-        <CompanyPanel
-          title="Client Attendees"
-          companies={data.clientCompanies}
-          accentColor={data.clientColor}
-          emptyText="No client companies attending"
-        />
+        {/* Col 1: Client Attendees / Competitors Attending (toggle) */}
+        <ClientCompetitorPanel data={data} />
 
-        {/* Col 2: Competitors Attending */}
-        <CompanyPanel
-          title="Competitors Attending"
-          companies={data.competitorCompanies}
-          accentColor={data.competitorColor}
-          emptyText="No competitor companies attending"
-        />
-
-        {/* Col 3: Pipeline Charts */}
-        <div className="md:col-span-1 h-full">
+        {/* Cols 2-3: Pipeline Charts + Companies by Assigned Rep */}
+        <div className="md:col-span-2 h-full">
           <PipelineChartsPanel
             conferenceId={conferenceId}
             targetMap={targetMap}
             meetingAttendeeIds={meetingAttendeeIds}
+            icpCompanies={icpCompanies}
           />
         </div>
 
