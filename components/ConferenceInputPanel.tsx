@@ -20,7 +20,7 @@ export function ConferenceInputPanel({ conferenceId, conferenceName, onClose }: 
 
       {/* Drawer — slides up from the bottom on mobile, in from the right on desktop */}
       <div
-        className="drawer-mobile-responsive relative flex flex-col w-full max-h-[85vh] sm:max-h-full sm:max-w-[400px] sm:h-full bg-white shadow-2xl overflow-hidden rounded-t-2xl sm:rounded-t-none sm:rounded-tl-2xl"
+        className="drawer-mobile-responsive relative flex flex-col w-full min-h-[75vh] max-h-[85vh] sm:min-h-0 sm:max-h-full sm:max-w-[400px] sm:h-full bg-white shadow-2xl overflow-hidden rounded-t-2xl sm:rounded-t-none sm:rounded-tl-2xl"
       >
         {/* Header — matches Cal Intel drawer style */}
         <div
