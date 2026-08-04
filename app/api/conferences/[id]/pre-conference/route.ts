@@ -8,7 +8,7 @@ import { resolveAttendeeTitleMetadata } from '@/lib/titleNormalizationRules';
 import { normalizeTitleKey } from '@/lib/titleNormalization';
 
 const PRE_CONF_CACHE = new Map<string, { data: unknown; cachedAt: number }>();
-const PRE_CONF_CACHE_TTL = 5 * 60 * 1000;
+const PRE_CONF_CACHE_TTL = 60 * 1000;
 
 function uniqueNumbers(arr: (number | null | undefined)[]): number[] {
   const seen = new Set<number>();
@@ -36,9 +36,10 @@ export async function GET(
   const confId = parseInt(id, 10);
   if (isNaN(confId)) return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
 
+  const forceRefresh = request.nextUrl.searchParams.get('refresh') === '1';
   const cacheKey = `${authResult?.accountId ?? 'anon'}:${confId}`;
   const cached = PRE_CONF_CACHE.get(cacheKey);
-  if (cached && Date.now() - cached.cachedAt < PRE_CONF_CACHE_TTL) {
+  if (!forceRefresh && cached && Date.now() - cached.cachedAt < PRE_CONF_CACHE_TTL) {
     return NextResponse.json(cached.data);
   }
 

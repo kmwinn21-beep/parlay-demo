@@ -285,7 +285,7 @@ export function PreConferenceReviewModal() {
   // Cache: avoid reloading if data is less than 5 minutes old
   const loadedAtRef = useRef<number | null>(null);
   const loadedForIdRef = useRef<number | null>(null);
-  const CACHE_TTL_MS = 5 * 60 * 1000;
+  const CACHE_TTL_MS = 60 * 1000;
 
   // Header height, tracked live (it changes when the mobile stat pills
   // collapse/expand) and exposed as a CSS var on the panel below so
@@ -330,13 +330,13 @@ export function PreConferenceReviewModal() {
       .map(t => ({ key: t.key, label: tabConfig.getLabel(t.key) }));
   }, [tabConfig]);
 
-  const load = useCallback(async (id: number) => {
+  const load = useCallback(async (id: number, force = false) => {
     if (loadedForIdRef.current !== id) {
       setData(null);
       setTargetMap(new Map());
       setActiveTab('landscape');
       loadedAtRef.current = null;
-    } else if (data && loadedAtRef.current && Date.now() - loadedAtRef.current < CACHE_TTL_MS) {
+    } else if (!force && data && loadedAtRef.current && Date.now() - loadedAtRef.current < CACHE_TTL_MS) {
       // Use cached data if fresh
       return;
     }
@@ -345,7 +345,7 @@ export function PreConferenceReviewModal() {
     setError(null);
     try {
       const [confRes, targetsRes] = await Promise.all([
-        fetch(`/api/conferences/${id}/pre-conference`),
+        fetch(`/api/conferences/${id}/pre-conference${force ? '?refresh=1' : ''}`),
         fetch(`/api/conferences/${id}/targets`),
       ]);
       if (!confRes.ok) throw new Error('Failed to load');
@@ -504,6 +504,16 @@ export function PreConferenceReviewModal() {
                   <h2 className="text-lg font-bold text-white leading-tight">{conferenceName}</h2>
                 </div>
                 <div className="flex items-center gap-2 mt-1">
+                  <button
+                    onClick={() => load(conferenceId, true)}
+                    disabled={loading}
+                    className="text-white/70 hover:text-white transition-colors disabled:opacity-40"
+                    title="Refresh data"
+                  >
+                    <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
                   <button
                     onClick={() => setStatsOpen(v => !v)}
                     className="sm:hidden text-white/70 hover:text-white transition-colors"
