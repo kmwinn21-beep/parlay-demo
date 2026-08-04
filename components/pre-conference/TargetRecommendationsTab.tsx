@@ -280,17 +280,32 @@ function repInitials(name: string): string {
   return name.trim().substring(0, 2).toUpperCase();
 }
 
+function hexAlpha(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return `rgba(156,163,175,${alpha})`; // gray fallback
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function RepPill({ name, color, size = 7 }: { name: string; color: string; size?: 6 | 7 }) {
+  const dim = size === 7 ? 'w-7 h-7' : 'w-6 h-6';
+  return (
+    <span
+      title={name}
+      className={`inline-flex items-center justify-center ${dim} rounded-full text-[10px] font-bold flex-shrink-0`}
+      style={{ backgroundColor: hexAlpha(color, 0.12), color, border: `1px solid ${hexAlpha(color, 0.35)}` }}
+    >
+      {repInitials(name)}
+    </span>
+  );
+}
+
 function RepCell({ company }: { company: TargetingCompanyRecommendation }) {
   const repName = company.assigned_user_names?.[0];
   if (repName) {
-    return (
-      <span
-        title={repName}
-        className="inline-flex items-center justify-center w-7 h-7 rounded-full text-[10px] font-bold bg-teal-100 text-teal-700 border border-teal-300"
-      >
-        {repInitials(repName)}
-      </span>
-    );
+    return <RepPill name={repName} color={company.assigned_user_colors?.[0] ?? '#6b7280'} />;
   }
   return (
     <span className="inline-flex items-center gap-1.5">
@@ -1023,12 +1038,7 @@ function MobileCompanyCard({ company, onReviewTitle, targetMap, onAddTargetWithT
           </span>
           <Pill tone={tierTone(company)}>{company.target_priority_tier || '—'}</Pill>
           {company.assigned_user_names?.[0] && (
-            <span
-              title={company.assigned_user_names[0]}
-              className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold bg-teal-100 text-teal-700 border border-teal-300 flex-shrink-0"
-            >
-              {repInitials(company.assigned_user_names[0])}
-            </span>
+            <RepPill name={company.assigned_user_names[0]} color={company.assigned_user_colors?.[0] ?? '#6b7280'} size={6} />
           )}
         </div>
       </button>

@@ -93,7 +93,7 @@ export async function GET(
       }).catch(() => ({ rows: [] as Row[] })),
       db.execute({ sql: `SELECT key, value FROM effectiveness_defaults WHERE key IN ('avg_annual_deal_size','avg_cost_per_unit')`, args: [] }).catch(() => ({ rows: [] as Row[] })),
       db.execute({ sql: "SELECT id, value FROM config_options WHERE category = 'user'", args: [] }).catch(() => ({ rows: [] as Row[] })),
-      db.execute({ sql: 'SELECT id, name FROM sales_territories', args: [] }).catch(() => ({ rows: [] as Row[] })),
+      db.execute({ sql: 'SELECT id, name, color, assigned_user_ids FROM sales_territories', args: [] }).catch(() => ({ rows: [] as Row[] })),
     ]);
 
     const settings: Record<string, string> = {};
@@ -105,6 +105,16 @@ export async function GET(
     const resolveAssignedUserNames = (raw: string | null | undefined): string[] =>
       String(raw ?? '').split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0).map(n => userNameMap.get(n) ?? String(n));
     const territoryNameMap = new Map<number, string>((territoriesRes.rows as Row[]).map(r => [Number(r.id), String(r.name)]));
+    const territoryColorMap = new Map<number, string>((territoriesRes.rows as Row[]).map(r => [Number(r.id), String(r.color)]));
+    const userColorMap = new Map<number, string>();
+    for (const r of territoriesRes.rows as Row[]) {
+      const color = String(r.color);
+      for (const uid of parseJson<number[]>(r.assigned_user_ids, [])) {
+        if (!userColorMap.has(uid)) userColorMap.set(uid, color);
+      }
+    }
+    const resolveAssignedUserColors = (raw: string | null | undefined): string[] =>
+      String(raw ?? '').split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0).map(n => userColorMap.get(n) ?? '#6b7280');
     const actionLabels = new Map<string, string>();
     for (const r of actionsRes.rows as Row[]) {
       const key = r.action_key ? String(r.action_key) : '';
@@ -326,7 +336,9 @@ export async function GET(
       return {
         ...score,
         assigned_user_names: resolveAssignedUserNames(company.assigned_user),
+        assigned_user_colors: resolveAssignedUserColors(company.assigned_user),
         territory_name: territoryId != null ? (territoryNameMap.get(territoryId) ?? null) : null,
+        territory_color: territoryId != null ? (territoryColorMap.get(territoryId) ?? null) : null,
       };
     }).sort((a, b) => b.target_priority_score - a.target_priority_score);
 
