@@ -247,12 +247,37 @@ function Pill({ children, tone = 'gray' }: { children: React.ReactNode; tone?: '
   return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${classes}`}>{children}</span>;
 }
 
+// Mobile-only accordion chevron for the sections below the KPI cards — desktop
+// (sm+) never shows this button since content is always expanded there.
+function MobileSectionToggle({ open }: { open: boolean }) {
+  return (
+    <span className="sm:hidden flex-shrink-0 text-gray-400" aria-hidden="true">
+      <svg className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      </svg>
+    </span>
+  );
+}
+
 function tierTone(company: TargetingCompanyRecommendation): 'green' | 'blue' | 'amber' | 'gray' {
   const key = stableKey(company.target_priority_tier_key || company.target_priority_tier);
   if (key === 'must_target' || key === 'high_priority') return 'green';
   if (key === 'worth_engaging') return 'blue';
   if (key === 'monitor') return 'amber';
   return 'gray';
+}
+
+const TONE_FILL: Record<'green' | 'blue' | 'amber' | 'gray', string> = {
+  green: '#059669',
+  blue: 'rgb(var(--brand-secondary-rgb))',
+  amber: '#d97706',
+  gray: '#6b7280',
+};
+
+function repInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.trim().substring(0, 2).toUpperCase();
 }
 
 function confidenceTone(confidence: string | null | undefined): 'green' | 'amber' | 'gray' {
@@ -530,6 +555,13 @@ export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), 
   const [titleRuleForm, setTitleRuleForm] = useState<TitleRuleForm>({ normalized_title: '', function_id: '', seniority_id: '', buyer_role: 'target_title', confidence: 'high', notes: '', apply_all_exact: true });
   const [titleReviewListOpen, setTitleReviewListOpen] = useState(false);
   const [dismissedTitleReviewIds, setDismissedTitleReviewIds] = useState<Set<number>>(new Set());
+  // Mobile-only accordion state for the sections below the KPI cards — desktop
+  // (sm and up) always shows content regardless of these, via the `sm:block`
+  // override on each section's content wrapper.
+  const [topCompaniesOpenMobile, setTopCompaniesOpenMobile] = useState(false);
+  const [bucketsOpenMobile, setBucketsOpenMobile] = useState(false);
+  const [titleReviewOpenMobile, setTitleReviewOpenMobile] = useState(false);
+  const [actionsOpenMobile, setActionsOpenMobile] = useState(false);
 
   useEffect(() => {
     const unsubscribe = subscribeToCompilation(conferenceId, () => setSnapshot(getCompilationSnapshot(conferenceId)));
@@ -732,12 +764,19 @@ export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), 
 
       <section className="rounded-xl border border-gray-200 bg-white overflow-hidden">
         <div className="p-4 border-b border-gray-100 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h4 className="font-bold text-brand-primary">Top Target Companies</h4>
-            <p className="text-xs text-gray-500 mt-0.5">Companies ranked by Target Priority Score</p>
-            {filteredCompanies.length > TOP_COMPANY_LIMIT && <p className="text-xs text-gray-400 mt-1">Showing top {TOP_COMPANY_LIMIT} of {filteredCompanies.length}</p>}
-          </div>
-          <div className="flex flex-wrap gap-2 text-xs">
+          <button
+            type="button"
+            onClick={() => setTopCompaniesOpenMobile(v => !v)}
+            className="w-full flex items-start justify-between gap-3 text-left sm:pointer-events-none lg:w-auto"
+          >
+            <div>
+              <h4 className="font-bold text-brand-primary">Top Target Companies</h4>
+              <p className="text-xs text-gray-500 mt-0.5">Companies ranked by Target Priority Score</p>
+              {filteredCompanies.length > TOP_COMPANY_LIMIT && <p className="text-xs text-gray-400 mt-1">Showing top {TOP_COMPANY_LIMIT} of {filteredCompanies.length}</p>}
+            </div>
+            <MobileSectionToggle open={topCompaniesOpenMobile} />
+          </button>
+          <div className={`${topCompaniesOpenMobile ? 'flex' : 'hidden'} sm:flex flex-wrap gap-2 text-xs`}>
             <select value={filters.tier} onChange={e => setFilters(f => ({ ...f, tier: e.target.value }))} className="rounded-lg border border-gray-200 px-2 py-1.5 bg-white text-gray-600">
               <option value="all">All tiers</option>
               {tiers.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
@@ -761,6 +800,7 @@ export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), 
             </label>
           </div>
         </div>
+        <div className={topCompaniesOpenMobile ? 'block' : 'hidden sm:block'}>
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
@@ -784,12 +824,20 @@ export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), 
           {visibleCompanies.map(company => <MobileCompanyCard key={company.company_id} company={company} onReviewTitle={openTitleReviewModal} targetMap={targetMap} onAddTargetWithTier={onAddTargetWithTier} />)}
         </div>
         {visibleCompanies.length === 0 && <p className="text-sm text-gray-400 text-center py-8">No companies match the selected filters.</p>}
+        </div>
       </section>
 
       <section>
-        <h4 className="font-bold text-brand-primary mb-1">Target Buckets</h4>
+        <button
+          type="button"
+          onClick={() => setBucketsOpenMobile(v => !v)}
+          className="w-full flex items-start justify-between gap-3 text-left mb-1 sm:pointer-events-none"
+        >
+          <h4 className="font-bold text-brand-primary">Target Buckets</h4>
+          <MobileSectionToggle open={bucketsOpenMobile} />
+        </button>
         <p className="text-xs text-gray-500 mb-3">Practical planning segments based on backend scores.</p>
-        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+        <div className={`${bucketsOpenMobile ? 'grid' : 'hidden'} sm:grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3`}>
           {buckets.map(bucket => (
             <div key={bucket.key} className="rounded-xl border border-gray-200 bg-white p-4">
               <div className="flex items-start justify-between gap-3">
@@ -808,10 +856,18 @@ export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), 
         </div>
       </section>
 
-      <section className="grid xl:grid-cols-2 gap-4">
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <h4 className="font-bold text-brand-primary">Needs Title Review</h4>
+      <section className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-4">
+          <button
+            type="button"
+            onClick={() => setTitleReviewOpenMobile(v => !v)}
+            className="w-full flex items-start justify-between gap-3 text-left sm:pointer-events-none"
+          >
+            <h4 className="font-bold text-brand-primary">Needs Title Review</h4>
+            <MobileSectionToggle open={titleReviewOpenMobile} />
+          </button>
           <p className="text-xs text-gray-500 mt-0.5 mb-3">Review fuzzy, low-confidence, or unmatched titles to improve Buyer Access and Target Priority Scores.</p>
+          <div className={titleReviewOpenMobile ? 'block' : 'hidden sm:block'}>
           {visibleTitleReviewItems.length > 0 ? (
             <div className="space-y-2">
               {visibleTitleReviewItems.map(attendee => (
@@ -835,11 +891,20 @@ export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), 
               ))}
             </div>
           ) : <p className="text-sm text-gray-400 py-6 text-center">All high-value attendee titles are classified.</p>}
+          </div>
         </div>
 
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <h4 className="font-bold text-brand-primary">Recommended Actions</h4>
+        <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-4">
+          <button
+            type="button"
+            onClick={() => setActionsOpenMobile(v => !v)}
+            className="w-full flex items-start justify-between gap-3 text-left sm:pointer-events-none"
+          >
+            <h4 className="font-bold text-brand-primary">Recommended Actions</h4>
+            <MobileSectionToggle open={actionsOpenMobile} />
+          </button>
           <p className="text-xs text-gray-500 mt-0.5 mb-3">Workload summary for activating this target list.</p>
+          <div className={actionsOpenMobile ? 'block' : 'hidden sm:block'}>
           {actionCounts.length > 0 ? (
             <div className="space-y-1.5">
               {actionCounts.map(action => (
@@ -853,6 +918,7 @@ export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), 
               ))}
             </div>
           ) : <p className="text-sm text-gray-400 py-6 text-center">No recommended actions available.</p>}
+          </div>
         </div>
       </section>
 
@@ -913,7 +979,23 @@ function MobileCompanyCard({ company, onReviewTitle, targetMap, onAddTargetWithT
     <div className="rounded-xl border border-gray-200 p-3">
       <button type="button" onClick={() => setExpanded(v => !v)} className="w-full text-left">
         <p className="font-semibold text-gray-900">{company.company_name}</p>
-        <p className="text-xs text-gray-500">Score {Math.round(scoreOrNull(company.target_priority_score) ?? 0)} · {company.target_priority_tier || '—'}</p>
+        <div className="flex items-center gap-1.5 mt-1.5">
+          <span
+            className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold text-white flex-shrink-0"
+            style={{ backgroundColor: TONE_FILL[tierTone(company)] }}
+          >
+            {Math.round(scoreOrNull(company.target_priority_score) ?? 0)}
+          </span>
+          <Pill tone={tierTone(company)}>{company.target_priority_tier || '—'}</Pill>
+          {company.assigned_user_names?.[0] && (
+            <span
+              title={company.assigned_user_names[0]}
+              className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold bg-teal-100 text-teal-700 border border-teal-300 flex-shrink-0"
+            >
+              {repInitials(company.assigned_user_names[0])}
+            </span>
+          )}
+        </div>
       </button>
       {expanded && (
         <>

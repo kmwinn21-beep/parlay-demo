@@ -82,7 +82,7 @@ export async function GET(
     const conferenceRes = await db.execute({ sql: 'SELECT id FROM conferences WHERE id = ?', args: [conferenceId] });
     if (conferenceRes.rows.length === 0) return NextResponse.json({ error: 'Conference not found' }, { status: 404 });
 
-    const [settingsRes, seniorityRes, functionRes, actionsRes, prospectTypeRes, effectivenessRes] = await Promise.all([
+    const [settingsRes, seniorityRes, functionRes, actionsRes, prospectTypeRes, effectivenessRes, userOptsRes] = await Promise.all([
       db.execute({ sql: 'SELECT key, value FROM site_settings', args: [] }),
       db.execute({ sql: "SELECT id, value FROM config_options WHERE category = 'seniority'", args: [] }),
       db.execute({ sql: "SELECT id, value FROM config_options WHERE category = 'function'", args: [] }),
@@ -92,6 +92,7 @@ export async function GET(
         args: [],
       }).catch(() => ({ rows: [] as Row[] })),
       db.execute({ sql: `SELECT key, value FROM effectiveness_defaults WHERE key IN ('avg_annual_deal_size','avg_cost_per_unit')`, args: [] }).catch(() => ({ rows: [] as Row[] })),
+      db.execute({ sql: "SELECT id, value FROM config_options WHERE category = 'user'", args: [] }).catch(() => ({ rows: [] as Row[] })),
     ]);
 
     const settings: Record<string, string> = {};
@@ -99,6 +100,9 @@ export async function GET(
 
     const seniorityLabels = new Map<number, string>(seniorityRes.rows.map(r => [Number(r.id), String(r.value)]));
     const functionLabels = new Map<number, string>(functionRes.rows.map(r => [Number(r.id), String(r.value)]));
+    const userNameMap = new Map<number, string>((userOptsRes.rows as Row[]).map(r => [Number(r.id), String(r.value)]));
+    const resolveAssignedUserNames = (raw: string | null | undefined): string[] =>
+      String(raw ?? '').split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0).map(n => userNameMap.get(n) ?? String(n));
     const actionLabels = new Map<string, string>();
     for (const r of actionsRes.rows as Row[]) {
       const key = r.action_key ? String(r.action_key) : '';
@@ -312,7 +316,8 @@ export async function GET(
     const companies = Array.from(companyMap.values()).map(({ company, attendees }) => {
       const signals = signalsByCompany.get(company.id) ?? {};
       signals.has_existing_status = Boolean(company.status && normalizeString(company.status) !== 'unknown');
-      return scoreCompanyTarget({ company, attendees, signals, config, functionLabels, seniorityLabels });
+      const score = scoreCompanyTarget({ company, attendees, signals, config, functionLabels, seniorityLabels });
+      return { ...score, assigned_user_names: resolveAssignedUserNames(company.assigned_user) };
     }).sort((a, b) => b.target_priority_score - a.target_priority_score);
 
     const responseData = {

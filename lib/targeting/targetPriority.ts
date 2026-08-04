@@ -83,6 +83,10 @@ export interface CompanyTargetScore {
   company_id: number;
   company_name: string;
   wse: number | null;
+  /** Resolved by the caller (app/api/conferences/[id]/targeting/route.ts) from
+   * TargetingCompanyInput.assigned_user's raw comma-separated config_options
+   * ids — not populated by scoreCompanyTarget itself. */
+  assigned_user_names?: string[];
   target_priority_score: number;
   target_priority_tier: string;
   target_priority_tier_key: string;

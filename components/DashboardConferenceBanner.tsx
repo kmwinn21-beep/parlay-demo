@@ -36,6 +36,8 @@ export interface ConferenceInfo {
   start_date: string;
   end_date: string;
   location: string | null;
+  location_city: string | null;
+  location_state: string | null;
 }
 
 export type BannerData =
@@ -52,6 +54,11 @@ function formatDateRange(startDate: string, endDate: string): string {
   const endStr = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const year = end.getFullYear();
   return `${startStr} – ${endStr}, ${year}`;
+}
+
+function cityStateLabel(conference: ConferenceInfo): string | null {
+  if (conference.location_city && conference.location_state) return `${conference.location_city}, ${conference.location_state}`;
+  return conference.location;
 }
 
 function getMeetingStatus(outcome: string | null): { label: string; className: string } {
@@ -199,8 +206,10 @@ function BannerStateUpcoming({ data, collapsed, onToggle }: {
           <h1 className="text-2xl font-bold font-serif">{data.conference.name}</h1>
           <p className="text-white/60 text-sm mt-0.5">
             {formatDateRange(data.conference.start_date, data.conference.end_date)}
-            {data.conference.location ? ` · ${data.conference.location}` : ''}
           </p>
+          {cityStateLabel(data.conference) && (
+            <p className="text-white/60 text-sm mt-0.5">{cityStateLabel(data.conference)}</p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {collapsed && (

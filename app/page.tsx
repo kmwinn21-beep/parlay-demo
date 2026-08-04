@@ -32,7 +32,7 @@ async function getBannerData(tenantDb: Client, userId: number): Promise<BannerDa
 
     // Find active conference where user is internal attendee
     const activeRes = await tenantDb.execute({
-      sql: `SELECT id, name, start_date, end_date, location FROM conferences
+      sql: `SELECT id, name, start_date, end_date, location, location_city, location_state FROM conferences
             WHERE start_date <= ? AND end_date >= ?
               AND LOWER(',' || COALESCE(internal_attendees,'') || ',') LIKE ?
             ORDER BY start_date ASC LIMIT 1`,
@@ -94,7 +94,7 @@ async function getBannerData(tenantDb: Client, userId: number): Promise<BannerDa
 
       return {
         state: 'active',
-        conference: { id: confId, name: String(conf.name), start_date: startDate, end_date: endDate, location: conf.location ? String(conf.location) : null },
+        conference: { id: confId, name: String(conf.name), start_date: startDate, end_date: endDate, location: conf.location ? String(conf.location) : null, location_city: conf.location_city ? String(conf.location_city) : null, location_state: conf.location_state ? String(conf.location_state) : null },
         dayNumber,
         totalDays,
         stats: {
@@ -117,7 +117,7 @@ async function getBannerData(tenantDb: Client, userId: number): Promise<BannerDa
 
     // No active conference — find next upcoming where user is internal attendee
     const upcomingRes = await tenantDb.execute({
-      sql: `SELECT id, name, start_date, end_date, location FROM conferences
+      sql: `SELECT id, name, start_date, end_date, location, location_city, location_state FROM conferences
             WHERE start_date > ?
               AND LOWER(',' || COALESCE(internal_attendees,'') || ',') LIKE ?
             ORDER BY start_date ASC LIMIT 1`,
@@ -149,7 +149,7 @@ async function getBannerData(tenantDb: Client, userId: number): Promise<BannerDa
 
       return {
         state: 'upcoming',
-        conference: { id: confId, name: String(conf.name), start_date: startDate, end_date: String(conf.end_date ?? ''), location: conf.location ? String(conf.location) : null },
+        conference: { id: confId, name: String(conf.name), start_date: startDate, end_date: String(conf.end_date ?? ''), location: conf.location ? String(conf.location) : null, location_city: conf.location_city ? String(conf.location_city) : null, location_state: conf.location_state ? String(conf.location_state) : null },
         daysUntil,
         attendeeCount,
         mustTargetCount: 0,
