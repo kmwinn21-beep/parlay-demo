@@ -917,51 +917,57 @@ function PipelineChartsPanel({
   const showPipeline = sectionMode !== 'prospects';
 
   return (
-    <div className="flex flex-col gap-4 h-full min-h-0">
-      {/* All | Prospects | Pipeline — desktop only; mobile always behaves as 'all' */}
-      <div className="hidden sm:flex items-center justify-end flex-shrink-0">
-        <ToggleGroup
-          options={[
-            { key: 'all', label: 'All', activeColor: 'rgb(var(--brand-primary-rgb))' },
-            { key: 'prospects', label: 'Prospects', activeColor: 'rgb(var(--brand-primary-rgb))' },
-            { key: 'pipeline', label: 'Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
-          ]}
-          active={sectionMode}
-          onChange={key => setSectionMode(key as 'all' | 'prospects' | 'pipeline')}
-        />
-      </div>
-
-      <div
-        className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${showProspects ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'} ${sectionMode === 'prospects' ? 'flex-1 min-h-0' : 'flex-shrink-0'}`}
-      >
-        <div className="overflow-hidden min-h-0 flex flex-col">
-          <CompaniesByRepChart
-            icpCompanies={icpCompanies}
-            onSelectRep={onSelectRep}
-            selectedRepName={selectedRepName}
-            expanded={sectionMode === 'prospects'}
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden flex flex-col h-full min-h-0">
+      {/* Header bar — same light-gray toggle-header treatment as the
+          Internal Relationships / Relationship Coverage panel, so this
+          section's border lines up top-to-bottom with its row siblings. */}
+      <div className="flex items-center justify-end gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50 flex-shrink-0">
+        {/* All | Prospects | Pipeline — desktop only; mobile always behaves as 'all' */}
+        <div className="hidden sm:flex">
+          <ToggleGroup
+            options={[
+              { key: 'all', label: 'All', activeColor: 'rgb(var(--brand-primary-rgb))' },
+              { key: 'prospects', label: 'Prospects', activeColor: 'rgb(var(--brand-primary-rgb))' },
+              { key: 'pipeline', label: 'Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
+            ]}
+            active={sectionMode}
+            onChange={key => setSectionMode(key as 'all' | 'prospects' | 'pipeline')}
           />
         </div>
       </div>
 
-      <div
-        className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${showPipeline ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'} ${sectionMode === 'pipeline' ? 'flex-1 min-h-0' : 'flex-shrink-0'}`}
-      >
-        <div className="overflow-hidden min-h-0 flex flex-col">
-          {/* Targeted Pipeline / Meetings Pipeline (toggle) */}
-          <div className="rounded-xl border border-gray-200 bg-white p-4 flex-1 flex flex-col overflow-y-auto">
-            <div className="flex items-center justify-start mb-3 flex-shrink-0">
-              <ToggleGroup
-                options={[
-                  { key: 'targeted', label: 'Targeted Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
-                  { key: 'meetings', label: 'Meetings Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
-                ]}
-                active={pipelineMode}
-                onChange={key => setPipelineMode(key as 'targeted' | 'meetings')}
-              />
-            </div>
+      <div className="flex-1 min-h-0 flex flex-col gap-4 p-3 overflow-y-auto">
+        <div
+          className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${showProspects ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'} ${sectionMode === 'prospects' ? 'flex-1 min-h-0' : 'flex-shrink-0'}`}
+        >
+          <div className="overflow-hidden min-h-0 flex flex-col">
+            <CompaniesByRepChart
+              icpCompanies={icpCompanies}
+              onSelectRep={onSelectRep}
+              selectedRepName={selectedRepName}
+              expanded={sectionMode === 'prospects'}
+            />
+          </div>
+        </div>
 
-            {requiredPipeline != null && (
+        <div
+          className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${showPipeline ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'} ${sectionMode === 'pipeline' ? 'flex-1 min-h-0' : 'flex-shrink-0'}`}
+        >
+          <div className="overflow-hidden min-h-0 flex flex-col">
+            {/* Targeted Pipeline / Meetings Pipeline (toggle) */}
+            <div className={`flex-1 flex flex-col overflow-y-auto ${showProspects ? 'border-t border-gray-100 pt-4' : ''}`}>
+              <div className="flex items-center justify-start mb-3 flex-shrink-0">
+                <ToggleGroup
+                  options={[
+                    { key: 'targeted', label: 'Targeted Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
+                    { key: 'meetings', label: 'Meetings Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
+                  ]}
+                  active={pipelineMode}
+                  onChange={key => setPipelineMode(key as 'targeted' | 'meetings')}
+                />
+              </div>
+
+              {requiredPipeline != null && (
               <div className="pb-3 mb-3 border-b border-gray-100">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs text-gray-500 font-medium">Required Pipeline</span>
@@ -1017,6 +1023,7 @@ function PipelineChartsPanel({
             )}
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
@@ -1098,7 +1105,7 @@ function CompaniesByRepChart({
   const maxRepValue = Math.max(1, ...sortedRepData.map(r => repValueNumber(r)));
 
   return (
-    <div className={`rounded-xl border border-gray-200 bg-white p-4 flex flex-col gap-3 ${expanded ? 'flex-1 min-h-0' : 'flex-shrink-0'}`}>
+    <div className={`flex flex-col gap-3 ${expanded ? 'flex-1 min-h-0' : 'flex-shrink-0'}`}>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 flex-shrink-0">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">Prospects by Assigned Rep</p>
         <ToggleGroup
