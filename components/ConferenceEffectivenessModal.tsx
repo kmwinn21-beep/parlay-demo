@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type CSSProperties } from 'react';
 import { SummaryTab } from './effectiveness/SummaryTab';
 import { SalesExecutionTab } from './effectiveness/SalesExecutionTab';
 import { AudienceMessagingTab } from './effectiveness/AudienceMessagingTab';
@@ -9,6 +9,7 @@ import { DefinitionsTab } from './effectiveness/DefinitionsTab';
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { useConferenceReviewModals } from '@/lib/ConferenceReviewModalsContext';
 import { DraggableTabNav } from './DraggableTabNav';
+import { useSidebarCollapse, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_EXPANDED_WIDTH } from './SidebarCollapseContext';
 
 // ── Shared data types ─────────────────────────────────────────────────────────
 
@@ -129,6 +130,7 @@ export function ConferenceEffectivenessModal({ conferenceId, conferenceName }: P
 
 export function ConferenceEffectivenessModalBody() {
   const { effectiveness: slot, minimizeEffectiveness, closeEffectiveness } = useConferenceReviewModals();
+  const { collapsed: sidebarCollapsed } = useSidebarCollapse();
   const [data, setData] = useState<EffectivenessData | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>('summary');
@@ -225,7 +227,10 @@ export function ConferenceEffectivenessModalBody() {
         className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ease-in-out ${minimized ? 'opacity-0' : 'opacity-100'}`}
         onClick={() => minimizeEffectiveness()}
       />
-      <div className="absolute inset-0 sm:left-64 sm:flex sm:items-center sm:justify-center sm:p-5">
+      <div
+        className="absolute inset-0 sm:left-[var(--sidebar-w)] sm:flex sm:items-center sm:justify-center sm:p-5 transition-[left] duration-300 ease-in-out"
+        style={{ '--sidebar-w': `${sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH}px` } as CSSProperties}
+      >
         <div
           className={`relative w-full h-full sm:h-[85vh] sm:max-w-[1440px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden transition-all duration-300 ease-in-out origin-bottom-left
             ${minimized ? 'opacity-0 scale-50 translate-y-[40vh] -translate-x-[20vw]' : 'opacity-100 scale-100 translate-y-0 translate-x-0'}`}
