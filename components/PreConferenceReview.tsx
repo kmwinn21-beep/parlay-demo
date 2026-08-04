@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect, type CSSProperties } from 'react';
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { useConferenceReviewModals } from '@/lib/ConferenceReviewModalsContext';
 import { DraggableTabNav } from './DraggableTabNav';
@@ -286,6 +286,21 @@ export function PreConferenceReviewModal() {
   const loadedForIdRef = useRef<number | null>(null);
   const CACHE_TTL_MS = 5 * 60 * 1000;
 
+  // Header height, tracked live (it changes when the mobile stat pills
+  // collapse/expand) and exposed as a CSS var on the panel below so
+  // mobile-drawer content — e.g. the rep drill-down panel in
+  // pre-conference/LandscapeTab.tsx — can pin its top edge to the header's
+  // bottom edge without hardcoding a height that would drift out of sync.
+  const headerRef = useRef<HTMLDivElement>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setHeaderHeight(entry.contentRect.height));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   // Cycling loading text
   const LOADING_LINES = ['Your Pre-Conference Score is Loading', 'Compiling Relevant Data', 'Scoring Attendee Targets'];
   const [loadingLineIdx, setLoadingLineIdx] = useState(0);
@@ -478,9 +493,10 @@ export function PreConferenceReviewModal() {
           <div
             className={`relative w-full h-full sm:h-[85vh] sm:max-w-[1440px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden transition-all duration-300 ease-in-out origin-bottom-left
               ${minimized ? 'opacity-0 scale-50 translate-y-[40vh] -translate-x-[20vw]' : 'opacity-100 scale-100 translate-y-0 translate-x-0'}`}
+            style={{ '--pcr-header-h': `${headerHeight}px` } as CSSProperties}
           >
             {/* Panel header */}
-            <div className="bg-brand-primary px-6 py-4 flex-shrink-0">
+            <div ref={headerRef} className="bg-brand-primary px-6 py-4 flex-shrink-0">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-xs text-white/60 uppercase tracking-widest font-semibold mb-0.5">Pre-Conference Review</p>
