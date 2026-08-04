@@ -100,29 +100,26 @@ async function getEnrichedConferences(db: Client) {
   // page depends on.
   type PlanRow = { decision: string | null; assignedRepIds: number[] };
   const planMap = new Map<number, PlanRow>();
-  const allRepIds = new Set<number>();
   for (const r of plansRes.rows as Row[]) {
     let assignedRepIds: number[] = [];
     try {
       const parsed = JSON.parse(String(r.assigned_rep_ids ?? '[]'));
       if (Array.isArray(parsed)) assignedRepIds = parsed.map(Number).filter(n => !isNaN(n));
     } catch { /* ignore */ }
-    assignedRepIds.forEach(id => allRepIds.add(id));
     planMap.set(Number(r.conference_id), { decision: r.decision ? String(r.decision) : null, assignedRepIds });
   }
 
+  // Fetch the full user roster (not just plan-assigned ids) — needed below to
+  // also resolve conferences.internal_attendees names, which "Assigned reps"
+  // is merged with (see assignedReps below).
   const repMap = new Map<number, EnrichedRep>();
-  if (allRepIds.size > 0) {
-    const repIdsArr = Array.from(allRepIds);
-    const repPh = repIdsArr.map(() => '?').join(',');
-    const repsRes = await db.execute({
-      sql: `SELECT id, value FROM config_options WHERE category = 'user' AND id IN (${repPh})`,
-      args: repIdsArr,
-    });
-    for (const r of repsRes.rows as Row[]) {
-      const displayName = String(r.value);
-      repMap.set(Number(r.id), { userId: Number(r.id), displayName, initials: getInitials(displayName) });
-    }
+  const repByNameLower = new Map<string, EnrichedRep>();
+  const repsRes = await db.execute({ sql: `SELECT id, value FROM config_options WHERE category = 'user'`, args: [] });
+  for (const r of repsRes.rows as Row[]) {
+    const displayName = String(r.value);
+    const rep: EnrichedRep = { userId: Number(r.id), displayName, initials: getInitials(displayName) };
+    repMap.set(rep.userId, rep);
+    repByNameLower.set(displayName.toLowerCase(), rep);
   }
 
   const outreachAssignedMap = new Map<number, number>();
@@ -136,7 +133,18 @@ async function getEnrichedConferences(db: Client) {
     const attendeeCount = Number(r.attendee_count ?? 0);
     const hasAttendeeList = attendeeCount > 0;
     const plan = planMap.get(confId);
-    const assignedReps = (plan?.assignedRepIds ?? []).map(id => repMap.get(id)).filter((x): x is EnrichedRep => x != null);
+    const planReps = (plan?.assignedRepIds ?? []).map(id => repMap.get(id)).filter((x): x is EnrichedRep => x != null);
+    // Merge with conferences.internal_attendees (the "who's attending" names
+    // shown on the conference details page) so a conference isn't shown as
+    // having no assigned reps just because it was only ever set via that
+    // field and never through the Program Planner's "Assign reps" flow.
+    const internalReps = String(r.internal_attendees ?? '')
+      .split(',').map(s => s.trim()).filter(Boolean)
+      .map(name => repByNameLower.get(name.toLowerCase()))
+      .filter((x): x is EnrichedRep => x != null);
+    const mergedReps = new Map<number, EnrichedRep>();
+    for (const rep of [...planReps, ...internalReps]) mergedReps.set(rep.userId, rep);
+    const assignedReps = Array.from(mergedReps.values());
 
     let stage: ConferenceStage | null = null;
     try {
