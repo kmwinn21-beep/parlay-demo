@@ -1210,7 +1210,7 @@ function RepDetailPanel({
   }, [rep.companies]);
 
   return (
-    <div className="absolute inset-0 z-10 flex flex-col rounded-xl border border-gray-200 bg-white shadow-2xl overflow-hidden animate-[slideInRight_0.25s_ease-out]">
+    <div className="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] rounded-t-2xl sm:absolute sm:inset-0 sm:z-10 sm:max-h-none sm:rounded-xl flex flex-col border border-gray-200 bg-white shadow-2xl overflow-hidden drawer-mobile-responsive">
       {/* Header */}
       <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-gray-100 bg-gray-50 flex-shrink-0">
         <span
@@ -1797,11 +1797,18 @@ export function LandscapeTab({
             relationships={relationships}
           />
           {selectedRep && (
-            <RepDetailPanel
-              rep={selectedRep}
-              totalIcp={icpCompanies.length}
-              onClose={() => setSelectedRep(null)}
-            />
+            <>
+              {/* Backdrop — mobile bottom-sheet only; desktop stays a contained overlay with no backdrop */}
+              <div
+                className="fixed inset-0 z-40 bg-black/30 sm:hidden"
+                onClick={() => setSelectedRep(null)}
+              />
+              <RepDetailPanel
+                rep={selectedRep}
+                totalIcp={icpCompanies.length}
+                onClose={() => setSelectedRep(null)}
+              />
+            </>
           )}
         </div>
       </div>
