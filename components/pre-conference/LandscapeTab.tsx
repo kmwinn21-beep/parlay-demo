@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { TargetBtn } from './TargetBtn';
 import { useRecordDrawer } from './RecordDrawerContext';
 import type { LandscapeData, TargetEntry, ClientCompanyEntry, ByRepEntry, IcpCompany, RelationshipRow } from '../PreConferenceReview';
@@ -740,20 +740,26 @@ function ToggleGroup({
   active,
   onChange,
   fullWidth,
+  fullWidthMobile,
 }: {
   options: { key: string; label: string; activeColor: string }[];
   active: string;
   onChange: (key: string) => void;
   fullWidth?: boolean;
+  /** Full width only below the sm breakpoint, auto-width (right-alignable) at sm+ — for
+   * toggles that live in a header row on desktop but need their own full-width row on mobile. */
+  fullWidthMobile?: boolean;
 }) {
+  const containerWidth = fullWidth ? 'flex w-full' : fullWidthMobile ? 'flex w-full sm:inline-flex sm:w-auto' : 'inline-flex';
+  const buttonWidth = fullWidth ? 'flex-1' : fullWidthMobile ? 'flex-1 sm:flex-none' : '';
   return (
-    <div className={`${fullWidth ? 'flex w-full' : 'inline-flex'} rounded-full border border-gray-200 bg-gray-100 p-0.5 gap-0.5`}>
+    <div className={`${containerWidth} rounded-full border border-gray-200 bg-gray-100 p-0.5 gap-0.5`}>
       {options.map(opt => (
         <button
           key={opt.key}
           type="button"
           onClick={() => onChange(opt.key)}
-          className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${fullWidth ? 'flex-1' : ''}`}
+          className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${buttonWidth}`}
           style={active === opt.key ? { backgroundColor: opt.activeColor, color: '#fff' } : { color: '#6b7280' }}
         >
           {opt.label}
@@ -980,6 +986,20 @@ function PipelineChartsPanel({
   );
 }
 
+// Same $125k / $1.2M abbreviation convention used for company value pills
+// elsewhere (e.g. components/OutreachCompanyCard.tsx) — duplicated locally
+// per this codebase's established precedent rather than a shared import.
+function abbreviateDollar(value: number): string {
+  if (value >= 1_000_000) return `$${(Math.floor(value / 100_000) / 10).toFixed(1)}M`;
+  if (value >= 1_000) return `$${Math.floor(value / 1000)}k`;
+  return `$${Math.round(value).toLocaleString('en-US')}`;
+}
+
+function companyValue(co: IcpCompany, avgCostPerUnit: number): number | null {
+  if (co.wse == null || avgCostPerUnit <= 0) return null;
+  return co.wse * avgCostPerUnit;
+}
+
 const REP_CHART_COLORS = ['#1B76BC', '#dc2626', '#059669', '#9333ea', '#ea580c', '#db2777', '#0891b2', '#ca8a04', '#4f46e5', '#6b7280'];
 
 interface RepChartEntry {
@@ -1011,15 +1031,40 @@ function CompaniesByRepChart({
   selectedRepName: string | null;
 }) {
   const repData = useMemo(() => computeRepData(icpCompanies), [icpCompanies]);
+  const avgCostPerUnit = useAvgCostPerUnit();
+  const [valueMode, setValueMode] = useState<'%' | '$' | '#'>('%');
+  const legendRef = useRef<HTMLDivElement>(null);
+  const scrollLegend = (dir: -1 | 1) => legendRef.current?.scrollBy({ left: dir * 160, behavior: 'smooth' });
 
   const total = icpCompanies.length;
 
+  const repValueText = (r: RepChartEntry): string => {
+    if (valueMode === '#') return `${r.count}`;
+    if (valueMode === '$') {
+      const sum = r.companies.reduce((s, co) => s + (companyValue(co, avgCostPerUnit) ?? 0), 0);
+      return abbreviateDollar(sum);
+    }
+    return `${Math.round((r.count / total) * 100)}%`;
+  };
+
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 flex flex-col gap-3 flex-shrink-0">
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">
-        <span className="hidden sm:inline">Prospect Companies by Assigned Rep Breakdown</span>
-        <span className="sm:hidden">Prospects by Assigned Rep</span>
-      </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">
+          <span className="hidden sm:inline">Prospect Companies by Assigned Rep Breakdown</span>
+          <span className="sm:hidden">Prospects by Assigned Rep</span>
+        </p>
+        <ToggleGroup
+          fullWidthMobile
+          options={[
+            { key: '%', label: '%', activeColor: 'rgb(var(--brand-primary-rgb))' },
+            { key: '$', label: '$', activeColor: 'rgb(var(--brand-primary-rgb))' },
+            { key: '#', label: '#', activeColor: 'rgb(var(--brand-primary-rgb))' },
+          ]}
+          active={valueMode}
+          onChange={key => setValueMode(key as '%' | '$' | '#')}
+        />
+      </div>
       {total === 0 ? (
         <p className="text-xs text-gray-400">No ICP companies attending.</p>
       ) : (
@@ -1039,34 +1084,56 @@ function CompaniesByRepChart({
                     filter: isDimmed ? 'grayscale(1)' : undefined,
                     opacity: isDimmed ? 0.35 : 1,
                   }}
-                  title={`${r.name}: ${r.count} (${Math.round((r.count / total) * 100)}%)`}
+                  title={`${r.name}: ${repValueText(r)}`}
                 />
               );
             })}
           </div>
-          <div className="flex flex-wrap gap-2">
-            {repData.map(r => {
-              const isDimmed = selectedRepName != null && selectedRepName !== r.name;
-              return (
-                <button
-                  key={r.name}
-                  type="button"
-                  onClick={() => onSelectRep(r)}
-                  title={r.name}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium hover:brightness-95 transition-all duration-150"
-                  style={{
-                    backgroundColor: hexAlpha(r.color, 0.12),
-                    color: r.color,
-                    border: `1px solid ${hexAlpha(r.color, 0.3)}`,
-                    filter: isDimmed ? 'grayscale(1)' : undefined,
-                    opacity: isDimmed ? 0.4 : 1,
-                  }}
-                >
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: r.color }} />
-                  {repInitials(r.name)} ({Math.round((r.count / total) * 100)}%)
-                </button>
-              );
-            })}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => scrollLegend(-1)}
+              className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-700 transition-colors"
+              aria-label="Scroll reps left"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <div ref={legendRef} className="flex-1 min-w-0 flex flex-nowrap gap-2 overflow-x-auto scrollbar-hide">
+              {repData.map(r => {
+                const isDimmed = selectedRepName != null && selectedRepName !== r.name;
+                return (
+                  <button
+                    key={r.name}
+                    type="button"
+                    onClick={() => onSelectRep(r)}
+                    title={r.name}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium hover:brightness-95 transition-all duration-150 flex-shrink-0 whitespace-nowrap"
+                    style={{
+                      backgroundColor: hexAlpha(r.color, 0.12),
+                      color: r.color,
+                      border: `1px solid ${hexAlpha(r.color, 0.3)}`,
+                      filter: isDimmed ? 'grayscale(1)' : undefined,
+                      opacity: isDimmed ? 0.4 : 1,
+                    }}
+                  >
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: r.color }} />
+                    {repInitials(r.name)} ({repValueText(r)})
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={() => scrollLegend(1)}
+              className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-700 transition-colors"
+              aria-label="Scroll reps right"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
         </>
       )}
@@ -1091,21 +1158,32 @@ function SeniorityPill({ seniority }: { seniority: string | null }) {
   );
 }
 
-function IcpCompanyCard({ co, accentColor }: { co: IcpCompany; accentColor: string }) {
+function IcpCompanyCard({ co, accentColor, dimmed }: { co: IcpCompany; accentColor: string; dimmed?: boolean }) {
   const openRecord = useRecordDrawer();
+  const avgCostPerUnit = useAvgCostPerUnit();
   const [expanded, setExpanded] = useState(false);
+  const value = companyValue(co, avgCostPerUnit);
   return (
     <div
-      className="rounded-lg overflow-hidden bg-white"
-      style={{ border: `1px solid ${hexAlpha(accentColor, 0.3)}` }}
+      className="rounded-lg overflow-hidden bg-white transition-all duration-150"
+      style={{
+        border: `1px solid ${hexAlpha(accentColor, 0.3)}`,
+        filter: dimmed ? 'grayscale(1)' : undefined,
+        opacity: dimmed ? 0.4 : 1,
+      }}
     >
       <button
         onClick={() => setExpanded(e => !e)}
         className="w-full flex items-center justify-between px-3 py-2 text-left gap-2 transition-colors"
         style={{ backgroundColor: hexAlpha(accentColor, 0.07) }}
       >
-        <span className="text-xs font-semibold text-gray-800 truncate flex-1">{co.name}</span>
+        <span className="text-xs font-semibold text-gray-800 truncate flex-1 min-w-0">{co.name}</span>
         <div className="flex items-center gap-2 flex-shrink-0">
+          {value != null && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
+              {abbreviateDollar(value)}
+            </span>
+          )}
           <span className="text-xs font-bold" style={{ color: accentColor }}>{co.attendees.length}</span>
           <svg
             className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`}
@@ -1147,9 +1225,20 @@ function IcpCompanyCard({ co, accentColor }: { co: IcpCompany; accentColor: stri
   );
 }
 
-function SeniorityDonut({ entries, total }: { entries: [string, number][]; total: number }) {
-  const size = 120, stroke = 16, r = (size - stroke) / 2, c = 2 * Math.PI * r;
+function SeniorityDonut({
+  entries,
+  total,
+  selected,
+  onSelect,
+}: {
+  entries: [string, number][];
+  total: number;
+  selected: string | null;
+  onSelect: (label: string | null) => void;
+}) {
+  const size = 120, stroke = 32, r = (size - stroke) / 2, c = 2 * Math.PI * r;
   let cumulative = 0;
+  const toggle = (label: string) => onSelect(selected === label ? null : label);
   return (
     <div className="flex items-center gap-4">
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="flex-shrink-0 -rotate-90">
@@ -1160,6 +1249,7 @@ function SeniorityDonut({ entries, total }: { entries: [string, number][]; total
           const offset = cumulative;
           cumulative += dash;
           const color = SENIORITY_COLORS[label] ?? '#6b7280';
+          const isDimmed = selected != null && selected !== label;
           return (
             <circle
               key={label}
@@ -1167,18 +1257,30 @@ function SeniorityDonut({ entries, total }: { entries: [string, number][]; total
               stroke={color} strokeWidth={stroke}
               strokeDasharray={`${dash} ${c - dash}`}
               strokeDashoffset={-offset}
+              className="cursor-pointer transition-all duration-150"
+              style={{ filter: isDimmed ? 'grayscale(1)' : undefined, opacity: isDimmed ? 0.35 : 1 }}
+              onClick={() => toggle(label)}
             />
           );
         })}
       </svg>
       <div className="flex flex-col gap-1.5 min-w-0">
-        {entries.map(([label, count]) => (
-          <div key={label} className="flex items-center gap-1.5 text-xs">
-            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: SENIORITY_COLORS[label] ?? '#6b7280' }} />
-            <span className="text-gray-600 truncate">{label}</span>
-            <span className="text-gray-400 flex-shrink-0">({count})</span>
-          </div>
-        ))}
+        {entries.map(([label, count]) => {
+          const isDimmed = selected != null && selected !== label;
+          return (
+            <button
+              key={label}
+              type="button"
+              onClick={() => toggle(label)}
+              className="flex items-center gap-1.5 text-xs transition-all duration-150"
+              style={{ filter: isDimmed ? 'grayscale(1)' : undefined, opacity: isDimmed ? 0.4 : 1 }}
+            >
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: SENIORITY_COLORS[label] ?? '#6b7280' }} />
+              <span className={`text-gray-600 truncate ${selected === label ? 'font-semibold' : ''}`}>{label}</span>
+              <span className="text-gray-400 flex-shrink-0">({count})</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -1194,7 +1296,8 @@ function RepDetailPanel({
   onClose: () => void;
 }) {
   const pct = totalIcp > 0 ? Math.round((rep.count / totalIcp) * 100) : 0;
-  const [showSeniority, setShowSeniority] = useState(false);
+  const avgCostPerUnit = useAvgCostPerUnit();
+  const [selectedSeniority, setSelectedSeniority] = useState<string | null>(null);
 
   const seniorityBreakdown = useMemo(() => {
     const counts = new Map<string, number>();
@@ -1208,6 +1311,11 @@ function RepDetailPanel({
     }
     return { total, entries: Array.from(counts.entries()).sort((a, b) => b[1] - a[1]) as [string, number][] };
   }, [rep.companies]);
+
+  const totalValue = useMemo(
+    () => rep.companies.reduce((s, co) => s + (companyValue(co, avgCostPerUnit) ?? 0), 0),
+    [rep.companies, avgCostPerUnit]
+  );
 
   return (
     <div className="fixed inset-x-0 bottom-0 top-[var(--pcr-header-h,0px)] z-50 rounded-t-2xl sm:absolute sm:inset-0 sm:top-0 sm:z-10 sm:rounded-xl flex flex-col border border-gray-200 bg-white shadow-2xl overflow-hidden drawer-mobile-responsive">
@@ -1231,7 +1339,7 @@ function RepDetailPanel({
         </button>
       </div>
 
-      {/* Stat cards + Seniority Breakdown toggle */}
+      {/* Stat cards */}
       <div className="grid grid-cols-3 gap-2 p-3 flex-shrink-0">
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-2.5 text-center">
           <p className="text-lg font-bold text-gray-800">{rep.count}</p>
@@ -1241,43 +1349,35 @@ function RepDetailPanel({
           <p className="text-lg font-bold text-gray-800">{pct}%</p>
           <p className="text-[10px] text-gray-400 uppercase tracking-wide">of ICP Total</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowSeniority(v => !v)}
-          className={`rounded-lg border p-2 text-center flex flex-col items-center justify-center gap-1 transition-colors ${
-            showSeniority ? 'border-brand-primary bg-brand-highlight' : 'border-gray-200 bg-gray-50 hover:bg-gray-100'
-          }`}
-        >
-          <svg className="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
-          </svg>
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide leading-tight">Seniority Breakdown</p>
-        </button>
-      </div>
-
-      {/* Seniority donut — expands from the bottom of the stat card row */}
-      <div
-        className="overflow-hidden transition-[max-height] duration-300 ease-in-out flex-shrink-0"
-        style={{ maxHeight: showSeniority ? 180 : 0 }}
-      >
-        <div className="px-3 pb-3 flex justify-center">
-          {seniorityBreakdown.total === 0 ? (
-            <p className="text-xs text-gray-400 text-center py-4">No attendees to show</p>
-          ) : (
-            <SeniorityDonut entries={seniorityBreakdown.entries} total={seniorityBreakdown.total} />
-          )}
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-2.5 text-center">
+          <p className="text-lg font-bold text-gray-800">{totalValue > 0 ? abbreviateDollar(totalValue) : '—'}</p>
+          <p className="text-[10px] text-gray-400 uppercase tracking-wide">Company Value</p>
         </div>
       </div>
 
-      {/* Company cards */}
+      {/* Seniority donut — always visible */}
+      <div className="px-3 pb-3 flex justify-center flex-shrink-0">
+        {seniorityBreakdown.total === 0 ? (
+          <p className="text-xs text-gray-400 text-center py-4">No attendees to show</p>
+        ) : (
+          <SeniorityDonut
+            entries={seniorityBreakdown.entries}
+            total={seniorityBreakdown.total}
+            selected={selectedSeniority}
+            onSelect={setSelectedSeniority}
+          />
+        )}
+      </div>
+
+      {/* Company cards — dimmed when they have no attendee at the selected seniority */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1.5 min-h-0">
         {rep.companies.length === 0 ? (
           <p className="text-xs text-gray-400 text-center py-6">No companies assigned</p>
         ) : (
-          rep.companies.map(co => (
-            <IcpCompanyCard key={co.id} co={co} accentColor={rep.color} />
-          ))
+          rep.companies.map(co => {
+            const dimmed = selectedSeniority != null && !co.attendees.some(a => (a.seniority || 'Other') === selectedSeniority);
+            return <IcpCompanyCard key={co.id} co={co} accentColor={rep.color} dimmed={dimmed} />;
+          })
         )}
       </div>
     </div>

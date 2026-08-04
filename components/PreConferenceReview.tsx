@@ -55,6 +55,7 @@ export interface IcpCompany {
   company_type: string | null;
   avgHealth: number;
   assigned_user_names: string[];
+  wse: number | null;
   attendees: { id: number; first_name: string; last_name: string; title: string | null; seniority: string | null; health: number }[];
 }
 
