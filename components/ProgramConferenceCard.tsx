@@ -24,6 +24,8 @@ export interface ProgramCardConference {
   start_date: string;
   end_date: string;
   location: string;
+  location_city?: string | null;
+  location_state?: string | null;
   stage: ConferenceStage | null;
   post_conference_days?: number | null;
   assignedReps: ProgramCardRep[];
@@ -37,6 +39,14 @@ export interface ProgramCardConference {
   pipelineInfluenced?: number | null;
   meetingCount?: number | null;
   companiesEngaged?: number | null;
+}
+
+// Same city/state-only convention used on the conference details page and
+// dashboard banner — falls back to the raw location string when city/state
+// aren't set.
+function cityStateLabel(conference: Pick<ProgramCardConference, 'location' | 'location_city' | 'location_state'>): string {
+  if (conference.location_city && conference.location_state) return `${conference.location_city}, ${conference.location_state}`;
+  return conference.location;
 }
 
 // Deterministic background color from a name — kept local per this build's
@@ -265,7 +275,7 @@ export function ProgramConferenceCard({ conference, territories, planYear, allCo
         <p style={{ fontSize: 11, color: 'var(--text-secondary, #6B7280)', margin: '2px 0 0' }} className="truncate">
           {formatDate(conference.start_date)}
           {conference.end_date && conference.end_date !== conference.start_date ? ` – ${formatDate(conference.end_date)}` : ''}
-          {conference.location ? ` · ${conference.location}` : ''}
+          {conference.location ? ` · ${cityStateLabel(conference)}` : ''}
         </p>
 
         <div style={{ marginTop: 8 }} onClick={e => { if (canAssignReps) { e.preventDefault(); e.stopPropagation(); } }}>
