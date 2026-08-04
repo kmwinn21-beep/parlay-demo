@@ -853,7 +853,7 @@ export default function CompanyDetailPage() {
                     setEditData((p) => ({ ...p, wse: val === '' ? undefined : Number(val) }));
                   }}
                   className="input-field"
-                  placeholder="# of Work Site Employees"
+                  placeholder={`# of ${unitTypeLabel}`}
                 />
               </div>
               <div>
