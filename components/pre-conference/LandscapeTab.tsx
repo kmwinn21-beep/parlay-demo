@@ -1147,6 +1147,43 @@ function IcpCompanyCard({ co, accentColor }: { co: IcpCompany; accentColor: stri
   );
 }
 
+function SeniorityDonut({ entries, total }: { entries: [string, number][]; total: number }) {
+  const size = 120, stroke = 16, r = (size - stroke) / 2, c = 2 * Math.PI * r;
+  let cumulative = 0;
+  return (
+    <div className="flex items-center gap-4">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="flex-shrink-0 -rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#f3f4f6" strokeWidth={stroke} />
+        {entries.map(([label, count]) => {
+          const frac = total > 0 ? count / total : 0;
+          const dash = frac * c;
+          const offset = cumulative;
+          cumulative += dash;
+          const color = SENIORITY_COLORS[label] ?? '#6b7280';
+          return (
+            <circle
+              key={label}
+              cx={size / 2} cy={size / 2} r={r} fill="none"
+              stroke={color} strokeWidth={stroke}
+              strokeDasharray={`${dash} ${c - dash}`}
+              strokeDashoffset={-offset}
+            />
+          );
+        })}
+      </svg>
+      <div className="flex flex-col gap-1.5 min-w-0">
+        {entries.map(([label, count]) => (
+          <div key={label} className="flex items-center gap-1.5 text-xs">
+            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: SENIORITY_COLORS[label] ?? '#6b7280' }} />
+            <span className="text-gray-600 truncate">{label}</span>
+            <span className="text-gray-400 flex-shrink-0">({count})</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function RepDetailPanel({
   rep,
   totalIcp,
@@ -1157,8 +1194,23 @@ function RepDetailPanel({
   onClose: () => void;
 }) {
   const pct = totalIcp > 0 ? Math.round((rep.count / totalIcp) * 100) : 0;
+  const [showSeniority, setShowSeniority] = useState(false);
+
+  const seniorityBreakdown = useMemo(() => {
+    const counts = new Map<string, number>();
+    let total = 0;
+    for (const co of rep.companies) {
+      for (const a of co.attendees) {
+        const label = a.seniority || 'Other';
+        counts.set(label, (counts.get(label) ?? 0) + 1);
+        total++;
+      }
+    }
+    return { total, entries: Array.from(counts.entries()).sort((a, b) => b[1] - a[1]) as [string, number][] };
+  }, [rep.companies]);
+
   return (
-    <div className="absolute inset-0 z-10 flex flex-col rounded-xl border border-gray-200 bg-white shadow-2xl overflow-hidden animate-[slideInRight_0.25s_ease-out]">
+    <div className="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] rounded-t-2xl sm:absolute sm:inset-0 sm:z-10 sm:max-h-none sm:rounded-xl flex flex-col border border-gray-200 bg-white shadow-2xl overflow-hidden drawer-mobile-responsive">
       {/* Header */}
       <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-gray-100 bg-gray-50 flex-shrink-0">
         <span
@@ -1179,8 +1231,8 @@ function RepDetailPanel({
         </button>
       </div>
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 gap-2 p-3 flex-shrink-0">
+      {/* Stat cards + Seniority Breakdown toggle */}
+      <div className="grid grid-cols-3 gap-2 p-3 flex-shrink-0">
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-2.5 text-center">
           <p className="text-lg font-bold text-gray-800">{rep.count}</p>
           <p className="text-[10px] text-gray-400 uppercase tracking-wide">Companies</p>
@@ -1188,6 +1240,33 @@ function RepDetailPanel({
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-2.5 text-center">
           <p className="text-lg font-bold text-gray-800">{pct}%</p>
           <p className="text-[10px] text-gray-400 uppercase tracking-wide">of ICP Total</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowSeniority(v => !v)}
+          className={`rounded-lg border p-2 text-center flex flex-col items-center justify-center gap-1 transition-colors ${
+            showSeniority ? 'border-brand-primary bg-brand-highlight' : 'border-gray-200 bg-gray-50 hover:bg-gray-100'
+          }`}
+        >
+          <svg className="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+          </svg>
+          <p className="text-[10px] text-gray-500 uppercase tracking-wide leading-tight">Seniority Breakdown</p>
+        </button>
+      </div>
+
+      {/* Seniority donut — expands from the bottom of the stat card row */}
+      <div
+        className="overflow-hidden transition-[max-height] duration-300 ease-in-out flex-shrink-0"
+        style={{ maxHeight: showSeniority ? 180 : 0 }}
+      >
+        <div className="px-3 pb-3 flex justify-center">
+          {seniorityBreakdown.total === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-4">No attendees to show</p>
+          ) : (
+            <SeniorityDonut entries={seniorityBreakdown.entries} total={seniorityBreakdown.total} />
+          )}
         </div>
       </div>
 
@@ -1718,11 +1797,18 @@ export function LandscapeTab({
             relationships={relationships}
           />
           {selectedRep && (
-            <RepDetailPanel
-              rep={selectedRep}
-              totalIcp={icpCompanies.length}
-              onClose={() => setSelectedRep(null)}
-            />
+            <>
+              {/* Backdrop — mobile bottom-sheet only; desktop stays a contained overlay with no backdrop */}
+              <div
+                className="fixed inset-0 z-40 bg-black/30 sm:hidden"
+                onClick={() => setSelectedRep(null)}
+              />
+              <RepDetailPanel
+                rep={selectedRep}
+                totalIcp={icpCompanies.length}
+                onClose={() => setSelectedRep(null)}
+              />
+            </>
           )}
         </div>
       </div>
