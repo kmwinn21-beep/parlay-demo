@@ -1122,40 +1122,66 @@ function CompaniesByRepChart({
       {total === 0 ? (
         <p className="text-xs text-gray-400">No ICP companies attending.</p>
       ) : expanded ? (
-        <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-0.5">
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-0.5">
           {sortedRepData.map(r => {
             const isDimmed = selectedRepName != null && selectedRepName !== r.name;
             const value = repValueNumber(r);
             const pct = Math.max(2, Math.round((value / maxRepValue) * 100));
             const valueText = repValueText(r);
             const showInside = pct >= 22;
+            const seniorityCounts = new Map<string, number>();
+            for (const co of r.companies) {
+              for (const a of co.attendees) {
+                const label = a.seniority || 'Other';
+                seniorityCounts.set(label, (seniorityCounts.get(label) ?? 0) + 1);
+              }
+            }
+            const seniorityEntries = Array.from(seniorityCounts.entries()).sort((a, b) => b[1] - a[1]);
             return (
-              <button
-                key={r.name}
-                type="button"
-                onClick={() => onSelectRep(r)}
-                title={r.name}
-                className="w-full flex items-center gap-2 group transition-all duration-150"
-                style={{ filter: isDimmed ? 'grayscale(1)' : undefined, opacity: isDimmed ? 0.4 : 1 }}
-              >
-                <span className="w-28 flex-shrink-0 text-xs font-medium text-gray-700 text-right truncate">{r.name}</span>
-                <div className="flex-1 h-6 relative">
-                  <div
-                    className="h-6 rounded-md flex items-center justify-end transition-all duration-300 ease-out group-hover:brightness-110"
-                    style={{ width: `${pct}%`, backgroundColor: r.color, minWidth: 4 }}
-                  >
-                    {showInside && <span className="mr-1.5 text-[11px] font-semibold text-white whitespace-nowrap">{valueText}</span>}
-                  </div>
-                  {!showInside && (
-                    <span
-                      className="absolute top-1/2 -translate-y-1/2 text-[11px] font-semibold text-gray-600 whitespace-nowrap"
-                      style={{ left: `calc(${pct}% + 6px)` }}
+              <div key={r.name} className="transition-all duration-150" style={{ filter: isDimmed ? 'grayscale(1)' : undefined, opacity: isDimmed ? 0.4 : 1 }}>
+                <button
+                  type="button"
+                  onClick={() => onSelectRep(r)}
+                  title={r.name}
+                  className="w-full flex items-center gap-2 group"
+                >
+                  <span className="w-28 flex-shrink-0 text-xs font-medium text-gray-700 text-right truncate">{r.name}</span>
+                  <div className="flex-1 h-6 relative">
+                    <div
+                      className="h-6 rounded-md flex items-center justify-end transition-all duration-300 ease-out group-hover:brightness-110"
+                      style={{ width: `${pct}%`, backgroundColor: r.color, minWidth: 4 }}
                     >
-                      {valueText}
-                    </span>
-                  )}
-                </div>
-              </button>
+                      {showInside && <span className="mr-1.5 text-[11px] font-semibold text-white whitespace-nowrap">{valueText}</span>}
+                    </div>
+                    {!showInside && (
+                      <span
+                        className="absolute top-1/2 -translate-y-1/2 text-[11px] font-semibold text-gray-600 whitespace-nowrap"
+                        style={{ left: `calc(${pct}% + 6px)` }}
+                      >
+                        {valueText}
+                      </span>
+                    )}
+                  </div>
+                </button>
+                {seniorityEntries.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1 pl-[calc(7rem+0.5rem)]">
+                    {seniorityEntries.map(([label, count]) => {
+                      const color = SENIORITY_COLORS[label] ?? '#6b7280';
+                      return (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => onSelectRep(r)}
+                          className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border hover:brightness-95 transition-all duration-150 whitespace-nowrap"
+                          style={{ color, borderColor: `${color}60`, backgroundColor: `${color}14` }}
+                        >
+                          {label} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
