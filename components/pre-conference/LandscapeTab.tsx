@@ -832,6 +832,9 @@ function PipelineChartsPanel({
   const [meetingsConvPct, setMeetingsConvPct] = useState(60);
   const [requiredPipeline, setRequiredPipeline] = useState<number | null>(null);
   const [pipelineMode, setPipelineMode] = useState<'targeted' | 'meetings'>('targeted');
+  // Desktop-only — mobile always renders as if 'all' since the toggle that
+  // changes this is hidden there (see the "hidden sm:flex" wrapper below).
+  const [sectionMode, setSectionMode] = useState<'all' | 'prospects' | 'pipeline'>('all');
 
   // Fixed conversion rate matching ConferenceTargetsTab default — not user-adjustable here
   const conversionPct = 60;
@@ -910,77 +913,110 @@ function PipelineChartsPanel({
       : (meetingAttendeeIds.size === 0 ? 'No meetings scheduled yet.' : 'No target companies with meetings.'))
     : 'Set avg. cost per unit in Admin Settings to see values.';
 
-  return (
-    <div className="flex flex-col gap-4 h-full">
-      <CompaniesByRepChart icpCompanies={icpCompanies} onSelectRep={onSelectRep} selectedRepName={selectedRepName} />
+  const showProspects = sectionMode !== 'pipeline';
+  const showPipeline = sectionMode !== 'prospects';
 
-      {/* Targeted Pipeline / Meetings Pipeline (toggle) */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4 flex-1 flex flex-col overflow-y-auto">
-        <div className="flex items-center justify-start mb-3 flex-shrink-0">
-          <ToggleGroup
-            options={[
-              { key: 'targeted', label: 'Targeted Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
-              { key: 'meetings', label: 'Meetings Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
-            ]}
-            active={pipelineMode}
-            onChange={key => setPipelineMode(key as 'targeted' | 'meetings')}
+  return (
+    <div className="flex flex-col gap-4 h-full min-h-0">
+      {/* All | Prospects | Pipeline — desktop only; mobile always behaves as 'all' */}
+      <div className="hidden sm:flex items-center justify-end flex-shrink-0">
+        <ToggleGroup
+          options={[
+            { key: 'all', label: 'All', activeColor: 'rgb(var(--brand-primary-rgb))' },
+            { key: 'prospects', label: 'Prospects', activeColor: 'rgb(var(--brand-primary-rgb))' },
+            { key: 'pipeline', label: 'Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
+          ]}
+          active={sectionMode}
+          onChange={key => setSectionMode(key as 'all' | 'prospects' | 'pipeline')}
+        />
+      </div>
+
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${showProspects ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'} ${sectionMode === 'prospects' ? 'flex-1 min-h-0' : 'flex-shrink-0'}`}
+      >
+        <div className="overflow-hidden min-h-0 flex flex-col">
+          <CompaniesByRepChart
+            icpCompanies={icpCompanies}
+            onSelectRep={onSelectRep}
+            selectedRepName={selectedRepName}
+            expanded={sectionMode === 'prospects'}
           />
         </div>
+      </div>
 
-        {requiredPipeline != null && (
-          <div className="pb-3 mb-3 border-b border-gray-100">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs text-gray-500 font-medium">Required Pipeline</span>
-              <span className="text-xs text-gray-400">${requiredPipeline.toLocaleString('en-US')}</span>
-            </div>
-            <div className="bg-gray-100 rounded-full h-2.5 overflow-hidden">
-              <div
-                className="h-2.5 rounded-full transition-all duration-300"
-                style={{
-                  width: `${Math.min((activeCoverageRatio ?? 0) * 100, 100)}%`,
-                  backgroundColor: (activeCoverageRatio ?? 0) >= 1 ? '#059669' : (activeCoverageRatio ?? 0) >= 0.6 ? '#f59e0b' : '#dc2626',
-                }}
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${showPipeline ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'} ${sectionMode === 'pipeline' ? 'flex-1 min-h-0' : 'flex-shrink-0'}`}
+      >
+        <div className="overflow-hidden min-h-0 flex flex-col">
+          {/* Targeted Pipeline / Meetings Pipeline (toggle) */}
+          <div className="rounded-xl border border-gray-200 bg-white p-4 flex-1 flex flex-col overflow-y-auto">
+            <div className="flex items-center justify-start mb-3 flex-shrink-0">
+              <ToggleGroup
+                options={[
+                  { key: 'targeted', label: 'Targeted Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
+                  { key: 'meetings', label: 'Meetings Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
+                ]}
+                active={pipelineMode}
+                onChange={key => setPipelineMode(key as 'targeted' | 'meetings')}
               />
             </div>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className="text-xs text-gray-400">
-                Projected: <span className="font-medium text-gray-600">${activeConvertedValue.toLocaleString('en-US')}</span>
-              </span>
-              {activeCoverageRatio != null && (
-                <span className={`text-xs font-medium ${(activeCoverageRatio ?? 0) >= 1 ? 'text-emerald-600' : (activeCoverageRatio ?? 0) >= 0.6 ? 'text-amber-600' : 'text-red-500'}`}>
-                  ({Math.round((activeCoverageRatio ?? 0) * 100)}%)
-                </span>
-              )}
-            </div>
-          </div>
-        )}
 
-        {activeHasValues ? (
-          <div className="space-y-2">
-            {TIER_DATA.map(tier => {
-              const val = activeTierValueSum[tier.key] ?? 0;
-              return (
-                <div key={tier.key} className="flex items-start gap-2">
-                  <span className="text-xs text-gray-600 w-24 flex-shrink-0 leading-tight">{tier.label}</span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                    <div
-                      className="h-2 rounded-full"
-                      style={{
-                        width: val > 0 ? `${Math.round((val / activeMaxTierValue) * 100)}%` : '0%',
-                        backgroundColor: tier.hex,
-                      }}
-                    />
-                  </div>
-                  <span className="text-xs text-gray-500 w-16 text-right flex-shrink-0">
-                    {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
-                  </span>
+            {requiredPipeline != null && (
+              <div className="pb-3 mb-3 border-b border-gray-100">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs text-gray-500 font-medium">Required Pipeline</span>
+                  <span className="text-xs text-gray-400">${requiredPipeline.toLocaleString('en-US')}</span>
                 </div>
-              );
-            })}
+                <div className="bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                  <div
+                    className="h-2.5 rounded-full transition-all duration-300"
+                    style={{
+                      width: `${Math.min((activeCoverageRatio ?? 0) * 100, 100)}%`,
+                      backgroundColor: (activeCoverageRatio ?? 0) >= 1 ? '#059669' : (activeCoverageRatio ?? 0) >= 0.6 ? '#f59e0b' : '#dc2626',
+                    }}
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className="text-xs text-gray-400">
+                    Projected: <span className="font-medium text-gray-600">${activeConvertedValue.toLocaleString('en-US')}</span>
+                  </span>
+                  {activeCoverageRatio != null && (
+                    <span className={`text-xs font-medium ${(activeCoverageRatio ?? 0) >= 1 ? 'text-emerald-600' : (activeCoverageRatio ?? 0) >= 0.6 ? 'text-amber-600' : 'text-red-500'}`}>
+                      ({Math.round((activeCoverageRatio ?? 0) * 100)}%)
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeHasValues ? (
+              <div className="space-y-2">
+                {TIER_DATA.map(tier => {
+                  const val = activeTierValueSum[tier.key] ?? 0;
+                  return (
+                    <div key={tier.key} className="flex items-start gap-2">
+                      <span className="text-xs text-gray-600 w-24 flex-shrink-0 leading-tight">{tier.label}</span>
+                      <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="h-2 rounded-full"
+                          style={{
+                            width: val > 0 ? `${Math.round((val / activeMaxTierValue) * 100)}%` : '0%',
+                            backgroundColor: tier.hex,
+                          }}
+                        />
+                      </div>
+                      <span className="text-xs text-gray-500 w-16 text-right flex-shrink-0">
+                        {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400">{emptyText}</p>
+            )}
           </div>
-        ) : (
-          <p className="text-xs text-gray-400">{emptyText}</p>
-        )}
+        </div>
       </div>
     </div>
   );
@@ -1025,10 +1061,15 @@ function CompaniesByRepChart({
   icpCompanies,
   onSelectRep,
   selectedRepName,
+  expanded = false,
 }: {
   icpCompanies: IcpCompany[];
   onSelectRep: (rep: RepChartEntry) => void;
   selectedRepName: string | null;
+  /** Desktop-only "Prospects" section mode — single horizontal bar per rep,
+   * sorted by the active value metric, filling the available height, instead
+   * of the compact single segmented bar + scrollable legend. */
+  expanded?: boolean;
 }) {
   const repData = useMemo(() => computeRepData(icpCompanies), [icpCompanies]);
   const avgCostPerUnit = useAvgCostPerUnit();
@@ -1038,22 +1079,28 @@ function CompaniesByRepChart({
 
   const total = icpCompanies.length;
 
+  const repValueNumber = (r: RepChartEntry): number => {
+    if (valueMode === '#') return r.count;
+    if (valueMode === '$') return r.companies.reduce((s, co) => s + (companyValue(co, avgCostPerUnit) ?? 0), 0);
+    return total > 0 ? (r.count / total) * 100 : 0;
+  };
   const repValueText = (r: RepChartEntry): string => {
     if (valueMode === '#') return `${r.count}`;
-    if (valueMode === '$') {
-      const sum = r.companies.reduce((s, co) => s + (companyValue(co, avgCostPerUnit) ?? 0), 0);
-      return abbreviateDollar(sum);
-    }
-    return `${Math.round((r.count / total) * 100)}%`;
+    if (valueMode === '$') return abbreviateDollar(repValueNumber(r));
+    return `${Math.round(repValueNumber(r))}%`;
   };
 
+  const sortedRepData = useMemo(
+    () => [...repData].sort((a, b) => repValueNumber(b) - repValueNumber(a)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [repData, valueMode, avgCostPerUnit, total]
+  );
+  const maxRepValue = Math.max(1, ...sortedRepData.map(r => repValueNumber(r)));
+
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 flex flex-col gap-3 flex-shrink-0">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">
-          <span className="hidden sm:inline">Prospect Companies by Assigned Rep Breakdown</span>
-          <span className="sm:hidden">Prospects by Assigned Rep</span>
-        </p>
+    <div className={`rounded-xl border border-gray-200 bg-white p-4 flex flex-col gap-3 ${expanded ? 'flex-1 min-h-0' : 'flex-shrink-0'}`}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 flex-shrink-0">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">Prospects by Assigned Rep</p>
         <ToggleGroup
           fullWidthMobile
           options={[
@@ -1067,6 +1114,44 @@ function CompaniesByRepChart({
       </div>
       {total === 0 ? (
         <p className="text-xs text-gray-400">No ICP companies attending.</p>
+      ) : expanded ? (
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-0.5">
+          {sortedRepData.map(r => {
+            const isDimmed = selectedRepName != null && selectedRepName !== r.name;
+            const value = repValueNumber(r);
+            const pct = Math.max(2, Math.round((value / maxRepValue) * 100));
+            const valueText = repValueText(r);
+            const showInside = pct >= 22;
+            return (
+              <button
+                key={r.name}
+                type="button"
+                onClick={() => onSelectRep(r)}
+                title={r.name}
+                className="w-full flex items-center gap-2 group transition-all duration-150"
+                style={{ filter: isDimmed ? 'grayscale(1)' : undefined, opacity: isDimmed ? 0.4 : 1 }}
+              >
+                <span className="w-28 flex-shrink-0 text-xs font-medium text-gray-700 text-right truncate">{r.name}</span>
+                <div className="flex-1 h-6 relative">
+                  <div
+                    className="h-6 rounded-md flex items-center justify-end transition-all duration-300 ease-out group-hover:brightness-110"
+                    style={{ width: `${pct}%`, backgroundColor: r.color, minWidth: 4 }}
+                  >
+                    {showInside && <span className="mr-1.5 text-[11px] font-semibold text-white whitespace-nowrap">{valueText}</span>}
+                  </div>
+                  {!showInside && (
+                    <span
+                      className="absolute top-1/2 -translate-y-1/2 text-[11px] font-semibold text-gray-600 whitespace-nowrap"
+                      style={{ left: `calc(${pct}% + 6px)` }}
+                    >
+                      {valueText}
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
       ) : (
         <>
           <div className="flex w-full h-6 rounded-full overflow-hidden">
