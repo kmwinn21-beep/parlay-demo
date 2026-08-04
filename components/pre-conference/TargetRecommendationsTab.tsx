@@ -384,7 +384,10 @@ function CompanyDetails({
   targetMap: Map<number, TargetEntry>;
   onAddTargetWithTier: (entry: Omit<TargetEntry, 'tier'>, tier: string) => Promise<void>;
 }) {
-  const reasons = (company.why_this_target ?? []).slice(0, 5);
+  const reasons = [
+    ...(company.recommended_action_reason ? [company.recommended_action_reason] : []),
+    ...(company.why_this_target ?? []),
+  ].slice(0, 5);
   const openRecord = useRecordDrawer();
   const confidenceReasons = (company.confidence_reasons ?? []).slice(0, 3);
   const attendees = (company.top_attendees ?? []).slice(0, 3);
@@ -445,7 +448,10 @@ function CompanyDetails({
         ) : <p className="text-xs text-gray-400">No reasons available.</p>}
       </div>
       <div>
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Confidence</p>
+        <div className="flex items-center gap-2 mb-1">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Confidence</p>
+          <Pill tone={confidenceTone(company.confidence_level)}>{company.confidence_level || '—'}</Pill>
+        </div>
         {confidenceReasons.length > 0 ? (
           <ul className="space-y-1">
             {confidenceReasons.map((reason, index) => (
@@ -477,7 +483,6 @@ function CompanyRow({ company, onReviewTitle, avgCostPerUnit, targetMap, onAddTa
         <td className="py-3 px-3"><Pill tone={tierTone(company)}>{company.target_priority_tier || '—'}</Pill></td>
         <td className="py-3 px-3 min-w-44">
           <Pill tone="blue">{company.recommended_action_label || company.recommended_action?.recommended_action_label || '—'}</Pill>
-          {company.recommended_action_reason && <p className="text-xs text-gray-400 mt-1 line-clamp-2">{company.recommended_action_reason}</p>}
         </td>
         <td className="py-3 px-3"><ScoreValueTooltip value={scoreOrNull(company.icp_fit_score)} title="ICP Fit Score" reasons={[...(company.matched_icp_reasons ?? []), ...(company.failed_icp_reasons ?? []).map(r => `Gap: ${r}`)]} /></td>
         <td className="py-3 px-3"><ScoreValueTooltip value={scoreOrNull(company.buyer_access_score)} title="Buyer Access Score" reasons={(company.top_attendees ?? []).flatMap(a => a.why_this_attendee ?? []).slice(0, 5)} /></td>
