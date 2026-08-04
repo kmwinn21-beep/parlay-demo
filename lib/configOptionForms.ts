@@ -52,6 +52,7 @@ export const CATEGORY_FORM_USAGE: Record<string, FormChoice[]> = {
     { key: 'relationships_page', label: 'Relationships Page' },
   ],
   services: [
+    { key: 'company_table', label: 'Company Table' },
     { key: 'company_detail', label: 'Company Detail' },
   ],
   entity_structure: [

@@ -15,6 +15,7 @@ import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getBadgeClass, getPreset } from '@/lib/colors';
 import { useUserOptions, parseRepIds, resolveRepInitials, getRepInitials } from '@/lib/useUserOptions';
 import { RepMultiSelect } from './RepMultiSelect';
+import { MultiSelectDropdown } from './MultiSelectDropdown';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
 import { CustomColumnCell } from './CustomColumnCell';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
@@ -249,6 +250,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
 
   const statusOptions = configOptions.status ?? [];
   const companyTypeOptions = configOptions.company_type ?? [];
+  const servicesOptions = configOptions.services ?? [];
   const [search, setSearch] = useState('');
   // filterSFOwner stores a user ID (as string) for filtering, or '' for all
   const [filterSFOwner, setFilterSFOwner] = useState('');
@@ -313,7 +315,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [showMassEdit, setShowMassEdit] = useState(false);
-  const [massEditFields, setMassEditFields] = useState<{ status?: string; company_type?: string; assigned_user?: string }>({});
+  const [massEditFields, setMassEditFields] = useState<{ status?: string; company_type?: string; assigned_user?: string; services?: string[] }>({});
   const [isApplying, setIsApplying] = useState(false);
   const [editingRepCompanyId, setEditingRepCompanyId] = useState<number | null>(null);
   const [editingRepIds, setEditingRepIds] = useState<number[]>([]);
@@ -486,6 +488,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
     if (massEditFields.status) fields.status = massEditFields.status;
     if (massEditFields.company_type) fields.company_type = massEditFields.company_type;
     if (massEditFields.assigned_user !== undefined) fields.assigned_user = massEditFields.assigned_user || null;
+    if (massEditFields.services && massEditFields.services.length > 0) fields.services = massEditFields.services.join(',');
     if (Object.keys(fields).length === 0) { toast.error('Select at least one field to change.'); return; }
     setIsApplying(true);
     // Optimistic update — reflect changes immediately
@@ -912,6 +915,16 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 onChange={(ids) => setMassEditFields(p => ({ ...p, assigned_user: ids.join(',') }))}
                 triggerClass="input-field w-48 text-sm flex items-center justify-between gap-2"
                 placeholder="— no change —"
+              />
+            </div>
+            <div className="w-56">
+              <MultiSelectDropdown
+                label="Services"
+                options={servicesOptions}
+                values={massEditFields.services ?? []}
+                onChange={(values) => setMassEditFields(p => ({ ...p, services: values }))}
+                placeholder="— no change —"
+                emptyMessage="No services configured. Add options in the Admin panel."
               />
             </div>
             <button onClick={handleMassEdit} disabled={isApplying} className="btn-primary text-sm">{isApplying ? 'Applying...' : `Apply to ${selectedIds.size}`}</button>
