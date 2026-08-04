@@ -13,6 +13,7 @@ import { BackButton } from '@/components/BackButton';
 import { CompanyTouchpointMatrix } from '@/components/CompanyTouchpointMatrix';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
+import { MatchMasterAccountField, type MasterAccountApplyPatch } from '@/components/MatchMasterAccountField';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getPillClass, getBadgeClass, getPreset } from '@/lib/colors';
 import { effectiveSeniority } from '@/lib/parsers';
@@ -957,6 +958,23 @@ export default function CompanyDetailPage() {
                   className="input-field uppercase"
                   placeholder="e.g. TX"
                   maxLength={2}
+                />
+              </div>
+              <div>
+                <MatchMasterAccountField
+                  currentValues={{
+                    website: editData.website,
+                    assigned_user: editData.assigned_user,
+                    hq_state: editData.hq_state,
+                    territory_id: editData.territory_id,
+                    entity_structure: editData.entity_structure,
+                    services: Array.isArray(editData.services) ? editData.services : [],
+                    wse: editData.wse,
+                  }}
+                  userOptions={userOptions}
+                  territoryOptions={territoryOptions}
+                  unitTypeLabel={unitTypeLabel}
+                  onApply={(patch: MasterAccountApplyPatch) => setEditData((p) => ({ ...p, ...patch }))}
                 />
               </div>
             </div>
