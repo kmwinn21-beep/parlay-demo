@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect, type CSSProperties } from 'react';
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { useConferenceReviewModals } from '@/lib/ConferenceReviewModalsContext';
+import { useSidebarCollapse, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_EXPANDED_WIDTH } from './SidebarCollapseContext';
 import { DraggableTabNav } from './DraggableTabNav';
 import { RecordDrawerCtx } from './pre-conference/RecordDrawerContext';
 import { LandscapeTab } from './pre-conference/LandscapeTab';
@@ -271,6 +272,7 @@ export function PreConferenceReviewModal() {
     minimizePreConference,
     closePreConference,
   } = useConferenceReviewModals();
+  const { collapsed: sidebarCollapsed } = useSidebarCollapse();
 
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<PreConferenceData | null>(null);
@@ -490,7 +492,10 @@ export function PreConferenceReviewModal() {
           className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ease-in-out ${minimized ? 'opacity-0' : 'opacity-100'}`}
           onClick={() => { minimizePreConference(); closeRecord(); }}
         />
-        <div className="absolute inset-0 sm:left-64 sm:flex sm:items-center sm:justify-center sm:p-5">
+        <div
+          className="absolute inset-0 sm:left-[var(--sidebar-w)] sm:flex sm:items-center sm:justify-center sm:p-5 transition-[left] duration-300 ease-in-out"
+          style={{ '--sidebar-w': `${sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH}px` } as CSSProperties}
+        >
           <div
             className={`relative w-full h-full sm:h-[85vh] sm:max-w-[1440px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden transition-all duration-300 ease-in-out origin-bottom-left
               ${minimized ? 'opacity-0 scale-50 translate-y-[40vh] -translate-x-[20vw]' : 'opacity-100 scale-100 translate-y-0 translate-x-0'}`}
