@@ -87,10 +87,17 @@ export interface CompanyTargetScore {
    * TargetingCompanyInput.assigned_user's raw comma-separated config_options
    * ids — not populated by scoreCompanyTarget itself. */
   assigned_user_names?: string[];
+  /** Resolved by the caller from each assigned user's sales_territories
+   * membership (same order as assigned_user_names) — not populated by
+   * scoreCompanyTarget itself. */
+  assigned_user_colors?: string[];
   /** Resolved by the caller from companies.territory_id — not populated by
    * scoreCompanyTarget itself. Used as a fallback display when no rep is
    * assigned. */
   territory_name?: string | null;
+  /** Resolved by the caller from companies.territory_id's sales_territories
+   * color — not populated by scoreCompanyTarget itself. */
+  territory_color?: string | null;
   target_priority_score: number;
   target_priority_tier: string;
   target_priority_tier_key: string;
