@@ -82,7 +82,7 @@ export async function GET(
     const conferenceRes = await db.execute({ sql: 'SELECT id FROM conferences WHERE id = ?', args: [conferenceId] });
     if (conferenceRes.rows.length === 0) return NextResponse.json({ error: 'Conference not found' }, { status: 404 });
 
-    const [settingsRes, seniorityRes, functionRes, actionsRes, prospectTypeRes, effectivenessRes, userOptsRes] = await Promise.all([
+    const [settingsRes, seniorityRes, functionRes, actionsRes, prospectTypeRes, effectivenessRes, userOptsRes, territoriesRes] = await Promise.all([
       db.execute({ sql: 'SELECT key, value FROM site_settings', args: [] }),
       db.execute({ sql: "SELECT id, value FROM config_options WHERE category = 'seniority'", args: [] }),
       db.execute({ sql: "SELECT id, value FROM config_options WHERE category = 'function'", args: [] }),
@@ -93,6 +93,7 @@ export async function GET(
       }).catch(() => ({ rows: [] as Row[] })),
       db.execute({ sql: `SELECT key, value FROM effectiveness_defaults WHERE key IN ('avg_annual_deal_size','avg_cost_per_unit')`, args: [] }).catch(() => ({ rows: [] as Row[] })),
       db.execute({ sql: "SELECT id, value FROM config_options WHERE category = 'user'", args: [] }).catch(() => ({ rows: [] as Row[] })),
+      db.execute({ sql: 'SELECT id, name FROM sales_territories', args: [] }).catch(() => ({ rows: [] as Row[] })),
     ]);
 
     const settings: Record<string, string> = {};
@@ -103,6 +104,7 @@ export async function GET(
     const userNameMap = new Map<number, string>((userOptsRes.rows as Row[]).map(r => [Number(r.id), String(r.value)]));
     const resolveAssignedUserNames = (raw: string | null | undefined): string[] =>
       String(raw ?? '').split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0).map(n => userNameMap.get(n) ?? String(n));
+    const territoryNameMap = new Map<number, string>((territoriesRes.rows as Row[]).map(r => [Number(r.id), String(r.name)]));
     const actionLabels = new Map<string, string>();
     for (const r of actionsRes.rows as Row[]) {
       const key = r.action_key ? String(r.action_key) : '';
@@ -195,7 +197,7 @@ export async function GET(
     const typeOrClause = allowedCompanyTypes.map(() => 'LOWER(c.company_type) = ?').join(' OR ');
     const attendeesRes = await db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority, a.company_id,
-                   c.name as company_name, c.company_type, c.services, c.status, c.icp, c.wse, c.assigned_user
+                   c.name as company_name, c.company_type, c.services, c.status, c.icp, c.wse, c.assigned_user, c.territory_id
             FROM conference_attendees ca
             JOIN attendees a ON a.id = ca.attendee_id
             JOIN companies c ON c.id = a.company_id
@@ -207,7 +209,7 @@ export async function GET(
         : [conferenceId, ...allowedCompanyTypes],
     });
 
-    const rawCompanyMap = new Map<number, { company: TargetingCompanyInput; attendeeRows: Row[] }>();
+    const rawCompanyMap = new Map<number, { company: TargetingCompanyInput; territoryId: number | null; attendeeRows: Row[] }>();
     for (const r of attendeesRes.rows as Row[]) {
       const companyId = r.company_id == null ? 0 : Number(r.company_id);
       if (!companyId) continue;
@@ -223,6 +225,7 @@ export async function GET(
             wse: r.wse == null ? null : Number(r.wse),
             assigned_user: r.assigned_user ? String(r.assigned_user) : null,
           },
+          territoryId: r.territory_id == null ? null : Number(r.territory_id),
           attendeeRows: [],
         });
       }
@@ -231,6 +234,8 @@ export async function GET(
 
     const allCompanyEntries = Array.from(rawCompanyMap.values()).sort((a, b) => a.company.name.localeCompare(b.company.name));
     const totalCompanies = allCompanyEntries.length;
+    const territoryIdByCompany = new Map<number, number | null>();
+    for (const { company, territoryId } of allCompanyEntries) territoryIdByCompany.set(company.id, territoryId);
     const selectedCompanyEntries = batchMode
       ? allCompanyEntries.slice(requestedOffset, requestedOffset + batchLimit)
       : allCompanyEntries;
@@ -317,7 +322,12 @@ export async function GET(
       const signals = signalsByCompany.get(company.id) ?? {};
       signals.has_existing_status = Boolean(company.status && normalizeString(company.status) !== 'unknown');
       const score = scoreCompanyTarget({ company, attendees, signals, config, functionLabels, seniorityLabels });
-      return { ...score, assigned_user_names: resolveAssignedUserNames(company.assigned_user) };
+      const territoryId = territoryIdByCompany.get(company.id) ?? null;
+      return {
+        ...score,
+        assigned_user_names: resolveAssignedUserNames(company.assigned_user),
+        territory_name: territoryId != null ? (territoryNameMap.get(territoryId) ?? null) : null,
+      };
     }).sort((a, b) => b.target_priority_score - a.target_priority_score);
 
     const responseData = {

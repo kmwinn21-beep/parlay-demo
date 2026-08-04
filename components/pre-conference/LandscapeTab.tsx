@@ -1298,6 +1298,10 @@ function RepDetailPanel({
   const pct = totalIcp > 0 ? Math.round((rep.count / totalIcp) * 100) : 0;
   const avgCostPerUnit = useAvgCostPerUnit();
   const [selectedSeniority, setSelectedSeniority] = useState<string | null>(null);
+  // Desktop-only visibility toggle — mobile always shows the donut regardless
+  // of this (see the className on the wrapper below), since mobile's drawer
+  // already defaults to showing it and has no equivalent space pressure.
+  const [seniorityVisibleDesktop, setSeniorityVisibleDesktop] = useState(true);
 
   const seniorityBreakdown = useMemo(() => {
     const counts = new Map<string, number>();
@@ -1355,8 +1359,18 @@ function RepDetailPanel({
         </div>
       </div>
 
-      {/* Seniority donut — always visible */}
-      <div className="px-3 pb-3 flex justify-center flex-shrink-0">
+      {/* Seniority donut — always visible on mobile; hideable on desktop */}
+      <div className="hidden sm:flex items-center justify-between px-3 pt-1 flex-shrink-0">
+        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Seniority Breakdown</p>
+        <button
+          type="button"
+          onClick={() => setSeniorityVisibleDesktop(v => !v)}
+          className="text-[10px] font-semibold text-brand-secondary hover:text-brand-primary transition-colors"
+        >
+          {seniorityVisibleDesktop ? 'Hide' : 'Show'}
+        </button>
+      </div>
+      <div className={`px-3 pb-3 flex justify-center flex-shrink-0 ${seniorityVisibleDesktop ? 'sm:flex' : 'sm:hidden'}`}>
         {seniorityBreakdown.total === 0 ? (
           <p className="text-xs text-gray-400 text-center py-4">No attendees to show</p>
         ) : (

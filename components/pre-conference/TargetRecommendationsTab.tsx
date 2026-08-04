@@ -280,6 +280,36 @@ function repInitials(name: string): string {
   return name.trim().substring(0, 2).toUpperCase();
 }
 
+function RepCell({ company }: { company: TargetingCompanyRecommendation }) {
+  const repName = company.assigned_user_names?.[0];
+  if (repName) {
+    return (
+      <span
+        title={repName}
+        className="inline-flex items-center justify-center w-7 h-7 rounded-full text-[10px] font-bold bg-teal-100 text-teal-700 border border-teal-300"
+      >
+        {repInitials(repName)}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => toast('A rep has not been assigned to this company.', { icon: '⚠️' })}
+        title="No rep assigned"
+        aria-label="No rep assigned"
+        className="text-amber-500 hover:text-amber-600 transition-colors flex-shrink-0"
+      >
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" clipRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l6.518 11.598c.75 1.334-.213 2.98-1.742 2.98H3.48c-1.53 0-2.493-1.646-1.743-2.98L8.257 3.1zM11 14a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" />
+        </svg>
+      </button>
+      {company.territory_name ? <Pill tone="gray">{repInitials(company.territory_name)}</Pill> : <span className="text-gray-400">—</span>}
+    </span>
+  );
+}
+
 function confidenceTone(confidence: string | null | undefined): 'green' | 'amber' | 'gray' {
   const key = stableKey(confidence);
   if (key === 'high') return 'green';
@@ -453,7 +483,7 @@ function CompanyRow({ company, onReviewTitle, avgCostPerUnit, targetMap, onAddTa
         <td className="py-3 px-3"><ScoreValueTooltip value={scoreOrNull(company.buyer_access_score)} title="Buyer Access Score" reasons={(company.top_attendees ?? []).flatMap(a => a.why_this_attendee ?? []).slice(0, 5)} /></td>
         <td className="py-3 px-3"><ScoreValueTooltip value={scoreOrNull(company.relationship_leverage_score)} title="Relationship Leverage Score" reasons={company.relationship_reasons ?? []} /></td>
         <td className="py-3 px-3"><ScoreValueTooltip value={scoreOrNull(company.conference_opportunity_score)} title="Conference Opportunity Score" reasons={[...(company.opportunity_reasons ?? []), `Attendees: ${company.attendee_count ?? 0}`, `High-priority attendees: ${company.high_priority_attendee_count ?? 0}`, `Scheduled meetings: ${company.scheduled_meeting_count ?? 0}`]} /></td>
-        <td className="py-3 px-3"><Pill tone={confidenceTone(company.confidence_level)}>{company.confidence_level || '—'}</Pill></td>
+        <td className="py-3 px-3"><RepCell company={company} /></td>
       </tr>
       {expanded && (
         <tr className="border-b border-gray-100">
@@ -814,7 +844,7 @@ export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), 
                 <th className="text-left font-semibold py-2 px-3"><InfoTooltip label="Buyer" title="Buyer Access Score" body="Measures whether the right people from this company are attending the conference." details={["Decision maker and influencer title matches.", "Seniority/function priority and product-function mapping.", "Uses human-in-the-loop title normalization when available."]} /></th>
                 <th className="text-left font-semibold py-2 px-3"><InfoTooltip label="Relationship" title="Relationship Leverage Score" body="Measures how much existing relationship context the team has with this company." details={["Internal relationships and assigned rep/account owner.", "Prior meetings, touchpoints, and prior conference overlap.", "Client/known prospect status plus recent notes/activity."]} /></th>
                 <th className="text-left font-semibold py-2 px-3"><InfoTooltip label="Opportunity" title="Conference Opportunity Score" body="Measures how strong the opportunity is at this specific conference." details={["Number of attendees and high-priority attendees present.", "Scheduled meetings and hosted/social event opportunity.", "Net-new or expansion opportunity signals."]} /></th>
-                <th className="text-left font-semibold py-2 px-3">Confidence</th>
+                <th className="text-left font-semibold py-2 px-3">Rep</th>
               </tr>
             </thead>
             <tbody>{visibleCompanies.map(company => <CompanyRow key={company.company_id} company={company} onReviewTitle={openTitleReviewModal} avgCostPerUnit={avgCostPerUnit} targetMap={targetMap} onAddTargetWithTier={onAddTargetWithTier} />)}</tbody>
