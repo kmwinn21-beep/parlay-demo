@@ -671,11 +671,14 @@ export async function GET(
     const cid = rel.company_id as number;
     const compAttendees = attendees.filter((a) => a.company_id === cid);
     const notes = companyNotes.filter((n) => n.company_id === cid);
+    // Only attendees explicitly tagged via contact_ids are "the relationship
+    // contacts" — this used to fall back to every attendee at the company
+    // (compAttendees), which showed cards for people the rep never actually
+    // tagged a relationship with.
+    const contactIds = parseIdList(rel.contact_ids);
+    const taggedAttendees = compAttendees.filter((a) => contactIds.includes(a.id as number));
     // Resolve contact_ids (attendee IDs) to names from the current conference attendees list
-    const contactNames = parseIdList(rel.contact_ids).map((aid) => {
-      const att = attendees.find((a) => (a.id as number) === aid);
-      return att ? `${att.first_name} ${att.last_name}` : null;
-    }).filter(Boolean) as string[];
+    const contactNames = taggedAttendees.map((a) => `${a.first_name} ${a.last_name}`);
     return {
       id: rel.id, company_id: cid,
       company_name: String(compAttendees[0]?.company_name ?? ''),
@@ -683,7 +686,7 @@ export async function GET(
       description: String(rel.description ?? ''),
       rep_names: resolveUserIds(rel.rep_ids),
       contact_names: contactNames,
-      attendees: compAttendees.map((a) => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title, seniority: resolveSeniority(a.seniority, a.title), health: attendeeHealthMap.get(a.id as number) ?? 0 })),
+      attendees: taggedAttendees.map((a) => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title, seniority: resolveSeniority(a.seniority, a.title), health: attendeeHealthMap.get(a.id as number) ?? 0 })),
       recentNotes: notes.slice(0, 3).map((n) => ({ id: n.id, content: n.content, created_at: n.created_at, rep: n.rep })),
     };
   });
