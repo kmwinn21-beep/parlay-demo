@@ -261,3 +261,30 @@ export async function DELETE(
     return NextResponse.json({ error: 'Failed to delete conference' }, { status: 500 });
   }
 }
+
+// Lightweight single-field update — separate from the full-object PUT above
+// since callers like the dashboard banner's manual "Pre-conference review"
+// checklist toggle only ever need to flip this one column.
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
+  try {
+    const body = await request.json();
+    if (!('pre_conference_review_marked' in body)) {
+      return NextResponse.json({ error: 'No valid fields' }, { status: 400 });
+    }
+    const marked = Boolean(body.pre_conference_review_marked);
+    await db.execute({
+      sql: `UPDATE conferences SET pre_conference_review_marked_at = ?, updated_at = datetime('now') WHERE id = ?`,
+      args: [marked ? new Date().toISOString() : null, params.id],
+    });
+    return NextResponse.json({ success: true, pre_conference_review_marked: marked });
+  } catch (error) {
+    console.error('PATCH /api/conferences/[id] error:', error);
+    return NextResponse.json({ error: 'Failed to update conference' }, { status: 500 });
+  }
+}
