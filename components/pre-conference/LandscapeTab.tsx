@@ -832,8 +832,6 @@ function PipelineChartsPanel({
   const [meetingsConvPct, setMeetingsConvPct] = useState(60);
   const [requiredPipeline, setRequiredPipeline] = useState<number | null>(null);
   const [pipelineMode, setPipelineMode] = useState<'targeted' | 'meetings'>('targeted');
-  // Desktop-only — mobile always renders as if 'all' since the toggle that
-  // changes this is hidden there (see the "hidden sm:flex" wrapper below).
   const [sectionMode, setSectionMode] = useState<'all' | 'prospects' | 'pipeline'>('all');
 
   // Fixed conversion rate matching ConferenceTargetsTab default — not user-adjustable here
@@ -922,18 +920,17 @@ function PipelineChartsPanel({
           Internal Relationships / Relationship Coverage panel, so this
           section's border lines up top-to-bottom with its row siblings. */}
       <div className="flex items-center justify-end gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50 flex-shrink-0">
-        {/* All | Prospects | Pipeline — desktop only; mobile always behaves as 'all' */}
-        <div className="hidden sm:flex">
-          <ToggleGroup
-            options={[
-              { key: 'all', label: 'All', activeColor: 'rgb(var(--brand-primary-rgb))' },
-              { key: 'prospects', label: 'Prospects', activeColor: 'rgb(var(--brand-primary-rgb))' },
-              { key: 'pipeline', label: 'Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
-            ]}
-            active={sectionMode}
-            onChange={key => setSectionMode(key as 'all' | 'prospects' | 'pipeline')}
-          />
-        </div>
+        {/* All | Prospects | Pipeline — full width on mobile, right-aligned on desktop */}
+        <ToggleGroup
+          fullWidthMobile
+          options={[
+            { key: 'all', label: 'All', activeColor: 'rgb(var(--brand-primary-rgb))' },
+            { key: 'prospects', label: 'Prospects', activeColor: 'rgb(var(--brand-primary-rgb))' },
+            { key: 'pipeline', label: 'Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
+          ]}
+          active={sectionMode}
+          onChange={key => setSectionMode(key as 'all' | 'prospects' | 'pipeline')}
+        />
       </div>
 
       <div className="flex-1 min-h-0 flex flex-col gap-4 p-3 overflow-y-auto">
@@ -1073,9 +1070,9 @@ function CompaniesByRepChart({
   icpCompanies: IcpCompany[];
   onSelectRep: (rep: RepChartEntry) => void;
   selectedRepName: string | null;
-  /** Desktop-only "Prospects" section mode — single horizontal bar per rep,
-   * sorted by the active value metric, filling the available height, instead
-   * of the compact single segmented bar + scrollable legend. */
+  /** "Prospects" section mode — single horizontal bar per rep, sorted by the
+   * active value metric, filling the available height, instead of the
+   * compact single segmented bar + scrollable legend. */
   expanded?: boolean;
 }) {
   const repData = useMemo(() => computeRepData(icpCompanies), [icpCompanies]);
