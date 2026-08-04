@@ -1210,7 +1210,7 @@ function RepDetailPanel({
   }, [rep.companies]);
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] rounded-t-2xl sm:absolute sm:inset-0 sm:z-10 sm:max-h-none sm:rounded-xl flex flex-col border border-gray-200 bg-white shadow-2xl overflow-hidden drawer-mobile-responsive">
+    <div className="fixed inset-x-0 bottom-0 top-[var(--pcr-header-h,0px)] z-50 rounded-t-2xl sm:absolute sm:inset-0 sm:top-0 sm:z-10 sm:rounded-xl flex flex-col border border-gray-200 bg-white shadow-2xl overflow-hidden drawer-mobile-responsive">
       {/* Header */}
       <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-gray-100 bg-gray-50 flex-shrink-0">
         <span
