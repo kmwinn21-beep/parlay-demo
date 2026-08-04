@@ -1981,4 +1981,10 @@ export const migrations: string[] = [
   `ALTER TABLE master_account_list ADD COLUMN entity_structure TEXT`,
   `ALTER TABLE master_account_list ADD COLUMN services TEXT`,
   `ALTER TABLE master_account_list ADD COLUMN wse INTEGER`,
+  // conferences.pre_conference_review_marked_at: manual user toggle for the
+  // dashboard banner's "Pre-conference review" prep checklist item — there's
+  // no automatic signal for "the user reviewed the pre-conference tab", so
+  // this is set/cleared directly by the user clicking the checklist circle
+  // (see PATCH /api/conferences/[id]). Non-null = marked done.
+  `ALTER TABLE conferences ADD COLUMN pre_conference_review_marked_at TEXT`,
 ];

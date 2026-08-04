@@ -32,7 +32,7 @@ async function getBannerData(tenantDb: Client, userId: number): Promise<BannerDa
 
     // Find active conference where user is internal attendee
     const activeRes = await tenantDb.execute({
-      sql: `SELECT id, name, start_date, end_date, location FROM conferences
+      sql: `SELECT id, name, start_date, end_date, location, location_city, location_state FROM conferences
             WHERE start_date <= ? AND end_date >= ?
               AND LOWER(',' || COALESCE(internal_attendees,'') || ',') LIKE ?
             ORDER BY start_date ASC LIMIT 1`,
@@ -94,7 +94,7 @@ async function getBannerData(tenantDb: Client, userId: number): Promise<BannerDa
 
       return {
         state: 'active',
-        conference: { id: confId, name: String(conf.name), start_date: startDate, end_date: endDate, location: conf.location ? String(conf.location) : null },
+        conference: { id: confId, name: String(conf.name), start_date: startDate, end_date: endDate, location: conf.location ? String(conf.location) : null, location_city: conf.location_city ? String(conf.location_city) : null, location_state: conf.location_state ? String(conf.location_state) : null },
         dayNumber,
         totalDays,
         stats: {
@@ -117,7 +117,7 @@ async function getBannerData(tenantDb: Client, userId: number): Promise<BannerDa
 
     // No active conference — find next upcoming where user is internal attendee
     const upcomingRes = await tenantDb.execute({
-      sql: `SELECT id, name, start_date, end_date, location FROM conferences
+      sql: `SELECT id, name, start_date, end_date, location, location_city, location_state, pre_conference_review_marked_at FROM conferences
             WHERE start_date > ?
               AND LOWER(',' || COALESCE(internal_attendees,'') || ',') LIKE ?
             ORDER BY start_date ASC LIMIT 1`,
@@ -130,10 +130,11 @@ async function getBannerData(tenantDb: Client, userId: number): Promise<BannerDa
       const startDate = String(conf.start_date);
       const daysUntil = Math.ceil((new Date(startDate + 'T00:00:00').getTime() - new Date(today + 'T00:00:00').getTime()) / 86400000);
 
-      const [attendeeCountRes, icpRes, targetsRes, meetingsRes] = await Promise.all([
+      const [attendeeCountRes, icpRes, targetsRes, outreachRes, meetingsRes] = await Promise.all([
         tenantDb.execute({ sql: `SELECT COUNT(*) as cnt FROM conference_attendees WHERE conference_id = ?`, args: [confId] }).catch(() => ({ rows: [{ cnt: 0 }] })),
         tenantDb.execute({ sql: `SELECT COUNT(*) as cnt FROM icp_rules`, args: [] }).catch(() => ({ rows: [{ cnt: 0 }] })),
         tenantDb.execute({ sql: `SELECT COUNT(*) as cnt FROM conference_targets WHERE conference_id = ? AND tier != 'unassigned'`, args: [confId] }).catch(() => ({ rows: [{ cnt: 0 }] })),
+        tenantDb.execute({ sql: `SELECT COUNT(*) as cnt FROM outreach_assignments WHERE conference_id = ?`, args: [confId] }).catch(() => ({ rows: [{ cnt: 0 }] })),
         tenantDb.execute({ sql: `SELECT COUNT(*) as cnt FROM meetings WHERE conference_id = ?`, args: [confId] }).catch(() => ({ rows: [{ cnt: 0 }] })),
       ]);
 
@@ -143,13 +144,14 @@ async function getBannerData(tenantDb: Client, userId: number): Promise<BannerDa
         attendeesUploaded: attendeeCount > 0,
         icpConfigured: Number((icpRes.rows[0] as { cnt?: unknown })?.cnt ?? 0) > 0,
         targetsSet: Number((targetsRes.rows[0] as { cnt?: unknown })?.cnt ?? 0) > 0,
-        preConferenceReview: false,
+        preConferenceReview: Boolean(conf.pre_conference_review_marked_at),
+        outreachAssigned: Number((outreachRes.rows[0] as { cnt?: unknown })?.cnt ?? 0) > 0,
         meetingsScheduled: Number((meetingsRes.rows[0] as { cnt?: unknown })?.cnt ?? 0) > 0,
       };
 
       return {
         state: 'upcoming',
-        conference: { id: confId, name: String(conf.name), start_date: startDate, end_date: String(conf.end_date ?? ''), location: conf.location ? String(conf.location) : null },
+        conference: { id: confId, name: String(conf.name), start_date: startDate, end_date: String(conf.end_date ?? ''), location: conf.location ? String(conf.location) : null, location_city: conf.location_city ? String(conf.location_city) : null, location_state: conf.location_state ? String(conf.location_state) : null },
         daysUntil,
         attendeeCount,
         mustTargetCount: 0,

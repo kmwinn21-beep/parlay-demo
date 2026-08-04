@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,7 @@ export interface PrepChecklist {
   icpConfigured: boolean;
   targetsSet: boolean;
   preConferenceReview: boolean;
+  outreachAssigned: boolean;
   meetingsScheduled: boolean;
 }
 
@@ -36,6 +38,8 @@ export interface ConferenceInfo {
   start_date: string;
   end_date: string;
   location: string | null;
+  location_city: string | null;
+  location_state: string | null;
 }
 
 export type BannerData =
@@ -52,6 +56,11 @@ function formatDateRange(startDate: string, endDate: string): string {
   const endStr = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const year = end.getFullYear();
   return `${startStr} – ${endStr}, ${year}`;
+}
+
+function cityStateLabel(conference: ConferenceInfo): string | null {
+  if (conference.location_city && conference.location_state) return `${conference.location_city}, ${conference.location_state}`;
+  return conference.location;
 }
 
 function getMeetingStatus(outcome: string | null): { label: string; className: string } {
@@ -184,11 +193,40 @@ function BannerStateUpcoming({ data, collapsed, onToggle }: {
     { key: 'icpConfigured', label: 'ICP configured', href: '/admin?tab=icp' },
     { key: 'targetsSet', label: 'Targets set', href: `/conferences/${data.conference.id}` },
     { key: 'preConferenceReview', label: 'Pre-conference review', href: `/conferences/${data.conference.id}` },
+    { key: 'outreachAssigned', label: 'Outreach assigned', href: `/conferences/${data.conference.id}` },
     { key: 'meetingsScheduled', label: 'Meetings scheduled', href: `/conferences/${data.conference.id}` },
   ];
 
-  const doneCount = Object.values(data.prepChecklist).filter(Boolean).length;
-  const allDone = doneCount === 5;
+  // Pre-conference review has no automatic completion signal, so it's the
+  // only checklist item the user can toggle by hand — track it locally
+  // (seeded from the server value) so the click feels instant, and PATCH the
+  // conference record in the background.
+  const [reviewOverride, setReviewOverride] = useState<boolean | null>(null);
+  const [togglingReview, setTogglingReview] = useState(false);
+  const reviewDone = reviewOverride ?? data.prepChecklist.preConferenceReview;
+  const effectiveChecklist = { ...data.prepChecklist, preConferenceReview: reviewDone };
+
+  const toggleReview = async () => {
+    const next = !reviewDone;
+    setReviewOverride(next);
+    setTogglingReview(true);
+    try {
+      const res = await fetch(`/api/conferences/${data.conference.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pre_conference_review_marked: next }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setReviewOverride(!next);
+      toast.error('Failed to update pre-conference review status.');
+    } finally {
+      setTogglingReview(false);
+    }
+  };
+
+  const doneCount = Object.values(effectiveChecklist).filter(Boolean).length;
+  const allDone = doneCount === checklistItems.length;
 
   return (
     <div className="bg-brand-primary rounded-2xl p-6 text-white h-full flex flex-col">
@@ -199,13 +237,15 @@ function BannerStateUpcoming({ data, collapsed, onToggle }: {
           <h1 className="text-2xl font-bold font-serif">{data.conference.name}</h1>
           <p className="text-white/60 text-sm mt-0.5">
             {formatDateRange(data.conference.start_date, data.conference.end_date)}
-            {data.conference.location ? ` · ${data.conference.location}` : ''}
           </p>
+          {cityStateLabel(data.conference) && (
+            <p className="text-white/60 text-sm mt-0.5">{cityStateLabel(data.conference)}</p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {collapsed && (
             <span className="text-xs px-2 py-1 rounded-full bg-amber-400/30 text-amber-200 text-center">
-              {doneCount}/5 Done
+              {doneCount}/{checklistItems.length} Done
             </span>
           )}
           <ChevronIcon collapsed={collapsed} />
@@ -220,21 +260,36 @@ function BannerStateUpcoming({ data, collapsed, onToggle }: {
             <div className="flex items-center justify-between mb-2">
               <p className="text-white/70 text-xs font-semibold">Conference prep</p>
               <span className={`text-xs font-semibold ${allDone ? 'text-teal-300' : 'text-amber-300'}`}>
-                {doneCount}/5 complete
+                {doneCount}/{checklistItems.length} complete
               </span>
             </div>
             <div className="space-y-2">
               {checklistItems.map(item => {
-                const done = data.prepChecklist[item.key];
+                const done = effectiveChecklist[item.key];
+                const checkIcon = (
+                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
+                );
                 return (
                   <div key={item.key} className="flex items-center gap-2.5">
-                    <div className={`w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center ${done ? 'bg-teal-500' : 'border-2 border-dashed border-white/30'}`}>
-                      {done && (
-                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
-                    </div>
+                    {item.key === 'preConferenceReview' ? (
+                      <button
+                        type="button"
+                        onClick={toggleReview}
+                        disabled={togglingReview}
+                        aria-pressed={done}
+                        aria-label={done ? 'Mark pre-conference review as not done' : 'Mark pre-conference review as done'}
+                        title={done ? 'Mark as not done' : 'Mark as done'}
+                        className={`w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center cursor-pointer transition-colors disabled:opacity-60 ${done ? 'bg-teal-500 hover:bg-teal-400' : 'border-2 border-dashed border-white/30 hover:border-white/60'}`}
+                      >
+                        {done && checkIcon}
+                      </button>
+                    ) : (
+                      <div className={`w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center ${done ? 'bg-teal-500' : 'border-2 border-dashed border-white/30'}`}>
+                        {done && checkIcon}
+                      </div>
+                    )}
                     <span className={`flex-1 text-sm ${done ? 'line-through text-white/40' : 'text-white'}`}>
                       {item.label}
                     </span>
