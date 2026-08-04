@@ -520,12 +520,12 @@ export async function GET(
     }
     icpCompanyMap.get(cid)!.attendeeList.push(a);
   }
-  const icpCompanies: Array<{ id: number; name: string; company_type: string | null; avgHealth: number; assigned_user_names: string[]; attendees: Array<{ id: unknown; first_name: unknown; last_name: unknown; title: unknown; health: number }> }> = [];
+  const icpCompanies: Array<{ id: number; name: string; company_type: string | null; avgHealth: number; assigned_user_names: string[]; wse: number | null; attendees: Array<{ id: unknown; first_name: unknown; last_name: unknown; title: unknown; health: number }> }> = [];
   icpCompanyMap.forEach((c) => {
     const scores = c.attendeeList.map((a) => attendeeHealthMap.get(a.id as number) ?? 0);
     const avg = scores.length > 0 ? Math.round(scores.reduce((s, v) => s + v, 0) / scores.length) : 0;
     const assignedNames = resolveUserIds(c.attendeeList[0]?.company_assigned_user);
-    icpCompanies.push({ id: c.id, name: c.name, company_type: c.company_type, avgHealth: avg, assigned_user_names: assignedNames, attendees: c.attendeeList.map((a) => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title, seniority: resolveSeniority(a.seniority, a.title), health: attendeeHealthMap.get(a.id as number) ?? 0 })) });
+    icpCompanies.push({ id: c.id, name: c.name, company_type: c.company_type, avgHealth: avg, assigned_user_names: assignedNames, wse: null, attendees: c.attendeeList.map((a) => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title, seniority: resolveSeniority(a.seniority, a.title), health: attendeeHealthMap.get(a.id as number) ?? 0 })) });
   });
   icpCompanies.sort((a, b) => b.avgHealth - a.avgHealth);
 
@@ -608,6 +608,12 @@ export async function GET(
       company_type: (a.company_type as string) ?? null,
       company_name: String(a.company_name || ''),
     });
+  }
+  // icpCompanies was built above, before companyDetailMap existed — backfill
+  // wse now so LandscapeTab's Companies by Assigned Rep chart can compute a
+  // per-company dollar value (wse × avg cost per unit) without a second fetch.
+  for (const co of icpCompanies) {
+    co.wse = companyDetailMap.get(co.id)?.wse ?? null;
   }
 
   // Build per-company internal_relationships with resolved rep names
