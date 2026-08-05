@@ -401,6 +401,30 @@ export function PreConferenceReviewModal() {
     }
   }, [conferenceId, targetMap]);
 
+  const toggleTargetWithTier = useCallback(async (entry: Omit<TargetEntry, 'tier'>, tier: string) => {
+    const isTarget = targetMap.has(entry.attendeeId);
+    // Optimistic update
+    if (isTarget) {
+      setTargetMap(prev => { const next = new Map(prev); next.delete(entry.attendeeId); return next; });
+    } else {
+      setTargetMap(prev => new Map(prev).set(entry.attendeeId, { ...entry, tier }));
+    }
+    try {
+      await fetch(`/api/conferences/${conferenceId}/targets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_id: entry.attendeeId, tier }),
+      });
+    } catch {
+      // Revert on error
+      if (isTarget) {
+        setTargetMap(prev => new Map(prev).set(entry.attendeeId, { ...entry, tier }));
+      } else {
+        setTargetMap(prev => { const next = new Map(prev); next.delete(entry.attendeeId); return next; });
+      }
+    }
+  }, [conferenceId, targetMap]);
+
   const addTargetWithTier = useCallback(async (entry: Omit<TargetEntry, 'tier'>, tier: string) => {
     if (targetMap.has(entry.attendeeId)) return;
     setTargetMap(prev => new Map(prev).set(entry.attendeeId, { ...entry, tier }));
@@ -604,7 +628,7 @@ export function PreConferenceReviewModal() {
                 <LandscapeTab
                   data={data.landscape}
                   targetMap={targetMap}
-                  onToggleTarget={toggleTarget}
+                  onToggleTargetWithTier={toggleTargetWithTier}
                   strategyAssessment={data.strategyAssessment ?? null}
                   meetingAttendeeIds={meetingAttendeeIds}
                   conferenceId={conferenceId}
@@ -613,6 +637,7 @@ export function PreConferenceReviewModal() {
                   icpCompanies={data.icpCompanies}
                   relationships={data.relationships}
                   onStrategyUpdated={() => load(conferenceId)}
+                  readOnly={targetsReadOnly}
                 />
               )}
               {activeTab === 'icp' && (

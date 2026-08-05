@@ -7,6 +7,8 @@ import type { LandscapeData, TargetEntry, ClientCompanyEntry, ByRepEntry, IcpCom
 import type { StrategyAssessment } from '@/lib/strategyAssessment';
 import { useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
 import { StrategyAlignmentDrawer } from '../StrategyAlignmentDrawer';
+import { companyTierToConferenceTier } from '@/lib/targeting/targetRecommendationsView';
+import { useTargetingCompilation } from '@/lib/targeting/targetingCompilationStore';
 import toast from 'react-hot-toast';
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
@@ -1273,7 +1275,26 @@ function SeniorityPill({ seniority }: { seniority: string | null }) {
   );
 }
 
-function IcpCompanyCard({ co, accentColor, dimmed }: { co: IcpCompany; accentColor: string; dimmed?: boolean }) {
+function IcpCompanyCard({
+  co,
+  accentColor,
+  dimmed,
+  targetMap,
+  onToggleTargetWithTier,
+  tierKey,
+  readOnly,
+}: {
+  co: IcpCompany;
+  accentColor: string;
+  dimmed?: boolean;
+  targetMap: Map<number, TargetEntry>;
+  onToggleTargetWithTier: (entry: Omit<TargetEntry, 'tier'>, tier: string) => Promise<void>;
+  /** This company's target_priority_tier_key from the target recommendations
+   * engine, if compiled yet — determines which kanban tier a newly-added
+   * target lands in (falls back to Monitor when null/uncompiled). */
+  tierKey: string | null;
+  readOnly?: boolean;
+}) {
   const openRecord = useRecordDrawer();
   const avgCostPerUnit = useAvgCostPerUnit();
   const [expanded, setExpanded] = useState(false);
@@ -1315,25 +1336,44 @@ function IcpCompanyCard({ co, accentColor, dimmed }: { co: IcpCompany; accentCol
           className="divide-y"
           style={{ borderTop: `1px solid ${hexAlpha(accentColor, 0.2)}`, borderColor: hexAlpha(accentColor, 0.1) }}
         >
-          {co.attendees.map(a => (
-            <div key={a.id} className="px-3 py-1.5 bg-white flex items-center justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <button
-                  type="button"
-                  onClick={e => { e.stopPropagation(); openRecord('attendee', a.id); }}
-                  className="text-xs font-medium text-gray-800 hover:text-brand-secondary transition-colors block truncate text-left w-full"
-                >
-                  {a.first_name} {a.last_name}
-                </button>
-                {a.title && <p className="text-xs text-gray-400 truncate">{a.title}</p>}
-              </div>
-              {a.seniority && (
-                <div className="flex-shrink-0">
-                  <SeniorityPill seniority={a.seniority} />
+          {co.attendees.map(a => {
+            const isTarget = targetMap.has(a.id);
+            return (
+              <div key={a.id} className="px-3 py-1.5 bg-white flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <button
+                    type="button"
+                    onClick={e => { e.stopPropagation(); openRecord('attendee', a.id); }}
+                    className="text-xs font-medium text-gray-800 hover:text-brand-secondary transition-colors block truncate text-left w-full"
+                  >
+                    {a.first_name} {a.last_name}
+                  </button>
+                  {a.title && <p className="text-xs text-gray-400 truncate">{a.title}</p>}
                 </div>
-              )}
-            </div>
-          ))}
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <TargetBtn
+                    isTarget={isTarget}
+                    disabled={readOnly}
+                    onClick={e => {
+                      e.stopPropagation();
+                      void onToggleTargetWithTier({
+                        attendeeId: a.id,
+                        firstName: a.first_name,
+                        lastName: a.last_name,
+                        title: a.title,
+                        seniority: a.seniority,
+                        companyName: co.name,
+                        companyId: co.id,
+                        companyWse: co.wse,
+                        assignedUserNames: co.assigned_user_names,
+                      }, companyTierToConferenceTier(tierKey));
+                    }}
+                  />
+                  {a.seniority && <SeniorityPill seniority={a.seniority} />}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -1405,13 +1445,29 @@ function RepDetailPanel({
   rep,
   totalIcp,
   onClose,
+  conferenceId,
+  targetMap,
+  onToggleTargetWithTier,
+  readOnly,
 }: {
   rep: RepChartEntry;
   totalIcp: number;
   onClose: () => void;
+  conferenceId: number;
+  targetMap: Map<number, TargetEntry>;
+  onToggleTargetWithTier: (entry: Omit<TargetEntry, 'tier'>, tier: string) => Promise<void>;
+  readOnly?: boolean;
 }) {
   const pct = totalIcp > 0 ? Math.round((rep.count / totalIcp) * 100) : 0;
   const avgCostPerUnit = useAvgCostPerUnit();
+  const targetingCompilation = useTargetingCompilation(conferenceId);
+  const companyTierMap = useMemo(() => {
+    const map = new Map<number, string | null>();
+    for (const c of targetingCompilation.data?.companies ?? []) {
+      map.set(c.company_id, c.target_priority_tier_key || c.target_priority_tier || null);
+    }
+    return map;
+  }, [targetingCompilation.data]);
   const [selectedSeniority, setSelectedSeniority] = useState<string | null>(null);
   // Desktop-only visibility toggle — mobile always shows the donut regardless
   // of this (see the className on the wrapper below), since mobile's drawer
@@ -1505,7 +1561,18 @@ function RepDetailPanel({
         ) : (
           rep.companies.map(co => {
             const dimmed = selectedSeniority != null && !co.attendees.some(a => (a.seniority || 'Other') === selectedSeniority);
-            return <IcpCompanyCard key={co.id} co={co} accentColor={rep.color} dimmed={dimmed} />;
+            return (
+              <IcpCompanyCard
+                key={co.id}
+                co={co}
+                accentColor={rep.color}
+                dimmed={dimmed}
+                targetMap={targetMap}
+                onToggleTargetWithTier={onToggleTargetWithTier}
+                tierKey={companyTierMap.get(co.id) ?? null}
+                readOnly={readOnly}
+              />
+            );
           })
         )}
       </div>
@@ -1964,7 +2031,7 @@ function RelationshipHeatmapPanel({
 export function LandscapeTab({
   data,
   targetMap,
-  onToggleTarget,
+  onToggleTargetWithTier,
   strategyAssessment,
   meetingAttendeeIds,
   conferenceId,
@@ -1973,10 +2040,11 @@ export function LandscapeTab({
   icpCompanies,
   relationships,
   onStrategyUpdated,
+  readOnly,
 }: {
   data: LandscapeData;
   targetMap: Map<number, TargetEntry>;
-  onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
+  onToggleTargetWithTier: (entry: Omit<TargetEntry, 'tier'>, tier: string) => Promise<void>;
   strategyAssessment: StrategyAssessment | null;
   meetingAttendeeIds: Set<number>;
   conferenceId: number;
@@ -1985,6 +2053,7 @@ export function LandscapeTab({
   icpCompanies: IcpCompany[];
   relationships: RelationshipRow[];
   onStrategyUpdated: () => void;
+  readOnly?: boolean;
 }) {
   const [selectedRep, setSelectedRep] = useState<RepChartEntry | null>(null);
 
@@ -2036,6 +2105,10 @@ export function LandscapeTab({
                 rep={selectedRep}
                 totalIcp={icpCompanies.length}
                 onClose={() => setSelectedRep(null)}
+                conferenceId={conferenceId}
+                targetMap={targetMap}
+                onToggleTargetWithTier={onToggleTargetWithTier}
+                readOnly={readOnly}
               />
             </>
           )}

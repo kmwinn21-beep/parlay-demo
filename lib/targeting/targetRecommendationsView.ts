@@ -81,6 +81,18 @@ export function getTierKey(company: TargetingCompanyRecommendation): string {
   return stableKey(company.target_priority_tier_key || company.target_priority_tier);
 }
 
+/** Maps a company's target-priority tier key to the conference targets kanban's
+ * tier key ('1' Must Target / '2' High Priority / '3' Worth Engaging /
+ * 'unassigned' Monitor). Companies with no recognized designation land in
+ * Monitor, same as any other unscored target. */
+export function companyTierToConferenceTier(tierKey: string | null | undefined): string {
+  const key = stableKey(tierKey ?? '');
+  if (key === 'must_target') return '1';
+  if (key === 'high_priority') return '2';
+  if (key === 'worth_engaging') return '3';
+  return 'unassigned';
+}
+
 export function scoreOrNull(value: unknown): number | null {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
