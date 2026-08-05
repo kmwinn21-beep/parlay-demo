@@ -431,7 +431,7 @@ export function ConferenceTargetsTab({
             </button>
           </div>
         </div>
-        <div className={isSoleVisibleColumn ? 'grid grid-cols-2 gap-2' : 'space-y-2'}>
+        <div className={isSoleVisibleColumn ? 'grid grid-cols-1 sm:grid-cols-2 gap-2' : 'space-y-2'}>
           {tierCards.map(entry => (
             <TargetCard
               key={entry.attendeeId}
