@@ -257,11 +257,13 @@ function ActionsPanel({
   icpCompanies,
   territoryScope,
   territoryIds,
+  onSelectRep,
 }: {
   sa: StrategyAssessment;
   icpCompanies: IcpCompany[];
   territoryScope: 'national' | 'regional' | null;
   territoryIds: number[];
+  onSelectRep: (rep: RepChartEntry) => void;
 }) {
   const [showChart, setShowChart] = useState(false);
 
@@ -331,7 +333,7 @@ function ActionsPanel({
       {/* Staffing */}
       <div>
         <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1.5">Staffing</div>
-        <StaffingPills icpCompanies={icpCompanies} territoryScope={territoryScope} territoryIds={territoryIds} />
+        <StaffingPills icpCompanies={icpCompanies} territoryScope={territoryScope} territoryIds={territoryIds} onSelectRep={onSelectRep} />
       </div>
     </div>
   );
@@ -341,14 +343,18 @@ function StaffingPills({
   icpCompanies,
   territoryScope,
   territoryIds,
+  onSelectRep,
 }: {
   icpCompanies: IcpCompany[];
   territoryScope: 'national' | 'regional' | null;
   territoryIds: number[];
+  onSelectRep: (rep: RepChartEntry) => void;
 }) {
   const avgCostPerUnit = useAvgCostPerUnit();
   const [territories, setTerritories] = useState<TerritoryResponse[]>([]);
   const [territoriesLoaded, setTerritoriesLoaded] = useState(false);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const scrollRow = (dir: -1 | 1) => rowRef.current?.scrollBy({ left: dir * 160, behavior: 'smooth' });
 
   useEffect(() => {
     fetch('/api/admin/territories')
@@ -371,6 +377,13 @@ function StaffingPills({
     return map;
   }, [territories]);
 
+  // Same per-rep company grouping the Prospects by Assigned Rep chart uses, so
+  // clicking a staffing pill can open that identical rep drill-down drawer.
+  const repData = useMemo(() => computeRepData(icpCompanies), [icpCompanies]);
+  const selectRepByName = (name: string, color: string) => {
+    onSelectRep(repData.find(r => r.name === name) ?? { name, companies: [], count: 0, color });
+  };
+
   if (territoryScope == null) {
     return <p className="text-xs text-gray-400">Set this conference&rsquo;s territory scope (National or Regional) in Conference Details to see staffing recommendations.</p>;
   }
@@ -378,18 +391,20 @@ function StaffingPills({
   if (territoryScope === 'regional') {
     if (!territoriesLoaded) return <p className="text-xs text-gray-400">Loading reps…</p>;
     const selected = territories.filter(t => territoryIds.includes(t.id));
-    const pills = selected.flatMap(t => t.assignedUsers.map(u => ({ key: `${t.id}-${u.userId}`, label: `${u.displayName} - ${t.name}`, color: t.color })));
+    const pills = selected.flatMap(t => t.assignedUsers.map(u => ({ key: `${t.id}-${u.userId}`, name: u.displayName, label: `${u.displayName} - ${t.name}`, color: t.color })));
     if (pills.length === 0) return <p className="text-xs text-gray-400">No reps assigned to this conference&rsquo;s territories yet.</p>;
     return (
       <div className="flex flex-wrap gap-1.5">
         {pills.map(p => (
-          <span
+          <button
             key={p.key}
-            className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap"
+            type="button"
+            onClick={() => selectRepByName(p.name, p.color)}
+            className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap hover:brightness-95 transition-all duration-150"
             style={{ backgroundColor: hexAlpha(p.color, 0.12), color: p.color, border: `1px solid ${hexAlpha(p.color, 0.3)}` }}
           >
             {p.label}
-          </span>
+          </button>
         ))}
       </div>
     );
@@ -410,21 +425,45 @@ function StaffingPills({
   if (ranked.length === 0) return <p className="text-xs text-gray-400">No reps assigned to attending companies yet.</p>;
 
   return (
-    <div className="flex flex-wrap gap-2.5">
-      {ranked.map(([name, value]) => {
-        const color = repColorMap.get(name) ?? '#6b7280';
-        return (
-          <div
-            key={name}
-            title={name}
-            className="w-14 h-14 rounded-full flex flex-col items-center justify-center flex-shrink-0"
-            style={{ backgroundColor: hexAlpha(color, 0.12), border: `1.5px solid ${hexAlpha(color, 0.35)}` }}
-          >
-            <span className="text-xs font-bold leading-none" style={{ color }}>{repInitials(name)}</span>
-            <span className="text-[9px] font-semibold leading-none mt-1" style={{ color }}>{abbreviateDollar(value)}</span>
-          </div>
-        );
-      })}
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => scrollRow(-1)}
+        className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-700 transition-colors"
+        aria-label="Scroll reps left"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+      <div ref={rowRef} className="flex-1 min-w-0 flex flex-nowrap gap-2.5 overflow-x-auto scrollbar-hide">
+        {ranked.map(([name, value]) => {
+          const color = repColorMap.get(name) ?? '#6b7280';
+          return (
+            <button
+              key={name}
+              type="button"
+              title={name}
+              onClick={() => selectRepByName(name, color)}
+              className="w-12 h-12 rounded-full flex flex-col items-center justify-center flex-shrink-0 hover:brightness-95 transition-all duration-150"
+              style={{ backgroundColor: hexAlpha(color, 0.12), border: `1.5px solid ${hexAlpha(color, 0.35)}` }}
+            >
+              <span className="text-xs font-bold leading-none" style={{ color }}>{repInitials(name)}</span>
+              <span className="text-[9px] font-semibold leading-none mt-1" style={{ color }}>{abbreviateDollar(value)}</span>
+            </button>
+          );
+        })}
+      </div>
+      <button
+        type="button"
+        onClick={() => scrollRow(1)}
+        className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-700 transition-colors"
+        aria-label="Scroll reps right"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
     </div>
   );
 }
@@ -598,6 +637,7 @@ function StrategyAssessmentSection({
   icpCompanies,
   territoryScope,
   territoryIds,
+  onSelectRep,
 }: {
   sa: StrategyAssessment;
   conferenceId: number;
@@ -606,6 +646,7 @@ function StrategyAssessmentSection({
   icpCompanies: IcpCompany[];
   territoryScope: 'national' | 'regional' | null;
   territoryIds: number[];
+  onSelectRep: (rep: RepChartEntry) => void;
 }) {
   return (
     <div className="pb-2 border-b border-gray-100 mb-6 space-y-4">
@@ -627,7 +668,7 @@ function StrategyAssessmentSection({
         </div>
         {/* Actions panel — 2 cols */}
         <div className="lg:col-span-2">
-          <ActionsPanel sa={sa} icpCompanies={icpCompanies} territoryScope={territoryScope} territoryIds={territoryIds} />
+          <ActionsPanel sa={sa} icpCompanies={icpCompanies} territoryScope={territoryScope} territoryIds={territoryIds} onSelectRep={onSelectRep} />
         </div>
       </div>
     </div>
@@ -2129,6 +2170,7 @@ export function LandscapeTab({
           icpCompanies={icpCompanies}
           territoryScope={territoryScope}
           territoryIds={territoryIds}
+          onSelectRep={setSelectedRep}
         />
       )}
 
