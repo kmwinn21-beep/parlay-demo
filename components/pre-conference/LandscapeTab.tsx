@@ -258,12 +258,14 @@ function ActionsPanel({
   territoryScope,
   territoryIds,
   onSelectRep,
+  selectedRepName,
 }: {
   sa: StrategyAssessment;
   icpCompanies: IcpCompany[];
   territoryScope: 'national' | 'regional' | null;
   territoryIds: number[];
   onSelectRep: (rep: RepChartEntry) => void;
+  selectedRepName: string | null;
 }) {
   const [showChart, setShowChart] = useState(false);
 
@@ -333,7 +335,7 @@ function ActionsPanel({
       {/* Staffing */}
       <div>
         <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1.5">Staffing</div>
-        <StaffingPills icpCompanies={icpCompanies} territoryScope={territoryScope} territoryIds={territoryIds} onSelectRep={onSelectRep} />
+        <StaffingPills icpCompanies={icpCompanies} territoryScope={territoryScope} territoryIds={territoryIds} onSelectRep={onSelectRep} selectedRepName={selectedRepName} />
       </div>
     </div>
   );
@@ -344,11 +346,13 @@ function StaffingPills({
   territoryScope,
   territoryIds,
   onSelectRep,
+  selectedRepName,
 }: {
   icpCompanies: IcpCompany[];
   territoryScope: 'national' | 'regional' | null;
   territoryIds: number[];
   onSelectRep: (rep: RepChartEntry) => void;
+  selectedRepName: string | null;
 }) {
   const avgCostPerUnit = useAvgCostPerUnit();
   const [territories, setTerritories] = useState<TerritoryResponse[]>([]);
@@ -395,17 +399,26 @@ function StaffingPills({
     if (pills.length === 0) return <p className="text-xs text-gray-400">No reps assigned to this conference&rsquo;s territories yet.</p>;
     return (
       <div className="flex flex-wrap gap-1.5">
-        {pills.map(p => (
-          <button
-            key={p.key}
-            type="button"
-            onClick={() => selectRepByName(p.name, p.color)}
-            className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap hover:brightness-95 transition-all duration-150"
-            style={{ backgroundColor: hexAlpha(p.color, 0.12), color: p.color, border: `1px solid ${hexAlpha(p.color, 0.3)}` }}
-          >
-            {p.label}
-          </button>
-        ))}
+        {pills.map(p => {
+          const isDimmed = selectedRepName != null && selectedRepName !== p.name;
+          return (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => selectRepByName(p.name, p.color)}
+              className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap hover:brightness-95 transition-all duration-150"
+              style={{
+                backgroundColor: hexAlpha(p.color, 0.12),
+                color: p.color,
+                border: `1px solid ${hexAlpha(p.color, 0.3)}`,
+                filter: isDimmed ? 'grayscale(1)' : undefined,
+                opacity: isDimmed ? 0.4 : 1,
+              }}
+            >
+              {p.label}
+            </button>
+          );
+        })}
       </div>
     );
   }
@@ -439,6 +452,7 @@ function StaffingPills({
       <div ref={rowRef} className="flex-1 min-w-0 flex flex-nowrap gap-2.5 overflow-x-auto scrollbar-hide">
         {ranked.map(([name, value]) => {
           const color = repColorMap.get(name) ?? '#6b7280';
+          const isDimmed = selectedRepName != null && selectedRepName !== name;
           return (
             <button
               key={name}
@@ -446,7 +460,12 @@ function StaffingPills({
               title={name}
               onClick={() => selectRepByName(name, color)}
               className="w-12 h-12 rounded-full flex flex-col items-center justify-center flex-shrink-0 hover:brightness-95 transition-all duration-150"
-              style={{ backgroundColor: hexAlpha(color, 0.12), border: `1.5px solid ${hexAlpha(color, 0.35)}` }}
+              style={{
+                backgroundColor: hexAlpha(color, 0.12),
+                border: `1.5px solid ${hexAlpha(color, 0.35)}`,
+                filter: isDimmed ? 'grayscale(1)' : undefined,
+                opacity: isDimmed ? 0.4 : 1,
+              }}
             >
               <span className="text-xs font-bold leading-none" style={{ color }}>{repInitials(name)}</span>
               <span className="text-[9px] font-semibold leading-none mt-1" style={{ color }}>{abbreviateDollar(value)}</span>
@@ -638,6 +657,7 @@ function StrategyAssessmentSection({
   territoryScope,
   territoryIds,
   onSelectRep,
+  selectedRepName,
 }: {
   sa: StrategyAssessment;
   conferenceId: number;
@@ -647,6 +667,7 @@ function StrategyAssessmentSection({
   territoryScope: 'national' | 'regional' | null;
   territoryIds: number[];
   onSelectRep: (rep: RepChartEntry) => void;
+  selectedRepName: string | null;
 }) {
   return (
     <div className="pb-2 border-b border-gray-100 mb-6 space-y-4">
@@ -668,7 +689,7 @@ function StrategyAssessmentSection({
         </div>
         {/* Actions panel — 2 cols */}
         <div className="lg:col-span-2">
-          <ActionsPanel sa={sa} icpCompanies={icpCompanies} territoryScope={territoryScope} territoryIds={territoryIds} onSelectRep={onSelectRep} />
+          <ActionsPanel sa={sa} icpCompanies={icpCompanies} territoryScope={territoryScope} territoryIds={territoryIds} onSelectRep={onSelectRep} selectedRepName={selectedRepName} />
         </div>
       </div>
     </div>
@@ -2171,6 +2192,7 @@ export function LandscapeTab({
           territoryScope={territoryScope}
           territoryIds={territoryIds}
           onSelectRep={setSelectedRep}
+          selectedRepName={selectedRep?.name ?? null}
         />
       )}
 
