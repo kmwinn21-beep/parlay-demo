@@ -9,6 +9,7 @@ import { useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
 import { StrategyAlignmentDrawer } from '../StrategyAlignmentDrawer';
 import { companyTierToConferenceTier } from '@/lib/targeting/targetRecommendationsView';
 import { useTargetingCompilation } from '@/lib/targeting/targetingCompilationStore';
+import type { TerritoryResponse } from '@/app/api/admin/territories/route';
 import toast from 'react-hot-toast';
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
@@ -249,16 +250,20 @@ function FitScorePill({ score }: { score: number }) {
   );
 }
 
-function repRange(min: number, max: number): string {
-  return min === max ? String(min) : `${min}–${max}`;
-}
-
 // ─── Combined actions panel (right 2 cols) ────────────────────────────────────
 
-function ActionsPanel({ sa }: { sa: StrategyAssessment }) {
+function ActionsPanel({
+  sa,
+  icpCompanies,
+  territoryScope,
+  territoryIds,
+}: {
+  sa: StrategyAssessment;
+  icpCompanies: IcpCompany[];
+  territoryScope: 'national' | 'regional' | null;
+  territoryIds: number[];
+}) {
   const [showChart, setShowChart] = useState(false);
-  const [showStaffingPopover, setShowStaffingPopover] = useState(false);
-  const isCovered = sa.currentRepCount >= sa.recommendedRepMin;
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 flex flex-col gap-3 h-full">
@@ -324,57 +329,102 @@ function ActionsPanel({ sa }: { sa: StrategyAssessment }) {
       <div className="border-t border-gray-100" />
 
       {/* Staffing */}
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-0.5">Staffing</div>
-          <div className="flex items-center gap-1.5">
-            <div className="text-xs font-semibold text-gray-800">
-              {repRange(sa.recommendedRepMin, sa.recommendedRepMax)} reps recommended
-            </div>
-            {sa.isStaffingConstrained && (
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowStaffingPopover(v => !v)}
-                  className="text-amber-400 hover:text-amber-600 transition-colors flex-shrink-0"
-                  title="Recommendation is capped by team size"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </button>
-                {showStaffingPopover && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowStaffingPopover(false)} />
-                    <div className="absolute left-0 top-5 z-50 w-64 rounded-lg border border-gray-200 bg-white shadow-lg p-3 text-xs text-gray-700 space-y-1.5">
-                      <p className="font-semibold text-gray-900">True recommendation: {repRange(sa.idealizedRepMin, sa.idealizedRepMax)} reps</p>
-                      <p>Your team has {sa.totalCompanyReps} total rep{sa.totalCompanyReps !== 1 ? 's' : ''} company-wide ({sa.alreadyCommittedReps} already assigned to this conference).</p>
-                      <p>The recommendation above is capped at your available headcount.</p>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="text-xs text-gray-400">Current: {sa.currentRepCount} rep{sa.currentRepCount !== 1 ? 's' : ''}</div>
-          {!isCovered && (
-            <div className="text-xs text-amber-600 font-medium mt-0.5">
-              Coverage gap: add {repRange(sa.recommendedRepMin - sa.currentRepCount, sa.recommendedRepMax - sa.currentRepCount)} more
-            </div>
-          )}
-        </div>
-        {isCovered ? (
-          <svg className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
-        ) : (
-          <svg className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-          </svg>
-        )}
+      <div>
+        <div className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1.5">Staffing</div>
+        <StaffingPills icpCompanies={icpCompanies} territoryScope={territoryScope} territoryIds={territoryIds} />
       </div>
+    </div>
+  );
+}
+
+function StaffingPills({
+  icpCompanies,
+  territoryScope,
+  territoryIds,
+}: {
+  icpCompanies: IcpCompany[];
+  territoryScope: 'national' | 'regional' | null;
+  territoryIds: number[];
+}) {
+  const avgCostPerUnit = useAvgCostPerUnit();
+  const [territories, setTerritories] = useState<TerritoryResponse[]>([]);
+  const [territoriesLoaded, setTerritoriesLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/admin/territories')
+      .then(r => r.ok ? r.json() : { territories: [] })
+      .then((data: { territories?: TerritoryResponse[] }) => setTerritories(data.territories ?? []))
+      .catch(() => setTerritories([]))
+      .finally(() => setTerritoriesLoaded(true));
+  }, []);
+
+  // Rep display name -> color, resolved from whichever territory that rep belongs
+  // to — the same colors configured in Admin > Sales Reps, so a rep's pill here
+  // matches their color everywhere else in the app.
+  const repColorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const t of territories) {
+      for (const u of t.assignedUsers) {
+        if (!map.has(u.displayName)) map.set(u.displayName, t.color);
+      }
+    }
+    return map;
+  }, [territories]);
+
+  if (territoryScope == null) {
+    return <p className="text-xs text-gray-400">Set this conference&rsquo;s territory scope (National or Regional) in Conference Details to see staffing recommendations.</p>;
+  }
+
+  if (territoryScope === 'regional') {
+    if (!territoriesLoaded) return <p className="text-xs text-gray-400">Loading reps…</p>;
+    const selected = territories.filter(t => territoryIds.includes(t.id));
+    const pills = selected.flatMap(t => t.assignedUsers.map(u => ({ key: `${t.id}-${u.userId}`, label: `${u.displayName} - ${t.name}`, color: t.color })));
+    if (pills.length === 0) return <p className="text-xs text-gray-400">No reps assigned to this conference&rsquo;s territories yet.</p>;
+    return (
+      <div className="flex flex-wrap gap-1.5">
+        {pills.map(p => (
+          <span
+            key={p.key}
+            className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap"
+            style={{ backgroundColor: hexAlpha(p.color, 0.12), color: p.color, border: `1px solid ${hexAlpha(p.color, 0.3)}` }}
+          >
+            {p.label}
+          </span>
+        ))}
+      </div>
+    );
+  }
+
+  // National — rank reps by total pipeline value (same $-mode total shown in
+  // Prospects by Assigned Rep), descending.
+  if (avgCostPerUnit <= 0) return <p className="text-xs text-gray-400">Set avg. cost per unit in Admin Settings to rank reps by pipeline.</p>;
+
+  const totals = new Map<string, number>();
+  for (const co of icpCompanies) {
+    const rep = co.assigned_user_names?.[0];
+    if (!rep) continue;
+    totals.set(rep, (totals.get(rep) ?? 0) + (companyValue(co, avgCostPerUnit) ?? 0));
+  }
+  const ranked = Array.from(totals.entries()).sort((a, b) => b[1] - a[1]);
+
+  if (ranked.length === 0) return <p className="text-xs text-gray-400">No reps assigned to attending companies yet.</p>;
+
+  return (
+    <div className="flex flex-wrap gap-2.5">
+      {ranked.map(([name, value]) => {
+        const color = repColorMap.get(name) ?? '#6b7280';
+        return (
+          <div
+            key={name}
+            title={name}
+            className="w-14 h-14 rounded-full flex flex-col items-center justify-center flex-shrink-0"
+            style={{ backgroundColor: hexAlpha(color, 0.12), border: `1.5px solid ${hexAlpha(color, 0.35)}` }}
+          >
+            <span className="text-xs font-bold leading-none" style={{ color }}>{repInitials(name)}</span>
+            <span className="text-[9px] font-semibold leading-none mt-1" style={{ color }}>{abbreviateDollar(value)}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -545,11 +595,17 @@ function StrategyAssessmentSection({
   conferenceId,
   conferenceName,
   onStrategyUpdated,
+  icpCompanies,
+  territoryScope,
+  territoryIds,
 }: {
   sa: StrategyAssessment;
   conferenceId: number;
   conferenceName: string;
   onStrategyUpdated: () => void;
+  icpCompanies: IcpCompany[];
+  territoryScope: 'national' | 'regional' | null;
+  territoryIds: number[];
 }) {
   return (
     <div className="pb-2 border-b border-gray-100 mb-6 space-y-4">
@@ -571,7 +627,7 @@ function StrategyAssessmentSection({
         </div>
         {/* Actions panel — 2 cols */}
         <div className="lg:col-span-2">
-          <ActionsPanel sa={sa} />
+          <ActionsPanel sa={sa} icpCompanies={icpCompanies} territoryScope={territoryScope} territoryIds={territoryIds} />
         </div>
       </div>
     </div>
@@ -2039,6 +2095,8 @@ export function LandscapeTab({
   byRep,
   icpCompanies,
   relationships,
+  territoryScope,
+  territoryIds,
   onStrategyUpdated,
   readOnly,
 }: {
@@ -2052,6 +2110,8 @@ export function LandscapeTab({
   byRep: ByRepEntry[];
   icpCompanies: IcpCompany[];
   relationships: RelationshipRow[];
+  territoryScope: 'national' | 'regional' | null;
+  territoryIds: number[];
   onStrategyUpdated: () => void;
   readOnly?: boolean;
 }) {
@@ -2066,6 +2126,9 @@ export function LandscapeTab({
           conferenceId={conferenceId}
           conferenceName={conferenceName}
           onStrategyUpdated={onStrategyUpdated}
+          icpCompanies={icpCompanies}
+          territoryScope={territoryScope}
+          territoryIds={territoryIds}
         />
       )}
 
