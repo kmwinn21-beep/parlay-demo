@@ -636,7 +636,7 @@ export function PreConferenceReviewModal() {
                   byRep={data.byRep}
                   icpCompanies={data.icpCompanies}
                   relationships={data.relationships}
-                  onStrategyUpdated={() => load(conferenceId)}
+                  onStrategyUpdated={() => load(conferenceId, true)}
                   readOnly={targetsReadOnly}
                 />
               )}
