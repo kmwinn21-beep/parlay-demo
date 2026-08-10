@@ -19,7 +19,11 @@ import { type Meeting } from './MeetingsTable';
 export type { StrategyAssessment } from '@/lib/strategyAssessment';
 
 export interface PreConferenceSummary {
-  conference: { id: number; name: string; start_date: string | null; end_date: string | null; location: string | null };
+  conference: {
+    id: number; name: string; start_date: string | null; end_date: string | null; location: string | null;
+    territory_scope: 'national' | 'regional' | null;
+    territory_ids: number[];
+  };
   totalAttendees: number;
   totalCompanies: number;
   icpCount: number;
@@ -636,6 +640,8 @@ export function PreConferenceReviewModal() {
                   byRep={data.byRep}
                   icpCompanies={data.icpCompanies}
                   relationships={data.relationships}
+                  territoryScope={data.summary.conference.territory_scope}
+                  territoryIds={data.summary.conference.territory_ids}
                   onStrategyUpdated={() => load(conferenceId, true)}
                   readOnly={targetsReadOnly}
                 />

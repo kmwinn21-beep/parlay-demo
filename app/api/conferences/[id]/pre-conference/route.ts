@@ -24,6 +24,15 @@ function parseIdList(raw: unknown): number[] {
   return String(raw).split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0);
 }
 
+// territory_ids is stored as a JSON array (see conferences.territory_ids), unlike
+// the comma-separated id lists parseIdList handles elsewhere in this route.
+function parseJsonIdList(raw: unknown): number[] {
+  try {
+    const parsed = JSON.parse(String(raw ?? '[]'));
+    return Array.isArray(parsed) ? parsed.map(Number).filter(n => Number.isFinite(n)) : [];
+  } catch { return []; }
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -45,7 +54,7 @@ export async function GET(
 
 
   const confRow = await db.execute({
-    sql: 'SELECT id, name, start_date, end_date, location, internal_attendees, conference_strategy_type_id FROM conferences WHERE id = ?',
+    sql: 'SELECT id, name, start_date, end_date, location, internal_attendees, conference_strategy_type_id, territory_scope, territory_ids FROM conferences WHERE id = ?',
     args: [confId],
   });
   if (confRow.rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -424,7 +433,11 @@ export async function GET(
     : [];
 
   const summary = {
-    conference: { id: conference.id, name: conference.name, start_date: conference.start_date, end_date: conference.end_date, location: conference.location },
+    conference: {
+      id: conference.id, name: conference.name, start_date: conference.start_date, end_date: conference.end_date, location: conference.location,
+      territory_scope: conference.territory_scope ? String(conference.territory_scope) : null,
+      territory_ids: parseJsonIdList(conference.territory_ids),
+    },
     totalAttendees, totalCompanies, icpCount, meetingCount, openFollowUps, reps,
   };
 
