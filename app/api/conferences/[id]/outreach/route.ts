@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
-import { getInitials, resolveUserDisplayName } from '@/lib/initials';
+import { getInitials } from '@/lib/initials';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,10 +53,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       sql: `SELECT oa.company_id, oa.status, oa.assigned_user_id,
                    c.name as company_name, c.company_type, c.icp, c.wse, c.territory_id,
                    st.name as territory_name, st.color as territory_color,
-                   u.display_name, u.first_name, u.last_name, u.email
+                   co.value as rep_name
             FROM outreach_assignments oa
             JOIN companies c ON c.id = oa.company_id
-            JOIN users u ON u.id = oa.assigned_user_id
+            JOIN config_options co ON co.id = oa.assigned_user_id AND co.category = 'user'
             LEFT JOIN sales_territories st ON st.id = c.territory_id
             WHERE oa.conference_id = ?
             ORDER BY c.name ASC`,
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const companyMap = new Map<number, CompanyAgg>();
     for (const r of assignRows.rows) {
       const companyId = Number(r.company_id);
-      const displayName = resolveUserDisplayName(r);
+      const displayName = String(r.rep_name);
       if (!companyMap.has(companyId)) {
         companyMap.set(companyId, {
           companyId,
