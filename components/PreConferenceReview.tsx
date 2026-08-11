@@ -15,6 +15,7 @@ import { RelationshipsTab } from './pre-conference/RelationshipsTab';
 import { ConferenceTargetsTab } from './pre-conference/ConferenceTargetsTab';
 import { TargetRecommendationsTab } from './pre-conference/TargetRecommendationsTab';
 import { ProductIcpTab } from './pre-conference/ProductIcpTab';
+import { OutreachAssignModal } from './OutreachAssignModal';
 import { type Meeting } from './MeetingsTable';
 export type { StrategyAssessment } from '@/lib/strategyAssessment';
 
@@ -287,6 +288,9 @@ export function PreConferenceReviewModal() {
   const [recordDrawer, setRecordDrawer] = useState<{ type: 'attendee' | 'company'; id: number } | null>(null);
   const openRecord = useCallback((type: 'attendee' | 'company', id: number) => setRecordDrawer({ type, id }), []);
   const closeRecord = useCallback(() => setRecordDrawer(null), []);
+  // After adding someone as a conference target (from any tab), prompt to also
+  // assign their company for outreach — targeting and outreach go hand in hand.
+  const [outreachPromptCompany, setOutreachPromptCompany] = useState<{ id: number; name: string } | null>(null);
 
   // Cache: avoid reloading if data is less than 5 minutes old
   const loadedAtRef = useRef<number | null>(null);
@@ -381,6 +385,14 @@ export function PreConferenceReviewModal() {
   const conferenceName = slot.conferenceName;
   const targetsReadOnly = slot.targetsReadOnly;
 
+  // Adding a target is the trigger for the outreach-assign prompt; removing one
+  // (or a failed request) never opens it.
+  const promptOutreachAssign = useCallback((entry: Omit<TargetEntry, 'tier'>) => {
+    if (entry.companyId != null) {
+      setOutreachPromptCompany({ id: entry.companyId, name: entry.companyName ?? 'this company' });
+    }
+  }, []);
+
   const toggleTarget = useCallback(async (entry: Omit<TargetEntry, 'tier'>) => {
     const isTarget = targetMap.has(entry.attendeeId);
     // Optimistic update
@@ -395,6 +407,7 @@ export function PreConferenceReviewModal() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ attendee_id: entry.attendeeId }),
       });
+      if (!isTarget) promptOutreachAssign(entry);
     } catch {
       // Revert on error
       if (isTarget) {
@@ -403,7 +416,7 @@ export function PreConferenceReviewModal() {
         setTargetMap(prev => { const next = new Map(prev); next.delete(entry.attendeeId); return next; });
       }
     }
-  }, [conferenceId, targetMap]);
+  }, [conferenceId, targetMap, promptOutreachAssign]);
 
   const toggleTargetWithTier = useCallback(async (entry: Omit<TargetEntry, 'tier'>, tier: string) => {
     const isTarget = targetMap.has(entry.attendeeId);
@@ -419,6 +432,7 @@ export function PreConferenceReviewModal() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ attendee_id: entry.attendeeId, tier }),
       });
+      if (!isTarget) promptOutreachAssign(entry);
     } catch {
       // Revert on error
       if (isTarget) {
@@ -427,7 +441,7 @@ export function PreConferenceReviewModal() {
         setTargetMap(prev => { const next = new Map(prev); next.delete(entry.attendeeId); return next; });
       }
     }
-  }, [conferenceId, targetMap]);
+  }, [conferenceId, targetMap, promptOutreachAssign]);
 
   const addTargetWithTier = useCallback(async (entry: Omit<TargetEntry, 'tier'>, tier: string) => {
     if (targetMap.has(entry.attendeeId)) return;
@@ -445,10 +459,11 @@ export function PreConferenceReviewModal() {
           body: JSON.stringify({ tier }),
         });
       }
+      promptOutreachAssign(entry);
     } catch {
       setTargetMap(prev => { const next = new Map(prev); next.delete(entry.attendeeId); return next; });
     }
-  }, [conferenceId, targetMap]);
+  }, [conferenceId, targetMap, promptOutreachAssign]);
 
   const setTargetTier = useCallback(async (attendeeId: number, tier: string) => {
     setTargetMap(prev => {
@@ -716,6 +731,19 @@ export function PreConferenceReviewModal() {
                 />
               </div>
             </>
+          )}
+
+          {/* Prompted right after adding a conference target anywhere in this
+              modal — targeting and outreach assignment go hand in hand. */}
+          {outreachPromptCompany && (
+            <OutreachAssignModal
+              conferenceId={conferenceId}
+              companyId={outreachPromptCompany.id}
+              companyName={outreachPromptCompany.name}
+              currentAssigneeIds={[]}
+              onClose={() => setOutreachPromptCompany(null)}
+              onAssigned={() => setOutreachPromptCompany(null)}
+            />
           )}
         </div>
       </div>
