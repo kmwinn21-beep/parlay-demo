@@ -2053,4 +2053,8 @@ export const migrations: string[] = [
    WHERE u.config_id IS NOT NULL`,
   `DROP TABLE outreach_assignments`,
   `ALTER TABLE outreach_assignments_new RENAME TO outreach_assignments`,
+  // quick_notes.conference_id: lets a Floor Note be tagged with the conference
+  // it was captured at — auto-filled from the active-conference switcher at
+  // save time, or set/changed afterward via the note card's "+ Event" pill.
+  `ALTER TABLE quick_notes ADD COLUMN conference_id INTEGER REFERENCES conferences(id) ON DELETE SET NULL`,
 ];

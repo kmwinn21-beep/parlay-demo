@@ -18,6 +18,8 @@ interface QuickNote {
   tag: string | null;
   secondary_tag: string | null;
   product_suggestions: string | null;
+  conference_id: number | null;
+  conference_name: string | null;
 }
 
 interface Conference { id: number; name: string; }
@@ -357,8 +359,88 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
 }
 
 // ── Note Card ─────────────────────────────────────────────────────────────────
-function NoteCard({ note, onDelete, onAssign, onEdit }: {
-  note: QuickNote; onDelete: (id: number) => void; onAssign: () => void; onEdit: (id: number, content: string) => Promise<void>;
+// ── Conference tag pill — click to attribute a floor note to a conference ──────
+function ConferenceTagPill({ noteId, conferenceId, conferenceName, conferences, onUpdated }: {
+  noteId: number;
+  conferenceId: number | null;
+  conferenceName: string | null;
+  conferences: Conference[];
+  onUpdated: (note: QuickNote) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [saving, setSaving] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+
+  const filtered = conferences.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
+
+  const pick = async (conf: Conference | null) => {
+    setOpen(false);
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/quick-notes/${noteId}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conference_id: conf?.id ?? null }),
+      });
+      if (!res.ok) throw new Error();
+      onUpdated(await res.json() as QuickNote);
+    } catch {
+      toast.error('Failed to update conference.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="relative flex-shrink-0" ref={ref}>
+      <button
+        type="button" disabled={saving} onClick={() => { setOpen(v => !v); setSearch(''); }}
+        className={
+          conferenceId != null
+            ? 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30 hover:border-brand-secondary transition-colors disabled:opacity-50'
+            : 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors disabled:opacity-50'
+        }
+      >
+        {conferenceId != null ? conferenceName : '+ Event'}
+      </button>
+      {open && (
+        <div className="absolute z-30 top-full left-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-xl max-h-56 flex flex-col">
+          <div className="p-2 border-b border-gray-100 flex-shrink-0">
+            <input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search conferences…"
+              className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-brand-secondary" />
+          </div>
+          <div className="overflow-y-auto">
+            {conferenceId != null && (
+              <button type="button" onClick={() => pick(null)}
+                className="w-full text-left px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 transition-colors border-b border-gray-50">
+                Remove event
+              </button>
+            )}
+            {filtered.length === 0 ? (
+              <p className="text-xs text-gray-400 px-3 py-2">No conferences found</p>
+            ) : filtered.map(c => (
+              <button key={c.id} type="button" onClick={() => pick(c)}
+                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 hover:text-brand-secondary transition-colors ${conferenceId === c.id ? 'bg-blue-50 text-brand-secondary font-medium' : 'text-gray-700'}`}>
+                {c.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NoteCard({ note, conferences, onDelete, onAssign, onEdit, onConferenceUpdated }: {
+  note: QuickNote; conferences: Conference[]; onDelete: (id: number) => void; onAssign: () => void;
+  onEdit: (id: number, content: string) => Promise<void>; onConferenceUpdated: (note: QuickNote) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -366,8 +448,10 @@ function NoteCard({ note, onDelete, onAssign, onEdit }: {
   const [saving, setSaving] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const pillsRef = useRef<HTMLDivElement>(null);
   const isLong = note.content.length > 200;
-  const stamp = `${fmtDate(note.created_at)}${note.created_by ? ` · ${note.created_by.split('@')[0]}` : ''}`;
+  const fullTimestamp = fmtDate(note.created_at);
+  const scrollPills = (dir: -1 | 1) => pillsRef.current?.scrollBy({ left: dir * 120, behavior: 'smooth' });
 
   const handleEditSave = async () => {
     if (!editText.trim() || editText.trim() === note.content) { setEditing(false); return; }
@@ -386,24 +470,40 @@ function NoteCard({ note, onDelete, onAssign, onEdit }: {
 
   return (
     <div className="border border-gray-200 rounded-xl p-4 bg-white hover:border-gray-300 transition-colors">
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <p className="hidden sm:block text-xs text-gray-400 truncate">{stamp}</p>
-          {note.tag === 'card-badge' && (
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-[10px] font-medium text-blue-600 flex-shrink-0">
-              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2" /></svg>
-              Badge
-            </span>
-          )}
-          {note.tag === 'card-badge' && note.secondary_tag?.startsWith('booth-') && (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-violet-50 border border-violet-200 text-[10px] font-medium text-violet-600 flex-shrink-0">
-              {note.secondary_tag === 'booth-stop' ? 'Stopped By'
-                : note.secondary_tag === 'booth-demo' ? 'Demo'
-                : note.secondary_tag === 'booth-meeting' ? 'Meeting'
-                : note.secondary_tag === 'booth-followup' ? 'Follow-up Req'
-                : note.secondary_tag}
-            </span>
-          )}
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-1 min-w-0 flex-1">
+          <button type="button" onClick={() => scrollPills(-1)}
+            className="hidden sm:block flex-shrink-0 text-gray-300 hover:text-gray-600 transition-colors" aria-label="Scroll left">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+          </button>
+          <div ref={pillsRef} className="flex items-center gap-1.5 min-w-0 overflow-x-auto scrollbar-hide flex-nowrap">
+            {note.tag === 'card-badge' && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-[10px] font-medium text-blue-600 flex-shrink-0">
+                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2" /></svg>
+                Badge
+              </span>
+            )}
+            {note.tag === 'card-badge' && note.secondary_tag?.startsWith('booth-') && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-violet-50 border border-violet-200 text-[10px] font-medium text-violet-600 flex-shrink-0">
+                {note.secondary_tag === 'booth-stop' ? 'Stopped By'
+                  : note.secondary_tag === 'booth-demo' ? 'Demo'
+                  : note.secondary_tag === 'booth-meeting' ? 'Meeting'
+                  : note.secondary_tag === 'booth-followup' ? 'Follow-up Req'
+                  : note.secondary_tag}
+              </span>
+            )}
+            <ConferenceTagPill
+              noteId={note.id}
+              conferenceId={note.conference_id}
+              conferenceName={note.conference_name}
+              conferences={conferences}
+              onUpdated={onConferenceUpdated}
+            />
+          </div>
+          <button type="button" onClick={() => scrollPills(1)}
+            className="hidden sm:block flex-shrink-0 text-gray-300 hover:text-gray-600 transition-colors" aria-label="Scroll right">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+          </button>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <button type="button" onClick={onAssign}
@@ -417,8 +517,8 @@ function NoteCard({ note, onDelete, onAssign, onEdit }: {
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.75" /><circle cx="12" cy="12" r="1.75" /><circle cx="12" cy="19" r="1.75" /></svg>
             </button>
             {menuOpen && (
-              <div className="absolute top-full right-0 mt-1 w-44 bg-white rounded-lg shadow-lg border border-gray-100 py-1.5 z-20">
-                <p className="sm:hidden px-3 pb-1.5 mb-1 border-b border-gray-100 text-xs text-gray-400 truncate">{stamp}</p>
+              <div className="absolute top-full right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-100 py-1.5 z-20">
+                <p className="px-3 pb-1.5 mb-1 border-b border-gray-100 text-xs text-gray-400 truncate">{fullTimestamp}</p>
                 <button type="button" onClick={() => { setEditing(true); setEditText(note.content); setMenuOpen(false); }}
                   className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
@@ -832,6 +932,7 @@ function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
 export function QuickNotesSection({ className = '' }: { className?: string }) {
   const { activeConference } = useActiveConference();
   const [notes, setNotes] = useState<QuickNote[]>([]);
+  const [conferences, setConferences] = useState<Conference[]>([]);
   const [sectionExpanded, setSectionExpanded] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [assigningNote, setAssigningNote] = useState<QuickNote | null>(null);
@@ -871,6 +972,13 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
   useEffect(() => {
     fetch('/api/quick-notes').then(r => r.ok ? r.json() : [])
       .then(data => { setNotes(data); setLoading(false); }).catch(() => setLoading(false));
+    fetch('/api/conferences?nav=1').then(r => r.ok ? r.json() : [])
+      .then((data: unknown) => setConferences(Array.isArray(data) ? data.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })) : []))
+      .catch(() => {});
+  }, []);
+
+  const handleConferenceUpdated = useCallback((updated: QuickNote) => {
+    setNotes(prev => prev.map(n => n.id === updated.id ? updated : n));
   }, []);
 
   useEffect(() => { if (sectionExpanded) requestAnimationFrame(checkScroll); }, [notes, sectionExpanded, loading, checkScroll]);
@@ -895,7 +1003,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
   const handleSaveNote = useCallback(async (content: string, tag?: string | null): Promise<QuickNote | null> => {
     const res = await fetch('/api/quick-notes', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content, tag: tag ?? null }),
+      body: JSON.stringify({ content, tag: tag ?? null, conference_id: activeConference?.id ?? null }),
     });
     if (res.ok) {
       const note = await res.json() as QuickNote;
@@ -906,7 +1014,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
     }
     toast.error('Failed to save note.');
     return null;
-  }, []);
+  }, [activeConference]);
 
   const handleDelete = async (id: number) => {
     if (!confirm('Delete this floor note? This cannot be undone.')) return;
@@ -1011,6 +1119,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
         tag: 'card-badge',
         secondary_tag: secondaryTag ?? null,
         product_suggestions: productSuggestions,
+        conference_id: activeConference?.id ?? null,
       }),
     });
     if (res.ok) {
@@ -1033,7 +1142,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
       if (next.length === 0) setTimeout(() => setShowScanModal(false), secondaryTag ? 1500 : 0);
       return next;
     });
-  }, [badgeScanRelevance]);
+  }, [badgeScanRelevance, activeConference]);
 
   const handleAssignNote = useCallback(async (note: QuickNote) => {
     if (note.tag !== 'card-badge') { setAssigningNote(note); return; }
@@ -1144,7 +1253,15 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
             <div className="relative flex-1 min-h-0 overflow-hidden">
               <div ref={scrollRef} onScroll={checkScroll} className="h-full overflow-y-auto space-y-3 pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' } as React.CSSProperties}>
                 {notes.map(note => (
-                  <NoteCard key={note.id} note={note} onDelete={handleDelete} onAssign={() => handleAssignNote(note)} onEdit={handleEdit} />
+                  <NoteCard
+                    key={note.id}
+                    note={note}
+                    conferences={conferences}
+                    onDelete={handleDelete}
+                    onAssign={() => handleAssignNote(note)}
+                    onEdit={handleEdit}
+                    onConferenceUpdated={handleConferenceUpdated}
+                  />
                 ))}
               </div>
               {hasMore && (
@@ -1200,6 +1317,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
 // Exported for use in FloatingNav
 export function QuickNoteInlineModal({ onClose }: { onClose: () => void }) {
   const { user } = useUser();
+  const { activeConference } = useActiveConference();
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -1208,7 +1326,7 @@ export function QuickNoteInlineModal({ onClose }: { onClose: () => void }) {
     setSaving(true);
     const res = await fetch('/api/quick-notes', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: text.trim() }),
+      body: JSON.stringify({ content: text.trim(), conference_id: activeConference?.id ?? null }),
     });
     setSaving(false);
     if (res.ok) {
