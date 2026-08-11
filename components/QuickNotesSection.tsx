@@ -495,8 +495,8 @@ function NoteCard({ note, conferences, onDelete, onAssign, onEdit, onConferenceU
                   onClick={() => { setPickerOpen(true); setConfSearch(''); }}
                   className={
                     note.conference_id != null
-                      ? 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30 hover:border-brand-secondary transition-colors disabled:opacity-50 flex-shrink-0'
-                      : 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors disabled:opacity-50 flex-shrink-0'
+                      ? 'inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30 hover:border-brand-secondary transition-colors disabled:opacity-50 flex-shrink-0'
+                      : 'inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap bg-gray-50 text-gray-400 border border-dashed border-gray-300 hover:border-gray-400 hover:text-gray-500 transition-colors disabled:opacity-50 flex-shrink-0'
                   }
                 >
                   {note.conference_id != null ? note.conference_name : '+ Event'}
