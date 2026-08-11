@@ -130,7 +130,7 @@ export function OutreachAssignModal({
       <div className="relative bg-white rounded-xl shadow-2xl border border-gray-200 w-full mx-4 max-w-md max-h-[85vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-gray-200 flex-shrink-0">
           <h2 className="text-sm font-semibold text-brand-primary font-serif truncate">
-            {selectedCompanyName ? `Assign — ${selectedCompanyName}` : 'Assign Company for Outreach'}
+            {selectedCompanyName ? `Assign Outreach - ${selectedCompanyName}` : 'Assign Company for Outreach'}
           </h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>

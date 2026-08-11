@@ -22,27 +22,51 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
   }
 }
 
-// PUT = update note content (edit)
+// PUT = update note content and/or conference tag (either field may be
+// omitted — e.g. the "+ Event" pill sends only conference_id).
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
   const db = await getDb(user?.accountId);
   try {
-    const { content } = await request.json() as { content: string };
-    if (!content?.trim()) return NextResponse.json({ error: 'Content required' }, { status: 400 });
+    const body = await request.json() as { content?: string; conference_id?: number | null };
+    const sets: string[] = [];
+    const args: (string | number | null)[] = [];
+    if (body.content !== undefined) {
+      if (!body.content.trim()) return NextResponse.json({ error: 'Content required' }, { status: 400 });
+      sets.push('content = ?');
+      args.push(body.content.trim());
+    }
+    if ('conference_id' in body) {
+      sets.push('conference_id = ?');
+      args.push(body.conference_id ?? null);
+    }
+    if (sets.length === 0) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
+
+    args.push(Number(params.id), user.email);
     const result = await db.execute({
-      sql: 'UPDATE quick_notes SET content = ? WHERE id = ? AND created_by = ? RETURNING id, content, created_at, created_by, tag',
-      args: [content.trim(), Number(params.id), user.email],
+      sql: `UPDATE quick_notes SET ${sets.join(', ')} WHERE id = ? AND created_by = ?
+            RETURNING id, content, created_at, created_by, tag, secondary_tag, product_suggestions, conference_id`,
+      args,
     });
     if (result.rows.length === 0) return NextResponse.json({ error: 'Note not found' }, { status: 404 });
     const row = result.rows[0];
+    let conferenceName: string | null = null;
+    if (row.conference_id != null) {
+      const cRow = await db.execute({ sql: 'SELECT name FROM conferences WHERE id = ?', args: [row.conference_id] });
+      conferenceName = cRow.rows.length > 0 ? String(cRow.rows[0].name) : null;
+    }
     return NextResponse.json({
       id: Number(row.id),
       content: String(row.content),
       created_at: String(row.created_at),
       created_by: row.created_by ? String(row.created_by) : null,
       tag: row.tag ? String(row.tag) : null,
+      secondary_tag: row.secondary_tag ? String(row.secondary_tag) : null,
+      product_suggestions: row.product_suggestions ? String(row.product_suggestions) : null,
+      conference_id: row.conference_id != null ? Number(row.conference_id) : null,
+      conference_name: conferenceName,
     });
   } catch (error) {
     console.error('PUT /api/quick-notes/[id] error:', error);

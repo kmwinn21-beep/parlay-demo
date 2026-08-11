@@ -1987,4 +1987,74 @@ export const migrations: string[] = [
   // this is set/cleared directly by the user clicking the checklist circle
   // (see PATCH /api/conferences/[id]). Non-null = marked done.
   `ALTER TABLE conferences ADD COLUMN pre_conference_review_marked_at TEXT`,
+  // outreach_assignments.assigned_user_id: switch from referencing users(id)
+  // to referencing config_options(id) (category='user') — the same rep
+  // roster (Admin > Types > Users) used everywhere else reps are assigned
+  // (companies.assigned_user, sales_territories.assigned_user_ids, conference
+  // targets, etc.), instead of requiring a real login account. Most reps in
+  // this roster don't have one, so the Assign Outreach modal was only ever
+  // able to offer whichever handful of reps did. Real accounts are still
+  // resolved (via users.config_id) when sending outreach-assignment
+  // notifications; reps without one just don't get notified.
+  //
+  // Step 1: every existing users row needs a linked config_options 'user'
+  // entry before the table rebuild below, or its outreach_assignments rows
+  // would have no config_options id to translate to and get dropped. Link by
+  // exact name match first (covers the common case where the account and its
+  // Types-tab entry share a name but were never linked), then create a new
+  // entry for anyone still unmatched.
+  `UPDATE users
+   SET config_id = (
+     SELECT co.id FROM config_options co
+     WHERE co.category = 'user'
+       AND co.value = COALESCE(NULLIF(TRIM(users.display_name), ''), NULLIF(TRIM(COALESCE(users.first_name,'') || ' ' || COALESCE(users.last_name,'')), ''), 'User ' || users.id)
+     ORDER BY co.id LIMIT 1
+   )
+   WHERE config_id IS NULL
+     AND EXISTS (
+       SELECT 1 FROM config_options co
+       WHERE co.category = 'user'
+         AND co.value = COALESCE(NULLIF(TRIM(users.display_name), ''), NULLIF(TRIM(COALESCE(users.first_name,'') || ' ' || COALESCE(users.last_name,'')), ''), 'User ' || users.id)
+     )`,
+  `INSERT INTO config_options (category, value, sort_order)
+   SELECT 'user',
+          COALESCE(NULLIF(TRIM(u.display_name), ''), NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), ''), 'User ' || u.id),
+          (SELECT COALESCE(MAX(sort_order), 0) FROM config_options WHERE category = 'user') + u.id
+   FROM users u
+   WHERE u.config_id IS NULL`,
+  `UPDATE users
+   SET config_id = (
+     SELECT co.id FROM config_options co
+     WHERE co.category = 'user'
+       AND co.value = COALESCE(NULLIF(TRIM(users.display_name), ''), NULLIF(TRIM(COALESCE(users.first_name,'') || ' ' || COALESCE(users.last_name,'')), ''), 'User ' || users.id)
+     ORDER BY co.id DESC LIMIT 1
+   )
+   WHERE config_id IS NULL`,
+  // Step 2: rebuild outreach_assignments with the new FK, translating every
+  // existing row's assigned_user_id (a users.id) to the linked
+  // config_options.id via the now fully-backfilled users.config_id.
+  `CREATE TABLE IF NOT EXISTS outreach_assignments_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      assigned_user_id INTEGER NOT NULL REFERENCES config_options(id) ON DELETE CASCADE,
+      assigned_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      status TEXT NOT NULL DEFAULT 'not_started'
+        CHECK(status IN ('not_started','in_progress','completed','overdue')),
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(conference_id, company_id, assigned_user_id)
+    )`,
+  `INSERT OR IGNORE INTO outreach_assignments_new
+     (id, conference_id, company_id, assigned_user_id, assigned_by_user_id, status, created_at, updated_at)
+   SELECT oa.id, oa.conference_id, oa.company_id, u.config_id, oa.assigned_by_user_id, oa.status, oa.created_at, oa.updated_at
+   FROM outreach_assignments oa
+   JOIN users u ON u.id = oa.assigned_user_id
+   WHERE u.config_id IS NOT NULL`,
+  `DROP TABLE outreach_assignments`,
+  `ALTER TABLE outreach_assignments_new RENAME TO outreach_assignments`,
+  // quick_notes.conference_id: lets a Floor Note be tagged with the conference
+  // it was captured at — auto-filled from the active-conference switcher at
+  // save time, or set/changed afterward via the note card's "+ Event" pill.
+  `ALTER TABLE quick_notes ADD COLUMN conference_id INTEGER REFERENCES conferences(id) ON DELETE SET NULL`,
 ];

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
-import { createNotifications } from '@/lib/notifications';
+import { createNotifications, resolveUserIds } from '@/lib/notifications';
 import { resolveUserDisplayName } from '@/lib/initials';
 
 // POST /api/conferences/[id]/outreach/assign — sets the full list of reps
@@ -10,6 +10,11 @@ import { resolveUserDisplayName } from '@/lib/initials';
 // conference+company whose assigned_user_id isn't in that list — so
 // unchecking a rep in the assign modal actually un-assigns them. An empty
 // userIds array is valid and clears all assignments for this company.
+//
+// userIds are config_options ids (category='user' — the Admin > Types rep
+// roster), not users.id — most reps don't have a real login account, so
+// notifications below resolve whichever of them do via resolveUserIds and
+// silently skip the rest.
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
@@ -60,9 +65,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     if (newlyAddedUserIds.length > 0) {
-      const [conferenceRow, assignerRow] = await Promise.all([
+      const [conferenceRow, assignerRow, notifyUserIds] = await Promise.all([
         db.execute({ sql: `SELECT name FROM conferences WHERE id = ?`, args: [conferenceId] }),
         db.execute({ sql: `SELECT display_name, first_name, last_name, email FROM users WHERE id = ?`, args: [authResult.id] }),
+        resolveUserIds(newlyAddedUserIds.join(',')),
       ]);
       const companyName = String(companyRow.rows[0].name);
       const conferenceName = conferenceRow.rows.length > 0 ? String(conferenceRow.rows[0].name) : 'this conference';
@@ -70,18 +76,21 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
       // Only newly-added reps are notified — editing an existing assignment
       // (e.g. adding one more rep) shouldn't re-notify reps who were already
-      // assigned and unaffected by the change.
-      await createNotifications({
-        userIds: newlyAddedUserIds,
-        type: 'conference',
-        recordId: conferenceId,
-        recordName: conferenceName,
-        message: `${assignerName} assigned you to outreach for ${companyName} at ${conferenceName}`,
-        changedByEmail: authResult.email,
-        changedByConfigId: null,
-        entityType: 'conference',
-        entityId: conferenceId,
-      });
+      // assigned and unaffected by the change. Reps with no linked login
+      // account (resolveUserIds drops them) just don't get one.
+      if (notifyUserIds.length > 0) {
+        await createNotifications({
+          userIds: notifyUserIds,
+          type: 'conference',
+          recordId: conferenceId,
+          recordName: conferenceName,
+          message: `${assignerName} assigned you to outreach for ${companyName} at ${conferenceName}`,
+          changedByEmail: authResult.email,
+          changedByConfigId: null,
+          entityType: 'conference',
+          entityId: conferenceId,
+        });
+      }
     }
 
     return NextResponse.json({ success: true });
