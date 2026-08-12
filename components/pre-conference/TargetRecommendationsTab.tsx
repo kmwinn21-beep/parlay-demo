@@ -194,6 +194,21 @@ function RepPill({ name, color, size = 7 }: { name: string; color: string; size?
   );
 }
 
+function RepIconPill({ name, color }: { name: string; color: string }) {
+  return (
+    <span
+      title={name}
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap flex-shrink-0"
+      style={{ backgroundColor: hexAlpha(color, 0.12), color, border: `1px solid ${hexAlpha(color, 0.35)}` }}
+    >
+      <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+      </svg>
+      {repInitials(name)}
+    </span>
+  );
+}
+
 function RepCell({ company }: { company: TargetingCompanyRecommendation }) {
   const repName = company.assigned_user_names?.[0];
   if (repName) {
@@ -508,6 +523,9 @@ function ActionRow({
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xs font-semibold text-gray-800">{company.company_name}</span>
                   <Pill tone={tierTone(company)}>{company.target_priority_tier || '—'}</Pill>
+                  {company.assigned_user_names?.[0] && (
+                    <RepIconPill name={company.assigned_user_names[0]} color={company.assigned_user_colors?.[0] ?? '#6b7280'} />
+                  )}
                 </div>
                 <div className="space-y-1 pl-2 border-l border-gray-200">
                   {attendees.map(attendee => {
