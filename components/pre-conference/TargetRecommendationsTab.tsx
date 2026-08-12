@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRecordDrawer } from './RecordDrawerContext';
+import { useUser } from '@/components/UserContext';
 import toast from 'react-hot-toast';
 import { BUYER_ROLE_OPTIONS, type BuyerRoleKey } from '@/lib/titleNormalization';
 import { formatValuePill, useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
@@ -31,10 +32,6 @@ import { getConfig } from '@/lib/configCache';
 type FilterState = {
   tier: string;
   action: string;
-  confidence: string;
-  hasBuyerAccess: boolean;
-  hasRelationship: boolean;
-  needsTitleReview: boolean;
 };
 
 const TOP_COMPANY_LIMIT = 25;
@@ -220,6 +217,70 @@ function RepCell({ company }: { company: TargetingCompanyRecommendation }) {
   );
 }
 
+function RankPill({ rank }: { rank: number }) {
+  return (
+    <span
+      className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold flex-shrink-0"
+      style={{ backgroundColor: 'rgba(var(--brand-primary-rgb), 0.12)', color: 'rgb(var(--brand-primary-rgb))', border: '1px solid rgba(var(--brand-primary-rgb), 0.4)' }}
+    >
+      {rank}
+    </span>
+  );
+}
+
+function RepMultiSelect({ reps, selected, onChange }: { reps: string[]; selected: Set<string>; onChange: (next: Set<string>) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+
+  const toggleRep = (name: string) => {
+    const next = new Set(selected);
+    if (next.has(name)) next.delete(name); else next.add(name);
+    onChange(next);
+  };
+
+  const label = selected.size === 0 ? 'All reps' : selected.size === 1 ? Array.from(selected)[0] : `${selected.size} reps`;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2 py-1.5 bg-white text-gray-600 hover:border-gray-300 transition-colors"
+      >
+        <span className="max-w-[9rem] truncate">{label}</span>
+        <svg className={`w-3 h-3 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute z-30 top-full left-0 mt-1 w-52 bg-white border border-gray-200 rounded-lg shadow-xl max-h-64 overflow-y-auto">
+          {selected.size > 0 && (
+            <button type="button" onClick={() => onChange(new Set())}
+              className="w-full text-left px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 transition-colors border-b border-gray-50">
+              Clear selection
+            </button>
+          )}
+          {reps.length === 0 ? (
+            <p className="text-xs text-gray-400 px-3 py-2">No reps assigned yet.</p>
+          ) : reps.map(name => (
+            <label key={name} className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer">
+              <input type="checkbox" checked={selected.has(name)} onChange={() => toggleRep(name)} />
+              <span className="truncate">{name}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function confidenceTone(confidence: string | null | undefined): 'green' | 'amber' | 'gray' {
   const key = stableKey(confidence);
   if (key === 'high') return 'green';
@@ -368,17 +429,22 @@ function CompanyDetails({
   );
 }
 
-function CompanyRow({ company, onReviewTitle, avgCostPerUnit, targetMap, onAddTargetWithTier }: { company: TargetingCompanyRecommendation; onReviewTitle: (attendee: NonNullable<TargetingCompanyRecommendation['top_attendees']>[number]) => void; avgCostPerUnit: number; targetMap: Map<number, TargetEntry>; onAddTargetWithTier: (entry: Omit<TargetEntry, 'tier'>, tier: string) => Promise<void> }) {
+function CompanyRow({ company, rank, onReviewTitle, avgCostPerUnit, targetMap, onAddTargetWithTier }: { company: TargetingCompanyRecommendation; rank: number; onReviewTitle: (attendee: NonNullable<TargetingCompanyRecommendation['top_attendees']>[number]) => void; avgCostPerUnit: number; targetMap: Map<number, TargetEntry>; onAddTargetWithTier: (entry: Omit<TargetEntry, 'tier'>, tier: string) => Promise<void> }) {
   const [expanded, setExpanded] = useState(false);
   const companyValue = formatValuePill(company.wse, avgCostPerUnit);
   return (
     <>
       <tr className="border-b border-gray-100 align-top hover:bg-gray-50/60">
         <td className="py-3 px-3 min-w-48">
-          <button onClick={() => setExpanded(v => !v)} className="text-left font-semibold text-gray-900 hover:text-brand-secondary transition-colors">
-            {company.company_name}
-          </button>
-          <p className="text-xs text-gray-400 mt-0.5">{expanded ? 'Hide details' : 'Show details'}</p>
+          <div className="flex items-start gap-2">
+            <RankPill rank={rank} />
+            <div>
+              <button onClick={() => setExpanded(v => !v)} className="text-left font-semibold text-gray-900 hover:text-brand-secondary transition-colors">
+                {company.company_name}
+              </button>
+              <p className="text-xs text-gray-400 mt-0.5">{expanded ? 'Hide details' : 'Show details'}</p>
+            </div>
+          </div>
         </td>
         <td className="py-3 px-3">{companyValue ? <Pill tone="green">{companyValue}</Pill> : <span className="text-gray-400">—</span>}</td>
         <td className="py-3 px-3"><ScoreBadge value={scoreOrNull(company.target_priority_score)} /></td>
@@ -482,8 +548,12 @@ function ActionRow({
 }
 
 export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), onAddTargetWithTier = async () => {} }: { conferenceId: number; targetMap?: Map<number, TargetEntry>; onAddTargetWithTier?: (entry: Omit<TargetEntry, 'tier'>, tier: string) => Promise<void> }) {
+  const { user: currentUser } = useUser();
   const [snapshot, setSnapshot] = useState<CompilationSnapshot>(() => getCompilationSnapshot(conferenceId));
-  const [filters, setFilters] = useState<FilterState>({ tier: 'all', action: 'all', confidence: 'all', hasBuyerAccess: false, hasRelationship: false, needsTitleReview: false });
+  const [filters, setFilters] = useState<FilterState>({ tier: 'all', action: 'all' });
+  const [selectedReps, setSelectedReps] = useState<Set<string>>(new Set());
+  const [myAccountsOnly, setMyAccountsOnly] = useState(false);
+  const [page, setPage] = useState(0);
   const [functionOptions, setFunctionOptions] = useState<ConfigOptionRecord[]>([]);
   const [seniorityOptions, setSeniorityOptions] = useState<ConfigOptionRecord[]>([]);
   const [titleReviewAttendee, setTitleReviewAttendee] = useState<NonNullable<TargetingCompanyRecommendation['top_attendees']>[number] | null>(null);
@@ -635,24 +705,29 @@ export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), 
 
   const tiers = useMemo(() => Array.from(new Map(companies.map(company => [stableKey(company.target_priority_tier_key || company.target_priority_tier), company.target_priority_tier])).entries()).filter(([key]) => key), [companies]);
   const actions = useMemo(() => actionCounts.map(action => ({ key: action.key, label: action.label })), [actionCounts]);
-  const confidences = useMemo(() => Array.from(new Set(companies.map(company => company.confidence_level).filter(Boolean))) as string[], [companies]);
+  const repNames = useMemo(() => Array.from(new Set(companies.flatMap(company => company.assigned_user_names ?? []))).sort((a, b) => a.localeCompare(b)), [companies]);
 
   const filteredCompanies = useMemo(() => companies.filter(company => {
     if (filters.tier !== 'all' && stableKey(company.target_priority_tier_key || company.target_priority_tier) !== filters.tier) return false;
     const actionKey = company.recommended_action_key || company.recommended_action?.recommended_action_key;
     if (filters.action !== 'all' && actionKey !== filters.action) return false;
-    if (filters.confidence !== 'all' && stableKey(company.confidence_level) !== filters.confidence) return false;
-    if (filters.hasBuyerAccess && (scoreOrNull(company.buyer_access_score) ?? 0) < 75) return false;
-    if (filters.hasRelationship && (scoreOrNull(company.relationship_leverage_score) ?? 0) < 50) return false;
-    if (filters.needsTitleReview && !(company.top_attendees ?? []).some(titleNeedsReview)) return false;
+    const companyReps = company.assigned_user_names ?? [];
+    if (selectedReps.size > 0 && !companyReps.some(name => selectedReps.has(name))) return false;
+    if (myAccountsOnly && !(currentUser?.repName && companyReps.includes(currentUser.repName))) return false;
     return true;
-  }), [companies, filters]);
+  }), [companies, filters, selectedReps, myAccountsOnly, currentUser]);
+
+  // Filters changing can shrink the result set below the current page —
+  // snap back to page 0 rather than showing an empty page.
+  useEffect(() => { setPage(0); }, [filters, selectedReps, myAccountsOnly]);
 
   if ((snapshot.status === 'idle' || isCompiling) && !hasData) return <LoadingState completed={snapshot.completed} total={snapshot.total} />;
   if (snapshot.status === 'error' && !hasData) return <ErrorState onRetry={() => setSnapshot(startTargetRecommendationsCompilation(conferenceId, true))} />;
   if (snapshot.status === 'ready' && (!data || companies.length === 0)) return <EmptyState reason={data?.unavailable_reason} />;
 
-  const visibleCompanies = filteredCompanies.slice(0, TOP_COMPANY_LIMIT);
+  const totalPages = Math.max(1, Math.ceil(filteredCompanies.length / TOP_COMPANY_LIMIT));
+  const pageStart = page * TOP_COMPANY_LIMIT;
+  const visibleCompanies = filteredCompanies.slice(pageStart, pageStart + TOP_COMPANY_LIMIT);
 
   const refreshRecommendations = () => {
     setSnapshot(startTargetRecommendationsCompilation(conferenceId, true));
@@ -709,11 +784,10 @@ export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), 
             <div>
               <h4 className="font-bold text-brand-primary">Top Target Companies</h4>
               <p className="text-xs text-gray-500 mt-0.5">Companies ranked by Target Priority Score</p>
-              {filteredCompanies.length > TOP_COMPANY_LIMIT && <p className="text-xs text-gray-400 mt-1">Showing top {TOP_COMPANY_LIMIT} of {filteredCompanies.length}</p>}
             </div>
             <MobileSectionToggle open={topCompaniesOpenMobile} />
           </button>
-          <div className={`${topCompaniesOpenMobile ? 'flex' : 'hidden'} sm:flex flex-wrap gap-2 text-xs`}>
+          <div className={`${topCompaniesOpenMobile ? 'flex' : 'hidden'} sm:flex flex-wrap items-center gap-2 text-xs`}>
             <select value={filters.tier} onChange={e => setFilters(f => ({ ...f, tier: e.target.value }))} className="rounded-lg border border-gray-200 px-2 py-1.5 bg-white text-gray-600">
               <option value="all">All tiers</option>
               {tiers.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
@@ -722,22 +796,46 @@ export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), 
               <option value="all">All actions</option>
               {actions.map(action => <option key={action.key} value={action.key}>{action.label}</option>)}
             </select>
-            <select value={filters.confidence} onChange={e => setFilters(f => ({ ...f, confidence: e.target.value }))} className="rounded-lg border border-gray-200 px-2 py-1.5 bg-white text-gray-600">
-              <option value="all">All confidence</option>
-              {confidences.map(confidence => <option key={confidence} value={stableKey(confidence)}>{confidence}</option>)}
-            </select>
-            <label className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2 py-1.5 text-gray-600">
-              <input type="checkbox" checked={filters.hasBuyerAccess} onChange={e => setFilters(f => ({ ...f, hasBuyerAccess: e.target.checked }))} /> Buyer access
-            </label>
-            <label className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2 py-1.5 text-gray-600">
-              <input type="checkbox" checked={filters.hasRelationship} onChange={e => setFilters(f => ({ ...f, hasRelationship: e.target.checked }))} /> Relationship
-            </label>
-            <label className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2 py-1.5 text-gray-600">
-              <input type="checkbox" checked={filters.needsTitleReview} onChange={e => setFilters(f => ({ ...f, needsTitleReview: e.target.checked }))} /> Needs title review
-            </label>
+            <RepMultiSelect reps={repNames} selected={selectedReps} onChange={setSelectedReps} />
+            {currentUser?.repName && (
+              <button
+                type="button"
+                onClick={() => setMyAccountsOnly(v => !v)}
+                className={`rounded-lg border px-2 py-1.5 font-semibold transition-colors ${
+                  myAccountsOnly
+                    ? 'border-brand-secondary bg-brand-secondary/10 text-brand-secondary'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                My Accounts
+              </button>
+            )}
           </div>
         </div>
         <div className={topCompaniesOpenMobile ? 'block' : 'hidden sm:block'}>
+        {filteredCompanies.length > 0 && (
+          <div className="flex items-center justify-end gap-2 px-4 pt-3 text-xs text-gray-500">
+            <button
+              type="button"
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              aria-label="Previous page"
+              className="p-1 rounded text-gray-400 hover:text-brand-secondary disabled:opacity-30 disabled:hover:text-gray-400 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            </button>
+            <span className="tabular-nums">{pageStart + 1}–{Math.min(pageStart + TOP_COMPANY_LIMIT, filteredCompanies.length)} of {filteredCompanies.length}</span>
+            <button
+              type="button"
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              aria-label="Next page"
+              className="p-1 rounded text-gray-400 hover:text-brand-secondary disabled:opacity-30 disabled:hover:text-gray-400 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            </button>
+          </div>
+        )}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
@@ -754,11 +852,11 @@ export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), 
                 <th className="text-left font-semibold py-2 px-3">Rep</th>
               </tr>
             </thead>
-            <tbody>{visibleCompanies.map(company => <CompanyRow key={company.company_id} company={company} onReviewTitle={openTitleReviewModal} avgCostPerUnit={avgCostPerUnit} targetMap={targetMap} onAddTargetWithTier={onAddTargetWithTier} />)}</tbody>
+            <tbody>{visibleCompanies.map((company, i) => <CompanyRow key={company.company_id} company={company} rank={pageStart + i + 1} onReviewTitle={openTitleReviewModal} avgCostPerUnit={avgCostPerUnit} targetMap={targetMap} onAddTargetWithTier={onAddTargetWithTier} />)}</tbody>
           </table>
         </div>
         <div className="md:hidden p-3 space-y-3">
-          {visibleCompanies.map(company => <MobileCompanyCard key={company.company_id} company={company} onReviewTitle={openTitleReviewModal} targetMap={targetMap} onAddTargetWithTier={onAddTargetWithTier} />)}
+          {visibleCompanies.map((company, i) => <MobileCompanyCard key={company.company_id} company={company} rank={pageStart + i + 1} onReviewTitle={openTitleReviewModal} targetMap={targetMap} onAddTargetWithTier={onAddTargetWithTier} />)}
         </div>
         {visibleCompanies.length === 0 && <p className="text-sm text-gray-400 text-center py-8">No companies match the selected filters.</p>}
         </div>
@@ -910,12 +1008,15 @@ export function TargetRecommendationsTab({ conferenceId, targetMap = new Map(), 
   );
 }
 
-function MobileCompanyCard({ company, onReviewTitle, targetMap, onAddTargetWithTier }: { company: TargetingCompanyRecommendation; onReviewTitle: (attendee: NonNullable<TargetingCompanyRecommendation['top_attendees']>[number]) => void; targetMap: Map<number, TargetEntry>; onAddTargetWithTier: (entry: Omit<TargetEntry, 'tier'>, tier: string) => Promise<void> }) {
+function MobileCompanyCard({ company, rank, onReviewTitle, targetMap, onAddTargetWithTier }: { company: TargetingCompanyRecommendation; rank: number; onReviewTitle: (attendee: NonNullable<TargetingCompanyRecommendation['top_attendees']>[number]) => void; targetMap: Map<number, TargetEntry>; onAddTargetWithTier: (entry: Omit<TargetEntry, 'tier'>, tier: string) => Promise<void> }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <div className="rounded-xl border border-gray-200 p-3">
       <button type="button" onClick={() => setExpanded(v => !v)} className="w-full text-left">
-        <p className="font-semibold text-gray-900">{company.company_name}</p>
+        <div className="flex items-center gap-2">
+          <RankPill rank={rank} />
+          <p className="font-semibold text-gray-900">{company.company_name}</p>
+        </div>
         <div className="flex items-center gap-1.5 mt-1.5">
           <span
             className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold text-white flex-shrink-0"

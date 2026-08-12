@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { TargetBtn } from './TargetBtn';
 import { useRecordDrawer } from './RecordDrawerContext';
+import { useUser } from '@/components/UserContext';
 import type { TargetEntry } from '../PreConferenceReview';
 import { useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
 import { NewMeetingModal } from '@/components/NewMeetingModal';
@@ -244,9 +245,11 @@ export function ConferenceTargetsTab({
   readOnly?: boolean;
   onMeetingScheduled?: (meeting: Meeting) => void;
 }) {
+  const { user: currentUser } = useUser();
   const avgCostPerUnit = useAvgCostPerUnit();
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [dragOverTier, setDragOverTier] = useState<string | null>(null);
+  const [myTargetsOnly, setMyTargetsOnly] = useState(false);
   // Default: Must Target / High Priority / Worth Engaging shown, Monitor minimized to a pill.
   const [minimizedTiers, setMinimizedTiers] = useState<Set<string>>(new Set(['unassigned']));
   const minimizeTier = (key: string) => setMinimizedTiers(prev => new Set(prev).add(key));
@@ -395,7 +398,9 @@ export function ConferenceTargetsTab({
   }
 
   function renderTierColumn(tier: typeof TIERS[number]) {
-    const tierCards = targets.filter(t => t.tier === tier.key);
+    const tierCards = targets
+      .filter(t => t.tier === tier.key)
+      .filter(t => !myTargetsOnly || (currentUser?.repName != null && t.assignedUserNames.includes(currentUser.repName)));
     const isOver = dragOverTier === tier.key;
     const visibleTierCount = TIERS.length - minimizedTiers.size;
     const isSoleVisibleColumn = visibleTierCount <= 1;
@@ -672,6 +677,19 @@ export function ConferenceTargetsTab({
                 </button>
               );
             })}
+            {currentUser?.repName && (
+              <button
+                type="button"
+                onClick={() => setMyTargetsOnly(v => !v)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold transition-colors ${
+                  myTargetsOnly
+                    ? 'border-brand-secondary bg-brand-secondary/10 text-brand-secondary'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                My Targets
+              </button>
+            )}
           </div>
 
           {onAddTargets && (
