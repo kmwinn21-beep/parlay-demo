@@ -2057,4 +2057,19 @@ export const migrations: string[] = [
   // it was captured at — auto-filled from the active-conference switcher at
   // save time, or set/changed afterward via the note card's "+ Event" pill.
   `ALTER TABLE quick_notes ADD COLUMN conference_id INTEGER REFERENCES conferences(id) ON DELETE SET NULL`,
+  // outreach_note_comments: per-note comment thread for the Outreach tab's
+  // notes drawer, mirroring note_comments (entity_notes' comment table) but
+  // FK'd to outreach_notes instead — this codebase uses one comments table
+  // per note table rather than a shared polymorphic one.
+  `CREATE TABLE IF NOT EXISTS outreach_note_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      note_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      body TEXT NOT NULL,
+      tagged_users TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (note_id) REFERENCES outreach_notes(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+  `CREATE INDEX IF NOT EXISTS idx_outreach_note_comments_note_id ON outreach_note_comments(note_id)`,
 ];
