@@ -46,10 +46,10 @@ const TIERS = [
   {
     key: '3' as const,
     label: 'Worth Engaging',
-    labelClass: 'text-brand-highlight',
-    bg: 'bg-brand-highlight/10',
-    border: 'border-brand-highlight/40',
-    dragOutline: '2px solid rgb(var(--brand-highlight-rgb))',
+    labelClass: 'text-brand-secondary',
+    bg: 'bg-brand-secondary/10',
+    border: 'border-brand-secondary',
+    dragOutline: '2px solid rgb(var(--brand-secondary-rgb))',
   },
   {
     key: 'unassigned' as const,
