@@ -181,44 +181,18 @@ export function ConferenceEffectivenessModalBody() {
     loadedForIdRef.current = null;
   };
 
-  if (loading && !data) {
-    if (slot.isMinimized) return null;
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-        <svg className="w-10 h-10 animate-spin text-brand-primary" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-        </svg>
-      </div>
-    );
-  }
-
-  if (error && !data) {
-    if (slot.isMinimized) return null;
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={handleClose}>
-        <div className="bg-white rounded-xl p-6 text-center" onClick={e => e.stopPropagation()}>
-          <p className="text-sm text-red-500 mb-3">{error}</p>
-          <button onClick={() => slot.conferenceId != null && load(slot.conferenceId)} className="btn-primary text-sm">Try again</button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!data) return null;
-
   const minimized = slot.isMinimized;
-  const conf = data.conference;
-  const ces = data.ces;
-  const pi = Number(data.pipeline.total_pipeline_influence ?? 0);
-  const salesScore = data.sales_execution?.sales_effectiveness_score != null ? Number(data.sales_execution.sales_effectiveness_score) : null;
-  const audienceScore = data.marketing_audience?.marketing_audience_signal_score != null ? Number(data.marketing_audience.marketing_audience_signal_score) : null;
-  const costScore = data.operational.cost_efficiency.cost_efficiency_score != null ? Number(data.operational.cost_efficiency.cost_efficiency_score) : null;
+  const conf = data?.conference;
+  const ces = data?.ces;
+  const pi = data ? Number(data.pipeline.total_pipeline_influence ?? 0) : 0;
+  const salesScore = data?.sales_execution?.sales_effectiveness_score != null ? Number(data.sales_execution.sales_effectiveness_score) : null;
+  const audienceScore = data?.marketing_audience?.marketing_audience_signal_score != null ? Number(data.marketing_audience.marketing_audience_signal_score) : null;
+  const costScore = data?.operational.cost_efficiency.cost_efficiency_score != null ? Number(data.operational.cost_efficiency.cost_efficiency_score) : null;
 
-  const startDate = conf.start_date ? fmtDate(String(conf.start_date)) : '';
-  const endDate   = conf.end_date   ? fmtDate(String(conf.end_date)) : '';
+  const startDate = conf?.start_date ? fmtDate(String(conf.start_date)) : '';
+  const endDate   = conf?.end_date   ? fmtDate(String(conf.end_date)) : '';
   const dateRange = startDate && endDate ? `${startDate} – ${endDate}` : startDate || '';
-  const location = conf.location ? String(conf.location) : '';
+  const location = conf?.location ? String(conf.location) : '';
 
   return (
     <div className={`fixed inset-0 z-50 ${minimized ? 'pointer-events-none' : ''}`} style={{ animation: 'fadeUp 0.2s ease-out' }}>
@@ -270,38 +244,73 @@ export function ConferenceEffectivenessModalBody() {
               </div>
             </div>
 
-            <div className={`grid grid-cols-2 sm:grid-cols-5 gap-2 mt-3 ${statsOpen ? 'grid' : 'hidden sm:grid'}`}>
-              <ScoreStatPill label="Conference Effectiveness Score" score={ces.score} />
-              <ScoreStatPill label="Sales Execution Score" score={salesScore} />
-              <ScoreStatPill label="Marketing Coverage Score" score={audienceScore} />
-              <ScoreStatPill label="Cost Efficiency Score" score={costScore} />
-              <StatPill label="Pipeline Influence" value={fmt$(pi)} />
+            {data && ces && (
+              <div className={`grid grid-cols-2 sm:grid-cols-5 gap-2 mt-3 ${statsOpen ? 'grid' : 'hidden sm:grid'}`}>
+                <ScoreStatPill label="Conference Effectiveness Score" score={ces.score} />
+                <ScoreStatPill label="Sales Execution Score" score={salesScore} />
+                <ScoreStatPill label="Marketing Coverage Score" score={audienceScore} />
+                <ScoreStatPill label="Cost Efficiency Score" score={costScore} />
+                <StatPill label="Pipeline Influence" value={fmt$(pi)} />
+              </div>
+            )}
+          </div>
+
+          {/* Loading bar */}
+          {loading && (
+            <div className="flex-shrink-0 h-1 bg-gray-100 overflow-hidden">
+              <div className="h-full bg-brand-secondary animate-[loadingBar_1.8s_ease-in-out_infinite]" />
+              <style>{`@keyframes loadingBar { 0%{width:0;margin-left:0} 50%{width:60%;margin-left:20%} 100%{width:0;margin-left:100%} }`}</style>
             </div>
-          </div>
+          )}
 
-          {/* Tab nav */}
-          <div className="border-b border-gray-200 bg-white overflow-x-auto flex-shrink-0">
-            <DraggableTabNav
-              tabs={visibleTabs}
-              activeKey={activeTab}
-              onSelect={key => setActiveTab(key as TabKey)}
-              onReorder={reorderTabs}
-              renderTab={(t, isActive) => ({
-                style: isActive
-                  ? { borderColor: SECONDARY, color: SECONDARY }
-                  : { borderColor: 'transparent', color: '#6b7280' },
-              })}
-            />
-          </div>
+          {/* Centered loading animation */}
+          {loading && !data && (
+            <div className="flex-1 flex flex-col items-center justify-center gap-4">
+              <svg className="w-10 h-10 animate-spin text-brand-primary" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              <p className="text-sm font-medium text-gray-500">Loading Effectiveness Scores</p>
+            </div>
+          )}
 
-          {/* Tab content */}
-          <div className="flex-1 overflow-y-auto">
-            {activeTab === 'summary'     && <SummaryTab data={data} conferenceId={conferenceId} />}
-            {activeTab === 'sales'       && <SalesExecutionTab data={data} />}
-            {activeTab === 'audience'    && <AudienceMessagingTab data={data} />}
-            {activeTab === 'roi'         && <OperationalROITab data={data} />}
-            {activeTab === 'definitions' && <DefinitionsTab />}
-          </div>
+          {/* Error state */}
+          {error && !loading && !data && (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <p className="text-gray-500 mb-3">{error}</p>
+                <button onClick={() => slot.conferenceId != null && load(slot.conferenceId)} className="btn-primary text-sm">Try again</button>
+              </div>
+            </div>
+          )}
+
+          {data && (
+            <>
+              {/* Tab nav */}
+              <div className="border-b border-gray-200 bg-white overflow-x-auto flex-shrink-0">
+                <DraggableTabNav
+                  tabs={visibleTabs}
+                  activeKey={activeTab}
+                  onSelect={key => setActiveTab(key as TabKey)}
+                  onReorder={reorderTabs}
+                  renderTab={(t, isActive) => ({
+                    style: isActive
+                      ? { borderColor: SECONDARY, color: SECONDARY }
+                      : { borderColor: 'transparent', color: '#6b7280' },
+                  })}
+                />
+              </div>
+
+              {/* Tab content */}
+              <div className="flex-1 overflow-y-auto">
+                {activeTab === 'summary'     && <SummaryTab data={data} conferenceId={conferenceId} />}
+                {activeTab === 'sales'       && <SalesExecutionTab data={data} />}
+                {activeTab === 'audience'    && <AudienceMessagingTab data={data} />}
+                {activeTab === 'roi'         && <OperationalROITab data={data} />}
+                {activeTab === 'definitions' && <DefinitionsTab />}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

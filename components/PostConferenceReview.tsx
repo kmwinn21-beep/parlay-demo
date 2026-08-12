@@ -246,33 +246,7 @@ export function PostConferenceReviewModal() {
     loadedForIdRef.current = null;
   };
 
-  if (loading && !data) {
-    if (slot.isMinimized) return null;
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-        <svg className="w-10 h-10 animate-spin text-brand-primary" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-        </svg>
-      </div>
-    );
-  }
-
-  if (error && !data) {
-    if (slot.isMinimized) return null;
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={handleClose}>
-        <div className="bg-white rounded-xl p-6 text-center" onClick={e => e.stopPropagation()}>
-          <p className="text-sm text-red-500 mb-3">{error}</p>
-          <button onClick={() => slot.conferenceId != null && load(slot.conferenceId)} className="btn-primary text-sm">Try again</button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!data) return null;
-
-  const effectiveTab = visibleTabs.includes(activeTab) ? activeTab : (visibleTabs[0] ?? 'summary');
+  const effectiveTab = data ? (visibleTabs.includes(activeTab) ? activeTab : (visibleTabs[0] ?? 'summary')) : activeTab;
   const minimized = slot.isMinimized;
 
   return (
@@ -322,43 +296,78 @@ export function PostConferenceReviewModal() {
                 </button>
               </div>
             </div>
-            <div className={`grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mt-3 sm:grid ${statsOpen ? 'grid' : 'hidden'}`}>
-              <StatPill label="Reps" value={data.summary.repsAttended} />
-              <StatPill label="Targets Engaged %" value={`${data.summary.targetsEngagedPct}%`} />
-              <StatPill label="Meetings Held" value={data.summary.meetingsHeld} />
-              <StatPill label="Follow-ups" value={data.summary.followUpsCreated} />
-              <StatPill label="Follow-up Rate" value={`${fuRate}%`} />
-              <StatPill label="Form Submissions" value={data.summary.formSubmissions} />
-              <StatPill label="ICP Capture Rate" value={`${data.summary.icpCaptureRate}%`} />
+            {data && (
+              <div className={`grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mt-3 sm:grid ${statsOpen ? 'grid' : 'hidden'}`}>
+                <StatPill label="Reps" value={data.summary.repsAttended} />
+                <StatPill label="Targets Engaged %" value={`${data.summary.targetsEngagedPct}%`} />
+                <StatPill label="Meetings Held" value={data.summary.meetingsHeld} />
+                <StatPill label="Follow-ups" value={data.summary.followUpsCreated} />
+                <StatPill label="Follow-up Rate" value={`${fuRate}%`} />
+                <StatPill label="Form Submissions" value={data.summary.formSubmissions} />
+                <StatPill label="ICP Capture Rate" value={`${data.summary.icpCaptureRate}%`} />
+              </div>
+            )}
+          </div>
+
+          {/* Loading bar */}
+          {loading && (
+            <div className="flex-shrink-0 h-1 bg-gray-100 overflow-hidden">
+              <div className="h-full bg-brand-secondary animate-[loadingBar_1.8s_ease-in-out_infinite]" />
+              <style>{`@keyframes loadingBar { 0%{width:0;margin-left:0} 50%{width:60%;margin-left:20%} 100%{width:0;margin-left:100%} }`}</style>
             </div>
-          </div>
+          )}
 
-          {/* Tab nav */}
-          <div className="border-b border-gray-200 bg-white overflow-x-auto flex-shrink-0">
-            <DraggableTabNav
-              tabs={visibleTabs.map(t => ({ key: t, label: tabConfig.getLabel(t) }))}
-              activeKey={effectiveTab}
-              onSelect={key => setActiveTab(key)}
-              onReorder={tabConfig.reorderTabs}
-              renderTab={(t, isActive) => ({
-                style: isActive
-                  ? { borderColor: GREEN_ACTIVE, color: GREEN_ACTIVE }
-                  : { borderColor: 'transparent', color: '#6b7280' },
-              })}
-            />
-          </div>
+          {/* Centered loading animation */}
+          {loading && !data && (
+            <div className="flex-1 flex flex-col items-center justify-center gap-4">
+              <svg className="w-10 h-10 animate-spin text-brand-primary" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              <p className="text-sm font-medium text-gray-500">Organizing Conference Activity</p>
+            </div>
+          )}
 
-          {/* Tab content */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-            {effectiveTab === 'summary' && <SummaryTab summary={data.summary} repPerformance={data.repPerformance} />}
-            {effectiveTab === 'company_rollup' && <CompanyRollupTab companyRollup={data.companyRollup} avgCostPerUnit={data.avgCostPerUnit} conferenceId={conferenceId} conferenceName={conferenceName} />}
-            {effectiveTab === 'contacts' && <ContactsCapturedTab contacts={data.contacts} />}
-            {effectiveTab === 'meetings' && <MeetingsTab meetings={data.meetings} />}
-            {effectiveTab === 'follow_ups' && <FollowUpsTab followUps={data.followUps} />}
-            {effectiveTab === 'relationship_shifts' && <RelationshipShiftsTab relationshipShifts={data.relationshipShifts} />}
-            {effectiveTab === 'events_touchpoints' && <EventsTouchpointsTab socialEvents={data.socialEvents} touchpoints={data.touchpoints} />}
-            {effectiveTab === 'action_items' && <ActionItemsTab actionItems={data.actionItems} />}
-          </div>
+          {/* Error state */}
+          {error && !loading && !data && (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <p className="text-gray-500 mb-3">{error}</p>
+                <button onClick={() => slot.conferenceId != null && load(slot.conferenceId)} className="btn-primary text-sm">Try again</button>
+              </div>
+            </div>
+          )}
+
+          {data && (
+            <>
+              {/* Tab nav */}
+              <div className="border-b border-gray-200 bg-white overflow-x-auto flex-shrink-0">
+                <DraggableTabNav
+                  tabs={visibleTabs.map(t => ({ key: t, label: tabConfig.getLabel(t) }))}
+                  activeKey={effectiveTab}
+                  onSelect={key => setActiveTab(key)}
+                  onReorder={tabConfig.reorderTabs}
+                  renderTab={(t, isActive) => ({
+                    style: isActive
+                      ? { borderColor: GREEN_ACTIVE, color: GREEN_ACTIVE }
+                      : { borderColor: 'transparent', color: '#6b7280' },
+                  })}
+                />
+              </div>
+
+              {/* Tab content */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+                {effectiveTab === 'summary' && <SummaryTab summary={data.summary} repPerformance={data.repPerformance} />}
+                {effectiveTab === 'company_rollup' && <CompanyRollupTab companyRollup={data.companyRollup} avgCostPerUnit={data.avgCostPerUnit} conferenceId={conferenceId} conferenceName={conferenceName} />}
+                {effectiveTab === 'contacts' && <ContactsCapturedTab contacts={data.contacts} />}
+                {effectiveTab === 'meetings' && <MeetingsTab meetings={data.meetings} />}
+                {effectiveTab === 'follow_ups' && <FollowUpsTab followUps={data.followUps} />}
+                {effectiveTab === 'relationship_shifts' && <RelationshipShiftsTab relationshipShifts={data.relationshipShifts} />}
+                {effectiveTab === 'events_touchpoints' && <EventsTouchpointsTab socialEvents={data.socialEvents} touchpoints={data.touchpoints} />}
+                {effectiveTab === 'action_items' && <ActionItemsTab actionItems={data.actionItems} />}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
