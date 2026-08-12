@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { db, dbReady } from '@/lib/db';
-import { signToken, authCookieOptions } from '@/lib/auth';
+import { signToken, authCookieOptions, recordUserSession } from '@/lib/auth';
 import { resolvePlanState } from '@/lib/trialState';
 import { sendTrialReminderEmail } from '@/lib/email';
 import { createTenantDb } from '@/lib/tenantDb';
@@ -72,15 +72,8 @@ export async function POST(request: NextRequest) {
 
     const token = await signToken(sessionUser);
 
-    // Record login session and update last_seen_at (fire-and-forget)
-    userDb.execute({
-      sql: 'INSERT INTO user_sessions (user_id, ip_address, user_agent) VALUES (?, ?, ?)',
-      args: [sessionUser.id, request.headers.get('x-forwarded-for') ?? null, request.headers.get('user-agent') ?? null],
-    }).catch(() => {});
-    userDb.execute({
-      sql: `UPDATE users SET last_seen_at = datetime('now') WHERE id = ?`,
-      args: [sessionUser.id],
-    }).catch(() => {});
+    // Record login session and update last_seen_at (for Admin > Usage).
+    await recordUserSession(userDb, sessionUser.id, request);
 
     // Fire-and-forget: send trial reminder emails if nearing expiry
     let redirectTo: string | undefined;

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { db, dbReady } from '@/lib/db';
-import { signToken, authCookieOptions, validatePassword } from '@/lib/auth';
+import { signToken, authCookieOptions, validatePassword, recordUserSession } from '@/lib/auth';
 import { provisionAccount } from '@/lib/provision';
 import { createTenantDb } from '@/lib/tenantDb';
 import { sendWelcomeEmail } from '@/lib/email';
@@ -169,6 +169,8 @@ export async function POST(request: NextRequest) {
 
     const token = await signToken(sessionUser);
     const redirectTo = `https://work.useparlay.app/?welcome=true`;
+
+    await recordUserSession(tenantClient, parlayUserId, request);
 
     const response = NextResponse.json({ success: true, redirectTo, onboardingTrack }, { headers: getCorsHeaders(request) });
     response.cookies.set({ ...authCookieOptions(), value: token });

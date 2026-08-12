@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 import type { NextRequest } from 'next/server';
+import type { Client } from '@libsql/client';
 
 // Re-export everything from auth-shared so existing API route imports keep working.
 export type {
@@ -139,6 +140,28 @@ export function authCookieOptions(maxAge = COOKIE_MAX_AGE) {
     maxAge,
     ...(!isPreview && rootDomain ? { domain: rootDomain } : {}),
   };
+}
+
+/**
+ * Records a new authenticated session for Admin > Usage tracking — call this
+ * anywhere a fresh auth cookie is issued (password login, invite acceptance,
+ * email verification, trial signup, account setup), not just the /login
+ * route, so the Usage tab reflects every way a user actually gets signed in.
+ * Awaited by callers (not fire-and-forget): un-awaited writes race a
+ * serverless function returning/freezing right after the response is sent,
+ * and can get silently dropped before they reach the DB.
+ */
+export async function recordUserSession(db: Client, userId: number, request: NextRequest): Promise<void> {
+  await Promise.all([
+    db.execute({
+      sql: 'INSERT INTO user_sessions (user_id, ip_address, user_agent) VALUES (?, ?, ?)',
+      args: [userId, request.headers.get('x-forwarded-for') ?? null, request.headers.get('user-agent') ?? null],
+    }).catch(err => console.error('Failed to record login session:', err)),
+    db.execute({
+      sql: `UPDATE users SET last_seen_at = datetime('now') WHERE id = ?`,
+      args: [userId],
+    }).catch(err => console.error('Failed to update last_seen_at:', err)),
+  ]);
 }
 
 // ─── API route helpers ────────────────────────────────────────────────────────
