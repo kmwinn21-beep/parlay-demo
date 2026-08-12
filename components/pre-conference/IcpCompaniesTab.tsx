@@ -1,7 +1,9 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { TargetBtn } from './TargetBtn';
 import { useRecordDrawer } from './RecordDrawerContext';
+import { useUser } from '@/components/UserContext';
 import type { IcpCompany, TargetEntry } from '../PreConferenceReview';
 
 function HealthBadge({ score }: { score: number }) {
@@ -40,6 +42,16 @@ export function IcpCompaniesTab({
   readOnly?: boolean;
 }) {
   const openRecord = useRecordDrawer();
+  const { user: currentUser } = useUser();
+  const [myAccountsOnly, setMyAccountsOnly] = useState(false);
+
+  const visibleCompanies = useMemo(
+    () => myAccountsOnly && currentUser?.repName
+      ? companies.filter(co => co.assigned_user_names.includes(currentUser.repName!))
+      : companies,
+    [companies, myAccountsOnly, currentUser],
+  );
+
   if (companies.length === 0) {
     return (
       <div className="text-center py-16">
@@ -50,9 +62,27 @@ export function IcpCompaniesTab({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-gray-500">{companies.length} ICP {companies.length === 1 ? 'company' : 'companies'} — sorted by relationship health</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-gray-500">{visibleCompanies.length} ICP {visibleCompanies.length === 1 ? 'company' : 'companies'} — sorted by relationship health</p>
+        {currentUser?.repName && (
+          <button
+            type="button"
+            onClick={() => setMyAccountsOnly(v => !v)}
+            className={`text-xs rounded-lg border px-2.5 py-1.5 font-semibold transition-colors ${
+              myAccountsOnly
+                ? 'border-brand-secondary bg-brand-secondary/10 text-brand-secondary'
+                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+            }`}
+          >
+            My Accounts
+          </button>
+        )}
+      </div>
+      {visibleCompanies.length === 0 && (
+        <p className="text-sm text-gray-400 text-center py-8">No ICP companies match this filter.</p>
+      )}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {companies.map((co) => (
+        {visibleCompanies.map((co) => (
           <div key={co.id} className="border border-gray-200 rounded-xl p-4 hover:border-brand-secondary/40 hover:shadow-sm transition-all overflow-hidden">
             <div className="flex items-start justify-between gap-2 mb-2">
               <div className="min-w-0">

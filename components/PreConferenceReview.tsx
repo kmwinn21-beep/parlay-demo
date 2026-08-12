@@ -652,6 +652,7 @@ export function PreConferenceReviewModal() {
                   meetingAttendeeIds={meetingAttendeeIds}
                   conferenceId={conferenceId}
                   conferenceName={conferenceName}
+                  conferenceStartDate={data.summary.conference.start_date}
                   byRep={data.byRep}
                   icpCompanies={data.icpCompanies}
                   relationships={data.relationships}

@@ -21,17 +21,28 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   if (!conferenceId || !companyId) return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
 
   try {
-    const rows = await db.execute({
-      sql: `SELECT n.id, n.body, n.created_at, n.activity_type, n.attendee_id,
-                   u.display_name, u.first_name, u.last_name, u.email,
-                   a.first_name as attendee_first_name, a.last_name as attendee_last_name
-            FROM outreach_notes n
-            JOIN users u ON u.id = n.user_id
-            LEFT JOIN attendees a ON a.id = n.attendee_id
-            WHERE n.conference_id = ? AND n.company_id = ?
-            ORDER BY n.created_at ASC`,
-      args: [conferenceId, companyId],
-    });
+    const [rows, commentCountRows] = await Promise.all([
+      db.execute({
+        sql: `SELECT n.id, n.body, n.created_at, n.activity_type, n.attendee_id, n.user_id,
+                     u.display_name, u.first_name, u.last_name, u.email,
+                     a.first_name as attendee_first_name, a.last_name as attendee_last_name
+              FROM outreach_notes n
+              JOIN users u ON u.id = n.user_id
+              LEFT JOIN attendees a ON a.id = n.attendee_id
+              WHERE n.conference_id = ? AND n.company_id = ?
+              ORDER BY n.created_at ASC`,
+        args: [conferenceId, companyId],
+      }),
+      db.execute({
+        sql: `SELECT note_id, COUNT(*) as cnt FROM outreach_note_comments
+              WHERE note_id IN (SELECT id FROM outreach_notes WHERE conference_id = ? AND company_id = ?)
+              GROUP BY note_id`,
+        args: [conferenceId, companyId],
+      }),
+    ]);
+
+    const commentCounts = new Map<number, number>();
+    for (const r of commentCountRows.rows) commentCounts.set(Number(r.note_id), Number(r.cnt));
 
     const notes = rows.rows.map(r => {
       const userName = resolveUserDisplayName(r);
@@ -44,6 +55,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         activityType: r.activity_type ? String(r.activity_type) : null,
         attendeeId: r.attendee_id != null ? Number(r.attendee_id) : null,
         attendeeName: r.attendee_first_name ? `${r.attendee_first_name} ${r.attendee_last_name}` : null,
+        userId: Number(r.user_id),
+        isMine: Number(r.user_id) === authResult.id,
+        commentCount: commentCounts.get(Number(r.id)) ?? 0,
       };
     });
 
@@ -115,6 +129,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       activityType: activityType || null,
       attendeeId: attendeeId ?? null,
       attendeeName,
+      userId: authResult.id,
+      isMine: true,
+      commentCount: 0,
     }, { status: 201 });
   } catch (error) {
     console.error('POST /api/conferences/[id]/outreach/[companyId]/notes error:', error);

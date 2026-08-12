@@ -1,6 +1,8 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { useRecordDrawer } from './RecordDrawerContext';
+import { useUser } from '@/components/UserContext';
 import type { MeetingRow } from '../PreConferenceReview';
 
 function fmtDate(d: string | null) {
@@ -22,6 +24,16 @@ function fmtTime(t: string | null) {
 
 export function MeetingsTab({ meetings }: { meetings: MeetingRow[] }) {
   const openRecord = useRecordDrawer();
+  const { user: currentUser } = useUser();
+  const [myMeetingsOnly, setMyMeetingsOnly] = useState(false);
+
+  const visibleMeetings = useMemo(
+    () => myMeetingsOnly && currentUser?.repName
+      ? meetings.filter(m => m.scheduled_by === currentUser.repName)
+      : meetings,
+    [meetings, myMeetingsOnly, currentUser],
+  );
+
   if (meetings.length === 0) {
     return (
       <div className="text-center py-16">
@@ -30,22 +42,39 @@ export function MeetingsTab({ meetings }: { meetings: MeetingRow[] }) {
     );
   }
 
-  const conflicts = meetings.filter((m) => m.hasConflict);
+  const conflicts = visibleMeetings.filter((m) => m.hasConflict);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4">
-        <p className="text-sm text-gray-500">{meetings.length} meeting{meetings.length !== 1 ? 's' : ''} scheduled</p>
+      <div className="flex flex-wrap items-center gap-4">
+        <p className="text-sm text-gray-500">{visibleMeetings.length} meeting{visibleMeetings.length !== 1 ? 's' : ''} scheduled</p>
         {conflicts.length > 0 && (
           <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-semibold">
             {conflicts.length} conflict{conflicts.length !== 1 ? 's' : ''}
           </span>
         )}
+        {currentUser?.repName && (
+          <button
+            type="button"
+            onClick={() => setMyMeetingsOnly(v => !v)}
+            className={`ml-auto text-xs rounded-lg border px-2.5 py-1.5 font-semibold transition-colors ${
+              myMeetingsOnly
+                ? 'border-brand-secondary bg-brand-secondary/10 text-brand-secondary'
+                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+            }`}
+          >
+            My Meetings
+          </button>
+        )}
       </div>
+
+      {visibleMeetings.length === 0 && (
+        <p className="text-sm text-gray-400 text-center py-8">No meetings match this filter.</p>
+      )}
 
       {/* Mobile card view */}
       <div className="sm:hidden space-y-3">
-        {meetings.map((m) => (
+        {visibleMeetings.map((m) => (
           <div
             key={m.id}
             className={`rounded-xl border p-4 space-y-2 ${m.hasConflict ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'}`}
@@ -97,7 +126,7 @@ export function MeetingsTab({ meetings }: { meetings: MeetingRow[] }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {meetings.map((m) => (
+            {visibleMeetings.map((m) => (
               <tr key={m.id} className={`${m.hasConflict ? 'bg-red-50' : 'hover:bg-gray-50'} transition-colors`}>
                 <td className="px-4 py-3">
                   <button type="button" onClick={() => openRecord('attendee', m.attendee_id)} className="font-medium text-brand-secondary hover:underline text-left">

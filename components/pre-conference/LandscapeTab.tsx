@@ -933,214 +933,40 @@ const TIER_DATA = [
 
 const TIER_PRIORITY: Record<string, number> = { '1': 0, '2': 1, '3': 2, 'unassigned': 3 };
 
+// Matches ConferenceTargetsTab's TIER_BAR_COLORS exactly, so the Targeted
+// Pipeline charts here (Internal Relationships panel) look identical to the
+// Conference Targets tab's own pipeline charts.
+const TARGETED_PIPELINE_BAR_COLORS: Record<string, string> = {
+  '1': '#dc2626',
+  '2': 'rgb(var(--brand-primary-rgb, 30 58 95))',
+  '3': 'rgb(var(--brand-highlight-rgb, 5 150 105))',
+  'unassigned': '#9ca3af',
+};
+
 function PipelineChartsPanel({
-  conferenceId,
-  targetMap,
-  meetingAttendeeIds,
   icpCompanies,
   onSelectRep,
   selectedRepName,
 }: {
-  conferenceId: number;
-  targetMap: Map<number, TargetEntry>;
-  meetingAttendeeIds: Set<number>;
   icpCompanies: IcpCompany[];
   onSelectRep: (rep: RepChartEntry) => void;
   selectedRepName: string | null;
 }) {
-  const avgCostPerUnit = useAvgCostPerUnit();
-  const [meetingsConvPct, setMeetingsConvPct] = useState(60);
-  const [requiredPipeline, setRequiredPipeline] = useState<number | null>(null);
-  const [pipelineMode, setPipelineMode] = useState<'targeted' | 'meetings'>('targeted');
-  const [sectionMode, setSectionMode] = useState<'all' | 'prospects' | 'pipeline'>('all');
-
-  // Fixed conversion rate matching ConferenceTargetsTab default — not user-adjustable here
-  const conversionPct = 60;
-
-  useEffect(() => {
-    Promise.all([
-      fetch(`/api/conferences/${conferenceId}/budget`).then(r => r.ok ? r.json() : null),
-      fetch('/api/admin/effectiveness').then(r => r.ok ? r.json() : null),
-    ]).then(([budgetData, effectivenessData]) => {
-      const val = (budgetData as { required_pipeline_amount?: number | null } | null)?.required_pipeline_amount;
-      if (val != null && Number(val) > 0) setRequiredPipeline(Number(val));
-      const mhRate = (effectivenessData as Record<string, string> | null)?.meetings_held_conversion_rate;
-      if (mhRate != null) {
-        const pct = parseFloat(mhRate);
-        if (!isNaN(pct) && pct > 0) setMeetingsConvPct(pct);
-      }
-    }).catch(() => {});
-  }, [conferenceId]);
-
-  // Targeted pipeline: deduplicate by company, best tier wins
-  const companyBestTier = useMemo(() => {
-    const map = new Map<number, { tier: string; wse: number }>();
-    for (const t of Array.from(targetMap.values())) {
-      if (t.companyId == null || t.companyWse == null) continue;
-      const existing = map.get(t.companyId);
-      if (!existing || (TIER_PRIORITY[t.tier] ?? 99) < (TIER_PRIORITY[existing.tier] ?? 99)) {
-        map.set(t.companyId, { tier: t.tier, wse: t.companyWse });
-      }
-    }
-    return map;
-  }, [targetMap]);
-
-  const tierValueSum: Record<string, number> = {};
-  for (const { tier, wse } of Array.from(companyBestTier.values())) {
-    tierValueSum[tier] = (tierValueSum[tier] ?? 0) + Math.round(wse * avgCostPerUnit);
-  }
-  const hasValues = avgCostPerUnit > 0 && companyBestTier.size > 0;
-  const totalTargetValue = Object.values(tierValueSum).reduce((a, b) => a + b, 0);
-  const convertedValue = Math.round(totalTargetValue * conversionPct / 100);
-  const coverageRatio = requiredPipeline && requiredPipeline > 0 ? convertedValue / requiredPipeline : null;
-  const maxTierValue = Math.max(1, ...Object.values(tierValueSum));
-
-  // Meetings pipeline
-  const meetingCompanyBestTier = useMemo(() => {
-    const map = new Map<number, { tier: string; wse: number }>();
-    for (const t of Array.from(targetMap.values())) {
-      if (!meetingAttendeeIds.has(t.attendeeId)) continue;
-      if (t.companyId == null || t.companyWse == null) continue;
-      const existing = map.get(t.companyId);
-      if (!existing || (TIER_PRIORITY[t.tier] ?? 99) < (TIER_PRIORITY[existing.tier] ?? 99)) {
-        map.set(t.companyId, { tier: t.tier, wse: t.companyWse });
-      }
-    }
-    return map;
-  }, [targetMap, meetingAttendeeIds]);
-
-  const meetingTierValueSum: Record<string, number> = {};
-  for (const { tier, wse } of Array.from(meetingCompanyBestTier.values())) {
-    meetingTierValueSum[tier] = (meetingTierValueSum[tier] ?? 0) + Math.round(wse * avgCostPerUnit);
-  }
-  const totalMeetingValue = Object.values(meetingTierValueSum).reduce((a, b) => a + b, 0);
-  const convertedMeetingValue = Math.round(totalMeetingValue * meetingsConvPct / 100);
-  const meetingsCoverageRatio = requiredPipeline && requiredPipeline > 0 ? convertedMeetingValue / requiredPipeline : null;
-  const maxMeetingTierValue = Math.max(1, ...Object.values(meetingTierValueSum));
-  const hasMeetingValues = avgCostPerUnit > 0 && meetingCompanyBestTier.size > 0;
-
-  const isTargeted = pipelineMode === 'targeted';
-  const activeTierValueSum = isTargeted ? tierValueSum : meetingTierValueSum;
-  const activeConvertedValue = isTargeted ? convertedValue : convertedMeetingValue;
-  const activeCoverageRatio = isTargeted ? coverageRatio : meetingsCoverageRatio;
-  const activeMaxTierValue = isTargeted ? maxTierValue : maxMeetingTierValue;
-  const activeHasValues = isTargeted ? hasValues : hasMeetingValues;
-  const emptyText = avgCostPerUnit > 0
-    ? (isTargeted
-      ? 'No target companies yet.'
-      : (meetingAttendeeIds.size === 0 ? 'No meetings scheduled yet.' : 'No target companies with meetings.'))
-    : 'Set avg. cost per unit in Admin Settings to see values.';
-
-  const showProspects = sectionMode !== 'pipeline';
-  const showPipeline = sectionMode !== 'prospects';
-
   return (
     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden flex flex-col h-full min-h-0">
       {/* Header bar — same light-gray toggle-header treatment as the
           Internal Relationships / Relationship Coverage panel, so this
           section's border lines up top-to-bottom with its row siblings. */}
-      <div className="flex items-center justify-end gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50 flex-shrink-0">
-        {/* All | Prospects | Pipeline — full width on mobile, right-aligned on desktop */}
-        <ToggleGroup
-          fullWidthMobile
-          options={[
-            { key: 'all', label: 'All', activeColor: 'rgb(var(--brand-primary-rgb))' },
-            { key: 'prospects', label: 'Prospects', activeColor: 'rgb(var(--brand-primary-rgb))' },
-            { key: 'pipeline', label: 'Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
-          ]}
-          active={sectionMode}
-          onChange={key => setSectionMode(key as 'all' | 'prospects' | 'pipeline')}
+      <div className="flex items-center px-3 py-2 border-b border-gray-100 bg-gray-50 flex-shrink-0">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">Prospects by Assigned Rep</p>
+      </div>
+
+      <div className="flex-1 min-h-0 flex flex-col p-3 overflow-y-auto">
+        <CompaniesByRepChart
+          icpCompanies={icpCompanies}
+          onSelectRep={onSelectRep}
+          selectedRepName={selectedRepName}
         />
-      </div>
-
-      <div className="flex-1 min-h-0 flex flex-col gap-4 p-3 overflow-y-auto">
-        <div
-          className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${showProspects ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'} ${sectionMode === 'prospects' ? 'flex-1 min-h-0' : 'flex-shrink-0'}`}
-        >
-          <div className="overflow-hidden min-h-0 flex flex-col">
-            <CompaniesByRepChart
-              icpCompanies={icpCompanies}
-              onSelectRep={onSelectRep}
-              selectedRepName={selectedRepName}
-              expanded={sectionMode === 'prospects'}
-            />
-          </div>
-        </div>
-
-        <div
-          className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${showPipeline ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'} ${sectionMode === 'pipeline' ? 'flex-1 min-h-0' : 'flex-shrink-0'}`}
-        >
-          <div className="overflow-hidden min-h-0 flex flex-col">
-            {/* Targeted Pipeline / Meetings Pipeline (toggle) */}
-            <div className={`flex-1 flex flex-col overflow-y-auto ${showProspects ? 'border-t border-gray-100 pt-4' : ''}`}>
-              <div className="flex items-center justify-start mb-3 flex-shrink-0">
-                <ToggleGroup
-                  options={[
-                    { key: 'targeted', label: 'Targeted Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
-                    { key: 'meetings', label: 'Meetings Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
-                  ]}
-                  active={pipelineMode}
-                  onChange={key => setPipelineMode(key as 'targeted' | 'meetings')}
-                />
-              </div>
-
-              {requiredPipeline != null && (
-              <div className="pb-3 mb-3 border-b border-gray-100">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs text-gray-500 font-medium">Required Pipeline</span>
-                  <span className="text-xs text-gray-400">${requiredPipeline.toLocaleString('en-US')}</span>
-                </div>
-                <div className="bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                  <div
-                    className="h-2.5 rounded-full transition-all duration-300"
-                    style={{
-                      width: `${Math.min((activeCoverageRatio ?? 0) * 100, 100)}%`,
-                      backgroundColor: (activeCoverageRatio ?? 0) >= 1 ? '#059669' : (activeCoverageRatio ?? 0) >= 0.6 ? '#f59e0b' : '#dc2626',
-                    }}
-                  />
-                </div>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <span className="text-xs text-gray-400">
-                    Projected: <span className="font-medium text-gray-600">${activeConvertedValue.toLocaleString('en-US')}</span>
-                  </span>
-                  {activeCoverageRatio != null && (
-                    <span className={`text-xs font-medium ${(activeCoverageRatio ?? 0) >= 1 ? 'text-emerald-600' : (activeCoverageRatio ?? 0) >= 0.6 ? 'text-amber-600' : 'text-red-500'}`}>
-                      ({Math.round((activeCoverageRatio ?? 0) * 100)}%)
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {activeHasValues ? (
-              <div className="space-y-2">
-                {TIER_DATA.map(tier => {
-                  const val = activeTierValueSum[tier.key] ?? 0;
-                  return (
-                    <div key={tier.key} className="flex items-start gap-2">
-                      <span className="text-xs text-gray-600 w-24 flex-shrink-0 leading-tight">{tier.label}</span>
-                      <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                        <div
-                          className="h-2 rounded-full"
-                          style={{
-                            width: val > 0 ? `${Math.round((val / activeMaxTierValue) * 100)}%` : '0%',
-                            backgroundColor: tier.hex,
-                          }}
-                        />
-                      </div>
-                      <span className="text-xs text-gray-500 w-16 text-right flex-shrink-0">
-                        {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-xs text-gray-400">{emptyText}</p>
-            )}
-          </div>
-        </div>
-      </div>
       </div>
     </div>
   );
@@ -1185,21 +1011,14 @@ function CompaniesByRepChart({
   icpCompanies,
   onSelectRep,
   selectedRepName,
-  expanded = false,
 }: {
   icpCompanies: IcpCompany[];
   onSelectRep: (rep: RepChartEntry) => void;
   selectedRepName: string | null;
-  /** "Prospects" section mode — single horizontal bar per rep, sorted by the
-   * active value metric, filling the available height, instead of the
-   * compact single segmented bar + scrollable legend. */
-  expanded?: boolean;
 }) {
   const repData = useMemo(() => computeRepData(icpCompanies), [icpCompanies]);
   const avgCostPerUnit = useAvgCostPerUnit();
   const [valueMode, setValueMode] = useState<'%' | '$' | '#'>('%');
-  const legendRef = useRef<HTMLDivElement>(null);
-  const scrollLegend = (dir: -1 | 1) => legendRef.current?.scrollBy({ left: dir * 160, behavior: 'smooth' });
 
   const total = icpCompanies.length;
 
@@ -1222,23 +1041,37 @@ function CompaniesByRepChart({
   const maxRepValue = Math.max(1, ...sortedRepData.map(r => repValueNumber(r)));
 
   return (
-    <div className={`flex flex-col gap-3 ${expanded ? 'flex-1 min-h-0' : 'flex-shrink-0'}`}>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 flex-shrink-0">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider leading-tight">Prospects by Assigned Rep</p>
-        <ToggleGroup
-          fullWidthMobile
-          options={[
-            { key: '%', label: '%', activeColor: 'rgb(var(--brand-primary-rgb))' },
-            { key: '$', label: '$', activeColor: 'rgb(var(--brand-primary-rgb))' },
-            { key: '#', label: '#', activeColor: 'rgb(var(--brand-primary-rgb))' },
-          ]}
-          active={valueMode}
-          onChange={key => setValueMode(key as '%' | '$' | '#')}
-        />
+    <div className="flex flex-col gap-3 flex-1 min-h-0">
+      <div className="flex-shrink-0">
+        {/* Mobile: short symbols, full width — matches the compact space available */}
+        <div className="sm:hidden">
+          <ToggleGroup
+            fullWidthMobile
+            options={[
+              { key: '%', label: '%', activeColor: 'rgb(var(--brand-primary-rgb))' },
+              { key: '$', label: '$', activeColor: 'rgb(var(--brand-primary-rgb))' },
+              { key: '#', label: '#', activeColor: 'rgb(var(--brand-primary-rgb))' },
+            ]}
+            active={valueMode}
+            onChange={key => setValueMode(key as '%' | '$' | '#')}
+          />
+        </div>
+        {/* Desktop: full labels, left-aligned */}
+        <div className="hidden sm:block">
+          <ToggleGroup
+            options={[
+              { key: '%', label: 'Percentage', activeColor: 'rgb(var(--brand-primary-rgb))' },
+              { key: '$', label: 'Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
+              { key: '#', label: 'Count', activeColor: 'rgb(var(--brand-primary-rgb))' },
+            ]}
+            active={valueMode}
+            onChange={key => setValueMode(key as '%' | '$' | '#')}
+          />
+        </div>
       </div>
       {total === 0 ? (
         <p className="text-xs text-gray-400">No ICP companies attending.</p>
-      ) : expanded ? (
+      ) : (
         <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-0.5">
           {sortedRepData.map(r => {
             const isDimmed = selectedRepName != null && selectedRepName !== r.name;
@@ -1302,75 +1135,6 @@ function CompaniesByRepChart({
             );
           })}
         </div>
-      ) : (
-        <>
-          <div className="flex w-full h-6 rounded-full overflow-hidden">
-            {repData.map(r => {
-              const isDimmed = selectedRepName != null && selectedRepName !== r.name;
-              return (
-                <button
-                  key={r.name}
-                  type="button"
-                  onClick={() => onSelectRep(r)}
-                  className="cursor-pointer hover:brightness-110 transition-all duration-150"
-                  style={{
-                    width: `${(r.count / total) * 100}%`,
-                    backgroundColor: r.color,
-                    filter: isDimmed ? 'grayscale(1)' : undefined,
-                    opacity: isDimmed ? 0.35 : 1,
-                  }}
-                  title={`${r.name}: ${repValueText(r)}`}
-                />
-              );
-            })}
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => scrollLegend(-1)}
-              className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-700 transition-colors"
-              aria-label="Scroll reps left"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <div ref={legendRef} className="flex-1 min-w-0 flex flex-nowrap gap-2 overflow-x-auto scrollbar-hide">
-              {repData.map(r => {
-                const isDimmed = selectedRepName != null && selectedRepName !== r.name;
-                return (
-                  <button
-                    key={r.name}
-                    type="button"
-                    onClick={() => onSelectRep(r)}
-                    title={r.name}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium hover:brightness-95 transition-all duration-150 flex-shrink-0 whitespace-nowrap"
-                    style={{
-                      backgroundColor: hexAlpha(r.color, 0.12),
-                      color: r.color,
-                      border: `1px solid ${hexAlpha(r.color, 0.3)}`,
-                      filter: isDimmed ? 'grayscale(1)' : undefined,
-                      opacity: isDimmed ? 0.4 : 1,
-                    }}
-                  >
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: r.color }} />
-                    {repInitials(r.name)} ({repValueText(r)})
-                  </button>
-                );
-              })}
-            </div>
-            <button
-              type="button"
-              onClick={() => scrollLegend(1)}
-              className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-700 transition-colors"
-              aria-label="Scroll reps right"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
-        </>
       )}
     </div>
   );
@@ -1564,6 +1328,8 @@ function RepDetailPanel({
   totalIcp,
   onClose,
   conferenceId,
+  conferenceName,
+  conferenceStartDate,
   targetMap,
   onToggleTargetWithTier,
   readOnly,
@@ -1572,10 +1338,15 @@ function RepDetailPanel({
   totalIcp: number;
   onClose: () => void;
   conferenceId: number;
+  conferenceName: string;
+  conferenceStartDate: string | null;
   targetMap: Map<number, TargetEntry>;
   onToggleTargetWithTier: (entry: Omit<TargetEntry, 'tier'>, tier: string) => Promise<void>;
   readOnly?: boolean;
 }) {
+  // Matches the Conference Details page header's own name+year construction
+  // (app/conferences/[id]/page.tsx) so this reads the same way everywhere.
+  const conferenceLabel = `${conferenceName}${conferenceStartDate ? ` - ${new Date(conferenceStartDate).getUTCFullYear()}` : ''}`;
   const pct = totalIcp > 0 ? Math.round((rep.count / totalIcp) * 100) : 0;
   const avgCostPerUnit = useAvgCostPerUnit();
   const targetingCompilation = useTargetingCompilation(conferenceId);
@@ -1611,16 +1382,19 @@ function RepDetailPanel({
   );
 
   return (
-    <div className="fixed inset-x-0 bottom-0 top-[var(--pcr-header-h,0px)] z-50 rounded-t-2xl sm:absolute sm:inset-0 sm:top-0 sm:z-10 sm:rounded-xl flex flex-col border border-gray-200 bg-white shadow-2xl overflow-hidden drawer-mobile-responsive">
+    <div className="drawer-mobile-responsive fixed inset-x-0 bottom-0 top-[var(--pcr-header-h,0px)] rounded-t-2xl sm:inset-x-auto sm:inset-y-0 sm:left-auto sm:right-0 sm:w-[480px] sm:rounded-tl-2xl sm:rounded-bl-2xl sm:rounded-tr-none z-[60] flex flex-col border border-gray-200 bg-white shadow-2xl overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-gray-100 bg-gray-50 flex-shrink-0">
-        <span
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium truncate"
-          style={{ backgroundColor: hexAlpha(rep.color, 0.12), color: rep.color, border: `1px solid ${hexAlpha(rep.color, 0.3)}` }}
-        >
-          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: rep.color }} />
-          <span className="truncate">{rep.name}</span>
-        </span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium flex-shrink-0"
+            style={{ backgroundColor: hexAlpha(rep.color, 0.12), color: rep.color, border: `1px solid ${hexAlpha(rep.color, 0.3)}` }}
+          >
+            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: rep.color }} />
+            <span className="truncate">{rep.name}</span>
+          </span>
+          <span className="text-xs text-gray-500 truncate">Prospects Attending {conferenceLabel}</span>
+        </div>
         <button
           onClick={onClose}
           className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
@@ -1830,16 +1604,90 @@ function RelationshipHeatmapPanel({
   icpCompanies,
   targetMap,
   relationships,
+  meetingAttendeeIds,
+  conferenceId,
 }: {
   byRep: ByRepEntry[];
   icpCompanies: IcpCompany[];
   targetMap: Map<number, TargetEntry>;
   relationships: RelationshipRow[];
+  meetingAttendeeIds: Set<number>;
+  conferenceId: number;
 }) {
-  const [view, setView] = useState<'internal' | 'coverage'>('internal');
+  const [view, setView] = useState<'internal' | 'coverage' | 'pipeline'>('internal');
   const [drillInternal, setDrillInternal] = useState<DrillInternalState | null>(null);
   const openRecord = useRecordDrawer();
   const [drillCoverage, setDrillCoverage] = useState<IcpCompany | null>(null);
+
+  // ── Targeted Pipeline (moved here from the old Pipeline section of the
+  // Prospects by Assigned Rep panel) ─────────────────────────────────────────
+  const avgCostPerUnit = useAvgCostPerUnit();
+  const [meetingsConvPct, setMeetingsConvPct] = useState(60);
+  const [requiredPipeline, setRequiredPipeline] = useState<number | null>(null);
+  // Fixed conversion rate matching ConferenceTargetsTab default — not user-adjustable here
+  const conversionPct = 60;
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`/api/conferences/${conferenceId}/budget`).then(r => r.ok ? r.json() : null),
+      fetch('/api/admin/effectiveness').then(r => r.ok ? r.json() : null),
+    ]).then(([budgetData, effectivenessData]) => {
+      const val = (budgetData as { required_pipeline_amount?: number | null } | null)?.required_pipeline_amount;
+      if (val != null && Number(val) > 0) setRequiredPipeline(Number(val));
+      const mhRate = (effectivenessData as Record<string, string> | null)?.meetings_held_conversion_rate;
+      if (mhRate != null) {
+        const pct = parseFloat(mhRate);
+        if (!isNaN(pct) && pct > 0) setMeetingsConvPct(pct);
+      }
+    }).catch(() => {});
+  }, [conferenceId]);
+
+  // Targeted pipeline: deduplicate by company, best tier wins
+  const companyBestTier = useMemo(() => {
+    const map = new Map<number, { tier: string; wse: number }>();
+    for (const t of Array.from(targetMap.values())) {
+      if (t.companyId == null || t.companyWse == null) continue;
+      const existing = map.get(t.companyId);
+      if (!existing || (TIER_PRIORITY[t.tier] ?? 99) < (TIER_PRIORITY[existing.tier] ?? 99)) {
+        map.set(t.companyId, { tier: t.tier, wse: t.companyWse });
+      }
+    }
+    return map;
+  }, [targetMap]);
+
+  const tierValueSum: Record<string, number> = {};
+  for (const { tier, wse } of Array.from(companyBestTier.values())) {
+    tierValueSum[tier] = (tierValueSum[tier] ?? 0) + Math.round(wse * avgCostPerUnit);
+  }
+  const hasPipelineValues = avgCostPerUnit > 0 && companyBestTier.size > 0;
+  const totalTargetValue = Object.values(tierValueSum).reduce((a, b) => a + b, 0);
+  const convertedValue = Math.round(totalTargetValue * conversionPct / 100);
+  const coverageRatio = requiredPipeline && requiredPipeline > 0 ? convertedValue / requiredPipeline : null;
+  const maxTierValue = Math.max(1, ...Object.values(tierValueSum));
+
+  // Meetings pipeline
+  const meetingCompanyBestTier = useMemo(() => {
+    const map = new Map<number, { tier: string; wse: number }>();
+    for (const t of Array.from(targetMap.values())) {
+      if (!meetingAttendeeIds.has(t.attendeeId)) continue;
+      if (t.companyId == null || t.companyWse == null) continue;
+      const existing = map.get(t.companyId);
+      if (!existing || (TIER_PRIORITY[t.tier] ?? 99) < (TIER_PRIORITY[existing.tier] ?? 99)) {
+        map.set(t.companyId, { tier: t.tier, wse: t.companyWse });
+      }
+    }
+    return map;
+  }, [targetMap, meetingAttendeeIds]);
+
+  const meetingTierValueSum: Record<string, number> = {};
+  for (const { tier, wse } of Array.from(meetingCompanyBestTier.values())) {
+    meetingTierValueSum[tier] = (meetingTierValueSum[tier] ?? 0) + Math.round(wse * avgCostPerUnit);
+  }
+  const totalMeetingValue = Object.values(meetingTierValueSum).reduce((a, b) => a + b, 0);
+  const convertedMeetingValue = Math.round(totalMeetingValue * meetingsConvPct / 100);
+  const meetingsCoverageRatio = requiredPipeline && requiredPipeline > 0 ? convertedMeetingValue / requiredPipeline : null;
+  const maxMeetingTierValue = Math.max(1, ...Object.values(meetingTierValueSum));
+  const hasMeetingValues = avgCostPerUnit > 0 && meetingCompanyBestTier.size > 0;
 
   // ── Internal relationships matrix ──────────────────────────────────────────
   const { reps, relTypes, matrix, repRelMap } = useMemo(() => {
@@ -1919,7 +1767,7 @@ function RelationshipHeatmapPanel({
     return grid;
   }, [icpCompanies, companyTierMap]);
 
-  const handleToggle = (next: 'internal' | 'coverage') => {
+  const handleToggle = (next: 'internal' | 'coverage' | 'pipeline') => {
     setView(next);
     setDrillInternal(null);
     setDrillCoverage(null);
@@ -1928,7 +1776,7 @@ function RelationshipHeatmapPanel({
   return (
     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden flex flex-col h-full min-h-[420px]">
       {/* Toggle header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50 flex-shrink-0">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50 flex-shrink-0 flex-wrap">
         <button
           onClick={() => handleToggle('internal')}
           className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${view === 'internal' ? 'bg-brand-primary text-white' : 'text-gray-500 hover:text-gray-700'}`}
@@ -1940,6 +1788,12 @@ function RelationshipHeatmapPanel({
           className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${view === 'coverage' ? 'bg-brand-primary text-white' : 'text-gray-500 hover:text-gray-700'}`}
         >
           Relationship Coverage
+        </button>
+        <button
+          onClick={() => handleToggle('pipeline')}
+          className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${view === 'pipeline' ? 'bg-brand-primary text-white' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          Targeted Pipeline
         </button>
       </div>
 
@@ -2139,6 +1993,135 @@ function RelationshipHeatmapPanel({
             </div>
           )
         )}
+
+        {/* ── Targeted Pipeline view ── */}
+        {view === 'pipeline' && (
+          <div className="absolute inset-0 p-4 overflow-y-auto space-y-4">
+            {/* Targeted Pipeline Value chart — same format as Conference Targets tab, minus the conversion input */}
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Targeted Pipeline Value</p>
+              {requiredPipeline != null && (
+                <div className="mb-3 pb-3 border-b border-gray-100">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs text-gray-500 font-medium">Required Pipeline</span>
+                    <span className="text-xs text-gray-400">${requiredPipeline.toLocaleString('en-US')}</span>
+                  </div>
+                  <div className="bg-gray-100 rounded-full h-3 overflow-hidden">
+                    <div
+                      className="h-3 rounded-full transition-all duration-300"
+                      style={{
+                        width: `${Math.min((coverageRatio ?? 0) * 100, 100)}%`,
+                        backgroundColor: (coverageRatio ?? 0) >= 1 ? '#059669' : (coverageRatio ?? 0) >= 0.6 ? '#f59e0b' : '#dc2626',
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="text-xs text-gray-400">
+                      Projected at {conversionPct}%:{' '}
+                      <span className="font-medium text-gray-600">${convertedValue.toLocaleString('en-US')}</span>
+                    </span>
+                    {coverageRatio != null && (
+                      <span className={`text-xs font-medium ${(coverageRatio ?? 0) >= 1 ? 'text-emerald-600' : (coverageRatio ?? 0) >= 0.6 ? 'text-amber-600' : 'text-red-500'}`}>
+                        ({Math.round((coverageRatio ?? 0) * 100)}%)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+              {hasPipelineValues ? (
+                <div className="space-y-2">
+                  {TIER_DATA.map(tier => {
+                    const val = tierValueSum[tier.key] ?? 0;
+                    return (
+                      <div key={tier.key} className="flex items-center gap-3">
+                        <span className="text-xs text-gray-600 w-28 flex-shrink-0 truncate">{tier.label}</span>
+                        <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                          <div
+                            className="h-2 rounded-full"
+                            style={{
+                              width: val > 0 ? `${Math.round((val / maxTierValue) * 100)}%` : '0%',
+                              backgroundColor: TARGETED_PIPELINE_BAR_COLORS[tier.key] ?? '#9ca3af',
+                            }}
+                          />
+                        </div>
+                        <span className="text-xs text-gray-500 w-20 text-right flex-shrink-0">
+                          {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400">Set avg. cost per unit in Admin Settings to see values.</p>
+              )}
+            </div>
+
+            {/* Targeted Pipeline Value of Scheduled Meetings chart */}
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Targeted Pipeline Value of Scheduled Meetings</p>
+              {requiredPipeline != null && (
+                <div className="mb-3 pb-3 border-b border-gray-100">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs text-gray-500 font-medium">Required Pipeline</span>
+                    <span className="text-xs text-gray-400">${requiredPipeline.toLocaleString('en-US')}</span>
+                  </div>
+                  <div className="bg-gray-100 rounded-full h-3 overflow-hidden">
+                    <div
+                      className="h-3 rounded-full transition-all duration-300"
+                      style={{
+                        width: `${Math.min((meetingsCoverageRatio ?? 0) * 100, 100)}%`,
+                        backgroundColor: (meetingsCoverageRatio ?? 0) >= 1 ? '#059669' : (meetingsCoverageRatio ?? 0) >= 0.6 ? '#f59e0b' : '#dc2626',
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="text-xs text-gray-400">
+                      Projected at {meetingsConvPct}%:{' '}
+                      <span className="font-medium text-gray-600">${convertedMeetingValue.toLocaleString('en-US')}</span>
+                    </span>
+                    {meetingsCoverageRatio != null && (
+                      <span className={`text-xs font-medium ${(meetingsCoverageRatio ?? 0) >= 1 ? 'text-emerald-600' : (meetingsCoverageRatio ?? 0) >= 0.6 ? 'text-amber-600' : 'text-red-500'}`}>
+                        ({Math.round((meetingsCoverageRatio ?? 0) * 100)}%)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+              {hasMeetingValues ? (
+                <div className="space-y-2">
+                  {TIER_DATA.map(tier => {
+                    const val = meetingTierValueSum[tier.key] ?? 0;
+                    return (
+                      <div key={tier.key} className="flex items-center gap-3">
+                        <span className="text-xs text-gray-600 w-28 flex-shrink-0 truncate">{tier.label}</span>
+                        <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                          <div
+                            className="h-2 rounded-full"
+                            style={{
+                              width: val > 0 ? `${Math.round((val / maxMeetingTierValue) * 100)}%` : '0%',
+                              backgroundColor: TARGETED_PIPELINE_BAR_COLORS[tier.key] ?? '#9ca3af',
+                            }}
+                          />
+                        </div>
+                        <span className="text-xs text-gray-500 w-20 text-right flex-shrink-0">
+                          {val > 0 ? '$' + val.toLocaleString('en-US') : '—'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400">
+                  {avgCostPerUnit > 0
+                    ? meetingAttendeeIds.size === 0
+                      ? 'No meetings scheduled yet.'
+                      : 'No target companies with scheduled meetings.'
+                    : 'Set avg. cost per unit in Admin Settings to see values.'}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2154,6 +2137,7 @@ export function LandscapeTab({
   meetingAttendeeIds,
   conferenceId,
   conferenceName,
+  conferenceStartDate,
   byRep,
   icpCompanies,
   relationships,
@@ -2169,6 +2153,7 @@ export function LandscapeTab({
   meetingAttendeeIds: Set<number>;
   conferenceId: number;
   conferenceName: string;
+  conferenceStartDate: string | null;
   byRep: ByRepEntry[];
   icpCompanies: IcpCompany[];
   relationships: RelationshipRow[];
@@ -2204,9 +2189,6 @@ export function LandscapeTab({
         {/* Cols 2-3: Pipeline Charts + Companies by Assigned Rep */}
         <div className="md:col-span-2 h-full">
           <PipelineChartsPanel
-            conferenceId={conferenceId}
-            targetMap={targetMap}
-            meetingAttendeeIds={meetingAttendeeIds}
             icpCompanies={icpCompanies}
             onSelectRep={setSelectedRep}
             selectedRepName={selectedRep?.name ?? null}
@@ -2220,12 +2202,15 @@ export function LandscapeTab({
             icpCompanies={icpCompanies}
             targetMap={targetMap}
             relationships={relationships}
+            meetingAttendeeIds={meetingAttendeeIds}
+            conferenceId={conferenceId}
           />
           {selectedRep && (
             <>
-              {/* Backdrop — mobile bottom-sheet only; desktop stays a contained overlay with no backdrop */}
+              {/* Backdrop — full drawer now slides in from the screen's right
+                  edge on desktop too, so it gets a backdrop at every breakpoint. */}
               <div
-                className="fixed inset-0 z-40 bg-black/30 sm:hidden"
+                className="fixed inset-0 z-[55] bg-black/30"
                 onClick={() => setSelectedRep(null)}
               />
               <RepDetailPanel
@@ -2233,6 +2218,8 @@ export function LandscapeTab({
                 totalIcp={icpCompanies.length}
                 onClose={() => setSelectedRep(null)}
                 conferenceId={conferenceId}
+                conferenceName={conferenceName}
+                conferenceStartDate={conferenceStartDate}
                 targetMap={targetMap}
                 onToggleTargetWithTier={onToggleTargetWithTier}
                 readOnly={readOnly}
