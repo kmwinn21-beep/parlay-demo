@@ -1564,6 +1564,8 @@ function RepDetailPanel({
   totalIcp,
   onClose,
   conferenceId,
+  conferenceName,
+  conferenceStartDate,
   targetMap,
   onToggleTargetWithTier,
   readOnly,
@@ -1572,10 +1574,15 @@ function RepDetailPanel({
   totalIcp: number;
   onClose: () => void;
   conferenceId: number;
+  conferenceName: string;
+  conferenceStartDate: string | null;
   targetMap: Map<number, TargetEntry>;
   onToggleTargetWithTier: (entry: Omit<TargetEntry, 'tier'>, tier: string) => Promise<void>;
   readOnly?: boolean;
 }) {
+  // Matches the Conference Details page header's own name+year construction
+  // (app/conferences/[id]/page.tsx) so this reads the same way everywhere.
+  const conferenceLabel = `${conferenceName}${conferenceStartDate ? ` - ${new Date(conferenceStartDate).getUTCFullYear()}` : ''}`;
   const pct = totalIcp > 0 ? Math.round((rep.count / totalIcp) * 100) : 0;
   const avgCostPerUnit = useAvgCostPerUnit();
   const targetingCompilation = useTargetingCompilation(conferenceId);
@@ -1611,16 +1618,19 @@ function RepDetailPanel({
   );
 
   return (
-    <div className="fixed inset-x-0 bottom-0 top-[var(--pcr-header-h,0px)] z-50 rounded-t-2xl sm:absolute sm:inset-0 sm:top-0 sm:z-10 sm:rounded-xl flex flex-col border border-gray-200 bg-white shadow-2xl overflow-hidden drawer-mobile-responsive">
+    <div className="drawer-mobile-responsive fixed inset-x-0 bottom-0 top-[var(--pcr-header-h,0px)] rounded-t-2xl sm:inset-x-auto sm:inset-y-0 sm:left-auto sm:right-0 sm:w-[480px] sm:rounded-tl-2xl sm:rounded-bl-2xl sm:rounded-tr-none z-[60] flex flex-col border border-gray-200 bg-white shadow-2xl overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-gray-100 bg-gray-50 flex-shrink-0">
-        <span
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium truncate"
-          style={{ backgroundColor: hexAlpha(rep.color, 0.12), color: rep.color, border: `1px solid ${hexAlpha(rep.color, 0.3)}` }}
-        >
-          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: rep.color }} />
-          <span className="truncate">{rep.name}</span>
-        </span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium flex-shrink-0"
+            style={{ backgroundColor: hexAlpha(rep.color, 0.12), color: rep.color, border: `1px solid ${hexAlpha(rep.color, 0.3)}` }}
+          >
+            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: rep.color }} />
+            <span className="truncate">{rep.name}</span>
+          </span>
+          <span className="text-xs text-gray-500 truncate">Prospects Attending {conferenceLabel}</span>
+        </div>
         <button
           onClick={onClose}
           className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
@@ -2154,6 +2164,7 @@ export function LandscapeTab({
   meetingAttendeeIds,
   conferenceId,
   conferenceName,
+  conferenceStartDate,
   byRep,
   icpCompanies,
   relationships,
@@ -2169,6 +2180,7 @@ export function LandscapeTab({
   meetingAttendeeIds: Set<number>;
   conferenceId: number;
   conferenceName: string;
+  conferenceStartDate: string | null;
   byRep: ByRepEntry[];
   icpCompanies: IcpCompany[];
   relationships: RelationshipRow[];
@@ -2223,9 +2235,10 @@ export function LandscapeTab({
           />
           {selectedRep && (
             <>
-              {/* Backdrop — mobile bottom-sheet only; desktop stays a contained overlay with no backdrop */}
+              {/* Backdrop — full drawer now slides in from the screen's right
+                  edge on desktop too, so it gets a backdrop at every breakpoint. */}
               <div
-                className="fixed inset-0 z-40 bg-black/30 sm:hidden"
+                className="fixed inset-0 z-[55] bg-black/30"
                 onClick={() => setSelectedRep(null)}
               />
               <RepDetailPanel
@@ -2233,6 +2246,8 @@ export function LandscapeTab({
                 totalIcp={icpCompanies.length}
                 onClose={() => setSelectedRep(null)}
                 conferenceId={conferenceId}
+                conferenceName={conferenceName}
+                conferenceStartDate={conferenceStartDate}
                 targetMap={targetMap}
                 onToggleTargetWithTier={onToggleTargetWithTier}
                 readOnly={readOnly}
