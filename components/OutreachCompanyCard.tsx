@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
-import { getBadgeClass, getHex } from '@/lib/colors';
+import { getBadgeClass, getHex, getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import { useUserOptions } from '@/lib/useUserOptions';
@@ -268,11 +269,24 @@ export function OutreachCompanyCard({
     return () => document.removeEventListener('mousedown', h);
   }, [headerMenuOpen]);
 
+  // Portaled to document.body (fixed-positioned from the trigger button's rect,
+  // like ActivityNotePopover above) rather than absolutely positioned within the
+  // row — the card list clips overflow, which was cutting this menu off when the
+  // row was near the bottom of the card.
   const [mobileAttendeeMenuKey, setMobileAttendeeMenuKey] = useState<number | null>(null);
+  const [mobileMenuPos, setMobileMenuPos] = useState<{ top: number; left: number } | null>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const mobileMenuTriggerRefs = useRef<Record<number, HTMLButtonElement | null>>({});
   useEffect(() => {
     if (mobileAttendeeMenuKey == null) return;
-    const h = (e: MouseEvent) => { if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target as Node)) setMobileAttendeeMenuKey(null); };
+    const h = (e: MouseEvent) => {
+      const target = e.target as Node;
+      const trigger = mobileMenuTriggerRefs.current[mobileAttendeeMenuKey];
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(target) && trigger && !trigger.contains(target)) {
+        setMobileAttendeeMenuKey(null);
+        setMobileMenuPos(null);
+      }
+    };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, [mobileAttendeeMenuKey]);
@@ -405,20 +419,32 @@ export function OutreachCompanyCard({
     }
   };
 
-  const assigneePill = (
+  // Same user-icon + initials pill format as the SF Owner column in
+  // components/CompanyTable.tsx — one small pill per assignee, colored via the
+  // 'user' config category's preset, rather than one pill listing every name.
+  const assigneePill = company.assignees.length > 0 ? (
+    <span className="inline-flex items-center gap-1 flex-shrink-0">
+      {company.assignees.map(a => (
+        <span
+          key={a.userId}
+          title={a.displayName}
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[a.displayName]).badgeClass}`}
+        >
+          <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          {a.initials}
+        </span>
+      ))}
+    </span>
+  ) : (
     <button
       type="button"
-      onClick={e => { e.stopPropagation(); if (company.assignees.length === 0) onOpenAssign(); }}
-      title={company.assignees.length === 0 ? 'Assign reps' : company.assignees.map(a => a.displayName).join(', ')}
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 truncate max-w-[220px] ${
-        company.assignees.length > 0
-          ? 'bg-blue-50 text-blue-600 border border-blue-300'
-          : 'bg-gray-100 text-gray-500 border border-gray-200 cursor-pointer hover:bg-gray-200'
-      }`}
+      onClick={e => { e.stopPropagation(); onOpenAssign(); }}
+      title="Assign reps"
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 bg-gray-100 text-gray-500 border border-gray-200 cursor-pointer hover:bg-gray-200"
     >
-      {company.assignees.length > 0
-        ? company.assignees.map(a => a.displayName).join(', ')
-        : 'Unassigned'}
+      Unassigned
     </button>
   );
 
@@ -433,6 +459,7 @@ export function OutreachCompanyCard({
 
   const badgesRow = (
     <>
+      {assigneePill}
       {company.companyType && (
         <span className={getBadgeClass(company.companyType, colorMaps.company_type || {})}>{company.companyType}</span>
       )}
@@ -460,7 +487,6 @@ export function OutreachCompanyCard({
           </span>
         )
       )}
-      {assigneePill}
       {territoryPill}
     </>
   );
@@ -515,7 +541,7 @@ export function OutreachCompanyCard({
       <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
       </svg>
-      <span className="text-sm font-bold text-gray-800 truncate">{company.companyName}</span>
+      <span className="text-sm font-semibold text-gray-800 truncate">{company.companyName}</span>
     </>
   );
 
@@ -523,18 +549,22 @@ export function OutreachCompanyCard({
     <div className="border border-gray-200 rounded-xl bg-white overflow-hidden hover:border-gray-300 transition-colors">
       {/* Collapsed row */}
       {isDesktop ? (
-        <div className="flex items-center gap-3 px-4 py-3">
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => setExpanded(v => !v)}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setExpanded(v => !v); }}
-            className="flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer"
-          >
-            {expandToggle}
-            {badgesRow}
+        <div className="flex items-start gap-3 px-4 py-3">
+          <div className="flex-1 min-w-0">
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setExpanded(v => !v)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setExpanded(v => !v); }}
+              className="flex items-center gap-2 min-w-0 text-left cursor-pointer"
+            >
+              {expandToggle}
+            </div>
+            <div className="flex items-center gap-2 flex-wrap mt-1.5 pl-6">
+              {badgesRow}
+            </div>
           </div>
-          <div className="flex items-center gap-4 flex-shrink-0">
+          <div className="flex items-center gap-4 flex-shrink-0 mt-0.5">
             {headerIcons}
           </div>
         </div>
@@ -748,21 +778,44 @@ export function OutreachCompanyCard({
                     {extraIconsBlock}
                   </>
                 ) : (
-                  <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()} ref={mobileMenuOpen ? mobileMenuRef : undefined}>
+                  <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
                     <button
                       type="button"
-                      onClick={() => setMobileAttendeeMenuKey(k => (k === attendee.attendeeId ? null : attendee.attendeeId))}
+                      ref={el => { mobileMenuTriggerRefs.current[attendee.attendeeId] = el; }}
+                      onClick={() => {
+                        if (mobileAttendeeMenuKey === attendee.attendeeId) {
+                          setMobileAttendeeMenuKey(null);
+                          setMobileMenuPos(null);
+                          return;
+                        }
+                        const btn = mobileMenuTriggerRefs.current[attendee.attendeeId];
+                        if (btn) {
+                          const rect = btn.getBoundingClientRect();
+                          const width = 220;
+                          setMobileMenuPos({
+                            top: rect.bottom + 4,
+                            left: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)),
+                          });
+                        }
+                        setMobileAttendeeMenuKey(attendee.attendeeId);
+                      }}
                       title="More options"
                       className="w-7 h-7 rounded-full bg-gray-50 text-gray-400 hover:bg-gray-100 flex items-center justify-center transition-colors"
                     >
                       <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.75" /><circle cx="12" cy="12" r="1.75" /><circle cx="12" cy="19" r="1.75" /></svg>
                     </button>
-                    {mobileMenuOpen && (
-                      <div className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-100 p-2 z-20 flex items-center gap-3 flex-wrap max-w-[220px]">
+                    {mobileMenuOpen && mobileMenuPos && createPortal(
+                      <div
+                        ref={mobileMenuRef}
+                        style={{ position: 'fixed', top: mobileMenuPos.top, left: mobileMenuPos.left, width: 220, zIndex: 10000 }}
+                        className="bg-white rounded-lg shadow-lg border border-gray-100 p-2 flex items-center gap-3 flex-wrap"
+                        onClick={e => e.stopPropagation()}
+                      >
                         {meetingIconBlock}
                         {activityIconsBlock}
                         {extraIconsBlock}
-                      </div>
+                      </div>,
+                      document.body
                     )}
                   </div>
                 )}
