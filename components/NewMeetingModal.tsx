@@ -10,6 +10,7 @@ import { useHideBottomNav } from './BottomNavContext';
 import { type Meeting } from '@/components/MeetingsTable';
 import { useUser } from '@/components/UserContext';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
+import { AdditionalAttendeesSelect, type AdditionalAttendeeCandidate } from '@/components/AdditionalAttendeesSelect';
 import { SendCalendarInvitePrompt } from '@/components/SendCalendarInvitePrompt';
 import { buildGoogleCalendarUrl, buildOutlookCalendarUrl } from '@/lib/calendarInvite';
 
@@ -237,7 +238,7 @@ export function NewMeetingModal({
   const [meetingType, setMeetingType] = useState('');
   const [meetingTypeOptions, setMeetingTypeOptions] = useState<string[]>([]);
   const [location, setLocation] = useState('');
-  const [additionalAttendees, setAdditionalAttendees] = useState('');
+  const [additionalAttendees, setAdditionalAttendees] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [companyTypeLookup, setCompanyTypeLookup] = useState<Map<number, string | null>>(new Map());
   const [showFullCalendar, setShowFullCalendar] = useState(false);
@@ -364,6 +365,27 @@ export function NewMeetingModal({
       .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`));
   }, [attendees, selectedCompanyId]);
 
+  // Search candidates for "Additional Attendees" — every conference attendee
+  // (searchable by name + company) plus every internal team member from the
+  // 'user' config category (Admin → Types → Users), minus whoever's already
+  // picked as the meeting's primary contact.
+  const additionalAttendeeCandidates = useMemo<AdditionalAttendeeCandidate[]>(() => {
+    const primaryId = selectedAttendeeId ? Number(selectedAttendeeId) : null;
+    const attendeeCandidates = attendees
+      .filter(a => a.id !== primaryId)
+      .map(a => ({
+        key: `a-${a.id}`,
+        name: `${a.first_name} ${a.last_name}`.trim(),
+        sub: a.company_name || '',
+      }));
+    const userCandidates = userOptions.map(u => ({
+      key: `u-${u.id}`,
+      name: u.value,
+      sub: 'Internal team',
+    }));
+    return [...attendeeCandidates, ...userCandidates];
+  }, [attendees, userOptions, selectedAttendeeId]);
+
   // Conference date chips
   const selectedConference = conferences.find(c => c.id === Number(selectedConferenceId));
   const conferenceDates: string[] = useMemo(() => {
@@ -415,7 +437,7 @@ export function NewMeetingModal({
     setMeetingTime('');
     setMeetingType('');
     setLocation('');
-    setAdditionalAttendees('');
+    setAdditionalAttendees([]);
     setShowFullCalendar(false);
     setConferenceMeetings([]);
     setCollapsedDays(new Set());
@@ -444,7 +466,7 @@ export function NewMeetingModal({
           meeting_type: meetingType || null,
           location: location || null,
           scheduled_by: selectedRepIds.length > 0 ? selectedRepIds.join(',') : null,
-          additional_attendees: additionalAttendees || null,
+          additional_attendees: additionalAttendees.length > 0 ? additionalAttendees.join(', ') : null,
         }),
       });
       if (!res.ok) {
@@ -466,7 +488,7 @@ export function NewMeetingModal({
           meeting_type: meetingType || null,
           location: location || null,
           scheduled_by: selectedRepIds.length > 0 ? selectedRepIds.join(',') : null,
-          additional_attendees: additionalAttendees || null,
+          additional_attendees: additionalAttendees.length > 0 ? additionalAttendees.join(', ') : null,
           outcome: created.outcome || 'Scheduled',
           created_at: created.created_at || new Date().toISOString(),
           first_name: contact?.first_name || '',
@@ -550,20 +572,28 @@ export function NewMeetingModal({
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 py-6">
       <div className={`relative bg-white rounded-xl shadow-2xl border border-brand-highlight w-full mx-4 max-h-[90vh] min-h-0 flex flex-col transition-all duration-200 overflow-hidden ${hasSidebar ? 'max-w-4xl' : 'max-w-lg'}`}>
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 px-6 py-3 border-b border-gray-200 shrink-0">
-          <h2 className="text-lg font-semibold text-brand-primary font-serif flex-1 min-w-0 truncate">Schedule New Meeting</h2>
-          <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Header — mobile stacks the title above full-width Cancel/Schedule
+            buttons; sm+ keeps the original single-row layout. */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-3 px-4 sm:px-6 py-3 border-b border-gray-200 shrink-0">
+          <div className="flex items-center justify-between gap-3 sm:flex-1 sm:min-w-0">
+            <h2 className="text-lg font-semibold text-brand-primary font-serif min-w-0 truncate">Schedule New Meeting</h2>
+            <button type="button" onClick={handleClose} className="sm:hidden text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0" aria-label="Close">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="flex items-center gap-3 sm:gap-2 sm:flex-shrink-0">
             <button type="button" onClick={handleClose}
-              className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+              className="flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 text-sm sm:text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
               Cancel
             </button>
             <button type="submit" onClick={handleSubmit}
               disabled={submitting || !selectedAttendeeId || !selectedConferenceId || !meetingDate || !meetingTime || !!user?.demoVisitor}
-              className="px-3 py-1.5 text-xs font-semibold text-white bg-brand-secondary rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              className="flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 text-sm sm:text-xs font-semibold text-white bg-brand-secondary rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               {submitting ? 'Scheduling...' : 'Schedule Meeting'}
             </button>
-            <button type="button" onClick={handleClose} className="text-gray-400 hover:text-gray-600 transition-colors" aria-label="Close">
+            <button type="button" onClick={handleClose} className="hidden sm:inline-flex text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0" aria-label="Close">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -576,7 +606,7 @@ export function NewMeetingModal({
           {/* Form */}
           <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-4 space-y-4 min-w-0 min-h-0">
             {/* Rep + Conference */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>Rep</label>
                 <RepMultiSelect
@@ -671,7 +701,7 @@ export function NewMeetingModal({
             </div>
 
             {/* Time + Meeting Type */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className={labelClass} style={{ marginBottom: 0 }}>Time *</label>
@@ -732,14 +762,19 @@ export function NewMeetingModal({
             )}
 
             {/* Meeting Location + Additional Attendees */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>Meeting Location</label>
                 <input type="text" className={inputClass} value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Room 201, Lobby Bar" />
               </div>
               <div>
                 <label className={labelClass}>Additional Attendees</label>
-                <input type="text" className={inputClass} value={additionalAttendees} onChange={e => setAdditionalAttendees(e.target.value)} placeholder="Comma-separated names" />
+                <AdditionalAttendeesSelect
+                  candidates={additionalAttendeeCandidates}
+                  selected={additionalAttendees}
+                  onChange={setAdditionalAttendees}
+                  inputClassName={inputClass}
+                />
               </div>
             </div>
           </form>

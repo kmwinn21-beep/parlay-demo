@@ -621,7 +621,12 @@ export function OutreachCompanyCard({
                 <button
                   type="button"
                   title={hasMeeting ? 'Edit scheduled meeting' : 'Schedule meeting'}
-                  onClick={() => (hasMeeting ? setEditingMeetingId(meetingId) : setSchedulingAttendee(attendee))}
+                  onClick={() => {
+                    setMobileAttendeeMenuKey(null);
+                    setMobileMenuPos(null);
+                    if (hasMeeting) setEditingMeetingId(meetingId);
+                    else setSchedulingAttendee(attendee);
+                  }}
                   className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-colors ${
                     hasMeeting
                       ? 'border-green-300 bg-green-50 text-green-600 hover:bg-green-100'
