@@ -43,10 +43,10 @@ const TIER_CONFIG = [
   {
     key: '3',
     label: 'Worth Engaging',
-    activeBg: 'bg-brand-highlight/10',
-    activeBorder: 'border-brand-highlight/40',
-    activeText: 'text-brand-highlight',
-    cardBorder: 'border-brand-highlight/40',
+    activeBg: 'bg-brand-secondary/10',
+    activeBorder: 'border-brand-secondary',
+    activeText: 'text-brand-secondary',
+    cardBorder: 'border-brand-secondary',
     cardBg: 'bg-white',
   },
   {
