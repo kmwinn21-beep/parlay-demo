@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
+import { useUser } from '@/components/UserContext';
 import { OutreachCompanyCard, type OutreachCompany, type OutreachAttendeeFilter } from './OutreachCompanyCard';
 import { OutreachDrawer, type TimelineActivity, type ThreadNote } from './OutreachDrawer';
 import { OutreachAssignModal } from './OutreachAssignModal';
@@ -41,6 +42,8 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
 
   const [assigneeFilter, setAssigneeFilter] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [myOutreachOnly, setMyOutreachOnly] = useState(false);
+  const { user: currentUser } = useUser();
 
   // Holds the most recently logged activity/note so the open OutreachDrawer
   // (a sibling of the card that logged it) can fold it into its timeline/notes
@@ -92,9 +95,10 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
     return companies.filter(c => {
       if (statusFilter && c.status !== statusFilter) return false;
       if (assigneeFilter != null && !c.assignees.some(a => a.userId === assigneeFilter)) return false;
+      if (myOutreachOnly && currentUser?.configId != null && !c.assignees.some(a => a.userId === currentUser.configId)) return false;
       return true;
     });
-  }, [data, statusFilter, assigneeFilter]);
+  }, [data, statusFilter, assigneeFilter, myOutreachOnly, currentUser?.configId]);
 
   const totalCount = data?.companies.length ?? 0;
 
@@ -136,6 +140,19 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
             <option value="">All Statuses</option>
             {STATUS_FILTER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
+          {currentUser?.configId != null && (
+            <button
+              type="button"
+              onClick={() => setMyOutreachOnly(v => !v)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-xs font-semibold transition-colors whitespace-nowrap flex-shrink-0 ${
+                myOutreachOnly
+                  ? 'border-brand-secondary bg-brand-secondary/10 text-brand-secondary'
+                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              My Outreach
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setAssignModalState({ currentAssigneeIds: [] })}
