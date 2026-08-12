@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { db, dbReady } from '@/lib/db';
-import { signToken, authCookieOptions } from '@/lib/auth';
+import { signToken, authCookieOptions, recordUserSession } from '@/lib/auth';
 import { resolvePlanState } from '@/lib/trialState';
 import { sendTrialReminderEmail } from '@/lib/email';
 import { createTenantDb } from '@/lib/tenantDb';
+import { findDbByToken } from '@/lib/getDb';
 import type { Client } from '@libsql/client';
 import { trackEvent, trackSession } from '@/lib/trackEvent';
 
@@ -20,7 +21,12 @@ export async function POST(request: NextRequest) {
 
     await dbReady;
 
-    // Look up account by email to find tenant DB credentials
+    // Look up account by email to find tenant DB credentials — this only
+    // matches the account admin's own email (fast path, no tenant scan
+    // needed). Invited team members' emails don't match accounts.admin_email,
+    // so fall back to searching every tenant DB by email, same pattern
+    // findDbByToken already uses for token-based routes (reset-password,
+    // accept-invite, etc.) that don't have a session to identify the tenant.
     const accountRow = await db.execute({
       sql: `SELECT id, turso_db_url, turso_auth_token FROM accounts WHERE admin_email = ?`,
       args: [email],
@@ -28,6 +34,8 @@ export async function POST(request: NextRequest) {
 
     let tenantClient: Client | null = null;
     let accountId: string | undefined;
+    let userDb: Client;
+    let userRow: Record<string, unknown> | undefined;
 
     if (accountRow.rows[0]?.turso_db_url) {
       accountId = String(accountRow.rows[0].id);
@@ -35,21 +43,26 @@ export async function POST(request: NextRequest) {
         String(accountRow.rows[0].turso_db_url),
         String(accountRow.rows[0].turso_auth_token),
       );
+      userDb = tenantClient;
+      const result = await userDb.execute({
+        sql: 'SELECT id, email, password_hash, role, email_verified, active, first_name FROM users WHERE email = ?',
+        args: [email],
+      });
+      userRow = result.rows[0] as Record<string, unknown> | undefined;
+    } else {
+      const found = await findDbByToken('email', email, 'id, email, password_hash, role, email_verified, active, first_name');
+      userDb = found?.client ?? db;
+      userRow = found?.row;
+      accountId = found?.accountId;
+      if (found && found.client !== db) tenantClient = found.client;
     }
 
-    // Query users from tenant DB (if found) or fall back to master DB (ops users)
-    const userDb: Client = tenantClient ?? db;
-    const result = await userDb.execute({
-      sql: 'SELECT id, email, password_hash, role, email_verified, active, first_name FROM users WHERE email = ?',
-      args: [email],
-    });
-
-    if (result.rows.length === 0) {
+    if (!userRow) {
       await bcrypt.compare(password, '$2a$12$dummyhashtopreventtimingattacks00000000000000000000000');
       return NextResponse.json({ error: 'Invalid email or password.' }, { status: 401 });
     }
 
-    const user = result.rows[0];
+    const user = userRow;
     const valid = await bcrypt.compare(password, String(user.password_hash));
     if (!valid) {
       return NextResponse.json({ error: 'Invalid email or password.' }, { status: 401 });
@@ -72,15 +85,8 @@ export async function POST(request: NextRequest) {
 
     const token = await signToken(sessionUser);
 
-    // Record login session and update last_seen_at (fire-and-forget)
-    userDb.execute({
-      sql: 'INSERT INTO user_sessions (user_id, ip_address, user_agent) VALUES (?, ?, ?)',
-      args: [sessionUser.id, request.headers.get('x-forwarded-for') ?? null, request.headers.get('user-agent') ?? null],
-    }).catch(() => {});
-    userDb.execute({
-      sql: `UPDATE users SET last_seen_at = datetime('now') WHERE id = ?`,
-      args: [sessionUser.id],
-    }).catch(() => {});
+    // Record login session and update last_seen_at (for Admin > Usage).
+    await recordUserSession(userDb, sessionUser.id, request);
 
     // Fire-and-forget: send trial reminder emails if nearing expiry
     let redirectTo: string | undefined;

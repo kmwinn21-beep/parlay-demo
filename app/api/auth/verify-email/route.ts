@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { findDbByToken } from '@/lib/getDb';
-import { signToken, authCookieOptions } from '@/lib/auth';
+import { signToken, authCookieOptions, recordUserSession } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,6 +29,8 @@ export async function POST(request: NextRequest) {
       emailVerified: true,
       accountId: found.accountId,
     });
+
+    await recordUserSession(userDb, Number(user.id), request);
 
     const response = NextResponse.json({ message: 'Email verified. Welcome!' });
     response.cookies.set({ ...authCookieOptions(), value: newToken });

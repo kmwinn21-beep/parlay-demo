@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { db, dbReady } from '@/lib/db';
-import { signToken, authCookieOptions, validatePassword } from '@/lib/auth';
+import { signToken, authCookieOptions, validatePassword, recordUserSession } from '@/lib/auth';
 
 // Setup uses the master DB directly — it runs before any tenant is provisioned.
 async function hasUsers(): Promise<boolean> {
@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
   };
 
   const token = await signToken(sessionUser);
+  await recordUserSession(db, userId, request);
   const response = NextResponse.json({ message: 'Admin account created.' });
   response.cookies.set({ ...authCookieOptions(), value: token });
   return response;

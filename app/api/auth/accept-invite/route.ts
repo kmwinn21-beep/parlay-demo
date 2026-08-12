@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { findDbByToken } from '@/lib/getDb';
-import { signToken, authCookieOptions, validatePassword } from '@/lib/auth';
+import { signToken, authCookieOptions, validatePassword, recordUserSession } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get('token');
@@ -91,6 +91,7 @@ export async function POST(request: NextRequest) {
   };
 
   const sessionToken = await signToken(sessionUser);
+  await recordUserSession(userDb, Number(user.id), request);
   const redirectTo = userRole === 'stakeholder' ? '/calendar-intelligence?tab=decisions' : '/';
   const response = NextResponse.json({
     message: 'Password set. Welcome!',
