@@ -6,26 +6,38 @@ export interface AdditionalAttendeeCandidate {
   key: string;
   name: string;
   sub: string;
+  /** 'user' candidates (from the config_options 'user' category) are internal
+   * team members — the caller routes these into scheduled_by so
+   * MeetingNotetaker shows them as Internal Attendees instead of External. */
+  source: 'attendee' | 'user';
+  id: number;
+}
+
+export interface AdditionalAttendeeSelection {
+  key: string;
+  name: string;
 }
 
 interface AdditionalAttendeesSelectProps {
   candidates: AdditionalAttendeeCandidate[];
-  selected: string[];
-  onChange: (names: string[]) => void;
+  selected: AdditionalAttendeeSelection[];
+  onAdd: (candidate: AdditionalAttendeeCandidate) => void;
+  onRemove: (selection: AdditionalAttendeeSelection) => void;
   inputClassName?: string;
   placeholder?: string;
 }
 
 // Searchable multi-select for the "Additional Attendees" field — matches
 // candidates (conference attendees by name/company, plus config_options'
-// 'user' category) against the typed query, and stores plain display names
-// (comma-joined on submit) to stay compatible with meetings.additional_attendees'
-// existing free-text format, which MeetingNotetaker already reads as a
-// comma-separated name list.
+// 'user' category) against the typed query. The caller decides where each
+// pick is stored (attendee picks go to meetings.additional_attendees'
+// free-text name list; user picks go to scheduled_by) so MeetingNotetaker's
+// existing internal/external split classifies them correctly.
 export function AdditionalAttendeesSelect({
   candidates,
   selected,
-  onChange,
+  onAdd,
+  onRemove,
   inputClassName = '',
   placeholder = 'Search attendees, companies, or users…',
 }: AdditionalAttendeesSelectProps) {
@@ -46,21 +58,17 @@ export function AdditionalAttendeesSelect({
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const selectedSet = new Set(selected);
+  const selectedNames = new Set(selected.map(s => s.name));
   const q = search.trim().toLowerCase();
   const filtered = candidates
-    .filter(c => !selectedSet.has(c.name))
+    .filter(c => !selectedNames.has(c.name))
     .filter(c => !q || c.name.toLowerCase().includes(q) || c.sub.toLowerCase().includes(q))
     .slice(0, 50);
 
-  const addName = (name: string) => {
-    if (!selectedSet.has(name)) onChange([...selected, name]);
+  const handleAdd = (candidate: AdditionalAttendeeCandidate) => {
+    onAdd(candidate);
     setSearch('');
     inputRef.current?.focus();
-  };
-
-  const removeName = (name: string) => {
-    onChange(selected.filter(n => n !== name));
   };
 
   return (
@@ -69,15 +77,15 @@ export function AdditionalAttendeesSelect({
         className={`${inputClassName} flex flex-wrap items-center gap-1 min-h-[38px] h-auto cursor-text`}
         onClick={() => { setOpen(true); inputRef.current?.focus(); }}
       >
-        {selected.map(name => (
+        {selected.map(s => (
           <span
-            key={name}
+            key={s.key}
             className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap"
           >
-            {name}
+            {s.name}
             <button
               type="button"
-              onClick={e => { e.stopPropagation(); removeName(name); }}
+              onClick={e => { e.stopPropagation(); onRemove(s); }}
               className="hover:text-red-500 leading-none"
             >
               <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -109,7 +117,7 @@ export function AdditionalAttendeesSelect({
                 key={c.key}
                 type="button"
                 className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 text-gray-800 flex items-center justify-between gap-2"
-                onClick={() => addName(c.name)}
+                onClick={() => handleAdd(c)}
               >
                 <span className="truncate">{c.name}</span>
                 {c.sub && <span className="text-xs text-gray-400 flex-shrink-0 truncate max-w-[40%]">{c.sub}</span>}

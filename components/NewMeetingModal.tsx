@@ -10,7 +10,7 @@ import { useHideBottomNav } from './BottomNavContext';
 import { type Meeting } from '@/components/MeetingsTable';
 import { useUser } from '@/components/UserContext';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
-import { AdditionalAttendeesSelect, type AdditionalAttendeeCandidate } from '@/components/AdditionalAttendeesSelect';
+import { AdditionalAttendeesSelect, type AdditionalAttendeeCandidate, type AdditionalAttendeeSelection } from '@/components/AdditionalAttendeesSelect';
 import { SendCalendarInvitePrompt } from '@/components/SendCalendarInvitePrompt';
 import { buildGoogleCalendarUrl, buildOutlookCalendarUrl } from '@/lib/calendarInvite';
 
@@ -239,6 +239,12 @@ export function NewMeetingModal({
   const [meetingTypeOptions, setMeetingTypeOptions] = useState<string[]>([]);
   const [location, setLocation] = useState('');
   const [additionalAttendees, setAdditionalAttendees] = useState<string[]>([]);
+  // Internal team members picked from the Additional Attendees field (as
+  // opposed to the Rep field above) — tracked separately and merged into
+  // scheduled_by on submit, so MeetingNotetaker classifies them as Internal
+  // Attendees rather than External (which is what any name here would become
+  // if it went into the additional_attendees free-text list instead).
+  const [additionalInternalUserIds, setAdditionalInternalUserIds] = useState<number[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [companyTypeLookup, setCompanyTypeLookup] = useState<Map<number, string | null>>(new Map());
   const [showFullCalendar, setShowFullCalendar] = useState(false);
@@ -368,23 +374,60 @@ export function NewMeetingModal({
   // Search candidates for "Additional Attendees" — every conference attendee
   // (searchable by name + company) plus every internal team member from the
   // 'user' config category (Admin → Types → Users), minus whoever's already
-  // picked as the meeting's primary contact.
+  // picked as the meeting's primary contact or already selected as a Rep
+  // above (picking a 'user' candidate here routes into scheduled_by, same as
+  // the Rep field, so it would just be a confusing duplicate).
   const additionalAttendeeCandidates = useMemo<AdditionalAttendeeCandidate[]>(() => {
     const primaryId = selectedAttendeeId ? Number(selectedAttendeeId) : null;
-    const attendeeCandidates = attendees
+    const attendeeCandidates: AdditionalAttendeeCandidate[] = attendees
       .filter(a => a.id !== primaryId)
       .map(a => ({
         key: `a-${a.id}`,
         name: `${a.first_name} ${a.last_name}`.trim(),
         sub: a.company_name || '',
+        source: 'attendee',
+        id: a.id,
       }));
-    const userCandidates = userOptions.map(u => ({
-      key: `u-${u.id}`,
-      name: u.value,
-      sub: 'Internal team',
-    }));
+    const userCandidates: AdditionalAttendeeCandidate[] = userOptions
+      .filter(u => !selectedRepIds.includes(u.id) && !additionalInternalUserIds.includes(u.id))
+      .map(u => ({
+        key: `u-${u.id}`,
+        name: u.value,
+        sub: 'Internal team',
+        source: 'user',
+        id: u.id,
+      }));
     return [...attendeeCandidates, ...userCandidates];
-  }, [attendees, userOptions, selectedAttendeeId]);
+  }, [attendees, userOptions, selectedAttendeeId, selectedRepIds, additionalInternalUserIds]);
+
+  // Chips shown in the Additional Attendees field — external names plus the
+  // display names of internal users picked through this field specifically
+  // (not the Rep field's own selection, which has its own chip row above).
+  const additionalAttendeeSelections = useMemo<AdditionalAttendeeSelection[]>(() => {
+    const internal = additionalInternalUserIds
+      .map(id => userOptions.find(u => u.id === id))
+      .filter((u): u is UserOption => !!u)
+      .map(u => ({ key: `u-${u.id}`, name: u.value }));
+    const external = additionalAttendees.map(name => ({ key: `ext-${name}`, name }));
+    return [...internal, ...external];
+  }, [additionalInternalUserIds, additionalAttendees, userOptions]);
+
+  const handleAddAdditionalAttendee = (candidate: AdditionalAttendeeCandidate) => {
+    if (candidate.source === 'user') {
+      setAdditionalInternalUserIds(prev => prev.includes(candidate.id) ? prev : [...prev, candidate.id]);
+    } else {
+      setAdditionalAttendees(prev => prev.includes(candidate.name) ? prev : [...prev, candidate.name]);
+    }
+  };
+
+  const handleRemoveAdditionalAttendee = (selection: AdditionalAttendeeSelection) => {
+    if (selection.key.startsWith('u-')) {
+      const id = Number(selection.key.slice(2));
+      setAdditionalInternalUserIds(prev => prev.filter(x => x !== id));
+    } else {
+      setAdditionalAttendees(prev => prev.filter(n => n !== selection.name));
+    }
+  };
 
   // Conference date chips
   const selectedConference = conferences.find(c => c.id === Number(selectedConferenceId));
@@ -438,6 +481,7 @@ export function NewMeetingModal({
     setMeetingType('');
     setLocation('');
     setAdditionalAttendees([]);
+    setAdditionalInternalUserIds([]);
     setShowFullCalendar(false);
     setConferenceMeetings([]);
     setCollapsedDays(new Set());
@@ -454,6 +498,7 @@ export function NewMeetingModal({
       return;
     }
     setSubmitting(true);
+    const scheduledByIds = Array.from(new Set([...selectedRepIds, ...additionalInternalUserIds]));
     try {
       const res = await fetch('/api/meetings', {
         method: 'POST',
@@ -465,7 +510,7 @@ export function NewMeetingModal({
           meeting_time: meetingTime,
           meeting_type: meetingType || null,
           location: location || null,
-          scheduled_by: selectedRepIds.length > 0 ? selectedRepIds.join(',') : null,
+          scheduled_by: scheduledByIds.length > 0 ? scheduledByIds.join(',') : null,
           additional_attendees: additionalAttendees.length > 0 ? additionalAttendees.join(', ') : null,
         }),
       });
@@ -487,7 +532,7 @@ export function NewMeetingModal({
           meeting_time: meetingTime,
           meeting_type: meetingType || null,
           location: location || null,
-          scheduled_by: selectedRepIds.length > 0 ? selectedRepIds.join(',') : null,
+          scheduled_by: scheduledByIds.length > 0 ? scheduledByIds.join(',') : null,
           additional_attendees: additionalAttendees.length > 0 ? additionalAttendees.join(', ') : null,
           outcome: created.outcome || 'Scheduled',
           created_at: created.created_at || new Date().toISOString(),
@@ -771,8 +816,9 @@ export function NewMeetingModal({
                 <label className={labelClass}>Additional Attendees</label>
                 <AdditionalAttendeesSelect
                   candidates={additionalAttendeeCandidates}
-                  selected={additionalAttendees}
-                  onChange={setAdditionalAttendees}
+                  selected={additionalAttendeeSelections}
+                  onAdd={handleAddAdditionalAttendee}
+                  onRemove={handleRemoveAdditionalAttendee}
                   inputClassName={inputClass}
                 />
               </div>
