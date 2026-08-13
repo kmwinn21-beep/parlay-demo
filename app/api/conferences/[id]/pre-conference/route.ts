@@ -66,7 +66,8 @@ export async function GET(
                    a.company_id, a.products, a."function",
                    c.name as company_name, c.company_type, c.icp, c.wse,
                    c.profit_type, c.entity_structure, c.services, c.website,
-                   c.status as company_status, c.assigned_user as company_assigned_user
+                   c.status as company_status, c.assigned_user as company_assigned_user,
+                   c.territory_id as company_territory_id
             FROM attendees a
             JOIN conference_attendees ca ON a.id = ca.attendee_id AND ca.conference_id = ?
             LEFT JOIN companies c ON a.company_id = c.id
@@ -147,7 +148,7 @@ export async function GET(
 
   const attendeeIds = attendees.map((a) => a.id);
 
-  const [internalRelsRes, companyNotesRes, attendeeConfsRes, detailsRes, allUserOptsRes, relStatusOptsRes, socialRsvpsRes, xMeetingsRes, xFollowUpsRes, xSocialRes, xNotesRes, unitTypeRes, clientStatusRes, seniorityOptsRes, competitorColorRes, brandPrimaryRes] = await Promise.all([
+  const [internalRelsRes, companyNotesRes, attendeeConfsRes, detailsRes, allUserOptsRes, relStatusOptsRes, socialRsvpsRes, xMeetingsRes, xFollowUpsRes, xSocialRes, xNotesRes, unitTypeRes, clientStatusRes, seniorityOptsRes, competitorColorRes, brandPrimaryRes, openOppStatusRes, brandSecondaryRes, territoriesRes] = await Promise.all([
     companyIds.length > 0
       ? db.execute({
           sql: `SELECT id, company_id, rep_ids, contact_ids, relationship_status, description
@@ -253,6 +254,11 @@ export async function GET(
     db.execute({ sql: `SELECT id, value FROM config_options WHERE category = 'seniority'`, args: [] }),
     db.execute({ sql: `SELECT color FROM config_options WHERE category = 'company_type' AND LOWER(TRIM(value)) = 'competitor' LIMIT 1`, args: [] }),
     db.execute({ sql: `SELECT value FROM site_settings WHERE key = 'brand_dark_blue' LIMIT 1`, args: [] }).catch(() => ({ rows: [] })),
+    // Seeded system status (see db-migrations). Matched by status_key so a
+    // colour change or future relabel can't break the Open Opps panel.
+    db.execute({ sql: `SELECT value FROM config_options WHERE category = 'status' AND (status_key = 'open_opportunity' OR LOWER(TRIM(value)) = 'open opportunity') LIMIT 1`, args: [] }).catch(() => ({ rows: [] })),
+    db.execute({ sql: `SELECT value FROM site_settings WHERE key = 'brand_bright_blue' LIMIT 1`, args: [] }).catch(() => ({ rows: [] })),
+    db.execute({ sql: `SELECT id, name, color FROM sales_territories`, args: [] }).catch(() => ({ rows: [] })),
   ]);
 
   const internalRels = internalRelsRes.rows;
@@ -458,60 +464,84 @@ export async function GET(
   const unitTypeLabel = unitTypeRes.rows[0]?.value ? String(unitTypeRes.rows[0].value) : 'Units';
   const customerTypeLabel = clientStatusRes.rows[0]?.value ? String(clientStatusRes.rows[0].value).toLowerCase().trim() : 'customer';
 
-  const clientCompanyMap = new Map<number, { companyId: number; companyName: string; wse: number | null; attendees: { id: number; firstName: string; lastName: string; title: string | null }[] }>();
-  for (const a of attendees) {
-    const companyId = a.company_id as number | null;
-    if (!companyId) continue;
-    if (String(a.company_type || '').trim().toLowerCase() !== customerTypeLabel) continue;
-    if (!clientCompanyMap.has(companyId)) {
-      clientCompanyMap.set(companyId, {
-        companyId,
-        companyName: String(a.company_name || ''),
-        wse: a.wse != null ? Number(a.wse) : null,
-        attendees: [],
+  // Territory lookup for the company-card header pills.
+  const territoryMap = new Map<number, { name: string; color: string }>();
+  for (const t of territoriesRes.rows) {
+    territoryMap.set(Number(t.id), { name: String(t.name ?? ''), color: String(t.color ?? '#185FA5') });
+  }
+
+  // Clients, competitors and open opportunities are the same shape — companies
+  // attending, each with the attendees who are attending — differing only in the
+  // predicate. Each entry also carries the metadata the card's expanded header
+  // row renders as pills (rep initials, territory, type, status, value).
+  type LandscapeCompany = {
+    companyId: number; companyName: string; wse: number | null;
+    companyType: string | null; companyStatus: string | null;
+    assignedUserNames: string[];
+    territoryName: string | null; territoryColor: string | null;
+    attendees: { id: number; firstName: string; lastName: string; title: string | null }[];
+  };
+
+  const buildCompanyGroup = (matches: (a: Record<string, unknown>) => boolean) => {
+    const map = new Map<number, LandscapeCompany>();
+    for (const a of attendees) {
+      const companyId = a.company_id as number | null;
+      if (!companyId) continue;
+      if (!matches(a as Record<string, unknown>)) continue;
+      if (!map.has(companyId)) {
+        const territory = a.company_territory_id != null
+          ? territoryMap.get(Number(a.company_territory_id)) ?? null
+          : null;
+        map.set(companyId, {
+          companyId,
+          companyName: String(a.company_name || ''),
+          wse: a.wse != null ? Number(a.wse) : null,
+          companyType: a.company_type ? String(a.company_type) : null,
+          companyStatus: a.company_status ? String(a.company_status) : null,
+          assignedUserNames: resolveIdList(a.company_assigned_user, userNameMap)
+            ? String(resolveIdList(a.company_assigned_user, userNameMap)).split(',').map(v => v.trim()).filter(Boolean)
+            : [],
+          territoryName: territory?.name ?? null,
+          territoryColor: territory?.color ?? null,
+          attendees: [],
+        });
+      }
+      map.get(companyId)!.attendees.push({
+        id: Number(a.id),
+        firstName: String(a.first_name || ''),
+        lastName: String(a.last_name || ''),
+        title: a.title ? String(a.title) : null,
       });
     }
-    clientCompanyMap.get(companyId)!.attendees.push({
-      id: Number(a.id),
-      firstName: String(a.first_name || ''),
-      lastName: String(a.last_name || ''),
-      title: a.title ? String(a.title) : null,
-    });
-  }
-  const clientCompanies = Array.from(clientCompanyMap.values())
-    .sort((a, b) => b.attendees.length - a.attendees.length || a.companyName.localeCompare(b.companyName))
-    .map(co => ({ ...co, attendeeCount: co.attendees.length }));
+    return Array.from(map.values())
+      .sort((x, y) => y.attendees.length - x.attendees.length || x.companyName.localeCompare(y.companyName))
+      .map(co => ({ ...co, attendeeCount: co.attendees.length }));
+  };
+
+  const clientCompanies = buildCompanyGroup(a =>
+    String(a.company_type || '').trim().toLowerCase() === customerTypeLabel);
 
   // Client color: brand Primary #1 (brand_dark_blue) from site_settings, fallback to default
   const clientColor: string = brandPrimaryRes.rows[0]?.value
     ? String(brandPrimaryRes.rows[0].value)
     : '#0B3C62';
 
-  // Competitor companies
   const competitorColor: string | null = competitorColorRes.rows[0]?.color ? String(competitorColorRes.rows[0].color) : null;
-  const competitorCompanyMap = new Map<number, { companyId: number; companyName: string; wse: number | null; attendees: { id: number; firstName: string; lastName: string; title: string | null }[] }>();
-  for (const a of attendees) {
-    const companyId = a.company_id as number | null;
-    if (!companyId) continue;
-    if (String(a.company_type || '').trim().toLowerCase() !== 'competitor') continue;
-    if (!competitorCompanyMap.has(companyId)) {
-      competitorCompanyMap.set(companyId, {
-        companyId,
-        companyName: String(a.company_name || ''),
-        wse: a.wse != null ? Number(a.wse) : null,
-        attendees: [],
-      });
-    }
-    competitorCompanyMap.get(companyId)!.attendees.push({
-      id: Number(a.id),
-      firstName: String(a.first_name || ''),
-      lastName: String(a.last_name || ''),
-      title: a.title ? String(a.title) : null,
-    });
-  }
-  const competitorCompanies = Array.from(competitorCompanyMap.values())
-    .sort((a, b) => b.attendees.length - a.attendees.length || a.companyName.localeCompare(b.companyName))
-    .map(co => ({ ...co, attendeeCount: co.attendees.length }));
+  const competitorCompanies = buildCompanyGroup(a =>
+    String(a.company_type || '').trim().toLowerCase() === 'competitor');
+
+  // Open opportunities key off the ATTENDEE's status rather than company type.
+  // attendees.status holds a comma-separated list of labels, so match per entry.
+  const openOppLabel = openOppStatusRes.rows[0]?.value
+    ? String(openOppStatusRes.rows[0].value).toLowerCase().trim()
+    : 'open opportunity';
+  const openOppCompanies = buildCompanyGroup(a =>
+    String(a.status ?? '').split(',').map(v => v.trim().toLowerCase()).filter(Boolean).includes(openOppLabel));
+
+  // Open Opps accent: brand Primary #2 (brand_bright_blue).
+  const openOppColor: string = brandSecondaryRes.rows[0]?.value
+    ? String(brandSecondaryRes.rows[0].value)
+    : '#3A506B';
 
   const landscape = {
     totalAttendees, totalCompanies, icpCount, wseCount: wseCompanyIds.size,
@@ -519,8 +549,10 @@ export async function GET(
     seniorityBreakdown: Object.entries(seniorityCount).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
     clientCompanies,
     competitorCompanies,
+    openOppCompanies,
     clientColor,
     competitorColor,
+    openOppColor,
     unitTypeLabel,
   };
 

@@ -17,7 +17,7 @@ import { useUser } from '@/components/UserContext';
 import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
 import { NewMeetingModal } from '@/components/NewMeetingModal';
 import { useConfigColors } from '@/lib/useConfigColors';
-import { getPillClass, getBadgeClass, getPreset } from '@/lib/colors';
+import { getPillClass, getBadgeClass, getPreset, formatStatusLabel} from '@/lib/colors';
 import { useUserOptions, resolveRepInitials, getRepInitials } from '@/lib/useUserOptions';
 import { InternalRelationshipsSection } from '@/components/InternalRelationshipsSection';
 import { TouchpointsSection } from '@/components/TouchpointsSection';
@@ -939,7 +939,7 @@ export default function AttendeeDetailPage() {
                           <span key={f} className={`badge ${getPillClass(f, colorMaps.function || {})}`}>{f}</span>
                         ))}
                         {currentStatuses.size > 0 ? Array.from(currentStatuses).map(s => (
-                          <span key={s} className={`badge ${getPillClass(s, colorMaps.status || {})}`}>{s}</span>
+                          <span key={s} className={`badge ${getPillClass(s, colorMaps.status || {})}`}>{formatStatusLabel(s)}</span>
                         )) : <span className="text-sm text-gray-400">—</span>}
                         {attendee.company_type && <span className={getBadgeClass(attendee.company_type, colorMaps.company_type || {})}>{attendee.company_type}</span>}
                         {/* LinkedIn icon */}

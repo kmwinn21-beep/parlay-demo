@@ -155,3 +155,14 @@ export function getHex(value: string | undefined, colorMap: ColorMap): string {
   if (value === 'Competitor') return RED_PRESET.hex;
   return getPreset(colorMap[value]).hex;
 }
+
+/**
+ * Display label for a status badge. "Open Opportunity" is a seeded system
+ * status whose full name crowds narrow table cells, so it renders abbreviated
+ * wherever it appears as a pill. Status *pickers* keep the full name — that is
+ * where the label has to stay unambiguous.
+ */
+export function formatStatusLabel(value: string | null | undefined): string {
+  const v = String(value ?? '');
+  return v.trim().toLowerCase() === 'open opportunity' ? 'Open Opp' : v;
+}

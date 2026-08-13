@@ -2072,4 +2072,10 @@ export const migrations: string[] = [
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )`,
   `CREATE INDEX IF NOT EXISTS idx_outreach_note_comments_note_id ON outreach_note_comments(note_id)`,
+  // "Open Opportunity" status: seeded and system-locked so the Landscape tab's
+  // Open Opps panel has a stable label to match on. is_system keeps the name
+  // and delete action locked in Admin > Types while leaving the colour editable
+  // (ColorPicker is not gated on is_system).
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, color) VALUES ('status', 'Open Opportunity', 50, 'blue')`,
+  `UPDATE config_options SET is_system = 1, status_key = 'open_opportunity' WHERE category = 'status' AND LOWER(TRIM(value)) = 'open opportunity'`,
 ];

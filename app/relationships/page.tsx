@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { getBadgeClass, getPreset } from '@/lib/colors';
+import { getBadgeClass, getPreset, formatStatusLabel} from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getRepInitials, resolveRepInitials, useConfigWithIds, useUserOptions, parseRepIds } from '@/lib/useUserOptions';
@@ -656,7 +656,7 @@ export default function RelationshipsPage() {
                       <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Status</p>
                       <span className="flex flex-wrap gap-1">
                         {statusValues.map((s) => (
-                          <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>
+                          <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{formatStatusLabel(s)}</span>
                         ))}
                         {statusValues.length === 0 && <span className="text-sm text-gray-400">—</span>}
                       </span>

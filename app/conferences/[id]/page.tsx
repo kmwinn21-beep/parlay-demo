@@ -22,7 +22,7 @@ import { useConfigOptions } from '@/lib/useConfigOptions';
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
 import { CustomColumnCell } from '@/components/CustomColumnCell';
-import { getBadgeClass, getHex, type ColorMap } from '@/lib/colors';
+import { getBadgeClass, getHex, type ColorMap, formatStatusLabel} from '@/lib/colors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { type UserOption, getRepInitials, parseRepIds } from '@/lib/useUserOptions';
 import { ColumnMappingModal } from '@/components/ColumnMappingModal';
@@ -3048,7 +3048,7 @@ export default function ConferenceDetailPage() {
                         </div>
                       )}
                       <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
-                        <span className="flex flex-wrap gap-1">{(attendee.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}{(attendee.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && <span className="text-gray-400">—</span>}</span>
+                        <span className="flex flex-wrap gap-1">{(attendee.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{formatStatusLabel(s)}</span>)}{(attendee.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && <span className="text-gray-400">—</span>}</span>
                         <span className={`${getBadgeClass(seniority, colorMaps.seniority || {})} inline-flex items-center gap-1`}>
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                           {seniority}

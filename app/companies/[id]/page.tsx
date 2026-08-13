@@ -15,7 +15,7 @@ import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { MatchMasterAccountField, type MasterAccountApplyPatch } from '@/components/MatchMasterAccountField';
 import { useConfigColors } from '@/lib/useConfigColors';
-import { getPillClass, getBadgeClass, getPreset } from '@/lib/colors';
+import { getPillClass, getBadgeClass, getPreset, formatStatusLabel} from '@/lib/colors';
 import { effectiveSeniority } from '@/lib/parsers';
 import { evaluateIcpRules, type IcpConfig } from '@/lib/icpRulesEval';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
@@ -1183,13 +1183,13 @@ export default function CompanyDetailPage() {
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Status</p>
                 <span className="flex flex-wrap gap-1">
                   {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => (
-                    <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>
+                    <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{formatStatusLabel(s)}</span>
                   ))}
                   {statusOptionObjects.filter(o => o.scope === 'user').flatMap(opt => {
                     const markers = (company.status_markers || []).filter(m => m.status_option_id === opt.id);
                     return markers.map((m, i) => (
                       <span key={`${opt.id}-${i}`} className={getBadgeClass(opt.value, colorMaps.status || {})}>
-                        {opt.value} - {m.initials}
+                        {formatStatusLabel(opt.value)} - {m.initials}
                       </span>
                     ));
                   })}

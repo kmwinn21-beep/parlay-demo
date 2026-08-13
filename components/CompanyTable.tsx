@@ -12,7 +12,7 @@ import { useDrawerResize } from '@/lib/useDrawerResize';
 import { AddToConferenceModal } from './AddToConferenceModal';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
-import { getBadgeClass, getPreset } from '@/lib/colors';
+import { getBadgeClass, getPreset, formatStatusLabel} from '@/lib/colors';
 import { useUserOptions, parseRepIds, resolveRepInitials, getRepInitials } from '@/lib/useUserOptions';
 import { INLINE_EDIT_FIELD_CLASS, InlineEditCancelButton, InlineEditRow, InlineEditPlaceholder } from '@/components/InlineEditField';
 import { RepMultiSelect } from './RepMultiSelect';
@@ -1009,10 +1009,10 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
               )}
               {/* Row 3: status badges */}
               <div className="mt-1 ml-6 flex items-center flex-wrap gap-1">
-                {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}
+                {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{formatStatusLabel(s)}</span>)}
                 {(company.my_user_status_ids || []).map(optId => {
                   const label = userScopedStatusMap.get(optId);
-                  return label ? <span key={optId} className={getBadgeClass(label, colorMaps.status || {})}>{label}</span> : null;
+                  return label ? <span key={optId} className={getBadgeClass(label, colorMaps.status || {})}>{formatStatusLabel(label)}</span> : null;
                 })}
                 {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && (company.my_user_status_ids || []).length === 0 && <span className="text-gray-400">—</span>}
               </div>
@@ -1262,10 +1262,10 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                         ) : (
                           <button type="button" onClick={() => startInlineEdit(company, 'status')} title="Click to set status">
                             <span className="flex flex-wrap gap-1">
-                              {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}
+                              {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{formatStatusLabel(s)}</span>)}
                               {(company.my_user_status_ids || []).map(optId => {
                                 const label = userScopedStatusMap.get(optId);
-                                return label ? <span key={optId} className={getBadgeClass(label, colorMaps.status || {})}>{label}</span> : null;
+                                return label ? <span key={optId} className={getBadgeClass(label, colorMaps.status || {})}>{formatStatusLabel(label)}</span> : null;
                               })}
                               {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && (company.my_user_status_ids || []).length === 0 && <InlineEditPlaceholder label="Status" />}
                             </span>

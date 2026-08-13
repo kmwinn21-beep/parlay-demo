@@ -39,6 +39,12 @@ export interface ClientCompanyEntry {
   wse: number | null;
   attendeeCount: number;
   attendees: { id: number; firstName: string; lastName: string; title: string | null }[];
+  // Metadata for the card's expanded header pill row.
+  companyType?: string | null;
+  companyStatus?: string | null;
+  assignedUserNames?: string[];
+  territoryName?: string | null;
+  territoryColor?: string | null;
 }
 
 export interface LandscapeData {
@@ -50,8 +56,10 @@ export interface LandscapeData {
   seniorityBreakdown: { label: string; count: number }[];
   clientCompanies: ClientCompanyEntry[];
   competitorCompanies: ClientCompanyEntry[];
+  openOppCompanies: ClientCompanyEntry[];
   clientColor: string;
   competitorColor: string | null;
+  openOppColor: string;
   unitTypeLabel: string;
 }
 
