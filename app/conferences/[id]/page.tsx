@@ -12,6 +12,7 @@ import { MeetingsTable, type Meeting, type EditFormData } from '@/components/Mee
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { PinnedNotesSection, type PinnedNote } from '@/components/PinnedNotesSection';
 import { NotesPopover } from '@/components/NotesPopover';
+import { INLINE_EDIT_FIELD_CLASS, InlineEditRow, InlineEditPlaceholder } from '@/components/InlineEditField';
 import { CompanyTable } from '@/components/CompanyTable';
 import { SocialEventsTable, type SocialEvent } from '@/components/SocialEventsTable';
 import { BackButton } from '@/components/BackButton';
@@ -3176,27 +3177,45 @@ export default function ConferenceDetailPage() {
                             </td>
                           );
                           case 'type': return (
-                            <td key="type" className="px-4 py-3 overflow-visible relative">
+                            <td key="type" className="px-4 py-3">
                               {editingCell?.attendeeId === attendee.id && editingCell.field === 'company_type' ? (
-                                <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'company_type')} autoFocus>
-                                  <option value="">—</option>
-                                  {companyTypeFilterOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                                </select>
+                                <InlineEditRow onCancel={() => setEditingCell(null)}>
+                                  <select
+                                    className={INLINE_EDIT_FIELD_CLASS}
+                                    value={cellDraft}
+                                    onChange={(e) => setCellDraft(e.target.value)}
+                                    onBlur={() => saveInlineEdit(attendee, 'company_type')}
+                                    onKeyDown={(e) => { if (e.key === 'Escape') setEditingCell(null); }}
+                                    autoFocus
+                                  >
+                                    <option value="">—</option>
+                                    {companyTypeFilterOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                                  </select>
+                                </InlineEditRow>
                               ) : (
-                                <button type="button" onClick={() => startInlineEdit(attendee, 'company_type')}>
-                                  {attendee.company_type ? (<span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>) : (<span className="text-gray-300">—</span>)}
+                                <button type="button" onClick={() => startInlineEdit(attendee, 'company_type')} title="Click to set type">
+                                  {attendee.company_type ? (<span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>) : <InlineEditPlaceholder label="Type" />}
                                 </button>
                               )}
                             </td>
                           );
                           case 'seniority': return (
-                            <td key="seniority" className="px-4 py-3 overflow-visible relative">
+                            <td key="seniority" className="px-4 py-3">
                               {editingCell?.attendeeId === attendee.id && editingCell.field === 'seniority' ? (
-                                <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(attendee, 'seniority')} autoFocus>
-                                  <option value="">Auto-detect</option>
-                                  {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
-                              ) : ((() => { const s = effectiveSeniority(attendee.seniority, attendee.title); return (<button type="button" onClick={() => startInlineEdit(attendee, 'seniority')}><span className={getBadgeClass(s, colorMaps.seniority || {})}>{s}</span></button>); })())}
+                                <InlineEditRow onCancel={() => setEditingCell(null)}>
+                                  <select
+                                    className={INLINE_EDIT_FIELD_CLASS}
+                                    value={cellDraft}
+                                    onChange={(e) => setCellDraft(e.target.value)}
+                                    onBlur={() => saveInlineEdit(attendee, 'seniority')}
+                                    onKeyDown={(e) => { if (e.key === 'Escape') setEditingCell(null); }}
+                                    autoFocus
+                                  >
+                                    <option value="">Auto-detect</option>
+                                    {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                                  </select>
+                                </InlineEditRow>
+                              ) : ((() => { const s = effectiveSeniority(attendee.seniority, attendee.title); return (<button type="button" onClick={() => startInlineEdit(attendee, 'seniority')} title="Click to set seniority">{s ? <span className={getBadgeClass(s, colorMaps.seniority || {})}>{s}</span> : <InlineEditPlaceholder label="Seniority" />}</button>); })())}
                             </td>
                           );
                           case 'conferences': return (

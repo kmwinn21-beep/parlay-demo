@@ -14,6 +14,7 @@ import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getBadgeClass, getPreset } from '@/lib/colors';
 import { useUserOptions, parseRepIds, resolveRepInitials, getRepInitials } from '@/lib/useUserOptions';
+import { INLINE_EDIT_FIELD_CLASS, InlineEditCancelButton, InlineEditPlaceholder } from '@/components/InlineEditField';
 import { RepMultiSelect } from './RepMultiSelect';
 import { MultiSelectDropdown } from './MultiSelectDropdown';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
@@ -211,32 +212,6 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
 }
 
 const DEFAULT_WIDTHS: Record<string, number> = { name: 220, type: 160, sfowner: 140, status: 140, attendees: 110, conferences: 120, actions: 110, updated_on: 110, value: 120 };
-
-// Shared cancel affordance for every inline cell editor, so Type/Status/units
-// read the same as the SF Owner editor they were modeled on.
-// onMouseDown preventDefault keeps focus on the field being edited, so its
-// onBlur save can't fire ahead of this button's onClick — the same blur-race
-// guard MentionTextarea uses for its suggestion list.
-function InlineEditCancelButton({ onCancel }: { onCancel: () => void }) {
-  return (
-    <button
-      type="button"
-      onMouseDown={e => e.preventDefault()}
-      onClick={onCancel}
-      className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
-      title="Cancel"
-    >
-      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-      </svg>
-    </button>
-  );
-}
-
-// Matches RepMultiSelect's default trigger styling so the native select/input
-// editors sit in the row the same way the SF Owner picker does.
-const INLINE_EDIT_FIELD_CLASS =
-  'w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white';
 
 function fmtDate(dateStr?: string): string {
   if (!dateStr) return '—';
@@ -1234,7 +1209,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                           <button type="button" onClick={() => startInlineEdit(company, 'company_type')} title="Click to set type">
                             {company.company_type
                               ? <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span>
-                              : <span className="text-[10px] text-gray-300 hover:text-gray-400 transition-colors">+ Type</span>}
+                              : <InlineEditPlaceholder label="Type" />}
                           </button>
                         )}
                       </td>;
@@ -1298,7 +1273,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                                 const label = userScopedStatusMap.get(optId);
                                 return label ? <span key={optId} className={getBadgeClass(label, colorMaps.status || {})}>{label}</span> : null;
                               })}
-                              {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && (company.my_user_status_ids || []).length === 0 && <span className="text-[10px] text-gray-300 hover:text-gray-400 transition-colors">+ Status</span>}
+                              {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && (company.my_user_status_ids || []).length === 0 && <InlineEditPlaceholder label="Status" />}
                             </span>
                           </button>
                         )}
@@ -1330,7 +1305,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                                 <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
                                 {Number(company.wse).toLocaleString()}
                               </span>
-                            ) : <span className="text-[10px] text-gray-300 hover:text-gray-400 transition-colors">+ {unitTypeLabel}</span>}
+                            ) : <InlineEditPlaceholder label={unitTypeLabel} />}
                           </button>
                         )}
                       </td>;
