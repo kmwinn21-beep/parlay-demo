@@ -22,6 +22,7 @@ export interface SocialEvent {
   event_name: string | null;
   event_type: string | null;
   host: string | null;
+  venue_name: string | null;
   location: string | null;
   event_date: string | null;
   event_time: string | null;
@@ -521,8 +522,10 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemov
  * Only formatted_address is stored, so the venue name isn't recoverable —
  * the trailing ", USA" is dropped instead to keep the pill readable.
  */
-function displayLocation(location: string): string {
-  return location.replace(/,\s*USA\s*$/i, '').trim();
+function displayLocation(venueName: string | null, address: string): string {
+  const addr = address.replace(/,\s*USA\s*$/i, '').trim();
+  const venue = (venueName ?? '').trim();
+  return [venue, addr].filter(Boolean).join(', ');
 }
 
 function mapsHref(location: string): string {
@@ -720,7 +723,7 @@ export function SocialEventsTable({
   const [editingEventId, setEditingEventId] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     entered_by: '', internal_attendees: [] as string[], event_name: '', event_type: '',
-    host: '', location: '', event_date: '', event_time: '',
+    host: '', venue_name: '', location: '', event_date: '', event_time: '',
     invite_only: 'No', prospect_attendees: [] as string[], notes: '',
   });
   const [internalOpen, setInternalOpen] = useState(false);
@@ -804,7 +807,7 @@ export function SocialEventsTable({
 
   /* form helpers */
   const resetForm = () => {
-    setFormData({ entered_by: '', internal_attendees: [], event_name: '', event_type: '', host: '', location: '', event_date: '', event_time: '', invite_only: 'No', prospect_attendees: [], notes: '' });
+    setFormData({ entered_by: '', internal_attendees: [], event_name: '', event_type: '', host: '', venue_name: '', location: '', event_date: '', event_time: '', invite_only: 'No', prospect_attendees: [], notes: '' });
     setEditingEventId(null);
     setShowForm(false);
   };
@@ -816,6 +819,7 @@ export function SocialEventsTable({
       event_name: ev.event_name || '',
       event_type: ev.event_type || '',
       host: ev.host || '',
+      venue_name: ev.venue_name || '',
       location: ev.location || '',
       event_date: ev.event_date || '',
       event_time: ev.event_time || '',
@@ -841,6 +845,7 @@ export function SocialEventsTable({
         event_name: formData.event_name.trim(),
         event_type: formData.event_type || null,
         host: formData.host || null,
+        venue_name: formData.venue_name || null,
         location: formData.location || null,
         event_date: formData.event_date || null,
         event_time: formData.event_time || null,
@@ -1022,9 +1027,22 @@ export function SocialEventsTable({
               </datalist>
             </div>
 
-            {/* Location */}
+            {/* Venue Name — captured separately because a Places result's
+                formatted_address never carries the venue's name. */}
             <div>
-              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Location</label>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Venue Name</label>
+              <input
+                type="text"
+                value={formData.venue_name}
+                onChange={e => setFormData(p => ({ ...p, venue_name: e.target.value }))}
+                placeholder="e.g. The Bellagio"
+                className="input-field text-sm w-full"
+              />
+            </div>
+
+            {/* Address */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Address</label>
               {/* Same Places-backed lookup as the conference Location field.
                   Only formatted_address is kept — social_events has no columns
                   for the lat/lng/timezone the details call also returns. */}
@@ -1110,7 +1128,8 @@ export function SocialEventsTable({
             const dateText = formatDate(ev.event_date);
             const timeText = formatTime(ev.event_time);
             const when = [dateText, timeText].filter(t => t && t !== '—').join(' · ');
-            const loc = (ev.location || '').trim();
+            const addr = (ev.location || '').trim();
+            const locText = displayLocation(ev.venue_name, addr);
             return (
               <div key={ev.id} className="border border-gray-200 rounded-xl bg-white overflow-hidden hover:border-gray-300 transition-colors">
                 {/* ── Header: event name + date/time pill, actions right ── */}
@@ -1145,16 +1164,16 @@ export function SocialEventsTable({
                     {/* ── Meta row: 2-up on mobile, inline from sm ── */}
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-2.5 pl-6 sm:flex sm:flex-wrap sm:gap-x-8">
                       <CardField label="Location">
-                        {loc ? (
+                        {locText ? (
                           <a
-                            href={mapsHref(loc)}
+                            href={mapsHref(addr || locText)}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={e => e.stopPropagation()}
-                            title={loc}
+                            title={locText}
                             className="text-brand-secondary hover:underline break-words"
                           >
-                            {displayLocation(loc)}
+                            {locText}
                           </a>
                         ) : <span className="text-gray-400">—</span>}
                       </CardField>
