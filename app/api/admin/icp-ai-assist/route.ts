@@ -49,6 +49,16 @@ Return ONLY valid JSON in this exact structure — no markdown, no explanation, 
 
 const MONTHLY_LIMIT = 5;
 
+// Analyzing a few PDFs through Claude routinely runs past the default function
+// timeout; without this the platform kills the request and returns a non-JSON
+// gateway error, which the client could only report as a generic failure.
+export const maxDuration = 300;
+
+// Kept in step with MAX_TOTAL_BYTES in components/IcpAiAssistModal.tsx. The
+// platform rejects bodies over ~4.5 MB before this handler runs, so this is a
+// backstop for direct callers rather than the primary guard.
+const MAX_TOTAL_UPLOAD_BYTES = 4 * 1024 * 1024;
+
 async function getUsage(dbClient: Awaited<ReturnType<typeof getDb>>): Promise<{ count: number; month: string }> {
   const currentMonth = new Date().toISOString().slice(0, 7);
   try {
@@ -96,12 +106,32 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const formData = await request.formData();
+  // A truncated or oversized upload makes formData() throw. Catch it so the
+  // client gets JSON it can read rather than an unparseable platform error.
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch (err) {
+    console.error('ICP AI assist: failed to parse upload', err);
+    return NextResponse.json(
+      { error: 'Could not read the uploaded files. They may be too large — try fewer or smaller documents.' },
+      { status: 413 }
+    );
+  }
+
   const links = (formData.getAll('links') as string[]).filter(l => l.trim());
   const files = (formData.getAll('files') as File[]).slice(0, 5);
 
   if (links.length === 0 && files.length === 0) {
     return NextResponse.json({ error: 'Please provide at least one link or document.' }, { status: 400 });
+  }
+
+  const totalUploadBytes = files.reduce((sum, f) => sum + (f.size ?? 0), 0);
+  if (totalUploadBytes > MAX_TOTAL_UPLOAD_BYTES) {
+    return NextResponse.json(
+      { error: 'Your documents exceed the 4.0 MB upload limit. Remove a file or upload a smaller version.' },
+      { status: 413 }
+    );
   }
 
   // Build user message content
@@ -185,7 +215,13 @@ export async function POST(request: NextRequest) {
     }
   } catch (err) {
     console.error('Claude AI assist failed:', err);
-    return NextResponse.json({ error: 'AI analysis failed. Please try again.' }, { status: 500 });
+    // Surface the provider's reason (page-count limits, unreadable PDF, etc.)
+    // instead of a blanket failure — these are usually user-fixable.
+    const detail = err instanceof Error ? err.message : '';
+    return NextResponse.json(
+      { error: detail ? `AI analysis failed: ${detail}` : 'AI analysis failed. Please try again.' },
+      { status: 500 }
+    );
   }
 
   // Increment usage count

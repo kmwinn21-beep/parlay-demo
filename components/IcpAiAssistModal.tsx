@@ -15,6 +15,18 @@ interface Props {
 const MAX_LINKS = 5;
 const MAX_FILES = 5;
 
+// Route handlers are capped at a 4.5 MB request body by the hosting platform
+// (next.config's serverActions.bodySizeLimit does NOT apply to route handlers).
+// Going over it means the request is rejected before it ever reaches our code,
+// with a non-JSON error body — which is what surfaced as a bare "Something went
+// wrong". Validate here so the user gets a specific, actionable message instead.
+const MAX_TOTAL_BYTES = 4 * 1024 * 1024;
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.round(bytes / 1024)} KB`;
+}
+
 export function IcpAiAssistModal({ onClose, onResult }: Props) {
   const [links, setLinks] = useState<string[]>(['']);
   const [files, setFiles] = useState<File[]>([]);
@@ -55,11 +67,20 @@ export function IcpAiAssistModal({ onClose, onResult }: Props) {
     setFiles(prev => prev.filter((_, idx) => idx !== i));
   };
 
+  const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
+  const overSizeLimit = totalBytes > MAX_TOTAL_BYTES;
+
   const handleSubmit = async () => {
     setError(null);
     const validLinks = links.filter(l => l.trim());
     if (validLinks.length === 0 && files.length === 0) {
       setError('Please add at least one link or upload a document.');
+      return;
+    }
+    if (overSizeLimit) {
+      setError(
+        `Your documents total ${formatBytes(totalBytes)}, over the ${formatBytes(MAX_TOTAL_BYTES)} upload limit. Remove a file or upload a smaller version.`
+      );
       return;
     }
 
@@ -70,15 +91,31 @@ export function IcpAiAssistModal({ onClose, onResult }: Props) {
       files.forEach(f => fd.append('files', f));
 
       const res = await fetch('/api/admin/icp-ai-assist', { method: 'POST', body: fd });
-      const data = await res.json() as {
+
+      // Parse defensively: a rejected upload (413) or a timed-out function comes
+      // back as plain text or HTML, so res.json() throws and we'd otherwise lose
+      // the real status behind a generic catch.
+      const rawBody = await res.text();
+      let data: {
         painPoints?: AiItem[];
         triggerEvents?: AiItem[];
         remaining?: number;
         error?: string;
-      };
+      } = {};
+      try {
+        data = rawBody ? JSON.parse(rawBody) : {};
+      } catch {
+        data = {};
+      }
 
       if (!res.ok) {
-        setError(data.error ?? 'Analysis failed. Please try again.');
+        if (res.status === 413) {
+          setError(`Your documents are too large to upload (limit ${formatBytes(MAX_TOTAL_BYTES)}). Remove a file or upload a smaller version.`);
+        } else if (res.status === 504 || res.status === 502) {
+          setError('The analysis took too long to finish. Try fewer or smaller documents.');
+        } else {
+          setError(data.error ?? `Analysis failed (error ${res.status}). Please try again.`);
+        }
         return;
       }
 
@@ -89,7 +126,7 @@ export function IcpAiAssistModal({ onClose, onResult }: Props) {
       onResult(data.painPoints ?? [], data.triggerEvents ?? []);
       onClose();
     } catch {
-      setError('Something went wrong. Please try again.');
+      setError('Could not reach the server. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -164,7 +201,15 @@ export function IcpAiAssistModal({ onClose, onResult }: Props) {
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-sm font-medium text-gray-700">Documents</label>
-              <span className="text-xs text-gray-400">{files.length}/{MAX_FILES}</span>
+              <span className="text-xs text-gray-400">
+                {files.length > 0 && (
+                  <span className={overSizeLimit ? 'text-red-600 font-medium' : ''}>
+                    {formatBytes(totalBytes)} / {formatBytes(MAX_TOTAL_BYTES)}
+                    <span className="mx-1.5 text-gray-300">·</span>
+                  </span>
+                )}
+                {files.length}/{MAX_FILES}
+              </span>
             </div>
 
             {files.length > 0 && (
@@ -199,7 +244,12 @@ export function IcpAiAssistModal({ onClose, onResult }: Props) {
                   onChange={handleFileChange} className="hidden" />
               </>
             )}
-            <p className="text-xs text-gray-400 mt-1.5">Upload case studies, pitch decks, marketing materials, or product one-pagers (PDF or image, up to {MAX_FILES}).</p>
+            <p className="text-xs text-gray-400 mt-1.5">Upload case studies, pitch decks, marketing materials, or product one-pagers (PDF or image, up to {MAX_FILES}, {formatBytes(MAX_TOTAL_BYTES)} total).</p>
+            {overSizeLimit && (
+              <p className="text-xs text-red-600 mt-1.5">
+                These documents total {formatBytes(totalBytes)}, over the {formatBytes(MAX_TOTAL_BYTES)} limit. Remove a file or upload a smaller version.
+              </p>
+            )}
           </div>
 
           {/* Error */}
@@ -224,7 +274,7 @@ export function IcpAiAssistModal({ onClose, onResult }: Props) {
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={loading || atLimit}
+              disabled={loading || atLimit || overSizeLimit}
               className="btn-primary text-sm flex items-center gap-2 disabled:opacity-50"
             >
               {loading ? (
