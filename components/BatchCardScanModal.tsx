@@ -260,7 +260,9 @@ function LeftCard({ card, onDraftChange, onAttendeeSelect, onCompanySelect }: Le
 interface RightCardProps {
   card: ScannedCard;
   onConfirm: (attendeeId: number, companyId: number | null) => void;
-  onNotAMatch: () => void;
+  /** Dismiss a single candidate. When the last one goes and there is no
+   *  company fallback, the card drops to the add-new-attendee state. */
+  onDismissMatch: (attendeeId: number) => void;
   onShowAddForm: () => void;
   onAddFormChange: (field: keyof ScannedCard['addDraft'], value: string) => void;
   onAddFormCompanySelect: (r: SearchResult) => void;
@@ -274,7 +276,7 @@ interface RightCardProps {
   saving: boolean;
 }
 
-function RightCard({ card, onConfirm, onNotAMatch, onShowAddForm, onAddFormChange, onAddFormCompanySelect, onInitiateAdd, onFinalConfirm, onCancelPending, onPendingViewChange, onPendingNoteChange, onPendingStatusSelect, statusOptions, saving }: RightCardProps) {
+function RightCard({ card, onConfirm, onDismissMatch, onShowAddForm, onAddFormChange, onAddFormCompanySelect, onInitiateAdd, onFinalConfirm, onCancelPending, onPendingViewChange, onPendingNoteChange, onPendingStatusSelect, statusOptions, saving }: RightCardProps) {
   if (card.pendingAction) {
     const action = card.pendingAction;
 
@@ -423,7 +425,9 @@ function RightCard({ card, onConfirm, onNotAMatch, onShowAddForm, onAddFormChang
     );
   }
 
-  const topMatch = card.selectedMatch ?? card.attendeeMatches[0] ?? null;
+  // A match picked explicitly (e.g. via the search box) collapses the list to
+  // just that one; otherwise every candidate the search returned is shown.
+  const visibleMatches = card.selectedMatch ? [card.selectedMatch] : card.attendeeMatches;
   const topCompany = card.selectedCompany ?? card.companyMatches[0] ?? null;
 
   if (card.showAddForm) {
@@ -475,40 +479,44 @@ function RightCard({ card, onConfirm, onNotAMatch, onShowAddForm, onAddFormChang
 
   return (
     <div className="flex-1 bg-white rounded-xl border border-gray-200 p-4 space-y-3 min-w-0">
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Best Match</p>
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+        {visibleMatches.length > 1 ? `${visibleMatches.length} Matches` : 'Best Match'}
+      </p>
 
-      {topMatch ? (
-        <>
-          <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold text-gray-800">
-                  {topMatch.first_name} {topMatch.last_name}
-                </p>
-                {topMatch.title && <p className="text-xs text-gray-500">{topMatch.title}</p>}
-                {topMatch.company_name && <p className="text-xs text-gray-500">{topMatch.company_name}</p>}
-                {topMatch.email && <p className="text-xs text-gray-400">{topMatch.email}</p>}
+      {visibleMatches.length > 0 ? (
+        // Every candidate is listed rather than just the top one — the scanned
+        // name is often ambiguous (Chris/Christine), so the rep needs to see
+        // the alternatives to pick correctly. Capped in height so a long list
+        // scrolls inside the card instead of stretching the modal.
+        <div className="space-y-2 max-h-[340px] overflow-y-auto scrollbar-thin -mr-1 pr-1">
+          {visibleMatches.map(match => (
+            <div key={match.id} className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-800">
+                    {match.first_name} {match.last_name}
+                  </p>
+                  {match.title && <p className="text-xs text-gray-500">{match.title}</p>}
+                  {match.company_name && <p className="text-xs text-gray-500">{match.company_name}</p>}
+                  {match.email && <p className="text-xs text-gray-400 truncate">{match.email}</p>}
+                </div>
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 flex-shrink-0 capitalize">
+                  {match.matchType}
+                </span>
               </div>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 flex-shrink-0 capitalize">
-                {topMatch.matchType}
-              </span>
+              <div className="flex items-center justify-end gap-2 mt-2.5">
+                <button onClick={() => onDismissMatch(match.id)}
+                  className="text-xs text-gray-400 hover:text-gray-600 px-2">
+                  Not a match
+                </button>
+                <button onClick={() => onConfirm(match.id, match.company_id)} disabled={saving}
+                  className="btn-primary text-xs px-3">
+                  {saving ? 'Saving…' : 'Confirm'}
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => onConfirm(topMatch.id, topMatch.company_id)} disabled={saving}
-              className="btn-primary text-xs flex-1">
-              {saving ? 'Saving…' : 'Confirm Match'}
-            </button>
-            <button onClick={onNotAMatch} className="text-xs text-gray-400 hover:text-gray-600 px-2">
-              Not a match
-            </button>
-          </div>
-          {card.attendeeMatches.length > 1 && (
-            <p className="text-[10px] text-gray-400">
-              +{card.attendeeMatches.length - 1} other match{card.attendeeMatches.length > 2 ? 'es' : ''} found
-            </p>
-          )}
-        </>
+          ))}
+        </div>
       ) : topCompany ? (
         <>
           <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
@@ -833,7 +841,18 @@ export function BatchCardScanModal({ conferenceId, initialCards, onClose, onDone
                     saving={savingId === card.localId}
                     statusOptions={statusOptions}
                     onConfirm={(attId, compId) => handleConfirm(card.localId, attId, compId)}
-                    onNotAMatch={() => updateCard(card.localId, { selectedMatch: null, selectedCompany: null, status: 'no-match' })}
+                    onDismissMatch={attendeeId => {
+                      const remaining = card.attendeeMatches.filter(m => m.id !== attendeeId);
+                      updateCard(card.localId, {
+                        attendeeMatches: remaining,
+                        selectedMatch: null,
+                        // Only fall through to "add as new" once every candidate
+                        // is gone and there is no company to attach them to.
+                        ...(remaining.length === 0 && card.companyMatches.length === 0
+                          ? { selectedCompany: null, status: 'no-match' as CardStatus }
+                          : {}),
+                      });
+                    }}
                     onShowAddForm={() => updateCard(card.localId, { showAddForm: !card.showAddForm })}
                     onAddFormChange={(f, v) => patchAddDraft(card.localId, f, v)}
                     onAddFormCompanySelect={r => handleAddFormCompanySelect(card.localId, r)}
