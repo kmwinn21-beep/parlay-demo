@@ -87,6 +87,29 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
         @keyframes meetingNotesSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         .meeting-notes-mobile-slide { animation: meetingNotesSlideUp 0.25s ease-out; }
         @media (min-width: 640px) { .meeting-notes-mobile-slide { animation: none; } }
+
+        /* Mobile bottom sheet geometry. The panel is deliberately overshot
+           past the bottom edge (bottom: -2.5rem plus matching padding) so no
+           backdrop or rounded corner can peek out beneath it — iOS reports a
+           layout viewport that disagrees with the visible one as the URL bar
+           collapses, which is what left the gap before. dvh is declared after
+           the vh fallback so older browsers keep the vh value. */
+        .meeting-notes-mobile-sheet {
+          bottom: -2.5rem;
+          height: calc(94vh + 2.5rem);
+          height: calc(94dvh + 2.5rem);
+          padding-bottom: 2.5rem;
+          border-bottom-left-radius: 0;
+          border-bottom-right-radius: 0;
+        }
+        @media (min-width: 640px) {
+          .meeting-notes-mobile-sheet {
+            position: static;
+            bottom: auto;
+            height: 100%;
+            padding-bottom: 0;
+          }
+        }
       `}</style>
 
       {/* Overlay — click minimizes, not closes */}
@@ -96,9 +119,10 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
       />
 
       {/* Modal panel — always mounted to preserve recording state.
-          Mobile: bottom sheet sliding up (h-[90vh], rounded top corners),
-          same action/height as the site's other mobile drawers. Desktop
-          (sm+): unchanged centered, resizable modal. */}
+          Mobile: full-bleed bottom sheet sliding up, rounded top corners
+          only, sized past the bottom edge so nothing shows behind it (see
+          .meeting-notes-mobile-sheet above). Desktop (sm+): unchanged
+          centered, resizable modal. */}
       <div
         className={`fixed inset-0 z-[500] pointer-events-none transition-opacity duration-200 sm:flex sm:items-center sm:justify-center sm:p-3 sm:transition-all ${
           minimized ? 'opacity-0 sm:scale-95' : 'opacity-100 sm:scale-100'
@@ -106,7 +130,7 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
         style={{ visibility: minimized ? 'hidden' : 'visible' }}
       >
         <div
-          className="meeting-notes-mobile-slide pointer-events-auto flex flex-col bg-white shadow-2xl overflow-hidden relative fixed bottom-0 left-0 right-0 h-[90vh] w-full rounded-t-2xl sm:static sm:h-full sm:rounded-xl"
+          className="meeting-notes-mobile-slide meeting-notes-mobile-sheet pointer-events-auto flex flex-col bg-white shadow-2xl overflow-hidden relative fixed left-0 right-0 w-full rounded-t-2xl sm:static sm:h-full sm:rounded-xl"
           style={{ width: window.innerWidth >= 640 ? Math.min(modalWidth, window.innerWidth - 24) : undefined }}
           onClick={e => e.stopPropagation()}
         >
