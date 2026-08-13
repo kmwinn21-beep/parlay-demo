@@ -10,7 +10,7 @@ import { StrategyAlignmentDrawer } from '../StrategyAlignmentDrawer';
 import { companyTierToConferenceTier } from '@/lib/targeting/targetRecommendationsView';
 import { useTargetingCompilation } from '@/lib/targeting/targetingCompilationStore';
 import type { TerritoryResponse } from '@/app/api/admin/territories/route';
-import { getBadgeClass, getPreset } from '@/lib/colors';
+import { getBadgeClass, getPreset, formatStatusLabel} from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import toast from 'react-hot-toast';
 
@@ -817,7 +817,7 @@ function CompanyCardMetaRow({ co, accentColor }: { co: ClientCompanyEntry; accen
       )}
 
       {statuses.map(st => (
-        <span key={st} className={`${getBadgeClass(st, colorMaps.status || {})} text-[10px]`}>{st}</span>
+        <span key={st} className={`${getBadgeClass(st, colorMaps.status || {})} text-[10px]`}>{formatStatusLabel(st)}</span>
       ))}
 
       {value != null && (
@@ -1175,10 +1175,13 @@ function CompaniesByRepChart({
                   type="button"
                   onClick={() => onSelectRep(r)}
                   title={r.name}
-                  className="w-full flex items-center gap-2 group"
+                  className="w-full text-left group"
                 >
-                  <span className="w-20 flex-shrink-0 text-[11px] font-medium text-gray-700 text-right truncate">{r.name}</span>
-                  <div className="flex-1 h-6 relative">
+                  {/* Rep name as an eyebrow above the bar, so the bar gets the
+                      full column width rather than sharing it with a name
+                      column that truncated at this width. */}
+                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 truncate mb-1">{r.name}</span>
+                  <div className="h-6 relative">
                     <div
                       className="h-6 rounded-md flex items-center justify-end transition-all duration-300 ease-out group-hover:brightness-110"
                       style={{ width: `${pct}%`, backgroundColor: r.color, minWidth: 4 }}
@@ -1196,7 +1199,11 @@ function CompaniesByRepChart({
                   </div>
                 </button>
                 {seniorityEntries.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1 pl-[calc(7rem+0.5rem)]">
+                  // Full-width so pills wrap several to a row. The old
+                  // pl-[calc(7rem+0.5rem)] indent aligned them under the bar,
+                  // but in a single-column panel it left too little room and
+                  // forced one pill per row.
+                  <div className="flex flex-wrap gap-1 mt-1">
                     {seniorityEntries.map(([label, count]) => {
                       const color = SENIORITY_COLORS[label] ?? '#6b7280';
                       return (
