@@ -42,6 +42,30 @@ interface ConfigOption {
   metadata?: string | null;
 }
 
+// Split a typed or pasted string into individual tag values. Handles a batch
+// pasted as "a, b, c", one-per-line, or semicolon-separated, so a list copied
+// out of a doc or spreadsheet lands as separate entries rather than one blob.
+function splitTagTokens(raw: string): string[] {
+  return raw
+    .split(/[,;\n\r\t]+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+// Append tokens to an existing tag list, dropping blanks and case-insensitive
+// duplicates (both against the existing list and within the pasted batch).
+function appendTagTokens(existing: string[], raw: string): string[] {
+  const seen = new Set(existing.map(t => t.toLowerCase()));
+  const next = [...existing];
+  for (const token of splitTagTokens(raw)) {
+    const key = token.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    next.push(token);
+  }
+  return next;
+}
+
 const CATEGORIES = [
   { key: 'company_type', label: 'Company Types' },
   { key: 'entity_structure', label: 'Entity Structure' },
@@ -1050,6 +1074,13 @@ export default function AdminPage() {
   const [savingBuyerPersona, setSavingBuyerPersona] = useState(false);
   const [icpPainPoints, setIcpPainPoints] = useState<string[]>([]);
   const [icpTriggerEvents, setIcpTriggerEvents] = useState<string[]>([]);
+  // Drafts for the pain point / trigger event tag inputs. These were previously
+  // hardcoded to value={''}, which made React clear the field on every
+  // keystroke — so each character committed as its own tag, and a pasted list
+  // committed as one run-on tag. Holding the draft here keeps the field
+  // editable and lets Enter/blur split a comma-separated batch into tags.
+  const [painPointDraft, setPainPointDraft] = useState('');
+  const [triggerEventDraft, setTriggerEventDraft] = useState('');
   const [icpAiPainPoints, setIcpAiPainPoints] = useState<AiItem[]>([]);
   const [icpAiTriggerEvents, setIcpAiTriggerEvents] = useState<AiItem[]>([]);
   const [icpExclusionDescription, setIcpExclusionDescription] = useState('');
@@ -3557,20 +3588,39 @@ export default function AdminPage() {
                   </span>
                 ))}
                 <input
-                  value={''}
-                  onChange={e => { if (e.target.value.trim()) { const v = e.target.value.replace(/,$/, '').trim(); if (v && !icpPainPoints.includes(v)) setIcpPainPoints(prev => [...prev, v]); } }}
-                  onKeyDown={e => {
-                    if ((e.key === 'Enter' || e.key === ',') && (e.target as HTMLInputElement).value.trim()) {
-                      e.preventDefault();
-                      const v = (e.target as HTMLInputElement).value.replace(/,$/, '').trim();
-                      if (v && !icpPainPoints.includes(v)) setIcpPainPoints(prev => [...prev, v]);
-                      (e.target as HTMLInputElement).value = '';
+                  value={painPointDraft}
+                  onChange={e => {
+                    const val = e.target.value;
+                    // Typing a comma commits what precedes it and keeps the rest
+                    // in the field, so "a, b" tags "a" and leaves "b" pending.
+                    if (/[,;\n]/.test(val)) {
+                      const lastDelim = Math.max(val.lastIndexOf(','), val.lastIndexOf(';'), val.lastIndexOf('\n'));
+                      const commit = val.slice(0, lastDelim);
+                      const rest = val.slice(lastDelim + 1);
+                      setIcpPainPoints(prev => appendTagTokens(prev, commit));
+                      setPainPointDraft(rest);
+                    } else {
+                      setPainPointDraft(val);
                     }
-                    if (e.key === 'Backspace' && !(e.target as HTMLInputElement).value && icpPainPoints.length) setIcpPainPoints(prev => prev.slice(0, -1));
                   }}
-                  onBlur={e => { if (e.target.value.trim()) { const v = e.target.value.replace(/,$/, '').trim(); if (v && !icpPainPoints.includes(v)) setIcpPainPoints(prev => [...prev, v]); e.target.value = ''; } }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && painPointDraft.trim()) {
+                      e.preventDefault();
+                      setIcpPainPoints(prev => appendTagTokens(prev, painPointDraft));
+                      setPainPointDraft('');
+                    }
+                    if (e.key === 'Backspace' && !painPointDraft && icpPainPoints.length) {
+                      setIcpPainPoints(prev => prev.slice(0, -1));
+                    }
+                  }}
+                  onBlur={() => {
+                    if (painPointDraft.trim()) {
+                      setIcpPainPoints(prev => appendTagTokens(prev, painPointDraft));
+                      setPainPointDraft('');
+                    }
+                  }}
                   className="flex-1 min-w-[120px] text-sm outline-none bg-transparent"
-                  placeholder={icpPainPoints.length === 0 && icpAiPainPoints.length === 0 ? 'Add a pain point…' : ''}
+                  placeholder={icpPainPoints.length === 0 && icpAiPainPoints.length === 0 ? 'Add pain points… (paste a comma-separated list)' : ''}
                 />
               </div>
               <p className="text-xs text-gray-400 mt-1">What operational or strategic problems does your product solve?</p>
@@ -3633,20 +3683,37 @@ export default function AdminPage() {
                   </span>
                 ))}
                 <input
-                  value={''}
-                  onChange={e => { if (e.target.value.trim()) { const v = e.target.value.replace(/,$/, '').trim(); if (v && !icpTriggerEvents.includes(v)) setIcpTriggerEvents(prev => [...prev, v]); } }}
-                  onKeyDown={e => {
-                    if ((e.key === 'Enter' || e.key === ',') && (e.target as HTMLInputElement).value.trim()) {
-                      e.preventDefault();
-                      const v = (e.target as HTMLInputElement).value.replace(/,$/, '').trim();
-                      if (v && !icpTriggerEvents.includes(v)) setIcpTriggerEvents(prev => [...prev, v]);
-                      (e.target as HTMLInputElement).value = '';
+                  value={triggerEventDraft}
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (/[,;\n]/.test(val)) {
+                      const lastDelim = Math.max(val.lastIndexOf(','), val.lastIndexOf(';'), val.lastIndexOf('\n'));
+                      const commit = val.slice(0, lastDelim);
+                      const rest = val.slice(lastDelim + 1);
+                      setIcpTriggerEvents(prev => appendTagTokens(prev, commit));
+                      setTriggerEventDraft(rest);
+                    } else {
+                      setTriggerEventDraft(val);
                     }
-                    if (e.key === 'Backspace' && !(e.target as HTMLInputElement).value && icpTriggerEvents.length) setIcpTriggerEvents(prev => prev.slice(0, -1));
                   }}
-                  onBlur={e => { if (e.target.value.trim()) { const v = e.target.value.replace(/,$/, '').trim(); if (v && !icpTriggerEvents.includes(v)) setIcpTriggerEvents(prev => [...prev, v]); e.target.value = ''; } }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && triggerEventDraft.trim()) {
+                      e.preventDefault();
+                      setIcpTriggerEvents(prev => appendTagTokens(prev, triggerEventDraft));
+                      setTriggerEventDraft('');
+                    }
+                    if (e.key === 'Backspace' && !triggerEventDraft && icpTriggerEvents.length) {
+                      setIcpTriggerEvents(prev => prev.slice(0, -1));
+                    }
+                  }}
+                  onBlur={() => {
+                    if (triggerEventDraft.trim()) {
+                      setIcpTriggerEvents(prev => appendTagTokens(prev, triggerEventDraft));
+                      setTriggerEventDraft('');
+                    }
+                  }}
                   className="flex-1 min-w-[120px] text-sm outline-none bg-transparent"
-                  placeholder={icpTriggerEvents.length === 0 && icpAiTriggerEvents.length === 0 ? 'Add a trigger event…' : ''}
+                  placeholder={icpTriggerEvents.length === 0 && icpAiTriggerEvents.length === 0 ? 'Add trigger events… (paste a comma-separated list)' : ''}
                 />
               </div>
               <p className="text-xs text-gray-400 mt-1">What signals indicate a company might be ready to buy? Parlay looks for these in conference context and company research.</p>

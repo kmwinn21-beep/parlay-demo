@@ -138,7 +138,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const body = await request.json();
-    const { notes_text, transcript, audio_file_path, summary } = body;
+    // audio_file_path is intentionally not accepted or written — meeting audio
+    // is never persisted. The column and any historical values it already holds
+    // are left untouched, and GET above still returns them so previously
+    // recorded meetings keep their playback.
+    const { notes_text, transcript, summary } = body;
 
     const existing = await db.execute({
       sql: `SELECT id FROM meeting_notes WHERE meeting_id = ?`,
@@ -150,27 +154,24 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         sql: `UPDATE meeting_notes SET
                 notes_text = COALESCE(?, notes_text),
                 transcript = COALESCE(?, transcript),
-                audio_file_path = COALESCE(?, audio_file_path),
                 summary = COALESCE(?, summary),
                 updated_at = datetime('now')
               WHERE meeting_id = ?`,
         args: [
           notes_text ?? null,
           transcript ?? null,
-          audio_file_path ?? null,
           summary ?? null,
           meetingId,
         ],
       });
     } else {
       await db.execute({
-        sql: `INSERT INTO meeting_notes (meeting_id, notes_text, transcript, audio_file_path, summary, created_by)
-              VALUES (?, ?, ?, ?, ?, ?)`,
+        sql: `INSERT INTO meeting_notes (meeting_id, notes_text, transcript, summary, created_by)
+              VALUES (?, ?, ?, ?, ?)`,
         args: [
           meetingId,
           notes_text ?? null,
           transcript ?? null,
-          audio_file_path ?? null,
           summary ?? null,
           user.id ?? null,
         ],
