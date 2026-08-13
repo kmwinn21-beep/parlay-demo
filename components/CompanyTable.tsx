@@ -14,7 +14,7 @@ import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getBadgeClass, getPreset } from '@/lib/colors';
 import { useUserOptions, parseRepIds, resolveRepInitials, getRepInitials } from '@/lib/useUserOptions';
-import { INLINE_EDIT_FIELD_CLASS, InlineEditCancelButton, InlineEditPlaceholder } from '@/components/InlineEditField';
+import { INLINE_EDIT_FIELD_CLASS, InlineEditCancelButton, InlineEditRow, InlineEditPlaceholder } from '@/components/InlineEditField';
 import { RepMultiSelect } from './RepMultiSelect';
 import { MultiSelectDropdown } from './MultiSelectDropdown';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
@@ -1189,8 +1189,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                       </td>;
                       case 'type': return <td key="type" className="px-3 py-3">
                         {editingCell?.companyId === company.id && editingCell.field === 'company_type' ? (
-                          <div className="flex items-start gap-1">
-                            <div className="flex-1 min-w-0">
+                          <InlineEditRow onCancel={() => setEditingCell(null)}>
                               <select
                                 className={INLINE_EDIT_FIELD_CLASS}
                                 value={cellDraft}
@@ -1202,9 +1201,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                                 <option value="">—</option>
                                 {companyTypeOptions.map(s => <option key={s} value={s}>{s}</option>)}
                               </select>
-                            </div>
-                            <InlineEditCancelButton onCancel={() => setEditingCell(null)} />
-                          </div>
+                          </InlineEditRow>
                         ) : (
                           <button type="button" onClick={() => startInlineEdit(company, 'company_type')} title="Click to set type">
                             {company.company_type
@@ -1249,8 +1246,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                       </td>;
                       case 'status': return <td key="status" className="px-3 py-3">
                         {editingCell?.companyId === company.id && editingCell.field === 'status' ? (
-                          <div className="flex items-start gap-1">
-                            <div className="flex-1 min-w-0">
+                          <InlineEditRow onCancel={() => setEditingCell(null)}>
                               <select
                                 className={INLINE_EDIT_FIELD_CLASS}
                                 value={cellDraft}
@@ -1262,9 +1258,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                                 <option value="">—</option>
                                 {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
                               </select>
-                            </div>
-                            <InlineEditCancelButton onCancel={() => setEditingCell(null)} />
-                          </div>
+                          </InlineEditRow>
                         ) : (
                           <button type="button" onClick={() => startInlineEdit(company, 'status')} title="Click to set status">
                             <span className="flex flex-wrap gap-1">
@@ -1282,8 +1276,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                       case 'conferences': return <td key="conferences" className="px-3 py-3"><ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} /></td>;
                       case 'wse': return <td key="wse" className="px-3 py-3">
                         {editingCell?.companyId === company.id && editingCell.field === 'wse' ? (
-                          <div className="flex items-start gap-1">
-                            <div className="flex-1 min-w-0">
+                          <InlineEditRow onCancel={() => setEditingCell(null)}>
                               <input
                                 className={INLINE_EDIT_FIELD_CLASS}
                                 value={cellDraft}
@@ -1295,9 +1288,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                                 }}
                                 autoFocus
                               />
-                            </div>
-                            <InlineEditCancelButton onCancel={() => setEditingCell(null)} />
-                          </div>
+                          </InlineEditRow>
                         ) : (
                           <button type="button" onClick={() => startInlineEdit(company, 'wse')} title={`Click to set ${unitTypeLabel}`}>
                             {company.wse != null ? (

@@ -8,14 +8,16 @@
  */
 
 /**
- * Matches RepMultiSelect's default trigger styling. The min-width keeps the
- * selected value readable in narrow columns like Type and Seniority — without
- * it a native select in a ~90px cell renders "Operator" as "Ope". The cell
- * grows to fit, which is ordinary table behaviour and far less disruptive than
- * the absolutely-positioned overlay this replaced.
+ * Matches RepMultiSelect's default trigger styling.
+ *
+ * Deliberately no min-width: these tables are tableLayout:'fixed' with explicit
+ * column widths, so a field wider than its column overflows into the neighbour
+ * rather than widening the cell. Narrow columns like Type (110px) will clip the
+ * selected value while the editor is open — the native dropdown still lists
+ * every option in full, and the value is shown as a badge once editing ends.
  */
 export const INLINE_EDIT_FIELD_CLASS =
-  'w-full min-w-[7.5rem] border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white';
+  'w-full max-w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white';
 
 /**
  * Cancel affordance for an inline editor.
@@ -41,10 +43,19 @@ export function InlineEditCancelButton({ onCancel }: { onCancel: () => void }) {
   );
 }
 
-/** Row wrapper: editor sized to the cell, cancel button pinned beside it. */
+/**
+ * Row wrapper: editor sized to the cell, cancel button beside it.
+ *
+ * items-center lines the X up with the field's text. Top-aligning it instead
+ * leaves it floating a few pixels high against a short input, which reads as
+ * misplaced. The one caller that must stay top-aligned is the SF Owner rep
+ * picker, whose selected-rep pills render *below* its trigger — centring there
+ * would drag the X down beside the pills instead of the trigger — so that one
+ * keeps its own wrapper rather than using this.
+ */
 export function InlineEditRow({ onCancel, children }: { onCancel: () => void; children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-1">
+    <div className="flex items-center gap-1">
       <div className="flex-1 min-w-0">{children}</div>
       <InlineEditCancelButton onCancel={onCancel} />
     </div>
