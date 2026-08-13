@@ -768,20 +768,40 @@ const PRIORITY_ACTIVE_CLASS: Record<PriorityValue, string> = {
  */
 function PriorityToggle({ value, onSelect }: { value: PriorityValue; onSelect: (v: PriorityValue) => void }) {
   return (
-    <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+    // Full width with equal segments when stacked under the eyebrow label on
+    // mobile; natural width beside the label from md up.
+    <div className="flex w-full rounded-lg border border-gray-200 overflow-hidden md:inline-flex md:w-auto md:flex-shrink-0">
       {PRIORITY_OPTIONS.map(opt => (
         <button
           key={opt}
           type="button"
           onClick={() => onSelect(opt)}
           aria-pressed={value === opt}
-          className={`px-2.5 py-1 text-xs font-medium border-r last:border-r-0 border-gray-200 transition-colors ${
+          className={`flex-1 px-2.5 py-1 text-xs font-medium border-r last:border-r-0 border-gray-200 transition-colors md:flex-none ${
             value === opt ? PRIORITY_ACTIVE_CLASS[opt] : 'bg-white text-gray-500 hover:bg-gray-50'
           }`}
         >
           {PRIORITY_LABELS[opt]}
         </button>
       ))}
+    </div>
+  );
+}
+
+/**
+ * One seniority/function row. Below md the panels are full width but still too
+ * narrow to sit a label beside four segments without the label truncating
+ * ("Supply Chain" -> "Supp…"), so the label becomes an eyebrow header stacked
+ * above the toggle. From md up — where the two panels sit side by side — it
+ * returns to a single line with the label opposite the toggle.
+ */
+function PriorityRow({ label, value, onSelect }: { label: string; value: PriorityValue; onSelect: (v: PriorityValue) => void }) {
+  return (
+    <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between md:gap-3">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 md:text-sm md:font-normal md:normal-case md:tracking-normal md:text-gray-700 md:min-w-0 md:truncate">
+        {label}
+      </span>
+      <PriorityToggle value={value} onSelect={onSelect} />
     </div>
   );
 }
@@ -3253,6 +3273,75 @@ export default function AdminPage() {
               </button>
             </div>
 
+          {/* ── Card: Ideal Buyer Persona ── */}
+          <div className="card">
+            <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Ideal Buyer Persona</h2>
+            <p className="text-sm text-gray-500 mb-4">Define who you&apos;re trying to reach at ICP companies. Used by Parlay to identify the right contacts to prioritize at each conference — not just the right companies.</p>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Seniority &amp; Function Prioritization</label>
+              <p className="text-xs text-gray-400 mb-2">Set the priority for each seniority tier and contact function. Contacts with High or Medium priority will be flagged as prioritized prospects.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+                <PrioritySection title="Seniority Priority" open={seniorityPriorityOpen} onToggle={() => setSeniorityPriorityOpen(v => !v)}>
+                  {(optionsByCategory['seniority'] ?? []).map(s => (
+                    <PriorityRow
+                      key={s.value}
+                      label={s.value}
+                      value={(icpSeniorityPriority[s.value] ?? 'Medium') as PriorityValue}
+                      onSelect={v => setIcpSeniorityPriority(prev => ({ ...prev, [s.value]: v }))}
+                    />
+                  ))}
+                  {(optionsByCategory['seniority'] ?? []).length === 0 && (
+                    <p className="text-xs text-gray-400">No seniority options configured.</p>
+                  )}
+                </PrioritySection>
+                <PrioritySection title="Function Priority" open={functionPriorityOpen} onToggle={() => setFunctionPriorityOpen(v => !v)}>
+                  {(optionsByCategory['function'] ?? []).map(f => (
+                    <PriorityRow
+                      key={f.value}
+                      label={f.value}
+                      value={(icpFunctionPriority[f.value] ?? 'Medium') as PriorityValue}
+                      onSelect={v => setIcpFunctionPriority(prev => ({ ...prev, [f.value]: v }))}
+                    />
+                  ))}
+                  {(optionsByCategory['function'] ?? []).length === 0 && (
+                    <p className="text-xs text-gray-400">No function options configured.</p>
+                  )}
+                </PrioritySection>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100 my-4" />
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Decision Maker vs. Influencer Titles</label>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-medium text-gray-600 mb-1">Decision Makers</p>
+                  <TagInput tags={icpDecisionMakerTitles} onChange={setIcpDecisionMakerTitles} placeholder="Add a title…" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-600 mb-1">Influencers</p>
+                  <TagInput tags={icpInfluencerTitles} onChange={setIcpInfluencerTitles} placeholder="Add a title…" />
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100 my-4" />
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Target Titles</label>
+              <TagInput tags={icpTargetTitles} onChange={setIcpTargetTitles} placeholder="Add a job title…" />
+              <p className="text-xs text-gray-400 mt-1">Job titles that indicate a strong prospect contact.</p>
+            </div>
+
+            <div className="flex justify-end mt-5 pt-4 border-t border-gray-100">
+              <button className="btn-primary text-sm" onClick={handleSaveBuyerPersona} disabled={savingBuyerPersona}>
+                {savingBuyerPersona ? 'Saving…' : 'Save Buyer Persona'}
+              </button>
+            </div>
+          </div>
+
           {/* ── Card: Target Classification ── */}
           <div className="card">
             <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Target Classification</h2>
@@ -3475,77 +3564,6 @@ export default function AdminPage() {
                   <button onClick={handleClearTierWorth} disabled={tierWorthSaving} className="btn-secondary text-sm flex-shrink-0">Clear</button>
                 )}
               </div>
-            </div>
-          </div>
-
-          {/* ── Card: Ideal Buyer Persona ── */}
-          <div className="card">
-            <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">Ideal Buyer Persona</h2>
-            <p className="text-sm text-gray-500 mb-4">Define who you&apos;re trying to reach at ICP companies. Used by Parlay to identify the right contacts to prioritize at each conference — not just the right companies.</p>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Target Titles</label>
-              <TagInput tags={icpTargetTitles} onChange={setIcpTargetTitles} placeholder="Add a job title…" />
-              <p className="text-xs text-gray-400 mt-1">Job titles that indicate a strong prospect contact.</p>
-            </div>
-
-            <div className="border-t border-gray-100 my-4" />
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Seniority &amp; Function Prioritization</label>
-              <p className="text-xs text-gray-400 mb-2">Set the priority for each seniority tier and contact function. Contacts with High or Medium priority will be flagged as prioritized prospects.</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
-                <PrioritySection title="Seniority Priority" open={seniorityPriorityOpen} onToggle={() => setSeniorityPriorityOpen(v => !v)}>
-                  {(optionsByCategory['seniority'] ?? []).map(s => (
-                    <div key={s.value} className="flex items-center justify-between gap-3">
-                      <span className="text-sm text-gray-700 min-w-0 truncate">{s.value}</span>
-                      <PriorityToggle
-                        value={(icpSeniorityPriority[s.value] ?? 'Medium') as PriorityValue}
-                        onSelect={v => setIcpSeniorityPriority(prev => ({ ...prev, [s.value]: v }))}
-                      />
-                    </div>
-                  ))}
-                  {(optionsByCategory['seniority'] ?? []).length === 0 && (
-                    <p className="text-xs text-gray-400">No seniority options configured.</p>
-                  )}
-                </PrioritySection>
-                <PrioritySection title="Function Priority" open={functionPriorityOpen} onToggle={() => setFunctionPriorityOpen(v => !v)}>
-                  {(optionsByCategory['function'] ?? []).map(f => (
-                    <div key={f.value} className="flex items-center justify-between gap-3">
-                      <span className="text-sm text-gray-700 min-w-0 truncate">{f.value}</span>
-                      <PriorityToggle
-                        value={(icpFunctionPriority[f.value] ?? 'Medium') as PriorityValue}
-                        onSelect={v => setIcpFunctionPriority(prev => ({ ...prev, [f.value]: v }))}
-                      />
-                    </div>
-                  ))}
-                  {(optionsByCategory['function'] ?? []).length === 0 && (
-                    <p className="text-xs text-gray-400">No function options configured.</p>
-                  )}
-                </PrioritySection>
-              </div>
-            </div>
-
-            <div className="border-t border-gray-100 my-4" />
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Decision Maker vs. Influencer Titles</label>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs font-medium text-gray-600 mb-1">Decision Makers</p>
-                  <TagInput tags={icpDecisionMakerTitles} onChange={setIcpDecisionMakerTitles} placeholder="Add a title…" />
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-gray-600 mb-1">Influencers</p>
-                  <TagInput tags={icpInfluencerTitles} onChange={setIcpInfluencerTitles} placeholder="Add a title…" />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end mt-5 pt-4 border-t border-gray-100">
-              <button className="btn-primary text-sm" onClick={handleSaveBuyerPersona} disabled={savingBuyerPersona}>
-                {savingBuyerPersona ? 'Saving…' : 'Save Buyer Persona'}
-              </button>
             </div>
           </div>
 
