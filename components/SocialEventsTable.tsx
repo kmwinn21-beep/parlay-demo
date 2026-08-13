@@ -1,12 +1,13 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { LocationAutocompleteInput } from './LocationAutocompleteInput';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { getBadgeClass } from '@/lib/colors';
+import { getBadgeClass, getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getConfig } from '@/lib/configCache';
-import { parseRepIds } from '@/lib/useUserOptions';
+import { parseRepIds, getRepInitials } from '@/lib/useUserOptions';
 import { useUser } from '@/components/UserContext';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
 import { CustomColumnCell } from './CustomColumnCell';
@@ -160,32 +161,29 @@ function AssignedUserPill({ assignedUser, userOptionsFull }: {
   assignedUser: string | null | undefined;
   userOptionsFull: Array<{ id: number; value: string }>;
 }) {
-  const [show, setShow] = useState(false);
+  const colorMaps = useConfigColors();
   if (!assignedUser) return null;
   const names = parseRepIds(assignedUser)
     .map(id => userOptionsFull.find(u => u.id === id)?.value)
     .filter(Boolean) as string[];
   if (names.length === 0) return null;
+  // Standard rep pill — user icon + initials, matching the SF Owner column in
+  // components/CompanyTable.tsx.
   return (
-    <div className="relative inline-flex">
-      <button
-        type="button"
-        className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors"
-        onMouseEnter={() => setShow(true)}
-        onMouseLeave={() => setShow(false)}
-        onClick={() => setShow(v => !v)}
-        title={names.join(', ')}
-      >
-        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-        </svg>
-      </button>
-      {show && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-50 bg-gray-900 text-white text-xs rounded-lg px-2 py-1.5 whitespace-nowrap shadow-xl pointer-events-none">
-          {names.join(', ')}
-        </div>
-      )}
-    </div>
+    <span className="inline-flex flex-wrap items-center gap-1">
+      {names.map(name => (
+        <span
+          key={name}
+          title={name}
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[name]).badgeClass}`}
+        >
+          <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          {getRepInitials(name)}
+        </span>
+      ))}
+    </span>
   );
 }
 
@@ -219,19 +217,22 @@ function InternalAttendeePill({ internalAttendees }: { internalAttendees: string
 }
 
 /* ─── RSVP summary totals + Primary Company Type toggle ─── */
-function RSVPSummaryBar({ invitedIds, rsvpMap, primaryTypeOnly, primaryCompanyType, attendees, onTogglePrimaryType, activeFilters, onToggleFilter, stackOperators }: {
+function RSVPSummaryBar({ invitedIds, rsvpMap, selectedTypes, icpCompanyTypes, attendees, onToggleType, activeFilters, onToggleFilter, stackOperators }: {
   invitedIds: number[];
   rsvpMap: Record<number, RsvpStatus[]>;
-  primaryTypeOnly: boolean;
-  primaryCompanyType: string | null;
+  selectedTypes: Set<string>;
+  icpCompanyTypes: string[];
   attendees: Attendee[];
-  onTogglePrimaryType: () => void;
+  onToggleType: (type: string) => void;
   activeFilters: RsvpStatus[];
   onToggleFilter: (f: RsvpStatus | null) => void;
   stackOperators?: boolean;
 }) {
-  const filtered = primaryTypeOnly && primaryCompanyType
-    ? invitedIds.filter(id => attendees.find(a => a.id === id)?.company_type === primaryCompanyType)
+  const filtered = selectedTypes.size > 0
+    ? invitedIds.filter(id => {
+        const t = attendees.find(a => a.id === id)?.company_type;
+        return t ? selectedTypes.has(t) : false;
+      })
     : invitedIds;
   const yes = filtered.filter(id => (rsvpMap[id] || []).includes('yes')).length;
   const attended = filtered.filter(id => (rsvpMap[id] || []).includes('attended')).length;
@@ -263,14 +264,20 @@ function RSVPSummaryBar({ invitedIds, rsvpMap, primaryTypeOnly, primaryCompanyTy
       })}
     </div>
   );
-  const primaryTypeBtn = primaryCompanyType ? (
-    <button
-      type="button"
-      onClick={onTogglePrimaryType}
-      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex-shrink-0 ${primaryTypeOnly ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-    >
-      {primaryCompanyType}
-    </button>
+  // One toggle per ICP company type; multiple can be active at once.
+  const primaryTypeBtn = icpCompanyTypes.length > 0 ? (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {icpCompanyTypes.map(type => (
+        <button
+          key={type}
+          type="button"
+          onClick={() => onToggleType(type)}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex-shrink-0 ${selectedTypes.has(type) ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+        >
+          {type}
+        </button>
+      ))}
+    </div>
   ) : null;
   if (stackOperators) {
     return (
@@ -380,7 +387,7 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMap
 }
 
 /* ─── Mobile: full-screen guest list bottom sheet ─── */
-function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, onClose, colorMaps, companies, userOptionsFull, primaryCompanyType }: {
+function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, onClose, colorMaps, companies, userOptionsFull, icpCompanyTypes }: {
   event: SocialEvent;
   invitedAttendees: Attendee[];
   rsvpMap: Record<number, RsvpStatus[]>;
@@ -390,15 +397,20 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
   colorMaps: Record<string, Record<string, string | null>>;
   companies: CompanyOption[];
   userOptionsFull: Array<{ id: number; value: string }>;
-  primaryCompanyType: string | null;
+  icpCompanyTypes: string[];
 }) {
-  const [primaryTypeOnly, setPrimaryTypeOnly] = useState(false);
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
+  const toggleType = (t: string) => setSelectedTypes(prev => {
+    const next = new Set(prev);
+    if (next.has(t)) next.delete(t); else next.add(t);
+    return next;
+  });
   const [activeFilters, setActiveFilters] = useState<RsvpStatus[]>([]);
   const handleToggleFilter = (f: RsvpStatus | null) => {
     if (f === null) { setActiveFilters([]); return; }
     setActiveFilters(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
   };
-  const byPrimaryType = primaryTypeOnly && primaryCompanyType ? invitedAttendees.filter(a => a.company_type === primaryCompanyType) : invitedAttendees;
+  const byPrimaryType = selectedTypes.size > 0 ? invitedAttendees.filter(a => a.company_type != null && selectedTypes.has(a.company_type)) : invitedAttendees;
   const visible = activeFilters.length === 0 ? byPrimaryType : byPrimaryType.filter(a => {
     const s = rsvpMap[a.id] || [];
     return activeFilters.some(f => s.includes(f));
@@ -416,7 +428,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
-          <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} primaryTypeOnly={primaryTypeOnly} primaryCompanyType={primaryCompanyType} attendees={invitedAttendees} onTogglePrimaryType={() => setPrimaryTypeOnly(v => !v)} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} stackOperators />
+          <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} selectedTypes={selectedTypes} icpCompanyTypes={icpCompanyTypes} attendees={invitedAttendees} onToggleType={toggleType} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} stackOperators />
         </div>
         <div className="overflow-y-auto flex-1 p-3 space-y-2 pb-24">
           {visible.length === 0
@@ -431,7 +443,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
 }
 
 /* ─── Desktop: inline RSVP expansion below table row ─── */
-function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, colorMaps, companies, userOptionsFull, primaryCompanyType }: {
+function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, colorMaps, companies, userOptionsFull, icpCompanyTypes }: {
   event: SocialEvent;
   invitedAttendees: Attendee[];
   rsvpMap: Record<number, RsvpStatus[]>;
@@ -440,15 +452,20 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemov
   colorMaps: Record<string, Record<string, string | null>>;
   companies: CompanyOption[];
   userOptionsFull: Array<{ id: number; value: string }>;
-  primaryCompanyType: string | null;
+  icpCompanyTypes: string[];
 }) {
-  const [primaryTypeOnly, setPrimaryTypeOnly] = useState(false);
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
+  const toggleType = (t: string) => setSelectedTypes(prev => {
+    const next = new Set(prev);
+    if (next.has(t)) next.delete(t); else next.add(t);
+    return next;
+  });
   const [activeFilters, setActiveFilters] = useState<RsvpStatus[]>([]);
   const handleToggleFilter = (f: RsvpStatus | null) => {
     if (f === null) { setActiveFilters([]); return; }
     setActiveFilters(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
   };
-  const byPrimaryType = primaryTypeOnly && primaryCompanyType ? invitedAttendees.filter(a => a.company_type === primaryCompanyType) : invitedAttendees;
+  const byPrimaryType = selectedTypes.size > 0 ? invitedAttendees.filter(a => a.company_type != null && selectedTypes.has(a.company_type)) : invitedAttendees;
   const visible = activeFilters.length === 0 ? byPrimaryType : byPrimaryType.filter(a => {
     const s = rsvpMap[a.id] || [];
     return activeFilters.some(f => s.includes(f));
@@ -456,7 +473,7 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemov
   return (
     <div className="p-4 bg-gray-50 border-t border-gray-200">
       <div className="mb-4">
-        <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} primaryTypeOnly={primaryTypeOnly} primaryCompanyType={primaryCompanyType} attendees={invitedAttendees} onTogglePrimaryType={() => setPrimaryTypeOnly(v => !v)} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} />
+        <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} selectedTypes={selectedTypes} icpCompanyTypes={icpCompanyTypes} attendees={invitedAttendees} onToggleType={toggleType} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} />
       </div>
       {visible.length === 0
         ? <p className="text-sm text-gray-400 text-center py-4">No attendees to show.</p>
@@ -527,19 +544,21 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemov
 }
 
 /* ─── Build Guest List modal ─── */
-function GuestListModal({ attendees, selected, onConfirm, onClose, primaryCompanyType }: {
+function GuestListModal({ attendees, selected, onConfirm, onClose, icpCompanyTypes }: {
   attendees: Attendee[];
   selected: string[];
   onConfirm: (ids: string[]) => void;
   onClose: () => void;
-  primaryCompanyType: string | null;
+  icpCompanyTypes: string[];
 }) {
   const [draft, setDraft] = useState<string[]>(selected);
   const [search, setSearch] = useState('');
 
+  // ICP company types sort to the top of the pick list.
+  const icpTypeSet = new Set(icpCompanyTypes);
   const sorted = [...attendees].sort((a, b) => {
-    const aOp = primaryCompanyType && a.company_type === primaryCompanyType ? 0 : 1;
-    const bOp = primaryCompanyType && b.company_type === primaryCompanyType ? 0 : 1;
+    const aOp = a.company_type && icpTypeSet.has(a.company_type) ? 0 : 1;
+    const bOp = b.company_type && icpTypeSet.has(b.company_type) ? 0 : 1;
     if (aOp !== bOp) return aOp - bOp;
     return (a.company_name || '').localeCompare(b.company_name || '');
   });
@@ -610,7 +629,7 @@ function GuestListModal({ attendees, selected, onConfirm, onClose, primaryCompan
               ) : visible.map(att => {
                 const id = String(att.id);
                 const checked = draft.includes(id);
-                const op = primaryCompanyType && att.company_type === primaryCompanyType;
+                const op = att.company_type != null && icpTypeSet.has(att.company_type);
                 return (
                   <tr key={att.id} onClick={() => toggle(id)} className={`cursor-pointer transition-colors ${checked ? 'bg-blue-50 hover:bg-blue-50' : 'hover:bg-gray-50'}`}>
                     <td className="pl-4 pr-2 py-2.5 align-middle">
@@ -660,13 +679,19 @@ export function SocialEventsTable({
 }: SocialEventsTableProps) {
   const colorMaps = useConfigColors();
   const { user } = useUser();
-  const [primaryCompanyType, setPrimaryCompanyType] = useState<string | null>(null);
+  // Company-type filter buttons come from the ICP Parameters rule in Admin >
+  // ICP (icp_rules, category 'company_type'), so the RSVP table offers the same
+  // types that define an ICP company — one button each — rather than the single
+  // is_primary type it used before. Same source CompanyTable reads.
+  const [icpCompanyTypes, setIcpCompanyTypes] = useState<string[]>([]);
   useEffect(() => {
-    getConfig().then((data: unknown) => {
-      const rows = data as { category: string; value: string; is_primary: number }[];
-      const primary = rows.find(r => r.category === 'company_type' && r.is_primary === 1);
-      setPrimaryCompanyType(primary?.value ?? null);
-    }).catch(() => {});
+    fetch('/api/admin/icp-rules', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then((data: { rules?: { category: string; conditions: { option_value: string }[] }[] } | null) => {
+        const rule = data?.rules?.find(r => r.category === 'company_type');
+        setIcpCompanyTypes(rule ? rule.conditions.map(c => c.option_value).filter(Boolean) : []);
+      })
+      .catch(() => {});
   }, []);
   const { isVisible, orderedColumns } = useTableColumnConfig('social_events');
   const customColumns = useCustomColumns('social_events');
@@ -956,7 +981,16 @@ export function SocialEventsTable({
             {/* Location */}
             <div>
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Location</label>
-              <input type="text" value={formData.location} onChange={e => setFormData(p => ({ ...p, location: e.target.value }))} placeholder="Enter location..." className="input-field text-sm w-full" />
+              {/* Same Places-backed lookup as the conference Location field.
+                  Only formatted_address is kept — social_events has no columns
+                  for the lat/lng/timezone the details call also returns. */}
+              <LocationAutocompleteInput
+                value={formData.location}
+                onChange={v => setFormData(p => ({ ...p, location: v }))}
+                onSelect={details => setFormData(p => ({ ...p, location: details.formatted_address }))}
+                placeholder="e.g., The Bellagio, Las Vegas, NV"
+                className="input-field text-sm w-full"
+              />
             </div>
 
             {/* Date */}
@@ -1018,7 +1052,7 @@ export function SocialEventsTable({
           selected={formData.prospect_attendees}
           onConfirm={ids => setFormData(p => ({ ...p, prospect_attendees: ids }))}
           onClose={() => setShowGuestListModal(false)}
-          primaryCompanyType={primaryCompanyType}
+          icpCompanyTypes={icpCompanyTypes}
         />
       )}
 
@@ -1153,7 +1187,7 @@ export function SocialEventsTable({
                       {isExpanded && (
                         <tr>
                           <td colSpan={99} className="p-0 border-b border-gray-200">
-                            <RSVPExpansion event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} primaryCompanyType={primaryCompanyType} />
+                            <RSVPExpansion event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} icpCompanyTypes={icpCompanyTypes} />
                           </td>
                         </tr>
                       )}
@@ -1172,7 +1206,7 @@ export function SocialEventsTable({
         if (!ev) return null;
         const { invited, rsvpMap } = getEventData(ev);
         return (
-          <GuestListSheet event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)} onClose={() => setGuestListEventId(null)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} primaryCompanyType={primaryCompanyType} />
+          <GuestListSheet event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)} onClose={() => setGuestListEventId(null)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} icpCompanyTypes={icpCompanyTypes} />
         );
       })()}
     </div>
