@@ -746,23 +746,9 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      // If there's an in-memory blob with no persisted URL, upload to R2 via server-side route
-      let persistedAudioUrl = audioUrl && !audioUrl.startsWith('blob:') ? audioUrl : null;
-      if (audioBlob && !persistedAudioUrl) {
-        try {
-          const ext = (audioBlob.type.split('/')[1] || 'webm').replace('mpeg', 'mp3');
-          const fd = new FormData();
-          fd.append('file', new File([audioBlob], `recording.${ext}`, { type: audioBlob.type }));
-          const up = await fetch(`/api/meetings/${meetingId}/audio`, { method: 'POST', body: fd });
-          if (up.ok) {
-            const { url } = await up.json();
-            persistedAudioUrl = url;
-            setAudioUrl(url);
-            setAudioBlob(null);
-          }
-        } catch { /* non-blocking — save proceeds without audio_file_path */ }
-      }
-
+      // Audio is never persisted. The recording exists only as an in-memory
+      // blob for the life of this session — Save writes the notes, transcript
+      // and AI summary, and nothing else.
       const res = await fetch(`/api/meetings/${meetingId}/notes`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -770,16 +756,15 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
           notes_text: notesText,
           transcript: transcript.length ? JSON.stringify(transcript) : null,
           summary,
-          audio_file_path: persistedAudioUrl,
         }),
       });
       if (!res.ok) throw new Error();
-      savedStateRef.current = { notesText, audioUrl: persistedAudioUrl, hadTranscript: transcript.length > 0 };
+      savedStateRef.current = { notesText, audioUrl, hadTranscript: transcript.length > 0 };
       // Confirm any selected action items into the bundled follow-up
       if (selectedTaskIds.size > 0) {
         try { await confirmSelectedTasksToApi(); } catch { /* non-blocking */ }
       }
-      toast.success('Notes saved.');
+      toast.success('Notes saved. The audio recording is not retained.');
       // Set outcome to Held (best-effort, non-blocking)
       if (meeting) {
         fetch(`/api/meetings/${meetingId}/set-held`, { method: 'POST' }).catch(() => {});
@@ -813,7 +798,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     } finally {
       setSaving(false);
     }
-  }, [meetingId, notesText, transcript, summary, audioUrl, audioBlob, meeting, insights, selectedTaskIds, confirmSelectedTasksToApi]);
+  }, [meetingId, notesText, transcript, summary, audioUrl, meeting, insights, selectedTaskIds, confirmSelectedTasksToApi]);
 
   // Poll via useEffect when summary === 'Generating…', stop when real data or error arrives.
   const isCompanyIntelGenerating = companyIntel?.summary === 'Generating…';
@@ -1037,11 +1022,15 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   // Use recorded elapsed time as fallback when the webm blob lacks duration metadata (Infinity)
   const displayDuration = isFinite(audioDuration) && audioDuration > 0 ? audioDuration : recordingDuration;
 
+  // A recording captured in this session. It lives only in browser memory and
+  // is never persisted, so it still warrants an exit warning — but Save won't
+  // preserve it, which the exit dialog's copy calls out explicitly.
+  const hasSessionRecording = !!audioBlob || !!(audioUrl?.startsWith('blob:'));
+
   // True when user has changes that haven't been persisted yet
   const hasUnsavedChanges = (
     notesText !== savedStateRef.current.notesText ||
-    !!audioBlob ||
-    !!(audioUrl?.startsWith('blob:')) ||
+    hasSessionRecording ||
     internalAttendees.length > 0 ||
     (!savedStateRef.current.hadTranscript && transcript.length > 0)
   );
@@ -1391,6 +1380,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
             </div>
             <p className="text-xs text-gray-500 mb-4 leading-relaxed">
               Save to keep your latest changes, or discard them and exit without affecting previously saved data.
+              {hasSessionRecording && ' Your notes, transcript and AI summary are saved — the audio recording itself is not retained and will be discarded when you exit.'}
             </p>
             <div className="flex flex-col gap-2">
               <button
@@ -1430,7 +1420,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
               <h2 className="text-sm font-semibold text-gray-800">Replace existing recording?</h2>
             </div>
             <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-              A recording already exists for this meeting. Starting a new recording will permanently replace it.
+              A recording is already loaded for this session. Starting a new recording will discard it.
             </p>
             <div className="flex gap-2">
               <button
@@ -1531,6 +1521,15 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block" /> Action item</span>
             </div>
           </div>
+          {hasSessionRecording && (
+            <div className="flex items-center gap-3 mt-1">
+              <div className="w-8 flex-shrink-0" />
+              <span className="w-10 flex-shrink-0" />
+              <p className="text-[10px] text-gray-400">
+                Playback is available for this session only — the recording is not retained. Generate an AI summary to keep the transcript.
+              </p>
+            </div>
+          )}
           <audio ref={audioRef} src={audioUrl} className="hidden" />
         </div>
       )}
