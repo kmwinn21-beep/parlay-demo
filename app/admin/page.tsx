@@ -748,6 +748,44 @@ function PrioritySection({ title, open, onToggle, children }: { title: string; o
   );
 }
 
+type PriorityValue = 'High' | 'Medium' | 'Low' | 'Ignore';
+
+const PRIORITY_OPTIONS: readonly PriorityValue[] = ['High', 'Medium', 'Low', 'Ignore'];
+const PRIORITY_LABELS: Record<PriorityValue, string> = { High: 'High', Medium: 'Med', Low: 'Low', Ignore: 'Ignore' };
+// Descending ramp so relative priority reads at a glance.
+const PRIORITY_ACTIVE_CLASS: Record<PriorityValue, string> = {
+  High: 'bg-teal-600 text-white border-teal-600',
+  Medium: 'bg-amber-500 text-white border-amber-500',
+  Low: 'bg-amber-200 text-amber-900 border-amber-300',
+  Ignore: 'bg-gray-400 text-white border-gray-400',
+};
+
+/**
+ * Segmented priority picker, matching TriToggle in the product ICP section
+ * (components/admin/ProductsSolutionsTab.tsx). Unlike that one there is no
+ * deselect: a seniority/function always carries a priority, defaulting to
+ * Medium when unset, so clicking the active segment is a no-op.
+ */
+function PriorityToggle({ value, onSelect }: { value: PriorityValue; onSelect: (v: PriorityValue) => void }) {
+  return (
+    <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+      {PRIORITY_OPTIONS.map(opt => (
+        <button
+          key={opt}
+          type="button"
+          onClick={() => onSelect(opt)}
+          aria-pressed={value === opt}
+          className={`px-2.5 py-1 text-xs font-medium border-r last:border-r-0 border-gray-200 transition-colors ${
+            value === opt ? PRIORITY_ACTIVE_CLASS[opt] : 'bg-white text-gray-500 hover:bg-gray-50'
+          }`}
+        >
+          {PRIORITY_LABELS[opt]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function TagInput({ tags, onChange, placeholder }: { tags: string[]; onChange: (tags: string[]) => void; placeholder: string }) {
   const [inputValue, setInputValue] = useState('');
   const add = (raw: string) => {
@@ -3456,32 +3494,29 @@ export default function AdminPage() {
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">Seniority &amp; Function Prioritization</label>
               <p className="text-xs text-gray-400 mb-2">Set the priority for each seniority tier and contact function. Contacts with High or Medium priority will be flagged as prioritized prospects.</p>
-              <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
                 <PrioritySection title="Seniority Priority" open={seniorityPriorityOpen} onToggle={() => setSeniorityPriorityOpen(v => !v)}>
                   {(optionsByCategory['seniority'] ?? []).map(s => (
-                    <div key={s.value}>
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{s.value}</p>
-                      <select
-                        value={icpSeniorityPriority[s.value] ?? 'Medium'}
-                        onChange={e => setIcpSeniorityPriority(prev => ({ ...prev, [s.value]: e.target.value as 'High' | 'Medium' | 'Low' | 'Ignore' }))}
-                        className="input-field text-sm w-full"
-                      >
-                        {(['High', 'Medium', 'Low', 'Ignore'] as const).map(p => <option key={p} value={p}>{p}</option>)}
-                      </select>
+                    <div key={s.value} className="flex items-center justify-between gap-3">
+                      <span className="text-sm text-gray-700 min-w-0 truncate">{s.value}</span>
+                      <PriorityToggle
+                        value={(icpSeniorityPriority[s.value] ?? 'Medium') as PriorityValue}
+                        onSelect={v => setIcpSeniorityPriority(prev => ({ ...prev, [s.value]: v }))}
+                      />
                     </div>
                   ))}
+                  {(optionsByCategory['seniority'] ?? []).length === 0 && (
+                    <p className="text-xs text-gray-400">No seniority options configured.</p>
+                  )}
                 </PrioritySection>
                 <PrioritySection title="Function Priority" open={functionPriorityOpen} onToggle={() => setFunctionPriorityOpen(v => !v)}>
                   {(optionsByCategory['function'] ?? []).map(f => (
-                    <div key={f.value}>
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{f.value}</p>
-                      <select
-                        value={icpFunctionPriority[f.value] ?? 'Medium'}
-                        onChange={e => setIcpFunctionPriority(prev => ({ ...prev, [f.value]: e.target.value as 'High' | 'Medium' | 'Low' | 'Ignore' }))}
-                        className="input-field text-sm w-full"
-                      >
-                        {(['High', 'Medium', 'Low', 'Ignore'] as const).map(p => <option key={p} value={p}>{p}</option>)}
-                      </select>
+                    <div key={f.value} className="flex items-center justify-between gap-3">
+                      <span className="text-sm text-gray-700 min-w-0 truncate">{f.value}</span>
+                      <PriorityToggle
+                        value={(icpFunctionPriority[f.value] ?? 'Medium') as PriorityValue}
+                        onSelect={v => setIcpFunctionPriority(prev => ({ ...prev, [f.value]: v }))}
+                      />
                     </div>
                   ))}
                   {(optionsByCategory['function'] ?? []).length === 0 && (
