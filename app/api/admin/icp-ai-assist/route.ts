@@ -49,6 +49,13 @@ Return ONLY valid JSON in this exact structure — no markdown, no explanation, 
 
 const MONTHLY_LIMIT = 5;
 
+// Deliberate token-budget cap. The uploaded documents already dominate the
+// request, so the product catalog is capped rather than allowed to grow with
+// the account's config. Products are taken in the same `sort_order, value`
+// order that /api/config returns them in, so the cap keeps whatever the admin
+// sorted to the top.
+const MAX_CONTEXT_PRODUCTS = 20;
+
 // Analyzing a few PDFs through Claude routinely runs past the default function
 // timeout; without this the platform kills the request and returns a non-JSON
 // gateway error, which the client could only report as a generic failure.
@@ -58,6 +65,169 @@ export const maxDuration = 300;
 // platform rejects bodies over ~4.5 MB before this handler runs, so this is a
 // backstop for direct callers rather than the primary guard.
 const MAX_TOTAL_UPLOAD_BYTES = 4 * 1024 * 1024;
+
+// ── Account context assembly ────────────────────────────────────────────────
+// Each block is either ready-to-inject text or null. Nothing is ever emitted as
+// a bare header with no body — a partially-configured account should read as
+// "this wasn't set up" rather than "this is empty", since the model would
+// otherwise treat an empty section as a statement about the vendor.
+//
+// Note this diverges from app/api/meetings/[id]/analyze/route.ts, which
+// substitutes sentinel "No specific pain points configured…" strings instead of
+// omitting. Omission is the better fit here: that route needs the model to keep
+// hunting for signals regardless, whereas this one should simply say less when
+// it knows less.
+type IcpAssistContext = {
+  vendorBlock: string | null;
+  personaBlock: string | null;
+  existingBlock: string | null;
+};
+
+/** Parse a site_settings value stored as a JSON array of plain strings. */
+function parseStringArraySetting(val: string | undefined): string[] {
+  if (!val) return [];
+  try {
+    const parsed = JSON.parse(val);
+    if (Array.isArray(parsed)) return parsed.map(String).map(s => s.trim()).filter(Boolean);
+  } catch { /* ignore */ }
+  return [];
+}
+
+/** Parse a site_settings value stored as a JSON array of { title, description }. */
+function parseTitleArraySetting(val: string | undefined): string[] {
+  if (!val) return [];
+  try {
+    const parsed = JSON.parse(val) as Array<{ title?: string }>;
+    if (Array.isArray(parsed)) return parsed.map(p => (p?.title ?? '').trim()).filter(Boolean);
+  } catch { /* ignore */ }
+  return [];
+}
+
+/** Case-insensitive de-duplication that preserves first-seen casing and order. */
+function dedupeByTitle(titles: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const t of titles) {
+    const key = t.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+}
+
+async function buildIcpAssistContext(
+  dbClient: Awaited<ReturnType<typeof getDb>>
+): Promise<IcpAssistContext> {
+  const settings: Record<string, string> = {};
+  try {
+    // Single batched read, matching the WHERE key IN (...) pattern used by the
+    // meeting analysis route. The four icp_*_points / icp_*_events keys are the
+    // same ones /api/icp-config reads — queried directly here rather than via an
+    // HTTP round-trip to our own API.
+    const rows = await dbClient.execute({
+      sql: `SELECT key, value FROM site_settings WHERE key IN (
+              'company_info_name', 'tagline',
+              'icp_use_case_description', 'icp_exclusion_description',
+              'icp_decision_maker_titles', 'icp_target_titles',
+              'icp_pain_points', 'icp_ai_pain_points',
+              'icp_trigger_events', 'icp_ai_trigger_events'
+            )`,
+      args: [],
+    });
+    for (const row of rows.rows) settings[String(row.key)] = String(row.value ?? '');
+  } catch { /* ignore — an unconfigured account yields all-null blocks */ }
+
+  // ── Vendor block ──
+  const vendorLines: string[] = [];
+  const companyName = (settings['company_info_name'] ?? '').trim();
+  const tagline = (settings['tagline'] ?? '').trim();
+  const useCase = (settings['icp_use_case_description'] ?? '').trim();
+  const exclusions = (settings['icp_exclusion_description'] ?? '').trim();
+
+  if (companyName) vendorLines.push(`Company: ${companyName}`);
+  if (tagline) vendorLines.push(`Positioning: ${tagline}`);
+  if (useCase) vendorLines.push(`Ideal customer and why they bought: ${useCase}`);
+  if (exclusions) vendorLines.push(`Explicitly not a fit: ${exclusions}`);
+
+  let productLines: string[] = [];
+  try {
+    const productRows = await dbClient.execute({
+      sql: `SELECT value, description, metadata FROM config_options
+            WHERE category = 'products' ORDER BY sort_order, value`,
+      args: [],
+    });
+    productLines = productRows.rows
+      .filter(r => {
+        // `active` lives inside the metadata JSON, not a column, and absence
+        // means active (parseMeta in ProductsSolutionsTab uses active !== false).
+        try {
+          const meta = r.metadata ? JSON.parse(String(r.metadata)) as { active?: boolean } : null;
+          return meta?.active !== false;
+        } catch { return true; }
+      })
+      .slice(0, MAX_CONTEXT_PRODUCTS)
+      .map(r => {
+        const name = String(r.value ?? '').trim();
+        if (!name) return '';
+        // No admin UI currently writes `description` for category='products'
+        // (only for 'product_category'), so this falls back to the bare name
+        // rather than dropping the product entirely — the name alone still
+        // tells the model what is sold.
+        const description = String(r.description ?? '').trim();
+        return description ? `- ${name}: ${description}` : `- ${name}`;
+      })
+      .filter(Boolean);
+  } catch { /* ignore — treat as no catalog */ }
+
+  if (productLines.length > 0) {
+    vendorLines.push(`Products and services offered:\n${productLines.join('\n')}`);
+  }
+
+  const vendorBlock = vendorLines.length > 0
+    ? `VENDOR CONTEXT — this is the company whose materials you are analyzing:\n${vendorLines.join('\n')}`
+    : null;
+
+  // ── Persona block ──
+  const decisionMakerTitles = parseStringArraySetting(settings['icp_decision_maker_titles']);
+  const targetTitles = parseStringArraySetting(settings['icp_target_titles']);
+  const personaLines: string[] = [];
+  if (decisionMakerTitles.length > 0) {
+    personaLines.push(`Decision-maker titles: ${decisionMakerTitles.join(', ')}`);
+  }
+  if (targetTitles.length > 0) {
+    personaLines.push(`Other target titles: ${targetTitles.join(', ')}`);
+  }
+  const personaBlock = personaLines.length > 0
+    ? `BUYING COMMITTEE — the roles this product is sold to:\n${personaLines.join('\n')}`
+    : null;
+
+  // ── Existing context block ──
+  // Manual and AI-sourced entries are merged the same way /api/icp-config merges
+  // them; the two sources are not distinguishable once combined, so dedupe runs
+  // across the whole list. Titles only — descriptions would bloat the block.
+  const existingPainPoints = dedupeByTitle([
+    ...parseStringArraySetting(settings['icp_pain_points']),
+    ...parseTitleArraySetting(settings['icp_ai_pain_points']),
+  ]);
+  const existingTriggerEvents = dedupeByTitle([
+    ...parseStringArraySetting(settings['icp_trigger_events']),
+    ...parseTitleArraySetting(settings['icp_ai_trigger_events']),
+  ]);
+
+  const existingLines: string[] = [];
+  if (existingPainPoints.length > 0) {
+    existingLines.push(`Pain points already configured:\n${existingPainPoints.map(t => `- ${t}`).join('\n')}`);
+  }
+  if (existingTriggerEvents.length > 0) {
+    existingLines.push(`Trigger events already configured:\n${existingTriggerEvents.map(t => `- ${t}`).join('\n')}`);
+  }
+  const existingBlock = existingLines.length > 0
+    ? `ALREADY CONFIGURED — avoid restating these; surface what is missing:\n${existingLines.join('\n\n')}`
+    : null;
+
+  return { vendorBlock, personaBlock, existingBlock };
+}
 
 async function getUsage(dbClient: Awaited<ReturnType<typeof getDb>>): Promise<{ count: number; month: string }> {
   const currentMonth = new Date().toISOString().slice(0, 7);
