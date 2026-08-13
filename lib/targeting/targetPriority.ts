@@ -289,7 +289,14 @@ export function scoreAttendeeBuyerFit(input: {
   const targetTitleScore = valueMatchesConfigured(meta?.normalized_title ?? title, config.target_titles) || (role === 'target_title' && exactOrConfirmed) ? 100 : fuzzyMedium ? 50 : 0;
   const productMappingScore = functionLabel && (config.function_product_mapping[String(meta?.function_id ?? '')]?.length || config.function_product_mapping[functionLabel]?.length) ? 100 : 0;
 
-  const buyer_fit_score = weighted([[roleScore, 35], [seniorityScore, 25], [functionScore, 20], [targetTitleScore, 15], [productMappingScore, 5]]);
+  // Weighted toward the structured Seniority/Function priority mappings over the
+  // free-text title lists: the dropdowns are explicit admin decisions keyed to
+  // resolved config ids, whereas the pill fields match raw title text by fuzzy
+  // substring and are correspondingly noisier.
+  // weighted() normalises by the total, so these are ratios rather than literal
+  // percentages — they sum to 110, giving effective shares of roughly
+  // seniority 36%, function 32%, role 18%, target title 9%, product mapping 5%.
+  const buyer_fit_score = weighted([[roleScore, 20], [seniorityScore, 40], [functionScore, 35], [targetTitleScore, 10], [productMappingScore, 5]]);
   const why: string[] = [];
   if (meta?.normalized_title) why.push(`Title normalized to ${meta.normalized_title}.`);
   if (role !== 'unknown') why.push(`Buyer role classified as ${role.replace(/_/g, ' ')}.`);
