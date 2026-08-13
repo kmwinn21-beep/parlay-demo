@@ -1,12 +1,13 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { LocationAutocompleteInput } from './LocationAutocompleteInput';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { getBadgeClass } from '@/lib/colors';
+import { getBadgeClass, getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getConfig } from '@/lib/configCache';
-import { parseRepIds } from '@/lib/useUserOptions';
+import { parseRepIds, getRepInitials } from '@/lib/useUserOptions';
 import { useUser } from '@/components/UserContext';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
 import { CustomColumnCell } from './CustomColumnCell';
@@ -21,6 +22,7 @@ export interface SocialEvent {
   event_name: string | null;
   event_type: string | null;
   host: string | null;
+  venue_name: string | null;
   location: string | null;
   event_date: string | null;
   event_time: string | null;
@@ -160,78 +162,49 @@ function AssignedUserPill({ assignedUser, userOptionsFull }: {
   assignedUser: string | null | undefined;
   userOptionsFull: Array<{ id: number; value: string }>;
 }) {
-  const [show, setShow] = useState(false);
+  const colorMaps = useConfigColors();
   if (!assignedUser) return null;
   const names = parseRepIds(assignedUser)
     .map(id => userOptionsFull.find(u => u.id === id)?.value)
     .filter(Boolean) as string[];
   if (names.length === 0) return null;
+  // Standard rep pill — user icon + initials, matching the SF Owner column in
+  // components/CompanyTable.tsx.
   return (
-    <div className="relative inline-flex">
-      <button
-        type="button"
-        className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors"
-        onMouseEnter={() => setShow(true)}
-        onMouseLeave={() => setShow(false)}
-        onClick={() => setShow(v => !v)}
-        title={names.join(', ')}
-      >
-        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-        </svg>
-      </button>
-      {show && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-50 bg-gray-900 text-white text-xs rounded-lg px-2 py-1.5 whitespace-nowrap shadow-xl pointer-events-none">
-          {names.join(', ')}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ─── Internal-attendee count pill ─── */
-function InternalAttendeePill({ internalAttendees }: { internalAttendees: string | null }) {
-  const [pos, setPos] = useState<{ top: number; left: number; width: number; above: boolean } | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-  if (!internalAttendees) return <span className="text-gray-400">—</span>;
-  const names = internalAttendees.split(',').map(n => n.trim()).filter(Boolean);
-  if (names.length === 0) return <span className="text-gray-400">—</span>;
-  const handleMouseEnter = () => {
-    if (!ref.current) return;
-    const rect = ref.current.getBoundingClientRect();
-    const w = Math.min(280, window.innerWidth - 16);
-    const left = Math.max(8, Math.min(rect.left + rect.width / 2 - w / 2, window.innerWidth - w - 8));
-    setPos({ top: rect.top > 200 ? rect.top - 8 : rect.bottom + 8, left, width: w, above: rect.top > 200 });
-  };
-  return (
-    <div ref={ref} className="relative inline-block" onMouseEnter={handleMouseEnter} onMouseLeave={() => setPos(null)}>
-      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-[#3A506B] cursor-pointer">{names.length}</span>
-      {pos && (
-        <div style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999, transform: pos.above ? 'translateY(-100%)' : 'translateY(0)' }}>
-          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2.5">
-            <p className="font-semibold mb-1.5 text-gray-300 uppercase tracking-wide text-[10px]">Internal Attendees</p>
-            <ul className="space-y-1">{names.map((n, i) => <li key={i} className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#3A506B] flex-shrink-0" />{n}</li>)}</ul>
-          </div>
-        </div>
-      )}
-    </div>
+    <span className="inline-flex flex-wrap items-center gap-1">
+      {names.map(name => (
+        <span
+          key={name}
+          title={name}
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[name]).badgeClass}`}
+        >
+          <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          {getRepInitials(name)}
+        </span>
+      ))}
+    </span>
   );
 }
 
 /* ─── RSVP summary totals + Primary Company Type toggle ─── */
-function RSVPSummaryBar({ invitedIds, rsvpMap, primaryTypeOnly, primaryCompanyType, attendees, onTogglePrimaryType, activeFilters, onToggleFilter, stackOperators }: {
+function RSVPSummaryBar({ invitedIds, rsvpMap, selectedTypes, icpCompanyTypes, attendees, onToggleType, activeFilters, onToggleFilter, stackOperators }: {
   invitedIds: number[];
   rsvpMap: Record<number, RsvpStatus[]>;
-  primaryTypeOnly: boolean;
-  primaryCompanyType: string | null;
+  selectedTypes: Set<string>;
+  icpCompanyTypes: string[];
   attendees: Attendee[];
-  onTogglePrimaryType: () => void;
+  onToggleType: (type: string) => void;
   activeFilters: RsvpStatus[];
   onToggleFilter: (f: RsvpStatus | null) => void;
   stackOperators?: boolean;
 }) {
-  const filtered = primaryTypeOnly && primaryCompanyType
-    ? invitedIds.filter(id => attendees.find(a => a.id === id)?.company_type === primaryCompanyType)
+  const filtered = selectedTypes.size > 0
+    ? invitedIds.filter(id => {
+        const t = attendees.find(a => a.id === id)?.company_type;
+        return t ? selectedTypes.has(t) : false;
+      })
     : invitedIds;
   const yes = filtered.filter(id => (rsvpMap[id] || []).includes('yes')).length;
   const attended = filtered.filter(id => (rsvpMap[id] || []).includes('attended')).length;
@@ -263,14 +236,20 @@ function RSVPSummaryBar({ invitedIds, rsvpMap, primaryTypeOnly, primaryCompanyTy
       })}
     </div>
   );
-  const primaryTypeBtn = primaryCompanyType ? (
-    <button
-      type="button"
-      onClick={onTogglePrimaryType}
-      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex-shrink-0 ${primaryTypeOnly ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-    >
-      {primaryCompanyType}
-    </button>
+  // One toggle per ICP company type; multiple can be active at once.
+  const primaryTypeBtn = icpCompanyTypes.length > 0 ? (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {icpCompanyTypes.map(type => (
+        <button
+          key={type}
+          type="button"
+          onClick={() => onToggleType(type)}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex-shrink-0 ${selectedTypes.has(type) ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+        >
+          {type}
+        </button>
+      ))}
+    </div>
   ) : null;
   if (stackOperators) {
     return (
@@ -380,7 +359,7 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMap
 }
 
 /* ─── Mobile: full-screen guest list bottom sheet ─── */
-function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, onClose, colorMaps, companies, userOptionsFull, primaryCompanyType }: {
+function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, onClose, colorMaps, companies, userOptionsFull, icpCompanyTypes }: {
   event: SocialEvent;
   invitedAttendees: Attendee[];
   rsvpMap: Record<number, RsvpStatus[]>;
@@ -390,15 +369,20 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
   colorMaps: Record<string, Record<string, string | null>>;
   companies: CompanyOption[];
   userOptionsFull: Array<{ id: number; value: string }>;
-  primaryCompanyType: string | null;
+  icpCompanyTypes: string[];
 }) {
-  const [primaryTypeOnly, setPrimaryTypeOnly] = useState(false);
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
+  const toggleType = (t: string) => setSelectedTypes(prev => {
+    const next = new Set(prev);
+    if (next.has(t)) next.delete(t); else next.add(t);
+    return next;
+  });
   const [activeFilters, setActiveFilters] = useState<RsvpStatus[]>([]);
   const handleToggleFilter = (f: RsvpStatus | null) => {
     if (f === null) { setActiveFilters([]); return; }
     setActiveFilters(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
   };
-  const byPrimaryType = primaryTypeOnly && primaryCompanyType ? invitedAttendees.filter(a => a.company_type === primaryCompanyType) : invitedAttendees;
+  const byPrimaryType = selectedTypes.size > 0 ? invitedAttendees.filter(a => a.company_type != null && selectedTypes.has(a.company_type)) : invitedAttendees;
   const visible = activeFilters.length === 0 ? byPrimaryType : byPrimaryType.filter(a => {
     const s = rsvpMap[a.id] || [];
     return activeFilters.some(f => s.includes(f));
@@ -416,7 +400,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
-          <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} primaryTypeOnly={primaryTypeOnly} primaryCompanyType={primaryCompanyType} attendees={invitedAttendees} onTogglePrimaryType={() => setPrimaryTypeOnly(v => !v)} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} stackOperators />
+          <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} selectedTypes={selectedTypes} icpCompanyTypes={icpCompanyTypes} attendees={invitedAttendees} onToggleType={toggleType} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} stackOperators />
         </div>
         <div className="overflow-y-auto flex-1 p-3 space-y-2 pb-24">
           {visible.length === 0
@@ -431,7 +415,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
 }
 
 /* ─── Desktop: inline RSVP expansion below table row ─── */
-function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, colorMaps, companies, userOptionsFull, primaryCompanyType }: {
+function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, colorMaps, companies, userOptionsFull, icpCompanyTypes }: {
   event: SocialEvent;
   invitedAttendees: Attendee[];
   rsvpMap: Record<number, RsvpStatus[]>;
@@ -440,15 +424,20 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemov
   colorMaps: Record<string, Record<string, string | null>>;
   companies: CompanyOption[];
   userOptionsFull: Array<{ id: number; value: string }>;
-  primaryCompanyType: string | null;
+  icpCompanyTypes: string[];
 }) {
-  const [primaryTypeOnly, setPrimaryTypeOnly] = useState(false);
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
+  const toggleType = (t: string) => setSelectedTypes(prev => {
+    const next = new Set(prev);
+    if (next.has(t)) next.delete(t); else next.add(t);
+    return next;
+  });
   const [activeFilters, setActiveFilters] = useState<RsvpStatus[]>([]);
   const handleToggleFilter = (f: RsvpStatus | null) => {
     if (f === null) { setActiveFilters([]); return; }
     setActiveFilters(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
   };
-  const byPrimaryType = primaryTypeOnly && primaryCompanyType ? invitedAttendees.filter(a => a.company_type === primaryCompanyType) : invitedAttendees;
+  const byPrimaryType = selectedTypes.size > 0 ? invitedAttendees.filter(a => a.company_type != null && selectedTypes.has(a.company_type)) : invitedAttendees;
   const visible = activeFilters.length === 0 ? byPrimaryType : byPrimaryType.filter(a => {
     const s = rsvpMap[a.id] || [];
     return activeFilters.some(f => s.includes(f));
@@ -456,7 +445,7 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemov
   return (
     <div className="p-4 bg-gray-50 border-t border-gray-200">
       <div className="mb-4">
-        <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} primaryTypeOnly={primaryTypeOnly} primaryCompanyType={primaryCompanyType} attendees={invitedAttendees} onTogglePrimaryType={() => setPrimaryTypeOnly(v => !v)} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} />
+        <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} selectedTypes={selectedTypes} icpCompanyTypes={icpCompanyTypes} attendees={invitedAttendees} onToggleType={toggleType} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} />
       </div>
       {visible.length === 0
         ? <p className="text-sm text-gray-400 text-center py-4">No attendees to show.</p>
@@ -526,20 +515,72 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemov
   );
 }
 
+/* ─── Social event card pieces ─── */
+
+/**
+ * Google Places returns "3600 S Las Vegas Blvd, Las Vegas, NV 89109, USA".
+ * Only formatted_address is stored, so the venue name isn't recoverable —
+ * the trailing ", USA" is dropped instead to keep the pill readable.
+ */
+function displayLocation(venueName: string | null, address: string): string {
+  const addr = address.replace(/,\s*USA\s*$/i, '').trim();
+  const venue = (venueName ?? '').trim();
+  return [venue, addr].filter(Boolean).join(', ');
+}
+
+function mapsHref(location: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
+}
+
+/** Eyebrow label with its value beneath, used across the card's meta row. */
+function CardField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">{label}</p>
+      <div className="text-xs text-gray-700 min-w-0">{children}</div>
+    </div>
+  );
+}
+
+/** Internal attendees as the abbreviated rep pills used in the company tables. */
+function InternalRepPills({ internalAttendees }: { internalAttendees: string | null }) {
+  const colorMaps = useConfigColors();
+  const names = (internalAttendees ?? '').split(',').map(n => n.trim()).filter(Boolean);
+  if (names.length === 0) return <span className="text-gray-400">—</span>;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      {names.map(name => (
+        <span
+          key={name}
+          title={name}
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[name]).badgeClass}`}
+        >
+          <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          {getRepInitials(name)}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 /* ─── Build Guest List modal ─── */
-function GuestListModal({ attendees, selected, onConfirm, onClose, primaryCompanyType }: {
+function GuestListModal({ attendees, selected, onConfirm, onClose, icpCompanyTypes }: {
   attendees: Attendee[];
   selected: string[];
   onConfirm: (ids: string[]) => void;
   onClose: () => void;
-  primaryCompanyType: string | null;
+  icpCompanyTypes: string[];
 }) {
   const [draft, setDraft] = useState<string[]>(selected);
   const [search, setSearch] = useState('');
 
+  // ICP company types sort to the top of the pick list.
+  const icpTypeSet = new Set(icpCompanyTypes);
   const sorted = [...attendees].sort((a, b) => {
-    const aOp = primaryCompanyType && a.company_type === primaryCompanyType ? 0 : 1;
-    const bOp = primaryCompanyType && b.company_type === primaryCompanyType ? 0 : 1;
+    const aOp = a.company_type && icpTypeSet.has(a.company_type) ? 0 : 1;
+    const bOp = b.company_type && icpTypeSet.has(b.company_type) ? 0 : 1;
     if (aOp !== bOp) return aOp - bOp;
     return (a.company_name || '').localeCompare(b.company_name || '');
   });
@@ -610,7 +651,7 @@ function GuestListModal({ attendees, selected, onConfirm, onClose, primaryCompan
               ) : visible.map(att => {
                 const id = String(att.id);
                 const checked = draft.includes(id);
-                const op = primaryCompanyType && att.company_type === primaryCompanyType;
+                const op = att.company_type != null && icpTypeSet.has(att.company_type);
                 return (
                   <tr key={att.id} onClick={() => toggle(id)} className={`cursor-pointer transition-colors ${checked ? 'bg-blue-50 hover:bg-blue-50' : 'hover:bg-gray-50'}`}>
                     <td className="pl-4 pr-2 py-2.5 align-middle">
@@ -660,15 +701,20 @@ export function SocialEventsTable({
 }: SocialEventsTableProps) {
   const colorMaps = useConfigColors();
   const { user } = useUser();
-  const [primaryCompanyType, setPrimaryCompanyType] = useState<string | null>(null);
+  // Company-type filter buttons come from the ICP Parameters rule in Admin >
+  // ICP (icp_rules, category 'company_type'), so the RSVP table offers the same
+  // types that define an ICP company — one button each — rather than the single
+  // is_primary type it used before. Same source CompanyTable reads.
+  const [icpCompanyTypes, setIcpCompanyTypes] = useState<string[]>([]);
   useEffect(() => {
-    getConfig().then((data: unknown) => {
-      const rows = data as { category: string; value: string; is_primary: number }[];
-      const primary = rows.find(r => r.category === 'company_type' && r.is_primary === 1);
-      setPrimaryCompanyType(primary?.value ?? null);
-    }).catch(() => {});
+    fetch('/api/admin/icp-rules', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then((data: { rules?: { category: string; conditions: { option_value: string }[] }[] } | null) => {
+        const rule = data?.rules?.find(r => r.category === 'company_type');
+        setIcpCompanyTypes(rule ? rule.conditions.map(c => c.option_value).filter(Boolean) : []);
+      })
+      .catch(() => {});
   }, []);
-  const { isVisible, orderedColumns } = useTableColumnConfig('social_events');
   const customColumns = useCustomColumns('social_events');
 
   /* form state */
@@ -677,7 +723,7 @@ export function SocialEventsTable({
   const [editingEventId, setEditingEventId] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     entered_by: '', internal_attendees: [] as string[], event_name: '', event_type: '',
-    host: '', location: '', event_date: '', event_time: '',
+    host: '', venue_name: '', location: '', event_date: '', event_time: '',
     invite_only: 'No', prospect_attendees: [] as string[], notes: '',
   });
   const [internalOpen, setInternalOpen] = useState(false);
@@ -687,6 +733,20 @@ export function SocialEventsTable({
   /* RSVP state */
   const [localRsvps, setLocalRsvps] = useState<Record<string, RsvpStatus[]>>({});
   const [guestListEventId, setGuestListEventId] = useState<number | null>(null);
+  // Below sm the RSVP table is too wide to read inline, so expanding opens the
+  // mobile guest-list sheet instead — same breakpoint the outreach cards use.
+  const toggleEvent = (id: number) => {
+    if (isDesktop) setExpandedEventId(v => (v === id ? null : id));
+    else setGuestListEventId(v => (v === id ? null : id));
+  };
+  const [isDesktop, setIsDesktop] = useState(true);
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 640px)');
+    const update = () => setIsDesktop(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
   const [expandedEventId, setExpandedEventId] = useState<number | null>(null);
 
   /* sync RSVP changes from other components (e.g. pre-conference review) */
@@ -747,7 +807,7 @@ export function SocialEventsTable({
 
   /* form helpers */
   const resetForm = () => {
-    setFormData({ entered_by: '', internal_attendees: [], event_name: '', event_type: '', host: '', location: '', event_date: '', event_time: '', invite_only: 'No', prospect_attendees: [], notes: '' });
+    setFormData({ entered_by: '', internal_attendees: [], event_name: '', event_type: '', host: '', venue_name: '', location: '', event_date: '', event_time: '', invite_only: 'No', prospect_attendees: [], notes: '' });
     setEditingEventId(null);
     setShowForm(false);
   };
@@ -759,6 +819,7 @@ export function SocialEventsTable({
       event_name: ev.event_name || '',
       event_type: ev.event_type || '',
       host: ev.host || '',
+      venue_name: ev.venue_name || '',
       location: ev.location || '',
       event_date: ev.event_date || '',
       event_time: ev.event_time || '',
@@ -784,6 +845,7 @@ export function SocialEventsTable({
         event_name: formData.event_name.trim(),
         event_type: formData.event_type || null,
         host: formData.host || null,
+        venue_name: formData.venue_name || null,
         location: formData.location || null,
         event_date: formData.event_date || null,
         event_time: formData.event_time || null,
@@ -947,16 +1009,50 @@ export function SocialEventsTable({
             {/* Host */}
             <div>
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Host</label>
-              <select value={formData.host} onChange={e => setFormData(p => ({ ...p, host: e.target.value }))} className="input-field text-sm w-full">
-                <option value="">Select company...</option>
-                {companies.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-              </select>
+              {/* Free text with company suggestions — hosts are often a venue,
+                  a partner or a co-sponsor that isn't a company on record, so
+                  the list can't be exhaustive. A native datalist gives the
+                  dropdown without constraining the value. */}
+              <input
+                type="text"
+                list="social-event-host-options"
+                value={formData.host}
+                onChange={e => setFormData(p => ({ ...p, host: e.target.value }))}
+                placeholder="Select a company or type a host…"
+                className="input-field text-sm w-full"
+                autoComplete="off"
+              />
+              <datalist id="social-event-host-options">
+                {companies.map(c => <option key={c.id} value={c.name} />)}
+              </datalist>
             </div>
 
-            {/* Location */}
+            {/* Venue Name — captured separately because a Places result's
+                formatted_address never carries the venue's name. */}
             <div>
-              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Location</label>
-              <input type="text" value={formData.location} onChange={e => setFormData(p => ({ ...p, location: e.target.value }))} placeholder="Enter location..." className="input-field text-sm w-full" />
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Venue Name</label>
+              <input
+                type="text"
+                value={formData.venue_name}
+                onChange={e => setFormData(p => ({ ...p, venue_name: e.target.value }))}
+                placeholder="e.g. The Bellagio"
+                className="input-field text-sm w-full"
+              />
+            </div>
+
+            {/* Address */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Address</label>
+              {/* Same Places-backed lookup as the conference Location field.
+                  Only formatted_address is kept — social_events has no columns
+                  for the lat/lng/timezone the details call also returns. */}
+              <LocationAutocompleteInput
+                value={formData.location}
+                onChange={v => setFormData(p => ({ ...p, location: v }))}
+                onSelect={details => setFormData(p => ({ ...p, location: details.formatted_address }))}
+                placeholder="e.g., The Bellagio, Las Vegas, NV"
+                className="input-field text-sm w-full"
+              />
             </div>
 
             {/* Date */}
@@ -1018,152 +1114,115 @@ export function SocialEventsTable({
           selected={formData.prospect_attendees}
           onConfirm={ids => setFormData(p => ({ ...p, prospect_attendees: ids }))}
           onClose={() => setShowGuestListModal(false)}
-          primaryCompanyType={primaryCompanyType}
+          icpCompanyTypes={icpCompanyTypes}
         />
       )}
 
       {events.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-6">No social events yet. Click &quot;Add Social Event&quot; to get started.</p>
       ) : (
-        <>
-          {/* Mobile cards */}
-          <div className="md:hidden space-y-3">
-            {events.map(ev => {
-              const { invited, rsvpMap } = getEventData(ev);
-              return (
-                <div key={ev.id} className="border border-gray-200 rounded-xl p-4 bg-white shadow-sm">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <p className="text-sm font-semibold text-brand-primary">{ev.event_name || ev.event_type || 'Social Event'}</p>
-                      <p className="text-xs text-gray-500">{ev.event_type ? `${ev.event_type} · ` : ''}{ev.host || '—'}</p>
+        <div className="space-y-2">
+          {events.map(ev => {
+            const { invited, rsvpMap } = getEventData(ev);
+            const isExpanded = expandedEventId === ev.id;
+            const dateText = formatDate(ev.event_date);
+            const timeText = formatTime(ev.event_time);
+            const when = [dateText, timeText].filter(t => t && t !== '—').join(' · ');
+            const addr = (ev.location || '').trim();
+            const locText = displayLocation(ev.venue_name, addr);
+            return (
+              <div key={ev.id} className="border border-gray-200 rounded-xl bg-white overflow-hidden hover:border-gray-300 transition-colors">
+                {/* ── Header: event name + date/time pill, actions right ── */}
+                <div className="flex items-start gap-3 px-4 py-3">
+                  <div className="flex-1 min-w-0">
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => toggleEvent(ev.id)}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') toggleEvent(ev.id); }}
+                      className="flex items-center gap-2 flex-wrap min-w-0 text-left cursor-pointer"
+                    >
+                      <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      <span className="text-sm font-semibold text-gray-800 truncate">{ev.event_name || ev.event_type || 'Social Event'}</span>
+                      {when && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30 whitespace-nowrap flex-shrink-0">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          {when}
+                        </span>
+                      )}
+                      {invited.length > 0 && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-700 whitespace-nowrap flex-shrink-0">
+                          {invited.length} invited
+                        </span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-1">
-                      <button type="button" onClick={() => handleEdit(ev)} className="text-gray-300 hover:text-brand-secondary transition-colors p-1" title="Edit">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                      </button>
-                      <button type="button" onClick={() => handleDelete(ev.id)} className="text-gray-300 hover:text-red-500 transition-colors p-1" title="Delete">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                      </button>
+
+                    {/* ── Meta row: 2-up on mobile, inline from sm ── */}
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-2.5 pl-6 sm:flex sm:flex-wrap sm:gap-x-8">
+                      <CardField label="Location">
+                        {locText ? (
+                          <a
+                            href={mapsHref(addr || locText)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            title={locText}
+                            className="text-brand-secondary hover:underline break-words"
+                          >
+                            {locText}
+                          </a>
+                        ) : <span className="text-gray-400">—</span>}
+                      </CardField>
+                      <CardField label="Type">{ev.event_type || <span className="text-gray-400">—</span>}</CardField>
+                      <CardField label="Host">{ev.host || <span className="text-gray-400">—</span>}</CardField>
+                      <CardField label="Internal Attendees"><InternalRepPills internalAttendees={ev.internal_attendees} /></CardField>
+                      <CardField label="Invite Only">{ev.invite_only === 'Yes' ? 'Yes' : 'No'}</CardField>
+                      {customColumns.filter(c => c.visible).map(col => (
+                        <CardField key={`custom_${col.id}`} label={col.label}>
+                          <CustomColumnCell column={col} value={(ev as unknown as Record<string, unknown>)[col.data_key]} />
+                        </CardField>
+                      ))}
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-2">
-                    <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Date</p><p className="text-gray-700">{formatDate(ev.event_date)}</p></div>
-                    <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Time</p><p className="text-gray-700">{formatTime(ev.event_time)}</p></div>
-                    <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Location</p><p className="text-gray-700">{ev.location || '—'}</p></div>
-                    <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Invite Only</p><p className="text-gray-700">{ev.invite_only === 'Yes' ? 'Yes' : 'No'}</p></div>
-                    <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Entered By</p><p className="text-gray-700">{ev.entered_by || '—'}</p></div>
-                    <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Internal</p><InternalAttendeePill internalAttendees={ev.internal_attendees} /></div>
-                    {customColumns.filter(c => c.visible).map(col => (
-                      <div key={`custom_${col.id}`}>
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{col.label}</p>
-                        <CustomColumnCell column={col} value={(ev as unknown as Record<string, unknown>)[col.data_key]} />
-                      </div>
-                    ))}
-                  </div>
-                  <div className="pt-2 border-t border-gray-100">
-                    <button type="button" onClick={() => setGuestListEventId(ev.id)} className="flex items-center gap-2 text-sm font-medium text-brand-secondary hover:text-brand-primary transition-colors">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                      Guest List {invited.length > 0 && <span className="px-1.5 py-0.5 rounded-full bg-brand-secondary text-white text-xs">{invited.length}</span>}
+
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button type="button" onClick={() => handleEdit(ev)} className="text-gray-300 hover:text-brand-secondary transition-colors p-1" title="Edit">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                    </button>
+                    <button type="button" onClick={() => handleDelete(ev.id)} className="text-gray-300 hover:text-red-500 transition-colors p-1" title="Delete">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
                   </div>
                 </div>
-              );
-            })}
-          </div>
 
-          {/* Desktop table */}
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  {orderedColumns.map(col => {
-                    if (!isVisible(col.key)) return null;
-                    const thCls = "px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap";
-                    switch (col.key) {
-                      case 'entered_by': return <th key="entered_by" className={thCls}>Entered By</th>;
-                      case 'internal': return <th key="internal" className={thCls}>Internal</th>;
-                      case 'event_name': return <th key="event_name" className={thCls}>Name</th>;
-                      case 'event_type': return <th key="event_type" className={thCls}>Type</th>;
-                      case 'host': return <th key="host" className={thCls}>Host</th>;
-                      case 'location': return <th key="location" className={thCls}>Location</th>;
-                      case 'date': return <th key="date" className={thCls}>Date</th>;
-                      case 'time': return <th key="time" className={thCls}>Time</th>;
-                      case 'invite_only': return <th key="invite_only" className={thCls}>Invite Only</th>;
-                      case 'guest_list': return <th key="guest_list" className={thCls}>Guest List</th>;
-                      default: return null;
-                    }
-                  })}
-                  {customColumns.filter(c => c.visible).map(col => (
-                    <th key={`custom_${col.id}`} className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                      {col.label}
-                    </th>
-                  ))}
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {events.map(ev => {
-                  const { invited, rsvpMap } = getEventData(ev);
-                  const isExpanded = expandedEventId === ev.id;
-                  return (
-                    <Fragment key={ev.id}>
-                      <tr className="hover:bg-gray-50 align-top">
-                        {orderedColumns.map(col => {
-                          if (!isVisible(col.key)) return null;
-                          switch (col.key) {
-                            case 'entered_by': return <td key="entered_by" className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.entered_by || '—'}</td>;
-                            case 'internal': return <td key="internal" className="px-3 py-3"><InternalAttendeePill internalAttendees={ev.internal_attendees} /></td>;
-                            case 'event_name': return <td key="event_name" className="px-3 py-3 text-gray-800 font-medium whitespace-nowrap">{ev.event_name || '—'}</td>;
-                            case 'event_type': return <td key="event_type" className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.event_type || '—'}</td>;
-                            case 'host': return <td key="host" className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.host || '—'}</td>;
-                            case 'location': return <td key="location" className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.location || '—'}</td>;
-                            case 'date': return <td key="date" className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatDate(ev.event_date)}</td>;
-                            case 'time': return <td key="time" className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatTime(ev.event_time)}</td>;
-                            case 'invite_only': return <td key="invite_only" className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.invite_only === 'Yes' ? 'Yes' : 'No'}</td>;
-                            case 'guest_list': return <td key="guest_list" className="px-3 py-3">
-                              {invited.length > 0
-                                ? <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">{invited.length}</span>
-                                : <span className="text-gray-400">—</span>}
-                            </td>;
-                            default: return null;
-                          }
-                        })}
-                        {customColumns.filter(c => c.visible).map(col => (
-                          <td key={`custom_${col.id}`} className="px-3 py-3 whitespace-nowrap">
-                            <CustomColumnCell column={col} value={(ev as unknown as Record<string, unknown>)[col.data_key]} />
-                          </td>
-                        ))}
-                        <td className="px-3 py-3">
-                          <div className="flex items-center gap-1">
-                            {invited.length > 0 && (
-                              <button type="button" title="Toggle guest list" onClick={() => setExpandedEventId(v => v === ev.id ? null : ev.id)}
-                                className={`transition-colors ${isExpanded ? 'text-brand-secondary' : 'text-gray-300 hover:text-brand-secondary'}`}>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                              </button>
-                            )}
-                            <button type="button" onClick={() => handleEdit(ev)} className="text-gray-300 hover:text-brand-secondary transition-colors" title="Edit">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                            </button>
-                            <button type="button" onClick={() => handleDelete(ev.id)} className="text-gray-300 hover:text-red-500 transition-colors" title="Delete">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                      {isExpanded && (
-                        <tr>
-                          <td colSpan={99} className="p-0 border-b border-gray-200">
-                            <RSVPExpansion event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} primaryCompanyType={primaryCompanyType} />
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </>
+                {/* ── Expanded: RSVP table, unchanged ── */}
+                {isExpanded && (
+                  <div className="border-t border-gray-200 hidden sm:block">
+                    {invited.length > 0 ? (
+                      <RSVPExpansion
+                        event={ev}
+                        invitedAttendees={invited}
+                        rsvpMap={rsvpMap}
+                        onToggleRsvp={(aid, st) => handleToggleRsvp(ev.id, aid, st)}
+                        onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)}
+                        colorMaps={colorMaps}
+                        companies={companies}
+                        userOptionsFull={userOptionsFull}
+                        icpCompanyTypes={icpCompanyTypes}
+                      />
+                    ) : (
+                      <p className="text-xs text-gray-400 px-4 py-3">No guests invited yet.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
 
       {/* Mobile guest list overlay */}
@@ -1172,7 +1231,7 @@ export function SocialEventsTable({
         if (!ev) return null;
         const { invited, rsvpMap } = getEventData(ev);
         return (
-          <GuestListSheet event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)} onClose={() => setGuestListEventId(null)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} primaryCompanyType={primaryCompanyType} />
+          <GuestListSheet event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)} onClose={() => setGuestListEventId(null)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} icpCompanyTypes={icpCompanyTypes} />
         );
       })()}
     </div>

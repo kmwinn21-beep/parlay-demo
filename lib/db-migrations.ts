@@ -2078,4 +2078,8 @@ export const migrations: string[] = [
   // (ColorPicker is not gated on is_system).
   `INSERT OR IGNORE INTO config_options (category, value, sort_order, color) VALUES ('status', 'Open Opportunity', 50, 'blue')`,
   `UPDATE config_options SET is_system = 1, status_key = 'open_opportunity' WHERE category = 'status' AND LOWER(TRIM(value)) = 'open opportunity'`,
+  // social_events.venue_name: the venue's name, captured alongside the Places
+  // address so the card can show "The Bellagio, 3600 S Las Vegas Blvd…" —
+  // formatted_address alone never carries the venue name.
+  `ALTER TABLE social_events ADD COLUMN venue_name TEXT`,
 ];

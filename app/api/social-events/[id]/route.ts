@@ -27,6 +27,7 @@ export async function PUT(
       event_name,
       event_type,
       host,
+      venue_name,
       location,
       event_date,
       event_time,
@@ -38,16 +39,17 @@ export async function PUT(
     const result = await db.execute({
       sql: `UPDATE social_events
             SET entered_by = ?, internal_attendees = ?, event_name = ?, event_type = ?, host = ?,
-                location = ?, event_date = ?, event_time = ?, invite_only = ?,
+                venue_name = ?, location = ?, event_date = ?, event_time = ?, invite_only = ?,
                 prospect_attendees = ?, notes = ?
             WHERE id = ?
-            RETURNING id, conference_id, entered_by, internal_attendees, event_name, event_type, host, location, event_date, event_time, invite_only, prospect_attendees, notes, created_at`,
+            RETURNING id, conference_id, entered_by, internal_attendees, event_name, event_type, host, venue_name, location, event_date, event_time, invite_only, prospect_attendees, notes, created_at`,
       args: [
         entered_by || null,
         internal_attendees || null,
         event_name || null,
         event_type || null,
         host || null,
+        venue_name || null,
         location || null,
         event_date || null,
         event_time || null,
@@ -67,6 +69,7 @@ export async function PUT(
       event_name: r.event_name ? String(r.event_name) : null,
       event_type: r.event_type ? String(r.event_type) : null,
       host: r.host ? String(r.host) : null,
+      venue_name: r.venue_name ? String(r.venue_name) : null,
       location: r.location ? String(r.location) : null,
       event_date: r.event_date ? String(r.event_date) : null,
       event_time: r.event_time ? String(r.event_time) : null,
