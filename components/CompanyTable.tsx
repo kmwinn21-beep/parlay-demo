@@ -212,6 +212,32 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
 
 const DEFAULT_WIDTHS: Record<string, number> = { name: 220, type: 160, sfowner: 140, status: 140, attendees: 110, conferences: 120, actions: 110, updated_on: 110, value: 120 };
 
+// Shared cancel affordance for every inline cell editor, so Type/Status/units
+// read the same as the SF Owner editor they were modeled on.
+// onMouseDown preventDefault keeps focus on the field being edited, so its
+// onBlur save can't fire ahead of this button's onClick — the same blur-race
+// guard MentionTextarea uses for its suggestion list.
+function InlineEditCancelButton({ onCancel }: { onCancel: () => void }) {
+  return (
+    <button
+      type="button"
+      onMouseDown={e => e.preventDefault()}
+      onClick={onCancel}
+      className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
+      title="Cancel"
+    >
+      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+  );
+}
+
+// Matches RepMultiSelect's default trigger styling so the native select/input
+// editors sit in the row the same way the SF Owner picker does.
+const INLINE_EDIT_FIELD_CLASS =
+  'w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white';
+
 function fmtDate(dateStr?: string): string {
   if (!dateStr) return '—';
   try {
@@ -1186,15 +1212,29 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                           </p>
                         )}
                       </td>;
-                      case 'type': return <td key="type" className="px-3 py-3 overflow-visible relative">
+                      case 'type': return <td key="type" className="px-3 py-3">
                         {editingCell?.companyId === company.id && editingCell.field === 'company_type' ? (
-                          <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'company_type')} autoFocus>
-                            <option value="">—</option>
-                            {companyTypeOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
+                          <div className="flex items-start gap-1">
+                            <div className="flex-1 min-w-0">
+                              <select
+                                className={INLINE_EDIT_FIELD_CLASS}
+                                value={cellDraft}
+                                onChange={(e) => setCellDraft(e.target.value)}
+                                onBlur={() => saveInlineEdit(company, 'company_type')}
+                                onKeyDown={(e) => { if (e.key === 'Escape') setEditingCell(null); }}
+                                autoFocus
+                              >
+                                <option value="">—</option>
+                                {companyTypeOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                            </div>
+                            <InlineEditCancelButton onCancel={() => setEditingCell(null)} />
+                          </div>
                         ) : (
-                          <button type="button" onClick={() => startInlineEdit(company, 'company_type')}>
-                            {company.company_type ? <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span> : <span className="text-gray-300">—</span>}
+                          <button type="button" onClick={() => startInlineEdit(company, 'company_type')} title="Click to set type">
+                            {company.company_type
+                              ? <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span>
+                              : <span className="text-[10px] text-gray-300 hover:text-gray-400 transition-colors">+ Type</span>}
                           </button>
                         )}
                       </td>;
@@ -1209,16 +1249,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                                 onClose={(ids) => handleRepSave(company.id, ids)}
                               />
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => setEditingRepCompanyId(null)}
-                              className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
-                              title="Cancel"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
+                            <InlineEditCancelButton onCancel={() => setEditingRepCompanyId(null)} />
                           </div>
                         ) : (
                           <button
@@ -1241,48 +1272,65 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                           </button>
                         )}
                       </td>;
-                      case 'status': return <td key="status" className="px-3 py-3 overflow-visible relative">
+                      case 'status': return <td key="status" className="px-3 py-3">
                         {editingCell?.companyId === company.id && editingCell.field === 'status' ? (
-                          <select className="input-field bg-white text-sm py-2 min-w-[260px] w-auto relative z-30 shadow-md" value={cellDraft} onChange={(e) => setCellDraft(e.target.value)} onBlur={() => saveInlineEdit(company, 'status')} autoFocus>
-                            <option value="">—</option>
-                            {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
+                          <div className="flex items-start gap-1">
+                            <div className="flex-1 min-w-0">
+                              <select
+                                className={INLINE_EDIT_FIELD_CLASS}
+                                value={cellDraft}
+                                onChange={(e) => setCellDraft(e.target.value)}
+                                onBlur={() => saveInlineEdit(company, 'status')}
+                                onKeyDown={(e) => { if (e.key === 'Escape') setEditingCell(null); }}
+                                autoFocus
+                              >
+                                <option value="">—</option>
+                                {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                            </div>
+                            <InlineEditCancelButton onCancel={() => setEditingCell(null)} />
+                          </div>
                         ) : (
-                          <button type="button" onClick={() => startInlineEdit(company, 'status')}>
+                          <button type="button" onClick={() => startInlineEdit(company, 'status')} title="Click to set status">
                             <span className="flex flex-wrap gap-1">
                               {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{s}</span>)}
                               {(company.my_user_status_ids || []).map(optId => {
                                 const label = userScopedStatusMap.get(optId);
                                 return label ? <span key={optId} className={getBadgeClass(label, colorMaps.status || {})}>{label}</span> : null;
                               })}
-                              {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && (company.my_user_status_ids || []).length === 0 && <span className="text-gray-300">—</span>}
+                              {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && (company.my_user_status_ids || []).length === 0 && <span className="text-[10px] text-gray-300 hover:text-gray-400 transition-colors">+ Status</span>}
                             </span>
                           </button>
                         )}
                       </td>;
                       case 'attendees': return <td key="attendees" className="px-3 py-3"><AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} onClick={conferenceAttendees ? () => setAttendeesDrawerCompany(company) : undefined} /></td>;
                       case 'conferences': return <td key="conferences" className="px-3 py-3"><ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} /></td>;
-                      case 'wse': return <td key="wse" className="px-3 py-3 overflow-visible relative">
+                      case 'wse': return <td key="wse" className="px-3 py-3">
                         {editingCell?.companyId === company.id && editingCell.field === 'wse' ? (
-                          <input
-                            className="input-field bg-white text-sm py-2 min-w-[180px] w-auto relative z-30 shadow-md"
-                            value={cellDraft}
-                            onChange={(e) => setCellDraft(e.target.value)}
-                            onBlur={() => saveInlineEdit(company, 'wse')}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') saveInlineEdit(company, 'wse');
-                              if (e.key === 'Escape') setEditingCell(null);
-                            }}
-                            autoFocus
-                          />
+                          <div className="flex items-start gap-1">
+                            <div className="flex-1 min-w-0">
+                              <input
+                                className={INLINE_EDIT_FIELD_CLASS}
+                                value={cellDraft}
+                                onChange={(e) => setCellDraft(e.target.value)}
+                                onBlur={() => saveInlineEdit(company, 'wse')}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveInlineEdit(company, 'wse');
+                                  if (e.key === 'Escape') setEditingCell(null);
+                                }}
+                                autoFocus
+                              />
+                            </div>
+                            <InlineEditCancelButton onCancel={() => setEditingCell(null)} />
+                          </div>
                         ) : (
-                          <button type="button" onClick={() => startInlineEdit(company, 'wse')}>
+                          <button type="button" onClick={() => startInlineEdit(company, 'wse')} title={`Click to set ${unitTypeLabel}`}>
                             {company.wse != null ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
                                 <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
                                 {Number(company.wse).toLocaleString()}
                               </span>
-                            ) : <span className="text-gray-300">—</span>}
+                            ) : <span className="text-[10px] text-gray-300 hover:text-gray-400 transition-colors">+ {unitTypeLabel}</span>}
                           </button>
                         )}
                       </td>;
