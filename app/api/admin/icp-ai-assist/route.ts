@@ -7,11 +7,7 @@ import { getDb } from '@/lib/getDb';
 // The uploaded documents and scraped link text are NOT part of this string —
 // they travel separately as the user message's content blocks, unchanged.
 function buildAiPrompt(context: IcpAssistContext): string {
-  const contextSections = [
-    context.vendorBlock,
-    context.personaBlock,
-    context.existingBlock,
-  ].filter(Boolean).join('\n\n');
+  const contextSections = joinContextSections(context);
 
   const degradationNote = contextSections
     ? ''
@@ -103,6 +99,11 @@ const MONTHLY_LIMIT = 5;
 // sorted to the top.
 const MAX_CONTEXT_PRODUCTS = 20;
 
+// Conservative character proxy for a few hundred tokens of assembled account
+// context. Over this, the product catalog is trimmed (whole entries only) —
+// see the context budget pass in buildIcpAssistContext.
+const MAX_CONTEXT_CHARS = 2000;
+
 // Analyzing a few PDFs through Claude routinely runs past the default function
 // timeout; without this the platform kills the request and returns a non-JSON
 // gateway error, which the client could only report as a generic failure.
@@ -148,6 +149,16 @@ function parseTitleArraySetting(val: string | undefined): string[] {
     if (Array.isArray(parsed)) return parsed.map(p => (p?.title ?? '').trim()).filter(Boolean);
   } catch { /* ignore */ }
   return [];
+}
+
+/**
+ * Concatenate the present blocks exactly as buildAiPrompt does. Shared so the
+ * budget check below measures the same string that actually reaches Claude.
+ */
+function joinContextSections(context: IcpAssistContext): string {
+  return [context.vendorBlock, context.personaBlock, context.existingBlock]
+    .filter(Boolean)
+    .join('\n\n');
 }
 
 /** Case-insensitive de-duplication that preserves first-seen casing and order. */
@@ -227,13 +238,17 @@ async function buildIcpAssistContext(
       .filter(Boolean);
   } catch { /* ignore — treat as no catalog */ }
 
-  if (productLines.length > 0) {
-    vendorLines.push(`Products and services offered:\n${productLines.join('\n')}`);
-  }
-
-  const vendorBlock = vendorLines.length > 0
-    ? `VENDOR CONTEXT — this is the company whose materials you are analyzing:\n${vendorLines.join('\n')}`
-    : null;
+  // Composed as a function rather than a value so the budget pass below can
+  // rebuild the block with fewer products without re-querying.
+  const composeVendorBlock = (products: string[]): string | null => {
+    const lines = [...vendorLines];
+    if (products.length > 0) {
+      lines.push(`Products and services offered:\n${products.join('\n')}`);
+    }
+    return lines.length > 0
+      ? `VENDOR CONTEXT — this is the company whose materials you are analyzing:\n${lines.join('\n')}`
+      : null;
+  };
 
   // ── Persona block ──
   const decisionMakerTitles = parseStringArraySetting(settings['icp_decision_maker_titles']);
@@ -273,7 +288,39 @@ async function buildIcpAssistContext(
     ? `ALREADY CONFIGURED — avoid restating these; surface what is missing:\n${existingLines.join('\n\n')}`
     : null;
 
-  return { vendorBlock, personaBlock, existingBlock };
+  // ── Context budget ──
+  // The uploaded documents already dominate the request, so keep the assembled
+  // context modest. Only the product catalog is trimmed, and only whole entries
+  // at a time — a half-truncated product description would read as a fact about
+  // the product. The persona and existing-context blocks are short by
+  // construction and are never trimmed.
+  let includedProducts = productLines;
+  let context: IcpAssistContext = {
+    vendorBlock: composeVendorBlock(includedProducts),
+    personaBlock,
+    existingBlock,
+  };
+
+  if (joinContextSections(context).length > MAX_CONTEXT_CHARS && includedProducts.length > 0) {
+    const originalCount = includedProducts.length;
+    while (includedProducts.length > 0 && joinContextSections(context).length > MAX_CONTEXT_CHARS) {
+      includedProducts = includedProducts.slice(0, -1);
+      context = { ...context, vendorBlock: composeVendorBlock(includedProducts) };
+    }
+    console.warn(
+      `ICP AI assist: assembled context exceeded ${MAX_CONTEXT_CHARS} chars — product catalog trimmed from ${originalCount} to ${includedProducts.length} entries.`
+    );
+  }
+
+  const finalLength = joinContextSections(context).length;
+  if (finalLength > MAX_CONTEXT_CHARS) {
+    // Nothing left that is safe to trim; the remaining blocks are sent in full.
+    console.warn(
+      `ICP AI assist: context still ${finalLength} chars after dropping the product catalog (budget ${MAX_CONTEXT_CHARS}). Sending as-is.`
+    );
+  }
+
+  return context;
 }
 
 async function getUsage(dbClient: Awaited<ReturnType<typeof getDb>>): Promise<{ count: number; month: string }> {
