@@ -10,6 +10,8 @@ import { StrategyAlignmentDrawer } from '../StrategyAlignmentDrawer';
 import { companyTierToConferenceTier } from '@/lib/targeting/targetRecommendationsView';
 import { useTargetingCompilation } from '@/lib/targeting/targetingCompilationStore';
 import type { TerritoryResponse } from '@/app/api/admin/territories/route';
+import { getBadgeClass, getPreset } from '@/lib/colors';
+import { useConfigColors } from '@/lib/useConfigColors';
 import toast from 'react-hot-toast';
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
@@ -744,6 +746,89 @@ function hexAlpha(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+// Abbreviates a territory the same way the Program Planner Plan tab does:
+// two words -> both initials, one word with an east/west suffix -> initial + E/W,
+// otherwise the single initial.
+function abbreviateTerritory(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '';
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  const word = words[0];
+  const lower = word.toLowerCase();
+  if (lower.indexOf('east') > 0) return (word[0] + 'E').toUpperCase();
+  if (lower.indexOf('west') > 0) return (word[0] + 'W').toUpperCase();
+  return word[0].toUpperCase();
+}
+
+/**
+ * Header row inside an expanded company card: a single line of pills carrying
+ * the context a rep needs before reading the attendee list — assigned rep(s),
+ * territory, company type, status and value. Shared by the Clients, Comp. and
+ * Open Opps panels so all three read identically.
+ */
+function CompanyCardMetaRow({ co, accentColor }: { co: ClientCompanyEntry; accentColor: string }) {
+  const colorMaps = useConfigColors();
+  const avgCostPerUnit = useAvgCostPerUnit();
+  const reps = co.assignedUserNames ?? [];
+  const statuses = String(co.companyStatus ?? '')
+    .split(',').map(v => v.trim()).filter(v => v && v !== 'Unknown');
+  const value = co.wse != null && avgCostPerUnit > 0 ? co.wse * avgCostPerUnit : null;
+
+  const hasAny = reps.length > 0 || co.territoryName || co.companyType || statuses.length > 0 || value != null;
+  if (!hasAny) return null;
+
+  return (
+    <div
+      className="flex flex-wrap items-center gap-1 px-3 py-1.5"
+      style={{ borderTop: `1px solid ${hexAlpha(accentColor, 0.2)}`, backgroundColor: hexAlpha(accentColor, 0.04) }}
+    >
+      {/* Assigned rep — user icon + initials, matching the companies table */}
+      {reps.map(name => (
+        <span
+          key={name}
+          title={name}
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[name]).badgeClass}`}
+        >
+          <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          {repInitials(name)}
+        </span>
+      ))}
+
+      {/* Territory — abbreviated square chip, same treatment as the Plan tab */}
+      {co.territoryName && (
+        <span
+          title={co.territoryName}
+          className="inline-flex items-center justify-center rounded-md text-[10px] font-bold flex-shrink-0"
+          style={{
+            width: 22, height: 22,
+            border: `1.5px solid ${co.territoryColor || '#185FA5'}`,
+            backgroundColor: hexAlpha(co.territoryColor || '#185FA5', 0.15),
+            color: co.territoryColor || '#185FA5',
+          }}
+        >
+          {abbreviateTerritory(co.territoryName)}
+        </span>
+      )}
+
+      {co.companyType && (
+        <span className={`${getBadgeClass(co.companyType, colorMaps.company_type || {})} text-[10px]`}>{co.companyType}</span>
+      )}
+
+      {statuses.map(st => (
+        <span key={st} className={`${getBadgeClass(st, colorMaps.status || {})} text-[10px]`}>{st}</span>
+      ))}
+
+      {value != null && (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
+          {abbreviateDollar(value)}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function CompanyCard({ co, accentColor }: { co: ClientCompanyEntry; accentColor: string }) {
   const openRecord = useRecordDrawer();
   const [expanded, setExpanded] = useState(false);
@@ -769,6 +854,8 @@ function CompanyCard({ co, accentColor }: { co: ClientCompanyEntry; accentColor:
           </svg>
         </div>
       </button>
+
+      {expanded && <CompanyCardMetaRow co={co} accentColor={accentColor} />}
 
       {expanded && co.attendees.length > 0 && (
         <div
@@ -889,9 +976,22 @@ function ToggleGroup({
   );
 }
 
+type ClientCompetitorMode = 'clients' | 'competitors' | 'openOpps';
+
 function ClientCompetitorPanel({ data }: { data: LandscapeData }) {
-  const [mode, setMode] = useState<'clients' | 'competitors'>('clients');
-  const isClients = mode === 'clients';
+  const [mode, setMode] = useState<ClientCompetitorMode>('clients');
+
+  // Open Opps uses brand Primary #2, so it reads as its own lens rather than
+  // borrowing the client (Primary #1) or competitor (red) accent.
+  const openOppCompanies = data.openOppCompanies ?? [];
+  const openOppColor = data.openOppColor || 'rgb(var(--brand-secondary-rgb))';
+
+  const view: Record<ClientCompetitorMode, { companies: ClientCompanyEntry[]; color: string | null; empty: string }> = {
+    clients:     { companies: data.clientCompanies, color: data.clientColor, empty: 'No client companies attending' },
+    competitors: { companies: data.competitorCompanies, color: data.competitorColor, empty: 'No competitor companies attending' },
+    openOpps:    { companies: openOppCompanies, color: openOppColor, empty: 'No open opportunities attending' },
+  };
+  const active = view[mode];
 
   const toggle = (
     <ToggleGroup
@@ -899,25 +999,19 @@ function ClientCompetitorPanel({ data }: { data: LandscapeData }) {
       options={[
         { key: 'clients', label: `Clients (${data.clientCompanies.length})`, activeColor: 'rgb(var(--brand-primary-rgb))' },
         { key: 'competitors', label: `Comp. (${data.competitorCompanies.length})`, activeColor: '#dc2626' },
+        { key: 'openOpps', label: `Open Opps (${openOppCompanies.length})`, activeColor: openOppColor },
       ]}
       active={mode}
-      onChange={key => setMode(key as 'clients' | 'competitors')}
+      onChange={key => setMode(key as ClientCompetitorMode)}
     />
   );
 
-  return isClients ? (
+  return (
     <CompanyPanel
       headerContent={toggle}
-      companies={data.clientCompanies}
-      accentColor={data.clientColor}
-      emptyText="No client companies attending"
-    />
-  ) : (
-    <CompanyPanel
-      headerContent={toggle}
-      companies={data.competitorCompanies}
-      accentColor={data.competitorColor}
-      emptyText="No competitor companies attending"
+      companies={active.companies}
+      accentColor={active.color}
+      emptyText={active.empty}
     />
   );
 }
@@ -1042,32 +1136,20 @@ function CompaniesByRepChart({
 
   return (
     <div className="flex flex-col gap-3 flex-1 min-h-0">
+      {/* Compact %/$/# toggle at every breakpoint. This panel is one column of
+          five now, so the full "Percentage / Pipeline / Count" labels no longer
+          fit — the layout matches what mobile already showed. */}
       <div className="flex-shrink-0">
-        {/* Mobile: short symbols, full width — matches the compact space available */}
-        <div className="sm:hidden">
-          <ToggleGroup
-            fullWidthMobile
-            options={[
-              { key: '%', label: '%', activeColor: 'rgb(var(--brand-primary-rgb))' },
-              { key: '$', label: '$', activeColor: 'rgb(var(--brand-primary-rgb))' },
-              { key: '#', label: '#', activeColor: 'rgb(var(--brand-primary-rgb))' },
-            ]}
-            active={valueMode}
-            onChange={key => setValueMode(key as '%' | '$' | '#')}
-          />
-        </div>
-        {/* Desktop: full labels, left-aligned */}
-        <div className="hidden sm:block">
-          <ToggleGroup
-            options={[
-              { key: '%', label: 'Percentage', activeColor: 'rgb(var(--brand-primary-rgb))' },
-              { key: '$', label: 'Pipeline', activeColor: 'rgb(var(--brand-primary-rgb))' },
-              { key: '#', label: 'Count', activeColor: 'rgb(var(--brand-primary-rgb))' },
-            ]}
-            active={valueMode}
-            onChange={key => setValueMode(key as '%' | '$' | '#')}
-          />
-        </div>
+        <ToggleGroup
+          fullWidth
+          options={[
+            { key: '%', label: '%', activeColor: 'rgb(var(--brand-primary-rgb))' },
+            { key: '$', label: '$', activeColor: 'rgb(var(--brand-primary-rgb))' },
+            { key: '#', label: '#', activeColor: 'rgb(var(--brand-primary-rgb))' },
+          ]}
+          active={valueMode}
+          onChange={key => setValueMode(key as '%' | '$' | '#')}
+        />
       </div>
       {total === 0 ? (
         <p className="text-xs text-gray-400">No ICP companies attending.</p>
@@ -1095,7 +1177,7 @@ function CompaniesByRepChart({
                   title={r.name}
                   className="w-full flex items-center gap-2 group"
                 >
-                  <span className="w-28 flex-shrink-0 text-xs font-medium text-gray-700 text-right truncate">{r.name}</span>
+                  <span className="w-20 flex-shrink-0 text-[11px] font-medium text-gray-700 text-right truncate">{r.name}</span>
                   <div className="flex-1 h-6 relative">
                     <div
                       className="h-6 rounded-md flex items-center justify-end transition-all duration-300 ease-out group-hover:brightness-110"
@@ -2183,11 +2265,13 @@ export function LandscapeTab({
 
       {/* 5-column layout: client/competitors | pipeline charts | relationship heatmap */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-stretch">
-        {/* Col 1: Client Attendees / Competitors Attending (toggle) */}
-        <ClientCompetitorPanel data={data} />
-
-        {/* Cols 2-3: Pipeline Charts + Companies by Assigned Rep */}
+        {/* Cols 1-2: Clients / Competitors / Open Opps (toggle) */}
         <div className="md:col-span-2 h-full">
+          <ClientCompetitorPanel data={data} />
+        </div>
+
+        {/* Col 3: Prospects by Assigned Rep */}
+        <div className="md:col-span-1 h-full">
           <PipelineChartsPanel
             icpCompanies={icpCompanies}
             onSelectRep={setSelectedRep}
