@@ -3,49 +3,96 @@ import Anthropic from '@anthropic-ai/sdk';
 import { requireAdmin } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 
-const AI_PROMPT = `You are a Chief Marketing Officer analyzing a company's public-facing presence to identify sales intelligence.
+// Built per-request so the account's own configuration can be interpolated in.
+// The uploaded documents and scraped link text are NOT part of this string —
+// they travel separately as the user message's content blocks, unchanged.
+function buildAiPrompt(context: IcpAssistContext): string {
+  const contextSections = [
+    context.vendorBlock,
+    context.personaBlock,
+    context.existingBlock,
+  ].filter(Boolean).join('\n\n');
 
-Review the provided information — which may include a company website, marketing materials, case studies, press releases, social media, etc — and return two structured lists:
+  const degradationNote = contextSections
+    ? ''
+    : '\nNo account-specific context has been configured yet — proceed using only the uploaded material.\n';
+
+  return `You are a Chief Marketing Officer analyzing your own company's product and
+marketing materials to build an Ideal Customer Profile.
+
+${contextSections}
+${degradationNote}
+If some but not all of the context above is present, that simply means this
+account hasn't fully configured it yet — proceed with what's available, and
+do not treat the absence of any single piece of context as evidence about
+the vendor.
+
+---
+
+Review the provided information — which may include your website, product
+pages, case studies, pitch decks, press releases, or other materials
+describing what your product or service does — and infer two things about
+the CUSTOMERS this product is built for:
 
 ---
 
 **PAIN POINTS** (5–10 items)
-Operational or strategic problems this company likely experiences based on visible signals. Consider:
-- Inefficiencies in how they operate or scale
-- Resource, staffing, or capacity constraints
-- Technology or process gaps
-- Cost pressures or margin challenges
-- Compliance, risk, or regulatory exposure
-- Customer acquisition, retention, or competitive positioning struggles
-- Leadership bandwidth or organizational complexity
+Operational or strategic problems a customer likely has that this product or
+service addresses. If vendor context is provided above, ground every pain
+point in what that context says the product actually does — do not infer
+problems unrelated to what the vendor sells. If no vendor context is
+provided, infer this from the uploaded material's own descriptions of
+features, outcomes, and use cases. Consider:
+- Inefficiencies or manual processes the product replaces or automates
+- Resource, staffing, or capacity constraints the product helps offset
+- Technology or process gaps the product fills
+- Cost, margin, or ROI pressures the product addresses
+- Compliance, risk, or regulatory exposure the product reduces
+- Customer acquisition, retention, or competitive pressures the product helps with
+- Visibility, coordination, or decision-making gaps the product closes
+
+Frame each pain point from the customer's perspective — the problem they
+have before adopting this product — not a description of the product's
+features.
 
 ---
 
 **TRIGGER EVENTS** (5–10 items)
-Signals visible in this content that suggest the company may be actively ready to buy or evaluate a new solution. Look for:
-- Leadership or ownership transitions
-- Rapid growth, expansion, or new locations
-- Recent funding, acquisition, or restructuring activity
-- High hiring volume or hard-to-fill roles
-- Rebranding or strategic pivots
-- Compliance or regulatory language
-- Financial stress or efficiency-focused messaging
+Signals in a prospect's business that would indicate they are ready to
+evaluate a solution like this one. Base these on who the materials (and any
+vendor context above) suggest this product is built for, and what
+situations make the product newly relevant or urgent. Consider:
+- Growth, expansion, or scaling milestones that create the problem this
+  product solves
+- New hires or leadership changes in roles connected to this product's use case
+- Funding, restructuring, or budget changes that enable a purchase like this
+- Process breakdowns or missed targets tied to the gap this product fills
+- Competitive or market pressure that makes this product's value more urgent
+- Compliance or regulatory changes that increase the need for this product
+
+Frame each trigger event as something happening in a PROSPECT's environment
+— not in the uploading company's own environment.
 
 ---
 
-Be specific to what you can actually observe. Do not fabricate details not visible in the information/documents provided. If a signal is inferred, note it as inferred.
+Be specific to what you can actually observe in the provided materials. Do
+not fabricate details not visible in the information/documents provided. If
+a pain point or trigger is inferred rather than explicitly stated, note it
+as inferred.
 
-Return ONLY valid JSON in this exact structure — no markdown, no explanation, just JSON:
+Return ONLY valid JSON in this exact structure — no markdown, no explanation,
+just JSON:
 {
   "pain_points": [
-    {"title": "Short 2-5 word title", "description": "One sentence describing the specific problem this company likely faces, based on what you observed."},
+    {"title": "Short 2-5 word title", "description": "One sentence describing the specific problem a customer likely has, based on what this product/service addresses."},
     ...
   ],
   "trigger_events": [
-    {"title": "Short 2-5 word title", "description": "One sentence describing the signal observed and why it indicates buying readiness."},
+    {"title": "Short 2-5 word title", "description": "One sentence describing the signal in a prospect's business and why it indicates readiness to evaluate this product."},
     ...
   ]
 }`;
+}
 
 const MONTHLY_LIMIT = 5;
 
@@ -356,6 +403,11 @@ export async function POST(request: NextRequest) {
     } catch { /* skip failed files */ }
   }
 
+  // Ground the prompt in whatever the account has configured. Any block the
+  // account hasn't filled in comes back null and is omitted entirely.
+  const assistContext = await buildIcpAssistContext(db);
+  const systemPrompt = buildAiPrompt(assistContext);
+
   // Call Claude
   const anthropic = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
@@ -369,7 +421,7 @@ export async function POST(request: NextRequest) {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4096,
-      system: AI_PROMPT,
+      system: systemPrompt,
       messages: [{ role: 'user', content: contentParts }],
     });
 
