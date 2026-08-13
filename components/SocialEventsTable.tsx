@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { LocationAutocompleteInput } from './LocationAutocompleteInput';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -184,35 +184,6 @@ function AssignedUserPill({ assignedUser, userOptionsFull }: {
         </span>
       ))}
     </span>
-  );
-}
-
-/* ─── Internal-attendee count pill ─── */
-function InternalAttendeePill({ internalAttendees }: { internalAttendees: string | null }) {
-  const [pos, setPos] = useState<{ top: number; left: number; width: number; above: boolean } | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-  if (!internalAttendees) return <span className="text-gray-400">—</span>;
-  const names = internalAttendees.split(',').map(n => n.trim()).filter(Boolean);
-  if (names.length === 0) return <span className="text-gray-400">—</span>;
-  const handleMouseEnter = () => {
-    if (!ref.current) return;
-    const rect = ref.current.getBoundingClientRect();
-    const w = Math.min(280, window.innerWidth - 16);
-    const left = Math.max(8, Math.min(rect.left + rect.width / 2 - w / 2, window.innerWidth - w - 8));
-    setPos({ top: rect.top > 200 ? rect.top - 8 : rect.bottom + 8, left, width: w, above: rect.top > 200 });
-  };
-  return (
-    <div ref={ref} className="relative inline-block" onMouseEnter={handleMouseEnter} onMouseLeave={() => setPos(null)}>
-      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-[#3A506B] cursor-pointer">{names.length}</span>
-      {pos && (
-        <div style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999, transform: pos.above ? 'translateY(-100%)' : 'translateY(0)' }}>
-          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2.5">
-            <p className="font-semibold mb-1.5 text-gray-300 uppercase tracking-wide text-[10px]">Internal Attendees</p>
-            <ul className="space-y-1">{names.map((n, i) => <li key={i} className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#3A506B] flex-shrink-0" />{n}</li>)}</ul>
-          </div>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -543,6 +514,54 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemov
   );
 }
 
+/* ─── Social event card pieces ─── */
+
+/**
+ * Google Places returns "3600 S Las Vegas Blvd, Las Vegas, NV 89109, USA".
+ * Only formatted_address is stored, so the venue name isn't recoverable —
+ * the trailing ", USA" is dropped instead to keep the pill readable.
+ */
+function displayLocation(location: string): string {
+  return location.replace(/,\s*USA\s*$/i, '').trim();
+}
+
+function mapsHref(location: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
+}
+
+/** Eyebrow label with its value beneath, used across the card's meta row. */
+function CardField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">{label}</p>
+      <div className="text-xs text-gray-700 min-w-0">{children}</div>
+    </div>
+  );
+}
+
+/** Internal attendees as the abbreviated rep pills used in the company tables. */
+function InternalRepPills({ internalAttendees }: { internalAttendees: string | null }) {
+  const colorMaps = useConfigColors();
+  const names = (internalAttendees ?? '').split(',').map(n => n.trim()).filter(Boolean);
+  if (names.length === 0) return <span className="text-gray-400">—</span>;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      {names.map(name => (
+        <span
+          key={name}
+          title={name}
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[name]).badgeClass}`}
+        >
+          <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          {getRepInitials(name)}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 /* ─── Build Guest List modal ─── */
 function GuestListModal({ attendees, selected, onConfirm, onClose, icpCompanyTypes }: {
   attendees: Attendee[];
@@ -693,7 +712,6 @@ export function SocialEventsTable({
       })
       .catch(() => {});
   }, []);
-  const { isVisible, orderedColumns } = useTableColumnConfig('social_events');
   const customColumns = useCustomColumns('social_events');
 
   /* form state */
@@ -712,6 +730,20 @@ export function SocialEventsTable({
   /* RSVP state */
   const [localRsvps, setLocalRsvps] = useState<Record<string, RsvpStatus[]>>({});
   const [guestListEventId, setGuestListEventId] = useState<number | null>(null);
+  // Below sm the RSVP table is too wide to read inline, so expanding opens the
+  // mobile guest-list sheet instead — same breakpoint the outreach cards use.
+  const toggleEvent = (id: number) => {
+    if (isDesktop) setExpandedEventId(v => (v === id ? null : id));
+    else setGuestListEventId(v => (v === id ? null : id));
+  };
+  const [isDesktop, setIsDesktop] = useState(true);
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 640px)');
+    const update = () => setIsDesktop(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
   const [expandedEventId, setExpandedEventId] = useState<number | null>(null);
 
   /* sync RSVP changes from other components (e.g. pre-conference review) */
@@ -972,10 +1004,22 @@ export function SocialEventsTable({
             {/* Host */}
             <div>
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Host</label>
-              <select value={formData.host} onChange={e => setFormData(p => ({ ...p, host: e.target.value }))} className="input-field text-sm w-full">
-                <option value="">Select company...</option>
-                {companies.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-              </select>
+              {/* Free text with company suggestions — hosts are often a venue,
+                  a partner or a co-sponsor that isn't a company on record, so
+                  the list can't be exhaustive. A native datalist gives the
+                  dropdown without constraining the value. */}
+              <input
+                type="text"
+                list="social-event-host-options"
+                value={formData.host}
+                onChange={e => setFormData(p => ({ ...p, host: e.target.value }))}
+                placeholder="Select a company or type a host…"
+                className="input-field text-sm w-full"
+                autoComplete="off"
+              />
+              <datalist id="social-event-host-options">
+                {companies.map(c => <option key={c.id} value={c.name} />)}
+              </datalist>
             </div>
 
             {/* Location */}
@@ -1059,145 +1103,107 @@ export function SocialEventsTable({
       {events.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-6">No social events yet. Click &quot;Add Social Event&quot; to get started.</p>
       ) : (
-        <>
-          {/* Mobile cards */}
-          <div className="md:hidden space-y-3">
-            {events.map(ev => {
-              const { invited, rsvpMap } = getEventData(ev);
-              return (
-                <div key={ev.id} className="border border-gray-200 rounded-xl p-4 bg-white shadow-sm">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <p className="text-sm font-semibold text-brand-primary">{ev.event_name || ev.event_type || 'Social Event'}</p>
-                      <p className="text-xs text-gray-500">{ev.event_type ? `${ev.event_type} · ` : ''}{ev.host || '—'}</p>
+        <div className="space-y-2">
+          {events.map(ev => {
+            const { invited, rsvpMap } = getEventData(ev);
+            const isExpanded = expandedEventId === ev.id;
+            const dateText = formatDate(ev.event_date);
+            const timeText = formatTime(ev.event_time);
+            const when = [dateText, timeText].filter(t => t && t !== '—').join(' · ');
+            const loc = (ev.location || '').trim();
+            return (
+              <div key={ev.id} className="border border-gray-200 rounded-xl bg-white overflow-hidden hover:border-gray-300 transition-colors">
+                {/* ── Header: event name + date/time pill, actions right ── */}
+                <div className="flex items-start gap-3 px-4 py-3">
+                  <div className="flex-1 min-w-0">
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => toggleEvent(ev.id)}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') toggleEvent(ev.id); }}
+                      className="flex items-center gap-2 flex-wrap min-w-0 text-left cursor-pointer"
+                    >
+                      <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      <span className="text-sm font-semibold text-gray-800 truncate">{ev.event_name || ev.event_type || 'Social Event'}</span>
+                      {when && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30 whitespace-nowrap flex-shrink-0">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          {when}
+                        </span>
+                      )}
+                      {invited.length > 0 && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-700 whitespace-nowrap flex-shrink-0">
+                          {invited.length} invited
+                        </span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-1">
-                      <button type="button" onClick={() => handleEdit(ev)} className="text-gray-300 hover:text-brand-secondary transition-colors p-1" title="Edit">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                      </button>
-                      <button type="button" onClick={() => handleDelete(ev.id)} className="text-gray-300 hover:text-red-500 transition-colors p-1" title="Delete">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                      </button>
+
+                    {/* ── Meta row: 2-up on mobile, inline from sm ── */}
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-2.5 pl-6 sm:flex sm:flex-wrap sm:gap-x-8">
+                      <CardField label="Location">
+                        {loc ? (
+                          <a
+                            href={mapsHref(loc)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            title={loc}
+                            className="text-brand-secondary hover:underline break-words"
+                          >
+                            {displayLocation(loc)}
+                          </a>
+                        ) : <span className="text-gray-400">—</span>}
+                      </CardField>
+                      <CardField label="Type">{ev.event_type || <span className="text-gray-400">—</span>}</CardField>
+                      <CardField label="Host">{ev.host || <span className="text-gray-400">—</span>}</CardField>
+                      <CardField label="Internal Attendees"><InternalRepPills internalAttendees={ev.internal_attendees} /></CardField>
+                      <CardField label="Invite Only">{ev.invite_only === 'Yes' ? 'Yes' : 'No'}</CardField>
+                      {customColumns.filter(c => c.visible).map(col => (
+                        <CardField key={`custom_${col.id}`} label={col.label}>
+                          <CustomColumnCell column={col} value={(ev as unknown as Record<string, unknown>)[col.data_key]} />
+                        </CardField>
+                      ))}
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-2">
-                    <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Date</p><p className="text-gray-700">{formatDate(ev.event_date)}</p></div>
-                    <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Time</p><p className="text-gray-700">{formatTime(ev.event_time)}</p></div>
-                    <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Location</p><p className="text-gray-700">{ev.location || '—'}</p></div>
-                    <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Invite Only</p><p className="text-gray-700">{ev.invite_only === 'Yes' ? 'Yes' : 'No'}</p></div>
-                    <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Entered By</p><p className="text-gray-700">{ev.entered_by || '—'}</p></div>
-                    <div><p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Internal</p><InternalAttendeePill internalAttendees={ev.internal_attendees} /></div>
-                    {customColumns.filter(c => c.visible).map(col => (
-                      <div key={`custom_${col.id}`}>
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{col.label}</p>
-                        <CustomColumnCell column={col} value={(ev as unknown as Record<string, unknown>)[col.data_key]} />
-                      </div>
-                    ))}
-                  </div>
-                  <div className="pt-2 border-t border-gray-100">
-                    <button type="button" onClick={() => setGuestListEventId(ev.id)} className="flex items-center gap-2 text-sm font-medium text-brand-secondary hover:text-brand-primary transition-colors">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                      Guest List {invited.length > 0 && <span className="px-1.5 py-0.5 rounded-full bg-brand-secondary text-white text-xs">{invited.length}</span>}
+
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button type="button" onClick={() => handleEdit(ev)} className="text-gray-300 hover:text-brand-secondary transition-colors p-1" title="Edit">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                    </button>
+                    <button type="button" onClick={() => handleDelete(ev.id)} className="text-gray-300 hover:text-red-500 transition-colors p-1" title="Delete">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
                   </div>
                 </div>
-              );
-            })}
-          </div>
 
-          {/* Desktop table */}
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  {orderedColumns.map(col => {
-                    if (!isVisible(col.key)) return null;
-                    const thCls = "px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap";
-                    switch (col.key) {
-                      case 'entered_by': return <th key="entered_by" className={thCls}>Entered By</th>;
-                      case 'internal': return <th key="internal" className={thCls}>Internal</th>;
-                      case 'event_name': return <th key="event_name" className={thCls}>Name</th>;
-                      case 'event_type': return <th key="event_type" className={thCls}>Type</th>;
-                      case 'host': return <th key="host" className={thCls}>Host</th>;
-                      case 'location': return <th key="location" className={thCls}>Location</th>;
-                      case 'date': return <th key="date" className={thCls}>Date</th>;
-                      case 'time': return <th key="time" className={thCls}>Time</th>;
-                      case 'invite_only': return <th key="invite_only" className={thCls}>Invite Only</th>;
-                      case 'guest_list': return <th key="guest_list" className={thCls}>Guest List</th>;
-                      default: return null;
-                    }
-                  })}
-                  {customColumns.filter(c => c.visible).map(col => (
-                    <th key={`custom_${col.id}`} className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                      {col.label}
-                    </th>
-                  ))}
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {events.map(ev => {
-                  const { invited, rsvpMap } = getEventData(ev);
-                  const isExpanded = expandedEventId === ev.id;
-                  return (
-                    <Fragment key={ev.id}>
-                      <tr className="hover:bg-gray-50 align-top">
-                        {orderedColumns.map(col => {
-                          if (!isVisible(col.key)) return null;
-                          switch (col.key) {
-                            case 'entered_by': return <td key="entered_by" className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.entered_by || '—'}</td>;
-                            case 'internal': return <td key="internal" className="px-3 py-3"><InternalAttendeePill internalAttendees={ev.internal_attendees} /></td>;
-                            case 'event_name': return <td key="event_name" className="px-3 py-3 text-gray-800 font-medium whitespace-nowrap">{ev.event_name || '—'}</td>;
-                            case 'event_type': return <td key="event_type" className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.event_type || '—'}</td>;
-                            case 'host': return <td key="host" className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.host || '—'}</td>;
-                            case 'location': return <td key="location" className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.location || '—'}</td>;
-                            case 'date': return <td key="date" className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatDate(ev.event_date)}</td>;
-                            case 'time': return <td key="time" className="px-3 py-3 text-gray-700 whitespace-nowrap">{formatTime(ev.event_time)}</td>;
-                            case 'invite_only': return <td key="invite_only" className="px-3 py-3 text-gray-700 whitespace-nowrap">{ev.invite_only === 'Yes' ? 'Yes' : 'No'}</td>;
-                            case 'guest_list': return <td key="guest_list" className="px-3 py-3">
-                              {invited.length > 0
-                                ? <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">{invited.length}</span>
-                                : <span className="text-gray-400">—</span>}
-                            </td>;
-                            default: return null;
-                          }
-                        })}
-                        {customColumns.filter(c => c.visible).map(col => (
-                          <td key={`custom_${col.id}`} className="px-3 py-3 whitespace-nowrap">
-                            <CustomColumnCell column={col} value={(ev as unknown as Record<string, unknown>)[col.data_key]} />
-                          </td>
-                        ))}
-                        <td className="px-3 py-3">
-                          <div className="flex items-center gap-1">
-                            {invited.length > 0 && (
-                              <button type="button" title="Toggle guest list" onClick={() => setExpandedEventId(v => v === ev.id ? null : ev.id)}
-                                className={`transition-colors ${isExpanded ? 'text-brand-secondary' : 'text-gray-300 hover:text-brand-secondary'}`}>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                              </button>
-                            )}
-                            <button type="button" onClick={() => handleEdit(ev)} className="text-gray-300 hover:text-brand-secondary transition-colors" title="Edit">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                            </button>
-                            <button type="button" onClick={() => handleDelete(ev.id)} className="text-gray-300 hover:text-red-500 transition-colors" title="Delete">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                      {isExpanded && (
-                        <tr>
-                          <td colSpan={99} className="p-0 border-b border-gray-200">
-                            <RSVPExpansion event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} icpCompanyTypes={icpCompanyTypes} />
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </>
+                {/* ── Expanded: RSVP table, unchanged ── */}
+                {isExpanded && (
+                  <div className="border-t border-gray-200 hidden sm:block">
+                    {invited.length > 0 ? (
+                      <RSVPExpansion
+                        event={ev}
+                        invitedAttendees={invited}
+                        rsvpMap={rsvpMap}
+                        onToggleRsvp={(aid, st) => handleToggleRsvp(ev.id, aid, st)}
+                        onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)}
+                        colorMaps={colorMaps}
+                        companies={companies}
+                        userOptionsFull={userOptionsFull}
+                        icpCompanyTypes={icpCompanyTypes}
+                      />
+                    ) : (
+                      <p className="text-xs text-gray-400 px-4 py-3">No guests invited yet.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
 
       {/* Mobile guest list overlay */}
