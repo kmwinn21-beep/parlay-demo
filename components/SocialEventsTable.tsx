@@ -24,6 +24,7 @@ export interface SocialEvent {
   host: string | null;
   venue_name: string | null;
   location: string | null;
+  company_hosted?: boolean;
   event_date: string | null;
   event_time: string | null;
   invite_only: string;
@@ -767,7 +768,7 @@ export function SocialEventsTable({
   const [editingEventId, setEditingEventId] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     entered_by: '', internal_attendees: [] as string[], event_name: '', event_type: '',
-    host: '', venue_name: '', location: '', event_date: '', event_time: '',
+    host: '', venue_name: '', location: '', company_hosted: false, event_date: '', event_time: '',
     invite_only: 'No', prospect_attendees: [] as string[], notes: '',
   });
   const [internalOpen, setInternalOpen] = useState(false);
@@ -851,7 +852,7 @@ export function SocialEventsTable({
 
   /* form helpers */
   const resetForm = () => {
-    setFormData({ entered_by: '', internal_attendees: [], event_name: '', event_type: '', host: '', venue_name: '', location: '', event_date: '', event_time: '', invite_only: 'No', prospect_attendees: [], notes: '' });
+    setFormData({ entered_by: '', internal_attendees: [], event_name: '', event_type: '', host: '', venue_name: '', location: '', company_hosted: false, event_date: '', event_time: '', invite_only: 'No', prospect_attendees: [], notes: '' });
     setEditingEventId(null);
     setShowForm(false);
   };
@@ -865,6 +866,7 @@ export function SocialEventsTable({
       host: ev.host || '',
       venue_name: ev.venue_name || '',
       location: ev.location || '',
+      company_hosted: Boolean(ev.company_hosted),
       event_date: ev.event_date || '',
       event_time: ev.event_time || '',
       invite_only: ev.invite_only || 'No',
@@ -891,6 +893,7 @@ export function SocialEventsTable({
         host: formData.host || null,
         venue_name: formData.venue_name || null,
         location: formData.location || null,
+        company_hosted: formData.company_hosted,
         event_date: formData.event_date || null,
         event_time: formData.event_time || null,
         invite_only: formData.invite_only,
@@ -983,7 +986,23 @@ export function SocialEventsTable({
       {/* form */}
       {showForm && (
         <div className="mb-5 p-4 bg-blue-50 border border-brand-secondary rounded-xl">
-          <p className="text-sm font-semibold text-brand-primary mb-3">{editingEventId ? 'Edit Social Event' : 'New Social Event'}</p>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <p className="text-sm font-semibold text-brand-primary">{editingEventId ? 'Edit Social Event' : 'New Social Event'}</p>
+            {/* Marks an event the account hosts or sponsors. Separate from
+                event_type, since a Dinner can also be company-hosted. */}
+            <label className="flex items-center gap-2 cursor-pointer flex-shrink-0">
+              <input
+                type="checkbox"
+                checked={formData.company_hosted}
+                onChange={e => setFormData(p => ({ ...p, company_hosted: e.target.checked }))}
+                className="accent-brand-secondary w-4 h-4 flex-shrink-0"
+              />
+              <span className="text-xs font-semibold text-gray-600 whitespace-nowrap">
+                <span className="sm:hidden">Company Hosted</span>
+                <span className="hidden sm:inline">Company Hosted / Sponsored</span>
+              </span>
+            </label>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
 
             {/* Entered By */}
@@ -1196,6 +1215,14 @@ export function SocialEventsTable({
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                           </svg>
                           {when}
+                        </span>
+                      )}
+                      {ev.company_hosted && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 whitespace-nowrap flex-shrink-0" title="Hosted or sponsored by your company">
+                          <svg className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.958a1 1 0 00.95.69h4.162c.969 0 1.371 1.24.588 1.81l-3.367 2.446a1 1 0 00-.363 1.118l1.286 3.957c.3.922-.755 1.688-1.538 1.118l-3.366-2.445a1 1 0 00-1.176 0l-3.366 2.445c-.783.57-1.838-.196-1.538-1.118l1.286-3.957a1 1 0 00-.363-1.118L2.005 9.385c-.783-.57-.38-1.81.588-1.81h4.162a1 1 0 00.95-.69l1.286-3.958z" />
+                          </svg>
+                          Company Hosted
                         </span>
                       )}
                       {invited.length > 0 && (

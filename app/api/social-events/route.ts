@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
     const result = await db.execute({
       sql: `SELECT id, conference_id, entered_by, internal_attendees, event_name, event_type, host,
-                   venue_name, location, event_date, event_time, invite_only, prospect_attendees, notes, created_at
+                   venue_name, location, company_hosted, event_date, event_time, invite_only, prospect_attendees, notes, created_at
             FROM social_events
             WHERE conference_id = ?
             ORDER BY event_date ASC, event_time ASC`,
@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
         host: r.host ? String(r.host) : null,
         venue_name: r.venue_name ? String(r.venue_name) : null,
         location: r.location ? String(r.location) : null,
+        company_hosted: Number(r.company_hosted ?? 0) === 1,
         event_date: r.event_date ? String(r.event_date) : null,
         event_time: r.event_time ? String(r.event_time) : null,
         invite_only: r.invite_only ? String(r.invite_only) : 'No',
@@ -76,6 +77,7 @@ export async function POST(request: NextRequest) {
       host,
       venue_name,
       location,
+      company_hosted,
       event_date,
       event_time,
       invite_only,
@@ -88,9 +90,9 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await db.execute({
-      sql: `INSERT INTO social_events (conference_id, entered_by, internal_attendees, event_name, event_type, host, venue_name, location, event_date, event_time, invite_only, prospect_attendees, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING id, conference_id, entered_by, internal_attendees, event_name, event_type, host, venue_name, location, event_date, event_time, invite_only, prospect_attendees, notes, created_at`,
+      sql: `INSERT INTO social_events (conference_id, entered_by, internal_attendees, event_name, event_type, host, venue_name, location, company_hosted, event_date, event_time, invite_only, prospect_attendees, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING id, conference_id, entered_by, internal_attendees, event_name, event_type, host, venue_name, location, company_hosted, event_date, event_time, invite_only, prospect_attendees, notes, created_at`,
       args: [
         conference_id,
         entered_by || null,
@@ -100,6 +102,7 @@ export async function POST(request: NextRequest) {
         host || null,
         venue_name || null,
         location || null,
+        company_hosted ? 1 : 0,
         event_date || null,
         event_time || null,
         invite_only || 'No',
@@ -119,6 +122,7 @@ export async function POST(request: NextRequest) {
       host: r.host ? String(r.host) : null,
       venue_name: r.venue_name ? String(r.venue_name) : null,
       location: r.location ? String(r.location) : null,
+      company_hosted: Number(r.company_hosted ?? 0) === 1,
       event_date: r.event_date ? String(r.event_date) : null,
       event_time: r.event_time ? String(r.event_time) : null,
       invite_only: r.invite_only ? String(r.invite_only) : 'No',
