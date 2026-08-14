@@ -42,7 +42,10 @@ interface ScannedCard {
 }
 
 interface Props {
+  /** Fixes the conference and hides the picker (the modal is opened in context). */
   conferenceId?: number | null;
+  /** Pre-selects the picker without hiding it, so the user can still change it. */
+  initialConferenceId?: number | null;
   initialCards?: ScannedCard[];
   onClose: () => void;
   onDone: () => void;
@@ -405,12 +408,12 @@ function RightCard({ card, onConfirm, onDismissMatch, onShowAddForm, onAddFormCh
 
 // ─── BatchCardScanModal — main export ─────────────────────────────────────────
 
-export function BatchCardScanModal({ conferenceId, initialCards, onClose, onDone, onConfirmed }: Props) {
+export function BatchCardScanModal({ conferenceId, initialConferenceId, initialCards, onClose, onDone, onConfirmed }: Props) {
   const [cards, setCards] = useState<ScannedCard[]>(initialCards ?? []);
   const [scanning, setScanning] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [conferences, setConferences] = useState<{ id: number; name: string }[]>([]);
-  const [activeConfId, setActiveConfId] = useState<number | null>(conferenceId ?? null);
+  const [activeConfId, setActiveConfId] = useState<number | null>(conferenceId ?? initialConferenceId ?? null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {

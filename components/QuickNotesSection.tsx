@@ -707,13 +707,9 @@ function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
   onClose: () => void;
   onSubmitted: (noteId: number) => void;
 }) {
+  // Notes assigned outside the booth flow carry no secondary tag; they log as a
+  // plain booth stop so the submit route stays on a branch it knows.
   const interactionType = data.note.secondary_tag ?? 'booth-stop';
-  const isMeeting = interactionType === 'booth-demo' || interactionType === 'booth-meeting';
-
-  const interactionLabel = interactionType === 'booth-demo' ? 'Demo'
-    : interactionType === 'booth-meeting' ? 'Meeting'
-    : interactionType === 'booth-followup' ? 'Follow-up Request'
-    : 'Booth Stop';
 
   // Parse suggested products from note
   const suggested: { productName: string; score: number }[] = (() => {
@@ -796,7 +792,7 @@ function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
           <div>
-            <h3 className="text-base font-semibold text-brand-primary font-serif">Log {interactionLabel}</h3>
+            <h3 className="text-base font-semibold text-brand-primary font-serif">Log Interaction</h3>
             <p className="text-xs text-gray-400 mt-0.5">
               {(() => {
                 const lines = data.note.content.split('\n');
@@ -1188,14 +1184,10 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
       const { attendeeMatches = [], companyMatches = [] } = mRes.ok ? await mRes.json() : {};
       const scanned: ScannedCard = { ...makeCard(draft), attendeeMatches, companyMatches, status: attendeeMatches.length > 0 ? 'matched' : 'no-match' };
       setBatchModalCards([scanned]);
-      if (note.secondary_tag?.startsWith('booth-')) {
-        // Booth flow: open BatchCardScanModal; on confirm → show structured capture
-        setBoothSourceNote(note);
-      } else {
-        // Non-booth: open BatchCardScanModal and delete the note immediately
-        setNotes(prev => prev.filter(n => n.id !== note.id));
-        await fetch(`/api/quick-notes/${note.id}`, { method: 'DELETE' });
-      }
+      // Every assigned note goes on to the interaction capture, booth-tagged or
+      // not. The note is left in place until that capture is submitted — the
+      // submit route deletes it — so backing out of the scan loses nothing.
+      setBoothSourceNote(note);
       setShowBatchModal(true);
     } catch { toast.error('Failed to search for match.'); }
   }, []);
@@ -1317,7 +1309,9 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
       {showBatchModal && (
         <BatchCardScanModal
           initialCards={batchModalCards}
-          conferenceId={boothSourceNote ? (activeConference?.id ?? null) : undefined}
+          /* Pre-select the note's own conference, falling back to whatever is
+             globally active — but leave the picker visible either way. */
+          initialConferenceId={boothSourceNote?.conference_id ?? activeConference?.id ?? null}
           onClose={() => { setShowBatchModal(false); setBoothSourceNote(null); }}
           onDone={() => { setShowBatchModal(false); setBoothSourceNote(null); }}
           onConfirmed={boothSourceNote ? (attendeeId, companyId, conferenceId) => {
