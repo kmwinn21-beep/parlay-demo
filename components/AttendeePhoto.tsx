@@ -108,7 +108,7 @@ export function ImageCropModal({ file, onCancel, onConfirm }: {
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" onClick={onCancel}>
+    <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/60 p-4" onClick={onCancel}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
         <h3 className="text-base font-semibold text-brand-primary font-serif mb-1">Crop photo</h3>
         <p className="text-xs text-gray-400 mb-4">Drag to reposition, and use the slider to zoom.</p>
@@ -210,7 +210,7 @@ export function PhotoSourceModal({ name, onUpload, onPaste, onClose }: {
   if (!mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-full max-w-xs px-6 py-6 text-center">
         <h3 className="text-base font-semibold text-brand-primary font-serif">Add a photo</h3>
         <p className="text-xs text-gray-400 mt-1">for {name}</p>
@@ -252,7 +252,7 @@ export function AttendeePhotoModal({ name, title, companyName, photoUrl, onClose
 
   return createPortal(
     // Below sm the card drops in from the top; from sm it is a centred modal.
-    <div className="fixed inset-0 z-[80] flex items-start sm:items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[600] flex items-start sm:items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
         onClick={e => e.stopPropagation()}
         className="attendee-photo-card bg-white rounded-2xl shadow-2xl w-full max-w-sm px-6 py-6 text-center mt-6 sm:mt-0"
