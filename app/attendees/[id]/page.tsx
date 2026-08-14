@@ -6,7 +6,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { effectiveSeniority } from '@/lib/parsers';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
-import { AttendeeAvatar, ImageCropModal } from '@/components/AttendeePhoto';
+import { AttendeeAvatar, ImageCropModal, readImageFromClipboard } from '@/components/AttendeePhoto';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
@@ -95,6 +95,7 @@ export default function AttendeeDetailPage() {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [photoSaving, setPhotoSaving] = useState(false);
+  const [photoDragging, setPhotoDragging] = useState(false);
   const [editData, setEditData] = useState<{ first_name?: string; last_name?: string; title?: string; company_id?: string; email?: string; seniority?: string; linkedin_url?: string; phone?: string; function?: string; consent?: string }>({});
   const [showPhonePopup, setShowPhonePopup] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -411,14 +412,55 @@ export default function AttendeeDetailPage() {
     return updated;
   }, [id, selectedConferenceId, conferenceDetail]);
 
-  const handlePhotoPick = (file: File | null | undefined) => {
+  const handlePhotoPick = useCallback((file: File | null | undefined) => {
     if (!file) return;
     if (!/^image\/(png|jpeg|jpg|webp)$/.test(file.type)) {
       toast.error('Use a PNG, JPEG or WebP image.');
       return;
     }
     setCropFile(file);
+  }, []);
+
+  // "Paste photo" button — reads the clipboard directly rather than waiting
+  // for a keystroke. Not every browser allows it, so failures explain the
+  // fallback rather than going quiet.
+  const handlePasteButton = useCallback(async () => {
+    try {
+      handlePhotoPick(await readImageFromClipboard());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not read the clipboard.');
+    }
+  }, [handlePhotoPick]);
+
+  /** First image file on a clipboard or drag payload, if there is one. */
+  const imageFromTransfer = (dt: DataTransfer | null): File | null => {
+    if (!dt) return null;
+    const direct = Array.from(dt.files ?? []).find(f => f.type.startsWith('image/'));
+    if (direct) return direct;
+    // Screenshots and "Copy image" often arrive as items rather than files.
+    for (const item of Array.from(dt.items ?? [])) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const f = item.getAsFile();
+        if (f) return f;
+      }
+    }
+    return null;
   };
+
+  // Paste anywhere in the edit form to set the photo. Only claims the event
+  // when the clipboard actually carries an image, so pasting text into the
+  // other fields still behaves normally.
+  useEffect(() => {
+    if (!isEditing || cropFile) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const file = imageFromTransfer(e.clipboardData);
+      if (!file) return;
+      e.preventDefault();
+      handlePhotoPick(file);
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  }, [isEditing, cropFile, handlePhotoPick]);
 
   const handlePhotoSave = async (blob: Blob) => {
     setCropFile(null);
@@ -852,7 +894,20 @@ export default function AttendeeDetailPage() {
                 <h2 className="text-lg font-semibold text-brand-primary font-serif">Edit Attendee</h2>
                 <div>
                   <label className="label">Photo</label>
-                  <div className="flex items-center gap-4">
+                  <div
+                    onDragOver={e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setPhotoDragging(true); } }}
+                    onDragLeave={() => setPhotoDragging(false)}
+                    onDrop={e => {
+                      const file = imageFromTransfer(e.dataTransfer);
+                      if (!file) return;
+                      e.preventDefault();
+                      setPhotoDragging(false);
+                      handlePhotoPick(file);
+                    }}
+                    className={`flex items-center gap-4 rounded-xl border-2 border-dashed p-3 transition-colors ${
+                      photoDragging ? 'border-brand-secondary bg-brand-secondary/5' : 'border-transparent'
+                    }`}
+                  >
                     <div className="w-16 h-16 rounded-full bg-brand-primary flex items-center justify-center text-white text-2xl font-bold font-serif flex-shrink-0 overflow-hidden">
                       {attendee.photo_url
                         // eslint-disable-next-line @next/next/no-img-element
@@ -868,12 +923,24 @@ export default function AttendeeDetailPage() {
                       >
                         {photoSaving ? 'Saving…' : attendee.photo_url ? 'Replace photo' : 'Upload photo'}
                       </button>
+                      <button
+                        type="button"
+                        onClick={handlePasteButton}
+                        disabled={photoSaving}
+                        className="btn-secondary text-sm"
+                      >
+                        Paste photo
+                      </button>
                       {attendee.photo_url && (
                         <button type="button" onClick={handlePhotoRemove} disabled={photoSaving} className="text-sm text-red-500 hover:text-red-600 transition-colors">
                           Remove
                         </button>
                       )}
-                      <p className="w-full text-xs text-gray-400">PNG, JPEG or WebP. You can crop it before saving.</p>
+                      <p className="w-full text-xs text-gray-400">
+                        {photoDragging
+                          ? 'Drop the image to crop it.'
+                          : 'PNG, JPEG or WebP — upload, drag one here, or paste with ⌘/Ctrl+V. You can crop it before saving.'}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -933,6 +1000,7 @@ export default function AttendeeDetailPage() {
                       companyName={attendee.company_name}
                       photoUrl={attendee.photo_url}
                       onUploadRequest={() => photoInputRef.current?.click()}
+                      onPasteRequest={handlePasteButton}
                     />
                     <div>
                       <div className="flex flex-wrap items-center gap-3">
