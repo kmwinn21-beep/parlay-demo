@@ -550,9 +550,9 @@ function CardField({ label, children }: { label: string; children: React.ReactNo
 }
 
 /**
- * "Company Hosted" marker, shown just right of the invited pill in the card
- * header. The label is dropped below sm — there is no room beside the pill —
- * so the tooltip and the screen-reader copy carry it there.
+ * "Company Hosted" marker, shown after the event name in the card header.
+ * The label is dropped below sm — there is no room for it beside a long
+ * name — so the tooltip and the screen-reader copy carry it there.
  */
 function CompanyHostedStar({ className }: { className?: string }) {
   return (
@@ -1229,19 +1229,14 @@ export function SocialEventsTable({
                       tabIndex={0}
                       onClick={() => toggleEvent(ev.id)}
                       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') toggleEvent(ev.id); }}
-                      /* No wrap — the name truncates instead, so the invited
-                         pill and the mobile star stay on the header line. */
+                      /* No wrap — the name truncates instead, so the star
+                         stays on the header line. */
                       className="flex items-center gap-2 min-w-0 text-left cursor-pointer"
                     >
                       <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                       <span className="text-sm font-semibold text-gray-800 truncate min-w-0">{ev.event_name || ev.event_type || 'Social Event'}</span>
-                      {invited.length > 0 && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-700 whitespace-nowrap flex-shrink-0">
-                          {invited.length} invited
-                        </span>
-                      )}
                       {ev.company_hosted && <CompanyHostedStar className="inline-flex ml-1.5" />}
                     </div>
 
@@ -1279,9 +1274,12 @@ export function SocialEventsTable({
                           </a>
                         ) : <span className="text-gray-400">—</span>}
                       </CardField>
-                      <div className="grid grid-cols-[1fr_1fr_auto] gap-x-3 sm:contents">
+                      {/* Below sm these wrap to two grid lines — Type / Host /
+                          # Invited, then Invite Only. */}
+                      <div className="grid grid-cols-[1fr_1fr_auto] gap-x-3 gap-y-2 sm:contents">
                         <CardField label="Type">{ev.event_type || <span className="text-gray-400">—</span>}</CardField>
                         <CardField label="Host">{ev.host || <span className="text-gray-400">—</span>}</CardField>
+                        <CardField label="# Invited">{invited.length > 0 ? invited.length : <span className="text-gray-400">—</span>}</CardField>
                         <CardField label="Invite Only">{ev.invite_only === 'Yes' ? 'Yes' : 'No'}</CardField>
                       </div>
                       <CardField label="Internal Attendees"><InternalRepPills internalAttendees={ev.internal_attendees} /></CardField>
