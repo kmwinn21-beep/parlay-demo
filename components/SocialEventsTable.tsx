@@ -389,8 +389,14 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
     return activeFilters.some(f => s.includes(f));
   });
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col justify-end" onClick={onClose}>
-      <div className="relative bg-white rounded-t-2xl shadow-2xl border border-brand-highlight flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+    // Dimmed backdrop plus the shared slide-up animation and h-[90vh], so this
+    // matches every other mobile drawer on the site rather than appearing
+    // instantly at whatever height its content happens to need.
+    <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/40" onClick={onClose}>
+      <div
+        className="drawer-mobile-responsive relative bg-white rounded-t-2xl shadow-2xl border border-brand-highlight flex flex-col h-[90vh]"
+        onClick={e => e.stopPropagation()}
+      >
         <div className="px-4 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center justify-between mb-3">
             <div>
@@ -1209,28 +1215,38 @@ export function SocialEventsTable({
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                       <span className="text-sm font-semibold text-gray-800 truncate">{ev.event_name || ev.event_type || 'Social Event'}</span>
-                      {when && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30 whitespace-nowrap flex-shrink-0">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                          {when}
-                        </span>
-                      )}
-                      {ev.company_hosted && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 whitespace-nowrap flex-shrink-0" title="Hosted or sponsored by your company">
+                    </div>
+
+                    {/* Date then invited count, on their own row under the name */}
+                    {(when || invited.length > 0) && (
+                      <div className="flex items-center gap-2 flex-wrap mt-1.5 pl-6">
+                        {when && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30 whitespace-nowrap flex-shrink-0">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            {when}
+                          </span>
+                        )}
+                        {invited.length > 0 && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-700 whitespace-nowrap flex-shrink-0">
+                            {invited.length} invited
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Company-hosted marker gets its own row beneath */}
+                    {ev.company_hosted && (
+                      <div className="flex items-center mt-1.5 pl-6">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 whitespace-nowrap" title="Hosted or sponsored by your company">
                           <svg className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
                             <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.958a1 1 0 00.95.69h4.162c.969 0 1.371 1.24.588 1.81l-3.367 2.446a1 1 0 00-.363 1.118l1.286 3.957c.3.922-.755 1.688-1.538 1.118l-3.366-2.445a1 1 0 00-1.176 0l-3.366 2.445c-.783.57-1.838-.196-1.538-1.118l1.286-3.957a1 1 0 00-.363-1.118L2.005 9.385c-.783-.57-.38-1.81.588-1.81h4.162a1 1 0 00.95-.69l1.286-3.958z" />
                           </svg>
                           Company Hosted
                         </span>
-                      )}
-                      {invited.length > 0 && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-700 whitespace-nowrap flex-shrink-0">
-                          {invited.length} invited
-                        </span>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
                     {/* ── Meta row: 2-up on mobile, inline from sm ── */}
                     {/* Mobile stacks into three bands — Location, then
