@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
     // ── Convo path (booth-stop) ───────────────────────────────────────────────
     if (isConvo && attendee_id && conference_id) {
       const tpOption = await db.execute({
-        sql: "SELECT id, auto_follow_up FROM config_options WHERE category = 'touchpoints' AND value = 'Booth Stop' LIMIT 1",
+        sql: "SELECT id, value, auto_follow_up FROM config_options WHERE category = 'touchpoints' AND value = 'Booth Stop' LIMIT 1",
         args: [],
       });
 
