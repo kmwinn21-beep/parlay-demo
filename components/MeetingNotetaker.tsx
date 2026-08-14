@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { useCapabilities } from '@/lib/useCapabilities';
+import { AttendeePhotoModal } from '@/components/AttendeePhoto';
 
 interface TranscriptSegment {
   text: string;
@@ -44,6 +45,7 @@ interface MeetingContext {
   first_name: string;
   last_name: string;
   title: string | null;
+  photo_url: string | null;
   company_id: number | null;
   company_name: string | null;
   company_icp: string | null;
@@ -113,12 +115,35 @@ function IcpBadge({ icp }: { icp: string | null }) {
   );
 }
 
-function Avatar({ name, size = 7 }: { name: string; size?: number }) {
+function Avatar({ name, size = 7, photoUrl, title, companyName }: {
+  name: string;
+  size?: number;
+  photoUrl?: string | null;
+  title?: string | null;
+  companyName?: string | null;
+}) {
+  const [showPhoto, setShowPhoto] = useState(false);
   const initials = name.trim().split(/\s+/).filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase();
+  const cls = `w-${size} h-${size} rounded-full bg-brand-secondary/20 flex items-center justify-center text-[10px] font-bold text-brand-secondary flex-shrink-0 overflow-hidden`;
+
+  if (!photoUrl) return <div className={cls}>{initials}</div>;
+
   return (
-    <div className={`w-${size} h-${size} rounded-full bg-brand-secondary/20 flex items-center justify-center text-[10px] font-bold text-brand-secondary flex-shrink-0`}>
-      {initials}
-    </div>
+    <>
+      <button type="button" onClick={() => setShowPhoto(true)} title={`View ${name}'s photo`} className={`${cls} transition-shadow hover:shadow-md`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={photoUrl} alt={name} className="w-full h-full object-cover" />
+      </button>
+      {showPhoto && (
+        <AttendeePhotoModal
+          name={name}
+          title={title}
+          companyName={companyName}
+          photoUrl={photoUrl}
+          onClose={() => setShowPhoto(false)}
+        />
+      )}
+    </>
   );
 }
 
@@ -1594,7 +1619,13 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
 
                   {/* Primary attendee */}
                   <div className="flex items-center gap-2 mb-1.5">
-                    <Avatar name={`${meeting.first_name} ${meeting.last_name}`} size={7} />
+                    <Avatar
+                      name={`${meeting.first_name} ${meeting.last_name}`}
+                      size={7}
+                      photoUrl={meeting.photo_url}
+                      title={meeting.title}
+                      companyName={meeting.company_name}
+                    />
                     <button
                       type="button"
                       onClick={() => openRecord('attendee', meeting.attendee_id)}

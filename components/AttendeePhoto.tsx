@@ -164,6 +164,73 @@ export function ImageCropModal({ file, onCancel, onConfirm }: {
   );
 }
 
+/**
+ * Read an image off the system clipboard on demand, for a "Paste photo"
+ * button. Distinct from handling a paste event: this needs the Clipboard Read
+ * permission, a secure context, and browser support (Chromium and Safari —
+ * Firefox does not implement it), so the caller gets a thrown reason to show.
+ */
+export async function readImageFromClipboard(): Promise<File> {
+  if (typeof navigator === 'undefined' || !navigator.clipboard?.read) {
+    throw new Error('This browser can\u2019t read the clipboard directly — press \u2318/Ctrl+V instead.');
+  }
+  let items: ClipboardItem[];
+  try {
+    items = await navigator.clipboard.read();
+  } catch {
+    throw new Error('Clipboard access was blocked — allow it, or press \u2318/Ctrl+V instead.');
+  }
+  for (const item of items) {
+    const type = item.types.find(t => t.startsWith('image/'));
+    if (!type) continue;
+    const blob = await item.getType(type);
+    const ext = type.split('/')[1] || 'png';
+    return new File([blob], `pasted.${ext}`, { type });
+  }
+  throw new Error('No image on the clipboard — copy one first.');
+}
+
+/**
+ * Asks how to supply a photo. Shown when an avatar with no photo is clicked,
+ * offering the same two routes the edit form does.
+ */
+export function PhotoSourceModal({ name, onUpload, onPaste, onClose }: {
+  name: string;
+  onUpload: () => void;
+  onPaste: () => void;
+  onClose: () => void;
+}) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onEsc);
+    return () => document.removeEventListener('keydown', onEsc);
+  }, [onClose]);
+  if (!mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl w-full max-w-xs px-6 py-6 text-center">
+        <h3 className="text-base font-semibold text-brand-primary font-serif">Add a photo</h3>
+        <p className="text-xs text-gray-400 mt-1">for {name}</p>
+        <div className="flex flex-col gap-2 mt-5">
+          <button type="button" onClick={() => { onClose(); onUpload(); }} className="btn-primary text-sm w-full">
+            Upload photo
+          </button>
+          <button type="button" onClick={() => { onClose(); onPaste(); }} className="btn-secondary text-sm w-full">
+            Paste photo
+          </button>
+        </div>
+        <button type="button" onClick={onClose} className="mt-3 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+          Cancel
+        </button>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 /* ─── Profile card ───────────────────────────────────────────────────────── */
 export function AttendeePhotoModal({ name, title, companyName, photoUrl, onClose }: {
   name: string;
@@ -208,24 +275,28 @@ export function AttendeePhotoModal({ name, title, companyName, photoUrl, onClose
 
 /* ─── Avatar ─────────────────────────────────────────────────────────────── */
 export function AttendeeAvatar({
-  firstName, lastName, title, companyName, photoUrl, onUploadRequest, className = 'w-16 h-16 text-2xl',
+  firstName, lastName, title, companyName, photoUrl, onUploadRequest, onPasteRequest,
+  className = 'w-16 h-16 text-2xl',
 }: {
   firstName: string;
   lastName: string;
   title?: string | null;
   companyName?: string | null;
   photoUrl?: string | null;
-  /** Called when a photo-less avatar is clicked and the user confirms. */
+  /** Opens the file picker from the "Add a photo" prompt. */
   onUploadRequest?: () => void;
+  /** Reads the clipboard from the "Add a photo" prompt. */
+  onPasteRequest?: () => void;
   className?: string;
 }) {
   const [showPhoto, setShowPhoto] = useState(false);
+  const [showSource, setShowSource] = useState(false);
   const name = `${firstName} ${lastName}`.trim();
 
   const handleClick = () => {
     if (photoUrl) { setShowPhoto(true); return; }
-    if (!onUploadRequest) return;
-    if (confirm(`Add a photo for ${name}?`)) onUploadRequest();
+    if (!onUploadRequest && !onPasteRequest) return;
+    setShowSource(true);
   };
 
   return (
@@ -248,6 +319,14 @@ export function AttendeeAvatar({
           companyName={companyName}
           photoUrl={photoUrl}
           onClose={() => setShowPhoto(false)}
+        />
+      )}
+      {showSource && (
+        <PhotoSourceModal
+          name={name}
+          onUpload={() => onUploadRequest?.()}
+          onPaste={() => onPasteRequest?.()}
+          onClose={() => setShowSource(false)}
         />
       )}
     </>

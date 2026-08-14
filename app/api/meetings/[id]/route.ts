@@ -15,7 +15,7 @@ export async function GET(
     const result = await db.execute({
       sql: `SELECT m.id, m.attendee_id, m.conference_id, m.scheduled_by,
                m.additional_attendees, m.meeting_date, m.meeting_time, m.location,
-               a.first_name, a.last_name, a.title,
+               a.first_name, a.last_name, a.title, a.photo_url,
                co.id AS company_id, co.name AS company_name, co.icp AS company_icp,
                c.name AS conference_name, c.internal_attendees AS conference_internal_attendees
             FROM meetings m
@@ -62,6 +62,7 @@ export async function GET(
       first_name: String(r.first_name ?? ''),
       last_name: String(r.last_name ?? ''),
       title: r.title ? String(r.title) : null,
+      photo_url: r.photo_url ? String(r.photo_url) : null,
       company_id: r.company_id ? Number(r.company_id) : null,
       company_name: r.company_name ? String(r.company_name) : null,
       company_icp: r.company_icp ? String(r.company_icp) : null,

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { effectiveSeniority } from '@/lib/parsers';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
-import { AttendeeAvatar, ImageCropModal } from '@/components/AttendeePhoto';
+import { AttendeeAvatar, ImageCropModal, readImageFromClipboard } from '@/components/AttendeePhoto';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
@@ -420,6 +420,17 @@ export default function AttendeeDetailPage() {
     }
     setCropFile(file);
   }, []);
+
+  // "Paste photo" button — reads the clipboard directly rather than waiting
+  // for a keystroke. Not every browser allows it, so failures explain the
+  // fallback rather than going quiet.
+  const handlePasteButton = useCallback(async () => {
+    try {
+      handlePhotoPick(await readImageFromClipboard());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not read the clipboard.');
+    }
+  }, [handlePhotoPick]);
 
   /** First image file on a clipboard or drag payload, if there is one. */
   const imageFromTransfer = (dt: DataTransfer | null): File | null => {
@@ -912,6 +923,14 @@ export default function AttendeeDetailPage() {
                       >
                         {photoSaving ? 'Saving…' : attendee.photo_url ? 'Replace photo' : 'Upload photo'}
                       </button>
+                      <button
+                        type="button"
+                        onClick={handlePasteButton}
+                        disabled={photoSaving}
+                        className="btn-secondary text-sm"
+                      >
+                        Paste photo
+                      </button>
                       {attendee.photo_url && (
                         <button type="button" onClick={handlePhotoRemove} disabled={photoSaving} className="text-sm text-red-500 hover:text-red-600 transition-colors">
                           Remove
@@ -981,6 +1000,7 @@ export default function AttendeeDetailPage() {
                       companyName={attendee.company_name}
                       photoUrl={attendee.photo_url}
                       onUploadRequest={() => photoInputRef.current?.click()}
+                      onPasteRequest={handlePasteButton}
                     />
                     <div>
                       <div className="flex flex-wrap items-center gap-3">
