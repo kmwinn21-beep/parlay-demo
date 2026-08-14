@@ -107,7 +107,9 @@ export interface SocialEventRow {
   event_type: string | null;
   event_name: string | null;
   host: string | null;
+  venue_name: string | null;
   location: string | null;
+  company_hosted: boolean;
   event_date: string | null;
   event_time: string | null;
   invite_only: string | null;

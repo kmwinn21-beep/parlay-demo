@@ -87,8 +87,8 @@ export async function GET(
       args: [confId],
     }),
     db.execute({
-      sql: `SELECT se.id, se.event_type, se.event_name, se.host, se.location,
-                   se.event_date, se.event_time, se.invite_only, se.notes,
+      sql: `SELECT se.id, se.event_type, se.event_name, se.host, se.venue_name, se.location,
+                   se.company_hosted, se.event_date, se.event_time, se.invite_only, se.notes,
                    se.internal_attendees, se.prospect_attendees
             FROM social_events se
             WHERE se.conference_id = ?
@@ -225,14 +225,15 @@ export async function GET(
           args: attendeeIds,
         })
       : Promise.resolve({ rows: [] }),
-    // Cross-conference social_event_rsvps 'attending' per attendee (for health score depth + ghost)
+    // Cross-conference social_event_rsvps per attendee (for health score depth + ghost).
+    // The stored vocabulary is yes|no|maybe|attended — 'attending' is never written.
     attendeeIds.length > 0
       ? db.execute({
           sql: `SELECT ser.attendee_id, se.conference_id
                 FROM social_event_rsvps ser
                 JOIN social_events se ON ser.social_event_id = se.id
                 WHERE ser.attendee_id IN (${attendeeIds.map(() => '?').join(',')})
-                  AND ser.rsvp_status LIKE '%attending%'
+                  AND ser.rsvp_status LIKE '%attended%'
                 GROUP BY ser.attendee_id, se.conference_id`,
           args: attendeeIds,
         })
@@ -626,7 +627,9 @@ export async function GET(
 
   const socialEventsData = socialEvents.map((se) => ({
     id: Number(se.id), event_type: se.event_type, event_name: se.event_name, host: se.host,
-    location: se.location, event_date: se.event_date, event_time: se.event_time,
+    venue_name: se.venue_name, location: se.location,
+    company_hosted: Number(se.company_hosted ?? 0) === 1,
+    event_date: se.event_date, event_time: se.event_time,
     invite_only: se.invite_only, notes: se.notes, internal_attendees: se.internal_attendees,
     attending_count: 0, declined_count: 0,
     guestList: guestListByEvent.get(Number(se.id)) ?? [],

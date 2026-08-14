@@ -11,6 +11,7 @@ import { parseRepIds, getRepInitials } from '@/lib/useUserOptions';
 import { useUser } from '@/components/UserContext';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
 import { CustomColumnCell } from './CustomColumnCell';
+import { CardField, SocialEventCardBody } from './SocialEventCardParts';
 
 type RsvpStatus = 'yes' | 'no' | 'maybe' | 'attended';
 
@@ -522,120 +523,6 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemov
   );
 }
 
-/* ─── Social event card pieces ─── */
-
-/**
- * Google Places returns "3600 S Las Vegas Blvd, Las Vegas, NV 89109, USA".
- * Only formatted_address is stored, so the venue name isn't recoverable —
- * the trailing ", USA" is dropped instead to keep the pill readable.
- */
-function displayLocation(venueName: string | null, address: string): string {
-  const addr = address.replace(/,\s*USA\s*$/i, '').trim();
-  const venue = (venueName ?? '').trim();
-  return [venue, addr].filter(Boolean).join(', ');
-}
-
-function mapsHref(location: string): string {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
-}
-
-/** Eyebrow label with its value beneath, used across the card's meta row. */
-function CardField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5 whitespace-nowrap">{label}</p>
-      <div className="text-xs text-gray-700 min-w-0">{children}</div>
-    </div>
-  );
-}
-
-/**
- * "Company Hosted" marker, shown after the event name in the card header.
- * The label is dropped below sm — there is no room for it beside a long
- * name — so the tooltip and the screen-reader copy carry it there.
- */
-function CompanyHostedStar({ className }: { className?: string }) {
-  return (
-    <span
-      className={`items-center gap-1 text-[11px] font-semibold text-amber-600 whitespace-nowrap flex-shrink-0 ${className ?? ''}`}
-      title="Hosted or sponsored by your company"
-    >
-      <svg className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
-        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.958a1 1 0 00.95.69h4.162c.969 0 1.371 1.24.588 1.81l-3.367 2.446a1 1 0 00-.363 1.118l1.286 3.957c.3.922-.755 1.688-1.538 1.118l-3.366-2.445a1 1 0 00-1.176 0l-3.366 2.445c-.783.57-1.838-.196-1.538-1.118l1.286-3.957a1 1 0 00-.363-1.118L2.005 9.385c-.783-.57-.38-1.81.588-1.81h4.162a1 1 0 00.95-.69l1.286-3.958z" />
-      </svg>
-      <span className="hidden sm:inline">Company Hosted</span>
-      <span className="sr-only">Company Hosted</span>
-    </span>
-  );
-}
-
-/**
- * Internal attendees as the abbreviated rep pills used in the company tables.
- * They sit on one line rather than wrapping — on a narrow card that would eat
- * several rows — so the row scrolls horizontally when it overflows, with
- * chevrons appearing on either side once there is somewhere to scroll to.
- */
-function InternalRepPills({ internalAttendees }: { internalAttendees: string | null }) {
-  const colorMaps = useConfigColors();
-  const rowRef = useRef<HTMLDivElement>(null);
-  const [canLeft, setCanLeft] = useState(false);
-  const [canRight, setCanRight] = useState(false);
-
-  const names = (internalAttendees ?? '').split(',').map(n => n.trim()).filter(Boolean);
-
-  const updateArrows = useCallback(() => {
-    const el = rowRef.current;
-    if (!el) return;
-    setCanLeft(el.scrollLeft > 1);
-    setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
-  }, []);
-
-  useEffect(() => {
-    updateArrows();
-    const el = rowRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(updateArrows);
-    ro.observe(el);
-    window.addEventListener('resize', updateArrows);
-    return () => { ro.disconnect(); window.removeEventListener('resize', updateArrows); };
-  }, [updateArrows, internalAttendees]);
-
-  if (names.length === 0) return <span className="text-gray-400">—</span>;
-
-  const scroll = (dir: -1 | 1) => rowRef.current?.scrollBy({ left: dir * 120, behavior: 'smooth' });
-  const arrowCls = 'flex-shrink-0 w-4 h-4 rounded-full bg-white border border-gray-200 text-gray-400 hover:text-brand-secondary hover:border-gray-300 flex items-center justify-center transition-colors';
-
-  return (
-    <div className="flex items-center gap-1 min-w-0">
-      {canLeft && (
-        <button type="button" onClick={e => { e.stopPropagation(); scroll(-1); }} className={arrowCls} title="Scroll left">
-          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" /></svg>
-        </button>
-      )}
-      <div ref={rowRef} onScroll={updateArrows} className="flex items-center gap-1 overflow-x-auto scrollbar-hide min-w-0">
-        {names.map(name => (
-          <span
-            key={name}
-            title={name}
-            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap flex-shrink-0 ${getPreset(colorMaps.user?.[name]).badgeClass}`}
-          >
-            <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-            {getRepInitials(name)}
-          </span>
-        ))}
-      </div>
-      {canRight && (
-        <button type="button" onClick={e => { e.stopPropagation(); scroll(1); }} className={arrowCls} title="Scroll right">
-          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" /></svg>
-        </button>
-      )}
-    </div>
-  );
-}
-
-
 /* ─── Build Guest List modal ─── */
 function GuestListModal({ attendees, selected, onConfirm, onClose, icpCompanyTypes }: {
   attendees: Attendee[];
@@ -933,6 +820,13 @@ export function SocialEventsTable({
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error();
+      const saved = await res.json().catch(() => null);
+
+      // Tell the other social-event surfaces (pre-conference review,
+      // post-conference) about the change so they don't hold a stale card.
+      if (saved?.id != null) {
+        window.dispatchEvent(new CustomEvent('social-event-saved', { detail: saved }));
+      }
 
       if (!isEditing && formData.notes?.trim()) {
         const label = formData.event_type ? `[${formData.event_type}]` : '[Social Event]';
@@ -980,6 +874,7 @@ export function SocialEventsTable({
     try {
       const res = await fetch(`/api/social-events/${eventId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error();
+      window.dispatchEvent(new CustomEvent('social-event-deleted', { detail: { id: eventId } }));
       toast.success('Social event deleted.');
       onRefresh();
     } catch {
@@ -1214,96 +1109,43 @@ export function SocialEventsTable({
           {events.map(ev => {
             const { invited, rsvpMap } = getEventData(ev);
             const isExpanded = expandedEventId === ev.id;
-            const dateText = formatDate(ev.event_date);
-            const timeText = formatTime(ev.event_time);
-            const when = [dateText, timeText].filter(t => t && t !== '—').join(' · ');
-            const addr = (ev.location || '').trim();
-            const locText = displayLocation(ev.venue_name, addr);
             return (
               <div key={ev.id} className="border border-gray-200 rounded-xl bg-white overflow-hidden hover:border-gray-300 transition-colors">
-                {/* ── Header: event name + date/time pill, actions right ── */}
-                <div className="flex items-start gap-2 px-3 py-3 sm:gap-3 sm:px-4">
-                  <div className="flex-1 min-w-0">
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => toggleEvent(ev.id)}
-                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') toggleEvent(ev.id); }}
-                      /* No wrap — the name truncates instead, so the star
-                         stays on the header line. */
-                      className="flex items-center gap-2 min-w-0 text-left cursor-pointer"
-                    >
-                      <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                      <span className="text-sm font-semibold text-gray-800 truncate min-w-0">{ev.event_name || ev.event_type || 'Social Event'}</span>
-                      {ev.company_hosted && <CompanyHostedStar className="inline-flex ml-1.5" />}
+                {/* ── Header + meta, shared with the pre-conference card ── */}
+                <SocialEventCardBody
+                  eventName={ev.event_name}
+                  eventType={ev.event_type}
+                  host={ev.host}
+                  venueName={ev.venue_name}
+                  location={ev.location}
+                  eventDate={ev.event_date}
+                  eventTime={ev.event_time}
+                  companyHosted={!!ev.company_hosted}
+                  inviteOnly={ev.invite_only}
+                  internalAttendees={ev.internal_attendees}
+                  invitedCount={invited.length}
+                  isExpanded={isExpanded}
+                  onToggle={() => toggleEvent(ev.id)}
+                  extraFields={customColumns.filter(c => c.visible).length > 0 ? (
+                    <div className="grid grid-cols-[1fr_1fr_auto] gap-x-3 sm:contents">
+                      {customColumns.filter(c => c.visible).map(col => (
+                        <CardField key={`custom_${col.id}`} label={col.label}>
+                          <CustomColumnCell column={col} value={(ev as unknown as Record<string, unknown>)[col.data_key]} />
+                        </CardField>
+                      ))}
                     </div>
-
-                    {/* Padding matches the meta row below (none on mobile,
-                        sm:pl-6 to clear the chevron) so the pill's left edge
-                        lines up with the Location eyebrow. */}
-                    {when && (
-                      <div className="flex items-center gap-2 flex-wrap mt-1.5 sm:pl-6">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30 whitespace-nowrap flex-shrink-0">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                          {when}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* ── Meta row: 2-up on mobile, inline from sm ── */}
-                    {/* Mobile stacks into three bands — Location, then
-                        Type/Host/Invite Only, then the attendee pills. The
-                        sm:contents wrappers dissolve at sm+ so the desktop row
-                        stays a single flex line. */}
-                    <div className="mt-2.5 space-y-2 sm:pl-6 sm:space-y-0 sm:flex sm:flex-wrap sm:gap-x-8 sm:gap-y-2">
-                      <CardField label="Location">
-                        {locText ? (
-                          <a
-                            href={mapsHref(addr || locText)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={e => e.stopPropagation()}
-                            title={locText}
-                            className="text-brand-secondary hover:underline break-words"
-                          >
-                            {locText}
-                          </a>
-                        ) : <span className="text-gray-400">—</span>}
-                      </CardField>
-                      {/* Below sm these wrap to two grid lines — Type / Host /
-                          # Invited, then Invite Only. */}
-                      <div className="grid grid-cols-[1fr_1fr_auto] gap-x-3 gap-y-2 sm:contents">
-                        <CardField label="Type">{ev.event_type || <span className="text-gray-400">—</span>}</CardField>
-                        <CardField label="Host">{ev.host || <span className="text-gray-400">—</span>}</CardField>
-                        <CardField label="# Invited">{invited.length > 0 ? invited.length : <span className="text-gray-400">—</span>}</CardField>
-                        <CardField label="Invite Only">{ev.invite_only === 'Yes' ? 'Yes' : 'No'}</CardField>
-                      </div>
-                      <CardField label="Internal Attendees"><InternalRepPills internalAttendees={ev.internal_attendees} /></CardField>
-                      {customColumns.filter(c => c.visible).length > 0 && (
-                        <div className="grid grid-cols-[1fr_1fr_auto] gap-x-3 sm:contents">
-                          {customColumns.filter(c => c.visible).map(col => (
-                            <CardField key={`custom_${col.id}`} label={col.label}>
-                              <CustomColumnCell column={col} value={(ev as unknown as Record<string, unknown>)[col.data_key]} />
-                            </CardField>
-                          ))}
-                        </div>
-                      )}
+                  ) : undefined}
+                  actions={(
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button type="button" onClick={() => handleEdit(ev)} className="text-gray-300 hover:text-brand-secondary transition-colors p-1" title="Edit">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                      </button>
+                      <button type="button" onClick={() => handleDelete(ev.id)} className="text-gray-300 hover:text-red-500 transition-colors p-1" title="Delete">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button type="button" onClick={() => handleEdit(ev)} className="text-gray-300 hover:text-brand-secondary transition-colors p-1" title="Edit">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                    </button>
-                    <button type="button" onClick={() => handleDelete(ev.id)} className="text-gray-300 hover:text-red-500 transition-colors p-1" title="Delete">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                    </button>
-                  </div>
-                </div>
+                  )}
+                />
 
                 {/* ── Expanded: RSVP table, unchanged ── */}
                 {isExpanded && (

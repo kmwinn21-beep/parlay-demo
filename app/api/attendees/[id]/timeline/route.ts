@@ -110,7 +110,8 @@ export async function GET(
       const hasMeetingHeld = detailActionKeys.some(k => k === 'meeting_held');
       const meetingHasOutcome = hasMeetingHeld && meetings.some(m => m.outcome && String(m.outcome).trim().length > 0);
       const hasNotes = notes.length > 0 || (details?.notes != null && String(details.notes).trim().length > 0);
-      const hasSocialAttending = socialEvents.some(e => String(e.rsvp_status).split(',').map(s => s.trim()).includes('attending'));
+      // Stored RSVP vocabulary is yes|no|maybe|attended — 'attending' is never written.
+      const hasSocialAttending = socialEvents.some(e => String(e.rsvp_status).split(',').map(s => s.trim()).includes('attended'));
       const hasFollowUps = followUps.length > 0;
       const hasCompletedFu = followUps.some(f => Number(f.completed) === 1);
       // Non-meeting touchpoint: action is set and its key is not a formal meeting action

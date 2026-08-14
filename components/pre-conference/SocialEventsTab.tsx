@@ -2,9 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useRecordDrawer } from './RecordDrawerContext';
+import { SocialEventCardBody } from '../SocialEventCardParts';
 import type { SocialEventRow, SocialEventGuest } from '../PreConferenceReview';
 
 type RsvpStatus = 'yes' | 'no' | 'maybe' | 'attended';
+
+/** The fields a Social-tab save broadcasts; ids identify the row to patch. */
+type SocialEventPatch = Partial<SocialEventRow> & { id: number; prospect_attendees?: string | null };
 
 function parseStatuses(s: string): RsvpStatus[] {
   return s.split(',').map(x => x.trim()).filter(x => ['yes','no','maybe','attended'].includes(x)) as RsvpStatus[];
@@ -224,87 +228,90 @@ function GuestListPanel({ event }: { event: SocialEventRow }) {
 }
 
 /* ─── Event card ─── */
+/**
+ * Mirrors the card in the conference-details Social tab — the header, date
+ * pill and meta row come from the same shared component, so the two surfaces
+ * cannot drift. Only the expanded body differs: this one is read-only apart
+ * from the RSVP toggles.
+ */
 function EventCard({ event }: { event: SocialEventRow }) {
   const [showGuests, setShowGuests] = useState(false);
-  const internalReps = event.internal_attendees
-    ? String(event.internal_attendees).split(',').map(r => r.trim()).filter(Boolean)
-    : [];
 
   return (
-    <div className="border border-gray-200 rounded-xl p-4 hover:shadow-sm transition-all">
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <div className="min-w-0">
-          <h4 className="font-semibold text-gray-900 text-sm truncate">{event.event_name || event.event_type || 'Untitled Event'}</h4>
-          {event.host && <p className="text-xs text-gray-500">Hosted by {event.host}</p>}
-        </div>
-        <div className="flex items-start gap-2 flex-shrink-0">
-          <div className="flex flex-col items-end gap-1">
-            {event.invite_only === 'Yes' && (
-              <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 text-xs font-medium">Invite Only</span>
-            )}
-            {event.event_type && (
-              <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs">{event.event_type}</span>
-            )}
-          </div>
-          {event.guestList.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowGuests(v => !v)}
-              title="Toggle guest list"
-              className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${showGuests ? 'bg-brand-secondary/10 text-brand-secondary' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-3 text-xs text-gray-500 mb-3">
-        {event.event_date && (
-          <span className="flex items-center gap-1">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            {fmtDate(event.event_date)}{event.event_time ? ` · ${fmtTime(event.event_time)}` : ''}
-          </span>
-        )}
-        {event.location && (
-          <span className="flex items-center gap-1">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-            </svg>
-            {event.location}
-          </span>
-        )}
-      </div>
-
-      {/* RSVP pills */}
-      <RsvpPills guestList={event.guestList} />
-
-      {internalReps.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-2">
-          {internalReps.map(rep => (
-            <span key={rep} className="px-2 py-0.5 rounded-full bg-blue-50 text-brand-secondary text-xs border border-blue-200">
-              {rep}
-            </span>
-          ))}
-        </div>
-      )}
+    <div className="border border-gray-200 rounded-xl bg-white overflow-hidden hover:border-gray-300 transition-colors">
+      <SocialEventCardBody
+        eventName={event.event_name}
+        eventType={event.event_type}
+        host={event.host}
+        venueName={event.venue_name ?? null}
+        location={event.location}
+        eventDate={event.event_date}
+        eventTime={event.event_time}
+        companyHosted={!!event.company_hosted}
+        inviteOnly={event.invite_only}
+        internalAttendees={event.internal_attendees}
+        invitedCount={event.guestList.length}
+        isExpanded={showGuests}
+        onToggle={() => setShowGuests(v => !v)}
+      />
 
       {event.notes && (
-        <p className="text-xs text-gray-500 mt-2 line-clamp-2">{event.notes}</p>
+        <p className="text-xs text-gray-500 px-3 pb-3 sm:px-4 sm:pl-10 line-clamp-2">{event.notes}</p>
       )}
 
-      {/* Expandable guest list */}
-      {showGuests && <GuestListPanel event={event} />}
+      {showGuests && (
+        <div className="border-t border-gray-200 px-3 pb-3 sm:px-4">
+          {event.guestList.length > 0
+            ? <GuestListPanel event={event} />
+            : <p className="text-xs text-gray-400 py-3">No guests invited yet.</p>}
+        </div>
+      )}
     </div>
   );
 }
 
 export function SocialEventsTab({ events }: { events: SocialEventRow[] }) {
-  if (events.length === 0) {
+  // The pre-conference payload is fetched once when the modal opens. Edits made
+  // in the conference-details Social tab broadcast, so patch the local copy
+  // rather than showing a stale card until the modal is reopened.
+  const [rows, setRows] = useState<SocialEventRow[]>(events);
+  useEffect(() => { setRows(events); }, [events]);
+
+  useEffect(() => {
+    const onSaved = (e: Event) => {
+      const ev = (e as CustomEvent).detail as SocialEventPatch | undefined;
+      if (!ev) return;
+      setRows(prev => {
+        const idx = prev.findIndex(r => r.id === ev.id);
+        if (idx === -1) return prev;
+        const next = [...prev];
+        const merged = { ...next[idx], ...ev };
+        // Guests dropped from the list go immediately. Newly invited ones can't
+        // be built here — they arrive with the next pre-conference load.
+        if (typeof ev.prospect_attendees === 'string') {
+          const stillInvited = new Set(
+            ev.prospect_attendees.split(',').map(v => Number(v.trim())).filter(n => n > 0),
+          );
+          merged.guestList = merged.guestList.filter(g => stillInvited.has(g.attendee_id));
+        }
+        next[idx] = merged;
+        return next;
+      });
+    };
+    const onDeleted = (e: Event) => {
+      const { id } = ((e as CustomEvent).detail ?? {}) as { id?: number };
+      if (id == null) return;
+      setRows(prev => prev.filter(r => r.id !== id));
+    };
+    window.addEventListener('social-event-saved', onSaved);
+    window.addEventListener('social-event-deleted', onDeleted);
+    return () => {
+      window.removeEventListener('social-event-saved', onSaved);
+      window.removeEventListener('social-event-deleted', onDeleted);
+    };
+  }, []);
+
+  if (rows.length === 0) {
     return (
       <div className="text-center py-16">
         <p className="text-gray-400 text-sm">No social events for this conference.</p>
@@ -312,16 +319,18 @@ export function SocialEventsTab({ events }: { events: SocialEventRow[] }) {
     );
   }
 
-  const internal = events.filter(e => e.event_type === 'Internal');
-  const external = events.filter(e => e.event_type !== 'Internal');
+  // Grouped on the Company Hosted / Sponsored flag — the same field the Social
+  // tab shows a star for — rather than on an 'Internal' event type.
+  const hosted = rows.filter(e => e.company_hosted);
+  const external = rows.filter(e => !e.company_hosted);
 
   return (
     <div className="space-y-8">
-      {internal.length > 0 && (
+      {hosted.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Company-Hosted Events ({internal.length})</h3>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Company-Hosted Events ({hosted.length})</h3>
           <div className="grid sm:grid-cols-2 gap-4">
-            {internal.map(e => <EventCard key={e.id} event={e} />)}
+            {hosted.map(e => <EventCard key={e.id} event={e} />)}
           </div>
         </div>
       )}
