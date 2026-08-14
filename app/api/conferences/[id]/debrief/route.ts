@@ -249,6 +249,27 @@ export async function GET(
       }
     }
 
+    // 6c. Contact details for every attendee that made it into a company card.
+    // They come from one lookup rather than every query above, which reach the
+    // attendee table through different joins.
+    const contactById = new Map<number, { email: string | null; phone: string | null; linkedinUrl: string | null }>();
+    const contactIds = Array.from(new Set(
+      Array.from(companyMap.values()).flatMap(co => Array.from(co.attendeeInfo.keys()))
+    ));
+    if (contactIds.length > 0) {
+      const contactRes = await db.execute({
+        sql: `SELECT id, email, phone, linkedin_url FROM attendees WHERE id IN (${contactIds.map(() => '?').join(',')})`,
+        args: contactIds,
+      }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
+      for (const row of (contactRes as { rows: Record<string, unknown>[] }).rows) {
+        contactById.set(Number(row.id), {
+          email: row.email ? String(row.email) : null,
+          phone: row.phone ? String(row.phone) : null,
+          linkedinUrl: row.linkedin_url ? String(row.linkedin_url) : null,
+        });
+      }
+    }
+
     // 7. Build output companies
     const companies = Array.from(companyMap.values()).map(co => {
       const openFollowUps = co.followUps.filter(fu => !fu.completed);
@@ -312,6 +333,9 @@ export async function GET(
         completedFollowUpCount: completedFollowUps.length,
         attendees: Array.from(co.attendeeInfo.entries()).map(([id, info]) => ({
           id, name: info.name, title: info.title,
+          email: contactById.get(id)?.email ?? null,
+          phone: contactById.get(id)?.phone ?? null,
+          linkedinUrl: contactById.get(id)?.linkedinUrl ?? null,
           meetingCount: co.meetingRows.filter(m => Number(m.attendee_id) === id).length,
           touchpointCount: touchpointByAttendee.get(id) ?? 0,
           followUpCount: co.followUps.filter(fu => Number(fu.attendee_id) === id).length,
