@@ -1022,21 +1022,18 @@ export function SocialEventsTable({
               </datalist>
             </div>
 
-            {/* Venue Name — captured separately because a Places result's
-                formatted_address never carries the venue's name. */}
+            {/* Invite Only */}
             <div>
-              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Venue Name</label>
-              <input
-                type="text"
-                value={formData.venue_name}
-                onChange={e => setFormData(p => ({ ...p, venue_name: e.target.value }))}
-                placeholder="e.g. The Bellagio"
-                className="input-field text-sm w-full"
-              />
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Invite Only?</label>
+              <select value={formData.invite_only} onChange={e => setFormData(p => ({ ...p, invite_only: e.target.value }))} className="input-field text-sm w-full">
+                <option value="No">No</option>
+                <option value="Yes">Yes</option>
+              </select>
             </div>
 
-            {/* Address */}
-            <div>
+            {/* Address — two columns so the full street address fits,
+                with the venue name beside it. */}
+            <div className="lg:col-span-2">
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Address</label>
               {/* Same Places-backed lookup as the conference Location field.
                   Only formatted_address is kept — social_events has no columns
@@ -1050,9 +1047,22 @@ export function SocialEventsTable({
               />
             </div>
 
+            {/* Venue Name — captured separately because a Places result's
+                formatted_address never carries the venue's name. */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Venue Name</label>
+              <input
+                type="text"
+                value={formData.venue_name}
+                onChange={e => setFormData(p => ({ ...p, venue_name: e.target.value }))}
+                placeholder="e.g. The Bellagio"
+                className="input-field text-sm w-full"
+              />
+            </div>
+
             {/* Date — one button per conference day, same picker the
                 new-meeting modal uses, with an escape to any other date. */}
-            <div className="sm:col-span-2 lg:col-span-3">
+            <div className="sm:col-span-2">
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Date</label>
               <ConferenceDatePicker
                 value={formData.event_date}
@@ -1067,15 +1077,6 @@ export function SocialEventsTable({
             <div>
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Time</label>
               <input type="time" value={formData.event_time} onChange={e => setFormData(p => ({ ...p, event_time: e.target.value }))} className="input-field text-sm w-full" />
-            </div>
-
-            {/* Invite Only */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Invite Only?</label>
-              <select value={formData.invite_only} onChange={e => setFormData(p => ({ ...p, invite_only: e.target.value }))} className="input-field text-sm w-full">
-                <option value="No">No</option>
-                <option value="Yes">Yes</option>
-              </select>
             </div>
 
             {/* Invited Attendees — Build Guest List. Only company-hosted
