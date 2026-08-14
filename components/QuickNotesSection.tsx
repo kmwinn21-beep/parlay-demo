@@ -72,13 +72,45 @@ function SearchableSelect<T extends { id: number }>({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // Portalled so the Assign Note modal's scrolling body can't clip the list.
+  const [pos, setPos] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     if (!open) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const h = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!ref.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false);
+    };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, [open]);
+
+  const position = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const below = window.innerHeight - r.bottom - 8;
+    const above = r.top - 8;
+    const flip = below < 180 && above > below;
+    const maxHeight = Math.max(140, Math.min(240, flip ? above : below));
+    setPos({ top: flip ? r.top - 4 - maxHeight : r.bottom + 4, left: r.left, width: r.width, maxHeight });
+  }, []);
+
+  useEffect(() => {
+    if (!open) { setPos(null); return; }
+    position();
+    const onScroll = () => position();
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [open, position]);
 
   const filtered = options.filter(o => getLabel(o).toLowerCase().includes(search.toLowerCase()));
 
@@ -99,8 +131,12 @@ function SearchableSelect<T extends { id: number }>({
           <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
         </div>
       </button>
-      {open && (
-        <div className="absolute z-50 top-full mt-1 left-0 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-52 flex flex-col">
+      {open && mounted && pos && createPortal(
+        <div
+          ref={menuRef}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, maxHeight: pos.maxHeight }}
+          className="z-[100] bg-white border border-gray-200 rounded-lg shadow-xl flex flex-col"
+        >
           <div className="p-2 border-b border-gray-100">
             <input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…"
               className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-brand-secondary" />
@@ -115,7 +151,8 @@ function SearchableSelect<T extends { id: number }>({
               </button>
             ))}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
@@ -186,7 +223,12 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
           fetch('/api/attendees?limit=5000').then(r => r.ok ? r.json() : []),
         ]);
         const confs: Conference[] = Array.isArray(confRes) ? confRes.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })) : [];
-        const comps: Company[] = Array.isArray(compRes) ? compRes.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })) : [];
+        // company_type has to survive the mapping — the company dropdown groups on it.
+        const comps: Company[] = Array.isArray(compRes)
+          ? compRes.map((c: { id: number; name: string; company_type?: string | null }) => ({
+              id: c.id, name: c.name, company_type: c.company_type ?? null,
+            }))
+          : [];
         const atts: Attendee[] = Array.isArray(attRes)
           ? attRes.map((a: { id: number; first_name: string; last_name: string; company_id?: number; company_name?: string }) => ({
               id: a.id, first_name: a.first_name, last_name: a.last_name,
