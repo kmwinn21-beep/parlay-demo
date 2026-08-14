@@ -25,6 +25,8 @@ export interface EntityNote {
   note_type?: string | null;
   meeting_id?: number | null;
   insight_counts?: string | null;
+  /** Status/sentiment chosen when the note came from a Log Interaction capture. */
+  status?: string | null;
 }
 
 

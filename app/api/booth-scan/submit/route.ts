@@ -200,12 +200,12 @@ export async function POST(request: NextRequest) {
       const noteContent = notes_text.trim();
       const insertNote = async (entityType: string, entityId: number) => {
         await db.execute({
-          sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_name, rep, attendee_name, company_name, author_user_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_name, rep, attendee_name, company_name, author_user_id, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           args: [entityType, entityId, noteContent, confName, repNameStr,
                  entityType !== 'attendee' ? attendeeName : null,
                  entityType !== 'company' ? companyName : null,
-                 authResult.id],
+                 authResult.id, sentiment || null],
         }).catch(() => {});
       };
 

@@ -60,12 +60,14 @@ export async function GET(request: NextRequest) {
         JOIN attendees a ON fu.attendee_id = a.id
         LEFT JOIN companies co ON a.company_id = co.id
         JOIN conferences c ON fu.conference_id = c.id
+        -- Counted per conference, matching what the row's notes popover shows:
+        -- it filters to the conference in the row's Conference column.
         LEFT JOIN (
-          SELECT entity_id, COUNT(*) as notes_count
+          SELECT entity_id, conference_name, COUNT(*) as notes_count
           FROM entity_notes
           WHERE entity_type = 'attendee'
-          GROUP BY entity_id
-        ) nc ON a.id = nc.entity_id
+          GROUP BY entity_id, conference_name
+        ) nc ON a.id = nc.entity_id AND nc.conference_name = c.name
         WHERE ${conditions.join(' AND ')}
         ORDER BY c.start_date DESC, a.last_name, a.first_name
       `,

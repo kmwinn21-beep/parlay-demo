@@ -98,12 +98,18 @@ export function FollowUpNotesPopover({
     fetch(`/api/notes?entity_type=attendee&entity_id=${attendeeId}`)
       .then(r => r.json())
       .then((data: PopoverNote[]) => {
-        setNotes(data);
-        setTotalCount(data.length);
+        // The popover hangs off one follow-up row, so it shows that row's
+        // conference only — the attendee's notes from other conferences
+        // aren't what the user clicked into.
+        const rows = conferenceName
+          ? data.filter(n => (n.conference_name ?? '') === conferenceName)
+          : data;
+        setNotes(rows);
+        setTotalCount(rows.length);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [open, attendeeId]);
+  }, [open, attendeeId, conferenceName]);
 
   // Fetch user options and attendee conferences when adding
   useEffect(() => {
@@ -326,7 +332,9 @@ export function FollowUpNotesPopover({
               {loading ? (
                 <p className="text-sm text-gray-400 italic text-center py-6">Loading...</p>
               ) : notes.length === 0 && !isAdding ? (
-                <p className="text-sm text-gray-400 italic text-center py-6">No notes yet. Click &quot;Add New Note&quot; to get started.</p>
+                <p className="text-sm text-gray-400 italic text-center py-6">
+                  {conferenceName ? `No notes for ${conferenceName} yet.` : 'No notes yet.'} Click &quot;Add New Note&quot; to get started.
+                </p>
               ) : notes.length === 0 ? null : (
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">

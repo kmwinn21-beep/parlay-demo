@@ -2097,4 +2097,7 @@ export const migrations: string[] = [
   // clears the conference's uploaded items.
   `ALTER TABLE conference_agenda_items ADD COLUMN social_event_id INTEGER`,
   `CREATE INDEX IF NOT EXISTS idx_agenda_social_event ON conference_agenda_items(conference_id, social_event_id)`,
+  // Status/sentiment picked in the Log Interaction step, carried on the notes it
+  // writes so the pill can show beside the note's timestamp.
+  `ALTER TABLE entity_notes ADD COLUMN status TEXT`,
 ];

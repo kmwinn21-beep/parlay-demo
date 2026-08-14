@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { getPreset } from '@/lib/colors';
+import { formatStatusLabel, getBadgeClass, getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useUser } from '@/components/UserContext';
 import { MentionTextarea } from '@/components/MentionTextarea';
@@ -306,6 +306,11 @@ export function NoteCard({
               @{getRepInitials(name)}
             </span>
           ))}
+          {note.status && (
+            <span className={`${getBadgeClass(note.status, colorMaps.status || {})} whitespace-nowrap`}>
+              {formatStatusLabel(note.status)}
+            </span>
+          )}
           {note.note_type === 'meeting_note' && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-xs font-medium border border-purple-200 whitespace-nowrap">
               <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
