@@ -631,7 +631,7 @@ function ContactIconRow({ attendee, companyName }: { attendee: DebriefAttendee; 
   const iconCls = 'w-4 h-4';
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center justify-between w-full">
       {/* Phone */}
       <button
         ref={phoneRef}
@@ -719,32 +719,18 @@ function DebriefContactCard({ attendee, companyName, onOpenRecord }: {
   companyName: string;
   onOpenRecord: () => void;
 }) {
-  // Desktop shows the contact icons inline; mobile tucks them behind a kebab
-  // so the card keeps its compact height.
-  const [showIcons, setShowIcons] = useState(false);
-
   return (
     <div className="relative border border-gray-200 rounded-lg p-2.5 bg-white hover:border-gray-300 transition-colors">
       <button
         type="button"
-        onClick={() => setShowIcons(v => !v)}
-        title="Contact info"
-        aria-expanded={showIcons}
-        className={`sm:hidden absolute top-1.5 right-1.5 p-0.5 rounded transition-colors ${showIcons ? 'text-gray-700 bg-gray-100' : 'text-gray-400 hover:text-gray-600'}`}
-      >
-        <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
-          <path d="M10 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
-        </svg>
-      </button>
-      <button
-        type="button"
         onClick={e => { e.stopPropagation(); onOpenRecord(); }}
-        className="text-left w-full hover:underline pr-5 sm:pr-0"
+        className="text-left w-full hover:underline"
       >
         <p className="text-xs font-semibold text-gray-800 leading-tight truncate">{attendee.name}</p>
       </button>
       {attendee.title && <p className="text-xs text-gray-400 mt-0.5 truncate">{attendee.title}</p>}
-      <div className={`${showIcons ? 'flex' : 'hidden'} sm:flex mt-1.5`}>
+      {/* Contact icons spread across the card's full width */}
+      <div className="flex mt-1.5">
         <ContactIconRow attendee={attendee} companyName={companyName} />
       </div>
       <div className="flex flex-col gap-1 mt-1.5">
