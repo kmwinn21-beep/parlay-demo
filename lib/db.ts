@@ -688,6 +688,30 @@ export const dbReady: Promise<void> = initDbWithRetry().catch((err) => {
   console.error('Failed to initialize database schema:', err);
 });
 
+// A failed init used to latch for the lifetime of the process: dbInitError was
+// only ever cleared inside that one module-load run, so a single cold-start
+// timeout made every later request on that instance 503 long after the database
+// had recovered. Callers go through this instead, which re-attempts init when
+// the flag is set — rate-limited so a genuinely down database isn't hammered,
+// and deduplicated so concurrent requests share one attempt.
+let reinitPending: Promise<void> | null = null;
+let lastInitAttempt = 0;
+const REINIT_COOLDOWN_MS = 5_000;
+
+/** Awaits initialization, retrying a previous failure. Returns the error, if any. */
+export async function ensureDbReady(): Promise<Error | null> {
+  await dbReady;
+  if (!dbInitError) return null;
+
+  if (!reinitPending) {
+    if (Date.now() - lastInitAttempt < REINIT_COOLDOWN_MS) return dbInitError;
+    lastInitAttempt = Date.now();
+    reinitPending = initDbWithRetry().finally(() => { reinitPending = null; });
+  }
+  await reinitPending;
+  return dbInitError;
+}
+
 // Seed a brand-new tenant DB with the full schema and default config data.
 // ALTER TABLE statements fail silently (columns already present in the full CREATE TABLE).
 // Role constraint migration is skipped — users table is created with the full constraint.

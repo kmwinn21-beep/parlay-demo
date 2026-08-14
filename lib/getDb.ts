@@ -1,5 +1,5 @@
 import { createClient, type Client } from '@libsql/client';
-import { db, dbReady, dbInitError, migrateTenantDb } from '@/lib/db';
+import { db, ensureDbReady, migrateTenantDb } from '@/lib/db';
 
 export class DatabaseUnavailableError extends Error {
   readonly status = 503;
@@ -23,8 +23,8 @@ export async function getDb(accountId: string | undefined): Promise<Client> {
   if (pending) return pending;
 
   const init = (async () => {
-    await dbReady;
-    if (dbInitError) throw new DatabaseUnavailableError(dbInitError);
+    const initErr = await ensureDbReady();
+    if (initErr) throw new DatabaseUnavailableError(initErr);
     const row = await db.execute({
       sql: `SELECT turso_db_url, turso_auth_token FROM accounts WHERE id = ?`,
       args: [accountId],
@@ -64,8 +64,8 @@ export async function findDbByToken(
   tokenValue: string,
   selectColumns = 'id'
 ): Promise<{ client: Client; row: Record<string, unknown>; accountId?: string } | null> {
-  await dbReady;
-  if (dbInitError) throw new DatabaseUnavailableError(dbInitError);
+  const initErr = await ensureDbReady();
+  if (initErr) throw new DatabaseUnavailableError(initErr);
 
   // Try master DB first (covers ops/single-tenant users)
   const masterResult = await db.execute({
