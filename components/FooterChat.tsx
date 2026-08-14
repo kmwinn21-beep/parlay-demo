@@ -182,7 +182,10 @@ function ChatWindow({
   };
 
   return (
-    <div className={`flex flex-col ${mobile ? 'w-full h-full rounded-xl' : 'w-[420px] rounded-t-xl'} bg-white shadow-2xl border border-gray-200 overflow-hidden`}>
+    // An open chat gets a fixed height rather than growing with its message
+    // count, which made short threads tiny and long ones unwieldy. Collapsed,
+    // it shrinks back to just the header.
+    <div className={`flex flex-col ${mobile ? 'w-full h-full rounded-xl' : `w-[420px] rounded-t-xl ${minimized ? '' : 'h-[600px] max-h-[80vh]'}`} bg-white shadow-2xl border border-gray-200 overflow-hidden`}>
       {/* Header */}
       <div
         className="flex items-center gap-2 px-3 py-2.5 bg-white border-b border-gray-100 cursor-pointer select-none"
@@ -215,7 +218,7 @@ function ChatWindow({
       {!minimized && (
         <>
           {/* Messages */}
-          <div className={`flex-1 overflow-y-auto px-3 py-2 space-y-1.5 bg-gray-50 ${mobile ? '' : 'h-64'}`}>
+          <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1.5 bg-gray-50">
             {loading && (
               <div className="flex justify-center items-center h-full">
                 <div className="w-5 h-5 animate-spin rounded-full border-2 border-brand-secondary border-t-transparent" />
@@ -344,7 +347,10 @@ function GroupChatWindow({
   };
 
   return (
-    <div className={`flex flex-col ${mobile ? 'w-full h-full rounded-xl' : 'w-[420px] rounded-t-xl'} bg-white shadow-2xl border border-gray-200 overflow-hidden`}>
+    // An open chat gets a fixed height rather than growing with its message
+    // count, which made short threads tiny and long ones unwieldy. Collapsed,
+    // it shrinks back to just the header.
+    <div className={`flex flex-col ${mobile ? 'w-full h-full rounded-xl' : `w-[420px] rounded-t-xl ${minimized ? '' : 'h-[600px] max-h-[80vh]'}`} bg-white shadow-2xl border border-gray-200 overflow-hidden`}>
       {/* Header */}
       <div
         className="flex items-center gap-2 px-3 py-2.5 bg-white border-b border-gray-100 cursor-pointer select-none"
@@ -370,7 +376,7 @@ function GroupChatWindow({
 
       {!minimized && (
         <>
-          <div className={`flex-1 overflow-y-auto px-3 py-2 space-y-1.5 bg-gray-50 ${mobile ? '' : 'h-64'}`}>
+          <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1.5 bg-gray-50">
             {loading && (
               <div className="flex justify-center items-center h-full">
                 <div className="w-5 h-5 animate-spin rounded-full border-2 border-brand-secondary border-t-transparent" />
@@ -426,6 +432,15 @@ function GroupChatWindow({
 
 // The main footer messaging hub
 const BAR_POSITION_STORAGE_KEY = 'footerChatBarLeft';
+// Width of the bar once its panel is open. Dragging has to clamp against this
+// rather than the collapsed width, or a bar parked at the right edge pushes
+// the panel off screen when it expands.
+const OPEN_PANEL_WIDTH = 420;
+
+/** Furthest left offset that still fits the open panel on screen. */
+function maxBarLeft(): number {
+  return Math.max(8, window.innerWidth - OPEN_PANEL_WIDTH - 8);
+}
 
 export function FooterChat() {
   const { user, loading: userLoading } = useUser();
@@ -443,8 +458,16 @@ export function FooterChat() {
     const saved = localStorage.getItem(BAR_POSITION_STORAGE_KEY);
     if (saved != null) {
       const n = Number(saved);
-      if (Number.isFinite(n)) setBarLeft(n);
+      if (Number.isFinite(n)) setBarLeft(Math.min(Math.max(8, n), maxBarLeft()));
     }
+  }, []);
+
+  // Re-clamp when the window narrows, so a position saved on a wider screen
+  // doesn't leave the panel hanging off the edge.
+  useEffect(() => {
+    const onResize = () => setBarLeft(prev => (prev == null ? prev : Math.min(Math.max(8, prev), maxBarLeft())));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, []);
 
   const handleDragStart = useCallback((e: React.MouseEvent) => {
@@ -458,8 +481,7 @@ export function FooterChat() {
     const onMove = (ev: MouseEvent) => {
       const delta = ev.clientX - startMouseX;
       if (Math.abs(delta) > 4) dragMovedRef.current = true;
-      const width = el.getBoundingClientRect().width;
-      const next = Math.min(Math.max(8, startLeft + delta), window.innerWidth - width - 8);
+      const next = Math.min(Math.max(8, startLeft + delta), maxBarLeft());
       setBarLeft(next);
     };
     const onUp = () => {
