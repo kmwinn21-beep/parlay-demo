@@ -2109,4 +2109,10 @@ export const migrations: string[] = [
         (SELECT value FROM config_options WHERE category = 'touchpoints' AND value = 'Booth Stop' LIMIT 1),
         'Booth Stop')
     WHERE next_steps = 'undefined'`,
+  // Optional attendee headshot — an R2 URL in production, a data URL when
+  // object storage isn't configured.
+  // NB: the schema version is this array's length, so new entries must be
+  // appended here. Inserting one mid-array leaves the count unchanged for
+  // anything already stamped, and the statement never runs.
+  `ALTER TABLE attendees ADD COLUMN photo_url TEXT`,
 ];

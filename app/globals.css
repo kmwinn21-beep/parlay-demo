@@ -126,6 +126,27 @@ h1, h2, h3 {
   }
 }
 
+/* Attendee photo card — drops in from the top on mobile, fades in from sm. */
+@keyframes slideInDown {
+  from { transform: translateY(-24px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+.attendee-photo-card {
+  animation: slideInDown 0.25s ease-out;
+}
+
+@media (min-width: 640px) {
+  .attendee-photo-card {
+    animation: fadeInScale 0.18s ease-out;
+  }
+}
+
+@keyframes fadeInScale {
+  from { transform: scale(0.96); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+
 /* Hide scrollbar utility */
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
