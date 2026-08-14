@@ -11,7 +11,9 @@ import { parseRepIds, getRepInitials } from '@/lib/useUserOptions';
 import { useUser } from '@/components/UserContext';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
 import { CustomColumnCell } from './CustomColumnCell';
-import { CardField, SocialEventCardBody } from './SocialEventCardParts';
+import { CardActionMenu, CardField, CardNotesButton, SocialEventCardBody } from './SocialEventCardParts';
+import { ConferenceDatePicker } from './ConferenceDatePicker';
+import { SocialEventNotesDrawer } from './SocialEventNotesDrawer';
 
 type RsvpStatus = 'yes' | 'no' | 'maybe' | 'attended';
 
@@ -80,6 +82,8 @@ interface CompanyOption {
 export interface SocialEventsTableProps {
   conferenceId: number;
   conferenceName: string;
+  conferenceStartDate: string | null;
+  conferenceEndDate: string | null;
   events: SocialEvent[];
   onRefresh: () => void;
   userOptions: string[];
@@ -654,7 +658,7 @@ function GuestListModal({ attendees, selected, onConfirm, onClose, icpCompanyTyp
 
 /* ─── Main component ─── */
 export function SocialEventsTable({
-  conferenceId, conferenceName, events, onRefresh,
+  conferenceId, conferenceName, conferenceStartDate, conferenceEndDate, events, onRefresh,
   userOptions, userOptionsFull, eventTypeOptions, companies, attendees,
 }: SocialEventsTableProps) {
   const colorMaps = useConfigColors();
@@ -686,6 +690,9 @@ export function SocialEventsTable({
   });
   const [internalOpen, setInternalOpen] = useState(false);
   const [showGuestListModal, setShowGuestListModal] = useState(false);
+  const [notesEventId, setNotesEventId] = useState<number | null>(null);
+  // Note counts drive the badge on each card's notes button.
+  const [noteCounts, setNoteCounts] = useState<Record<number, number>>({});
   const internalRef = useRef<HTMLDivElement>(null);
 
   /* RSVP state */
@@ -706,6 +713,23 @@ export function SocialEventsTable({
     return () => media.removeEventListener('change', update);
   }, []);
   const [expandedEventId, setExpandedEventId] = useState<number | null>(null);
+
+  /* note counts for the card badges — one request for all events */
+  const eventIdKey = events.map(e => e.id).join(',');
+  useEffect(() => {
+    if (!eventIdKey) { setNoteCounts({}); return; }
+    let cancelled = false;
+    fetch(`/api/notes?entity_type=social_event&entity_ids=${eventIdKey}`)
+      .then(res => (res.ok ? res.json() : []))
+      .then((rows: Array<{ entity_id: number }>) => {
+        if (cancelled || !Array.isArray(rows)) return;
+        const counts: Record<number, number> = {};
+        for (const r of rows) counts[Number(r.entity_id)] = (counts[Number(r.entity_id)] ?? 0) + 1;
+        setNoteCounts(counts);
+      })
+      .catch(() => { /* badge just stays at zero */ });
+    return () => { cancelled = true; };
+  }, [eventIdKey]);
 
   /* sync RSVP changes from other components (e.g. pre-conference review) */
   useEffect(() => {
@@ -828,21 +852,8 @@ export function SocialEventsTable({
         window.dispatchEvent(new CustomEvent('social-event-saved', { detail: saved }));
       }
 
-      if (!isEditing && formData.notes?.trim()) {
-        const label = formData.event_type ? `[${formData.event_type}]` : '[Social Event]';
-        const attLabel = `[${conferenceName} | ${formData.event_type || 'Social Event'} | ${formData.host || 'N/A'}]`;
-        const promises: Promise<unknown>[] = [
-          fetch('/api/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entity_type: 'conference', entity_id: conferenceId, content: `${label} ${formData.notes.trim()}`, conference_name: conferenceName, rep: formData.entered_by || null }) }),
-        ];
-        for (const idStr of formData.prospect_attendees) {
-          const att = attendees.find(a => a.id === parseInt(idStr, 10));
-          if (!att) continue;
-          promises.push(fetch('/api/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entity_type: 'attendee', entity_id: att.id, content: `${attLabel} ${formData.notes.trim()}`, conference_name: conferenceName, rep: formData.entered_by || null }) }));
-          if (att.company_id) promises.push(fetch('/api/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entity_type: 'company', entity_id: att.company_id, content: `[${att.first_name} ${att.last_name}] ${label} ${formData.notes.trim()}`, conference_name: conferenceName, rep: formData.entered_by || null }) }));
-        }
-        await Promise.allSettled(promises);
-      }
-
+      // The form no longer collects notes — event notes live in the notes
+      // drawer, which posts them against entity_type 'social_event'.
       toast.success(isEditing ? 'Social event updated.' : 'Social event added.');
       resetForm();
       onRefresh();
@@ -1039,10 +1050,17 @@ export function SocialEventsTable({
               />
             </div>
 
-            {/* Date */}
-            <div>
+            {/* Date — one button per conference day, same picker the
+                new-meeting modal uses, with an escape to any other date. */}
+            <div className="sm:col-span-2 lg:col-span-3">
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Date</label>
-              <input type="date" value={formData.event_date} onChange={e => setFormData(p => ({ ...p, event_date: e.target.value }))} className="input-field text-sm w-full" />
+              <ConferenceDatePicker
+                value={formData.event_date}
+                onChange={ymd => setFormData(p => ({ ...p, event_date: ymd }))}
+                startDate={conferenceStartDate}
+                endDate={conferenceEndDate}
+                inputClassName="input-field text-sm w-full"
+              />
             </div>
 
             {/* Time */}
@@ -1060,7 +1078,9 @@ export function SocialEventsTable({
               </select>
             </div>
 
-            {/* Invited Attendees — Build Guest List */}
+            {/* Invited Attendees — Build Guest List. Only company-hosted
+                events keep a guest list, so the button is hidden otherwise. */}
+            {formData.company_hosted && (
             <div className="sm:col-span-2 lg:col-span-1">
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Invited</label>
               <button
@@ -1077,13 +1097,9 @@ export function SocialEventsTable({
                 )}
               </button>
             </div>
+            )}
           </div>
 
-          {/* Notes */}
-          <div className="mb-3">
-            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Notes</label>
-            <textarea value={formData.notes} onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))} placeholder="Enter notes..." className="input-field resize-none w-full text-sm" rows={3} />
-          </div>
           <div className="flex gap-2">
             <button type="button" onClick={handleSubmit} disabled={isSubmitting} className="btn-primary text-sm">{isSubmitting ? 'Saving...' : editingEventId ? 'Update Event' : 'Add Event'}</button>
             <button type="button" onClick={resetForm} className="btn-secondary text-sm">Cancel</button>
@@ -1092,6 +1108,16 @@ export function SocialEventsTable({
       )}
 
       {/* Guest List Modal */}
+      {notesEventId != null && (
+        <SocialEventNotesDrawer
+          eventId={notesEventId}
+          eventName={events.find(e => e.id === notesEventId)?.event_name || 'Social Event'}
+          conferenceName={conferenceName}
+          onClose={() => setNotesEventId(null)}
+          onCountChange={(id, count) => setNoteCounts(prev => ({ ...prev, [id]: count }))}
+        />
+      )}
+
       {showGuestListModal && (
         <GuestListModal
           attendees={attendees}
@@ -1136,13 +1162,14 @@ export function SocialEventsTable({
                     </div>
                   ) : undefined}
                   actions={(
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button type="button" onClick={() => handleEdit(ev)} className="text-gray-300 hover:text-brand-secondary transition-colors p-1" title="Edit">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                      </button>
-                      <button type="button" onClick={() => handleDelete(ev.id)} className="text-gray-300 hover:text-red-500 transition-colors p-1" title="Delete">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                      </button>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <CardNotesButton count={noteCounts[ev.id] ?? 0} onClick={() => setNotesEventId(ev.id)} />
+                      <CardActionMenu
+                        onEdit={() => handleEdit(ev)}
+                        onDelete={() => handleDelete(ev.id)}
+                        onNotes={() => setNotesEventId(ev.id)}
+                        noteCount={noteCounts[ev.id] ?? 0}
+                      />
                     </div>
                   )}
                 />

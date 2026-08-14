@@ -3712,6 +3712,8 @@ export default function ConferenceDetailPage() {
         <SocialEventsTable
           conferenceId={Number(id)}
           conferenceName={conference?.name || ''}
+          conferenceStartDate={conference?.start_date || null}
+          conferenceEndDate={conference?.end_date || null}
           events={confSocialEvents}
           onRefresh={fetchConference}
           userOptions={userOptions.map(u => u.value)}
