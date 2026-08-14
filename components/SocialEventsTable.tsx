@@ -536,7 +536,7 @@ function mapsHref(location: string): string {
 function CardField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">{label}</p>
+      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5 whitespace-nowrap">{label}</p>
       <div className="text-xs text-gray-700 min-w-0">{children}</div>
     </div>
   );
@@ -1177,7 +1177,7 @@ export function SocialEventsTable({
             return (
               <div key={ev.id} className="border border-gray-200 rounded-xl bg-white overflow-hidden hover:border-gray-300 transition-colors">
                 {/* ── Header: event name + date/time pill, actions right ── */}
-                <div className="flex items-start gap-3 px-4 py-3">
+                <div className="flex items-start gap-2 px-3 py-3 sm:gap-3 sm:px-4">
                   <div className="flex-1 min-w-0">
                     <div
                       role="button"
@@ -1210,7 +1210,7 @@ export function SocialEventsTable({
                         Type/Host/Invite Only, then the attendee pills. The
                         sm:contents wrappers dissolve at sm+ so the desktop row
                         stays a single flex line. */}
-                    <div className="mt-2.5 pl-6 space-y-2 sm:space-y-0 sm:flex sm:flex-wrap sm:gap-x-8 sm:gap-y-2">
+                    <div className="mt-2.5 space-y-2 sm:pl-6 sm:space-y-0 sm:flex sm:flex-wrap sm:gap-x-8 sm:gap-y-2">
                       <CardField label="Location">
                         {locText ? (
                           <a
@@ -1225,14 +1225,14 @@ export function SocialEventsTable({
                           </a>
                         ) : <span className="text-gray-400">—</span>}
                       </CardField>
-                      <div className="grid grid-cols-3 gap-x-4 sm:contents">
+                      <div className="grid grid-cols-[1fr_1fr_auto] gap-x-3 sm:contents">
                         <CardField label="Type">{ev.event_type || <span className="text-gray-400">—</span>}</CardField>
                         <CardField label="Host">{ev.host || <span className="text-gray-400">—</span>}</CardField>
                         <CardField label="Invite Only">{ev.invite_only === 'Yes' ? 'Yes' : 'No'}</CardField>
                       </div>
                       <CardField label="Internal Attendees"><InternalRepPills internalAttendees={ev.internal_attendees} /></CardField>
                       {customColumns.filter(c => c.visible).length > 0 && (
-                        <div className="grid grid-cols-3 gap-x-4 sm:contents">
+                        <div className="grid grid-cols-[1fr_1fr_auto] gap-x-3 sm:contents">
                           {customColumns.filter(c => c.visible).map(col => (
                             <CardField key={`custom_${col.id}`} label={col.label}>
                               <CustomColumnCell column={col} value={(ev as unknown as Record<string, unknown>)[col.data_key]} />
