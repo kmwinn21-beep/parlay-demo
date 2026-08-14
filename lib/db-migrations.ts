@@ -2092,4 +2092,9 @@ export const migrations: string[] = [
   `UPDATE config_options SET value = 'Fundraiser'
      WHERE category = 'event_type' AND LOWER(TRIM(value)) = 'company hosted'
        AND NOT EXISTS (SELECT 1 FROM config_options c2 WHERE c2.category = 'event_type' AND LOWER(TRIM(c2.value)) = 'fundraiser')`,
+  // Agenda rows mirrored from a company-hosted social event carry the event's
+  // id, so they can be re-slotted on edit and spared when an agenda upload
+  // clears the conference's uploaded items.
+  `ALTER TABLE conference_agenda_items ADD COLUMN social_event_id INTEGER`,
+  `CREATE INDEX IF NOT EXISTS idx_agenda_social_event ON conference_agenda_items(conference_id, social_event_id)`,
 ];

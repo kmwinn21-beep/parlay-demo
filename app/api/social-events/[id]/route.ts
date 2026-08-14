@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/getDb';
 import { getSessionUser } from '@/lib/auth';
+import { syncSocialEventAgenda, removeSocialEventFromAgenda } from '@/lib/socialEventAgenda';
 
 export async function PUT(
   request: NextRequest,
@@ -63,6 +64,14 @@ export async function PUT(
     });
 
     const r = result.rows[0];
+
+    // Re-slot (or drop) the agenda mirror for the saved values.
+    try {
+      await syncSocialEventAgenda(db, Number(r.id));
+    } catch (err) {
+      console.error('syncSocialEventAgenda after update failed:', err);
+    }
+
     return NextResponse.json({
       id: Number(r.id),
       conference_id: Number(r.conference_id),
@@ -103,6 +112,13 @@ export async function DELETE(
 
     if (existing.rows.length === 0) {
       return NextResponse.json({ error: 'Social event not found' }, { status: 404 });
+    }
+
+    // Clear the agenda mirror first — it is matched by id, which is about to go.
+    try {
+      await removeSocialEventFromAgenda(db, Number(id));
+    } catch (err) {
+      console.error('removeSocialEventFromAgenda failed:', err);
     }
 
     await db.execute({

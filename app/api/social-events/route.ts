@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/getDb';
 import { getSessionUser } from '@/lib/auth';
+import { syncSocialEventAgenda } from '@/lib/socialEventAgenda';
 
 export async function GET(request: NextRequest) {
   try {
@@ -112,6 +113,15 @@ export async function POST(request: NextRequest) {
     });
 
     const r = result.rows[0];
+
+    // Company-hosted events mirror onto the conference agenda (and the
+    // internal attendees' My Agenda). Never let that fail the create.
+    try {
+      await syncSocialEventAgenda(db, Number(r.id));
+    } catch (err) {
+      console.error('syncSocialEventAgenda after create failed:', err);
+    }
+
     return NextResponse.json({
       id: Number(r.id),
       conference_id: Number(r.conference_id),
