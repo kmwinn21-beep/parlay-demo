@@ -6,6 +6,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { effectiveSeniority } from '@/lib/parsers';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
+import { AttendeeAvatar, ImageCropModal } from '@/components/AttendeePhoto';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
@@ -50,6 +51,7 @@ interface Attendee {
   email?: string; notes?: string; action?: string; next_steps?: string;
   next_steps_notes?: string; status?: string; seniority?: string; linkedin_url?: string; phone?: string;
   function?: string; products?: string; consent?: string; title_match_metadata?: TitleMatchMetadata;
+  photo_url?: string | null;
   created_at: string; conferences: Conference[];
 }
 
@@ -89,6 +91,10 @@ export default function AttendeeDetailPage() {
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  // Photo upload — the picked file goes through the crop step before saving.
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [photoSaving, setPhotoSaving] = useState(false);
   const [editData, setEditData] = useState<{ first_name?: string; last_name?: string; title?: string; company_id?: string; email?: string; seniority?: string; linkedin_url?: string; phone?: string; function?: string; consent?: string }>({});
   const [showPhonePopup, setShowPhonePopup] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -404,6 +410,50 @@ export default function AttendeeDetailPage() {
     setConferenceDetail(updated);
     return updated;
   }, [id, selectedConferenceId, conferenceDetail]);
+
+  const handlePhotoPick = (file: File | null | undefined) => {
+    if (!file) return;
+    if (!/^image\/(png|jpeg|jpg|webp)$/.test(file.type)) {
+      toast.error('Use a PNG, JPEG or WebP image.');
+      return;
+    }
+    setCropFile(file);
+  };
+
+  const handlePhotoSave = async (blob: Blob) => {
+    setCropFile(null);
+    setPhotoSaving(true);
+    try {
+      const form = new FormData();
+      form.append('file', new File([blob], 'photo.jpg', { type: 'image/jpeg' }));
+      const res = await fetch(`/api/attendees/${id}/photo`, { method: 'POST', body: form });
+      const text = await res.text();
+      if (!res.ok) {
+        let msg = 'Failed to save photo.';
+        try { msg = (JSON.parse(text) as { error?: string }).error || msg; } catch { /* non-JSON */ }
+        throw new Error(msg);
+      }
+      toast.success('Photo saved.');
+      fetchAttendee();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save photo.');
+    } finally {
+      setPhotoSaving(false);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
+  };
+
+  const handlePhotoRemove = async () => {
+    if (!confirm('Remove this photo?')) return;
+    setPhotoSaving(true);
+    try {
+      const res = await fetch(`/api/attendees/${id}/photo`, { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      toast.success('Photo removed.');
+      fetchAttendee();
+    } catch { toast.error('Failed to remove photo.'); }
+    finally { setPhotoSaving(false); }
+  };
 
   const handleSave = async () => {
     if (!editData.first_name || !editData.last_name) { toast.error('First and last name are required.'); return; }
@@ -800,6 +850,33 @@ export default function AttendeeDetailPage() {
             {isEditing ? (
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold text-brand-primary font-serif">Edit Attendee</h2>
+                <div>
+                  <label className="label">Photo</label>
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-full bg-brand-primary flex items-center justify-center text-white text-2xl font-bold font-serif flex-shrink-0 overflow-hidden">
+                      {attendee.photo_url
+                        // eslint-disable-next-line @next/next/no-img-element
+                        ? <img src={attendee.photo_url} alt="" className="w-full h-full object-cover" />
+                        : <>{attendee.first_name[0]}{attendee.last_name[0]}</>}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => photoInputRef.current?.click()}
+                        disabled={photoSaving}
+                        className="btn-secondary text-sm"
+                      >
+                        {photoSaving ? 'Saving…' : attendee.photo_url ? 'Replace photo' : 'Upload photo'}
+                      </button>
+                      {attendee.photo_url && (
+                        <button type="button" onClick={handlePhotoRemove} disabled={photoSaving} className="text-sm text-red-500 hover:text-red-600 transition-colors">
+                          Remove
+                        </button>
+                      )}
+                      <p className="w-full text-xs text-gray-400">PNG, JPEG or WebP. You can crop it before saving.</p>
+                    </div>
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div><label className="label">First Name *</label><input value={editData.first_name || ''} onChange={e => setEditData(p => ({ ...p, first_name: e.target.value }))} className="input-field" /></div>
                   <div><label className="label">Last Name *</label><input value={editData.last_name || ''} onChange={e => setEditData(p => ({ ...p, last_name: e.target.value }))} className="input-field" /></div>
@@ -849,9 +926,14 @@ export default function AttendeeDetailPage() {
               <div>
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-4">
-                    <div className="w-16 h-16 rounded-full bg-brand-primary flex items-center justify-center text-white text-2xl font-bold font-serif flex-shrink-0">
-                      {attendee.first_name[0]}{attendee.last_name[0]}
-                    </div>
+                    <AttendeeAvatar
+                      firstName={attendee.first_name}
+                      lastName={attendee.last_name}
+                      title={attendee.title}
+                      companyName={attendee.company_name}
+                      photoUrl={attendee.photo_url}
+                      onUploadRequest={() => photoInputRef.current?.click()}
+                    />
                     <div>
                       <div className="flex flex-wrap items-center gap-3">
                         <h1 className="text-2xl font-bold text-brand-primary font-serif">{attendee.first_name} {attendee.last_name}</h1>
@@ -1640,6 +1722,25 @@ export default function AttendeeDetailPage() {
           onClose={() => setTimelineOpen(false)}
           companyId={attendee.company_id}
           companyName={attendee.company_name ?? ''}
+        />
+      )}
+
+      {/* Photo picker — shared by the edit form button and the avatar prompt */}
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={e => handlePhotoPick(e.target.files?.[0])}
+      />
+      {cropFile && (
+        <ImageCropModal
+          file={cropFile}
+          onCancel={() => {
+            setCropFile(null);
+            if (photoInputRef.current) photoInputRef.current.value = '';
+          }}
+          onConfirm={handlePhotoSave}
         />
       )}
     </div>
