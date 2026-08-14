@@ -550,6 +550,27 @@ function CardField({ label, children }: { label: string; children: React.ReactNo
 }
 
 /**
+ * "Company Hosted" marker. Rendered twice per card with different display
+ * classes: next to the invited pill below sm, and at the right of the date
+ * row from sm up. The label is dropped on mobile — there is no room beside
+ * the invited pill — so the tooltip and the screen-reader copy carry it.
+ */
+function CompanyHostedStar({ className }: { className?: string }) {
+  return (
+    <span
+      className={`items-center gap-1 text-[11px] font-semibold text-amber-600 whitespace-nowrap flex-shrink-0 ${className ?? ''}`}
+      title="Hosted or sponsored by your company"
+    >
+      <svg className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.958a1 1 0 00.95.69h4.162c.969 0 1.371 1.24.588 1.81l-3.367 2.446a1 1 0 00-.363 1.118l1.286 3.957c.3.922-.755 1.688-1.538 1.118l-3.366-2.445a1 1 0 00-1.176 0l-3.366 2.445c-.783.57-1.838-.196-1.538-1.118l1.286-3.957a1 1 0 00-.363-1.118L2.005 9.385c-.783-.57-.38-1.81.588-1.81h4.162a1 1 0 00.95-.69l1.286-3.958z" />
+      </svg>
+      <span className="hidden sm:inline">Company Hosted</span>
+      <span className="sr-only">Company Hosted</span>
+    </span>
+  );
+}
+
+/**
  * Internal attendees as the abbreviated rep pills used in the company tables.
  * They sit on one line rather than wrapping — on a narrow card that would eat
  * several rows — so the row scrolls horizontally when it overflows, with
@@ -1209,17 +1230,22 @@ export function SocialEventsTable({
                       tabIndex={0}
                       onClick={() => toggleEvent(ev.id)}
                       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') toggleEvent(ev.id); }}
-                      className="flex items-center gap-2 flex-wrap min-w-0 text-left cursor-pointer"
+                      /* No wrap — the name truncates instead, so the invited
+                         pill and the mobile star stay on the header line. */
+                      className="flex items-center gap-2 min-w-0 text-left cursor-pointer"
                     >
                       <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
-                      <span className="text-sm font-semibold text-gray-800 truncate">{ev.event_name || ev.event_type || 'Social Event'}</span>
+                      <span className="text-sm font-semibold text-gray-800 truncate min-w-0">{ev.event_name || ev.event_type || 'Social Event'}</span>
                       {invited.length > 0 && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-700 whitespace-nowrap flex-shrink-0">
                           {invited.length} invited
                         </span>
                       )}
+                      {/* Mobile: the star sits right after the invited pill.
+                          From sm it moves to the right of the date row below. */}
+                      {ev.company_hosted && <CompanyHostedStar className="inline-flex sm:hidden ml-1.5" />}
                     </div>
 
                     {/* Date on the left, company-hosted marker pushed right.
@@ -1227,7 +1253,7 @@ export function SocialEventsTable({
                         sm:pl-6 to clear the chevron) so the pill's left edge
                         lines up with the Location eyebrow. */}
                     {(when || ev.company_hosted) && (
-                      <div className="flex items-center justify-between gap-2 flex-wrap mt-1.5 sm:pl-6">
+                      <div className={`items-center justify-between gap-2 flex-wrap mt-1.5 sm:pl-6 ${when ? 'flex' : 'hidden sm:flex'}`}>
                         {when ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30 whitespace-nowrap flex-shrink-0">
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1236,18 +1262,7 @@ export function SocialEventsTable({
                             {when}
                           </span>
                         ) : <span />}
-                        {ev.company_hosted && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 whitespace-nowrap flex-shrink-0" title="Hosted or sponsored by your company">
-                            <svg className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
-                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.958a1 1 0 00.95.69h4.162c.969 0 1.371 1.24.588 1.81l-3.367 2.446a1 1 0 00-.363 1.118l1.286 3.957c.3.922-.755 1.688-1.538 1.118l-3.366-2.445a1 1 0 00-1.176 0l-3.366 2.445c-.783.57-1.838-.196-1.538-1.118l1.286-3.957a1 1 0 00-.363-1.118L2.005 9.385c-.783-.57-.38-1.81.588-1.81h4.162a1 1 0 00.95-.69l1.286-3.958z" />
-                            </svg>
-                            {/* Below sm the label is dropped so the star can share
-                                the date row — the row is 222px there and the two
-                                together need 267px. The title carries the meaning. */}
-                            <span className="hidden sm:inline">Company Hosted</span>
-                            <span className="sr-only">Company Hosted</span>
-                          </span>
-                        )}
+                        {ev.company_hosted && <CompanyHostedStar className="hidden sm:inline-flex" />}
                       </div>
                     )}
 
