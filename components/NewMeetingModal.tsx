@@ -12,7 +12,7 @@ import { useUser } from '@/components/UserContext';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
 import { AdditionalAttendeesSelect, type AdditionalAttendeeCandidate, type AdditionalAttendeeSelection } from '@/components/AdditionalAttendeesSelect';
 import { SendCalendarInvitePrompt } from '@/components/SendCalendarInvitePrompt';
-import { OverlappingRepPills } from '@/components/OverlappingRepPills';
+import { ScrollingRepPills } from '@/components/OverlappingRepPills';
 import { buildGoogleCalendarUrl, buildOutlookCalendarUrl } from '@/lib/calendarInvite';
 
 interface ConferenceOption {
@@ -218,7 +218,7 @@ function SidebarContent({
                           {m.company_name && <p className="text-gray-400 truncate">{m.company_name}</p>}
                           {m.scheduled_by && (
                             <div className="mt-1">
-                              <OverlappingRepPills repIds={m.scheduled_by} userOptions={userOptions} size="xs" emptyLabel={null} />
+                              <ScrollingRepPills repIds={m.scheduled_by} userOptions={userOptions} />
                             </div>
                           )}
                         </div>

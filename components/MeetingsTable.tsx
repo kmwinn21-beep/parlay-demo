@@ -8,6 +8,7 @@ import { getPreset, type ColorMap } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { OverlappingRepPills } from '@/components/OverlappingRepPills';
+import { AdditionalAttendeesSelect, type AdditionalAttendeeCandidate, type AdditionalAttendeeSelection } from '@/components/AdditionalAttendeesSelect';
 import {
   type UserOption,
   parseRepIds,
@@ -150,6 +151,86 @@ function MeetingActionsMenu({ hasNotes, onNotes, onEdit }: {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Additional Attendees for the inline editor — the same searchable picker the
+ * schedule modal uses. Internal picks are routed into scheduled_by so the
+ * notetaker treats them as Internal Attendees; everyone else stays as free
+ * text in additional_attendees.
+ */
+function EditAdditionalAttendees({
+  conferenceId, userOptions, freeText, onFreeTextChange, internalIds, onInternalIdsChange, inputClassName,
+}: {
+  conferenceId: number | null | undefined;
+  userOptions: UserOption[];
+  freeText: string;
+  onFreeTextChange: (v: string) => void;
+  internalIds: number[];
+  onInternalIdsChange: (ids: number[]) => void;
+  inputClassName?: string;
+}) {
+  const [attendees, setAttendees] = useState<Array<{ id: number; first_name: string; last_name: string; company_name?: string | null }>>([]);
+
+  useEffect(() => {
+    if (!conferenceId) { setAttendees([]); return; }
+    let cancelled = false;
+    fetch(`/api/conferences/${conferenceId}`)
+      .then(r => (r.ok ? r.json() : { attendees: [] }))
+      .then(d => { if (!cancelled) setAttendees(d.attendees ?? []); })
+      .catch(() => { if (!cancelled) setAttendees([]); });
+    return () => { cancelled = true; };
+  }, [conferenceId]);
+
+  const externalNames = freeText.split(',').map(n => n.trim()).filter(Boolean);
+
+  const candidates: AdditionalAttendeeCandidate[] = [
+    ...attendees.map(a => ({
+      key: `attendee-${a.id}`,
+      name: `${a.first_name} ${a.last_name}`.trim(),
+      sub: a.company_name ?? '',
+      source: 'attendee' as const,
+      id: a.id,
+    })),
+    ...userOptions.map(u => ({
+      key: `user-${u.id}`,
+      name: u.value,
+      sub: 'Team member',
+      source: 'user' as const,
+      id: u.id,
+    })),
+  ];
+
+  const selected: AdditionalAttendeeSelection[] = [
+    ...internalIds.map(id => ({
+      key: `user-${id}`,
+      name: userOptions.find(u => u.id === id)?.value ?? `User ${id}`,
+    })),
+    ...externalNames.map(n => ({ key: `name-${n}`, name: n })),
+  ];
+
+  return (
+    <AdditionalAttendeesSelect
+      candidates={candidates}
+      selected={selected}
+      inputClassName={inputClassName}
+      onAdd={c => {
+        if (c.source === 'user') {
+          if (!internalIds.includes(c.id)) onInternalIdsChange([...internalIds, c.id]);
+        } else if (!externalNames.includes(c.name)) {
+          onFreeTextChange([...externalNames, c.name].join(', '));
+        }
+      }}
+      onRemove={sel => {
+        if (sel.key.startsWith('user-')) {
+          const id = Number(sel.key.slice(5));
+          onInternalIdsChange(internalIds.filter(x => x !== id));
+        } else {
+          onFreeTextChange(externalNames.filter(n => n !== sel.name).join(', '));
+        }
+      }}
+    />
   );
 }
 
@@ -354,13 +435,16 @@ function EditMeetingRow({
   const [selectedRepIds, setSelectedRepIds] = useState<number[]>(() =>
     parseRepIds(meeting.scheduled_by)
   );
+  // Internal people added through the attendees picker. They save into
+  // scheduled_by with the reps, which is where the notetaker reads them from.
+  const [additionalInternalIds, setAdditionalInternalIds] = useState<number[]>([]);
 
   const inputClass = 'w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary focus:border-brand-secondary bg-white';
 
   const handleSave = () => {
     onSave(meeting.id, {
       ...form,
-      scheduled_by: selectedRepIds.join(','),
+      scheduled_by: Array.from(new Set([...selectedRepIds, ...additionalInternalIds])).join(','),
     });
   };
 
@@ -402,7 +486,15 @@ function EditMeetingRow({
         </div>
         <div>
           <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Additional Attendees</label>
-          <input type="text" className={inputClass} value={form.additional_attendees} onChange={e => setForm(f => ({ ...f, additional_attendees: e.target.value }))} placeholder="Comma-separated names" />
+          <EditAdditionalAttendees
+            conferenceId={meeting.conference_id}
+            userOptions={userOptions}
+            freeText={form.additional_attendees}
+            onFreeTextChange={v => setForm(f => ({ ...f, additional_attendees: v }))}
+            internalIds={additionalInternalIds}
+            onInternalIdsChange={setAdditionalInternalIds}
+            inputClassName={inputClass}
+          />
         </div>
       </div>
       <div className="flex items-center justify-between pt-1">
@@ -464,13 +556,16 @@ function EditMeetingTableRow({
   const [selectedRepIds, setSelectedRepIds] = useState<number[]>(() =>
     parseRepIds(meeting.scheduled_by)
   );
+  // Internal people added through the attendees picker. They save into
+  // scheduled_by with the reps, which is where the notetaker reads them from.
+  const [additionalInternalIds, setAdditionalInternalIds] = useState<number[]>([]);
 
   const inputClass = 'w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary focus:border-brand-secondary bg-white';
 
   const handleSave = () => {
     onSave(meeting.id, {
       ...form,
-      scheduled_by: selectedRepIds.join(','),
+      scheduled_by: Array.from(new Set([...selectedRepIds, ...additionalInternalIds])).join(','),
     });
   };
 
@@ -514,7 +609,15 @@ function EditMeetingTableRow({
             </div>
             <div>
               <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Add&apos;l Attendees</label>
-              <input type="text" className={inputClass} value={form.additional_attendees} onChange={e => setForm(f => ({ ...f, additional_attendees: e.target.value }))} placeholder="Comma-separated" />
+              <EditAdditionalAttendees
+                conferenceId={meeting.conference_id}
+                userOptions={userOptions}
+                freeText={form.additional_attendees}
+                onFreeTextChange={v => setForm(f => ({ ...f, additional_attendees: v }))}
+                internalIds={additionalInternalIds}
+                onInternalIdsChange={setAdditionalInternalIds}
+                inputClassName={inputClass}
+              />
             </div>
           </div>
           <div className="flex items-center justify-between">
