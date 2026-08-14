@@ -7,6 +7,8 @@ import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/componen
 import { getPreset, type ColorMap } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
+import { OverlappingRepPills } from '@/components/OverlappingRepPills';
+import { AdditionalAttendeesSelect, type AdditionalAttendeeCandidate, type AdditionalAttendeeSelection } from '@/components/AdditionalAttendeesSelect';
 import {
   type UserOption,
   parseRepIds,
@@ -82,6 +84,153 @@ function RepPills({
         </span>
       ))}
     </span>
+  );
+}
+
+/** Internal people on a meeting minus the rep who booked it, who has the Rep column. */
+function supportRepIds(scheduledBy: string | null | undefined): string | null {
+  const ids = parseRepIds(scheduledBy);
+  return ids.length > 1 ? ids.slice(1).join(',') : null;
+}
+
+/** Row actions — the notetaker and edit entries the icons used to carry. */
+function MeetingActionsMenu({ hasNotes, onNotes, onEdit }: {
+  hasNotes: boolean;
+  onNotes?: () => void;
+  onEdit: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onEsc);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onEsc); };
+  }, [open]);
+
+  const itemCls = 'w-full text-left px-3 py-2 text-xs font-medium flex items-center gap-2 text-gray-700 hover:bg-gray-50 transition-colors';
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        title="Actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={`p-1 rounded transition-colors ${open ? 'bg-gray-100 text-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
+      >
+        <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M10 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
+        </svg>
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 top-full mt-1 z-30 w-40 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+          {onNotes && (
+            <button type="button" role="menuitem" onClick={() => { setOpen(false); onNotes(); }} className={itemCls}>
+              <span className="relative inline-flex flex-shrink-0">
+                <svg className={`w-3.5 h-3.5 ${hasNotes ? 'text-green-600' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                {hasNotes && <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-green-500" />}
+              </span>
+              Notetaker
+            </button>
+          )}
+          <button type="button" role="menuitem" onClick={() => { setOpen(false); onEdit(); }} className={itemCls}>
+            <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            Edit
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Additional Attendees for the inline editor — the same searchable picker the
+ * schedule modal uses. Internal picks are routed into scheduled_by so the
+ * notetaker treats them as Internal Attendees; everyone else stays as free
+ * text in additional_attendees.
+ */
+function EditAdditionalAttendees({
+  conferenceId, userOptions, freeText, onFreeTextChange, internalIds, onInternalIdsChange, inputClassName,
+}: {
+  conferenceId: number | null | undefined;
+  userOptions: UserOption[];
+  freeText: string;
+  onFreeTextChange: (v: string) => void;
+  internalIds: number[];
+  onInternalIdsChange: (ids: number[]) => void;
+  inputClassName?: string;
+}) {
+  const [attendees, setAttendees] = useState<Array<{ id: number; first_name: string; last_name: string; company_name?: string | null }>>([]);
+
+  useEffect(() => {
+    if (!conferenceId) { setAttendees([]); return; }
+    let cancelled = false;
+    fetch(`/api/conferences/${conferenceId}`)
+      .then(r => (r.ok ? r.json() : { attendees: [] }))
+      .then(d => { if (!cancelled) setAttendees(d.attendees ?? []); })
+      .catch(() => { if (!cancelled) setAttendees([]); });
+    return () => { cancelled = true; };
+  }, [conferenceId]);
+
+  const externalNames = freeText.split(',').map(n => n.trim()).filter(Boolean);
+
+  const candidates: AdditionalAttendeeCandidate[] = [
+    ...attendees.map(a => ({
+      key: `attendee-${a.id}`,
+      name: `${a.first_name} ${a.last_name}`.trim(),
+      sub: a.company_name ?? '',
+      source: 'attendee' as const,
+      id: a.id,
+    })),
+    ...userOptions.map(u => ({
+      key: `user-${u.id}`,
+      name: u.value,
+      sub: 'Team member',
+      source: 'user' as const,
+      id: u.id,
+    })),
+  ];
+
+  const selected: AdditionalAttendeeSelection[] = [
+    ...internalIds.map(id => ({
+      key: `user-${id}`,
+      name: userOptions.find(u => u.id === id)?.value ?? `User ${id}`,
+    })),
+    ...externalNames.map(n => ({ key: `name-${n}`, name: n })),
+  ];
+
+  return (
+    <AdditionalAttendeesSelect
+      candidates={candidates}
+      selected={selected}
+      inputClassName={inputClassName}
+      onAdd={c => {
+        if (c.source === 'user') {
+          if (!internalIds.includes(c.id)) onInternalIdsChange([...internalIds, c.id]);
+        } else if (!externalNames.includes(c.name)) {
+          onFreeTextChange([...externalNames, c.name].join(', '));
+        }
+      }}
+      onRemove={sel => {
+        if (sel.key.startsWith('user-')) {
+          const id = Number(sel.key.slice(5));
+          onInternalIdsChange(internalIds.filter(x => x !== id));
+        } else {
+          onFreeTextChange(externalNames.filter(n => n !== sel.name).join(', '));
+        }
+      }}
+    />
   );
 }
 
@@ -286,13 +435,16 @@ function EditMeetingRow({
   const [selectedRepIds, setSelectedRepIds] = useState<number[]>(() =>
     parseRepIds(meeting.scheduled_by)
   );
+  // Internal people added through the attendees picker. They save into
+  // scheduled_by with the reps, which is where the notetaker reads them from.
+  const [additionalInternalIds, setAdditionalInternalIds] = useState<number[]>([]);
 
   const inputClass = 'w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary focus:border-brand-secondary bg-white';
 
   const handleSave = () => {
     onSave(meeting.id, {
       ...form,
-      scheduled_by: selectedRepIds.join(','),
+      scheduled_by: Array.from(new Set([...selectedRepIds, ...additionalInternalIds])).join(','),
     });
   };
 
@@ -334,7 +486,15 @@ function EditMeetingRow({
         </div>
         <div>
           <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Additional Attendees</label>
-          <input type="text" className={inputClass} value={form.additional_attendees} onChange={e => setForm(f => ({ ...f, additional_attendees: e.target.value }))} placeholder="Comma-separated names" />
+          <EditAdditionalAttendees
+            conferenceId={meeting.conference_id}
+            userOptions={userOptions}
+            freeText={form.additional_attendees}
+            onFreeTextChange={v => setForm(f => ({ ...f, additional_attendees: v }))}
+            internalIds={additionalInternalIds}
+            onInternalIdsChange={setAdditionalInternalIds}
+            inputClassName={inputClass}
+          />
         </div>
       </div>
       <div className="flex items-center justify-between pt-1">
@@ -396,13 +556,16 @@ function EditMeetingTableRow({
   const [selectedRepIds, setSelectedRepIds] = useState<number[]>(() =>
     parseRepIds(meeting.scheduled_by)
   );
+  // Internal people added through the attendees picker. They save into
+  // scheduled_by with the reps, which is where the notetaker reads them from.
+  const [additionalInternalIds, setAdditionalInternalIds] = useState<number[]>([]);
 
   const inputClass = 'w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary focus:border-brand-secondary bg-white';
 
   const handleSave = () => {
     onSave(meeting.id, {
       ...form,
-      scheduled_by: selectedRepIds.join(','),
+      scheduled_by: Array.from(new Set([...selectedRepIds, ...additionalInternalIds])).join(','),
     });
   };
 
@@ -446,7 +609,15 @@ function EditMeetingTableRow({
             </div>
             <div>
               <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Add&apos;l Attendees</label>
-              <input type="text" className={inputClass} value={form.additional_attendees} onChange={e => setForm(f => ({ ...f, additional_attendees: e.target.value }))} placeholder="Comma-separated" />
+              <EditAdditionalAttendees
+                conferenceId={meeting.conference_id}
+                userOptions={userOptions}
+                freeText={form.additional_attendees}
+                onFreeTextChange={v => setForm(f => ({ ...f, additional_attendees: v }))}
+                internalIds={additionalInternalIds}
+                onInternalIdsChange={setAdditionalInternalIds}
+                inputClassName={inputClass}
+              />
             </div>
           </div>
           <div className="flex items-center justify-between">
@@ -827,9 +998,9 @@ export function MeetingsTable({
                   case 'company': return !hideCompany ? <SortHeader key="company" label="Company" col="company" /> : null;
                   case 'datetime': return <SortHeader key="datetime" label="Date/Time" col="datetime" />;
                   case 'conference': return <SortHeader key="conference" label="Conference" col="conference" />;
-                  case 'meeting_type': return <SortHeader key="meeting_type" label="Meeting Type" col="meeting_type" />;
+                  case 'meeting_type': return <SortHeader key="meeting_type" label="Type" col="meeting_type" />;
+                  case 'support': return <th key="support" className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Support</th>;
                   case 'outcome': return <SortHeader key="outcome" label="Outcome" col="outcome" />;
-                  case 'info': return <th key="info" className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Notes</th>;
                   default: return null;
                 }
               })}
@@ -898,25 +1069,13 @@ export function MeetingsTable({
                         <Link href={`/conferences/${m.conference_id}`} className="text-brand-secondary hover:underline">{m.conference_name}</Link>
                       </td>;
                       case 'meeting_type': return <td key="meeting_type" className="px-3 py-2 text-gray-600 leading-snug">{m.meeting_type || <span className="text-gray-300">—</span>}</td>;
+                      // Everyone internal on the meeting bar the rep who booked
+                      // it — that rep already has the Rep column to themselves.
+                      case 'support': return <td key="support" className="px-3 py-2">
+                        <OverlappingRepPills repIds={supportRepIds(m.scheduled_by)} userOptions={userOptions} size="xs" />
+                      </td>;
                       case 'outcome': return <td key="outcome" className="px-3 py-2">
                         <OutcomeButton value={m.outcome} options={actionOptions} colorMap={colorMap} onChange={(val) => onOutcomeChange(m.id, val)} />
-                      </td>;
-                      case 'info': return <td key="info" className="px-3 py-2">
-                        <button
-                          type="button"
-                          className={`relative transition-colors ${m.has_notes ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-gray-600'}`}
-                          title={m.has_notes ? 'View notes' : 'Add notes'}
-                          onClick={() => onNotesClick?.(m.id)}
-                        >
-                          {m.has_notes ? (
-                            <span className="relative inline-flex">
-                              <svg className="w-4 h-4" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-500" />
-                            </span>
-                          ) : (
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                          )}
-                        </button>
                       </td>;
                       default: return null;
                     }
@@ -928,9 +1087,11 @@ export function MeetingsTable({
                   ))}
                   {hasActions && (
                     <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => setEditingId(m.id)} className="text-gray-400 hover:text-brand-secondary text-xs font-medium transition-colors">Edit</button>
-                      </div>
+                      <MeetingActionsMenu
+                        hasNotes={!!m.has_notes}
+                        onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
+                        onEdit={() => setEditingId(m.id)}
+                      />
                     </td>
                   )}
                 </tr>
