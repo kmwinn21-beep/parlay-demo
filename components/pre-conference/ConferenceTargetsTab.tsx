@@ -874,7 +874,8 @@ export function ConferenceTargetsTab({
           onSuccess={(meeting) => {
             setOptimisticMeetingIds(prev => new Set([...Array.from(prev), schedulingEntry.attendeeId]));
             onMeetingScheduled?.(meeting);
-            setSchedulingEntry(null);
+            // Deliberately not closing here — the modal stays mounted to offer
+            // the calendar invite, and calls onClose once that is done.
           }}
         />
       )}

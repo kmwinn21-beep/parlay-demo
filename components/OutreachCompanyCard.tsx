@@ -850,7 +850,8 @@ export function OutreachCompanyCard({
           prefillAttendeeId={schedulingAttendee.attendeeId}
           onSuccess={(meeting: Meeting) => {
             setLocalMeetingIds(prev => ({ ...prev, [schedulingAttendee.attendeeId]: meeting.id }));
-            setSchedulingAttendee(null);
+            // Left open on purpose so the calendar invite prompt can show; the
+            // modal closes itself through onClose afterwards.
             onActivityLogged();
           }}
         />

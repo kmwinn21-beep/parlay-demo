@@ -5,13 +5,14 @@ import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
-import { type UserOption } from '@/lib/useUserOptions';
+import { parseRepIds, type UserOption } from '@/lib/useUserOptions';
 import { useHideBottomNav } from './BottomNavContext';
 import { type Meeting } from '@/components/MeetingsTable';
 import { useUser } from '@/components/UserContext';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
 import { AdditionalAttendeesSelect, type AdditionalAttendeeCandidate, type AdditionalAttendeeSelection } from '@/components/AdditionalAttendeesSelect';
 import { SendCalendarInvitePrompt } from '@/components/SendCalendarInvitePrompt';
+import { OverlappingRepPills } from '@/components/OverlappingRepPills';
 import { buildGoogleCalendarUrl, buildOutlookCalendarUrl } from '@/lib/calendarInvite';
 
 interface ConferenceOption {
@@ -47,6 +48,7 @@ interface ConferenceMeeting {
   title: string | null;
   company_name: string | null;
   scheduled_by: string | null;
+  additional_attendees: string | null;
 }
 
 /** Returns every date (YYYY-MM-DD) between start and end inclusive, capped at 14 days. */
@@ -110,6 +112,9 @@ function SidebarContent({
   collapsedDays,
   setCollapsedDays,
   selectedRepIds,
+  search,
+  setSearch,
+  userOptions,
 }: {
   selectedConference: ConferenceOption | undefined;
   loadingMeetings: boolean;
@@ -119,12 +124,41 @@ function SidebarContent({
   collapsedDays: Set<string>;
   setCollapsedDays: React.Dispatch<React.SetStateAction<Set<string>>>;
   selectedRepIds: number[];
+  search: string;
+  setSearch: (v: string) => void;
+  userOptions: UserOption[];
 }) {
   return (
     <>
       <div className="px-4 py-3 border-b border-gray-200 flex-shrink-0 hidden md:block">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Scheduled Meetings</p>
         <p className="text-xs text-gray-400 mt-0.5">{selectedConference?.name}</p>
+      </div>
+      <div className="px-4 py-2 border-b border-gray-200 flex-shrink-0">
+        <div className="relative">
+          <svg className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search attendee, company, or rep…"
+            className="w-full pl-8 pr-7 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-secondary"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              title="Clear"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto">
         {loadingMeetings ? (
@@ -133,7 +167,9 @@ function SidebarContent({
             Loading…
           </div>
         ) : meetingsByDay.length === 0 ? (
-          <p className="px-4 py-8 text-center text-xs text-gray-400">No meetings scheduled yet.</p>
+          <p className="px-4 py-8 text-center text-xs text-gray-400">
+            {search ? 'No meetings match that search.' : 'No meetings scheduled yet.'}
+          </p>
         ) : (
           meetingsByDay.map(([day, dayMeetings]) => {
             const { short } = formatChipDate(day);
@@ -178,7 +214,13 @@ function SidebarContent({
                               </span>
                             )}
                           </div>
+                          {m.title && <p className="text-gray-400 truncate">{m.title}</p>}
                           {m.company_name && <p className="text-gray-400 truncate">{m.company_name}</p>}
+                          {m.scheduled_by && (
+                            <div className="mt-1">
+                              <OverlappingRepPills repIds={m.scheduled_by} userOptions={userOptions} size="xs" emptyLabel={null} />
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -251,6 +293,7 @@ export function NewMeetingModal({
 
   // Conference meetings sidebar
   const [conferenceMeetings, setConferenceMeetings] = useState<ConferenceMeeting[]>([]);
+  const [meetingSearch, setMeetingSearch] = useState('');
   const [loadingMeetings, setLoadingMeetings] = useState(false);
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
@@ -462,14 +505,30 @@ export function NewMeetingModal({
 
   // Sidebar: group meetings by day
   const meetingsByDay = useMemo(() => {
+    const q = meetingSearch.trim().toLowerCase();
+    // Matches on the attendee, their company, whichever reps are on it, and any
+    // free-text additional attendee — the four things a card actually shows.
+    const matches = (m: ConferenceMeeting) => {
+      if (!q) return true;
+      const repNames = parseRepIds(m.scheduled_by)
+        .map(id => userOptions.find(u => u.id === id)?.value ?? '')
+        .join(' ');
+      return [
+        `${m.first_name} ${m.last_name}`,
+        m.company_name ?? '',
+        repNames,
+        m.additional_attendees ?? '',
+      ].join(' ').toLowerCase().includes(q);
+    };
+
     const map = new Map<string, ConferenceMeeting[]>();
-    for (const m of conferenceMeetings) {
+    for (const m of conferenceMeetings.filter(matches)) {
       const day = m.meeting_date;
       if (!map.has(day)) map.set(day, []);
       map.get(day)!.push(m);
     }
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [conferenceMeetings]);
+  }, [conferenceMeetings, meetingSearch, userOptions]);
 
   function resetForm() {
     setSelectedRepIds([]);
@@ -837,6 +896,9 @@ export function NewMeetingModal({
                 collapsedDays={collapsedDays}
                 setCollapsedDays={setCollapsedDays}
                 selectedRepIds={selectedRepIds}
+                search={meetingSearch}
+                setSearch={setMeetingSearch}
+                userOptions={userOptions}
               />
             </div>
           )}
@@ -866,6 +928,9 @@ export function NewMeetingModal({
               collapsedDays={collapsedDays}
               setCollapsedDays={setCollapsedDays}
               selectedRepIds={selectedRepIds}
+              search={meetingSearch}
+              setSearch={setMeetingSearch}
+              userOptions={userOptions}
             />
           </div>
         )}
