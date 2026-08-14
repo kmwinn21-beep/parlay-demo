@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useDrawerResize } from '@/lib/useDrawerResize';
+import { useSidebarCollapse, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_EXPANDED_WIDTH } from './SidebarCollapseContext';
 import toast from 'react-hot-toast';
 import { getPreset } from '@/lib/colors';
 
@@ -550,8 +551,8 @@ interface Props {
 }
 
 export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
-  const { panelStyle, handleResizeStart } = useDrawerResize(1200, 700, 1440);
   const { panelStyle: recordPanelStyle, handleResizeStart: recordResizeStart } = useDrawerResize(400, 280, 800);
+  const { collapsed: sidebarCollapsed } = useSidebarCollapse();
   const [data, setData] = useState<DebriefData | null>(null);
   const [effData, setEffData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
@@ -796,16 +797,16 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
 
       {/* ── Centering wrapper ──
           Mobile: absolute inset-0 (full screen)
-          Desktop: starts at sidebar right edge (left-64), flex centered */}
-      <div className="absolute inset-0 sm:left-64 sm:flex sm:items-center sm:justify-center sm:p-5">
+          Desktop: starts at the sidebar's right edge, flex centered — the
+          same framing the pre-conference review uses, so both modals occupy
+          the same box. */}
+      <div
+        className="absolute inset-0 sm:left-[var(--sidebar-w)] sm:flex sm:items-center sm:justify-center sm:p-5 transition-[left] duration-300 ease-in-out"
+        style={{ '--sidebar-w': `${sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH}px` } as React.CSSProperties}
+      >
 
         {/* Modal box — full-screen on mobile, contained on desktop */}
-        <div className="relative w-full h-full sm:h-[85vh] sm:max-w-[1440px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden" style={panelStyle}>
-          {/* Left-edge resize handle */}
-          <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={handleResizeStart}>
-            <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-secondary/0 group-hover/rh:bg-brand-secondary/40 transition-colors" />
-          </div>
-
+        <div className="relative w-full h-full sm:h-[85vh] sm:max-w-[1440px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden">
           {/* ── Header ── */}
           <div className="bg-brand-primary flex-shrink-0">
 
