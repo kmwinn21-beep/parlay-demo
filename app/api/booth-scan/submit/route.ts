@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
       notes_text,
       products,         // string[] — selected product names
       sentiment,        // string | null — status option value
+      company_type,     // string | null — applied to company_id when set
       schedule_follow_up, // boolean | null
     } = body as {
       quick_note_id?: number | null;
@@ -36,6 +37,7 @@ export async function POST(request: NextRequest) {
       notes_text?: string | null;
       products?: string[] | null;
       sentiment?: string | null;
+      company_type?: string | null;
       schedule_follow_up?: boolean | null;
     };
 
@@ -123,7 +125,7 @@ export async function POST(request: NextRequest) {
     // ── Convo path (booth-stop) ───────────────────────────────────────────────
     if (isConvo && attendee_id && conference_id) {
       const tpOption = await db.execute({
-        sql: "SELECT id, auto_follow_up FROM config_options WHERE category = 'touchpoints' AND value = 'Booth Stop' LIMIT 1",
+        sql: "SELECT id, value, auto_follow_up FROM config_options WHERE category = 'touchpoints' AND value = 'Booth Stop' LIMIT 1",
         args: [],
       });
 
@@ -200,12 +202,12 @@ export async function POST(request: NextRequest) {
       const noteContent = notes_text.trim();
       const insertNote = async (entityType: string, entityId: number) => {
         await db.execute({
-          sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_name, rep, attendee_name, company_name, author_user_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_name, rep, attendee_name, company_name, author_user_id, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           args: [entityType, entityId, noteContent, confName, repNameStr,
                  entityType !== 'attendee' ? attendeeName : null,
                  entityType !== 'company' ? companyName : null,
-                 authResult.id],
+                 authResult.id, sentiment || null],
         }).catch(() => {});
       };
 
@@ -213,6 +215,18 @@ export async function POST(request: NextRequest) {
       if (resolvedCompanyId) await insertNote('company', resolvedCompanyId);
       if (conference_id) await insertNote('conference', conference_id);
       results.note = 'created';
+    }
+
+    // ── Company type ──────────────────────────────────────────────────────────
+    // A card scan can only infer the type from the company name, so it is often
+    // blank on a freshly created company. The capture form is where a rep sets
+    // it; only write when one was actually chosen.
+    if (company_type && company_id) {
+      await db.execute({
+        sql: 'UPDATE companies SET company_type = ? WHERE id = ?',
+        args: [company_type, company_id],
+      }).catch(() => {});
+      results.company_type = 'updated';
     }
 
     // ── Delete quick_note ─────────────────────────────────────────────────────

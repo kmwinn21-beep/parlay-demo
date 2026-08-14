@@ -64,21 +64,55 @@ function formatCardAsText(draft: CardDraft): string {
 
 // ── Searchable dropdown ──────────────────────────────────────────────────────
 function SearchableSelect<T extends { id: number }>({
-  options, value, onChange, getLabel, placeholder, disabled,
+  options, value, onChange, getLabel, placeholder, disabled, onSelectOther,
 }: {
   options: T[]; value: T | null; onChange: (v: T | null) => void;
   getLabel: (v: T) => string; placeholder: string; disabled?: boolean;
+  /** Adds an "Other (not in list)" entry above the results when provided. */
+  onSelectOther?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // Portalled so the Assign Note modal's scrolling body can't clip the list.
+  const [pos, setPos] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     if (!open) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const h = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!ref.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false);
+    };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, [open]);
+
+  const position = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const below = window.innerHeight - r.bottom - 8;
+    const above = r.top - 8;
+    const flip = below < 180 && above > below;
+    const maxHeight = Math.max(140, Math.min(240, flip ? above : below));
+    setPos({ top: flip ? r.top - 4 - maxHeight : r.bottom + 4, left: r.left, width: r.width, maxHeight });
+  }, []);
+
+  useEffect(() => {
+    if (!open) { setPos(null); return; }
+    position();
+    const onScroll = () => position();
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [open, position]);
 
   const filtered = options.filter(o => getLabel(o).toLowerCase().includes(search.toLowerCase()));
 
@@ -99,13 +133,26 @@ function SearchableSelect<T extends { id: number }>({
           <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
         </div>
       </button>
-      {open && (
-        <div className="absolute z-50 top-full mt-1 left-0 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-52 flex flex-col">
+      {open && mounted && pos && createPortal(
+        <div
+          ref={menuRef}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, maxHeight: pos.maxHeight }}
+          className="z-[100] bg-white border border-gray-200 rounded-lg shadow-xl flex flex-col"
+        >
           <div className="p-2 border-b border-gray-100">
             <input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…"
               className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-brand-secondary" />
           </div>
           <div className="overflow-y-auto">
+            {onSelectOther && (
+              <button
+                type="button"
+                onClick={() => { onSelectOther(); setOpen(false); setSearch(''); }}
+                className="w-full text-left px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 border-b border-gray-100 font-medium"
+              >
+                Other (not in list)
+              </button>
+            )}
             {filtered.length === 0 ? (
               <p className="text-sm text-gray-400 px-3 py-2">No results</p>
             ) : filtered.map(o => (
@@ -115,7 +162,8 @@ function SearchableSelect<T extends { id: number }>({
               </button>
             ))}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
@@ -176,6 +224,25 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
   const [loading, setLoading] = useState(true);
   const [loadingConf, setLoadingConf] = useState(false);
 
+  // "Other (not in list)" — create the company and/or attendee on assign, the
+  // same way a public conference form does when someone isn't on the list.
+  const [companyIsOther, setCompanyIsOther] = useState(false);
+  const [newCompanyName, setNewCompanyName] = useState('');
+  const [newCompanyType, setNewCompanyType] = useState('');
+  const [companyTypeOptions, setCompanyTypeOptions] = useState<string[]>([]);
+  const [attendeeIsOther, setAttendeeIsOther] = useState(false);
+  const [manualFirst, setManualFirst] = useState('');
+  const [manualLast, setManualLast] = useState('');
+  const [manualTitle, setManualTitle] = useState('');
+  const [manualEmail, setManualEmail] = useState('');
+
+  useEffect(() => {
+    fetch('/api/config?category=company_type')
+      .then(r => (r.ok ? r.json() : []))
+      .then((opts: { value: string }[]) => setCompanyTypeOptions(Array.isArray(opts) ? opts.map(o => o.value).filter(Boolean) : []))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -186,7 +253,12 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
           fetch('/api/attendees?limit=5000').then(r => r.ok ? r.json() : []),
         ]);
         const confs: Conference[] = Array.isArray(confRes) ? confRes.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })) : [];
-        const comps: Company[] = Array.isArray(compRes) ? compRes.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })) : [];
+        // company_type has to survive the mapping — the company dropdown groups on it.
+        const comps: Company[] = Array.isArray(compRes)
+          ? compRes.map((c: { id: number; name: string; company_type?: string | null }) => ({
+              id: c.id, name: c.name, company_type: c.company_type ?? null,
+            }))
+          : [];
         const atts: Attendee[] = Array.isArray(attRes)
           ? attRes.map((a: { id: number; first_name: string; last_name: string; company_id?: number; company_name?: string }) => ({
               id: a.id, first_name: a.first_name, last_name: a.last_name,
@@ -244,6 +316,7 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
   }, [selCompany, allAttendees, allCompanies]);
 
   const handleCompanyChange = useCallback((comp: Company | null) => {
+    setCompanyIsOther(false);
     setSelCompany(comp); setSelAttendee(null);
     const sourceAtts = selConference ? conferenceAttendees : allAttendees;
     if (!comp) {
@@ -266,6 +339,7 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
   }, [selConference, conferenceAttendees, allAttendees, allCompanies]);
 
   const handleAttendeeChange = useCallback((att: Attendee | null) => {
+    setAttendeeIsOther(false);
     setSelAttendee(att);
     if (!att) return;
     if (!selCompany && att.company_id) {
@@ -274,25 +348,78 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
     }
   }, [selCompany, allCompanies]);
 
-  const canSave = selConference || selCompany || selAttendee;
+  const newCompanyReady = companyIsOther && newCompanyName.trim().length > 0;
+  const newAttendeeReady = attendeeIsOther && manualFirst.trim().length > 0 && manualLast.trim().length > 0;
+  // A brand new attendee is created against a conference, the way the public
+  // form does, so one has to be picked first.
+  const newAttendeeBlocked = attendeeIsOther && !selConference;
+  const canSave = !!(selConference || selCompany || selAttendee || newCompanyReady || newAttendeeReady)
+    && !newAttendeeBlocked
+    && !(companyIsOther && !newCompanyReady)
+    && !(attendeeIsOther && !newAttendeeReady);
 
   const handleSave = async () => {
     if (!canSave) return;
     setSaving(true);
     try {
+      let companyId = selCompany?.id ?? null;
+      let companyName = selCompany?.name ?? null;
+      let attendeeId = selAttendee?.id ?? null;
+      let attendeeName = selAttendee ? `${selAttendee.first_name} ${selAttendee.last_name}` : null;
+
+      // A new attendee's company is created by the add endpoint below, so only
+      // create it up front when there is no attendee to carry it.
+      if (newCompanyReady && !newAttendeeReady) {
+        const res = await fetch('/api/companies', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newCompanyName.trim(), company_type: newCompanyType || null }),
+        });
+        if (!res.ok) throw new Error('company');
+        const created = await res.json();
+        companyId = Number(created.id);
+        companyName = String(created.name ?? newCompanyName.trim());
+      }
+
+      if (newAttendeeReady && selConference) {
+        const res = await fetch(`/api/conferences/${selConference.id}/attendees/add`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            first_name: manualFirst.trim(),
+            last_name: manualLast.trim(),
+            title: manualTitle.trim() || undefined,
+            email: manualEmail.trim() || undefined,
+            company: newCompanyReady ? newCompanyName.trim() : (companyName ?? undefined),
+            company_type: newCompanyReady ? (newCompanyType || undefined) : undefined,
+          }),
+        });
+        if (!res.ok) throw new Error('attendee');
+        const created = await res.json();
+        attendeeId = Number(created.id);
+        attendeeName = `${manualFirst.trim()} ${manualLast.trim()}`;
+        if (created.company_id != null) companyId = Number(created.company_id);
+        if (created.company_name) companyName = String(created.company_name);
+      }
+
       const res = await fetch(`/api/quick-notes/${note.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          conference_id: selConference?.id ?? null, company_id: selCompany?.id ?? null,
-          attendee_id: selAttendee?.id ?? null, conference_name: selConference?.name ?? null,
-          company_name: selCompany?.name ?? null,
-          attendee_name: selAttendee ? `${selAttendee.first_name} ${selAttendee.last_name}` : null,
+          conference_id: selConference?.id ?? null, company_id: companyId,
+          attendee_id: attendeeId, conference_name: selConference?.name ?? null,
+          company_name: companyName,
+          attendee_name: attendeeName,
         }),
       });
       if (!res.ok) throw new Error();
       toast.success('Note assigned successfully.');
       onAssigned(note.id);
-    } catch { toast.error('Failed to assign note.'); }
+    } catch (err) {
+      const which = err instanceof Error ? err.message : '';
+      toast.error(
+        which === 'company' ? 'Failed to create the company.'
+        : which === 'attendee' ? 'Failed to create the attendee.'
+        : 'Failed to assign note.'
+      );
+    }
     finally { setSaving(false); }
   };
 
@@ -319,17 +446,49 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Company</label>
-                <GroupedCompanyDropdown
-                  companies={filteredCompanies}
-                  value={selCompany?.id ?? null}
-                  onChange={(id, _name) => {
-                    const comp = filteredCompanies.find(c => c.id === id) ?? allCompanies.find(c => c.id === id) ?? null;
-                    handleCompanyChange(comp);
-                  }}
-                  onClear={() => handleCompanyChange(null)}
-                  placeholder="Select a company…"
-                  inputClassName="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white"
-                />
+                {companyIsOther ? (
+                  <div className="space-y-2">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={newCompanyName}
+                      onChange={e => setNewCompanyName(e.target.value)}
+                      placeholder="New company name"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white"
+                    />
+                    <div>
+                      <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">Company Type</label>
+                      <select
+                        value={newCompanyType}
+                        onChange={e => setNewCompanyType(e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white"
+                      >
+                        <option value="">Auto-detect from name</option>
+                        {companyTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setCompanyIsOther(false); setNewCompanyName(''); setNewCompanyType(''); }}
+                      className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      ← Pick an existing company
+                    </button>
+                  </div>
+                ) : (
+                  <GroupedCompanyDropdown
+                    companies={filteredCompanies}
+                    value={selCompany?.id ?? null}
+                    onChange={(id, _name) => {
+                      const comp = filteredCompanies.find(c => c.id === id) ?? allCompanies.find(c => c.id === id) ?? null;
+                      handleCompanyChange(comp);
+                    }}
+                    onClear={() => handleCompanyChange(null)}
+                    onSelectOther={() => { handleCompanyChange(null); setCompanyIsOther(true); }}
+                    placeholder="Select a company…"
+                    inputClassName="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white"
+                  />
+                )}
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Attendee</label>
@@ -338,13 +497,46 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
                     <div className="animate-spin w-3.5 h-3.5 border-2 border-brand-secondary border-t-transparent rounded-full" />
                     Loading attendees…
                   </div>
+                ) : attendeeIsOther ? (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input autoFocus type="text" value={manualFirst} onChange={e => setManualFirst(e.target.value)} placeholder="First name *"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white" />
+                      <input type="text" value={manualLast} onChange={e => setManualLast(e.target.value)} placeholder="Last name *"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white" />
+                    </div>
+                    <input type="text" value={manualTitle} onChange={e => setManualTitle(e.target.value)} placeholder="Title"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white" />
+                    <input type="email" value={manualEmail} onChange={e => setManualEmail(e.target.value)} placeholder="Email"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white" />
+                    <button
+                      type="button"
+                      onClick={() => { setAttendeeIsOther(false); setManualFirst(''); setManualLast(''); setManualTitle(''); setManualEmail(''); }}
+                      className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      ← Pick an existing attendee
+                    </button>
+                  </div>
                 ) : (
-                  <SearchableSelect options={filteredAttendees} value={selAttendee} onChange={handleAttendeeChange} getLabel={a => `${a.first_name} ${a.last_name}`} placeholder="Select an attendee…" />
+                  <SearchableSelect
+                    options={filteredAttendees}
+                    value={selAttendee}
+                    onChange={handleAttendeeChange}
+                    getLabel={a => `${a.first_name} ${a.last_name}`}
+                    placeholder="Select an attendee…"
+                    onSelectOther={() => { handleAttendeeChange(null); setAttendeeIsOther(true); }}
+                  />
                 )}
               </div>
-              {canSave
-                ? <p className="text-xs text-gray-400">Note will be saved to the selected record(s) and removed from Floor Notes.</p>
-                : <p className="text-xs text-amber-600">Select at least one conference, company, or attendee.</p>}
+              {newAttendeeBlocked
+                ? <p className="text-xs text-amber-600">Pick a conference first — new attendees are added to one.</p>
+                : canSave
+                  ? <p className="text-xs text-gray-400">
+                      {newCompanyReady || newAttendeeReady
+                        ? 'The new record(s) will be created, then the note saved to them and removed from Floor Notes.'
+                        : 'Note will be saved to the selected record(s) and removed from Floor Notes.'}
+                    </p>
+                  : <p className="text-xs text-amber-600">Select at least one conference, company, or attendee.</p>}
             </div>
           )}
         </div>
@@ -707,13 +899,9 @@ function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
   onClose: () => void;
   onSubmitted: (noteId: number) => void;
 }) {
+  // Notes assigned outside the booth flow carry no secondary tag; they log as a
+  // plain booth stop so the submit route stays on a branch it knows.
   const interactionType = data.note.secondary_tag ?? 'booth-stop';
-  const isMeeting = interactionType === 'booth-demo' || interactionType === 'booth-meeting';
-
-  const interactionLabel = interactionType === 'booth-demo' ? 'Demo'
-    : interactionType === 'booth-meeting' ? 'Meeting'
-    : interactionType === 'booth-followup' ? 'Follow-up Request'
-    : 'Booth Stop';
 
   // Parse suggested products from note
   const suggested: { productName: string; score: number }[] = (() => {
@@ -726,6 +914,12 @@ function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
     new Set(suggested.slice(0, 3).map(s => s.productName))
   );
   const [sentiment, setSentiment] = useState<string | null>(null);
+  // Company type for the company behind this interaction. Card scans create
+  // companies with whatever classifyCompanyType() could infer, which is often
+  // nothing — this is where a rep sets or corrects it.
+  const [companyTypeOptions, setCompanyTypeOptions] = useState<string[]>([]);
+  const [companyType, setCompanyType] = useState('');
+  const [initialCompanyType, setInitialCompanyType] = useState('');
   const [scheduleFollowUp, setScheduleFollowUp] = useState<boolean | null>(null);
   const [notesText, setNotesText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -735,17 +929,25 @@ function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
   useEffect(() => {
     const load = async () => {
       try {
-        const [prodRes, statusRes] = await Promise.all([
+        const [prodRes, statusRes, typeRes, coRes] = await Promise.all([
           fetch('/api/config?category=products').then(r => r.ok ? r.json() : []),
           fetch('/api/config?category=status&form=booth_interaction').then(r => r.ok ? r.json() : []),
+          fetch('/api/config?category=company_type').then(r => r.ok ? r.json() : []),
+          data.companyId
+            ? fetch(`/api/companies/${data.companyId}`).then(r => (r.ok ? r.json() : null)).catch(() => null)
+            : Promise.resolve(null),
         ]);
         setAllProducts(Array.isArray(prodRes) ? prodRes.map((p: { id?: number; value?: string }) => ({ id: p.id ?? 0, name: p.value ?? '' })).filter(p => p.name) : []);
         setStatusOptions(Array.isArray(statusRes) ? statusRes.map((s: { value?: string }) => ({ value: s.value ?? '', label: s.value ?? '' })).filter(s => s.value) : []);
+        setCompanyTypeOptions(Array.isArray(typeRes) ? typeRes.map((t: { value?: string }) => t.value ?? '').filter(Boolean) : []);
+        const currentType = (coRes?.company_type ?? coRes?.company?.company_type ?? '') as string;
+        setCompanyType(currentType || '');
+        setInitialCompanyType(currentType || '');
       } catch { /* non-blocking */ }
       setLoading(false);
     };
     load();
-  }, []);
+  }, [data.companyId]);
 
   const toggleProduct = (name: string) => {
     setSelectedProducts(prev => {
@@ -775,6 +977,9 @@ function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
           notes_text: notesText.trim() || null,
           products: Array.from(selectedProducts),
           sentiment,
+          // Only sent when the rep actually changed it, so an established
+          // company's type is never rewritten by simply saving.
+          company_type: companyType && companyType !== initialCompanyType ? companyType : undefined,
           schedule_follow_up: scheduleFollowUp,
         }),
       });
@@ -796,7 +1001,7 @@ function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
           <div>
-            <h3 className="text-base font-semibold text-brand-primary font-serif">Log {interactionLabel}</h3>
+            <h3 className="text-base font-semibold text-brand-primary font-serif">Log Interaction</h3>
             <p className="text-xs text-gray-400 mt-0.5">
               {(() => {
                 const lines = data.note.content.split('\n');
@@ -909,6 +1114,22 @@ function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Company Type — a card scan can only guess it from the name,
+                  so this is the first chance to set it deliberately. */}
+              {data.companyId != null && companyTypeOptions.length > 0 && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Company Type</label>
+                  <select
+                    value={companyType}
+                    onChange={e => setCompanyType(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white"
+                  >
+                    <option value="">— Select —</option>
+                    {companyTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
                 </div>
               )}
 
@@ -1188,14 +1409,10 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
       const { attendeeMatches = [], companyMatches = [] } = mRes.ok ? await mRes.json() : {};
       const scanned: ScannedCard = { ...makeCard(draft), attendeeMatches, companyMatches, status: attendeeMatches.length > 0 ? 'matched' : 'no-match' };
       setBatchModalCards([scanned]);
-      if (note.secondary_tag?.startsWith('booth-')) {
-        // Booth flow: open BatchCardScanModal; on confirm → show structured capture
-        setBoothSourceNote(note);
-      } else {
-        // Non-booth: open BatchCardScanModal and delete the note immediately
-        setNotes(prev => prev.filter(n => n.id !== note.id));
-        await fetch(`/api/quick-notes/${note.id}`, { method: 'DELETE' });
-      }
+      // Every assigned note goes on to the interaction capture, booth-tagged or
+      // not. The note is left in place until that capture is submitted — the
+      // submit route deletes it — so backing out of the scan loses nothing.
+      setBoothSourceNote(note);
       setShowBatchModal(true);
     } catch { toast.error('Failed to search for match.'); }
   }, []);
@@ -1317,7 +1534,9 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
       {showBatchModal && (
         <BatchCardScanModal
           initialCards={batchModalCards}
-          conferenceId={boothSourceNote ? (activeConference?.id ?? null) : undefined}
+          /* Pre-select the note's own conference, falling back to whatever is
+             globally active — but leave the picker visible either way. */
+          initialConferenceId={boothSourceNote?.conference_id ?? activeConference?.id ?? null}
           onClose={() => { setShowBatchModal(false); setBoothSourceNote(null); }}
           onDone={() => { setShowBatchModal(false); setBoothSourceNote(null); }}
           onConfirmed={boothSourceNote ? (attendeeId, companyId, conferenceId) => {

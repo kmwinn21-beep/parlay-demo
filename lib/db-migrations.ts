@@ -2097,4 +2097,16 @@ export const migrations: string[] = [
   // clears the conference's uploaded items.
   `ALTER TABLE conference_agenda_items ADD COLUMN social_event_id INTEGER`,
   `CREATE INDEX IF NOT EXISTS idx_agenda_social_event ON conference_agenda_items(conference_id, social_event_id)`,
+  // Status/sentiment picked in the Log Interaction step, carried on the notes it
+  // writes so the pill can show beside the note's timestamp.
+  `ALTER TABLE entity_notes ADD COLUMN status TEXT`,
+  // The booth-stop path in /api/booth-scan/submit read config_options.value from
+  // a row that never selected that column, so every follow-up it created was
+  // labelled with the string "undefined". Relabel those to the touchpoint they
+  // actually came from.
+  `UPDATE follow_ups
+      SET next_steps = COALESCE(
+        (SELECT value FROM config_options WHERE category = 'touchpoints' AND value = 'Booth Stop' LIMIT 1),
+        'Booth Stop')
+    WHERE next_steps = 'undefined'`,
 ];

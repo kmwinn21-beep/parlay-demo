@@ -30,14 +30,14 @@ export async function GET(request: NextRequest) {
       const joinCompany = entityType === 'company';
       result = await db.execute({
         sql: joinCompany
-          ? `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, en.conference_name, en.rep, en.attendee_name, en.company_name, en.tagged_users, en.lets_talk, en.author_user_id, en.note_type, en.meeting_id, en.insight_counts, co.name AS joined_company_name, COUNT(nc.id) AS comment_count
+          ? `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, en.conference_name, en.rep, en.attendee_name, en.company_name, en.tagged_users, en.lets_talk, en.author_user_id, en.note_type, en.meeting_id, en.insight_counts, en.status, co.name AS joined_company_name, COUNT(nc.id) AS comment_count
                 FROM entity_notes en
                 LEFT JOIN companies co ON en.entity_id = co.id
                 LEFT JOIN note_comments nc ON nc.note_id = en.id
                 WHERE en.entity_type = ? AND en.entity_id IN (${ids.map(() => '?').join(',')})
                 GROUP BY en.id
                 ORDER BY en.created_at DESC`
-          : `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, en.conference_name, en.rep, en.attendee_name, en.company_name, en.tagged_users, en.lets_talk, en.author_user_id, en.note_type, en.meeting_id, en.insight_counts, COUNT(nc.id) AS comment_count
+          : `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, en.conference_name, en.rep, en.attendee_name, en.company_name, en.tagged_users, en.lets_talk, en.author_user_id, en.note_type, en.meeting_id, en.insight_counts, en.status, COUNT(nc.id) AS comment_count
                 FROM entity_notes en
                 LEFT JOIN note_comments nc ON nc.note_id = en.id
                 WHERE en.entity_type = ? AND en.entity_id IN (${ids.map(() => '?').join(',')})
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
       });
     } else {
       result = await db.execute({
-        sql: `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, en.conference_name, en.rep, en.attendee_name, en.company_name, en.tagged_users, en.lets_talk, en.author_user_id, en.note_type, en.meeting_id, en.insight_counts, COUNT(nc.id) AS comment_count
+        sql: `SELECT en.id, en.entity_type, en.entity_id, en.content, en.created_at, en.conference_name, en.rep, en.attendee_name, en.company_name, en.tagged_users, en.lets_talk, en.author_user_id, en.note_type, en.meeting_id, en.insight_counts, en.status, COUNT(nc.id) AS comment_count
               FROM entity_notes en
               LEFT JOIN note_comments nc ON nc.note_id = en.id
               WHERE en.entity_type = ? AND en.entity_id = ?
@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
         note_type: r.note_type != null ? String(r.note_type) : 'note',
         meeting_id: r.meeting_id != null ? Number(r.meeting_id) : null,
         insight_counts: r.insight_counts != null ? String(r.insight_counts) : null,
+        status: r.status != null ? String(r.status) : null,
       }))
     );
   } catch (error) {
