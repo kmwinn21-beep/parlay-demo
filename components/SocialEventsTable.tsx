@@ -550,10 +550,9 @@ function CardField({ label, children }: { label: string; children: React.ReactNo
 }
 
 /**
- * "Company Hosted" marker. Rendered twice per card with different display
- * classes: next to the invited pill below sm, and at the right of the date
- * row from sm up. The label is dropped on mobile — there is no room beside
- * the invited pill — so the tooltip and the screen-reader copy carry it.
+ * "Company Hosted" marker, shown just right of the invited pill in the card
+ * header. The label is dropped below sm — there is no room beside the pill —
+ * so the tooltip and the screen-reader copy carry it there.
  */
 function CompanyHostedStar({ className }: { className?: string }) {
   return (
@@ -1243,26 +1242,20 @@ export function SocialEventsTable({
                           {invited.length} invited
                         </span>
                       )}
-                      {/* Mobile: the star sits right after the invited pill.
-                          From sm it moves to the right of the date row below. */}
-                      {ev.company_hosted && <CompanyHostedStar className="inline-flex sm:hidden ml-1.5" />}
+                      {ev.company_hosted && <CompanyHostedStar className="inline-flex ml-1.5" />}
                     </div>
 
-                    {/* Date on the left, company-hosted marker pushed right.
-                        Padding matches the meta row below (none on mobile,
+                    {/* Padding matches the meta row below (none on mobile,
                         sm:pl-6 to clear the chevron) so the pill's left edge
                         lines up with the Location eyebrow. */}
-                    {(when || ev.company_hosted) && (
-                      <div className={`items-center justify-between gap-2 flex-wrap mt-1.5 sm:pl-6 ${when ? 'flex' : 'hidden sm:flex'}`}>
-                        {when ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30 whitespace-nowrap flex-shrink-0">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            {when}
-                          </span>
-                        ) : <span />}
-                        {ev.company_hosted && <CompanyHostedStar className="hidden sm:inline-flex" />}
+                    {when && (
+                      <div className="flex items-center gap-2 flex-wrap mt-1.5 sm:pl-6">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30 whitespace-nowrap flex-shrink-0">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          {when}
+                        </span>
                       </div>
                     )}
 
