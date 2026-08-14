@@ -56,29 +56,51 @@ export async function POST(request: NextRequest) {
   const inviteExpires = Date.now() + 72 * 60 * 60 * 1000; // 72 hours
   const displayName = `${firstName.trim()} ${lastName.trim()}`;
 
-  // Create user with a placeholder password hash (invite flow sets the real one)
+  // Resolve the 'user' config option they appear as in rep dropdowns. It is
+  // often already there — reps are commonly set up as config options before
+  // anyone invites them a login — and (category, value) is unique, so blindly
+  // inserting threw and left a user with no config_id behind. Reuse the row
+  // instead, which is also how the invitee inherits their existing
+  // assignments. If another account already claims it, two people share a
+  // display name, so this one gets a distinct value rather than their records.
+  let configId: number;
+  const existingConfig = await db.execute({
+    sql: `SELECT id FROM config_options WHERE category = 'user' AND value = ? LIMIT 1`,
+    args: [displayName],
+  });
+
+  const claimedBy = existingConfig.rows.length > 0
+    ? await db.execute({
+        sql: 'SELECT id FROM users WHERE config_id = ? LIMIT 1',
+        args: [Number(existingConfig.rows[0].id)],
+      })
+    : null;
+
+  if (existingConfig.rows.length > 0 && (claimedBy?.rows.length ?? 0) === 0) {
+    configId = Number(existingConfig.rows[0].id);
+  } else {
+    const configValue = existingConfig.rows.length > 0
+      ? `${displayName} (${email})`
+      : displayName;
+    const configResult = await db.execute({
+      sql: `INSERT INTO config_options (category, value, sort_order) VALUES ('user', ?, (SELECT COALESCE(MAX(sort_order),0)+1 FROM config_options WHERE category='user'))
+            RETURNING id`,
+      args: [configValue],
+    });
+    configId = Number(configResult.rows[0].id);
+  }
+
+  // Create user with a placeholder password hash (invite flow sets the real one).
+  // Created after the config option so a failure there can't leave a half-made
+  // account behind, which is what produced "invited but errored" users.
   const userResult = await db.execute({
-    sql: `INSERT INTO users (email, password_hash, role, email_verified, active, first_name, last_name, display_name, invite_token, invite_expires)
-          VALUES (?, '$2a$12$placeholder-no-login-until-invite-accepted', ?, 0, 1, ?, ?, ?, ?, ?)
+    sql: `INSERT INTO users (email, password_hash, role, email_verified, active, first_name, last_name, display_name, invite_token, invite_expires, config_id)
+          VALUES (?, '$2a$12$placeholder-no-login-until-invite-accepted', ?, 0, 1, ?, ?, ?, ?, ?, ?)
           RETURNING id`,
-    args: [email, role, firstName.trim(), lastName.trim(), displayName, inviteToken, inviteExpires],
+    args: [email, role, firstName.trim(), lastName.trim(), displayName, inviteToken, inviteExpires, configId],
   });
 
   const userId = Number(userResult.rows[0].id);
-
-  // Add to config_options as a 'user' type so they appear in rep dropdowns
-  const configResult = await db.execute({
-    sql: `INSERT INTO config_options (category, value, sort_order) VALUES ('user', ?, (SELECT COALESCE(MAX(sort_order),0)+1 FROM config_options WHERE category='user'))
-          RETURNING id`,
-    args: [displayName],
-  });
-  const configId = Number(configResult.rows[0].id);
-
-  // Link the user record to their config option
-  await db.execute({
-    sql: 'UPDATE users SET config_id = ? WHERE id = ?',
-    args: [configId, userId],
-  });
 
   // Send invite email (non-blocking in prod)
   let devLink: string | undefined;
