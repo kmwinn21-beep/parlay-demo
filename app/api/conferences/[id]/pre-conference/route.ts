@@ -192,7 +192,7 @@ export async function GET(
     socialEventIds.length > 0
       ? db.execute({
           sql: `SELECT ser.social_event_id, ser.attendee_id, ser.rsvp_status,
-                       a.first_name, a.last_name, a.title,
+                       a.first_name, a.last_name, a.title, a.seniority,
                        c.name as company_name, c.id as company_id, c.company_type, c.assigned_user
                 FROM social_event_rsvps ser
                 JOIN attendees a ON ser.attendee_id = a.id
@@ -605,7 +605,7 @@ export async function GET(
   // --- Social Events ---
   // Build per-event guest list from RSVP rows
   const guestListByEvent = new Map<number, Array<{
-    attendee_id: number; first_name: string; last_name: string; title: string | null;
+    attendee_id: number; first_name: string; last_name: string; title: string | null; seniority: string | null;
     company_name: string | null; company_id: number | null; company_type: string | null;
     rsvp_status: string; assigned_user_names: string[];
   }>>();
@@ -617,6 +617,7 @@ export async function GET(
       first_name: String(row.first_name),
       last_name: String(row.last_name),
       title: row.title ? String(row.title) : null,
+      seniority: resolveSeniority(row.seniority, row.title),
       company_name: row.company_name ? String(row.company_name) : null,
       company_id: row.company_id != null ? Number(row.company_id) : null,
       company_type: row.company_type ? String(row.company_type) : null,

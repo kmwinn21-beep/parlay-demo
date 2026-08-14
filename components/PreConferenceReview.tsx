@@ -95,6 +95,7 @@ export interface SocialEventGuest {
   first_name: string;
   last_name: string;
   title: string | null;
+  seniority: string | null;
   company_name: string | null;
   company_id: number | null;
   company_type: string | null;

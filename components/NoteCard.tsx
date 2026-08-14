@@ -100,7 +100,7 @@ export function NoteCard({
   onPin?: (noteId: number) => void;
   pinnedNoteIds?: Set<number>;
   showPinnedIndicator?: boolean;
-  entityType: 'attendee' | 'company' | 'conference';
+  entityType: 'attendee' | 'company' | 'conference' | 'social_event';
   conferences?: Array<{ id: number; name: string }>;
   onMeetingNoteClick?: (meetingId: number) => void;
 }) {

@@ -46,7 +46,7 @@ export function NotesSection({
   showPinnedIndicator = false,
   onMeetingNoteClick,
 }: {
-  entityType: 'attendee' | 'company' | 'conference';
+  entityType: 'attendee' | 'company' | 'conference' | 'social_event';
   entityId: number;
   initialNotes?: EntityNote[];
   parentEntityId?: number;
@@ -96,7 +96,9 @@ export function NotesSection({
     if (!noteText.trim()) { toast.error('Note cannot be empty.'); return; }
     setIsSubmitting(true);
     const content = noteText.trim();
-    const conferenceName = selectedConference || (entityType === 'conference' ? currentConferenceName : '') || 'General Note';
+    const conferenceName = selectedConference
+      || (entityType === 'conference' || entityType === 'social_event' ? currentConferenceName : '')
+      || 'General Note';
     // Auto-detect rep from logged-in user
     const repValue = user?.displayName || null;
     const taggedUsersStr = taggedUserIds.length > 0 ? taggedUserIds.join(',') : null;

@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRecordDrawer } from './RecordDrawerContext';
 import { SocialEventCardBody } from '../SocialEventCardParts';
+import { getBadgeClass, getPreset } from '@/lib/colors';
+import { useConfigColors } from '@/lib/useConfigColors';
+import { getRepInitials } from '@/lib/useUserOptions';
 import type { SocialEventRow, SocialEventGuest } from '../PreConferenceReview';
 
 type RsvpStatus = 'yes' | 'no' | 'maybe' | 'attended';
@@ -27,13 +30,18 @@ function fmtTime(t: string | null) {
   } catch { return t; }
 }
 
+/** Standard rep pill — user icon + initials, matching the Social tab's table. */
 function UserPill({ name }: { name: string }) {
+  const colorMaps = useConfigColors();
   return (
-    <span className="self-start inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap bg-blue-100 text-blue-800 border border-blue-300">
+    <span
+      title={name}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[name]).badgeClass}`}
+    >
       <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
       </svg>
-      {name}
+      {getRepInitials(name)}
     </span>
   );
 }
@@ -64,6 +72,96 @@ function RsvpPills({ guestList }: { guestList: SocialEventGuest[] }) {
   );
 }
 
+/* ─── RSVP status control ─── */
+
+const RSVP_OPTIONS: { key: RsvpStatus; label: string }[] = [
+  { key: 'yes', label: 'Yes' },
+  { key: 'attended', label: 'Attended' },
+  { key: 'no', label: 'No' },
+  { key: 'maybe', label: 'Maybe' },
+];
+
+/** Filled treatment for a recorded status; the trigger borrows it too. */
+function rsvpFillClass(s: RsvpStatus): string {
+  return s === 'yes' ? 'bg-green-100 text-green-600'
+    : s === 'attended' ? 'bg-purple-100 text-purple-600'
+    : s === 'no' ? 'bg-red-50 text-red-500'
+    : 'bg-gray-200 text-gray-600';
+}
+
+function RsvpGlyph({ status }: { status: RsvpStatus }) {
+  if (status === 'yes') return <CheckSvg />;
+  if (status === 'attended') return <StarSvg />;
+  if (status === 'no') return <XSvg />;
+  return <span className="font-bold text-[10px] leading-none">?</span>;
+}
+
+/**
+ * Collapsed RSVP control: a kebab until something is recorded, after which the
+ * trigger becomes the filled circular icon for that status. Either way clicking
+ * it opens the picker, so a status can always be changed.
+ */
+function RsvpMenu({ statuses, onToggle }: {
+  statuses: RsvpStatus[];
+  onToggle: (s: RsvpStatus) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onEsc);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onEsc); };
+  }, [open]);
+
+  // With several statuses recorded, the first in canonical order leads.
+  const primary = RSVP_OPTIONS.map(o => o.key).find(k => statuses.includes(k)) ?? null;
+
+  return (
+    <div ref={wrapRef} className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        title={primary ? `RSVP: ${primary}` : 'Set RSVP'}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ${
+          primary ? rsvpFillClass(primary) : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+        }`}
+      >
+        {primary ? <RsvpGlyph status={primary} /> : (
+          <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M10 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
+          </svg>
+        )}
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 top-full mt-1 z-30 bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 flex gap-1">
+          {RSVP_OPTIONS.map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              role="menuitem"
+              title={label}
+              onClick={() => onToggle(key)}
+              className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ${
+                statuses.includes(key) ? rsvpFillClass(key) : 'bg-gray-50 text-gray-300 hover:text-gray-500 hover:bg-gray-100'
+              }`}
+            >
+              <RsvpGlyph status={key} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Guest list row ─── */
 function GuestRow({ guest, eventId, onUpdate }: {
   guest: SocialEventGuest;
@@ -71,11 +169,11 @@ function GuestRow({ guest, eventId, onUpdate }: {
   onUpdate: (attendeeId: number, newStatus: string) => void;
 }) {
   const openRecord = useRecordDrawer();
+  const colorMaps = useConfigColors();
   const statuses = parseStatuses(guest.rsvp_status);
-  const has = (s: RsvpStatus) => statuses.includes(s);
 
   async function toggle(s: RsvpStatus) {
-    const next: RsvpStatus[] = has(s) ? statuses.filter(x => x !== s) : [...statuses, s];
+    const next: RsvpStatus[] = statuses.includes(s) ? statuses.filter(x => x !== s) : [...statuses, s];
     const statusStr = next.length > 0 ? next.join(',') : 'maybe';
     try {
       await fetch(`/api/social-events/${eventId}/rsvp`, {
@@ -94,7 +192,11 @@ function GuestRow({ guest, eventId, onUpdate }: {
         <button type="button" onClick={() => openRecord('attendee', guest.attendee_id)} className="font-medium text-xs text-brand-primary hover:underline whitespace-nowrap text-left">
           {guest.first_name} {guest.last_name}
         </button>
-        {guest.title && <p className="text-[10px] text-gray-400 leading-tight">{guest.title}</p>}
+      </td>
+      <td className="py-2 pr-3 hidden sm:table-cell">
+        {guest.seniority
+          ? <span className={`${getBadgeClass(guest.seniority, colorMaps.seniority || {})} text-[10px] whitespace-nowrap`}>{guest.seniority}</span>
+          : <span className="text-xs text-gray-400">—</span>}
       </td>
       <td className="py-2 pr-3 text-xs text-gray-600 whitespace-nowrap hidden sm:table-cell">
         {guest.company_id
@@ -103,28 +205,15 @@ function GuestRow({ guest, eventId, onUpdate }: {
         }
       </td>
       <td className="py-2 pr-3 hidden sm:table-cell">
+        {guest.company_type
+          ? <span className={`${getBadgeClass(guest.company_type, colorMaps.company_type || {})} text-[10px] whitespace-nowrap`}>{guest.company_type}</span>
+          : <span className="text-xs text-gray-400">—</span>}
+      </td>
+      <td className="py-2 pr-3 hidden sm:table-cell">
         {guest.assigned_user_names.length > 0 && <UserPill name={guest.assigned_user_names[0]} />}
       </td>
       <td className="py-2">
-        <div className="flex gap-1">
-          {(['yes', 'attended', 'no', 'maybe'] as RsvpStatus[]).map(opt => (
-            <button key={opt} type="button" title={opt.charAt(0).toUpperCase() + opt.slice(1)}
-              onClick={() => toggle(opt)}
-              className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ${
-                has(opt)
-                  ? opt === 'yes'      ? 'bg-green-100 text-green-600'
-                  : opt === 'attended' ? 'bg-purple-100 text-purple-600'
-                  : opt === 'no'       ? 'bg-red-50 text-red-500'
-                  :                     'bg-gray-200 text-gray-600'
-                  : 'bg-gray-50 text-gray-300 hover:text-gray-500 hover:bg-gray-100'
-              }`}>
-              {opt === 'yes'      && <CheckSvg />}
-              {opt === 'attended' && <StarSvg />}
-              {opt === 'no'       && <XSvg />}
-              {opt === 'maybe'    && <span className="font-bold text-[10px] leading-none">?</span>}
-            </button>
-          ))}
-        </div>
+        <RsvpMenu statuses={statuses} onToggle={toggle} />
       </td>
     </tr>
   );
@@ -133,7 +222,25 @@ function GuestRow({ guest, eventId, onUpdate }: {
 /* ─── Guest list panel (inline expansion) ─── */
 function GuestListPanel({ event }: { event: SocialEventRow }) {
   const [guests, setGuests] = useState<SocialEventGuest[]>(event.guestList);
-  const [operatorsOnly, setOperatorsOnly] = useState(false);
+  // Company-type filter buttons come from the ICP Parameters rule in Admin >
+  // ICP (icp_rules, category 'company_type') — the same source the Social tab's
+  // RSVP table reads, so both offer the same set.
+  const [icpCompanyTypes, setIcpCompanyTypes] = useState<string[]>([]);
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    fetch('/api/admin/icp-rules', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then((data: { rules?: { category: string; conditions: { option_value: string }[] }[] } | null) => {
+        const rule = data?.rules?.find(x => x.category === 'company_type');
+        setIcpCompanyTypes(rule ? rule.conditions.map(c => c.option_value).filter(Boolean) : []);
+      })
+      .catch(() => {});
+  }, []);
+  const toggleType = (t: string) => setSelectedTypes(prev => {
+    const next = new Set(prev);
+    if (next.has(t)) next.delete(t); else next.add(t);
+    return next;
+  });
   const [activeFilter, setActiveFilter] = useState<RsvpStatus | null>(null);
 
   function handleUpdate(attendeeId: number, newStatus: string) {
@@ -150,13 +257,9 @@ function GuestListPanel({ event }: { event: SocialEventRow }) {
     return () => window.removeEventListener('rsvp-updated', handler);
   }, [event.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const isOperator = (ct: string | null | undefined) => {
-    const l = (ct || '').toLowerCase();
-    return l.includes('operator') || l.includes('own/op') || l.includes('opco');
-  };
 
   const filtered = guests
-    .filter(g => !operatorsOnly || isOperator(g.company_type))
+    .filter(g => selectedTypes.size === 0 || (g.company_type != null && selectedTypes.has(g.company_type)))
     .filter(g => {
       if (!activeFilter) return true;
       return parseStatuses(g.rsvp_status).includes(activeFilter);
@@ -195,10 +298,20 @@ function GuestListPanel({ event }: { event: SocialEventRow }) {
             );
           })}
         </div>
-        <button type="button" onClick={() => setOperatorsOnly(v => !v)}
-          className={`px-2 py-1 rounded-lg text-xs font-medium transition-colors flex-shrink-0 ${operatorsOnly ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-          Operators
-        </button>
+        {icpCompanyTypes.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {icpCompanyTypes.map(type => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => toggleType(type)}
+                className={`px-2 py-1 rounded-lg text-xs font-medium transition-colors flex-shrink-0 ${selectedTypes.has(type) ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Table */}
@@ -210,7 +323,9 @@ function GuestListPanel({ event }: { event: SocialEventRow }) {
             <thead className="sticky top-0 bg-white">
               <tr className="border-b border-gray-200">
                 <th className="pb-1.5 pr-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Name</th>
+                <th className="pb-1.5 pr-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide hidden sm:table-cell" title="Seniority">Snrty</th>
                 <th className="pb-1.5 pr-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide hidden sm:table-cell">Company</th>
+                <th className="pb-1.5 pr-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide hidden sm:table-cell">Type</th>
                 <th className="pb-1.5 pr-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide hidden sm:table-cell">Rep</th>
                 <th className="pb-1.5 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide">RSVP</th>
               </tr>
