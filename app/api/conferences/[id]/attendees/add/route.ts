@@ -15,13 +15,15 @@ export async function POST(
   const db = await getDb(user?.accountId);
   try {
     const body = await request.json();
-    const { first_name, last_name, title, company, email, website } = body as {
+    const { first_name, last_name, title, company, email, website, company_type } = body as {
       first_name: string;
       last_name: string;
       title?: string;
       company?: string;
       email?: string;
       website?: string;
+      /** Applied only when this call is what creates the company. */
+      company_type?: string;
     };
 
     if (!first_name || !last_name) {
@@ -81,8 +83,8 @@ export async function POST(
           companyId = Number(coResult.rows[0].id);
         } else {
           const newCo = await db.execute({
-            sql: 'INSERT INTO companies (name) VALUES (?) RETURNING id',
-            args: [company],
+            sql: 'INSERT INTO companies (name, company_type) VALUES (?, ?) RETURNING id',
+            args: [company, company_type || null],
           });
           companyId = Number(newCo.rows[0].id);
         }

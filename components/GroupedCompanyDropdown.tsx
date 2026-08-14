@@ -17,6 +17,9 @@ interface GroupedCompanyDropdownProps {
   placeholder?: string;
   disabled?: boolean;
   inputClassName?: string;
+  /** Adds an "Other (not in list)" entry at the top of the menu when provided. */
+  onSelectOther?: () => void;
+  otherLabel?: string;
 }
 
 // Module-level cache: primary company type value
@@ -100,6 +103,8 @@ export function GroupedCompanyDropdown({
   placeholder = 'Search companies…',
   disabled = false,
   inputClassName = '',
+  onSelectOther,
+  otherLabel = 'Other (not in list)',
 }: GroupedCompanyDropdownProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -237,6 +242,16 @@ export function GroupedCompanyDropdown({
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
+          )}
+
+          {onSelectOther && (
+            <button
+              type="button"
+              className="w-full text-left px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 border-b border-gray-100 font-medium"
+              onClick={() => { onSelectOther(); setOpen(false); setSearch(''); }}
+            >
+              {otherLabel}
+            </button>
           )}
 
           {groups.length === 0 ? (
