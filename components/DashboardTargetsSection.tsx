@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
+import { useUser } from '@/components/UserContext';
 import type { DashboardConference } from './RecentSection';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import { useDrawerResize } from '@/lib/useDrawerResize';
@@ -174,6 +175,17 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
   const [meetingAttendeeIds, setMeetingAttendeeIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
+  const { user: currentUser } = useUser();
+  const [myTargetsOnly, setMyTargetsOnly] = useState(false);
+  // Targets carry resolved rep names rather than config ids, so the match is
+  // by name — repName first, since that is the config_options value the
+  // targets are attributed to.
+  const myRepNames = useMemo(() => {
+    const names = [currentUser?.repName, currentUser?.displayName]
+      .map(n => n?.trim().toLowerCase())
+      .filter((n): n is string => !!n);
+    return new Set(names);
+  }, [currentUser?.repName, currentUser?.displayName]);
   const { panelStyle: attendeePanelStyle, handleResizeStart: attendeeResizeStart } = useDrawerResize(480);
   const [drawerAttendeeId, setDrawerAttendeeId] = useState<number | null>(null);
   const [drawerAttendeeName, setDrawerAttendeeName] = useState<string>('');
@@ -213,18 +225,30 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
     }
   }, [selectedConfId, fetchTargets]);
 
+  const isMine = useCallback(
+    (t: TargetEntry) => t.assignedUserNames.some(n => myRepNames.has(n.trim().toLowerCase())),
+    [myRepNames],
+  );
+
+  // Scoped first, so the tier counts describe what the tier buttons will
+  // actually show while "My Targets" is on.
+  const scopedTargets = useMemo(
+    () => (myTargetsOnly ? targets.filter(isMine) : targets),
+    [targets, myTargetsOnly, isMine],
+  );
+
   const tierCounts: Record<string, number> = {
-    '1': targets.filter(t => t.tier === '1').length,
-    '2': targets.filter(t => t.tier === '2').length,
-    '3': targets.filter(t => t.tier === '3').length,
-    'unassigned': targets.filter(t => t.tier === 'unassigned').length,
+    '1': scopedTargets.filter(t => t.tier === '1').length,
+    '2': scopedTargets.filter(t => t.tier === '2').length,
+    '3': scopedTargets.filter(t => t.tier === '3').length,
+    'unassigned': scopedTargets.filter(t => t.tier === 'unassigned').length,
   };
 
   function toggleTier(key: string) {
     setSelectedTier(prev => (prev === key ? null : key));
   }
 
-  const filteredTargets = targets
+  const filteredTargets = scopedTargets
     .filter(t => selectedTier === null || t.tier === selectedTier)
     .sort((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier));
 
@@ -254,13 +278,14 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
           </span>
         </h2>
         {sortedConferences.length > 0 && (
+          <div className="flex items-center gap-2">
           <select
             value={selectedConfId ?? ''}
             onChange={e => {
               setSelectedConfId(Number(e.target.value));
               setSelectedTier(null);
             }}
-            className="input-field text-sm w-full"
+            className="input-field text-sm w-full min-w-0"
           >
             {allConferences.some(c => c.status === 'in_progress') && (
               <optgroup label="In Progress">
@@ -288,6 +313,21 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
               </optgroup>
             )}
           </select>
+          {currentUser && (
+            <button
+              type="button"
+              onClick={() => setMyTargetsOnly(v => !v)}
+              title="Show only targets assigned to me"
+              className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
+                myTargetsOnly
+                  ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+                  : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              My Targets
+            </button>
+          )}
+          </div>
         )}
       </div>
 
