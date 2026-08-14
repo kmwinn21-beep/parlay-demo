@@ -914,6 +914,12 @@ function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
     new Set(suggested.slice(0, 3).map(s => s.productName))
   );
   const [sentiment, setSentiment] = useState<string | null>(null);
+  // Company type for the company behind this interaction. Card scans create
+  // companies with whatever classifyCompanyType() could infer, which is often
+  // nothing — this is where a rep sets or corrects it.
+  const [companyTypeOptions, setCompanyTypeOptions] = useState<string[]>([]);
+  const [companyType, setCompanyType] = useState('');
+  const [initialCompanyType, setInitialCompanyType] = useState('');
   const [scheduleFollowUp, setScheduleFollowUp] = useState<boolean | null>(null);
   const [notesText, setNotesText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -923,17 +929,25 @@ function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
   useEffect(() => {
     const load = async () => {
       try {
-        const [prodRes, statusRes] = await Promise.all([
+        const [prodRes, statusRes, typeRes, coRes] = await Promise.all([
           fetch('/api/config?category=products').then(r => r.ok ? r.json() : []),
           fetch('/api/config?category=status&form=booth_interaction').then(r => r.ok ? r.json() : []),
+          fetch('/api/config?category=company_type').then(r => r.ok ? r.json() : []),
+          data.companyId
+            ? fetch(`/api/companies/${data.companyId}`).then(r => (r.ok ? r.json() : null)).catch(() => null)
+            : Promise.resolve(null),
         ]);
         setAllProducts(Array.isArray(prodRes) ? prodRes.map((p: { id?: number; value?: string }) => ({ id: p.id ?? 0, name: p.value ?? '' })).filter(p => p.name) : []);
         setStatusOptions(Array.isArray(statusRes) ? statusRes.map((s: { value?: string }) => ({ value: s.value ?? '', label: s.value ?? '' })).filter(s => s.value) : []);
+        setCompanyTypeOptions(Array.isArray(typeRes) ? typeRes.map((t: { value?: string }) => t.value ?? '').filter(Boolean) : []);
+        const currentType = (coRes?.company_type ?? coRes?.company?.company_type ?? '') as string;
+        setCompanyType(currentType || '');
+        setInitialCompanyType(currentType || '');
       } catch { /* non-blocking */ }
       setLoading(false);
     };
     load();
-  }, []);
+  }, [data.companyId]);
 
   const toggleProduct = (name: string) => {
     setSelectedProducts(prev => {
@@ -963,6 +977,9 @@ function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
           notes_text: notesText.trim() || null,
           products: Array.from(selectedProducts),
           sentiment,
+          // Only sent when the rep actually changed it, so an established
+          // company's type is never rewritten by simply saving.
+          company_type: companyType && companyType !== initialCompanyType ? companyType : undefined,
           schedule_follow_up: scheduleFollowUp,
         }),
       });
@@ -1097,6 +1114,22 @@ function BoothStructuredCaptureModal({ data, onClose, onSubmitted }: {
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Company Type — a card scan can only guess it from the name,
+                  so this is the first chance to set it deliberately. */}
+              {data.companyId != null && companyTypeOptions.length > 0 && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Company Type</label>
+                  <select
+                    value={companyType}
+                    onChange={e => setCompanyType(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white"
+                  >
+                    <option value="">— Select —</option>
+                    {companyTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
                 </div>
               )}
 
