@@ -1108,16 +1108,6 @@ export function SocialEventsTable({
       )}
 
       {/* Guest List Modal */}
-      {notesEventId != null && (
-        <SocialEventNotesDrawer
-          eventId={notesEventId}
-          eventName={events.find(e => e.id === notesEventId)?.event_name || 'Social Event'}
-          conferenceName={conferenceName}
-          onClose={() => setNotesEventId(null)}
-          onCountChange={(id, count) => setNoteCounts(prev => ({ ...prev, [id]: count }))}
-        />
-      )}
-
       {showGuestListModal && (
         <GuestListModal
           attendees={attendees}
@@ -1131,7 +1121,10 @@ export function SocialEventsTable({
       {events.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-6">No social events yet. Click &quot;Add Social Event&quot; to get started.</p>
       ) : (
-        <div className="space-y-2">
+        // The notes drawer is a sibling column so it reveals itself beside the
+        // cards, the way the outreach tab's drawer does.
+        <div className="flex gap-3 items-start">
+        <div className="flex-1 min-w-0 space-y-2">
           {events.map(ev => {
             const { invited, rsvpMap } = getEventData(ev);
             const isExpanded = expandedEventId === ev.id;
@@ -1197,6 +1190,18 @@ export function SocialEventsTable({
               </div>
             );
           })}
+        </div>
+          {notesEventId != null && (
+            <div className="sm:w-[300px] sm:flex-shrink-0">
+              <SocialEventNotesDrawer
+                eventId={notesEventId}
+                eventName={events.find(e => e.id === notesEventId)?.event_name || 'Social Event'}
+                conferenceName={conferenceName}
+                onClose={() => setNotesEventId(null)}
+                onCountChange={(id, count) => setNoteCounts(prev => ({ ...prev, [id]: count }))}
+              />
+            </div>
+          )}
         </div>
       )}
 
