@@ -2297,15 +2297,15 @@ export function LandscapeTab({
         />
       )}
 
-      {/* 5-column layout: client/competitors | pipeline charts | relationship heatmap */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-stretch">
+      {/* 6-column layout, two columns each: client/competitors | pipeline charts | relationship heatmap */}
+      <div className="grid grid-cols-1 md:grid-cols-6 gap-6 items-stretch">
         {/* Cols 1-2: Clients / Competitors / Open Opps (toggle) */}
         <div className="md:col-span-2 h-full">
           <ClientCompetitorPanel data={data} />
         </div>
 
-        {/* Col 3: Prospects by Assigned Rep */}
-        <div className="md:col-span-1 h-full">
+        {/* Cols 3-4: Prospects by Assigned Rep */}
+        <div className="md:col-span-2 h-full">
           <PipelineChartsPanel
             icpCompanies={icpCompanies}
             onSelectRep={setSelectedRep}
@@ -2313,7 +2313,7 @@ export function LandscapeTab({
           />
         </div>
 
-        {/* Cols 4-5: Relationship Heatmap (Companies by Rep detail slides in on top) */}
+        {/* Cols 5-6: Relationship Heatmap (Companies by Rep detail slides in on top) */}
         <div className="relative md:col-span-2 h-full">
           <RelationshipHeatmapPanel
             byRep={byRep}
