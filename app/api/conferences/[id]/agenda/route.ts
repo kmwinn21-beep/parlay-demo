@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import Anthropic from '@anthropic-ai/sdk';
 import { notifyConferenceInternalAttendees, getConfigIdByEmail } from '@/lib/notifications';
+import { resyncConferenceSocialEvents } from '@/lib/socialEventAgenda';
 
 export const maxDuration = 90;
 
@@ -328,8 +329,10 @@ Rules:
     }
 
     if (!append) {
+      // Rows mirrored from a company-hosted social event aren't part of the
+      // uploaded agenda and survive the replace — they are re-slotted below.
       await db.execute({
-        sql: 'DELETE FROM conference_agenda_items WHERE conference_id = ?',
+        sql: 'DELETE FROM conference_agenda_items WHERE conference_id = ? AND social_event_id IS NULL',
         args: [conferenceId],
       });
     }
@@ -369,6 +372,14 @@ Rules:
       await db.batch(insertStatements, 'write');
     }
 
+    // Put the company-hosted social events back into their time slots relative
+    // to the agenda that was just written.
+    try {
+      await resyncConferenceSocialEvents(db, conferenceId);
+    } catch (err) {
+      console.error('resyncConferenceSocialEvents after agenda upload failed:', err);
+    }
+
     // Write upload metadata so the conference edit form can show when it was last uploaded
     await db.execute({
       sql: `UPDATE conferences SET global_agenda_uploaded_at = datetime('now'), global_agenda_uploaded_by_name = ? WHERE id = ?`,
@@ -404,8 +415,10 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
   const db = await getDb(authResult?.accountId);
 
   try {
+    // Leave the social-event mirror rows — they are owned by the Social tab,
+    // not by the uploaded agenda.
     await db.execute({
-      sql: 'DELETE FROM conference_agenda_items WHERE conference_id = ?',
+      sql: 'DELETE FROM conference_agenda_items WHERE conference_id = ? AND social_event_id IS NULL',
       args: [Number(params.id)],
     });
     return NextResponse.json({ success: true });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/getDb';
 import { getSessionUser } from '@/lib/auth';
+import { syncSocialEventAgenda, removeSocialEventFromAgenda } from '@/lib/socialEventAgenda';
 
 export async function PUT(
   request: NextRequest,
@@ -29,6 +30,7 @@ export async function PUT(
       host,
       venue_name,
       location,
+      company_hosted,
       event_date,
       event_time,
       invite_only,
@@ -39,10 +41,10 @@ export async function PUT(
     const result = await db.execute({
       sql: `UPDATE social_events
             SET entered_by = ?, internal_attendees = ?, event_name = ?, event_type = ?, host = ?,
-                venue_name = ?, location = ?, event_date = ?, event_time = ?, invite_only = ?,
+                venue_name = ?, location = ?, company_hosted = ?, event_date = ?, event_time = ?, invite_only = ?,
                 prospect_attendees = ?, notes = ?
             WHERE id = ?
-            RETURNING id, conference_id, entered_by, internal_attendees, event_name, event_type, host, venue_name, location, event_date, event_time, invite_only, prospect_attendees, notes, created_at`,
+            RETURNING id, conference_id, entered_by, internal_attendees, event_name, event_type, host, venue_name, location, company_hosted, event_date, event_time, invite_only, prospect_attendees, notes, created_at`,
       args: [
         entered_by || null,
         internal_attendees || null,
@@ -51,6 +53,7 @@ export async function PUT(
         host || null,
         venue_name || null,
         location || null,
+        company_hosted ? 1 : 0,
         event_date || null,
         event_time || null,
         invite_only || 'No',
@@ -61,6 +64,14 @@ export async function PUT(
     });
 
     const r = result.rows[0];
+
+    // Re-slot (or drop) the agenda mirror for the saved values.
+    try {
+      await syncSocialEventAgenda(db, Number(r.id));
+    } catch (err) {
+      console.error('syncSocialEventAgenda after update failed:', err);
+    }
+
     return NextResponse.json({
       id: Number(r.id),
       conference_id: Number(r.conference_id),
@@ -71,6 +82,7 @@ export async function PUT(
       host: r.host ? String(r.host) : null,
       venue_name: r.venue_name ? String(r.venue_name) : null,
       location: r.location ? String(r.location) : null,
+      company_hosted: Number(r.company_hosted ?? 0) === 1,
       event_date: r.event_date ? String(r.event_date) : null,
       event_time: r.event_time ? String(r.event_time) : null,
       invite_only: r.invite_only ? String(r.invite_only) : 'No',
@@ -100,6 +112,13 @@ export async function DELETE(
 
     if (existing.rows.length === 0) {
       return NextResponse.json({ error: 'Social event not found' }, { status: 404 });
+    }
+
+    // Clear the agenda mirror first — it is matched by id, which is about to go.
+    try {
+      await removeSocialEventFromAgenda(db, Number(id));
+    } catch (err) {
+      console.error('removeSocialEventFromAgenda failed:', err);
     }
 
     await db.execute({

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/getDb';
 import { getSessionUser } from '@/lib/auth';
+import { syncSocialEventAgenda } from '@/lib/socialEventAgenda';
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     const result = await db.execute({
       sql: `SELECT id, conference_id, entered_by, internal_attendees, event_name, event_type, host,
-                   venue_name, location, event_date, event_time, invite_only, prospect_attendees, notes, created_at
+                   venue_name, location, company_hosted, event_date, event_time, invite_only, prospect_attendees, notes, created_at
             FROM social_events
             WHERE conference_id = ?
             ORDER BY event_date ASC, event_time ASC`,
@@ -47,6 +48,7 @@ export async function GET(request: NextRequest) {
         host: r.host ? String(r.host) : null,
         venue_name: r.venue_name ? String(r.venue_name) : null,
         location: r.location ? String(r.location) : null,
+        company_hosted: Number(r.company_hosted ?? 0) === 1,
         event_date: r.event_date ? String(r.event_date) : null,
         event_time: r.event_time ? String(r.event_time) : null,
         invite_only: r.invite_only ? String(r.invite_only) : 'No',
@@ -76,6 +78,7 @@ export async function POST(request: NextRequest) {
       host,
       venue_name,
       location,
+      company_hosted,
       event_date,
       event_time,
       invite_only,
@@ -88,9 +91,9 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await db.execute({
-      sql: `INSERT INTO social_events (conference_id, entered_by, internal_attendees, event_name, event_type, host, venue_name, location, event_date, event_time, invite_only, prospect_attendees, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING id, conference_id, entered_by, internal_attendees, event_name, event_type, host, venue_name, location, event_date, event_time, invite_only, prospect_attendees, notes, created_at`,
+      sql: `INSERT INTO social_events (conference_id, entered_by, internal_attendees, event_name, event_type, host, venue_name, location, company_hosted, event_date, event_time, invite_only, prospect_attendees, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING id, conference_id, entered_by, internal_attendees, event_name, event_type, host, venue_name, location, company_hosted, event_date, event_time, invite_only, prospect_attendees, notes, created_at`,
       args: [
         conference_id,
         entered_by || null,
@@ -100,6 +103,7 @@ export async function POST(request: NextRequest) {
         host || null,
         venue_name || null,
         location || null,
+        company_hosted ? 1 : 0,
         event_date || null,
         event_time || null,
         invite_only || 'No',
@@ -109,6 +113,15 @@ export async function POST(request: NextRequest) {
     });
 
     const r = result.rows[0];
+
+    // Company-hosted events mirror onto the conference agenda (and the
+    // internal attendees' My Agenda). Never let that fail the create.
+    try {
+      await syncSocialEventAgenda(db, Number(r.id));
+    } catch (err) {
+      console.error('syncSocialEventAgenda after create failed:', err);
+    }
+
     return NextResponse.json({
       id: Number(r.id),
       conference_id: Number(r.conference_id),
@@ -119,6 +132,7 @@ export async function POST(request: NextRequest) {
       host: r.host ? String(r.host) : null,
       venue_name: r.venue_name ? String(r.venue_name) : null,
       location: r.location ? String(r.location) : null,
+      company_hosted: Number(r.company_hosted ?? 0) === 1,
       event_date: r.event_date ? String(r.event_date) : null,
       event_time: r.event_time ? String(r.event_time) : null,
       invite_only: r.invite_only ? String(r.invite_only) : 'No',

@@ -2082,4 +2082,19 @@ export const migrations: string[] = [
   // address so the card can show "The Bellagio, 3600 S Las Vegas Blvd…" —
   // formatted_address alone never carries the venue name.
   `ALTER TABLE social_events ADD COLUMN venue_name TEXT`,
+  // social_events.company_hosted: marks an event the account itself hosts or
+  // sponsors. Kept separate from event_type — an event can be a Dinner *and*
+  // company-hosted, which a single type field can't express.
+  `ALTER TABLE social_events ADD COLUMN company_hosted INTEGER NOT NULL DEFAULT 0`,
+  // The 'Company Hosted' event_type predates that flag and now duplicates it;
+  // it becomes a plain type again. Only renamed when 'Fundraiser' isn't
+  // already present, so tenants that added their own aren't left with two.
+  `UPDATE config_options SET value = 'Fundraiser'
+     WHERE category = 'event_type' AND LOWER(TRIM(value)) = 'company hosted'
+       AND NOT EXISTS (SELECT 1 FROM config_options c2 WHERE c2.category = 'event_type' AND LOWER(TRIM(c2.value)) = 'fundraiser')`,
+  // Agenda rows mirrored from a company-hosted social event carry the event's
+  // id, so they can be re-slotted on edit and spared when an agenda upload
+  // clears the conference's uploaded items.
+  `ALTER TABLE conference_agenda_items ADD COLUMN social_event_id INTEGER`,
+  `CREATE INDEX IF NOT EXISTS idx_agenda_social_event ON conference_agenda_items(conference_id, social_event_id)`,
 ];

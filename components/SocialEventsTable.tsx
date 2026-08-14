@@ -11,6 +11,7 @@ import { parseRepIds, getRepInitials } from '@/lib/useUserOptions';
 import { useUser } from '@/components/UserContext';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
 import { CustomColumnCell } from './CustomColumnCell';
+import { CardField, SocialEventCardBody } from './SocialEventCardParts';
 
 type RsvpStatus = 'yes' | 'no' | 'maybe' | 'attended';
 
@@ -24,6 +25,7 @@ export interface SocialEvent {
   host: string | null;
   venue_name: string | null;
   location: string | null;
+  company_hosted?: boolean;
   event_date: string | null;
   event_time: string | null;
   invite_only: string;
@@ -388,8 +390,14 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
     return activeFilters.some(f => s.includes(f));
   });
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col justify-end" onClick={onClose}>
-      <div className="relative bg-white rounded-t-2xl shadow-2xl border border-brand-highlight flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+    // Dimmed backdrop plus the shared slide-up animation and h-[90vh], so this
+    // matches every other mobile drawer on the site rather than appearing
+    // instantly at whatever height its content happens to need.
+    <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/40" onClick={onClose}>
+      <div
+        className="drawer-mobile-responsive relative bg-white rounded-t-2xl shadow-2xl border border-brand-highlight flex flex-col h-[90vh]"
+        onClick={e => e.stopPropagation()}
+      >
         <div className="px-4 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center justify-between mb-3">
             <div>
@@ -512,56 +520,6 @@ function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemov
           </table>
         )}
     </div>
-  );
-}
-
-/* ─── Social event card pieces ─── */
-
-/**
- * Google Places returns "3600 S Las Vegas Blvd, Las Vegas, NV 89109, USA".
- * Only formatted_address is stored, so the venue name isn't recoverable —
- * the trailing ", USA" is dropped instead to keep the pill readable.
- */
-function displayLocation(venueName: string | null, address: string): string {
-  const addr = address.replace(/,\s*USA\s*$/i, '').trim();
-  const venue = (venueName ?? '').trim();
-  return [venue, addr].filter(Boolean).join(', ');
-}
-
-function mapsHref(location: string): string {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
-}
-
-/** Eyebrow label with its value beneath, used across the card's meta row. */
-function CardField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">{label}</p>
-      <div className="text-xs text-gray-700 min-w-0">{children}</div>
-    </div>
-  );
-}
-
-/** Internal attendees as the abbreviated rep pills used in the company tables. */
-function InternalRepPills({ internalAttendees }: { internalAttendees: string | null }) {
-  const colorMaps = useConfigColors();
-  const names = (internalAttendees ?? '').split(',').map(n => n.trim()).filter(Boolean);
-  if (names.length === 0) return <span className="text-gray-400">—</span>;
-  return (
-    <span className="inline-flex flex-wrap items-center gap-1">
-      {names.map(name => (
-        <span
-          key={name}
-          title={name}
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[name]).badgeClass}`}
-        >
-          <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-          {getRepInitials(name)}
-        </span>
-      ))}
-    </span>
   );
 }
 
@@ -723,7 +681,7 @@ export function SocialEventsTable({
   const [editingEventId, setEditingEventId] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     entered_by: '', internal_attendees: [] as string[], event_name: '', event_type: '',
-    host: '', venue_name: '', location: '', event_date: '', event_time: '',
+    host: '', venue_name: '', location: '', company_hosted: false, event_date: '', event_time: '',
     invite_only: 'No', prospect_attendees: [] as string[], notes: '',
   });
   const [internalOpen, setInternalOpen] = useState(false);
@@ -807,7 +765,7 @@ export function SocialEventsTable({
 
   /* form helpers */
   const resetForm = () => {
-    setFormData({ entered_by: '', internal_attendees: [], event_name: '', event_type: '', host: '', venue_name: '', location: '', event_date: '', event_time: '', invite_only: 'No', prospect_attendees: [], notes: '' });
+    setFormData({ entered_by: '', internal_attendees: [], event_name: '', event_type: '', host: '', venue_name: '', location: '', company_hosted: false, event_date: '', event_time: '', invite_only: 'No', prospect_attendees: [], notes: '' });
     setEditingEventId(null);
     setShowForm(false);
   };
@@ -821,6 +779,7 @@ export function SocialEventsTable({
       host: ev.host || '',
       venue_name: ev.venue_name || '',
       location: ev.location || '',
+      company_hosted: Boolean(ev.company_hosted),
       event_date: ev.event_date || '',
       event_time: ev.event_time || '',
       invite_only: ev.invite_only || 'No',
@@ -847,6 +806,7 @@ export function SocialEventsTable({
         host: formData.host || null,
         venue_name: formData.venue_name || null,
         location: formData.location || null,
+        company_hosted: formData.company_hosted,
         event_date: formData.event_date || null,
         event_time: formData.event_time || null,
         invite_only: formData.invite_only,
@@ -860,6 +820,13 @@ export function SocialEventsTable({
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error();
+      const saved = await res.json().catch(() => null);
+
+      // Tell the other social-event surfaces (pre-conference review,
+      // post-conference) about the change so they don't hold a stale card.
+      if (saved?.id != null) {
+        window.dispatchEvent(new CustomEvent('social-event-saved', { detail: saved }));
+      }
 
       if (!isEditing && formData.notes?.trim()) {
         const label = formData.event_type ? `[${formData.event_type}]` : '[Social Event]';
@@ -907,6 +874,7 @@ export function SocialEventsTable({
     try {
       const res = await fetch(`/api/social-events/${eventId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error();
+      window.dispatchEvent(new CustomEvent('social-event-deleted', { detail: { id: eventId } }));
       toast.success('Social event deleted.');
       onRefresh();
     } catch {
@@ -939,7 +907,23 @@ export function SocialEventsTable({
       {/* form */}
       {showForm && (
         <div className="mb-5 p-4 bg-blue-50 border border-brand-secondary rounded-xl">
-          <p className="text-sm font-semibold text-brand-primary mb-3">{editingEventId ? 'Edit Social Event' : 'New Social Event'}</p>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <p className="text-sm font-semibold text-brand-primary">{editingEventId ? 'Edit Social Event' : 'New Social Event'}</p>
+            {/* Marks an event the account hosts or sponsors. Separate from
+                event_type, since a Dinner can also be company-hosted. */}
+            <label className="flex items-center gap-2 cursor-pointer flex-shrink-0">
+              <input
+                type="checkbox"
+                checked={formData.company_hosted}
+                onChange={e => setFormData(p => ({ ...p, company_hosted: e.target.checked }))}
+                className="accent-brand-secondary w-4 h-4 flex-shrink-0"
+              />
+              <span className="text-xs font-semibold text-gray-600 whitespace-nowrap">
+                <span className="sm:hidden">Company Hosted</span>
+                <span className="hidden sm:inline">Company Hosted / Sponsored</span>
+              </span>
+            </label>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
 
             {/* Entered By */}
@@ -1125,79 +1109,43 @@ export function SocialEventsTable({
           {events.map(ev => {
             const { invited, rsvpMap } = getEventData(ev);
             const isExpanded = expandedEventId === ev.id;
-            const dateText = formatDate(ev.event_date);
-            const timeText = formatTime(ev.event_time);
-            const when = [dateText, timeText].filter(t => t && t !== '—').join(' · ');
-            const addr = (ev.location || '').trim();
-            const locText = displayLocation(ev.venue_name, addr);
             return (
               <div key={ev.id} className="border border-gray-200 rounded-xl bg-white overflow-hidden hover:border-gray-300 transition-colors">
-                {/* ── Header: event name + date/time pill, actions right ── */}
-                <div className="flex items-start gap-3 px-4 py-3">
-                  <div className="flex-1 min-w-0">
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => toggleEvent(ev.id)}
-                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') toggleEvent(ev.id); }}
-                      className="flex items-center gap-2 flex-wrap min-w-0 text-left cursor-pointer"
-                    >
-                      <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                      <span className="text-sm font-semibold text-gray-800 truncate">{ev.event_name || ev.event_type || 'Social Event'}</span>
-                      {when && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30 whitespace-nowrap flex-shrink-0">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                          {when}
-                        </span>
-                      )}
-                      {invited.length > 0 && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-700 whitespace-nowrap flex-shrink-0">
-                          {invited.length} invited
-                        </span>
-                      )}
-                    </div>
-
-                    {/* ── Meta row: 2-up on mobile, inline from sm ── */}
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-2.5 pl-6 sm:flex sm:flex-wrap sm:gap-x-8">
-                      <CardField label="Location">
-                        {locText ? (
-                          <a
-                            href={mapsHref(addr || locText)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={e => e.stopPropagation()}
-                            title={locText}
-                            className="text-brand-secondary hover:underline break-words"
-                          >
-                            {locText}
-                          </a>
-                        ) : <span className="text-gray-400">—</span>}
-                      </CardField>
-                      <CardField label="Type">{ev.event_type || <span className="text-gray-400">—</span>}</CardField>
-                      <CardField label="Host">{ev.host || <span className="text-gray-400">—</span>}</CardField>
-                      <CardField label="Internal Attendees"><InternalRepPills internalAttendees={ev.internal_attendees} /></CardField>
-                      <CardField label="Invite Only">{ev.invite_only === 'Yes' ? 'Yes' : 'No'}</CardField>
+                {/* ── Header + meta, shared with the pre-conference card ── */}
+                <SocialEventCardBody
+                  eventName={ev.event_name}
+                  eventType={ev.event_type}
+                  host={ev.host}
+                  venueName={ev.venue_name}
+                  location={ev.location}
+                  eventDate={ev.event_date}
+                  eventTime={ev.event_time}
+                  companyHosted={!!ev.company_hosted}
+                  inviteOnly={ev.invite_only}
+                  internalAttendees={ev.internal_attendees}
+                  invitedCount={invited.length}
+                  isExpanded={isExpanded}
+                  onToggle={() => toggleEvent(ev.id)}
+                  extraFields={customColumns.filter(c => c.visible).length > 0 ? (
+                    <div className="grid grid-cols-[1fr_1fr_auto] gap-x-3 sm:contents">
                       {customColumns.filter(c => c.visible).map(col => (
                         <CardField key={`custom_${col.id}`} label={col.label}>
                           <CustomColumnCell column={col} value={(ev as unknown as Record<string, unknown>)[col.data_key]} />
                         </CardField>
                       ))}
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button type="button" onClick={() => handleEdit(ev)} className="text-gray-300 hover:text-brand-secondary transition-colors p-1" title="Edit">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                    </button>
-                    <button type="button" onClick={() => handleDelete(ev.id)} className="text-gray-300 hover:text-red-500 transition-colors p-1" title="Delete">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                    </button>
-                  </div>
-                </div>
+                  ) : undefined}
+                  actions={(
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button type="button" onClick={() => handleEdit(ev)} className="text-gray-300 hover:text-brand-secondary transition-colors p-1" title="Edit">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                      </button>
+                      <button type="button" onClick={() => handleDelete(ev.id)} className="text-gray-300 hover:text-red-500 transition-colors p-1" title="Delete">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
+                    </div>
+                  )}
+                />
 
                 {/* ── Expanded: RSVP table, unchanged ── */}
                 {isExpanded && (
