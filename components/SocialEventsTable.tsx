@@ -542,28 +542,72 @@ function CardField({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
-/** Internal attendees as the abbreviated rep pills used in the company tables. */
+/**
+ * Internal attendees as the abbreviated rep pills used in the company tables.
+ * They sit on one line rather than wrapping — on a narrow card that would eat
+ * several rows — so the row scrolls horizontally when it overflows, with
+ * chevrons appearing on either side once there is somewhere to scroll to.
+ */
 function InternalRepPills({ internalAttendees }: { internalAttendees: string | null }) {
   const colorMaps = useConfigColors();
+  const rowRef = useRef<HTMLDivElement>(null);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(false);
+
   const names = (internalAttendees ?? '').split(',').map(n => n.trim()).filter(Boolean);
+
+  const updateArrows = useCallback(() => {
+    const el = rowRef.current;
+    if (!el) return;
+    setCanLeft(el.scrollLeft > 1);
+    setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    updateArrows();
+    const el = rowRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(updateArrows);
+    ro.observe(el);
+    window.addEventListener('resize', updateArrows);
+    return () => { ro.disconnect(); window.removeEventListener('resize', updateArrows); };
+  }, [updateArrows, internalAttendees]);
+
   if (names.length === 0) return <span className="text-gray-400">—</span>;
+
+  const scroll = (dir: -1 | 1) => rowRef.current?.scrollBy({ left: dir * 120, behavior: 'smooth' });
+  const arrowCls = 'flex-shrink-0 w-4 h-4 rounded-full bg-white border border-gray-200 text-gray-400 hover:text-brand-secondary hover:border-gray-300 flex items-center justify-center transition-colors';
+
   return (
-    <span className="inline-flex flex-wrap items-center gap-1">
-      {names.map(name => (
-        <span
-          key={name}
-          title={name}
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[name]).badgeClass}`}
-        >
-          <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-          {getRepInitials(name)}
-        </span>
-      ))}
-    </span>
+    <div className="flex items-center gap-1 min-w-0">
+      {canLeft && (
+        <button type="button" onClick={e => { e.stopPropagation(); scroll(-1); }} className={arrowCls} title="Scroll left">
+          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" /></svg>
+        </button>
+      )}
+      <div ref={rowRef} onScroll={updateArrows} className="flex items-center gap-1 overflow-x-auto scrollbar-hide min-w-0">
+        {names.map(name => (
+          <span
+            key={name}
+            title={name}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap flex-shrink-0 ${getPreset(colorMaps.user?.[name]).badgeClass}`}
+          >
+            <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            {getRepInitials(name)}
+          </span>
+        ))}
+      </div>
+      {canRight && (
+        <button type="button" onClick={e => { e.stopPropagation(); scroll(1); }} className={arrowCls} title="Scroll right">
+          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" /></svg>
+        </button>
+      )}
+    </div>
   );
 }
+
 
 /* ─── Build Guest List modal ─── */
 function GuestListModal({ attendees, selected, onConfirm, onClose, icpCompanyTypes }: {
@@ -1162,7 +1206,11 @@ export function SocialEventsTable({
                     </div>
 
                     {/* ── Meta row: 2-up on mobile, inline from sm ── */}
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-2.5 pl-6 sm:flex sm:flex-wrap sm:gap-x-8">
+                    {/* Mobile stacks into three bands — Location, then
+                        Type/Host/Invite Only, then the attendee pills. The
+                        sm:contents wrappers dissolve at sm+ so the desktop row
+                        stays a single flex line. */}
+                    <div className="mt-2.5 pl-6 space-y-2 sm:space-y-0 sm:flex sm:flex-wrap sm:gap-x-8 sm:gap-y-2">
                       <CardField label="Location">
                         {locText ? (
                           <a
@@ -1177,15 +1225,21 @@ export function SocialEventsTable({
                           </a>
                         ) : <span className="text-gray-400">—</span>}
                       </CardField>
-                      <CardField label="Type">{ev.event_type || <span className="text-gray-400">—</span>}</CardField>
-                      <CardField label="Host">{ev.host || <span className="text-gray-400">—</span>}</CardField>
+                      <div className="grid grid-cols-3 gap-x-4 sm:contents">
+                        <CardField label="Type">{ev.event_type || <span className="text-gray-400">—</span>}</CardField>
+                        <CardField label="Host">{ev.host || <span className="text-gray-400">—</span>}</CardField>
+                        <CardField label="Invite Only">{ev.invite_only === 'Yes' ? 'Yes' : 'No'}</CardField>
+                      </div>
                       <CardField label="Internal Attendees"><InternalRepPills internalAttendees={ev.internal_attendees} /></CardField>
-                      <CardField label="Invite Only">{ev.invite_only === 'Yes' ? 'Yes' : 'No'}</CardField>
-                      {customColumns.filter(c => c.visible).map(col => (
-                        <CardField key={`custom_${col.id}`} label={col.label}>
-                          <CustomColumnCell column={col} value={(ev as unknown as Record<string, unknown>)[col.data_key]} />
-                        </CardField>
-                      ))}
+                      {customColumns.filter(c => c.visible).length > 0 && (
+                        <div className="grid grid-cols-3 gap-x-4 sm:contents">
+                          {customColumns.filter(c => c.visible).map(col => (
+                            <CardField key={`custom_${col.id}`} label={col.label}>
+                              <CustomColumnCell column={col} value={(ev as unknown as Record<string, unknown>)[col.data_key]} />
+                            </CardField>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
