@@ -1060,23 +1060,26 @@ export function SocialEventsTable({
               />
             </div>
 
-            {/* Date — one button per conference day, same picker the
-                new-meeting modal uses, with an escape to any other date. */}
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Date</label>
-              <ConferenceDatePicker
-                value={formData.event_date}
-                onChange={ymd => setFormData(p => ({ ...p, event_date: ymd }))}
-                startDate={conferenceStartDate}
-                endDate={conferenceEndDate}
-                inputClassName="input-field text-sm w-full"
-              />
-            </div>
-
-            {/* Time */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Time</label>
-              <input type="time" value={formData.event_time} onChange={e => setFormData(p => ({ ...p, event_time: e.target.value }))} className="input-field text-sm w-full" />
+            {/* Date + Time share a row, but as a flex pair rather than grid
+                cells: the day buttons take only the width they need, so Time
+                follows them directly instead of after a fixed column. */}
+            <div className="sm:col-span-2 lg:col-span-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+              <div className="min-w-0">
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Date</label>
+                {/* One button per conference day, same picker the new-meeting
+                    modal uses, with an escape to any other date. */}
+                <ConferenceDatePicker
+                  value={formData.event_date}
+                  onChange={ymd => setFormData(p => ({ ...p, event_date: ymd }))}
+                  startDate={conferenceStartDate}
+                  endDate={conferenceEndDate}
+                  inputClassName="input-field text-sm w-full sm:w-48"
+                />
+              </div>
+              <div className="sm:w-40 flex-shrink-0">
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Time</label>
+                <input type="time" value={formData.event_time} onChange={e => setFormData(p => ({ ...p, event_time: e.target.value }))} className="input-field text-sm w-full" />
+              </div>
             </div>
 
             {/* Invited Attendees — Build Guest List. Only company-hosted
