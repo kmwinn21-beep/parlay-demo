@@ -549,6 +549,7 @@ export function RelationshipsTab({
               seniority: a.seniority ?? null,
               companyName: a.company_name,
               companyId: a.company_id,
+              // Not carried on this payload — refreshTargets() fills it in.
               companyWse: null,
               assignedUserNames: a.rep_names,
             })}

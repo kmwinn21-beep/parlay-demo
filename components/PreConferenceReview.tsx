@@ -398,6 +398,20 @@ export function PreConferenceReviewModal() {
 
   // Adding a target is the trigger for the outreach-assign prompt; removing one
   // (or a failed request) never opens it.
+  // Optimistic target entries are assembled from whatever the calling tab has
+  // on hand, which often doesn't include the company's WSE — and a target
+  // without a WSE contributes nothing to the pipeline charts. Re-reading the
+  // list after a change puts the server's values (WSE included) back in play.
+  const refreshTargets = useCallback(async () => {
+    if (!conferenceId) return;
+    try {
+      const res = await fetch(`/api/conferences/${conferenceId}/targets`);
+      if (!res.ok) return;
+      const arr = await res.json() as TargetEntry[];
+      setTargetMap(new Map(arr.map(t => [t.attendeeId, t])));
+    } catch { /* keep the optimistic map */ }
+  }, [conferenceId]);
+
   const promptOutreachAssign = useCallback((entry: Omit<TargetEntry, 'tier'>) => {
     if (entry.companyId != null) {
       setOutreachPromptCompany({ id: entry.companyId, name: entry.companyName ?? 'this company' });
@@ -418,6 +432,7 @@ export function PreConferenceReviewModal() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ attendee_id: entry.attendeeId }),
       });
+      await refreshTargets();
       if (!isTarget) promptOutreachAssign(entry);
     } catch {
       // Revert on error
@@ -427,7 +442,7 @@ export function PreConferenceReviewModal() {
         setTargetMap(prev => { const next = new Map(prev); next.delete(entry.attendeeId); return next; });
       }
     }
-  }, [conferenceId, targetMap, promptOutreachAssign]);
+  }, [conferenceId, targetMap, promptOutreachAssign, refreshTargets]);
 
   const toggleTargetWithTier = useCallback(async (entry: Omit<TargetEntry, 'tier'>, tier: string) => {
     const isTarget = targetMap.has(entry.attendeeId);
@@ -443,6 +458,7 @@ export function PreConferenceReviewModal() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ attendee_id: entry.attendeeId, tier }),
       });
+      await refreshTargets();
       if (!isTarget) promptOutreachAssign(entry);
     } catch {
       // Revert on error
@@ -452,7 +468,7 @@ export function PreConferenceReviewModal() {
         setTargetMap(prev => { const next = new Map(prev); next.delete(entry.attendeeId); return next; });
       }
     }
-  }, [conferenceId, targetMap, promptOutreachAssign]);
+  }, [conferenceId, targetMap, promptOutreachAssign, refreshTargets]);
 
   const addTargetWithTier = useCallback(async (entry: Omit<TargetEntry, 'tier'>, tier: string) => {
     if (targetMap.has(entry.attendeeId)) return;
@@ -470,11 +486,12 @@ export function PreConferenceReviewModal() {
           body: JSON.stringify({ tier }),
         });
       }
+      await refreshTargets();
       promptOutreachAssign(entry);
     } catch {
       setTargetMap(prev => { const next = new Map(prev); next.delete(entry.attendeeId); return next; });
     }
-  }, [conferenceId, targetMap, promptOutreachAssign]);
+  }, [conferenceId, targetMap, promptOutreachAssign, refreshTargets]);
 
   const setTargetTier = useCallback(async (attendeeId: number, tier: string) => {
     setTargetMap(prev => {
