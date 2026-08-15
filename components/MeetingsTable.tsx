@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -49,6 +49,11 @@ type SortKey = 'name' | 'title' | 'scheduled_by' | 'company' | 'datetime' | 'con
 function formatMeetingDate(d: string) {
   if (!d) return '';
   return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/** "Monday, Aug 17" — the day-section heading. */
+function formatGroupDate(d: string) {
+  return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
 function formatMeetingTime(t: string) {
@@ -701,6 +706,36 @@ function EditMeetingTableRow({
   );
 }
 
+/** Section header for one day's meetings — click to collapse the group. */
+function DateGroupHeader({ date, count, collapsed, onToggle, bare = false }: {
+  date: string;
+  count: number;
+  collapsed: boolean;
+  onToggle: () => void;
+  /** Table variant: no background of its own, the row supplies it. */
+  bare?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={!collapsed}
+      className={`w-full flex items-center gap-2 text-left ${bare ? '' : 'px-4 py-2 bg-gray-50 border-b border-gray-200'}`}
+    >
+      <svg
+        className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${collapsed ? '-rotate-90' : ''}`}
+        fill="none" stroke="currentColor" viewBox="0 0 24 24"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      </svg>
+      <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+        {date ? formatGroupDate(date) : 'No date'}
+      </span>
+      <span className="text-xs text-gray-400">({count})</span>
+    </button>
+  );
+}
+
 export function MeetingsTable({
   meetings,
   actionOptions,
@@ -714,6 +749,7 @@ export function MeetingsTable({
   userOptions = [],
   hideCompany = false,
   tableName = 'meetings',
+  groupByDate = false,
 }: {
   meetings: Meeting[];
   actionOptions: string[];
@@ -727,6 +763,8 @@ export function MeetingsTable({
   userOptions?: UserOption[];
   hideCompany?: boolean;
   tableName?: string;
+  /** Break the list into collapsible sections, one per meeting date. */
+  groupByDate?: boolean;
 }) {
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
   const customColumns = useCustomColumns(tableName);
@@ -737,6 +775,7 @@ export function MeetingsTable({
   const [meetingTypeOptions, setMeetingTypeOptions] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkRepIds, setBulkRepIds] = useState<number[]>([]);
+  const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set());
   const hasActions = !!onEdit;
   const hasSelection = !!(onBulkDelete || onBulkUpdate);
   const { user } = useUser();
@@ -831,9 +870,33 @@ export function MeetingsTable({
     return sortDir === 'asc' ? cmp : -cmp;
   });
 
+  // Sections run oldest day first regardless of the column sort; the rows
+  // inside each keep whatever order the sort asked for.
+  const groupedMeetings = groupByDate
+    ? (() => {
+        const map = new Map<string, Meeting[]>();
+        for (const m of sorted) {
+          const key = m.meeting_date ?? '';
+          const list = map.get(key);
+          if (list) list.push(m); else map.set(key, [m]);
+        }
+        return Array.from(map.entries())
+          .sort((a, b) => (a[0] || '9999-12-31').localeCompare(b[0] || '9999-12-31'));
+      })()
+    : null;
+
+  const toggleDateGroup = (date: string) => setCollapsedDates(prev => {
+    const next = new Set(prev);
+    if (next.has(date)) next.delete(date); else next.add(date);
+    return next;
+  });
+
   const allSelected = sorted.length > 0 && sorted.every(m => selectedIds.has(m.id));
   const someSelected = !allSelected && sorted.some(m => selectedIds.has(m.id));
   const toggleAll = () => setSelectedIds(allSelected ? new Set() : new Set(sorted.map(m => m.id)));
+
+  const tableColSpan = (hideCompany ? 8 : 9) + (hasActions ? 1 : 0) + (hasSelection ? 1 : 0)
+    + customColumns.filter(c => c.visible).length;
 
   const SortHeader = ({ label, col }: { label: string; col: SortKey }) => (
     <th
@@ -851,6 +914,192 @@ export function MeetingsTable({
         )}
       </span>
     </th>
+  );
+
+  const renderMobileCard = (m: Meeting) => (
+      <div key={m.id} className="p-4 bg-white">
+        {editingId === m.id && onEdit ? (
+          <EditMeetingRow
+            meeting={m}
+            onSave={(id, data) => { onEdit(id, data); setEditingId(null); }}
+            onCancel={() => setEditingId(null)}
+            onDelete={onDelete && canDelete(m) ? (id) => { onDelete(id); setEditingId(null); } : undefined}
+            userOptions={userOptions}
+            meetingTypeOptions={meetingTypeOptions}
+          />
+        ) : (
+          <>
+            <div className="flex items-start justify-between gap-3">
+              {hasSelection && (
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(m.id)}
+                  onChange={() => toggleSelect(m.id)}
+                  className="mt-0.5 flex-shrink-0 h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
+                />
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1 group">
+                  <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: m.attendee_id, name: `${m.first_name} ${m.last_name}` })} />
+                  <Link href={`/attendees/${m.attendee_id}`} className="text-sm font-semibold text-brand-secondary hover:underline">
+                    {m.first_name} {m.last_name}
+                  </Link>
+                </div>
+                {m.title && <p className="text-xs text-gray-500 mt-0.5">{m.title}</p>}
+                {!hideCompany && (m.company_name && m.company_id ? (
+                  <div className="flex items-center gap-1 group mt-0.5">
+                    <QuickViewIcon onClick={() => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! })} />
+                    <Link href={`/companies/${m.company_id}`} className="text-xs text-brand-secondary hover:underline">
+                      {m.company_name}
+                    </Link>
+                  </div>
+                ) : m.company_name ? (
+                  <p className="text-xs text-gray-400 mt-0.5">{m.company_name}</p>
+                ) : null)}
+              </div>
+              <MeetingInfoTooltip
+                scheduledByDisplay={resolveRepNames(m.scheduled_by, userOptions) || null}
+                location={m.location}
+                attendees={m.additional_attendees}
+                companyWse={m.company_wse}
+              />
+              {onEdit && (
+                <button onClick={() => setEditingId(m.id)} className="flex-shrink-0 text-gray-400 hover:text-brand-secondary p-1 rounded" title="Edit">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-gray-600">
+                {formatMeetingDate(m.meeting_date)} at {formatMeetingTime(m.meeting_time)}
+              </span>
+              {m.meeting_type && (
+                <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{m.meeting_type}</span>
+              )}
+            </div>
+            <div className="mt-1.5 flex items-center gap-2">
+              <Link href={`/conferences/${m.conference_id}`} className="text-xs text-brand-secondary hover:underline">
+                {m.conference_name}
+              </Link>
+            </div>
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <OutcomeButton
+                value={m.outcome}
+                options={actionOptions}
+                colorMap={colorMap}
+                onChange={(val) => onOutcomeChange(m.id, val)}
+              />
+              <div className="flex items-center gap-2">
+                <RepPills scheduledBy={m.scheduled_by} userOptions={userOptions} size="xs" />
+                {onNotesClick && (
+                  <button
+                    type="button"
+                    className={`flex-shrink-0 transition-colors ${m.has_notes ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-gray-600'}`}
+                    title={m.has_notes ? 'View meeting notes' : 'Add meeting notes'}
+                    onClick={() => onNotesClick(m.id)}
+                  >
+                    {m.has_notes ? (
+                      <span className="relative inline-flex">
+                        <svg className="w-4 h-4" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                        <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-500" />
+                      </span>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+  );
+
+  const renderTableRow = (m: Meeting) => (
+  editingId === m.id && onEdit ? (
+    <EditMeetingTableRow
+      key={m.id}
+      meeting={m}
+      onSave={(id, data) => { onEdit(id, data); setEditingId(null); }}
+      onCancel={() => setEditingId(null)}
+      onDelete={onDelete && canDelete(m) ? (id) => { onDelete(id); setEditingId(null); } : undefined}
+      colSpan={(hideCompany ? 8 : 9) + (hasActions ? 1 : 0) + (hasSelection ? 1 : 0) + customColumns.filter(c => c.visible).length}
+      userOptions={userOptions}
+      meetingTypeOptions={meetingTypeOptions}
+    />
+  ) : (
+    <tr
+      key={m.id}
+      className={`transition-colors align-top hover:bg-gray-50 ${selectedIds.has(m.id) ? 'bg-blue-50' : ''}`}
+    >
+      {hasSelection && (
+        <td className="pl-3 pr-1 py-2 w-8">
+          <input
+            type="checkbox"
+            checked={selectedIds.has(m.id)}
+            onChange={() => toggleSelect(m.id)}
+            className="h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
+          />
+        </td>
+      )}
+      {orderedColumns.map(col => {
+        if (!isVisible(col.key)) return null;
+        switch (col.key) {
+          case 'name': return <td key="name" className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
+            <div className="flex items-center gap-1 group">
+              <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: m.attendee_id, name: `${m.first_name} ${m.last_name}` })} />
+              <Link href={`/attendees/${m.attendee_id}`} className="text-brand-secondary hover:underline leading-snug block truncate" title={`${m.first_name} ${m.last_name}`}>
+                {m.first_name} {m.last_name}
+              </Link>
+            </div>
+          </td>;
+          case 'title': return <td key="title" className="px-3 py-2 text-gray-600 leading-snug"><span className="block text-xs leading-snug break-words whitespace-normal">{m.title || <span className="text-gray-300">—</span>}</span></td>;
+          case 'rep': return <td key="rep" className="px-3 py-2 leading-snug"><RepPills scheduledBy={m.scheduled_by} userOptions={userOptions} /></td>;
+          case 'company': return !hideCompany ? <td key="company" className="px-3 py-2 text-gray-600 leading-snug">
+            {m.company_name && m.company_id ? (
+              <div className="flex items-center gap-1 group">
+                <QuickViewIcon onClick={() => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! })} />
+                <Link href={`/companies/${m.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">{m.company_name}</Link>
+              </div>
+            ) : (<span className="text-gray-300">—</span>)}
+          </td> : null;
+          case 'datetime': return <td key="datetime" className="px-3 py-2 text-gray-600 leading-snug">
+            <div className="font-medium">{formatMeetingDate(m.meeting_date)}</div>
+            <div className="text-gray-400">{formatMeetingTime(m.meeting_time)}</div>
+          </td>;
+          case 'conference': return <td key="conference" className="px-3 py-2 text-gray-600 leading-snug">
+            <Link href={`/conferences/${m.conference_id}`} className="text-brand-secondary hover:underline">{m.conference_name}</Link>
+          </td>;
+          case 'meeting_type': return <td key="meeting_type" className="px-3 py-2 text-gray-600 leading-snug">{m.meeting_type || <span className="text-gray-300">—</span>}</td>;
+          // Everyone internal on the meeting bar the rep who booked
+          // it — that rep already has the Rep column to themselves.
+          case 'support': return <td key="support" className="px-3 py-2">
+            <OverlappingRepPills repIds={supportRepIds(m.scheduled_by)} userOptions={userOptions} size="xs" />
+          </td>;
+          case 'outcome': return <td key="outcome" className="px-3 py-2">
+            <OutcomeButton value={m.outcome} options={actionOptions} colorMap={colorMap} onChange={(val) => onOutcomeChange(m.id, val)} />
+          </td>;
+          default: return null;
+        }
+      })}
+      {customColumns.filter(c => c.visible).map(col => (
+        <td key={`custom_${col.id}`} className="px-3 py-2 text-gray-600 leading-snug">
+          <CustomColumnCell column={col} value={(m as unknown as Record<string, unknown>)[col.data_key]} />
+        </td>
+      ))}
+      {hasActions && (
+        <td className="px-3 py-2">
+          <MeetingActionsMenu
+            hasNotes={!!m.has_notes}
+            onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
+            onEdit={() => setEditingId(m.id)}
+          />
+        </td>
+      )}
+    </tr>
+  )
   );
 
   if (meetings.length === 0) {
@@ -937,106 +1186,19 @@ export function MeetingsTable({
 
       {/* Mobile card layout */}
       <div className="block lg:hidden divide-y divide-gray-100">
-        {sorted.map((m) => (
-          <div key={m.id} className="p-4 bg-white">
-            {editingId === m.id && onEdit ? (
-              <EditMeetingRow
-                meeting={m}
-                onSave={(id, data) => { onEdit(id, data); setEditingId(null); }}
-                onCancel={() => setEditingId(null)}
-                onDelete={onDelete && canDelete(m) ? (id) => { onDelete(id); setEditingId(null); } : undefined}
-                userOptions={userOptions}
-                meetingTypeOptions={meetingTypeOptions}
+        {groupedMeetings
+          ? groupedMeetings.map(([date, list]) => (
+            <div key={date || "no-date"}>
+              <DateGroupHeader
+                date={date}
+                count={list.length}
+                collapsed={collapsedDates.has(date)}
+                onToggle={() => toggleDateGroup(date)}
               />
-            ) : (
-              <>
-                <div className="flex items-start justify-between gap-3">
-                  {hasSelection && (
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(m.id)}
-                      onChange={() => toggleSelect(m.id)}
-                      className="mt-0.5 flex-shrink-0 h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
-                    />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1 group">
-                      <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: m.attendee_id, name: `${m.first_name} ${m.last_name}` })} />
-                      <Link href={`/attendees/${m.attendee_id}`} className="text-sm font-semibold text-brand-secondary hover:underline">
-                        {m.first_name} {m.last_name}
-                      </Link>
-                    </div>
-                    {m.title && <p className="text-xs text-gray-500 mt-0.5">{m.title}</p>}
-                    {!hideCompany && (m.company_name && m.company_id ? (
-                      <div className="flex items-center gap-1 group mt-0.5">
-                        <QuickViewIcon onClick={() => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! })} />
-                        <Link href={`/companies/${m.company_id}`} className="text-xs text-brand-secondary hover:underline">
-                          {m.company_name}
-                        </Link>
-                      </div>
-                    ) : m.company_name ? (
-                      <p className="text-xs text-gray-400 mt-0.5">{m.company_name}</p>
-                    ) : null)}
-                  </div>
-                  <MeetingInfoTooltip
-                    scheduledByDisplay={resolveRepNames(m.scheduled_by, userOptions) || null}
-                    location={m.location}
-                    attendees={m.additional_attendees}
-                    companyWse={m.company_wse}
-                  />
-                  {onEdit && (
-                    <button onClick={() => setEditingId(m.id)} className="flex-shrink-0 text-gray-400 hover:text-brand-secondary p-1 rounded" title="Edit">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-gray-600">
-                    {formatMeetingDate(m.meeting_date)} at {formatMeetingTime(m.meeting_time)}
-                  </span>
-                  {m.meeting_type && (
-                    <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{m.meeting_type}</span>
-                  )}
-                </div>
-                <div className="mt-1.5 flex items-center gap-2">
-                  <Link href={`/conferences/${m.conference_id}`} className="text-xs text-brand-secondary hover:underline">
-                    {m.conference_name}
-                  </Link>
-                </div>
-                <div className="mt-2 flex items-center justify-between gap-2">
-                  <OutcomeButton
-                    value={m.outcome}
-                    options={actionOptions}
-                    colorMap={colorMap}
-                    onChange={(val) => onOutcomeChange(m.id, val)}
-                  />
-                  <div className="flex items-center gap-2">
-                    <RepPills scheduledBy={m.scheduled_by} userOptions={userOptions} size="xs" />
-                    {onNotesClick && (
-                      <button
-                        type="button"
-                        className={`flex-shrink-0 transition-colors ${m.has_notes ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-gray-600'}`}
-                        title={m.has_notes ? 'View meeting notes' : 'Add meeting notes'}
-                        onClick={() => onNotesClick(m.id)}
-                      >
-                        {m.has_notes ? (
-                          <span className="relative inline-flex">
-                            <svg className="w-4 h-4" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-500" />
-                          </span>
-                        ) : (
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                        )}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        ))}
+              {!collapsedDates.has(date) && list.map(renderMobileCard)}
+            </div>
+          ))
+          : sorted.map(renderMobileCard)}
       </div>
 
       {/* Desktop table layout */}
@@ -1079,90 +1241,24 @@ export function MeetingsTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {sorted.map((m) =>
-              editingId === m.id && onEdit ? (
-                <EditMeetingTableRow
-                  key={m.id}
-                  meeting={m}
-                  onSave={(id, data) => { onEdit(id, data); setEditingId(null); }}
-                  onCancel={() => setEditingId(null)}
-                  onDelete={onDelete && canDelete(m) ? (id) => { onDelete(id); setEditingId(null); } : undefined}
-                  colSpan={(hideCompany ? 8 : 9) + (hasActions ? 1 : 0) + (hasSelection ? 1 : 0) + customColumns.filter(c => c.visible).length}
-                  userOptions={userOptions}
-                  meetingTypeOptions={meetingTypeOptions}
-                />
-              ) : (
-                <tr
-                  key={m.id}
-                  className={`transition-colors align-top hover:bg-gray-50 ${selectedIds.has(m.id) ? 'bg-blue-50' : ''}`}
-                >
-                  {hasSelection && (
-                    <td className="pl-3 pr-1 py-2 w-8">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(m.id)}
-                        onChange={() => toggleSelect(m.id)}
-                        className="h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
-                      />
-                    </td>
-                  )}
-                  {orderedColumns.map(col => {
-                    if (!isVisible(col.key)) return null;
-                    switch (col.key) {
-                      case 'name': return <td key="name" className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
-                        <div className="flex items-center gap-1 group">
-                          <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: m.attendee_id, name: `${m.first_name} ${m.last_name}` })} />
-                          <Link href={`/attendees/${m.attendee_id}`} className="text-brand-secondary hover:underline leading-snug block truncate" title={`${m.first_name} ${m.last_name}`}>
-                            {m.first_name} {m.last_name}
-                          </Link>
-                        </div>
-                      </td>;
-                      case 'title': return <td key="title" className="px-3 py-2 text-gray-600 leading-snug"><span className="block text-xs leading-snug break-words whitespace-normal">{m.title || <span className="text-gray-300">—</span>}</span></td>;
-                      case 'rep': return <td key="rep" className="px-3 py-2 leading-snug"><RepPills scheduledBy={m.scheduled_by} userOptions={userOptions} /></td>;
-                      case 'company': return !hideCompany ? <td key="company" className="px-3 py-2 text-gray-600 leading-snug">
-                        {m.company_name && m.company_id ? (
-                          <div className="flex items-center gap-1 group">
-                            <QuickViewIcon onClick={() => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! })} />
-                            <Link href={`/companies/${m.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">{m.company_name}</Link>
-                          </div>
-                        ) : (<span className="text-gray-300">—</span>)}
-                      </td> : null;
-                      case 'datetime': return <td key="datetime" className="px-3 py-2 text-gray-600 leading-snug">
-                        <div className="font-medium">{formatMeetingDate(m.meeting_date)}</div>
-                        <div className="text-gray-400">{formatMeetingTime(m.meeting_time)}</div>
-                      </td>;
-                      case 'conference': return <td key="conference" className="px-3 py-2 text-gray-600 leading-snug">
-                        <Link href={`/conferences/${m.conference_id}`} className="text-brand-secondary hover:underline">{m.conference_name}</Link>
-                      </td>;
-                      case 'meeting_type': return <td key="meeting_type" className="px-3 py-2 text-gray-600 leading-snug">{m.meeting_type || <span className="text-gray-300">—</span>}</td>;
-                      // Everyone internal on the meeting bar the rep who booked
-                      // it — that rep already has the Rep column to themselves.
-                      case 'support': return <td key="support" className="px-3 py-2">
-                        <OverlappingRepPills repIds={supportRepIds(m.scheduled_by)} userOptions={userOptions} size="xs" />
-                      </td>;
-                      case 'outcome': return <td key="outcome" className="px-3 py-2">
-                        <OutcomeButton value={m.outcome} options={actionOptions} colorMap={colorMap} onChange={(val) => onOutcomeChange(m.id, val)} />
-                      </td>;
-                      default: return null;
-                    }
-                  })}
-                  {customColumns.filter(c => c.visible).map(col => (
-                    <td key={`custom_${col.id}`} className="px-3 py-2 text-gray-600 leading-snug">
-                      <CustomColumnCell column={col} value={(m as unknown as Record<string, unknown>)[col.data_key]} />
-                    </td>
-                  ))}
-                  {hasActions && (
-                    <td className="px-3 py-2">
-                      <MeetingActionsMenu
-                        hasNotes={!!m.has_notes}
-                        onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
-                        onEdit={() => setEditingId(m.id)}
-                      />
-                    </td>
-                  )}
-                </tr>
-              )
-            )}
+            {groupedMeetings
+              ? groupedMeetings.map(([date, list]) => (
+                  <Fragment key={date || "no-date"}>
+                    <tr className="bg-gray-50/70">
+                      <td colSpan={tableColSpan} className="px-3 py-1.5">
+                        <DateGroupHeader
+                          date={date}
+                          count={list.length}
+                          collapsed={collapsedDates.has(date)}
+                          onToggle={() => toggleDateGroup(date)}
+                          bare
+                        />
+                      </td>
+                    </tr>
+                    {!collapsedDates.has(date) && list.map(renderTableRow)}
+                  </Fragment>
+                ))
+              : sorted.map(renderTableRow)}
           </tbody>
         </table>
       </div>

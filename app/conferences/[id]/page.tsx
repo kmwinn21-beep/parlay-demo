@@ -9,6 +9,7 @@ import { AnalyticsCharts } from '@/components/AnalyticsCharts';
 import { invalidateConfsCache } from '@/components/Header';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
+import { MeetingDateFilterBar } from '@/components/MeetingDateFilterBar';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { PinnedNotesSection, type PinnedNote } from '@/components/PinnedNotesSection';
 import { NotesPopover } from '@/components/NotesPopover';
@@ -373,6 +374,7 @@ export default function ConferenceDetailPage() {
 
   // Meeting filter state
   const [meetingFiltersOpen, setMeetingFiltersOpen] = useState(false);
+  const [myMeetingsOnly, setMyMeetingsOnly] = useState(false);
   const [meetingFilterReps, setMeetingFilterReps] = useState<number[]>([]);
   const [meetingFilterDates, setMeetingFilterDates] = useState<string[]>([]);
   const [meetingFilterCompanyTypes, setMeetingFilterCompanyTypes] = useState<string[]>([]);
@@ -3323,7 +3325,14 @@ export default function ConferenceDetailPage() {
         const conferenceDates = conference ? getConferenceDates(conference.start_date, conference.end_date) : [];
         const anyFilters = meetingFilterReps.length > 0 || meetingFilterDates.length > 0 || meetingFilterCompanyTypes.length > 0 || meetingFilterSeniorities.length > 0;
         const activeFilterCount = [meetingFilterReps, meetingFilterDates, meetingFilterCompanyTypes, meetingFilterSeniorities].filter(f => f.length > 0).length;
+        const myConfigId = currentUser?.configId ?? null;
+        const myMeetingsAvailable = myConfigId != null;
         const filteredMeetings = confMeetings.filter(m => {
+          // "My Meetings" covers both the booking rep and anyone on support.
+          if (myMeetingsOnly && myConfigId != null) {
+            const ids = (m.scheduled_by || '').split(',').map(x => parseInt(x.trim())).filter(n => !isNaN(n));
+            if (!ids.includes(myConfigId)) return false;
+          }
           if (meetingFilterReps.length > 0) {
             const ids = (m.scheduled_by || '').split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
             if (!meetingFilterReps.some(id => ids.includes(id))) return false;
@@ -3349,6 +3358,42 @@ export default function ConferenceDetailPage() {
           ...meetingFilterCompanyTypes.map(t => ({ label: t, shortLabel: t, onRemove: () => setMeetingFilterCompanyTypes(meetingFilterCompanyTypes.filter(x => x !== t)) })),
           ...meetingFilterSeniorities.map(s => ({ label: s, shortLabel: s, onRemove: () => setMeetingFilterSeniorities(meetingFilterSeniorities.filter(x => x !== s)) })),
         ];
+        const meetingActionButtons = (
+          <>
+            <button
+              type="button"
+              onClick={() => setNewMeetingOpen(true)}
+              disabled={stagePermissions != null && !stagePermissions.canLogMeeting}
+              title={stagePermissions != null && !stagePermissions.canLogMeeting ? 'Activity logging is closed for this conference.' : undefined}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-secondary text-brand-secondary text-sm font-medium hover:bg-blue-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Meeting
+            </button>
+            <button
+              type="button"
+              onClick={() => setMeetingFiltersOpen(o => !o)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                anyFilters ? 'text-brand-secondary bg-blue-50' : 'text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              Filters
+              {anyFilters && (
+                <span className="bg-brand-secondary text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                  {activeFilterCount}
+                </span>
+              )}
+              <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${meetingFiltersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          </>
+        );
         const PillList = ({ useShortLabel, className }: { useShortLabel?: boolean; className?: string }) => (
           <div className={`flex flex-wrap gap-1.5 ${className ?? ''}`}>
             {activePills.map((pill, i) => (
@@ -3367,7 +3412,9 @@ export default function ConferenceDetailPage() {
           <div className="card p-0 overflow-hidden">
             {/* Header */}
             <div className="px-6 py-4 border-b border-gray-100">
-              {/* Top row: title + desktop pills + filters button */}
+              {/* Row 1 — title, the day filters (desktop), and the actions.
+                  On mobile the actions drop to their own row below and only
+                  My Meetings keeps the title company. */}
               <div className="flex items-center gap-3">
                 <h2 className="text-lg font-semibold text-brand-primary font-serif flex-shrink-0">
                   Meetings
@@ -3377,48 +3424,56 @@ export default function ConferenceDetailPage() {
                     </span>
                   )}
                 </h2>
-                {/* Desktop: pills inline between count and Filters button — full rep names */}
-                {anyFilters && <div className="hidden lg:block flex-1 min-w-0"><PillList useShortLabel={false} /></div>}
+                <div className="hidden lg:flex flex-1 min-w-0">
+                  <MeetingDateFilterBar
+                    dates={conferenceDates}
+                    selected={meetingFilterDates}
+                    onChange={setMeetingFilterDates}
+                    variant="long"
+                  />
+                </div>
                 <div className="ml-auto flex-shrink-0 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setNewMeetingOpen(true)}
-                    disabled={stagePermissions != null && !stagePermissions.canLogMeeting}
-                    title={stagePermissions != null && !stagePermissions.canLogMeeting ? 'Activity logging is closed for this conference.' : undefined}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-secondary text-brand-secondary text-sm font-medium hover:bg-blue-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    Meeting
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMeetingFiltersOpen(o => !o)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
-                      anyFilters
-                        ? 'border-brand-secondary text-brand-secondary bg-blue-50'
-                        : 'border-gray-200 text-gray-600 hover:border-gray-400'
-                    }`}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                    </svg>
-                    Filters
-                    {anyFilters && (
-                      <span className="bg-brand-secondary text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
-                        {activeFilterCount}
-                      </span>
-                    )}
-                    <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${meetingFiltersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
+                  {myMeetingsAvailable && (
+                    <button
+                      type="button"
+                      onClick={() => setMyMeetingsOnly(v => !v)}
+                      aria-pressed={myMeetingsOnly}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                        myMeetingsOnly
+                          ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+                          : 'border-gray-200 text-gray-600 hover:border-gray-400'
+                      }`}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      My Meetings
+                    </button>
+                  )}
+                  <div className="hidden lg:contents">{meetingActionButtons}</div>
                 </div>
               </div>
-              {/* Mobile: pills below the header row */}
-              {/* Mobile: pills below header row — rep initials only */}
-              {anyFilters && <div className="lg:hidden mt-3"><PillList useShortLabel={true} /></div>}
+
+              {/* Mobile row 2 — the actions the header row gave up */}
+              <div className="lg:hidden mt-3 flex items-center gap-2">{meetingActionButtons}</div>
+
+              {/* Mobile row 3 — day filters, one scrolling line */}
+              <div className="lg:hidden mt-3">
+                <MeetingDateFilterBar
+                  dates={conferenceDates}
+                  selected={meetingFilterDates}
+                  onChange={setMeetingFilterDates}
+                  variant="short"
+                />
+              </div>
+
+              {/* Active filter pills — full rep names on desktop, initials on mobile */}
+              {anyFilters && (
+                <>
+                  <div className="hidden lg:block mt-3"><PillList useShortLabel={false} /></div>
+                  <div className="lg:hidden mt-3"><PillList useShortLabel={true} /></div>
+                </>
+              )}
             </div>
 
             {/* Collapsible filter pane */}
@@ -3479,6 +3534,7 @@ export default function ConferenceDetailPage() {
 
             <MeetingsTable
               tableName="conference_meetings"
+              groupByDate
               meetings={filteredMeetings}
               actionOptions={actionOptions}
               colorMap={colorMaps.action || {}}
