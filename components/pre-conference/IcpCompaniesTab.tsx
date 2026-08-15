@@ -138,7 +138,7 @@ export function IcpCompaniesTab({
                           seniority: a.seniority ?? null,
                           companyName: co.name,
                           companyId: co.id,
-                          companyWse: null,
+                          companyWse: co.wse ?? null,
                           assignedUserNames: co.assigned_user_names,
                         })}
                       />

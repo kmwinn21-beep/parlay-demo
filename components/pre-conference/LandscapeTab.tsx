@@ -1804,6 +1804,11 @@ function RelationshipHeatmapPanel({
   const meetingsCoverageRatio = requiredPipeline && requiredPipeline > 0 ? convertedMeetingValue / requiredPipeline : null;
   const maxMeetingTierValue = Math.max(1, ...Object.values(meetingTierValueSum));
   const hasMeetingValues = avgCostPerUnit > 0 && meetingCompanyBestTier.size > 0;
+  // Targets that do have a meeting but whose company carries no WSE — they
+  // contribute nothing to the chart, which is worth saying out loud.
+  const meetingTargetsWithoutWse = Array.from(targetMap.values()).filter(
+    t => meetingAttendeeIds.has(t.attendeeId) && (t.companyId == null || t.companyWse == null)
+  ).length;
 
   // ── Internal relationships matrix ──────────────────────────────────────────
   const { reps, relTypes, matrix, repRelMap } = useMemo(() => {
@@ -2168,7 +2173,11 @@ function RelationshipHeatmapPanel({
                   })}
                 </div>
               ) : (
-                <p className="text-xs text-gray-400">Set avg. cost per unit in Admin Settings to see values.</p>
+                <p className="text-xs text-gray-400">
+              {avgCostPerUnit > 0
+                ? 'No WSE on file for the target companies.'
+                : 'Set avg. cost per unit in Admin Settings to see values.'}
+            </p>
               )}
             </div>
 
@@ -2231,7 +2240,9 @@ function RelationshipHeatmapPanel({
                   {avgCostPerUnit > 0
                     ? meetingAttendeeIds.size === 0
                       ? 'No meetings scheduled yet.'
-                      : 'No target companies with scheduled meetings.'
+                      : meetingTargetsWithoutWse > 0
+                        ? `${meetingTargetsWithoutWse} target${meetingTargetsWithoutWse > 1 ? 's have' : ' has'} a meeting scheduled, but no WSE is on file for the company.`
+                        : 'No target companies with scheduled meetings.'
                     : 'Set avg. cost per unit in Admin Settings to see values.'}
                 </p>
               )}
