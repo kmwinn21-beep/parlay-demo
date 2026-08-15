@@ -124,12 +124,32 @@ export async function DELETE(
     const { id } = params;
 
     const existing = await db.execute({
-      sql: 'SELECT id, attendee_id, conference_id FROM meetings WHERE id = ?',
+      sql: 'SELECT id, attendee_id, conference_id, scheduled_by FROM meetings WHERE id = ?',
       args: [id],
     });
 
     if (existing.rows.length === 0) {
       return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    }
+
+    // Deleting a meeting belongs to the rep who booked it — the first id on
+    // scheduled_by. Administrators keep the ability to clean up, and meetings
+    // with nobody on scheduled_by have no owner to defer to.
+    const ownerId = Number(
+      String(existing.rows[0].scheduled_by ?? '').split(',').map(s => s.trim()).filter(Boolean)[0]
+    );
+    if (Number.isFinite(ownerId) && ownerId > 0 && user && user.role !== 'administrator') {
+      const me = await db.execute({
+        sql: 'SELECT config_id FROM users WHERE id = ?',
+        args: [user.id],
+      });
+      const myConfigId = me.rows[0]?.config_id != null ? Number(me.rows[0].config_id) : null;
+      if (myConfigId !== ownerId) {
+        return NextResponse.json(
+          { error: 'Only the rep who scheduled this meeting can delete it.' },
+          { status: 403 }
+        );
+      }
     }
 
     const stageBlock = await validateConferenceStage(request, Number(existing.rows[0].conference_id), 'canDeleteMeeting');

@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { getPreset, type ColorMap } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
+import { useUser } from '@/components/UserContext';
 import { OverlappingRepPills } from '@/components/OverlappingRepPills';
 import { AdditionalAttendeesSelect, type AdditionalAttendeeCandidate, type AdditionalAttendeeSelection } from '@/components/AdditionalAttendeesSelect';
 import {
@@ -87,11 +89,18 @@ function RepPills({
   );
 }
 
+/** The rep who booked the meeting — the first id on scheduled_by. */
+function bookingRepId(scheduledBy: string | null | undefined): number | null {
+  return parseRepIds(scheduledBy)[0] ?? null;
+}
+
 /** Internal people on a meeting minus the rep who booked it, who has the Rep column. */
 function supportRepIds(scheduledBy: string | null | undefined): string | null {
   const ids = parseRepIds(scheduledBy);
   return ids.length > 1 ? ids.slice(1).join(',') : null;
 }
+
+const ACTIONS_MENU_WIDTH = 160;
 
 /** Row actions — the notetaker and edit entries the icons used to carry. */
 function MeetingActionsMenu({ hasNotes, onNotes, onEdit }: {
@@ -101,17 +110,49 @@ function MeetingActionsMenu({ hasNotes, onNotes, onEdit }: {
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // The menu renders in a portal so a table with only a row or two can't clip
+  // it against the bottom of its scroll container; that means positioning it
+  // against the button's viewport rect by hand.
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
+
+  const position = useCallback(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    // Roughly two 33px items plus borders; enough to decide on flipping.
+    const height = onNotes ? 74 : 41;
+    const flip = window.innerHeight - r.bottom - 8 < height && r.top - 8 > height;
+    setPos({
+      top: flip ? r.top - 4 - height : r.bottom + 4,
+      left: Math.max(8, Math.min(r.right - ACTIONS_MENU_WIDTH, window.innerWidth - ACTIONS_MENU_WIDTH - 8)),
+    });
+  }, [onNotes]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) { setPos(null); return; }
+    position();
     const onDown = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (wrapRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
     };
     const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    const onScroll = () => position();
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onEsc);
-    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onEsc); };
-  }, [open]);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onEsc);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [open, position]);
 
   const itemCls = 'w-full text-left px-3 py-2 text-xs font-medium flex items-center gap-2 text-gray-700 hover:bg-gray-50 transition-colors';
 
@@ -129,8 +170,13 @@ function MeetingActionsMenu({ hasNotes, onNotes, onEdit }: {
           <path d="M10 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
         </svg>
       </button>
-      {open && (
-        <div role="menu" className="absolute right-0 top-full mt-1 z-30 w-40 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+      {open && mounted && pos && createPortal(
+        <div
+          ref={menuRef}
+          role="menu"
+          style={{ position: 'fixed', top: pos.top, left: pos.left, width: ACTIONS_MENU_WIDTH }}
+          className="z-[10000] bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
+        >
           {onNotes && (
             <button type="button" role="menuitem" onClick={() => { setOpen(false); onNotes(); }} className={itemCls}>
               <span className="relative inline-flex flex-shrink-0">
@@ -148,7 +194,8 @@ function MeetingActionsMenu({ hasNotes, onNotes, onEdit }: {
             </svg>
             Edit
           </button>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -692,6 +739,16 @@ export function MeetingsTable({
   const [bulkRepIds, setBulkRepIds] = useState<number[]>([]);
   const hasActions = !!onEdit;
   const hasSelection = !!(onBulkDelete || onBulkUpdate);
+  const { user } = useUser();
+
+  // Deleting a meeting belongs to the rep who booked it. Administrators keep
+  // the ability to clean up, and meetings with nobody on scheduled_by have no
+  // owner to defer to.
+  const canDelete = useCallback((meeting: Meeting) => {
+    const owner = bookingRepId(meeting.scheduled_by);
+    if (owner == null || user?.role === 'administrator') return true;
+    return user?.configId != null && user.configId === owner;
+  }, [user]);
 
   useEffect(() => {
     fetch('/api/config?category=meeting_type', { cache: 'no-store' })
@@ -712,9 +769,18 @@ export function MeetingsTable({
   });
 
   const handleBulkDelete = () => {
-    const ids = Array.from(selectedIds);
-    if (!ids.length || !onBulkDelete) return;
-    if (!confirm(`Delete ${ids.length} meeting${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
+    const selected = meetings.filter(m => selectedIds.has(m.id));
+    if (!selected.length || !onBulkDelete) return;
+    const ids = selected.filter(canDelete).map(m => m.id);
+    const blocked = selected.length - ids.length;
+    if (!ids.length) {
+      toast.error(`Only the rep who scheduled a meeting can delete it.`);
+      return;
+    }
+    const suffix = blocked
+      ? `\n\n${blocked} meeting${blocked > 1 ? 's' : ''} scheduled by someone else will be left alone.`
+      : '';
+    if (!confirm(`Delete ${ids.length} meeting${ids.length > 1 ? 's' : ''}? This cannot be undone.${suffix}`)) return;
     onBulkDelete(ids);
     setSelectedIds(new Set());
   };
@@ -878,7 +944,7 @@ export function MeetingsTable({
                 meeting={m}
                 onSave={(id, data) => { onEdit(id, data); setEditingId(null); }}
                 onCancel={() => setEditingId(null)}
-                onDelete={onDelete ? (id) => { onDelete(id); setEditingId(null); } : undefined}
+                onDelete={onDelete && canDelete(m) ? (id) => { onDelete(id); setEditingId(null); } : undefined}
                 userOptions={userOptions}
                 meetingTypeOptions={meetingTypeOptions}
               />
@@ -1020,7 +1086,7 @@ export function MeetingsTable({
                   meeting={m}
                   onSave={(id, data) => { onEdit(id, data); setEditingId(null); }}
                   onCancel={() => setEditingId(null)}
-                  onDelete={onDelete ? (id) => { onDelete(id); setEditingId(null); } : undefined}
+                  onDelete={onDelete && canDelete(m) ? (id) => { onDelete(id); setEditingId(null); } : undefined}
                   colSpan={(hideCompany ? 8 : 9) + (hasActions ? 1 : 0) + (hasSelection ? 1 : 0) + customColumns.filter(c => c.visible).length}
                   userOptions={userOptions}
                   meetingTypeOptions={meetingTypeOptions}

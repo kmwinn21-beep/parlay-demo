@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface AdditionalAttendeeCandidate {
   key: string;
@@ -45,14 +46,51 @@ export function AdditionalAttendeesSelect({
   const [search, setSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // The menu renders in a portal so a short table row or a scrolling modal
+  // body can't clip it; that means positioning it against the field's
+  // viewport rect by hand.
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
+
+  // Drop below the field, or flip above it when the space below is tighter.
+  const positionMenu = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const below = window.innerHeight - r.bottom - 8;
+    const above = r.top - 8;
+    const flip = below < 180 && above > below;
+    const maxHeight = Math.max(120, Math.min(224, flip ? above : below));
+    setMenuPos({
+      top: flip ? r.top - 4 - maxHeight : r.bottom + 4,
+      left: r.left,
+      width: r.width,
+      maxHeight,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!open) { setMenuPos(null); return; }
+    positionMenu();
+    const onScroll = () => positionMenu();
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [open, positionMenu, selected.length]);
 
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-        setSearch('');
-      }
+      const t = e.target as Node;
+      if (containerRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
+      setSearch('');
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -105,8 +143,12 @@ export function AdditionalAttendeesSelect({
         />
       </div>
 
-      {open && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+      {open && mounted && menuPos && createPortal(
+        <div
+          ref={menuRef}
+          style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, width: menuPos.width, maxHeight: menuPos.maxHeight }}
+          className="z-[10000] bg-white border border-gray-200 rounded-lg shadow-lg overflow-y-auto"
+        >
           {filtered.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-3">
               {q ? 'No matches' : 'Type to search attendees or users'}
@@ -124,7 +166,8 @@ export function AdditionalAttendeesSelect({
               </button>
             ))
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

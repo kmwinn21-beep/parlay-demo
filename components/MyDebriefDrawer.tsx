@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useDrawerResize } from '@/lib/useDrawerResize';
+import { useSidebarCollapse, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_EXPANDED_WIDTH } from './SidebarCollapseContext';
 import toast from 'react-hot-toast';
 import { getPreset } from '@/lib/colors';
 
@@ -23,6 +24,9 @@ interface DebriefAttendee {
   meetingCount: number;
   touchpointCount: number;
   followUpCount: number;
+  email: string | null;
+  phone: string | null;
+  linkedinUrl: string | null;
 }
 
 interface DebriefFollowUp {
@@ -527,6 +531,232 @@ function MeetingNotesPanel({
   );
 }
 
+// ─── Contact card ─────────────────────────────────────────────────────────────
+
+/**
+ * A small popover anchored to a contact icon. It portals to the body so the
+ * scrolling company column can't clip it.
+ */
+function ContactPopover({ anchor, onClose, label, value, href, actionLabel, copyLabel }: {
+  anchor: HTMLElement | null;
+  onClose: () => void;
+  label: string;
+  value: string;
+  href: string;
+  actionLabel: string;
+  copyLabel: string;
+}) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  const position = useCallback(() => {
+    if (!anchor) return;
+    const r = anchor.getBoundingClientRect();
+    const width = 240;
+    const height = 96;
+    const flip = window.innerHeight - r.bottom - 8 < height && r.top - 8 > height;
+    setPos({
+      top: flip ? r.top - 6 - height : r.bottom + 6,
+      left: Math.max(8, Math.min(r.left, window.innerWidth - width - 8)),
+    });
+  }, [anchor]);
+
+  useEffect(() => {
+    position();
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (boxRef.current?.contains(t) || anchor?.contains(t)) return;
+      onClose();
+    };
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onEsc);
+    window.addEventListener('scroll', position, true);
+    window.addEventListener('resize', position);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onEsc);
+      window.removeEventListener('scroll', position, true);
+      window.removeEventListener('resize', position);
+    };
+  }, [position, onClose, anchor]);
+
+  if (!pos) return null;
+
+  return createPortal(
+    <div
+      ref={boxRef}
+      style={{ position: 'fixed', top: pos.top, left: pos.left, width: 240 }}
+      className="z-[10000] rounded-lg border border-gray-200 bg-white shadow-lg p-3"
+    >
+      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
+      <p className="text-xs text-gray-700 mt-0.5 break-all">{value}</p>
+      <div className="flex items-center gap-2 mt-2">
+        <a
+          href={href}
+          className="flex-1 text-center px-2 py-1 rounded-lg bg-brand-secondary text-white text-[11px] font-semibold hover:bg-blue-700 transition-colors"
+        >
+          {actionLabel}
+        </a>
+        <button
+          type="button"
+          title={copyLabel}
+          onClick={() => {
+            navigator.clipboard.writeText(value)
+              .then(() => toast.success(copyLabel))
+              .catch(() => toast.error('Failed to copy.'));
+          }}
+          className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:text-brand-secondary hover:border-gray-300 transition-colors"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+        </button>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+const LINKEDIN_PATH = 'M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z';
+
+/** Phone / email / LinkedIn for one contact, filled when the value is on file. */
+function ContactIconRow({ attendee, companyName }: { attendee: DebriefAttendee; companyName: string }) {
+  const [open, setOpen] = useState<'phone' | 'email' | null>(null);
+  const phoneRef = useRef<HTMLButtonElement>(null);
+  const emailRef = useRef<HTMLButtonElement>(null);
+
+  const linkedinHref = attendee.linkedinUrl
+    ?? `https://www.linkedin.com/search/results/all/?keywords=${encodeURIComponent(`${attendee.name} ${companyName}`.trim())}&origin=GLOBAL_SEARCH_HEADER`;
+  const iconCls = 'w-4 h-4';
+
+  return (
+    <div className="flex items-center justify-between w-full">
+      {/* Phone */}
+      <button
+        ref={phoneRef}
+        type="button"
+        disabled={!attendee.phone}
+        title={attendee.phone ? 'Phone' : 'No phone on file'}
+        onClick={e => { e.stopPropagation(); setOpen(o => (o === 'phone' ? null : 'phone')); }}
+        className={attendee.phone ? 'text-brand-secondary hover:opacity-70 transition-opacity' : 'text-gray-300 cursor-default'}
+      >
+        {attendee.phone ? (
+          <svg className={iconCls} viewBox="0 0 20 20" fill="currentColor" aria-label="Phone">
+            <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+          </svg>
+        ) : (
+          <svg className={iconCls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-label="No phone">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+          </svg>
+        )}
+      </button>
+
+      {/* Email */}
+      <button
+        ref={emailRef}
+        type="button"
+        disabled={!attendee.email}
+        title={attendee.email ? 'Email' : 'No email on file'}
+        onClick={e => { e.stopPropagation(); setOpen(o => (o === 'email' ? null : 'email')); }}
+        className={attendee.email ? 'text-brand-secondary hover:opacity-70 transition-opacity' : 'text-gray-300 cursor-default'}
+      >
+        {attendee.email ? (
+          <svg className={iconCls} viewBox="0 0 20 20" fill="currentColor" aria-label="Email">
+            <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+            <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+          </svg>
+        ) : (
+          <svg className={iconCls} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-label="No email">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+        )}
+      </button>
+
+      {/* LinkedIn — profile when we have one, otherwise a pre-filled search */}
+      <a
+        href={linkedinHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={e => e.stopPropagation()}
+        title={attendee.linkedinUrl ? 'LinkedIn profile' : 'Search LinkedIn'}
+        className="hover:opacity-70 transition-opacity"
+      >
+        <svg viewBox="0 0 24 24" className={iconCls} fill={attendee.linkedinUrl ? '#0A66C2' : '#D1D5DB'} aria-label="LinkedIn">
+          <path d={LINKEDIN_PATH} />
+        </svg>
+      </a>
+
+      {open === 'phone' && attendee.phone && (
+        <ContactPopover
+          anchor={phoneRef.current}
+          onClose={() => setOpen(null)}
+          label="Phone"
+          value={attendee.phone}
+          href={`callto:${attendee.phone}`}
+          actionLabel="Call"
+          copyLabel="Phone number copied."
+        />
+      )}
+      {open === 'email' && attendee.email && (
+        <ContactPopover
+          anchor={emailRef.current}
+          onClose={() => setOpen(null)}
+          label="Email"
+          value={attendee.email}
+          href={`mailto:${attendee.email}`}
+          actionLabel="Compose"
+          copyLabel="Email copied."
+        />
+      )}
+    </div>
+  );
+}
+
+/** One contact in the company card's Contacts grid. */
+function DebriefContactCard({ attendee, companyName, onOpenRecord }: {
+  attendee: DebriefAttendee;
+  companyName: string;
+  onOpenRecord: () => void;
+}) {
+  return (
+    <div className="relative border border-gray-200 rounded-lg p-2.5 bg-white hover:border-gray-300 transition-colors">
+      <button
+        type="button"
+        onClick={e => { e.stopPropagation(); onOpenRecord(); }}
+        className="text-left w-full hover:underline"
+      >
+        <p className="text-xs font-semibold text-gray-800 leading-tight truncate">{attendee.name}</p>
+      </button>
+      {attendee.title && <p className="text-xs text-gray-400 mt-0.5 truncate">{attendee.title}</p>}
+      {/* Contact icons spread across the card's full width */}
+      <div className="flex mt-1.5">
+        <ContactIconRow attendee={attendee} companyName={companyName} />
+      </div>
+      <div className="flex flex-col gap-1 mt-1.5">
+        {attendee.meetingCount > 0 && (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-brand-primary/10 text-brand-primary">
+            {attendee.meetingCount} Meeting{attendee.meetingCount !== 1 ? 's' : ''}
+          </span>
+        )}
+        {attendee.touchpointCount > 0 && (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+            {attendee.touchpointCount} Touchpoint{attendee.touchpointCount !== 1 ? 's' : ''}
+          </span>
+        )}
+        {attendee.followUpCount > 0 && (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-rose-100 text-rose-600">
+            {attendee.followUpCount} Follow-Up{attendee.followUpCount !== 1 ? 's' : ''}
+          </span>
+        )}
+        {attendee.meetingCount === 0 && attendee.touchpointCount === 0 && attendee.followUpCount === 0 && (
+          <span className="text-xs text-gray-300 italic">No activity</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Session Note Types ───────────────────────────────────────────────────────
 
 interface AgendaItemWithNote {
@@ -550,8 +780,8 @@ interface Props {
 }
 
 export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
-  const { panelStyle, handleResizeStart } = useDrawerResize(1200, 700, 1440);
   const { panelStyle: recordPanelStyle, handleResizeStart: recordResizeStart } = useDrawerResize(400, 280, 800);
+  const { collapsed: sidebarCollapsed } = useSidebarCollapse();
   const [data, setData] = useState<DebriefData | null>(null);
   const [effData, setEffData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
@@ -796,16 +1026,16 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
 
       {/* ── Centering wrapper ──
           Mobile: absolute inset-0 (full screen)
-          Desktop: starts at sidebar right edge (left-64), flex centered */}
-      <div className="absolute inset-0 sm:left-64 sm:flex sm:items-center sm:justify-center sm:p-5">
+          Desktop: starts at the sidebar's right edge, flex centered — the
+          same framing the pre-conference review uses, so both modals occupy
+          the same box. */}
+      <div
+        className="absolute inset-0 sm:left-[var(--sidebar-w)] sm:flex sm:items-center sm:justify-center sm:p-5 transition-[left] duration-300 ease-in-out"
+        style={{ '--sidebar-w': `${sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH}px` } as React.CSSProperties}
+      >
 
         {/* Modal box — full-screen on mobile, contained on desktop */}
-        <div className="relative w-full h-full sm:h-[85vh] sm:max-w-[1440px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden" style={panelStyle}>
-          {/* Left-edge resize handle */}
-          <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={handleResizeStart}>
-            <div className="absolute inset-y-0 left-0 w-0.5 bg-brand-secondary/0 group-hover/rh:bg-brand-secondary/40 transition-colors" />
-          </div>
-
+        <div className="relative w-full h-full sm:h-[85vh] sm:max-w-[1440px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden">
           {/* ── Header ── */}
           <div className="bg-brand-primary flex-shrink-0">
 
@@ -1150,36 +1380,12 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Contacts</p>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                           {selectedCompany.attendees.map(a => (
-                            <div key={a.id} className="border border-gray-200 rounded-lg p-2.5 bg-white hover:border-gray-300 transition-colors">
-                              <button
-                                type="button"
-                                onClick={e => { e.stopPropagation(); openRecordDrawer('attendee', a.id); }}
-                                className="text-left w-full hover:underline"
-                              >
-                                <p className="text-xs font-semibold text-gray-800 leading-tight truncate">{a.name}</p>
-                              </button>
-                              {a.title && <p className="text-xs text-gray-400 mt-0.5 truncate">{a.title}</p>}
-                              <div className="flex flex-col gap-1 mt-1.5">
-                                {a.meetingCount > 0 && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-brand-primary/10 text-brand-primary">
-                                    {a.meetingCount} Meeting{a.meetingCount !== 1 ? 's' : ''}
-                                  </span>
-                                )}
-                                {a.touchpointCount > 0 && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
-                                    {a.touchpointCount} Touchpoint{a.touchpointCount !== 1 ? 's' : ''}
-                                  </span>
-                                )}
-                                {a.followUpCount > 0 && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-rose-100 text-rose-600">
-                                    {a.followUpCount} Follow-Up{a.followUpCount !== 1 ? 's' : ''}
-                                  </span>
-                                )}
-                                {a.meetingCount === 0 && a.touchpointCount === 0 && a.followUpCount === 0 && (
-                                  <span className="text-xs text-gray-300 italic">No activity</span>
-                                )}
-                              </div>
-                            </div>
+                            <DebriefContactCard
+                              key={a.id}
+                              attendee={a}
+                              companyName={selectedCompany.name}
+                              onOpenRecord={() => openRecordDrawer('attendee', a.id)}
+                            />
                           ))}
                         </div>
                       </div>
@@ -1297,7 +1503,10 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                               ) : (
                                 <div>
                                   {visibleLines.map((line, i) => (
-                                    <p key={i} className={`text-xs text-gray-700 leading-snug${i > 0 ? ' mt-1.5' : ''}`}>- {line}</p>
+                                    <p key={i} className={`flex items-start gap-1.5 text-xs text-gray-700 leading-snug${i > 0 ? ' mt-1.5' : ''}`}>
+                                      <span aria-hidden className="mt-[5px] w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#46bdf8' }} />
+                                      <span className="min-w-0">{line}</span>
+                                    </p>
                                   ))}
                                   {multiLine && (
                                     <>
