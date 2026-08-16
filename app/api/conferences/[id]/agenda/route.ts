@@ -146,7 +146,21 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       });
     }
 
-    const days: AgendaDay[] = Array.from(dayMap.entries()).map(([day_label, items]) => ({ day_label, items }));
+    // Day groups come out in sort_order, which is the order the parse produced
+    // them — an agenda uploaded in pieces can end up with its days out of
+    // sequence. Order any label that reads as a date chronologically; labels
+    // that don't ("Day 1") keep the order they arrived in, after the dated ones.
+    const dayEntries = Array.from(dayMap.entries()).map(([day_label, items], index) => {
+      const parsed = new Date(day_label);
+      return { day_label, items, index, time: isNaN(parsed.getTime()) ? null : parsed.getTime() };
+    });
+    dayEntries.sort((a, b) => {
+      if (a.time != null && b.time != null) return a.time - b.time;
+      if (a.time != null) return -1;
+      if (b.time != null) return 1;
+      return a.index - b.index;
+    });
+    const days: AgendaDay[] = dayEntries.map(({ day_label, items }) => ({ day_label, items }));
     return NextResponse.json({ days });
   } catch (error) {
     console.error('GET /api/conferences/[id]/agenda error:', error);
