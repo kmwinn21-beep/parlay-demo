@@ -420,12 +420,17 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const [transcriptExpanded, setTranscriptExpanded] = useState(false);
   const [pastedTranscript, setPastedTranscript] = useState('');
   const [pasteOpen, setPasteOpen] = useState(false);
+  // The two capture sections in the notes pane start collapsed.
+  const [capturePainOpen, setCapturePainOpen] = useState(false);
+  const [captureSignalsOpen, setCaptureSignalsOpen] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
   const [actionItemsOpen, setActionItemsOpen] = useState(false);
   const [meetingSummaryOpen, setMeetingSummaryOpen] = useState(true);
   const [buyingSignalsOpen, setBuyingSignalsOpen] = useState(false);
   const [painPointsOpen, setPainPointsOpen] = useState(false);
   const [expandedQuotes, setExpandedQuotes] = useState<Set<number>>(new Set());
+  const manualPainPointCount = insights.filter(i => i.source === 'manual' && i.insight_type === 'pain_point').length;
+  const manualSignalCount = insights.filter(i => i.source === 'manual' && i.insight_type === 'buying_signal').length;
 
   // Drag and drop
   const [dragOver, setDragOver] = useState(false);
@@ -1825,13 +1830,25 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
 
               {/* ── Pain Points ── */}
               <div className="border-t border-gray-100 pt-4">
-                <div className="flex items-center gap-1.5 mb-2">
+                <button
+                  type="button"
+                  onClick={() => setCapturePainOpen(o => !o)}
+                  aria-expanded={capturePainOpen}
+                  className="w-full flex items-center gap-1.5 mb-2"
+                >
                   <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="#E24B4A" strokeWidth={2} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
                   </svg>
                   <span className="text-[11px] font-medium text-gray-600">Pain points</span>
-                </div>
+                  {manualPainPointCount > 0 && (
+                    <span className="text-[10px] text-gray-400">({manualPainPointCount})</span>
+                  )}
+                  <svg className={`w-3.5 h-3.5 ml-auto text-gray-400 transition-transform ${capturePainOpen ? '' : '-rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
 
+                {capturePainOpen && (<>
                 {/* Free-text input */}
                 <input
                   type="text"
@@ -1886,17 +1903,30 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                     ))}
                   </div>
                 )}
+                </>)}
               </div>
 
               {/* ── Trigger Events & Buying Signals ── */}
               <div className="border-t border-gray-100 pt-4">
-                <div className="flex items-center gap-1.5 mb-2">
+                <button
+                  type="button"
+                  onClick={() => setCaptureSignalsOpen(o => !o)}
+                  aria-expanded={captureSignalsOpen}
+                  className="w-full flex items-center gap-1.5 mb-2"
+                >
                   <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="#1D9E75" strokeWidth={2} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                   </svg>
-                  <span className="text-[11px] font-medium text-gray-600">Trigger Events & Buying Signals</span>
-                </div>
+                  <span className="text-[11px] font-medium text-gray-600">Trigger Events &amp; Buying Signals</span>
+                  {manualSignalCount > 0 && (
+                    <span className="text-[10px] text-gray-400">({manualSignalCount})</span>
+                  )}
+                  <svg className={`w-3.5 h-3.5 ml-auto text-gray-400 transition-transform ${captureSignalsOpen ? '' : '-rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
 
+                {captureSignalsOpen && (<>
                 {/* Free-text input */}
                 <input
                   type="text"
@@ -1951,6 +1981,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                     ))}
                   </div>
                 )}
+                </>)}
               </div>
 
             </div>
