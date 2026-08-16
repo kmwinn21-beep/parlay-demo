@@ -5,6 +5,7 @@ import { useState, useCallback } from 'react';
 import { useDrawerResize } from '@/lib/useDrawerResize';
 import toast from 'react-hot-toast';
 import type { AttendeeRef, CompanyCommittee } from '@/app/api/conferences/[id]/buying-committee-coverage/route';
+import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
 
 interface CommitteeDrawerProps {
   isOpen: boolean;
@@ -22,10 +23,6 @@ const ROLE_LABELS: Record<string, string> = {
   influencer: 'Influencer',
   target_title: 'Target Title',
 };
-
-function initials(first: string, last: string): string {
-  return `${first.charAt(0)}${last.charAt(0)}`.toUpperCase();
-}
 
 function AttendeeCell({
   attendee,
@@ -63,12 +60,14 @@ function AttendeeCell({
 
   return (
     <div className="flex items-center gap-2 py-1">
-      <div
-        className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold"
+      <AttendeeInitialsAvatar
+        name={`${attendee.firstName} ${attendee.lastName}`.trim()}
+        photoUrl={attendee.photoUrl}
+        title={attendee.title}
+        className="w-6 h-6 text-[10px]"
+        baseClass=""
         style={{ background: '#E6F1FB', color: '#0C447C' }}
-      >
-        {initials(attendee.firstName, attendee.lastName)}
-      </div>
+      />
       <div className="flex-1 min-w-0">
         <p className="text-[12px] font-medium text-gray-800 truncate">
           {attendee.firstName} {attendee.lastName}

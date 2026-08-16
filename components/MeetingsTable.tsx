@@ -19,8 +19,9 @@ import {
   getRepInitials,
 } from '@/lib/useUserOptions';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
-import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import { CustomColumnCell } from './CustomColumnCell';
+import { ScrollRow } from '@/components/ScrollRow';
+import { useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
 
 export interface Meeting {
   id: number;
@@ -69,10 +70,13 @@ function RepPills({
   scheduledBy,
   userOptions,
   size = 'sm',
+  withIcon = false,
 }: {
   scheduledBy: string | null;
   userOptions: UserOption[];
   size?: 'sm' | 'xs';
+  /** Leads each pill with the user glyph, as the mobile card does. */
+  withIcon?: boolean;
 }) {
   const colorMaps = useConfigColors();
   const users = parseRepIds(scheduledBy).map(id => userOptions.find(u => u.id === id)).filter(Boolean);
@@ -86,7 +90,12 @@ function RepPills({
   return (
     <span className="inline-flex flex-wrap gap-1">
       {users.map((user, i) => (
-        <span key={i} className={`${baseClass} ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
+        <span key={i} className={`${baseClass} gap-1 ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
+          {withIcon && (
+            <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+          )}
           {getRepInitials(user!.value)}
         </span>
       ))}
@@ -103,6 +112,59 @@ function bookingRepId(scheduledBy: string | null | undefined): number | null {
 function supportRepIds(scheduledBy: string | null | undefined): string | null {
   const ids = parseRepIds(scheduledBy);
   return ids.length > 1 ? ids.slice(1).join(',') : null;
+}
+
+/** "$1.2M" / "$600K" — the card has no room for the full figure. */
+function abbreviateValue(total: number): string {
+  if (total >= 1_000_000) return `$${(total / 1_000_000).toFixed(total >= 10_000_000 ? 0 : 1).replace(/\.0$/, '')}M`;
+  if (total >= 1_000) return `$${Math.round(total / 1_000)}K`;
+  return `$${total}`;
+}
+
+/** Initials for a free-text attendee name: "Jane External" -> "JE". */
+function nameInitials(name: string): string {
+  return name.trim().split(/\s+/).filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase();
+}
+
+/**
+ * Location, additional attendees and company value for the mobile card — one
+ * scrolling line, since three pills rarely fit a phone.
+ */
+function MeetingDetailPills({ meeting, avgCostPerUnit }: { meeting: Meeting; avgCostPerUnit: number }) {
+  const extras = (meeting.additional_attendees || '').split(',').map(n => n.trim()).filter(Boolean);
+  const value = meeting.company_wse != null && avgCostPerUnit > 0
+    ? abbreviateValue(Math.round(meeting.company_wse * avgCostPerUnit))
+    : null;
+  if (!meeting.location && extras.length === 0 && !value) return null;
+
+  const pill = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap flex-shrink-0 border';
+
+  return (
+    <ScrollRow className="mt-1.5" gapClass="gap-1.5" step={120}>
+      {meeting.location && (
+        <span className={`${pill} bg-gray-50 text-gray-600 border-gray-200`} title={meeting.location}>
+          <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          {meeting.location}
+        </span>
+      )}
+      {extras.length > 0 && (
+        <span className={`${pill} bg-blue-50 text-blue-700 border-blue-200`} title={extras.join(', ')}>
+          <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          {extras.map(nameInitials).join(' | ')}
+        </span>
+      )}
+      {value && (
+        <span className={`${pill} bg-green-100 text-green-700 border-green-300 font-semibold`}>
+          {value}
+        </span>
+      )}
+    </ScrollRow>
+  );
 }
 
 const ACTIONS_MENU_WIDTH = 160;
@@ -283,87 +345,6 @@ function EditAdditionalAttendees({
         }
       }}
     />
-  );
-}
-
-function MeetingInfoTooltip({
-  scheduledByDisplay,
-  location,
-  attendees,
-  companyWse,
-}: {
-  scheduledByDisplay?: string | null;
-  location?: string | null;
-  attendees?: string | null;
-  companyWse?: number | null;
-}) {
-  const [pos, setPos] = useState<{ top: number; left: number; width: number; above: boolean } | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-  const unitTypeLabel = useUnitTypeLabel();
-  const attendeeList = attendees ? attendees.split(',').map(n => n.trim()).filter(Boolean) : [];
-  const hasContent = scheduledByDisplay || location || attendeeList.length > 0 || companyWse != null;
-
-  const handleMouseEnter = () => {
-    if (!ref.current || !hasContent) return;
-    const rect = ref.current.getBoundingClientRect();
-    const w = Math.min(240, window.innerWidth - 16);
-    const left = Math.max(8, Math.min(rect.left + rect.width / 2 - w / 2, window.innerWidth - w - 8));
-    const above = rect.top > 180;
-    setPos({ top: above ? rect.top - 8 : rect.bottom + 8, left, width: w, above });
-  };
-
-  if (!hasContent) return null;
-
-  return (
-    <div ref={ref} className="relative inline-block" onMouseEnter={handleMouseEnter} onMouseLeave={() => setPos(null)}>
-      <button type="button" className="text-gray-400 hover:text-brand-secondary transition-colors" title="Meeting Info">
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      </button>
-      {pos && (
-        <div style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999, transform: pos.above ? 'translateY(-100%)' : 'translateY(0)' }}>
-          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2.5 space-y-2">
-            {scheduledByDisplay && (
-              <div>
-                <p className="font-semibold mb-0.5 text-gray-300 uppercase tracking-wide text-[10px]">Scheduled By</p>
-                <p>{scheduledByDisplay}</p>
-              </div>
-            )}
-            {location && (
-              <div>
-                <p className="font-semibold mb-0.5 text-gray-300 uppercase tracking-wide text-[10px]">Location</p>
-                <p>{location}</p>
-              </div>
-            )}
-            {attendeeList.length > 0 && (
-              <div>
-                <p className="font-semibold mb-1 text-gray-300 uppercase tracking-wide text-[10px]">Additional Attendees</p>
-                <ul className="space-y-1">
-                  {attendeeList.map((name, i) => (
-                    <li key={i} className="flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />
-                      {name}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {companyWse != null && (
-              <div>
-                <p className="font-semibold mb-0.5 text-gray-300 uppercase tracking-wide text-[10px]">{unitTypeLabel}</p>
-                <p className="flex items-center gap-1">
-                  <svg className="w-3.5 h-3.5 text-yellow-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" />
-                  </svg>
-                  {Number(companyWse).toLocaleString()}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -779,6 +760,7 @@ export function MeetingsTable({
   const hasActions = !!onEdit;
   const hasSelection = !!(onBulkDelete || onBulkUpdate);
   const { user } = useUser();
+  const avgCostPerUnit = useAvgCostPerUnit();
 
   // Deleting a meeting belongs to the rep who booked it. Administrators keep
   // the ability to clean up, and meetings with nobody on scheduled_by have no
@@ -939,51 +921,45 @@ export function MeetingsTable({
                 />
               )}
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1 group">
-                  <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: m.attendee_id, name: `${m.first_name} ${m.last_name}` })} />
-                  <Link href={`/attendees/${m.attendee_id}`} className="text-sm font-semibold text-brand-secondary hover:underline">
-                    {m.first_name} {m.last_name}
-                  </Link>
-                </div>
+                {/* Names open the quick-view drawer rather than the full profile */}
+                <button
+                  type="button"
+                  onClick={() => setQuickView({ type: 'attendee', id: m.attendee_id, name: `${m.first_name} ${m.last_name}` })}
+                  className="text-sm font-semibold text-brand-secondary hover:underline text-left"
+                >
+                  {m.first_name} {m.last_name}
+                </button>
                 {m.title && <p className="text-xs text-gray-500 mt-0.5">{m.title}</p>}
                 {!hideCompany && (m.company_name && m.company_id ? (
-                  <div className="flex items-center gap-1 group mt-0.5">
-                    <QuickViewIcon onClick={() => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! })} />
-                    <Link href={`/companies/${m.company_id}`} className="text-xs text-brand-secondary hover:underline">
-                      {m.company_name}
-                    </Link>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! })}
+                    className="block text-xs text-brand-secondary hover:underline mt-0.5 text-left"
+                  >
+                    {m.company_name}
+                  </button>
                 ) : m.company_name ? (
                   <p className="text-xs text-gray-400 mt-0.5">{m.company_name}</p>
                 ) : null)}
               </div>
-              <MeetingInfoTooltip
-                scheduledByDisplay={resolveRepNames(m.scheduled_by, userOptions) || null}
-                location={m.location}
-                attendees={m.additional_attendees}
-                companyWse={m.company_wse}
-              />
-              {onEdit && (
-                <button onClick={() => setEditingId(m.id)} className="flex-shrink-0 text-gray-400 hover:text-brand-secondary p-1 rounded" title="Edit">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                </button>
+              {(onEdit || onNotesClick) && (
+                <MeetingActionsMenu
+                  hasNotes={!!m.has_notes}
+                  onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
+                  onEdit={() => setEditingId(m.id)}
+                />
               )}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="text-xs text-gray-600">
-                {formatMeetingDate(m.meeting_date)} at {formatMeetingTime(m.meeting_time)}
-              </span>
               {m.meeting_type && (
                 <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{m.meeting_type}</span>
               )}
+              <span className="text-xs text-gray-600">
+                {formatMeetingDate(m.meeting_date)} at {formatMeetingTime(m.meeting_time)}
+              </span>
             </div>
-            <div className="mt-1.5 flex items-center gap-2">
-              <Link href={`/conferences/${m.conference_id}`} className="text-xs text-brand-secondary hover:underline">
-                {m.conference_name}
-              </Link>
-            </div>
+            {/* Location, additional attendees and company value — one scrolling line */}
+            <MeetingDetailPills meeting={m} avgCostPerUnit={avgCostPerUnit} />
             <div className="mt-2 flex items-center justify-between gap-2">
               <OutcomeButton
                 value={m.outcome}
@@ -991,26 +967,7 @@ export function MeetingsTable({
                 colorMap={colorMap}
                 onChange={(val) => onOutcomeChange(m.id, val)}
               />
-              <div className="flex items-center gap-2">
-                <RepPills scheduledBy={m.scheduled_by} userOptions={userOptions} size="xs" />
-                {onNotesClick && (
-                  <button
-                    type="button"
-                    className={`flex-shrink-0 transition-colors ${m.has_notes ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-gray-600'}`}
-                    title={m.has_notes ? 'View meeting notes' : 'Add meeting notes'}
-                    onClick={() => onNotesClick(m.id)}
-                  >
-                    {m.has_notes ? (
-                      <span className="relative inline-flex">
-                        <svg className="w-4 h-4" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                        <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-500" />
-                      </span>
-                    ) : (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                    )}
-                  </button>
-                )}
-              </div>
+              <RepPills scheduledBy={m.scheduled_by} userOptions={userOptions} size="xs" withIcon />
             </div>
           </>
         )}

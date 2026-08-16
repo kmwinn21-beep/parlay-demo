@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { AttendeeInitialsAvatar } from './AttendeePhoto';
 import { TouchpointMap } from './TouchpointMap';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -41,6 +42,7 @@ interface TimelineData {
     id: number; first_name: string; last_name: string; title: string | null;
     email: string | null; status: string | null; seniority: string | null;
     company_name: string | null; company_type: string | null; icp: string | null; wse: number | null;
+    photo_url?: string | null;
   };
   touchpoints: Touchpoint[];
   healthScore: number;
@@ -355,10 +357,17 @@ function AttendeeCard({ data, onRemove }: { data: TimelineData; onRemove: () => 
 
       {/* Header */}
       <div className="flex items-start gap-3 pr-4">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-brand-primary font-bold font-serif text-lg flex-shrink-0"
-          style={{ background: `${hColor}22` }}>
-          {avatarLetter}
-        </div>
+        <AttendeeInitialsAvatar
+          name={`${attendee.first_name} ${attendee.last_name}`.trim()}
+          photoUrl={attendee.photo_url}
+          title={attendee.title}
+          companyName={attendee.company_name}
+          initialsOverride={avatarLetter}
+          className="w-10 h-10 text-lg font-serif"
+          baseClass="text-brand-primary"
+          shapeClass="rounded-xl"
+          style={{ background: `${hColor}22` }}
+        />
         <div className="flex-1 min-w-0">
           <Link href={`/attendees/${attendee.id}`}
             className="font-semibold text-brand-primary hover:text-brand-secondary transition-colors leading-tight block font-serif">

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useDrawerResize } from '@/lib/useDrawerResize';
 import Link from 'next/link';
+import { AttendeeInitialsAvatar } from './AttendeePhoto';
 import { getBadgeClass, getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getRepInitials } from '@/lib/useUserOptions';
@@ -72,6 +73,7 @@ interface TimelineData {
     id: number; first_name: string; last_name: string; title: string | null;
     email: string | null; status: string | null; seniority: string | null;
     company_name: string | null; company_type: string | null; icp: string | null; wse: number | null;
+    photo_url?: string | null;
   };
   touchpoints: Touchpoint[];
   healthScore: number;
@@ -326,10 +328,17 @@ function ContactCard({ group, timeline, defaultExpanded }: {
     <div className="card flex flex-col gap-3">
       {/* Header */}
       <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-brand-primary font-bold font-serif text-lg flex-shrink-0"
-          style={{ background: timeline ? `${hColor}22` : 'rgba(34,58,94,0.08)' }}>
-          {avatarLetter}
-        </div>
+        <AttendeeInitialsAvatar
+          name={`${contact.first_name} ${contact.last_name}`.trim()}
+          photoUrl={timeline?.attendee.photo_url}
+          title={contact.title}
+          companyName={timeline?.attendee.company_name}
+          initialsOverride={avatarLetter}
+          className="w-10 h-10 text-lg font-serif"
+          baseClass="text-brand-primary"
+          shapeClass="rounded-xl"
+          style={{ background: timeline ? `${hColor}22` : 'rgba(34,58,94,0.08)' }}
+        />
         <div className="flex-1 min-w-0">
           <Link href={`/attendees/${contact.id}`}
             className="font-semibold text-brand-primary hover:text-brand-secondary transition-colors leading-tight block font-serif">

@@ -9,6 +9,7 @@ import { OperatorCapitalModal } from './OperatorCapitalModal';
 import { InternalRelationshipModal } from './InternalRelationshipsSection';
 import { CompanyRelationshipsPopup } from './CompanyRelationshipsPopup';
 import { useDrawerResize } from '@/lib/useDrawerResize';
+import { ScrollRow } from '@/components/ScrollRow';
 import { AddToConferenceModal } from './AddToConferenceModal';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
@@ -94,7 +95,11 @@ function calcTooltipPos(el: HTMLElement, maxW = 260): TooltipPos {
   return { top: above ? rect.top - 8 : rect.bottom + 8, left, width: w, above };
 }
 
-function AttendeeTooltip({ count, summary, onClick }: { count: number; summary?: string; onClick?: () => void }) {
+/** `disableTooltip` is for the mobile card, where a tap fires mouseenter and
+ *  the hover panel gets in the way of the drawer the tap opens. */
+function AttendeeTooltip({ count, summary, onClick, disableTooltip = false }: {
+  count: number; summary?: string; onClick?: () => void; disableTooltip?: boolean;
+}) {
   const [pos, setPos] = useState<TooltipPos | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const attendees = (summary || '').split('~~~').map(s => s.trim()).filter(Boolean).map(s => {
@@ -104,7 +109,7 @@ function AttendeeTooltip({ count, summary, onClick }: { count: number; summary?:
   if (count === 0) return <span className="badge-gray">{count}</span>;
   return (
     <div ref={ref} className="relative inline-block"
-      onMouseEnter={() => ref.current && setPos(calcTooltipPos(ref.current))}
+      onMouseEnter={() => { if (!disableTooltip && ref.current) setPos(calcTooltipPos(ref.current)); }}
       onMouseLeave={() => setPos(null)}>
       {onClick ? (
         <button type="button" onClick={onClick} className="badge-gray hover:ring-2 hover:ring-brand-secondary/40 transition-shadow" title="View attendees">{count}</button>
@@ -610,6 +615,70 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
 
   const activeFilterCount = (filterSFOwner ? 1 : 0) + (filterType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterConference ? 1 : 0) + (filterICP ? 1 : 0) + (wseFilterActive ? 1 : 0) + (filterUpdatedWithin ? 1 : 0) + (filterHierarchy ? 1 : 0);
 
+  // Quick filters + the Filters toggle. Mobile keeps them on one
+  // horizontally scrolling line; desktop lays them out inline.
+  const filterButtons = (
+    <>
+      {/* Quick-filter badges — common one-click filters, multi-select */}
+      <button
+        type="button"
+        onClick={() => setQuickFilterIcp(v => !v)}
+        className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+          quickFilterIcp
+            ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+            : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+        }`}
+      >
+        ICP
+      </button>
+      {quickFilterTypeButtons.map(type => (
+        <button
+          key={type}
+          type="button"
+          onClick={() => toggleQuickFilterType(type)}
+          className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+            quickFilterTypes.has(type)
+              ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+              : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+          }`}
+        >
+          {type === 'Customer' ? 'Customers' : type === 'Competitor' ? 'Competitors' : type}
+        </button>
+      ))}
+      {currentUser && (
+        <button
+          type="button"
+          onClick={() => setQuickFilterMyAccounts(v => !v)}
+          className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+            quickFilterMyAccounts
+              ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+              : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+          }`}
+        >
+          My Accounts
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => setFiltersOpen(o => !o)}
+        className={`flex-shrink-0 whitespace-nowrap flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${activeFilterCount > 0 ? 'border-brand-secondary text-brand-secondary bg-blue-50' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+        </svg>
+        Filters
+        {activeFilterCount > 0 && (
+          <span className="bg-brand-secondary text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+            {activeFilterCount}
+          </span>
+        )}
+        <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+    </>
+  );
+
   return (
     <div>
       {/* Toolbar */}
@@ -619,64 +688,9 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search companies..." className="input-field pl-9" />
         </div>
 
-        {/* Quick-filter badges — common one-click filters, multi-select */}
-        <button
-          type="button"
-          onClick={() => setQuickFilterIcp(v => !v)}
-          className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-            quickFilterIcp
-              ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
-              : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
-          }`}
-        >
-          ICP
-        </button>
-        {quickFilterTypeButtons.map(type => (
-          <button
-            key={type}
-            type="button"
-            onClick={() => toggleQuickFilterType(type)}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-              quickFilterTypes.has(type)
-                ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
-                : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
-            }`}
-          >
-            {type === 'Customer' ? 'Customers' : type === 'Competitor' ? 'Competitors' : type}
-          </button>
-        ))}
-        {currentUser && (
-          <button
-            type="button"
-            onClick={() => setQuickFilterMyAccounts(v => !v)}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-              quickFilterMyAccounts
-                ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
-                : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
-            }`}
-          >
-            My Accounts
-          </button>
-        )}
-
-        <button
-          type="button"
-          onClick={() => setFiltersOpen(o => !o)}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${activeFilterCount > 0 ? 'border-brand-secondary text-brand-secondary bg-blue-50' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-          </svg>
-          Filters
-          {activeFilterCount > 0 && (
-            <span className="bg-brand-secondary text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
-              {activeFilterCount}
-            </span>
-          )}
-          <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+        {/* Mobile: one scrolling line. Desktop: inline in the toolbar. */}
+        <ScrollRow className="w-full lg:hidden" gapClass="gap-2">{filterButtons}</ScrollRow>
+        <div className="hidden lg:contents">{filterButtons}</div>
 
         {selectedIds.size >= 1 && (
           <>
@@ -998,63 +1012,56 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                   )}
                 </button>
               </div>
-              {/* Row 2: company type (like attendee title row) */}
-              {company.company_type && (
-                <div className="mt-1 ml-6">
-                  {company.company_type === 'Competitor'
-                    ? <CompetitorTypePill competitorType={company.competitor_type} badgeClass={getBadgeClass(company.company_type, colorMaps.company_type || {})}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</CompetitorTypePill>
-                    : <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span>
-                  }
-                </div>
-              )}
-              {/* Row 3: status badges */}
-              <div className="mt-1 ml-6 flex items-center flex-wrap gap-1">
-                {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{formatStatusLabel(s)}</span>)}
+              {/* Rows 2-4 ride one scrolling line, company type first */}
+              <ScrollRow className="mt-2 ml-6" gapClass="gap-2">
+                {company.company_type && (
+                  <span className="flex-shrink-0 whitespace-nowrap">
+                    {company.company_type === 'Competitor'
+                      ? <CompetitorTypePill competitorType={company.competitor_type} badgeClass={getBadgeClass(company.company_type, colorMaps.company_type || {})}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</CompetitorTypePill>
+                      : <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span>
+                    }
+                  </span>
+                )}
+                {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => (
+                  <span key={s} className={`${getBadgeClass(s, colorMaps.status || {})} flex-shrink-0 whitespace-nowrap`}>{formatStatusLabel(s)}</span>
+                ))}
                 {(company.my_user_status_ids || []).map(optId => {
                   const label = userScopedStatusMap.get(optId);
-                  return label ? <span key={optId} className={getBadgeClass(label, colorMaps.status || {})}>{formatStatusLabel(label)}</span> : null;
+                  return label ? <span key={optId} className={`${getBadgeClass(label, colorMaps.status || {})} flex-shrink-0 whitespace-nowrap`}>{formatStatusLabel(label)}</span> : null;
                 })}
-                {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && (company.my_user_status_ids || []).length === 0 && <span className="text-gray-400">—</span>}
-              </div>
-              {/* Row 4: stats */}
-              <div className="mt-2 ml-6 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <span className="inline-flex items-center gap-1 text-xs text-gray-500">
-                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                    <AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} onClick={conferenceAttendees ? () => setAttendeesDrawerCompany(company) : undefined} />
+                <span className="inline-flex items-center gap-1 text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">
+                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                  <AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} onClick={conferenceAttendees ? () => setAttendeesDrawerCompany(company) : undefined} disableTooltip />
+                </span>
+                <span className="inline-flex items-center gap-1 text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">
+                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                  <ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} />
+                </span>
+                {Number(company.relationship_count) > 0 && (
+                  <button
+                    type="button"
+                    onClick={e => { e.preventDefault(); e.stopPropagation(); setRelPopupCompany({ id: company.id, name: company.name }); }}
+                    title="View relationships"
+                    className="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
+                  >
+                    {Number(company.relationship_count)}
+                  </button>
+                )}
+                {company.wse != null && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200 flex-shrink-0 whitespace-nowrap">
+                    <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+                    {Number(company.wse).toLocaleString()}
                   </span>
-                  <span className="inline-flex items-center gap-1 text-xs text-gray-500">
-                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                    <ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} />
-                  </span>
-                  {Number(company.relationship_count) > 0 && (
-                    <button
-                      type="button"
-                      onClick={e => { e.preventDefault(); e.stopPropagation(); setRelPopupCompany({ id: company.id, name: company.name }); }}
-                      title="View relationships"
-                      className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
-                    >
-                      {Number(company.relationship_count)}
-                    </button>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {company.wse != null && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
-                      <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
-                      {Number(company.wse).toLocaleString()}
+                )}
+                {(() => {
+                  const pill = formatValuePill(company.wse, avgCostPerUnit);
+                  return pill ? (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap flex-shrink-0">
+                      {pill}
                     </span>
-                  )}
-                  {(() => {
-                    const pill = formatValuePill(company.wse, avgCostPerUnit);
-                    return pill ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
-                        {pill}
-                      </span>
-                    ) : null;
-                  })()}
-                </div>
-              </div>
+                  ) : null;
+                })()}
+              </ScrollRow>
             </div>
           ))}
         </div>

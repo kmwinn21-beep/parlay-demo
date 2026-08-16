@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
 import { TargetBtn } from './TargetBtn';
 import { useRecordDrawer } from './RecordDrawerContext';
 import { getBadgeClass, getPreset } from '@/lib/colors';
@@ -100,7 +101,7 @@ interface Touchpoint {
   depthScore: number;
 }
 interface TimelineData {
-  attendee: { id: number; first_name: string; last_name: string; title: string | null; email: string | null; status: string | null; seniority: string | null; company_name: string | null; company_type: string | null; icp: string | null; wse: number | null };
+  attendee: { id: number; first_name: string; last_name: string; title: string | null; email: string | null; status: string | null; seniority: string | null; company_name: string | null; company_type: string | null; icp: string | null; wse: number | null; photo_url?: string | null };
   touchpoints: Touchpoint[];
   healthScore: number;
   daysSinceLastTouch: number | null;
@@ -220,10 +221,17 @@ function RelationshipAttendeeCard({
     <div className="card flex flex-col gap-3">
       {/* Header */}
       <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-brand-primary font-bold font-serif text-lg flex-shrink-0"
-          style={{ background: timeline ? `${hColor}22` : 'rgba(34,58,94,0.08)' }}>
-          {avatarLetter}
-        </div>
+        <AttendeeInitialsAvatar
+          name={`${attendee.first_name} ${attendee.last_name}`.trim()}
+          photoUrl={timeline?.attendee.photo_url}
+          title={attendee.title}
+          companyName={attendee.company_name}
+          initialsOverride={avatarLetter}
+          className="w-10 h-10 text-lg font-serif"
+          baseClass="text-brand-primary"
+          shapeClass="rounded-xl"
+          style={{ background: timeline ? `${hColor}22` : 'rgba(34,58,94,0.08)' }}
+        />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
             <Link href={`/attendees/${attendee.id}`}

@@ -22,7 +22,7 @@ export async function GET(
   const [attRow, actionOptsRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.status, a.seniority,
-                   a.relationship_floor,
+                   a.relationship_floor, a.photo_url,
                    c.name as company_name, c.company_type, c.icp, c.wse
             FROM attendees a LEFT JOIN companies c ON a.company_id = c.id
             WHERE a.id = ?`,
