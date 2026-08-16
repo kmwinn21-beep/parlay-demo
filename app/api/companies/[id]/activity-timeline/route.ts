@@ -60,7 +60,7 @@ export async function GET(
 
     // Step 2 — All attendees from this company
     const attendeesResult = await db.execute({
-      sql: `SELECT DISTINCT a.id, a.first_name, a.last_name, a.title, a.seniority, a.health_score
+      sql: `SELECT DISTINCT a.id, a.first_name, a.last_name, a.title, a.seniority, a.health_score, a.photo_url
             FROM attendees a
             WHERE a.company_id = ?`,
       args: [companyId],
@@ -181,6 +181,7 @@ export async function GET(
         title: r.title != null ? String(r.title) : null,
         seniority: r.seniority != null ? String(r.seniority) : null,
         healthScore: r.health_score != null ? Number(r.health_score) : null,
+        photoUrl: r.photo_url != null ? String(r.photo_url) : null,
       })),
       activity: {
         meetings: meetingsResult.rows.map(r => ({

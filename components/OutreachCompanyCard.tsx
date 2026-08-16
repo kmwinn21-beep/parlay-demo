@@ -15,6 +15,7 @@ import { AttendeeQuickViewDrawer } from './AttendeeQuickViewDrawer';
 import { QuickViewIcon } from './QuickViewDrawer';
 import { type TimelineActivity, type ThreadNote } from './OutreachDrawer';
 import { type Meeting } from './MeetingsTable';
+import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
 
 type ActivityType = 'phone' | 'text' | 'email' | 'linkedin';
 
@@ -33,6 +34,7 @@ export interface OutreachAttendee {
   email: string | null;
   phone: string | null;
   linkedinUrl: string | null;
+  photoUrl: string | null;
   activityCount: number;
   activityCounts: { phone: number; text: number; email: number; linkedin: number };
   meetingId: number | null;
@@ -753,12 +755,15 @@ export function OutreachCompanyCard({
                 }`}
               >
                 {isDesktop && (
-                  <div
-                    className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0"
+                  <AttendeeInitialsAvatar
+                    name={`${attendee.firstName} ${attendee.lastName}`.trim()}
+                    photoUrl={attendee.photoUrl}
+                    title={attendee.title}
+                    companyName={company.companyName}
+                    className="w-7 h-7 text-[10px]"
+                    baseClass="text-white"
                     style={{ backgroundColor: companyTypeHex }}
-                  >
-                    {(attendee.firstName[0] ?? '') + (attendee.lastName[0] ?? '')}
-                  </div>
+                  />
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-gray-800 flex items-center gap-1 min-w-0">

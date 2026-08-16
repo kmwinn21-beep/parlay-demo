@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 
@@ -342,6 +342,9 @@ export function AttendeeAvatar({
 export function AttendeeInitialsAvatar({
   name, photoUrl, title, companyName, className = 'w-7 h-7 text-[10px]',
   baseClass = 'bg-brand-secondary/20 text-brand-secondary',
+  shapeClass = 'rounded-full',
+  initialsOverride,
+  style,
 }: {
   name: string;
   photoUrl?: string | null;
@@ -351,12 +354,18 @@ export function AttendeeInitialsAvatar({
   className?: string;
   /** Colours for the initials state. */
   baseClass?: string;
+  /** Some surfaces use a squircle rather than a circle. */
+  shapeClass?: string;
+  /** For the surfaces that show a single letter. */
+  initialsOverride?: string;
+  style?: CSSProperties;
 }) {
   const [showPhoto, setShowPhoto] = useState(false);
-  const initials = name.trim().split(/\s+/).filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase();
-  const shell = `${className} ${baseClass} rounded-full inline-flex items-center justify-center font-bold flex-shrink-0 overflow-hidden`;
+  const initials = initialsOverride
+    ?? name.trim().split(/\s+/).filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase();
+  const shell = `${className} ${baseClass} ${shapeClass} inline-flex items-center justify-center font-bold flex-shrink-0 overflow-hidden`;
 
-  if (!photoUrl) return <span className={shell}>{initials}</span>;
+  if (!photoUrl) return <span className={shell} style={style}>{initials}</span>;
 
   return (
     <>
@@ -364,6 +373,7 @@ export function AttendeeInitialsAvatar({
         type="button"
         onClick={e => { e.stopPropagation(); e.preventDefault(); setShowPhoto(true); }}
         title={`View ${name}'s photo`}
+        style={style}
         className={`${shell} transition-shadow hover:shadow-md`}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}

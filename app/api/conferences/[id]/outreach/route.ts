@@ -16,6 +16,7 @@ interface AttendeeEntry {
   email: string | null;
   phone: string | null;
   linkedinUrl: string | null;
+  photoUrl: string | null;
   activityCount: number;
   activityCounts: { phone: number; email: number; linkedin: number; text: number };
   meetingId: number | null;
@@ -96,7 +97,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const [attendeeRows, activityRows, noteRows, meetingRows, excludedRows] = await Promise.all([
       db.execute({
         sql: `SELECT a.id as attendee_id, a.company_id, a.first_name, a.last_name, a.title, a.seniority,
-                     a.email, a.phone, a.linkedin_url
+                     a.email, a.phone, a.linkedin_url, a.photo_url
               FROM conference_attendees ca
               JOIN attendees a ON a.id = ca.attendee_id
               WHERE ca.conference_id = ? AND a.company_id IN (${placeholders})
@@ -185,6 +186,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         email: r.email ? String(r.email) : null,
         phone: r.phone ? String(r.phone) : null,
         linkedinUrl: r.linkedin_url ? String(r.linkedin_url) : null,
+        photoUrl: r.photo_url ? String(r.photo_url) : null,
         activityCount: activityByAttendee.get(attendeeId) || 0,
         activityCounts: activityByAttendeeType.get(attendeeId) || { phone: 0, text: 0, email: 0, linkedin: 0 },
         meetingId: meetingIdByAttendee.get(attendeeId) ?? null,

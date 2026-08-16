@@ -10,6 +10,7 @@ import { getBadgeClass, getPillClass, getPreset } from '@/lib/colors';
 import { useUserOptions, parseRepIds, getRepInitials } from '@/lib/useUserOptions';
 import { useCapabilities } from '@/lib/useCapabilities';
 import { ActivityTimelineModal } from './ActivityTimelineModal';
+import { AttendeeInitialsAvatar } from './AttendeePhoto';
 
 export interface CompanyAttendeeLite {
   id: number;
@@ -24,6 +25,7 @@ export interface CompanyAttendeeLite {
   company_assigned_user?: string;
   email?: string;
   linkedin_url?: string;
+  photo_url?: string | null;
 }
 
 interface Props {
@@ -47,15 +49,20 @@ function AttendeeMiniCard({ attendee }: { attendee: CompanyAttendeeLite }) {
   const colorMaps = useConfigColors();
   const userOptionsFull = useUserOptions();
   const seniority = effectiveSeniority(attendee.seniority, attendee.title);
-  const initials = `${attendee.first_name?.[0] ?? ''}${attendee.last_name?.[0] ?? ''}`.toUpperCase();
+
   const repUsers = parseRepIds(attendee.company_assigned_user ?? '').map(id => userOptionsFull.find(u => u.id === id)).filter(Boolean);
 
   return (
     <div className="border border-gray-200 rounded-xl p-4">
       <div className="flex items-start gap-3">
-        <div className="w-11 h-11 rounded-full bg-brand-primary flex items-center justify-center text-white text-sm font-bold font-serif flex-shrink-0">
-          {initials || '?'}
-        </div>
+        <AttendeeInitialsAvatar
+          name={`${attendee.first_name ?? ''} ${attendee.last_name ?? ''}`.trim() || '?'}
+          photoUrl={attendee.photo_url}
+          title={attendee.title}
+          companyName={attendee.company_name}
+          className="w-11 h-11 text-sm font-serif"
+          baseClass="bg-brand-primary text-white"
+        />
         <div className="min-w-0">
           <Link href={`/attendees/${attendee.id}`} className="text-sm font-bold text-brand-primary hover:text-brand-secondary hover:underline">
             {attendee.first_name} {attendee.last_name}

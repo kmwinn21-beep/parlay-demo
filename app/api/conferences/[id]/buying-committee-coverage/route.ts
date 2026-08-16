@@ -33,6 +33,7 @@ export interface AttendeeRef {
   firstName: string;
   lastName: string;
   title: string | null;
+  photoUrl: string | null;
   isTargeted: boolean;
 }
 
@@ -53,6 +54,7 @@ interface SignalRow {
   firstName: string;
   lastName: string;
   title: string | null;
+  photoUrl: string | null;
   companyId: number | null;
   companyName: string;
 }
@@ -84,6 +86,7 @@ function computeCompanyCommittees(
           firstName: sig.firstName,
           lastName: sig.lastName,
           title: sig.title,
+          photoUrl: sig.photoUrl,
           isTargeted: targetedIds.has(sig.attendeeId),
         });
       }
@@ -135,7 +138,7 @@ export async function GET(
     }),
     db.execute({
       sql: `SELECT aps.attendee_id, aps.product_name, aps.buyer_role, aps.function_match,
-                   a.first_name, a.last_name, a.title,
+                   a.first_name, a.last_name, a.title, a.photo_url,
                    c.id as company_id, COALESCE(c.name, 'Unknown company') as company_name
             FROM attendee_product_signals aps
             JOIN attendees a ON a.id = aps.attendee_id
@@ -162,6 +165,7 @@ export async function GET(
     firstName: String(r.first_name ?? ''),
     lastName: String(r.last_name ?? ''),
     title: r.title ? String(r.title) : null,
+    photoUrl: r.photo_url ? String(r.photo_url) : null,
     companyId: r.company_id != null ? Number(r.company_id) : null,
     companyName: String(r.company_name ?? 'Unknown company'),
   }));
