@@ -1,13 +1,36 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
 interface Props {
   attendeeName: string;
   onDismiss: () => void;
   onGoogle: () => void;
   onOutlook: () => void;
+  /** Hands the device an .ics so the default calendar app takes it. */
+  onDeviceCalendar?: () => void;
 }
 
-export function SendCalendarInvitePrompt({ attendeeName, onDismiss, onGoogle, onOutlook }: Props) {
+export function SendCalendarInvitePrompt({ attendeeName, onDismiss, onGoogle, onOutlook, onDeviceCalendar }: Props) {
+  // On a touch device the device calendar is the likelier destination, so it
+  // leads; on a desktop the web composers usually are.
+  const [touchFirst, setTouchFirst] = useState(false);
+  useEffect(() => { setTouchFirst(window.matchMedia('(hover: none)').matches); }, []);
+
+  const deviceButton = onDeviceCalendar ? (
+    <button
+      key="device"
+      type="button"
+      onClick={onDeviceCalendar}
+      className="btn-secondary text-sm flex items-center justify-center gap-2"
+    >
+      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+      Add to my calendar
+    </button>
+  ) : null;
+
   return (
     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-4 bg-black/40" onClick={onDismiss}>
       <div
@@ -29,7 +52,9 @@ export function SendCalendarInvitePrompt({ attendeeName, onDismiss, onGoogle, on
         </div>
 
         <div className="flex flex-col gap-2">
+          {touchFirst && deviceButton}
           <button
+            key="google"
             type="button"
             onClick={onGoogle}
             className="btn-secondary text-sm flex items-center justify-center gap-2"
@@ -56,6 +81,7 @@ export function SendCalendarInvitePrompt({ attendeeName, onDismiss, onGoogle, on
             </svg>
             Send via Outlook
           </button>
+          {!touchFirst && deviceButton}
           <button
             type="button"
             onClick={onDismiss}
