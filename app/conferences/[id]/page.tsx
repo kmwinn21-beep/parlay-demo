@@ -11,6 +11,7 @@ import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
 import { MeetingDateFilterBar } from '@/components/MeetingDateFilterBar';
 import { KebabMenu } from '@/components/KebabMenu';
+import { ScrollRow } from '@/components/ScrollRow';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { PinnedNotesSection, type PinnedNote } from '@/components/PinnedNotesSection';
 import { NotesPopover } from '@/components/NotesPopover';
@@ -2724,61 +2725,72 @@ export default function ConferenceDetailPage() {
                 className="hidden"
                 onChange={handleUploadAttendees}
               />
-              {/* Quick-filter badges — common one-click filters, multi-select */}
-              <button
-                type="button"
-                onClick={() => setQuickFilterIcp(v => !v)}
-                className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                  quickFilterIcp
-                    ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
-                    : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
-                }`}
-              >
-                ICP
-              </button>
-              {quickFilterTypeButtons.map(type => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => toggleQuickFilterType(type)}
-                  className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                    quickFilterTypes.has(type)
-                      ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
-                      : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
-                  }`}
-                >
-                  {type === 'Customer' ? 'Customers' : type === 'Competitor' ? 'Competitors' : type}
-                </button>
-              ))}
-              {currentUser && (
-                <button
-                  type="button"
-                  onClick={() => setQuickFilterMyAccounts(v => !v)}
-                  className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                    quickFilterMyAccounts
-                      ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
-                      : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
-                  }`}
-                >
-                  My Accounts
-                </button>
-              )}
-
-              {/* Filters toggle button */}
-              <button
-                onClick={() => setAttendeeFiltersOpen(v => !v)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${attendeeFiltersOpen ? 'bg-brand-secondary text-white border-brand-secondary' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
-                </svg>
-                Filters
-                {(filterSeniority || filterCompanyType || filterStatus || filterConfCounts.size > 0 || filterUpdatedWithin || filterNeedsReview) && (
-                  <span className="ml-0.5 min-w-[18px] h-[18px] rounded-full bg-white text-brand-secondary text-[10px] font-bold flex items-center justify-center px-1 leading-none border border-brand-secondary">
-                    {(filterSeniority ? 1 : 0) + (filterCompanyType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterUpdatedWithin ? 1 : 0) + (filterNeedsReview ? 1 : 0)}
-                  </span>
-                )}
-              </button>
+              {/* Quick filters + the Filters toggle. Mobile keeps them on one
+                  horizontally scrolling line; desktop lays them out inline. */}
+              {(() => {
+                const attendeeFilterButtons = (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setQuickFilterIcp(v => !v)}
+                      className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                        quickFilterIcp
+                          ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+                          : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      ICP
+                    </button>
+                    {quickFilterTypeButtons.map(type => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => toggleQuickFilterType(type)}
+                        className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                          quickFilterTypes.has(type)
+                            ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+                            : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                        }`}
+                      >
+                        {type === 'Customer' ? 'Customers' : type === 'Competitor' ? 'Competitors' : type}
+                      </button>
+                    ))}
+                    {currentUser && (
+                      <button
+                        type="button"
+                        onClick={() => setQuickFilterMyAccounts(v => !v)}
+                        className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                          quickFilterMyAccounts
+                            ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+                            : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                        }`}
+                      >
+                        My Accounts
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setAttendeeFiltersOpen(v => !v)}
+                      className={`flex-shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${attendeeFiltersOpen ? 'bg-brand-secondary text-white border-brand-secondary' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
+                      </svg>
+                      Filters
+                      {(filterSeniority || filterCompanyType || filterStatus || filterConfCounts.size > 0 || filterUpdatedWithin || filterNeedsReview) && (
+                        <span className="ml-0.5 min-w-[18px] h-[18px] rounded-full bg-white text-brand-secondary text-[10px] font-bold flex items-center justify-center px-1 leading-none border border-brand-secondary">
+                          {(filterSeniority ? 1 : 0) + (filterCompanyType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterUpdatedWithin ? 1 : 0) + (filterNeedsReview ? 1 : 0)}
+                        </span>
+                      )}
+                    </button>
+                  </>
+                );
+                return (
+                  <>
+                    <ScrollRow className="w-full lg:hidden" gapClass="gap-2">{attendeeFilterButtons}</ScrollRow>
+                    <div className="hidden lg:contents">{attendeeFilterButtons}</div>
+                  </>
+                );
+              })()}
             </div>
           </div>
 

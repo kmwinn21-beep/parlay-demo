@@ -9,6 +9,7 @@ import { OperatorCapitalModal } from './OperatorCapitalModal';
 import { InternalRelationshipModal } from './InternalRelationshipsSection';
 import { CompanyRelationshipsPopup } from './CompanyRelationshipsPopup';
 import { useDrawerResize } from '@/lib/useDrawerResize';
+import { ScrollRow } from '@/components/ScrollRow';
 import { AddToConferenceModal } from './AddToConferenceModal';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
@@ -610,6 +611,70 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
 
   const activeFilterCount = (filterSFOwner ? 1 : 0) + (filterType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterConference ? 1 : 0) + (filterICP ? 1 : 0) + (wseFilterActive ? 1 : 0) + (filterUpdatedWithin ? 1 : 0) + (filterHierarchy ? 1 : 0);
 
+  // Quick filters + the Filters toggle. Mobile keeps them on one
+  // horizontally scrolling line; desktop lays them out inline.
+  const filterButtons = (
+    <>
+      {/* Quick-filter badges — common one-click filters, multi-select */}
+      <button
+        type="button"
+        onClick={() => setQuickFilterIcp(v => !v)}
+        className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+          quickFilterIcp
+            ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+            : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+        }`}
+      >
+        ICP
+      </button>
+      {quickFilterTypeButtons.map(type => (
+        <button
+          key={type}
+          type="button"
+          onClick={() => toggleQuickFilterType(type)}
+          className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+            quickFilterTypes.has(type)
+              ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+              : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+          }`}
+        >
+          {type === 'Customer' ? 'Customers' : type === 'Competitor' ? 'Competitors' : type}
+        </button>
+      ))}
+      {currentUser && (
+        <button
+          type="button"
+          onClick={() => setQuickFilterMyAccounts(v => !v)}
+          className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+            quickFilterMyAccounts
+              ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+              : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+          }`}
+        >
+          My Accounts
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => setFiltersOpen(o => !o)}
+        className={`flex-shrink-0 whitespace-nowrap flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${activeFilterCount > 0 ? 'border-brand-secondary text-brand-secondary bg-blue-50' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+        </svg>
+        Filters
+        {activeFilterCount > 0 && (
+          <span className="bg-brand-secondary text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+            {activeFilterCount}
+          </span>
+        )}
+        <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+    </>
+  );
+
   return (
     <div>
       {/* Toolbar */}
@@ -619,64 +684,9 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search companies..." className="input-field pl-9" />
         </div>
 
-        {/* Quick-filter badges — common one-click filters, multi-select */}
-        <button
-          type="button"
-          onClick={() => setQuickFilterIcp(v => !v)}
-          className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-            quickFilterIcp
-              ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
-              : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
-          }`}
-        >
-          ICP
-        </button>
-        {quickFilterTypeButtons.map(type => (
-          <button
-            key={type}
-            type="button"
-            onClick={() => toggleQuickFilterType(type)}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-              quickFilterTypes.has(type)
-                ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
-                : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
-            }`}
-          >
-            {type === 'Customer' ? 'Customers' : type === 'Competitor' ? 'Competitors' : type}
-          </button>
-        ))}
-        {currentUser && (
-          <button
-            type="button"
-            onClick={() => setQuickFilterMyAccounts(v => !v)}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-              quickFilterMyAccounts
-                ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
-                : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
-            }`}
-          >
-            My Accounts
-          </button>
-        )}
-
-        <button
-          type="button"
-          onClick={() => setFiltersOpen(o => !o)}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${activeFilterCount > 0 ? 'border-brand-secondary text-brand-secondary bg-blue-50' : 'border-gray-200 text-gray-600 hover:border-gray-400'}`}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-          </svg>
-          Filters
-          {activeFilterCount > 0 && (
-            <span className="bg-brand-secondary text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
-              {activeFilterCount}
-            </span>
-          )}
-          <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+        {/* Mobile: one scrolling line. Desktop: inline in the toolbar. */}
+        <ScrollRow className="w-full lg:hidden" gapClass="gap-2">{filterButtons}</ScrollRow>
+        <div className="hidden lg:contents">{filterButtons}</div>
 
         {selectedIds.size >= 1 && (
           <>
