@@ -431,6 +431,11 @@ export default function ConferenceDetailPage() {
   const [sortKey, setSortKey] = useState<'name' | 'title' | 'company' | 'seniority'>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [filterNeedsReview, setFilterNeedsReview] = useState(false);
+  // How many of the advanced attendee filters are set — shown as a badge on
+  // the Filters control, wherever that control currently lives.
+  const attendeeAdvancedFilterCount = (filterSeniority ? 1 : 0) + (filterCompanyType ? 1 : 0)
+    + (filterStatus ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0)
+    + (filterUpdatedWithin ? 1 : 0) + (filterNeedsReview ? 1 : 0);
   const [titleMetaMap, setTitleMetaMap] = useState<Record<number, TitleMatchMetadata>>({});
   const [titleMetaLoading, setTitleMetaLoading] = useState(false);
   const [titleMetaRefetch, setTitleMetaRefetch] = useState(0);
@@ -2666,20 +2671,69 @@ export default function ConferenceDetailPage() {
                   })()}
                 </>
               )}
-              <div className="relative">
-                <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <input
-                  value={attendeeSearch}
-                  onChange={(e) => setAttendeeSearch(e.target.value)}
-                  placeholder="Search attendees..."
-                  className="input-field pl-9 w-56"
+              <div className="flex items-center gap-2 w-full lg:w-auto">
+                <div className="relative flex-1 lg:flex-none">
+                  <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <input
+                    value={attendeeSearch}
+                    onChange={(e) => setAttendeeSearch(e.target.value)}
+                    placeholder="Search attendees..."
+                    className="input-field pl-9 w-full lg:w-56"
+                  />
+                </div>
+                {/* Mobile: Scan / Add / Upload live in this menu instead of the toolbar */}
+                <KebabMenu
+                  className="lg:hidden"
+                  title="Attendee actions"
+                  items={[
+                    {
+                      label: 'Scan',
+                      onClick: () => setShowBatchScan(true),
+                      icon: (
+                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                      ),
+                    },
+                    {
+                      label: 'Add',
+                      onClick: () => setShowAddForm(v => !v),
+                      icon: (
+                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                      ),
+                    },
+                    {
+                      label: isUploading ? 'Uploading…' : 'Upload',
+                      onClick: () => uploadFileRef.current?.click(),
+                      disabled: isUploading,
+                      icon: (
+                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                      ),
+                    },
+                    {
+                      label: 'Filters',
+                      onClick: () => setAttendeeFiltersOpen(v => !v),
+                      active: attendeeFiltersOpen || attendeeAdvancedFilterCount > 0,
+                      badge: attendeeAdvancedFilterCount,
+                      icon: (
+                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
+                        </svg>
+                      ),
+                    },
+                  ]}
                 />
               </div>
               <button
                 onClick={() => setShowBatchScan(true)}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium text-brand-primary"
+                className="hidden lg:flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium text-brand-primary"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -2689,7 +2743,7 @@ export default function ConferenceDetailPage() {
               </button>
               <button
                 onClick={() => setShowAddForm((v) => !v)}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium text-brand-primary"
+                className="hidden lg:flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium text-brand-primary"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -2699,7 +2753,7 @@ export default function ConferenceDetailPage() {
               <button
                 onClick={() => uploadFileRef.current?.click()}
                 disabled={isUploading}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium text-brand-primary disabled:opacity-50"
+                className="hidden lg:flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium text-brand-primary disabled:opacity-50"
               >
                 {isUploading ? (
                   <>
@@ -2768,26 +2822,30 @@ export default function ConferenceDetailPage() {
                         My Accounts
                       </button>
                     )}
-                    <button
-                      onClick={() => setAttendeeFiltersOpen(v => !v)}
-                      className={`flex-shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${attendeeFiltersOpen ? 'bg-brand-secondary text-white border-brand-secondary' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
-                      </svg>
-                      Filters
-                      {(filterSeniority || filterCompanyType || filterStatus || filterConfCounts.size > 0 || filterUpdatedWithin || filterNeedsReview) && (
-                        <span className="ml-0.5 min-w-[18px] h-[18px] rounded-full bg-white text-brand-secondary text-[10px] font-bold flex items-center justify-center px-1 leading-none border border-brand-secondary">
-                          {(filterSeniority ? 1 : 0) + (filterCompanyType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterUpdatedWithin ? 1 : 0) + (filterNeedsReview ? 1 : 0)}
-                        </span>
-                      )}
-                    </button>
                   </>
+                );
+                // Desktop keeps the Filters toggle inline with the chips;
+                // mobile reaches it from the actions kebab instead.
+                const filtersToggle = (
+                  <button
+                    onClick={() => setAttendeeFiltersOpen(v => !v)}
+                    className={`flex-shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${attendeeFiltersOpen ? 'bg-brand-secondary text-white border-brand-secondary' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
+                    </svg>
+                    Filters
+                    {attendeeAdvancedFilterCount > 0 && (
+                      <span className="ml-0.5 min-w-[18px] h-[18px] rounded-full bg-white text-brand-secondary text-[10px] font-bold flex items-center justify-center px-1 leading-none border border-brand-secondary">
+                        {attendeeAdvancedFilterCount}
+                      </span>
+                    )}
+                  </button>
                 );
                 return (
                   <>
                     <ScrollRow className="w-full lg:hidden" gapClass="gap-2">{attendeeFilterButtons}</ScrollRow>
-                    <div className="hidden lg:contents">{attendeeFilterButtons}</div>
+                    <div className="hidden lg:contents">{attendeeFilterButtons}{filtersToggle}</div>
                   </>
                 );
               })()}
@@ -2938,7 +2996,7 @@ export default function ConferenceDetailPage() {
           {showAddForm && (
             <div className="mb-4 p-4 bg-blue-50 border border-brand-secondary rounded-xl">
               <h3 className="text-sm font-semibold text-brand-primary mb-3">Add Attendee to Conference</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                 <div>
                   <label className="label text-xs">First Name *</label>
                   <input
