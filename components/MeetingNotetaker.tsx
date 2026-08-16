@@ -87,6 +87,10 @@ interface UserOption {
 
 type RecordingState = 'idle' | 'recording' | 'paused' | 'stopped';
 
+// In-app recording is hidden until the transcription pipeline is settled.
+// Flip this back to true to restore the Record controls everywhere.
+const AUDIO_RECORDING_ENABLED = false;
+
 interface Props {
   meetingId: number;
   onClose?: () => void;
@@ -414,6 +418,8 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
   const closeRecord = useCallback(() => setRecordDrawer(null), []);
   const [mobileTab, setMobileTab] = useState<'context' | 'notes' | 'summary'>('notes');
   const [transcriptExpanded, setTranscriptExpanded] = useState(false);
+  const [pastedTranscript, setPastedTranscript] = useState('');
+  const [pasteOpen, setPasteOpen] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
   const [actionItemsOpen, setActionItemsOpen] = useState(false);
   const [meetingSummaryOpen, setMeetingSummaryOpen] = useState(true);
@@ -700,10 +706,16 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
     } catch { /* silent */ }
   }, [additionalAttendees, meeting, meetingId]);
 
-  const handleAnalyze = useCallback(async () => {
-    const hasAudioBlob = !!audioBlob;
-    const hasSavedAudio = !!(audioUrl && !audioUrl.startsWith('blob:'));
-    const hasTranscript = transcript.length > 0;
+  /**
+   * Runs the meeting through analysis. Pass transcriptOverride to summarize
+   * text that hasn't landed in `transcript` state yet — the paste box does
+   * this so the request doesn't wait on a re-render.
+   */
+  const handleAnalyze = useCallback(async (transcriptOverride?: string) => {
+    const pasted = transcriptOverride?.trim() || null;
+    const hasAudioBlob = !pasted && !!audioBlob;
+    const hasSavedAudio = !pasted && !!(audioUrl && !audioUrl.startsWith('blob:'));
+    const hasTranscript = !!pasted || transcript.length > 0;
 
     if (!hasAudioBlob && !hasTranscript && !hasSavedAudio) {
       toast.error('No audio or transcript to analyze.');
@@ -721,7 +733,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
         formData.append('audio_file', new File([audioBlob!], `recording.${ext}`, { type: audioBlob!.type }));
         analyzeRes = await fetch(`/api/meetings/${meetingId}/analyze`, { method: 'POST', body: formData });
       } else {
-        const transcriptPayload = hasTranscript ? transcript.map(s => s.text).join('\n') : null;
+        const transcriptPayload = pasted ?? (hasTranscript ? transcript.map(s => s.text).join('\n') : null);
         const r2Url = hasSavedAudio ? audioUrl : null;
         analyzeRes = await fetch(`/api/meetings/${meetingId}/analyze`, {
           method: 'POST',
@@ -755,6 +767,19 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       onAnalysisStateChange?.(false);
     }
   }, [audioBlob, audioUrl, meetingId, transcript, onAnalysisStateChange]);
+
+  // Pasted transcript — same treatment as an uploaded .txt, then straight
+  // into analysis so the user gets a summary in one step.
+  const handleSummarizePasted = useCallback(async () => {
+    const text = pastedTranscript.trim();
+    if (!text) return;
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    setTranscript(lines.map((line, i) => ({ text: line, start: i * 5, end: (i + 1) * 5 })));
+    setPasteOpen(false);
+    await handleAnalyze(text);
+    setPastedTranscript('');
+  }, [pastedTranscript, handleAnalyze]);
+
 
   const confirmSelectedTasksToApi = useCallback(async () => {
     const selected = nextSteps.filter(s => s.id != null && selectedTaskIds.has(s.id));
@@ -1119,7 +1144,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
             type="button"
             onClick={() => setShowMobileTools(v => !v)}
             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
-            title="Recording & AI tools"
+            title="Upload & AI tools"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
@@ -1129,6 +1154,8 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
             <>
               <div className="fixed inset-0 z-[30]" onClick={() => setShowMobileTools(false)} />
               <div className="absolute right-0 top-full mt-1 z-[31] bg-white border border-gray-200 rounded-xl shadow-xl py-2 min-w-[220px]">
+                {AUDIO_RECORDING_ENABLED && (
+                <>
                 {/* Record */}
                 <button
                   onClick={() => {
@@ -1161,6 +1188,8 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                     )}
                     <button onClick={() => { stopRecording(); setShowMobileTools(false); }} className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-red-100 text-red-700">Stop</button>
                   </div>
+                )}
+                </>
                 )}
 
                 {/* Upload Audio */}
@@ -1231,6 +1260,8 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
         </div>
 
         <div className="hidden lg:flex items-center gap-2 flex-shrink-0">
+          {AUDIO_RECORDING_ENABLED && (
+          <>
           {/* Record button */}
           <button
             onClick={() => {
@@ -1260,6 +1291,8 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
               }
               <button onClick={stopRecording} className="px-2 py-1.5 text-xs font-semibold rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition-colors">Stop</button>
             </div>
+          )}
+          </>
           )}
 
           {/* Upload button with popover */}
@@ -1326,7 +1359,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
           {/* Generate AI Summary */}
           {canAnalyze && (
           <button
-            onClick={handleAnalyze}
+            onClick={() => handleAnalyze()}
             disabled={analysisLoading || (!hasAudioOrTranscript)}
             className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-teal-50 border border-teal-200 text-teal-700 hover:bg-teal-100 transition-colors flex items-center gap-1.5 disabled:opacity-40"
             title="Generate AI summary from audio or transcript"
@@ -1931,12 +1964,69 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                 </div>
               )}
 
+              {/* Paste a transcript — the way to get a summary without audio */}
+              {!analysisLoading && canAnalyze && transcript.length === 0 && (
+                <div className="border border-gray-200 rounded-lg p-3 mb-4">
+                  {!pasteOpen ? (
+                    <button
+                      type="button"
+                      onClick={() => setPasteOpen(true)}
+                      className="w-full flex items-center gap-2 text-xs font-semibold text-gray-600 hover:text-gray-800 transition-colors"
+                    >
+                      <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                      Paste a transcript
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Paste transcript</p>
+                        <button
+                          type="button"
+                          onClick={() => { setPasteOpen(false); setPastedTranscript(''); }}
+                          className="text-[10px] text-gray-400 hover:text-gray-600 font-medium"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      <textarea
+                        autoFocus
+                        value={pastedTranscript}
+                        onChange={e => setPastedTranscript(e.target.value)}
+                        placeholder="Paste the meeting transcript here…"
+                        rows={8}
+                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs leading-snug focus:outline-none focus:ring-1 focus:ring-brand-secondary focus:border-brand-secondary resize-y"
+                      />
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] text-gray-400">
+                          {pastedTranscript.trim()
+                            ? `${pastedTranscript.trim().length.toLocaleString()} characters`
+                            : 'One line per exchange works best'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleSummarizePasted}
+                          disabled={analysisLoading || !pastedTranscript.trim()}
+                          className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-teal-50 border border-teal-200 text-teal-700 hover:bg-teal-100 transition-colors flex items-center gap-1.5 disabled:opacity-40"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                          </svg>
+                          {analysisLoading ? 'Summarizing…' : 'Summarize'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {!analysisLoading && insights.length === 0 && nextSteps.length === 0 && !summary && !notesText && (
                 <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
                   <svg className="w-10 h-10 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                   </svg>
-                  <p className="text-sm text-gray-400 max-w-[200px]">Add pain points or buying signals on the left, or record / upload audio to generate an AI summary.</p>
+                  <p className="text-sm text-gray-400 max-w-[200px]">Add pain points or buying signals on the left, or paste a transcript above to generate an AI summary.</p>
                 </div>
               )}
 
@@ -2201,7 +2291,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                     </div>
                   )}
 
-                  {/* 6. Transcript */}
+                  {/* 7. Transcript */}
                   {transcript.length > 0 && (
                     <div>
                       <div className="flex items-center justify-between py-1">
