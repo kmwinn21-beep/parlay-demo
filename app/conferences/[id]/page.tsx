@@ -3117,26 +3117,33 @@ export default function ConferenceDetailPage() {
                           ) : (
                             <span className="text-xs text-gray-700">{attendee.company_name}</span>
                           )}
-                          {attendee.company_type && <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>}
                         </div>
                       )}
-                      <div className="mt-2 ml-6 flex items-center flex-wrap gap-2">
-                        <span className="flex flex-wrap gap-1">{(attendee.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{formatStatusLabel(s)}</span>)}{(attendee.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && <span className="text-gray-400">—</span>}</span>
-                        <span className={`${getBadgeClass(seniority, colorMaps.seniority || {})} inline-flex items-center gap-1`}>
+                      {/* Everything else rides one scrolling line, company type first */}
+                      <ScrollRow className="mt-2 ml-6" gapClass="gap-2">
+                        {attendee.company_type && (
+                          <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs flex-shrink-0 whitespace-nowrap`}>{attendee.company_type}</span>
+                        )}
+                        {(attendee.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => (
+                          <span key={s} className={`${getBadgeClass(s, colorMaps.status || {})} flex-shrink-0 whitespace-nowrap`}>{formatStatusLabel(s)}</span>
+                        ))}
+                        <span className={`${getBadgeClass(seniority, colorMaps.seniority || {})} inline-flex items-center gap-1 flex-shrink-0 whitespace-nowrap`}>
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                           {seniority}
                         </span>
-                        <span className="inline-flex items-center gap-1">
+                        <span className="inline-flex items-center gap-1 flex-shrink-0 whitespace-nowrap">
                           <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                           <ConferenceCountTooltip count={Number(attendee.conference_count ?? 0)} names={attendee.conference_names as string | undefined} />
                         </span>
                         {Number(attendee.entity_notes_count ?? 0) > 0 && (
-                          <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.entity_notes_count)} />
+                          <span className="flex-shrink-0">
+                            <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.entity_notes_count)} />
+                          </span>
                         )}
-                      </div>
-                      {attendee.created_at && (
-                        <p className="text-[11px] text-gray-400 mt-1 ml-6">Added {fmtDate(attendee.created_at)}</p>
-                      )}
+                        {attendee.created_at && (
+                          <span className="text-[11px] text-gray-400 flex-shrink-0 whitespace-nowrap">Added {fmtDate(attendee.created_at)}</span>
+                        )}
+                      </ScrollRow>
                     </div>
                   );
                 })}
