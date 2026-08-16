@@ -332,3 +332,52 @@ export function AttendeeAvatar({
     </>
   );
 }
+
+/**
+ * The small circular avatar used in lists, cards and drawers. Shows the
+ * attendee's photo when one is on file, initials otherwise, and opens the
+ * photo card on click. Pure display — it never offers to add a photo, which
+ * is what AttendeeAvatar (the editable one on the profile) is for.
+ */
+export function AttendeeInitialsAvatar({
+  name, photoUrl, title, companyName, className = 'w-7 h-7 text-[10px]',
+  baseClass = 'bg-brand-secondary/20 text-brand-secondary',
+}: {
+  name: string;
+  photoUrl?: string | null;
+  title?: string | null;
+  companyName?: string | null;
+  /** Size + font size. */
+  className?: string;
+  /** Colours for the initials state. */
+  baseClass?: string;
+}) {
+  const [showPhoto, setShowPhoto] = useState(false);
+  const initials = name.trim().split(/\s+/).filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase();
+  const shell = `${className} ${baseClass} rounded-full inline-flex items-center justify-center font-bold flex-shrink-0 overflow-hidden`;
+
+  if (!photoUrl) return <span className={shell}>{initials}</span>;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={e => { e.stopPropagation(); e.preventDefault(); setShowPhoto(true); }}
+        title={`View ${name}'s photo`}
+        className={`${shell} transition-shadow hover:shadow-md`}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={photoUrl} alt={name} className="w-full h-full object-cover" />
+      </button>
+      {showPhoto && (
+        <AttendeePhotoModal
+          name={name}
+          title={title}
+          companyName={companyName}
+          photoUrl={photoUrl}
+          onClose={() => setShowPhoto(false)}
+        />
+      )}
+    </>
+  );
+}
