@@ -200,7 +200,7 @@ function AddNoteModal({ onClose, onSave }: { onClose: () => void; onSave: (conte
             {saving ? 'Saving…' : 'Save Note'}
           </button>
         </div>
-        <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Write your note here…" rows={5}
+        <textarea autoFocus value={text} onChange={e => setText(e.target.value)} placeholder="Write your note here…" rows={5}
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary resize-none"
           onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSave(); }} />
         <p className="text-xs text-gray-400 mt-1 sm:mb-4">⌘+Enter to save</p>
@@ -1609,7 +1609,7 @@ export function QuickNoteInlineModal({ onClose }: { onClose: () => void }) {
             {saving ? 'Saving…' : 'Save Note'}
           </button>
         </div>
-        <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Write a floor note…" rows={4}
+        <textarea autoFocus value={text} onChange={e => setText(e.target.value)} placeholder="Write a floor note…" rows={4}
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary resize-none"
           onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSave(); }} />
         <div className="hidden sm:flex justify-end gap-2 mt-3">
