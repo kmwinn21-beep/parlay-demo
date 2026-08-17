@@ -9,6 +9,7 @@ import { useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
 import { NewMeetingModal } from '@/components/NewMeetingModal';
 import { type Meeting } from '@/components/MeetingsTable';
 import { OutreachAssignModal } from '@/components/OutreachAssignModal';
+import { ScrollRow } from '@/components/ScrollRow';
 
 export interface AddableAttendee {
   id: number;
@@ -60,6 +61,13 @@ const TIERS = [
     dragOutline: '2px solid #9ca3af',
   },
 ];
+
+/** "$1.5M" / "$485K" — the phone has no room for the full figure. */
+function abbreviateMoney(total: number): string {
+  if (total >= 1_000_000) return `$${(total / 1_000_000).toFixed(total >= 10_000_000 ? 0 : 1).replace(/\.0$/, '')}M`;
+  if (total >= 1_000) return `$${Math.round(total / 1_000)}K`;
+  return `$${total}`;
+}
 
 function SeniorityPill({ seniority }: { seniority: string | null }) {
   if (!seniority) return null;
@@ -247,6 +255,10 @@ export function ConferenceTargetsTab({
 }) {
   const { user: currentUser } = useUser();
   const avgCostPerUnit = useAvgCostPerUnit();
+  // The per-tier bars are heavy on a phone, so they hide behind Details there;
+  // desktop always shows them.
+  const [tierDetailsOpen, setTierDetailsOpen] = useState(false);
+  const [meetingTierDetailsOpen, setMeetingTierDetailsOpen] = useState(false);
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [dragOverTier, setDragOverTier] = useState<string | null>(null);
   const [myTargetsOnly, setMyTargetsOnly] = useState(false);
@@ -483,6 +495,29 @@ export function ConferenceTargetsTab({
     );
   }
 
+  const minimizedTierPills = TIERS.filter(tier => minimizedTiers.has(tier.key)).map(tier => {
+    const val = tierValueSum[tier.key] ?? 0;
+    const count = targets.filter(t => t.tier === tier.key).length;
+    return (
+      <button
+        key={tier.key}
+        type="button"
+        onClick={() => restoreTier(tier.key)}
+        title={`Show ${tier.label}`}
+        style={{ animation: 'minimizedPillIn 200ms ease-out' }}
+        className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-semibold transition-colors hover:brightness-95 flex-shrink-0 whitespace-nowrap ${tier.bg} ${tier.border} ${tier.labelClass}`}
+      >
+        <span className="uppercase tracking-wide">{tier.label}</span>
+        <span className="opacity-80">{hasValues ? '$' + val.toLocaleString('en-US') : count}</span>
+        <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-white/70">
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+        </span>
+      </button>
+    );
+  });
+
   return (
     <div className="space-y-6">
       {/* Header row: pipeline value chart + meetings pipeline chart */}
@@ -527,20 +562,32 @@ export function ConferenceTargetsTab({
               <div className="flex items-center gap-1.5 mt-1">
                 <span className="text-xs text-gray-400">
                   Projected at {conversionPct}%:{' '}
-                  <span className="font-medium text-gray-600">${convertedValue.toLocaleString('en-US')}</span>
+                  <span className="font-medium text-gray-600 lg:hidden">{abbreviateMoney(convertedValue)}</span>
+                  <span className="font-medium text-gray-600 hidden lg:inline">${convertedValue.toLocaleString('en-US')}</span>
                 </span>
                 {coverageRatio != null && (
                   <span className={`text-xs font-medium ${(coverageRatio ?? 0) >= 1 ? 'text-emerald-600' : (coverageRatio ?? 0) >= 0.6 ? 'text-amber-600' : 'text-red-500'}`}>
                     ({Math.round((coverageRatio ?? 0) * 100)}%)
                   </span>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setTierDetailsOpen(o => !o)}
+                  aria-expanded={tierDetailsOpen}
+                  className="lg:hidden ml-auto text-xs font-medium text-brand-secondary hover:text-brand-primary transition-colors flex items-center gap-0.5"
+                >
+                  Details
+                  <svg className={`w-3 h-3 transition-transform ${tierDetailsOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
               </div>
             </div>
           )}
 
-          {/* Per-tier value bars */}
+          {/* Per-tier value bars — behind Details on mobile */}
           {hasValues ? (
-            <div className="space-y-2">
+            <div className={`space-y-2 ${tierDetailsOpen ? 'block' : 'hidden lg:block'}`}>
               {TIERS.map(tier => {
                 const val = tierValueSum[tier.key] ?? 0;
                 return (
@@ -611,20 +658,32 @@ export function ConferenceTargetsTab({
               <div className="flex items-center gap-1.5 mt-1">
                 <span className="text-xs text-gray-400">
                   Projected at {meetingsConvPct}%:{' '}
-                  <span className="font-medium text-gray-600">${convertedMeetingValue.toLocaleString('en-US')}</span>
+                  <span className="font-medium text-gray-600 lg:hidden">{abbreviateMoney(convertedMeetingValue)}</span>
+                  <span className="font-medium text-gray-600 hidden lg:inline">${convertedMeetingValue.toLocaleString('en-US')}</span>
                 </span>
                 {meetingsCoverageRatio != null && (
                   <span className={`text-xs font-medium ${(meetingsCoverageRatio ?? 0) >= 1 ? 'text-emerald-600' : (meetingsCoverageRatio ?? 0) >= 0.6 ? 'text-amber-600' : 'text-red-500'}`}>
                     ({Math.round((meetingsCoverageRatio ?? 0) * 100)}%)
                   </span>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setMeetingTierDetailsOpen(o => !o)}
+                  aria-expanded={meetingTierDetailsOpen}
+                  className="lg:hidden ml-auto text-xs font-medium text-brand-secondary hover:text-brand-primary transition-colors flex items-center gap-0.5"
+                >
+                  Details
+                  <svg className={`w-3 h-3 transition-transform ${meetingTierDetailsOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
               </div>
             </div>
           )}
 
-          {/* Per-tier value bars for companies with meetings */}
+          {/* Per-tier value bars for companies with meetings — behind Details on mobile */}
           {hasMeetingValues ? (
-            <div className="space-y-2">
+            <div className={`space-y-2 ${meetingTierDetailsOpen ? 'block' : 'hidden lg:block'}`}>
               {TIERS.map(tier => {
                 const val = meetingTierValueSum[tier.key] ?? 0;
                 return (
@@ -663,36 +722,17 @@ export function ConferenceTargetsTab({
       {/* Kanban */}
       <div>
         <style>{`@keyframes minimizedPillIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }`}</style>
-        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-          <div className="flex items-center gap-2 flex-wrap">
+        {/* Header: title + My Targets. Minimized tier pills stay inline on
+            desktop and drop to their own scrolling row on mobile. */}
+        <div className="flex items-center justify-between mb-2 gap-3">
+          <div className="flex items-center gap-2 min-w-0 flex-wrap">
             <h3 className="text-sm font-semibold text-gray-700 flex-shrink-0">{conferenceName} Targets</h3>
-            {TIERS.filter(tier => minimizedTiers.has(tier.key)).map(tier => {
-              const val = tierValueSum[tier.key] ?? 0;
-              const count = targets.filter(t => t.tier === tier.key).length;
-              return (
-                <button
-                  key={tier.key}
-                  type="button"
-                  onClick={() => restoreTier(tier.key)}
-                  title={`Show ${tier.label}`}
-                  style={{ animation: 'minimizedPillIn 200ms ease-out' }}
-                  className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-semibold transition-colors hover:brightness-95 ${tier.bg} ${tier.border} ${tier.labelClass}`}
-                >
-                  <span className="uppercase tracking-wide">{tier.label}</span>
-                  <span className="opacity-80">{hasValues ? '$' + val.toLocaleString('en-US') : count}</span>
-                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-white/70">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                    </svg>
-                  </span>
-                </button>
-              );
-            })}
+            <div className="hidden lg:flex items-center gap-2 flex-wrap">{minimizedTierPills}</div>
             {currentUser?.repName && (
               <button
                 type="button"
                 onClick={() => setMyTargetsOnly(v => !v)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold transition-colors ${
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold transition-colors flex-shrink-0 ${
                   myTargetsOnly
                     ? 'border-brand-secondary bg-brand-secondary/10 text-brand-secondary'
                     : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
@@ -856,6 +896,10 @@ export function ConferenceTargetsTab({
             </div>
           )}
         </div>
+
+        {minimizedTiers.size > 0 && (
+          <ScrollRow className="lg:hidden mb-4" gapClass="gap-2">{minimizedTierPills}</ScrollRow>
+        )}
 
         {/* Mobile/tablet — simple stack of visible tiers only, reflows on add/remove */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:hidden gap-4">

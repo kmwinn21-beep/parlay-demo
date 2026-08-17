@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ScrollRow } from '@/components/ScrollRow';
 import { getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getRepInitials } from '@/lib/useUserOptions';
@@ -231,9 +232,15 @@ export function SocialEventCardBody({
           <CardField label="Location">
             <EventLocationLink venueName={venueName} location={location} />
           </CardField>
-          {/* Below sm these wrap to two grid lines — Type / Host /
-              # Invited, then Invite Only. */}
-          <div className="grid grid-cols-[1fr_1fr_auto] gap-x-3 gap-y-2 sm:contents">
+          {/* Below sm these share one scrolling line rather than wrapping to
+              two grid rows; from sm they join the inline meta row. */}
+          <ScrollRow className="sm:hidden" gapClass="gap-x-6">
+            <span className="flex-shrink-0"><CardField label="Type">{eventType || <span className="text-gray-400">—</span>}</CardField></span>
+            <span className="flex-shrink-0"><CardField label="Host">{host || <span className="text-gray-400">—</span>}</CardField></span>
+            <span className="flex-shrink-0"><CardField label="# Invited">{invitedCount > 0 ? invitedCount : <span className="text-gray-400">—</span>}</CardField></span>
+            <span className="flex-shrink-0"><CardField label="Invite Only">{inviteOnly === 'Yes' ? 'Yes' : 'No'}</CardField></span>
+          </ScrollRow>
+          <div className="hidden sm:contents">
             <CardField label="Type">{eventType || <span className="text-gray-400">—</span>}</CardField>
             <CardField label="Host">{host || <span className="text-gray-400">—</span>}</CardField>
             <CardField label="# Invited">{invitedCount > 0 ? invitedCount : <span className="text-gray-400">—</span>}</CardField>

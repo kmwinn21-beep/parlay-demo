@@ -1,38 +1,84 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useRecordDrawer } from './RecordDrawerContext';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import toast from 'react-hot-toast';
 import { useUser } from '@/components/UserContext';
+import { useUserOptions } from '@/lib/useUserOptions';
+import { useConfigColors } from '@/lib/useConfigColors';
+import { MeetingsTable, type Meeting } from '@/components/MeetingsTable';
 import type { MeetingRow } from '../PreConferenceReview';
 
-function fmtDate(d: string | null) {
-  if (!d) return '—';
-  try {
-    return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  } catch { return d; }
-}
-
-function fmtTime(t: string | null) {
-  if (!t) return '';
-  try {
-    const [h, m] = t.split(':').map(Number);
-    const ampm = h >= 12 ? 'pm' : 'am';
-    const hr = h % 12 || 12;
-    return `${hr}:${String(m).padStart(2, '0')}${ampm}`;
-  } catch { return t; }
+/**
+ * The pre-conference tab renders the same card the conference Meetings tab
+ * does — cardsOnly, since this modal column is far narrower than that page.
+ */
+function toMeeting(m: MeetingRow, outcomeOverride?: string): Meeting {
+  return {
+    id: m.id,
+    attendee_id: m.attendee_id,
+    conference_id: m.conference_id ?? 0,
+    meeting_date: m.meeting_date ?? '',
+    meeting_time: m.meeting_time ?? '',
+    location: m.location,
+    // The rep pills need the raw ids; `scheduled_by` here is already names.
+    scheduled_by: m.scheduled_by_ids ?? null,
+    additional_attendees: m.additional_attendees ?? null,
+    outcome: outcomeOverride ?? m.outcome,
+    meeting_type: m.meeting_type,
+    created_at: m.created_at ?? '',
+    first_name: m.first_name,
+    last_name: m.last_name,
+    title: m.title,
+    company_id: m.company_id,
+    company_name: m.company_name,
+    company_wse: m.company_wse ?? null,
+    conference_name: m.conference_name ?? '',
+    has_notes: m.has_notes,
+  };
 }
 
 export function MeetingsTab({ meetings }: { meetings: MeetingRow[] }) {
-  const openRecord = useRecordDrawer();
   const { user: currentUser } = useUser();
+  const userOptions = useUserOptions();
+  const colorMaps = useConfigColors();
   const [myMeetingsOnly, setMyMeetingsOnly] = useState(false);
+  const [actionOptions, setActionOptions] = useState<string[]>([]);
+  // Outcome edits are applied here rather than refetching the whole modal.
+  const [outcomeOverrides, setOutcomeOverrides] = useState<Record<number, string>>({});
+
+  useEffect(() => {
+    fetch('/api/config?category=action', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : []))
+      .then((data: { value: string }[]) => setActionOptions(Array.isArray(data) ? data.map(d => d.value) : []))
+      .catch(() => {});
+  }, []);
 
   const visibleMeetings = useMemo(
-    () => myMeetingsOnly && currentUser?.repName
-      ? meetings.filter(m => m.scheduled_by === currentUser.repName)
-      : meetings,
+    () => (myMeetingsOnly && currentUser?.repName
+      ? meetings.filter(m => (m.scheduled_by ?? '').split(',').map(n => n.trim()).includes(currentUser.repName!))
+      : meetings),
     [meetings, myMeetingsOnly, currentUser],
   );
+
+  const cardMeetings = useMemo(
+    () => visibleMeetings.map(m => toMeeting(m, outcomeOverrides[m.id])),
+    [visibleMeetings, outcomeOverrides],
+  );
+
+  const handleOutcomeChange = useCallback(async (meetingId: number, outcome: string) => {
+    setOutcomeOverrides(prev => ({ ...prev, [meetingId]: outcome }));
+    try {
+      const res = await fetch('/api/meetings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: meetingId, outcome }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Outcome updated.');
+    } catch {
+      toast.error('Failed to update outcome.');
+    }
+  }, []);
 
   if (meetings.length === 0) {
     return (
@@ -42,7 +88,7 @@ export function MeetingsTab({ meetings }: { meetings: MeetingRow[] }) {
     );
   }
 
-  const conflicts = visibleMeetings.filter((m) => m.hasConflict);
+  const conflicts = visibleMeetings.filter(m => m.hasConflict);
 
   return (
     <div className="space-y-4">
@@ -68,94 +114,22 @@ export function MeetingsTab({ meetings }: { meetings: MeetingRow[] }) {
         )}
       </div>
 
-      {visibleMeetings.length === 0 && (
+      {visibleMeetings.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-8">No meetings match this filter.</p>
+      ) : (
+        <div className="rounded-xl border border-gray-200 overflow-hidden">
+          <MeetingsTable
+            cardsOnly
+            groupByDate
+            tableName="conference_meetings"
+            meetings={cardMeetings}
+            actionOptions={actionOptions}
+            colorMap={colorMaps.action || {}}
+            userOptions={userOptions}
+            onOutcomeChange={handleOutcomeChange}
+          />
+        </div>
       )}
-
-      {/* Mobile card view */}
-      <div className="sm:hidden space-y-3">
-        {visibleMeetings.map((m) => (
-          <div
-            key={m.id}
-            className={`rounded-xl border p-4 space-y-2 ${m.hasConflict ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'}`}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <button type="button" onClick={() => openRecord('attendee', m.attendee_id)} className="font-medium text-brand-secondary hover:underline text-sm text-left">
-                  {m.first_name} {m.last_name}
-                </button>
-                {m.title && <p className="text-xs text-gray-400 truncate">{m.title}</p>}
-              </div>
-              {m.outcome ? (
-                <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium">{m.outcome}</span>
-              ) : (
-                <span className="flex-shrink-0 text-gray-400 text-xs">Pending</span>
-              )}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
-              <span>{fmtDate(m.meeting_date)}{m.meeting_time ? ` · ${fmtTime(m.meeting_time)}` : ''}</span>
-              {m.hasConflict && (
-                <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-medium">Conflict</span>
-              )}
-            </div>
-
-            {m.company_name && (
-              <p className="text-xs text-gray-500 truncate">{m.company_name}</p>
-            )}
-
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
-              {m.scheduled_by && <span>Rep: {m.scheduled_by}</span>}
-              {m.meeting_type && <span className="text-gray-400">{m.meeting_type}</span>}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Desktop table view */}
-      <div className="hidden sm:block overflow-x-auto rounded-xl border border-gray-200">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Attendee</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Company</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Date / Time</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Rep</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Type</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Outcome</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {visibleMeetings.map((m) => (
-              <tr key={m.id} className={`${m.hasConflict ? 'bg-red-50' : 'hover:bg-gray-50'} transition-colors`}>
-                <td className="px-4 py-3">
-                  <button type="button" onClick={() => openRecord('attendee', m.attendee_id)} className="font-medium text-brand-secondary hover:underline text-left">
-                    {m.first_name} {m.last_name}
-                  </button>
-                  {m.title && <p className="text-xs text-gray-400">{m.title}</p>}
-                </td>
-                <td className="px-4 py-3 text-gray-700 text-xs">{m.company_name ?? '—'}</td>
-                <td className="px-4 py-3">
-                  <span className="text-gray-700">{fmtDate(m.meeting_date)}</span>
-                  {m.meeting_time && <span className="text-gray-400 text-xs block">{fmtTime(m.meeting_time)}</span>}
-                  {m.hasConflict && (
-                    <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-xs bg-red-100 text-red-700 font-medium">Conflict</span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-gray-700 text-xs">{m.scheduled_by ?? '—'}</td>
-                <td className="px-4 py-3 text-gray-600 text-xs">{m.meeting_type ?? '—'}</td>
-                <td className="px-4 py-3">
-                  {m.outcome ? (
-                    <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium">{m.outcome}</span>
-                  ) : (
-                    <span className="text-gray-400 text-xs">Pending</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }

@@ -77,11 +77,14 @@ export async function GET(
     db.execute({
       sql: `SELECT m.id, m.attendee_id, m.conference_id, m.meeting_date, m.meeting_time,
                    m.location, m.scheduled_by, m.outcome, m.meeting_type,
+                   m.additional_attendees, m.created_at,
                    a.first_name, a.last_name, a.title,
-                   c.name as company_name, c.id as company_id
+                   c.name as company_name, c.id as company_id, c.wse as company_wse,
+                   CASE WHEN mn.id IS NOT NULL THEN 1 ELSE 0 END as has_notes
             FROM meetings m
             JOIN attendees a ON m.attendee_id = a.id
             LEFT JOIN companies c ON a.company_id = c.id
+            LEFT JOIN meeting_notes mn ON mn.meeting_id = m.id
             WHERE m.conference_id = ?
             ORDER BY m.meeting_date, m.meeting_time`,
       args: [confId],
@@ -600,6 +603,16 @@ export async function GET(
     location: m.location, scheduled_by: resolveIdList(m.scheduled_by, userNameMap) ?? (m.scheduled_by ? String(m.scheduled_by) : null), outcome: m.outcome, meeting_type: m.meeting_type,
     first_name: m.first_name, last_name: m.last_name, title: m.title,
     company_name: m.company_name, company_id: m.company_id, hasConflict: conflictIds.has(m.id as number),
+    // Raw fields so the Scheduled Meetings tab can render the same card the
+    // conference Meetings tab does — scheduled_by above is already resolved
+    // to names, which those rep pills can't map back to ids.
+    scheduled_by_ids: m.scheduled_by ? String(m.scheduled_by) : null,
+    additional_attendees: m.additional_attendees ? String(m.additional_attendees) : null,
+    created_at: m.created_at ? String(m.created_at) : '',
+    company_wse: m.company_wse != null ? Number(m.company_wse) : null,
+    conference_id: Number(m.conference_id),
+    conference_name: String(conference.name ?? ''),
+    has_notes: Number(m.has_notes) === 1,
   }));
 
   // --- Social Events ---
