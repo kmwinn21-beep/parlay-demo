@@ -1,13 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
 /**
  * An agenda item's description: one line by default, the rest behind a
  * chevron. It sits outside the item's text column so its left edge lines up
  * with the session time.
  */
-export function AgendaDescription({ text, className = '' }: { text: string; className?: string }) {
+export function AgendaDescription({ text, className = '', icon }: {
+  text: string;
+  className?: string;
+  /** Leading glyph — the location line uses the map pin. */
+  icon?: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const [clamped, setClamped] = useState(false);
   const ref = useRef<HTMLParagraphElement>(null);
@@ -31,6 +36,7 @@ export function AgendaDescription({ text, className = '' }: { text: string; clas
 
   return (
     <div className={`flex items-start gap-1 ${className}`}>
+      {icon}
       <p ref={ref} className={`text-xs text-gray-500 flex-1 min-w-0 ${open ? '' : 'line-clamp-1'}`}>
         {text}
       </p>
