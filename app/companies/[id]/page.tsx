@@ -31,6 +31,7 @@ import { CompanyDrawer } from '@/components/CompanyDrawer';
 import { ActivityTimelineModal } from '@/components/ActivityTimelineModal';
 import { useCapabilities } from '@/lib/useCapabilities';
 import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
+import { ScrollRow } from '@/components/ScrollRow';
 import { ClosedWonDealsSection } from '@/components/ClosedWonDealsSection';
 import type { ClosedDeal } from '@/lib/ClosedDealDraftContext';
 
@@ -802,6 +803,50 @@ export default function CompanyDetailPage() {
 
   if (!company) return null;
 
+  // Header pills render twice — one scrolling line on mobile, the
+  // wrapping row on desktop.
+  const headerPills = (
+    <>
+                  {company.company_type && (
+                    <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}>
+                      {company.entity_structure === 'Parent' && (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                      )}
+                      {company.entity_structure === 'Child' && (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4" />
+                        </svg>
+                      )}
+                      {company.company_type}
+                    </span>
+                  )}
+                  {company.profit_type && (
+                    <span className={`badge ${company.profit_type === 'for-profit' ? 'badge-green' : 'badge-gold'}`}>
+                      {company.profit_type}
+                    </span>
+                  )}
+                  {(() => {
+                    const pill = formatValuePill(company.wse, avgCostPerUnit);
+                    return pill ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
+                        {pill}
+                      </span>
+                    ) : null;
+                  })()}
+                  <span className="badge-gray">{company.attendees.length} attendees</span>
+                  {parseRepIds(company.assigned_user ?? '').map(id => userOptions.find(u => u.id === id)).filter(Boolean).map((user, i) => (
+                    <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
+                      <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      {getRepInitials(user!.value)}
+                    </span>
+                  ))}
+    </>
+  );
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <BackButton />
@@ -1064,44 +1109,13 @@ export default function CompanyDetailPage() {
                     </button>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {company.company_type && (
-                    <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}>
-                      {company.entity_structure === 'Parent' && (
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                        </svg>
-                      )}
-                      {company.entity_structure === 'Child' && (
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4" />
-                        </svg>
-                      )}
-                      {company.company_type}
-                    </span>
-                  )}
-                  {company.profit_type && (
-                    <span className={`badge ${company.profit_type === 'for-profit' ? 'badge-green' : 'badge-gold'}`}>
-                      {company.profit_type}
-                    </span>
-                  )}
-                  {(() => {
-                    const pill = formatValuePill(company.wse, avgCostPerUnit);
-                    return pill ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
-                        {pill}
-                      </span>
-                    ) : null;
-                  })()}
-                  <span className="badge-gray">{company.attendees.length} attendees</span>
-                  {parseRepIds(company.assigned_user ?? '').map(id => userOptions.find(u => u.id === id)).filter(Boolean).map((user, i) => (
-                    <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
-                      <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                      {getRepInitials(user!.value)}
-                    </span>
-                  ))}
+                {/* Mobile keeps these on one scrolling line; desktop wraps.
+                    The circular icon buttons below stay where they are. */}
+                <ScrollRow className="sm:hidden mt-2" gapClass="gap-2">
+                  {headerPills}
+                </ScrollRow>
+                <div className="hidden sm:flex flex-wrap gap-2 mt-2">
+                  {headerPills}
                 </div>
                 {/* Mobile-only: icon buttons row below pills, above divider */}
                 <div className="flex sm:hidden items-center gap-2 mt-2">
@@ -1249,9 +1263,15 @@ export default function CompanyDetailPage() {
                 <div key={attendee.id} className="p-4 bg-white">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-2">
-                      <Link href={`/attendees/${attendee.id}`} className="font-semibold text-brand-secondary hover:underline text-sm">
+                      {/* The name opens the quick-view drawer rather than
+                          navigating to the profile, as elsewhere on mobile. */}
+                      <button
+                        type="button"
+                        onClick={() => setQuickView({ type: 'attendee', id: attendee.id, name: `${attendee.first_name} ${attendee.last_name}` })}
+                        className="font-semibold text-brand-secondary hover:underline text-sm text-left"
+                      >
                         {attendee.first_name} {attendee.last_name}
-                      </Link>
+                      </button>
                       {attendee.email && (
                         <button
                           type="button"
