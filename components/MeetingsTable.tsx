@@ -731,6 +731,7 @@ export function MeetingsTable({
   hideCompany = false,
   tableName = 'meetings',
   groupByDate = false,
+  cardsOnly = false,
 }: {
   meetings: Meeting[];
   actionOptions: string[];
@@ -746,6 +747,8 @@ export function MeetingsTable({
   tableName?: string;
   /** Break the list into collapsible sections, one per meeting date. */
   groupByDate?: boolean;
+  /** Keep the mobile card layout at every width — for narrow containers. */
+  cardsOnly?: boolean;
 }) {
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
   const customColumns = useCustomColumns(tableName);
@@ -1142,7 +1145,7 @@ export function MeetingsTable({
       )}
 
       {/* Mobile card layout */}
-      <div className="block lg:hidden divide-y divide-gray-100">
+      <div className={`${cardsOnly ? 'block' : 'block lg:hidden'} divide-y divide-gray-100`}>
         {groupedMeetings
           ? groupedMeetings.map(([date, list]) => (
             <div key={date || "no-date"}>
@@ -1159,6 +1162,7 @@ export function MeetingsTable({
       </div>
 
       {/* Desktop table layout */}
+      {!cardsOnly && (
       <div className="hidden lg:block overflow-x-auto">
         <table className="w-full" style={{ fontSize: '0.7rem' }}>
           <thead>
@@ -1219,6 +1223,7 @@ export function MeetingsTable({
           </tbody>
         </table>
       </div>
+      )}
       {quickView && (
         <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
       )}

@@ -1,18 +1,20 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { BatchCardScanModal, makeCard, type ScannedCard, type CardDraft } from './BatchCardScanModal';
 import { useUser } from '@/components/UserContext';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
 import { AssignFollowUpModal } from './AssignFollowUpModal';
-import { QuickNoteInlineModal } from './QuickNotesSection';
 import { getPreset } from '@/lib/colors';
 import Link from 'next/link';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
 import { SetConferenceButton } from '@/components/SetConferenceButton';
 import { resolveProductRelevance, type ProductRelevanceResult } from '@/lib/productRelevance';
 import { ProductRelevanceSection } from './ProductRelevanceSection';
+import { MeetingsTable, type Meeting } from '@/components/MeetingsTable';
+import { useUserOptions } from '@/lib/useUserOptions';
+import { useConfigColors } from '@/lib/useConfigColors';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -664,10 +666,64 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
   const [scanSavingId, setScanSavingId] = useState<string | null>(null);
   const [batchModalCards, setBatchModalCards] = useState<ScannedCard[]>([]);
   const [showBatchModal, setShowBatchModal] = useState(false);
-  const [showNoteModal, setShowNoteModal] = useState(false);
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [showTouchpointsModal, setShowTouchpointsModal] = useState(false);
   const [badgeScanRelevance, setBadgeScanRelevance] = useState<Record<string, ProductRelevanceResult[]>>({});
+  const [meetingsOpen, setMeetingsOpen] = useState(false);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [loadingMeetings, setLoadingMeetings] = useState(false);
+  const [actionOptions, setActionOptions] = useState<string[]>([]);
+  const userOptions = useUserOptions();
+  const colorMaps = useConfigColors();
+
+  // Only fetched once the section is opened — the dashboard shouldn't pay for
+  // a list nobody has asked for.
+  useEffect(() => {
+    if (!meetingsOpen || !activeConference?.id) return;
+    let cancelled = false;
+    setLoadingMeetings(true);
+    Promise.all([
+      fetch(`/api/meetings?conference_id=${activeConference.id}`).then(r => (r.ok ? r.json() : [])),
+      fetch('/api/config?category=action').then(r => (r.ok ? r.json() : [])),
+    ])
+      .then(([rows, actions]: [Meeting[], { value: string }[]]) => {
+        if (cancelled) return;
+        setMeetings(Array.isArray(rows) ? rows : []);
+        setActionOptions(Array.isArray(actions) ? actions.map(a => a.value) : []);
+      })
+      .catch(() => { if (!cancelled) setMeetings([]); })
+      .finally(() => { if (!cancelled) setLoadingMeetings(false); });
+    return () => { cancelled = true; };
+  }, [meetingsOpen, activeConference?.id]);
+
+  // Mine — booked by me or on support — and still to come, soonest first.
+  const myUpcomingMeetings = useMemo(() => {
+    const myConfigId = user?.configId ?? null;
+    const today = new Date().toISOString().slice(0, 10);
+    return meetings
+      .filter(m => {
+        if (!m.meeting_date || m.meeting_date < today) return false;
+        if (myConfigId == null) return false;
+        const ids = (m.scheduled_by || '').split(',').map(x => parseInt(x.trim(), 10)).filter(n => !isNaN(n));
+        return ids.includes(myConfigId);
+      })
+      .sort((a, b) => `${a.meeting_date} ${a.meeting_time}`.localeCompare(`${b.meeting_date} ${b.meeting_time}`));
+  }, [meetings, user?.configId]);
+
+  const handleOutcomeChange = useCallback(async (meetingId: number, outcome: string) => {
+    setMeetings(prev => prev.map(m => (m.id === meetingId ? { ...m, outcome } : m)));
+    try {
+      const res = await fetch('/api/meetings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: meetingId, outcome }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Outcome updated.');
+    } catch {
+      toast.error('Failed to update outcome.');
+    }
+  }, []);
 
   const cameraMenuRef = useRef<HTMLDivElement>(null);
   const badgeFileRef = useRef<HTMLInputElement>(null);
@@ -881,21 +937,7 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
           </button>
         )}
 
-        {/* Middle — Quick Note */}
-        <button
-          type="button"
-          onClick={() => setShowNoteModal(true)}
-          className="flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-yellow-50 transition-colors group"
-        >
-          <div className="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center group-hover:bg-brand-highlight transition-colors flex-shrink-0">
-            <svg className="w-4 h-4 text-yellow-600 group-hover:text-brand-primary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-          </div>
-          <p className="text-xs text-gray-500 leading-tight">Floor Note</p>
-        </button>
-
-        {/* Right — Touchpoints */}
+        {/* Middle — Touchpoints */}
         <button
           type="button"
           onClick={() => setShowTouchpointsModal(true)}
@@ -913,6 +955,52 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
           </div>
           <p className="text-xs text-gray-500 leading-tight">Touchpoints</p>
         </button>
+
+        {/* Right — Meetings, which expands the list below rather than opening a modal */}
+        <button
+          type="button"
+          onClick={() => setMeetingsOpen(o => !o)}
+          aria-expanded={meetingsOpen}
+          className="flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-yellow-50 transition-colors group"
+        >
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ${meetingsOpen ? 'bg-brand-highlight' : 'bg-yellow-100 group-hover:bg-brand-highlight'}`}>
+            <svg className={`w-4 h-4 transition-colors ${meetingsOpen ? 'text-brand-primary' : 'text-yellow-600 group-hover:text-brand-primary'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <p className="text-xs text-gray-500 leading-tight">Meetings</p>
+        </button>
+      </div>
+
+      {/* Upcoming meetings — mine, on the selected conference. The card layout
+          is forced because this column is far narrower than the meetings tab. */}
+      <div
+        className="overflow-hidden transition-all duration-300 ease-out"
+        style={{ maxHeight: meetingsOpen ? 520 : 0, opacity: meetingsOpen ? 1 : 0 }}
+      >
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          {!activeConference ? (
+            <p className="text-xs text-gray-400 text-center py-4">Set an active conference to see your meetings.</p>
+          ) : loadingMeetings ? (
+            <p className="text-xs text-gray-400 text-center py-4">Loading meetings…</p>
+          ) : myUpcomingMeetings.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-4">
+              No upcoming meetings for you at {activeConference.name}.
+            </p>
+          ) : (
+            <div className="max-h-[460px] overflow-y-auto -mx-4">
+              <MeetingsTable
+                cardsOnly
+                tableName="conference_meetings"
+                meetings={myUpcomingMeetings}
+                actionOptions={actionOptions}
+                colorMap={colorMaps.action || {}}
+                userOptions={userOptions}
+                onOutcomeChange={handleOutcomeChange}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Hidden file inputs for camera scan */}
@@ -934,7 +1022,6 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
       />
 
       {/* Modals */}
-      {showNoteModal && <QuickNoteInlineModal onClose={() => setShowNoteModal(false)} />}
       <AssignFollowUpModal
         isOpen={showFollowUpModal}
         onClose={() => setShowFollowUpModal(false)}
