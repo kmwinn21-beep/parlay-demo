@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AgendaDescription } from '@/components/AgendaDescription';
 import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
@@ -368,7 +369,7 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
                         const subtitle = isMeeting ? [item.attendee_title, item.company_name].filter(Boolean).join(' · ') : null;
                         return (
                           <div key={item.key}>
-                            <div className={`flex gap-3 px-4 py-2.5 ${isMeeting ? 'bg-brand-accent/15' : ''}`}>
+                            <div className={`flex gap-3 px-4 pt-2.5 pb-1.5 ${isMeeting ? 'bg-brand-accent/15' : ''}`}>
                               <div className="w-20 shrink-0 pt-0.5">
                                 {item.start_time && <p className="text-xs text-gray-500 tabular-nums leading-snug">{formatTime12h(item.start_time)}</p>}
                               </div>
@@ -380,7 +381,6 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
                                     {isMeeting && meetingStatusPill(item.meeting_status)}
                                   </div>
                                   {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
-                                  {item.description && <p className="mt-0.5 text-xs text-gray-500">{item.description}</p>}
                                   {item.location && (
                                     <p className="mt-0.5 flex items-center gap-1 text-xs text-gray-400">
                                       <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
@@ -434,6 +434,7 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
                                 )}
                               </div>
                             </div>
+                            {item.description && <AgendaDescription text={item.description} className={`px-4 pb-2 ${isMeeting ? 'bg-brand-accent/15' : ''}`} />}
                             {noteOpen && !isMeeting && (
                               <div className="px-4 pb-3 space-y-1.5">
                                 <textarea
@@ -522,7 +523,7 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
                       {day.items.map(item => {
                         const inMyAgenda = myAgendaItemIds.has(item.id);
                         return (
-                          <div key={item.id} className="flex gap-3 px-4 py-2.5">
+                          <div key={item.id} className="flex gap-3 px-4 pt-2.5 pb-1.5">
                             <div className="w-20 shrink-0 pt-0.5">
                               {item.start_time && <p className="text-xs text-gray-500 tabular-nums">{formatTime12h(item.start_time)}</p>}
                             </div>
@@ -532,7 +533,6 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
                                   {item.session_type && <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${sessionBadgeClass(item.session_type)}`}>{item.session_type}</span>}
                                   <p className="text-xs font-medium text-gray-800 leading-snug">{item.title}</p>
                                 </div>
-                                {item.description && <p className="mt-0.5 text-xs text-gray-500">{item.description}</p>}
                                 {item.location && (
                                   <p className="mt-0.5 flex items-center gap-1 text-xs text-gray-400">
                                     <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
