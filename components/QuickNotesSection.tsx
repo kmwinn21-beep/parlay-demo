@@ -185,7 +185,7 @@ function AddNoteModal({ onClose, onSave }: { onClose: () => void; onSave: (conte
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={onClose}>
       {/* Rises from the bottom edge on a phone, like the drawers. */}
-      <div className="modal-sheet-mobile bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md p-6 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="modal-sheet-mobile bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md p-6 min-h-[56vh] sm:min-h-0 max-h-[92vh] overflow-y-auto flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold text-brand-primary font-serif">Floor Note</h3>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded">
@@ -193,7 +193,7 @@ function AddNoteModal({ onClose, onSave }: { onClose: () => void; onSave: (conte
           </button>
         </div>
         <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Write your note here…" rows={5}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary resize-none"
+          className="w-full flex-1 min-h-[8rem] border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary resize-none"
           onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSave(); }} />
         <p className="text-xs text-gray-400 mt-1 mb-4">⌘+Enter to save</p>
         <div className="flex justify-end gap-2">
@@ -1586,7 +1586,7 @@ export function QuickNoteInlineModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={onClose}>
-      <div className="modal-sheet-mobile bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md p-5 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="modal-sheet-mobile bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md p-5 min-h-[56vh] sm:min-h-0 max-h-[92vh] overflow-y-auto flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-base font-semibold text-brand-primary font-serif">Floor Note</h3>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded">
@@ -1594,7 +1594,7 @@ export function QuickNoteInlineModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Write a floor note…" rows={4}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary resize-none"
+          className="w-full flex-1 min-h-[8rem] border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary resize-none"
           onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSave(); }} />
         <div className="flex justify-end gap-2 mt-3">
           <button type="button" onClick={onClose} className="btn-secondary text-sm">Cancel</button>

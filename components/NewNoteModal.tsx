@@ -271,8 +271,10 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
   const labelClass = 'block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="relative bg-white rounded-xl shadow-2xl border border-brand-highlight w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50">
+      {/* Below sm this behaves like the app's drawers — it rises from the
+          bottom edge and keeps its rounded top corners. */}
+      <div className="modal-sheet-mobile relative bg-white rounded-t-2xl sm:rounded-xl shadow-2xl border border-brand-highlight w-full sm:max-w-lg sm:mx-4 max-h-[92vh] sm:max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-brand-primary font-serif">Add New Note</h2>
@@ -358,7 +360,6 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
               className={`${inputClass} resize-none`}
               placeholder="Enter your note... (type @ to mention a user)"
               rows={5}
-              autoFocus
             />
           </div>
 
