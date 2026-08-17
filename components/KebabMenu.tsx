@@ -117,3 +117,88 @@ export function KebabMenu({ items, title = 'Actions', className = '' }: {
     </div>
   );
 }
+
+
+/**
+ * A kebab button whose panel holds arbitrary controls rather than menu rows —
+ * for tucking a set of filters away on a phone. Same portalled positioning as
+ * KebabMenu, so a scrolling header can't clip it.
+ */
+export function KebabPopover({ children, title = 'Filters', className = '', width = 240, active = false }: {
+  children: ReactNode;
+  title?: string;
+  className?: string;
+  width?: number;
+  /** Tints the button when a filter is set. */
+  active?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
+
+  const position = useCallback(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setPos({
+      top: r.bottom + 4,
+      left: Math.max(8, Math.min(r.right - width, window.innerWidth - width - 8)),
+    });
+  }, [width]);
+
+  useEffect(() => {
+    if (!open) { setPos(null); return; }
+    position();
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (wrapRef.current?.contains(t) || panelRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    const onScroll = () => position();
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onEsc);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onEsc);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [open, position]);
+
+  return (
+    <div ref={wrapRef} className={`relative ${className}`}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        title={title}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        className={`p-1.5 rounded-lg transition-colors ${
+          open || active ? 'bg-gray-100 text-brand-secondary' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+        }`}
+      >
+        <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M10 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
+        </svg>
+      </button>
+      {open && mounted && pos && createPortal(
+        <div
+          ref={panelRef}
+          role="dialog"
+          style={{ position: 'fixed', top: pos.top, left: pos.left, width }}
+          className="z-[10000] bg-white border border-gray-200 rounded-lg shadow-lg p-3 space-y-2"
+        >
+          {children}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}

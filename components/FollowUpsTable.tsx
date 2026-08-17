@@ -228,12 +228,15 @@ export function FollowUpsTable({
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex items-center gap-1 group">
-                <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: fu.attendee_id, name: `${fu.first_name} ${fu.last_name}` })} />
-                <Link href={`/attendees/${fu.attendee_id}`} className="text-sm font-semibold text-brand-secondary hover:underline">
-                  {fu.first_name} {fu.last_name}
-                </Link>
-              </div>
+              {/* The name opens the quick-view drawer; the icon that used to do
+                  that is redundant on a phone. */}
+              <button
+                type="button"
+                onClick={() => setQuickView({ type: 'attendee', id: fu.attendee_id, name: `${fu.first_name} ${fu.last_name}` })}
+                className="text-sm font-semibold text-brand-secondary hover:underline text-left"
+              >
+                {fu.first_name} {fu.last_name}
+              </button>
               {canEditRep ? (
                 isEditingRep ? (
                   <div className="w-40">
@@ -259,10 +262,13 @@ export function FollowUpsTable({
             </div>
             {fu.title && <p className="text-xs text-gray-500 mt-0.5">{fu.title}</p>}
             {fu.company_name && fu.company_id ? (
-              <div className="flex items-center gap-1 group">
-                <QuickViewIcon onClick={() => setQuickView({ type: 'company', id: fu.company_id!, name: fu.company_name! })} />
-                <Link href={`/companies/${fu.company_id}`} className="text-xs text-brand-secondary hover:underline">{fu.company_name}</Link>
-              </div>
+              <button
+                type="button"
+                onClick={() => setQuickView({ type: 'company', id: fu.company_id!, name: fu.company_name! })}
+                className="block text-xs text-brand-secondary hover:underline text-left"
+              >
+                {fu.company_name}
+              </button>
             ) : fu.company_name ? (
               <p className="text-xs text-gray-500">{fu.company_name}</p>
             ) : null}

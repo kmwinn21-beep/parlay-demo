@@ -3082,20 +3082,15 @@ export default function ConferenceDetailPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-2 min-w-0 flex-1">
                           <input type="checkbox" checked={selectedAttendeeIds.has(attendee.id)} onChange={() => toggleAttendeeSelect(attendee.id)} className="accent-brand-secondary flex-shrink-0" />
+                          {/* The name opens the quick-view drawer, so the icon
+                              that used to do that is gone. */}
                           <button
                             type="button"
                             onClick={() => { setQuickViewId(attendee.id); setQuickViewType('attendee'); }}
-                            className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-brand-secondary flex-shrink-0"
-                            title="Quick view"
+                            className="font-semibold text-brand-secondary hover:underline text-sm truncate text-left"
                           >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                          </button>
-                          <Link href={`/attendees/${attendee.id}`} className="font-semibold text-brand-secondary hover:underline text-sm truncate">
                             {attendee.first_name} {attendee.last_name}
-                          </Link>
+                          </button>
                         </div>
                       </div>
                       {attendee.title && (
@@ -3113,7 +3108,13 @@ export default function ConferenceDetailPage() {
                       {attendee.company_name && (
                         <div className="mt-1 ml-6 flex items-center gap-1.5 flex-wrap">
                           {attendee.company_id ? (
-                            <Link href={`/companies/${attendee.company_id}`} className="text-xs text-gray-700 hover:text-brand-secondary hover:underline">{attendee.company_name}</Link>
+                            <button
+                              type="button"
+                              onClick={() => { setQuickViewId(attendee.company_id!); setQuickViewType('company'); }}
+                              className="text-xs text-gray-700 hover:text-brand-secondary hover:underline text-left"
+                            >
+                              {attendee.company_name}
+                            </button>
                           ) : (
                             <span className="text-xs text-gray-700">{attendee.company_name}</span>
                           )}

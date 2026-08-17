@@ -13,6 +13,7 @@ import { NewMeetingModal } from './NewMeetingModal';
 import { EditOutreachMeetingModal } from './EditOutreachMeetingModal';
 import { AttendeeQuickViewDrawer } from './AttendeeQuickViewDrawer';
 import { QuickViewIcon } from './QuickViewDrawer';
+import { ScrollRow } from '@/components/ScrollRow';
 import { type TimelineActivity, type ThreadNote } from './OutreachDrawer';
 import { type Meeting } from './MeetingsTable';
 import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
@@ -598,9 +599,9 @@ export function OutreachCompanyCard({
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap pl-6">
+          <ScrollRow className="pl-6" gapClass="gap-2">
             {badgesRow}
-          </div>
+          </ScrollRow>
         </div>
       )}
 
@@ -766,9 +767,23 @@ export function OutreachCompanyCard({
                   />
                 )}
                 <div className="flex-1 min-w-0">
+                  {/* The name opens the quick-view drawer on mobile; desktop
+                      keeps the icon beside it. */}
                   <p className="text-xs font-medium text-gray-800 flex items-center gap-1 min-w-0">
-                    <span className="truncate">{attendee.firstName} {attendee.lastName}</span>
-                    <QuickViewIcon onClick={() => setQuickViewAttendeeId(attendee.attendeeId)} />
+                    {isDesktop ? (
+                      <>
+                        <span className="truncate">{attendee.firstName} {attendee.lastName}</span>
+                        <QuickViewIcon onClick={() => setQuickViewAttendeeId(attendee.attendeeId)} />
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); setQuickViewAttendeeId(attendee.attendeeId); }}
+                        className="truncate text-left text-brand-secondary hover:underline"
+                      >
+                        {attendee.firstName} {attendee.lastName}
+                      </button>
+                    )}
                   </p>
                   <p className="text-xs text-gray-400 truncate">{attendee.title || '—'}</p>
                 </div>
