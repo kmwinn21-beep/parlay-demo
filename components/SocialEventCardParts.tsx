@@ -192,12 +192,16 @@ export function SocialEventCardBody({
   inviteOnly: string | null;
   internalAttendees: string | null;
   invitedCount: number;
-  isExpanded: boolean;
+  /** Omit to drop the chevron — surfaces whose list opens in a drawer do. */
+  isExpanded?: boolean;
   onToggle: () => void;
   actions?: React.ReactNode;
   extraFields?: React.ReactNode;
 }) {
   const when = formatEventWhen(eventDate, eventTime);
+  const showChevron = isExpanded !== undefined;
+  // The meta rows clear the chevron; without one they start at the edge.
+  const indent = showChevron ? 'sm:pl-6' : '';
 
   return (
     <div className="flex items-start gap-2 px-3 py-3 sm:gap-3 sm:px-4">
@@ -211,24 +215,26 @@ export function SocialEventCardBody({
              stays on the header line. */
           className="flex items-center gap-2 min-w-0 text-left cursor-pointer"
         >
-          <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
+          {showChevron && (
+            <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          )}
           <span className="text-sm font-semibold text-gray-800 truncate min-w-0">{eventName || eventType || 'Social Event'}</span>
           {companyHosted && <CompanyHostedStar className="inline-flex ml-1.5" />}
         </div>
 
         {/* Padding matches the meta row below (none on mobile,
-            sm:pl-6 to clear the chevron) so the pill's left edge
+            sm:pl-6 to clear the chevron when there is one) so the pill's left edge
             lines up with the Location eyebrow. */}
         {when && (
-          <div className="flex items-center gap-2 flex-wrap mt-1.5 sm:pl-6">
+          <div className={`flex items-center gap-2 flex-wrap mt-1.5 ${indent}`}>
             <EventDatePill when={when} />
           </div>
         )}
 
         {/* ── Meta row: 2-up on mobile, inline from sm ── */}
-        <div className="mt-2.5 space-y-2 sm:pl-6 sm:space-y-0 sm:flex sm:flex-wrap sm:gap-x-8 sm:gap-y-2">
+        <div className={`mt-2.5 space-y-2 ${indent} sm:space-y-0 sm:flex sm:flex-wrap sm:gap-x-8 sm:gap-y-2`}>
           <CardField label="Location">
             <EventLocationLink venueName={venueName} location={location} />
           </CardField>
@@ -332,6 +338,31 @@ export function CardActionMenu({ onEdit, onDelete, onNotes, noteCount }: {
  * Circular notes button that sits left of the kebab on desktop. The count
  * bubble in its upper-left corner shows how many notes the event has.
  */
+/**
+ * Desktop-only twin of the notes button: opens the guest list drawer. Mobile
+ * reaches the same list by tapping the card, so it stays hidden there.
+ */
+export function CardGuestListButton({ count, onClick }: { count: number; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={count > 0 ? `Guest list (${count})` : 'Guest list'}
+      aria-label="Guest list"
+      className="relative hidden sm:flex flex-shrink-0 w-8 h-8 rounded-full border border-gray-200 text-gray-500 hover:text-brand-secondary hover:border-brand-secondary/40 hover:bg-brand-secondary/5 transition-colors items-center justify-center"
+    >
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+      </svg>
+      {count > 0 && (
+        <span className="absolute -top-1 -left-1 min-w-[16px] h-4 px-1 rounded-full bg-brand-secondary text-white text-[9px] font-bold flex items-center justify-center">
+          {count > 99 ? '99+' : count}
+        </span>
+      )}
+    </button>
+  );
+}
+
 export function CardNotesButton({ count, onClick }: { count: number; onClick: () => void }) {
   return (
     <button
