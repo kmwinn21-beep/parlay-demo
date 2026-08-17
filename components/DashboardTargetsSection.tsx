@@ -6,6 +6,11 @@ import { useUser } from '@/components/UserContext';
 import type { DashboardConference } from './RecentSection';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import { useDrawerResize } from '@/lib/useDrawerResize';
+import { KebabMenu } from '@/components/KebabMenu';
+import { NewMeetingModal } from '@/components/NewMeetingModal';
+import { NewNoteModal } from '@/components/NewNoteModal';
+import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
+import { TouchpointQuickModal } from '@/components/DashboardActionCard';
 
 interface TargetEntry {
   attendeeId: number;
@@ -19,6 +24,8 @@ interface TargetEntry {
   assignedUserNames: string[];
   tier: string;
 }
+
+type TargetAction = 'touchpoint' | 'note' | 'followup' | 'meeting';
 
 const TIER_ORDER = ['1', '2', '3', 'unassigned'];
 
@@ -107,11 +114,14 @@ function DashboardTargetCard({
   hasMeeting,
   avgCostPerUnit,
   onAttendeeClick,
+  onAction,
 }: {
   entry: TargetEntry;
   hasMeeting: boolean;
   avgCostPerUnit: number;
   onAttendeeClick: (id: number, name: string) => void;
+  /** Adds the actions kebab to the card header (the mobile tier drawer). */
+  onAction?: (action: TargetAction, entry: TargetEntry) => void;
 }) {
   const valuePill = formatValuePill(entry.companyWse, avgCostPerUnit);
   const tierConfig = TIER_CONFIG.find(t => t.key === entry.tier);
@@ -131,6 +141,18 @@ function DashboardTargetCard({
             <p className="text-xs text-gray-400 truncate mt-0.5">{entry.companyName}</p>
           )}
         </div>
+        {onAction && (
+          <KebabMenu
+            title="Log activity"
+            className="flex-shrink-0 -mr-1 -mt-1"
+            items={[
+              { label: 'Touchpoint', onClick: () => onAction('touchpoint', entry) },
+              { label: '+ Note', onClick: () => onAction('note', entry) },
+              { label: '+ Follow Up', onClick: () => onAction('followup', entry) },
+              { label: '+ Meeting', onClick: () => onAction('meeting', entry) },
+            ]}
+          />
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-1 mt-1">
         {entry.seniority && <SeniorityPill seniority={entry.seniority} />}
@@ -247,6 +269,8 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
   // Below sm the cards live in a drawer instead of under the tiles, so a tap
   // on a tile both filters (desktop) and opens that tier's list (mobile).
   const [tierDrawerKey, setTierDrawerKey] = useState<string | null>(null);
+  // Which activity modal a card's kebab opened, and for whom.
+  const [cardAction, setCardAction] = useState<{ action: TargetAction; entry: TargetEntry } | null>(null);
 
   function toggleTier(key: string) {
     setSelectedTier(prev => (prev === key ? null : key));
@@ -434,6 +458,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
                         hasMeeting={meetingAttendeeIds.has(entry.attendeeId)}
                         avgCostPerUnit={avgCostPerUnit}
                         onAttendeeClick={(id, name) => { setDrawerAttendeeId(id); setDrawerAttendeeName(name); }}
+                        onAction={(action, target) => setCardAction({ action, entry: target })}
                       />
                     ))}
                   </div>
@@ -443,6 +468,39 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
           </div>
         );
       })()}
+
+      {/* Activity modals launched from a target card's kebab — each opens with
+          the card's conference, company and attendee already chosen. */}
+      {cardAction?.action === 'touchpoint' && (
+        <TouchpointQuickModal
+          onClose={() => setCardAction(null)}
+          defaultConferenceId={selectedConfId}
+          defaultCompanyId={cardAction.entry.companyId}
+          defaultAttendeeId={cardAction.entry.attendeeId}
+        />
+      )}
+      <NewNoteModal
+        isOpen={cardAction?.action === 'note'}
+        onClose={() => setCardAction(null)}
+        defaultConferenceId={selectedConfId}
+        defaultCompanyId={cardAction?.entry.companyId ?? null}
+        defaultAttendeeId={cardAction?.entry.attendeeId ?? null}
+      />
+      <AssignFollowUpModal
+        isOpen={cardAction?.action === 'followup'}
+        onClose={() => setCardAction(null)}
+        onSuccess={() => setCardAction(null)}
+        defaultConferenceId={selectedConfId ?? undefined}
+        defaultCompanyId={cardAction?.entry.companyId ?? undefined}
+        defaultAttendeeId={cardAction?.entry.attendeeId ?? undefined}
+      />
+      <NewMeetingModal
+        isOpen={cardAction?.action === 'meeting'}
+        onClose={() => setCardAction(null)}
+        defaultConferenceId={selectedConfId ?? undefined}
+        prefillCompanyId={cardAction?.entry.companyId ?? undefined}
+        prefillAttendeeId={cardAction?.entry.attendeeId ?? undefined}
+      />
 
       {/* Attendee record iframe drawer */}
       {drawerAttendeeId !== null && (

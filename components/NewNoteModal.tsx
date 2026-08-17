@@ -33,9 +33,13 @@ interface AttendeeOption {
 interface NewNoteModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Opens with these already chosen — used when the note starts from a record. */
+  defaultConferenceId?: number | null;
+  defaultCompanyId?: number | null;
+  defaultAttendeeId?: number | null;
 }
 
-export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
+export function NewNoteModal({ isOpen, onClose, defaultConferenceId, defaultCompanyId, defaultAttendeeId }: NewNoteModalProps) {
   useHideBottomNav(isOpen);
   const userOptionsWithIds = useUserOptions();
   const [conferences, setConferences] = useState<ConferenceOption[]>([]);
@@ -71,12 +75,27 @@ export function NewNoteModal({ isOpen, onClose }: NewNoteModalProps) {
       .catch(() => {});
   }, [isOpen]);
 
-  // Pre-populate conference from active context once conferences load
+  // Pre-populate conference from the caller's defaults, else the active context
   useEffect(() => {
-    if (!isOpen || !activeConference || selectedConferenceId || conferences.length === 0) return;
-    const match = conferences.find(c => c.id === activeConference.id);
+    if (!isOpen || selectedConferenceId || conferences.length === 0) return;
+    const wanted = defaultConferenceId ?? activeConference?.id ?? null;
+    if (wanted == null) return;
+    const match = conferences.find(c => c.id === wanted);
     if (match) setSelectedConferenceId(String(match.id));
-  }, [isOpen, activeConference, conferences, selectedConferenceId]);
+  }, [isOpen, activeConference, conferences, selectedConferenceId, defaultConferenceId]);
+
+  // Company and attendee follow, once the conference's attendee list is in.
+  useEffect(() => {
+    if (!isOpen || defaultCompanyId == null) return;
+    setSelectedCompanyId(String(defaultCompanyId));
+  }, [isOpen, defaultCompanyId]);
+
+  useEffect(() => {
+    if (!isOpen || defaultAttendeeId == null) return;
+    const known = conferenceAttendees.some(a => a.id === defaultAttendeeId)
+      || allAttendees.some(a => a.id === defaultAttendeeId);
+    if (known) setSelectedAttendeeId(String(defaultAttendeeId));
+  }, [isOpen, defaultAttendeeId, conferenceAttendees, allAttendees]);
 
   // Fetch conference attendees when conference changes
   useEffect(() => {
