@@ -16,14 +16,14 @@ export async function POST(request: NextRequest) {
     const attendeeMatches: {
       id: number; first_name: string; last_name: string;
       title: string | null; company_name: string | null; company_id: number | null;
-      email: string | null; matchType: 'email' | 'name';
+      email: string | null; photo_url: string | null; matchType: 'email' | 'name';
     }[] = [];
     const seenAttendeeIds = new Set<number>();
 
     // 1. Email match (highest confidence)
     if (email && email.trim()) {
       const emailRows = await db.execute({
-        sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.company_id,
+        sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.company_id, a.photo_url,
                      c.name as company_name
               FROM attendees a
               LEFT JOIN companies c ON c.id = a.company_id
@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
             company_name: r.company_name ? String(r.company_name) : null,
             company_id: r.company_id ? Number(r.company_id) : null,
             email: r.email ? String(r.email) : null,
+            photo_url: r.photo_url ? String(r.photo_url) : null,
             matchType: 'email',
           });
         }
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
     // 2. Name match
     if (first_name && last_name && first_name.trim() && last_name.trim()) {
       const nameRows = await db.execute({
-        sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.company_id,
+        sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.company_id, a.photo_url,
                      c.name as company_name
               FROM attendees a
               LEFT JOIN companies c ON c.id = a.company_id
@@ -68,6 +69,7 @@ export async function POST(request: NextRequest) {
             company_name: r.company_name ? String(r.company_name) : null,
             company_id: r.company_id ? Number(r.company_id) : null,
             email: r.email ? String(r.email) : null,
+            photo_url: r.photo_url ? String(r.photo_url) : null,
             matchType: 'name',
           });
         }
