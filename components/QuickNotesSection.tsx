@@ -192,11 +192,19 @@ function AddNoteModal({ onClose, onSave }: { onClose: () => void; onSave: (conte
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
+        {/* Mobile puts the actions under the title, above the note box;
+              desktop keeps them at the foot of the sheet. */}
+        <div className="flex sm:hidden items-center gap-3 mb-3">
+          <button type="button" onClick={onClose} className="btn-secondary text-sm flex-1">Cancel</button>
+          <button type="button" onClick={handleSave} disabled={!text.trim() || saving || !!user?.demoVisitor} className="btn-primary text-sm flex-1">
+            {saving ? 'Saving…' : 'Save Note'}
+          </button>
+        </div>
         <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Write your note here…" rows={5}
           className="w-full flex-1 min-h-[8rem] border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary resize-none"
           onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSave(); }} />
-        <p className="text-xs text-gray-400 mt-1 mb-4">⌘+Enter to save</p>
-        <div className="flex justify-end gap-2">
+        <p className="text-xs text-gray-400 mt-1 sm:mb-4">⌘+Enter to save</p>
+        <div className="hidden sm:flex justify-end gap-2">
           <button type="button" onClick={onClose} className="btn-secondary text-sm">Cancel</button>
           <button type="button" onClick={handleSave} disabled={!text.trim() || saving || !!user?.demoVisitor} className="btn-primary text-sm">
             {saving ? 'Saving…' : 'Save Note'}
@@ -1593,10 +1601,18 @@ export function QuickNoteInlineModal({ onClose }: { onClose: () => void }) {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
+        {/* Mobile puts the actions under the title, above the note box;
+              desktop keeps them at the foot of the sheet. */}
+        <div className="flex sm:hidden items-center gap-3 mb-3">
+          <button type="button" onClick={onClose} className="btn-secondary text-sm flex-1">Cancel</button>
+          <button type="button" onClick={handleSave} disabled={!text.trim() || saving || !!user?.demoVisitor} className="btn-primary text-sm flex-1">
+            {saving ? 'Saving…' : 'Save Note'}
+          </button>
+        </div>
         <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Write a floor note…" rows={4}
           className="w-full flex-1 min-h-[8rem] border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary resize-none"
           onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSave(); }} />
-        <div className="flex justify-end gap-2 mt-3">
+        <div className="hidden sm:flex justify-end gap-2 mt-3">
           <button type="button" onClick={onClose} className="btn-secondary text-sm">Cancel</button>
           <button type="button" onClick={handleSave} disabled={!text.trim() || saving || !!user?.demoVisitor} className="btn-primary text-sm">
             {saving ? 'Saving…' : 'Save'}
