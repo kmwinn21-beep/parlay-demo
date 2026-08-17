@@ -1578,8 +1578,8 @@ export default function ConferenceDetailPage() {
     <>
                 {conference.conference_type && (
                   <div>
-                    <p className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.07em] mb-1.5">Type</p>
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-semibold bg-amber-50 text-amber-800 border border-amber-300">
+                    <p className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.07em] mb-1.5 whitespace-nowrap">Type</p>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-semibold whitespace-nowrap bg-amber-50 text-amber-800 border border-amber-300">
                       <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3 21l18 0" />
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v1a3 3 0 0 0 6 0v-1m0 1a3 3 0 0 0 6 0v-1m0 1a3 3 0 0 0 6 0v-1h-18l2 -4h14l2 4" />
@@ -1593,8 +1593,8 @@ export default function ConferenceDetailPage() {
                 )}
                 {!conference.is_historical && conference.conference_strategy_type_display_name && (
                   <div>
-                    <p className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.07em] mb-1.5">Strategy</p>
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+                    <p className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.07em] mb-1.5 whitespace-nowrap">Strategy</p>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-semibold whitespace-nowrap bg-blue-50 text-blue-800 border border-blue-200">
                       <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 12m-8 0a8 8 0 1 0 16 0a8 8 0 1 0 -16 0" />
@@ -1609,8 +1609,8 @@ export default function ConferenceDetailPage() {
                 )}
                 {conference.sponsorship_level && conference.sponsorship_level.toLowerCase() !== 'none' && (
                   <div>
-                    <p className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.07em] mb-1.5">Sponsorship</p>
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-semibold bg-green-50 text-green-800 border border-green-300">
+                    <p className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.07em] mb-1.5 whitespace-nowrap">Sponsorship</p>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-semibold whitespace-nowrap bg-green-50 text-green-800 border border-green-300">
                       <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M8 21l8 0" />
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 17l0 4" />
@@ -1624,12 +1624,12 @@ export default function ConferenceDetailPage() {
                   </div>
                 )}
                 <div className="flex-shrink-0">
-                  <p className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.07em] mb-1.5">Agenda</p>
+                  <p className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.07em] mb-1.5 whitespace-nowrap">Agenda</p>
                   {conference.global_agenda_uploaded_at ? (
                     <button
                       type="button"
                       onClick={() => setActiveTab('agenda')}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-semibold bg-green-50 text-green-800 border border-green-300 hover:bg-green-100 transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-semibold whitespace-nowrap bg-green-50 text-green-800 border border-green-300 hover:bg-green-100 transition-colors cursor-pointer"
                     >
                       <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v4a1 1 0 0 0 1 1h4" />
@@ -1639,7 +1639,7 @@ export default function ConferenceDetailPage() {
                       Agenda Uploaded
                     </button>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-semibold bg-red-50 text-red-700 border border-red-300">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-semibold whitespace-nowrap bg-red-50 text-red-700 border border-red-300">
                       <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v4a1 1 0 0 0 1 1h4" />
                         <path strokeLinecap="round" strokeLinejoin="round" d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
@@ -1650,16 +1650,16 @@ export default function ConferenceDetailPage() {
                   )}
                 </div>
                 <div className="flex-shrink-0">
-                  <p className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.07em] mb-1.5">Attendees</p>
+                  <p className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.07em] mb-1.5 whitespace-nowrap">Attendees</p>
                   {conference.attendees.length === 0 ? (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-semibold bg-amber-50 text-amber-700 border border-amber-300">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-semibold whitespace-nowrap bg-amber-50 text-amber-700 border border-amber-300">
                       <svg className="w-3.5 h-3.5 flex-shrink-0 text-amber-500" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.86a1 1 0 00.87 1.5h17.16a1 1 0 00.87-1.5L12.71 3.86a1 1 0 00-1.42 0z" />
                       </svg>
                       Awaiting Attendee Upload
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-semibold whitespace-nowrap bg-blue-50 text-blue-800 border border-blue-200">
                       <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 7m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" />
@@ -1672,8 +1672,8 @@ export default function ConferenceDetailPage() {
                 </div>
                 {conference.booth_present ? (
                   <div>
-                    <p className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.07em] mb-1.5">Booth</p>
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-semibold bg-purple-50 text-purple-800 border border-purple-300">
+                    <p className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.07em] mb-1.5 whitespace-nowrap">Booth</p>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-semibold whitespace-nowrap bg-purple-50 text-purple-800 border border-purple-300">
                       <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M4 4m0 1a1 1 0 0 1 1 -1h14a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-14a1 1 0 0 1 -1 -1zm0 5l16 0m-5 -5l0 16m-6 -16l0 16" />
                       </svg>
