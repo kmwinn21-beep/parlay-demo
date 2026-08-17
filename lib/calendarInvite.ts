@@ -67,3 +67,89 @@ export function buildOutlookCalendarUrl(input: CalendarInviteInput): string {
   if (input.attendeeEmail) params.set('to', input.attendeeEmail);
   return `https://outlook.office.com/calendar/0/deeplink/compose?${params.toString()}`;
 }
+
+/* ─── .ics ────────────────────────────────────────────────────────────────
+ * The vendor URLs above are web composers — the OS hands them to a browser.
+ * An .ics served as text/calendar is the handoff the device understands:
+ * iOS opens the Add Event sheet, Android the calendar chooser, desktop
+ * Outlook or Apple Calendar.
+ * ------------------------------------------------------------------------ */
+
+export interface IcsInput extends CalendarInviteInput {
+  /** Stable across regenerations so a re-send updates rather than duplicates. */
+  uid: string;
+  description?: string | null;
+  organizerName?: string | null;
+  organizerEmail?: string | null;
+  attendeeName?: string | null;
+  /** Bumped when the meeting is edited, so calendars supersede the old copy. */
+  sequence?: number;
+  /** Stamp for DTSTAMP; defaults to now. */
+  now?: Date;
+}
+
+/** RFC 5545 escaping for TEXT values. */
+function escapeIcsText(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\r?\n/g, '\\n');
+}
+
+function toIcsStamp(d: Date): string {
+  return `${d.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`;
+}
+
+/** Folds to 75 octets per line, as long SUMMARY/LOCATION values require. */
+function foldIcsLine(line: string): string {
+  const bytes = Buffer.from(line, 'utf8');
+  if (bytes.length <= 75) return line;
+  const out: string[] = [];
+  let start = 0;
+  while (start < bytes.length) {
+    const limit = out.length === 0 ? 75 : 74;
+    let end = Math.min(start + limit, bytes.length);
+    // Don't split a multi-byte character.
+    while (end > start && end < bytes.length && (bytes[end] & 0xc0) === 0x80) end--;
+    out.push((out.length === 0 ? '' : ' ') + bytes.subarray(start, end).toString('utf8'));
+    start = end;
+  }
+  return out.join('\r\n');
+}
+
+export function buildIcs(input: IcsInput): string {
+  const start = resolveStartUtc(input.dateYMD, input.timeHM, input.timezone);
+  const end = new Date(start.getTime() + (input.durationMinutes ?? DEFAULT_DURATION_MINUTES) * 60000);
+  // An event with an invitee is a REQUEST so Outlook and Apple Calendar offer
+  // to send it; without one there is nobody to invite, so it is a plain add.
+  const method = input.attendeeEmail ? 'REQUEST' : 'PUBLISH';
+
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Parlay//Conference Hub//EN',
+    'CALSCALE:GREGORIAN',
+    `METHOD:${method}`,
+    'BEGIN:VEVENT',
+    `UID:${input.uid}`,
+    `DTSTAMP:${toIcsStamp(input.now ?? new Date())}`,
+    `DTSTART:${toIcsStamp(start)}`,
+    `DTEND:${toIcsStamp(end)}`,
+    `SEQUENCE:${input.sequence ?? 0}`,
+    `SUMMARY:${escapeIcsText(input.title)}`,
+  ];
+  if (input.location) lines.push(`LOCATION:${escapeIcsText(input.location)}`);
+  if (input.description) lines.push(`DESCRIPTION:${escapeIcsText(input.description)}`);
+  if (input.organizerEmail) {
+    const cn = input.organizerName ? `;CN=${escapeIcsText(input.organizerName)}` : '';
+    lines.push(`ORGANIZER${cn}:mailto:${input.organizerEmail}`);
+  }
+  if (input.attendeeEmail) {
+    const cn = input.attendeeName ? `;CN=${escapeIcsText(input.attendeeName)}` : '';
+    lines.push(`ATTENDEE${cn};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${input.attendeeEmail}`);
+  }
+  lines.push('STATUS:CONFIRMED', 'END:VEVENT', 'END:VCALENDAR');
+
+  return lines.map(foldIcsLine).join('\r\n') + '\r\n';
+}

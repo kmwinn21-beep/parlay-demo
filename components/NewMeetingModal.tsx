@@ -262,6 +262,7 @@ export function NewMeetingModal({
   const [attendees, setAttendees] = useState<AttendeeOption[]>([]);
   const [loadingConference, setLoadingConference] = useState(false);
   const [inviteContext, setInviteContext] = useState<{
+    meetingId: number;
     attendeeName: string;
     attendeeEmail: string | null;
     title: string;
@@ -615,6 +616,7 @@ export function NewMeetingModal({
           const attendeeFirst = contact.first_name || 'Attendee';
           const repFirst = user?.firstName || 'Rep';
           setInviteContext({
+            meetingId: meeting.id,
             attendeeName: `${contact.first_name} ${contact.last_name}`.trim(),
             attendeeEmail: contact.email || null,
             title: `${attendeeFirst} and ${repFirst}: ${conf?.name || 'Conference'} Meeting`,
@@ -662,6 +664,12 @@ export function NewMeetingModal({
             timeHM: inviteContext.timeHM,
             timezone: inviteContext.timezone,
           }), '_blank', 'noopener,noreferrer');
+          finish();
+        }}
+        onDeviceCalendar={() => {
+          // Content-Disposition on the route means the browser hands the file
+          // to the OS rather than navigating away from the app.
+          window.location.href = `/api/meetings/${inviteContext.meetingId}/invite.ics`;
           finish();
         }}
       />,

@@ -2,6 +2,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { compressImage } from './DashboardActionCard';
+import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -15,6 +16,7 @@ interface AttendeeMatch {
   id: number; first_name: string; last_name: string;
   title: string | null; company_name: string | null;
   company_id: number | null; email: string | null;
+  photo_url?: string | null;
   matchType: 'email' | 'name';
 }
 
@@ -356,7 +358,20 @@ function RightCard({ card, onConfirm, onDismissMatch, onShowAddForm, onAddFormCh
           {visibleMatches.map(match => (
             <div key={match.id} className="p-3 bg-blue-50 rounded-lg border border-blue-100">
               <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
+                {/* Desktop: the photo leads the card; mobile puts it on the
+                    action row so the details keep the full width. */}
+                {match.photo_url && (
+                  <span className="hidden sm:block">
+                    <AttendeeInitialsAvatar
+                      name={`${match.first_name} ${match.last_name}`.trim()}
+                      photoUrl={match.photo_url}
+                      title={match.title}
+                      companyName={match.company_name}
+                      className="w-10 h-10 text-xs"
+                    />
+                  </span>
+                )}
+                <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-gray-800">
                     {match.first_name} {match.last_name}
                   </p>
@@ -369,6 +384,17 @@ function RightCard({ card, onConfirm, onDismissMatch, onShowAddForm, onAddFormCh
                 </span>
               </div>
               <div className="flex items-center justify-end gap-2 mt-2.5">
+                {match.photo_url && (
+                  <span className="sm:hidden mr-auto">
+                    <AttendeeInitialsAvatar
+                      name={`${match.first_name} ${match.last_name}`.trim()}
+                      photoUrl={match.photo_url}
+                      title={match.title}
+                      companyName={match.company_name}
+                      className="w-10 h-10 text-xs"
+                    />
+                  </span>
+                )}
                 <button onClick={() => onDismissMatch(match.id)}
                   className="text-xs text-gray-400 hover:text-gray-600 px-2">
                   Not a match
