@@ -130,17 +130,31 @@ function nameInitials(name: string): string {
  * Location, additional attendees and company value for the mobile card — one
  * scrolling line, since three pills rarely fit a phone.
  */
-function MeetingDetailPills({ meeting, avgCostPerUnit }: { meeting: Meeting; avgCostPerUnit: number }) {
+function MeetingDetailPills({ meeting, avgCostPerUnit, showConference = false }: {
+  meeting: Meeting;
+  avgCostPerUnit: number;
+  /** For lists that span conferences, or sit outside a conference page. */
+  showConference?: boolean;
+}) {
   const extras = (meeting.additional_attendees || '').split(',').map(n => n.trim()).filter(Boolean);
   const value = meeting.company_wse != null && avgCostPerUnit > 0
     ? abbreviateValue(Math.round(meeting.company_wse * avgCostPerUnit))
     : null;
-  if (!meeting.location && extras.length === 0 && !value) return null;
+  const conference = showConference ? meeting.conference_name : null;
+  if (!conference && !meeting.location && extras.length === 0 && !value) return null;
 
   const pill = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap flex-shrink-0 border';
 
   return (
     <ScrollRow className="mt-1.5" gapClass="gap-1.5" step={120}>
+      {conference && (
+        <span className={`${pill} bg-brand-secondary/10 text-brand-secondary border-brand-secondary/30`} title={conference}>
+          <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          {conference}
+        </span>
+      )}
       {meeting.location && (
         <span className={`${pill} bg-gray-50 text-gray-600 border-gray-200`} title={meeting.location}>
           <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -731,6 +745,8 @@ export function MeetingsTable({
   hideCompany = false,
   tableName = 'meetings',
   groupByDate = false,
+  cardsOnly = false,
+  showConferencePill = false,
 }: {
   meetings: Meeting[];
   actionOptions: string[];
@@ -746,6 +762,10 @@ export function MeetingsTable({
   tableName?: string;
   /** Break the list into collapsible sections, one per meeting date. */
   groupByDate?: boolean;
+  /** Keep the mobile card layout at every width — for narrow containers. */
+  cardsOnly?: boolean;
+  /** Adds the conference name to the card's pill row. */
+  showConferencePill?: boolean;
 }) {
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
   const customColumns = useCustomColumns(tableName);
@@ -959,7 +979,7 @@ export function MeetingsTable({
               </span>
             </div>
             {/* Location, additional attendees and company value — one scrolling line */}
-            <MeetingDetailPills meeting={m} avgCostPerUnit={avgCostPerUnit} />
+            <MeetingDetailPills meeting={m} avgCostPerUnit={avgCostPerUnit} showConference={showConferencePill} />
             <div className="mt-2 flex items-center justify-between gap-2">
               <OutcomeButton
                 value={m.outcome}
@@ -1142,7 +1162,7 @@ export function MeetingsTable({
       )}
 
       {/* Mobile card layout */}
-      <div className="block lg:hidden divide-y divide-gray-100">
+      <div className={`${cardsOnly ? 'block' : 'block lg:hidden'} divide-y divide-gray-100`}>
         {groupedMeetings
           ? groupedMeetings.map(([date, list]) => (
             <div key={date || "no-date"}>
@@ -1159,6 +1179,7 @@ export function MeetingsTable({
       </div>
 
       {/* Desktop table layout */}
+      {!cardsOnly && (
       <div className="hidden lg:block overflow-x-auto">
         <table className="w-full" style={{ fontSize: '0.7rem' }}>
           <thead>
@@ -1219,6 +1240,7 @@ export function MeetingsTable({
           </tbody>
         </table>
       </div>
+      )}
       {quickView && (
         <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
       )}
