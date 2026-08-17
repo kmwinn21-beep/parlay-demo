@@ -244,8 +244,13 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
     'unassigned': scopedTargets.filter(t => t.tier === 'unassigned').length,
   };
 
+  // Below sm the cards live in a drawer instead of under the tiles, so a tap
+  // on a tile both filters (desktop) and opens that tier's list (mobile).
+  const [tierDrawerKey, setTierDrawerKey] = useState<string | null>(null);
+
   function toggleTier(key: string) {
     setSelectedTier(prev => (prev === key ? null : key));
+    setTierDrawerKey(prev => (prev === key ? null : key));
   }
 
   const filteredTargets = scopedTargets
@@ -284,6 +289,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
             onChange={e => {
               setSelectedConfId(Number(e.target.value));
               setSelectedTier(null);
+              setTierDrawerKey(null);
             }}
             className="input-field text-sm w-full min-w-0"
           >
@@ -357,21 +363,21 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
         })}
       </div>
 
-      {/* Target cards */}
+      {/* Target cards — inline from sm; below that they live in the drawer */}
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="hidden sm:grid grid-cols-1 sm:grid-cols-2 gap-3">
           {[1, 2, 3, 4].map(i => (
             <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />
           ))}
         </div>
       ) : filteredTargets.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-6">
+        <p className="hidden sm:block text-sm text-gray-400 text-center py-6">
           {targets.length === 0
             ? 'No targets set for this conference.'
             : 'No targets match the selected filters.'}
         </p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="hidden sm:grid grid-cols-1 sm:grid-cols-2 gap-3">
           {filteredTargets.map(entry => (
             <DashboardTargetCard
               key={entry.attendeeId}
@@ -383,6 +389,60 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
           ))}
         </div>
       )}
+
+      {/* Mobile: the selected tier's targets, in a drawer */}
+      {tierDrawerKey !== null && (() => {
+        const tier = TIER_CONFIG.find(t => t.key === tierDrawerKey);
+        const tierTargets = scopedTargets.filter(t => t.tier === tierDrawerKey);
+        const conferenceName = allConferences.find(c => c.id === selectedConfId)?.name ?? null;
+        return (
+          <div className="sm:hidden">
+            <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setTierDrawerKey(null)} />
+            <div className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 h-[85vh] w-full bg-white shadow-2xl flex flex-col rounded-t-2xl z-50">
+              <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-gray-200 flex-shrink-0">
+                <div className="min-w-0">
+                  <h3 className={`text-sm font-semibold ${tier?.activeText ?? 'text-gray-800'}`}>
+                    {tier?.label ?? 'Targets'}
+                    <span className="ml-1.5 text-xs font-normal text-gray-400">({tierTargets.length})</span>
+                  </h3>
+                  {conferenceName && (
+                    <span className="mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-brand-secondary border border-blue-100 whitespace-nowrap">
+                      {conferenceName}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTierDrawerKey(null)}
+                  className="p-1.5 rounded hover:bg-gray-100 text-gray-500 flex-shrink-0"
+                  aria-label="Close"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                {tierTargets.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-6">No targets in this tier.</p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3">
+                    {tierTargets.map(entry => (
+                      <DashboardTargetCard
+                        key={entry.attendeeId}
+                        entry={entry}
+                        hasMeeting={meetingAttendeeIds.has(entry.attendeeId)}
+                        avgCostPerUnit={avgCostPerUnit}
+                        onAttendeeClick={(id, name) => { setDrawerAttendeeId(id); setDrawerAttendeeName(name); }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Attendee record iframe drawer */}
       {drawerAttendeeId !== null && (
