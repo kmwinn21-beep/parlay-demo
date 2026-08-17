@@ -991,6 +991,7 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
             <div className="max-h-[460px] overflow-y-auto -mx-4">
               <MeetingsTable
                 cardsOnly
+                showConferencePill
                 tableName="conference_meetings"
                 meetings={myUpcomingMeetings}
                 actionOptions={actionOptions}
