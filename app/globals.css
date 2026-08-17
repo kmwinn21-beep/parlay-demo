@@ -126,6 +126,18 @@ h1, h2, h3 {
   }
 }
 
+/* Modals that become bottom sheets on a phone: they rise from the bottom edge
+   like the drawers do, and fade in as a centred dialog from sm. */
+.modal-sheet-mobile {
+  animation: slideInUp 0.25s ease-out;
+}
+
+@media (min-width: 640px) {
+  .modal-sheet-mobile {
+    animation: fadeInScale 0.18s ease-out;
+  }
+}
+
 /* Attendee photo card — drops in from the top on mobile, fades in from sm. */
 @keyframes slideInDown {
   from { transform: translateY(-24px); opacity: 0; }
