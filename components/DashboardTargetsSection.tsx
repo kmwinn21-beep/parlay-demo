@@ -120,7 +120,7 @@ function DashboardTargetCard({
   hasMeeting: boolean;
   avgCostPerUnit: number;
   onAttendeeClick: (id: number, name: string) => void;
-  /** Adds the actions kebab to the card header (the mobile tier drawer). */
+  /** Adds the actions kebab to the card header. */
   onAction?: (action: TargetAction, entry: TargetEntry) => void;
 }) {
   const valuePill = formatValuePill(entry.companyWse, avgCostPerUnit);
@@ -409,6 +409,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
               hasMeeting={meetingAttendeeIds.has(entry.attendeeId)}
               avgCostPerUnit={avgCostPerUnit}
               onAttendeeClick={(id, name) => { setDrawerAttendeeId(id); setDrawerAttendeeName(name); }}
+              onAction={(action, target) => setCardAction({ action, entry: target })}
             />
           ))}
         </div>
