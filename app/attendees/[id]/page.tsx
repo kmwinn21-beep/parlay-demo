@@ -1141,10 +1141,9 @@ export default function AttendeeDetailPage() {
                           )}
                         </div>
                       )}
-                      {/* Mobile keeps these on one scrolling line; desktop wraps. */}
-                      <ScrollRow className="sm:hidden mt-2" gapClass="gap-2">
-                        {headerPills}
-                      </ScrollRow>
+                      {/* Desktop wraps them here; mobile gets a full-width
+                          scrolling row below, clear of the avatar column so the
+                          chevron lines up with the edit button. */}
                       <div className="hidden sm:flex flex-wrap items-center gap-2 mt-2">
                         {headerPills}
                       </div>
@@ -1157,6 +1156,9 @@ export default function AttendeeDetailPage() {
                     </button>
                   </div>
                 </div>
+                <ScrollRow className="sm:hidden mt-2" gapClass="gap-2">
+                  {headerPills}
+                </ScrollRow>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-100">
                   <div>
                     <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Company</p>
