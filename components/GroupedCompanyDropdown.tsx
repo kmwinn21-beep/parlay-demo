@@ -228,7 +228,9 @@ export function GroupedCompanyDropdown({
         <div
           ref={menuRef}
           style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, width: menuPos.width, maxHeight: menuPos.maxHeight }}
-          className="z-[100] bg-white border border-gray-200 rounded-lg shadow-lg overflow-y-auto"
+          // Above app modals (z-[200]) — the menu portals to the body, so a
+          // lower value leaves it stranded behind whatever opened it.
+          className="z-[10000] bg-white border border-gray-200 rounded-lg shadow-lg overflow-y-auto"
         >
           {/* Search box inside panel when a value is not selected */}
           {value == null && (
