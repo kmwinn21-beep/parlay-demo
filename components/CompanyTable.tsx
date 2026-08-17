@@ -961,22 +961,17 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-brand-secondary flex-shrink-0" />
-                  <button
-                    type="button"
-                    onClick={() => setQuickViewId(company.id)}
-                    className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-brand-secondary flex-shrink-0"
-                    title="Quick view"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                  </button>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <Link href={`/companies/${company.id}`} className="font-semibold text-brand-secondary hover:underline text-sm leading-snug">
+                      {/* The name opens the quick-view drawer; the icon that
+                          used to do that is redundant on a phone. */}
+                      <button
+                        type="button"
+                        onClick={() => setQuickViewId(company.id)}
+                        className="font-semibold text-brand-secondary hover:underline text-sm leading-snug text-left"
+                      >
                         {company.name}
-                      </Link>
+                      </button>
                       {Number(company.pinned_notes_count) > 0 && (
                         <span title="Has pinned note" className="flex-shrink-0 inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-400 text-white">
                           <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">

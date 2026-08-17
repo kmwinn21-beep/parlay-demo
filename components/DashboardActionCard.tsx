@@ -870,7 +870,7 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
             type="button"
             onClick={() => setShowCameraMenu(v => !v)}
             disabled={isScanning}
-            className="w-full flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-blue-50 transition-colors group disabled:opacity-50"
+            className={`w-full flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-blue-50 transition-all group disabled:opacity-50 ${meetingsOpen ? 'opacity-40 grayscale' : ''}`}
           >
             <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center group-hover:bg-brand-secondary transition-colors flex-shrink-0">
               {isScanning ? (
@@ -913,7 +913,7 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
         {bannerState === 'active' && activeConference ? (
           <Link
             href={`/conferences/${activeConference.id}?fieldreport=true`}
-            className="hidden lg:flex flex-1 flex-col items-center gap-1 p-2 rounded-xl hover:bg-purple-50 transition-colors group"
+            className={`hidden lg:flex flex-1 flex-col items-center gap-1 p-2 rounded-xl hover:bg-purple-50 transition-all group ${meetingsOpen ? 'opacity-40 grayscale' : ''}`}
           >
             <div className="w-8 h-8 rounded-full flex items-center justify-center group-hover:bg-purple-500 transition-colors flex-shrink-0" style={{ backgroundColor: '#f5f3ff' }}>
               <svg className="w-4 h-4 group-hover:text-white transition-colors" style={{ color: '#7c3aed' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -926,7 +926,7 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
           <button
             type="button"
             onClick={() => setShowFollowUpModal(true)}
-            className="hidden lg:flex flex-1 flex-col items-center gap-1 p-2 rounded-xl hover:bg-blue-50 transition-colors group"
+            className={`hidden lg:flex flex-1 flex-col items-center gap-1 p-2 rounded-xl hover:bg-blue-50 transition-all group ${meetingsOpen ? 'opacity-40 grayscale' : ''}`}
           >
             <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center group-hover:bg-brand-secondary transition-colors flex-shrink-0">
               <svg className="w-4 h-4 text-brand-secondary group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -941,7 +941,7 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
         <button
           type="button"
           onClick={() => setShowTouchpointsModal(true)}
-          className="flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-green-50 transition-colors group"
+          className={`flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-green-50 transition-all group ${meetingsOpen ? 'opacity-40 grayscale' : ''}`}
         >
           <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center group-hover:bg-green-500 transition-colors flex-shrink-0">
             <svg className="w-4 h-4 text-green-600 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">

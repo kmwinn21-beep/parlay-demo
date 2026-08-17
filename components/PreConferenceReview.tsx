@@ -79,6 +79,7 @@ export interface MeetingRow {
   meeting_date: string | null;
   meeting_time: string | null;
   location: string | null;
+  /** Resolved rep names, for display and the My Meetings filter. */
   scheduled_by: string | null;
   outcome: string | null;
   meeting_type: string | null;
@@ -88,6 +89,14 @@ export interface MeetingRow {
   company_name: string | null;
   company_id: number | null;
   hasConflict: boolean;
+  /** Raw config_options ids — what the shared meeting card's rep pills read. */
+  scheduled_by_ids?: string | null;
+  additional_attendees?: string | null;
+  created_at?: string;
+  company_wse?: number | null;
+  conference_id?: number;
+  conference_name?: string;
+  has_notes?: boolean;
 }
 
 export interface SocialEventGuest {

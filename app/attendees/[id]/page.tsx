@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { effectiveSeniority } from '@/lib/parsers';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { AttendeeAvatar, ImageCropModal, readImageFromClipboard } from '@/components/AttendeePhoto';
+import { ScrollRow } from '@/components/ScrollRow';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
@@ -881,6 +882,63 @@ export default function AttendeeDetailPage() {
   const currentStatuses = new Set((attendee.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown'));
   const currentFunctions = new Set((attendee.function || '').split(',').map(s => s.trim()).filter(Boolean));
   const currentProducts = new Set((attendee.products || '').split(',').map(s => s.trim()).filter(Boolean));
+  // The header pills render twice — one scrolling line on mobile, the
+  // wrapping row on desktop.
+  const headerPills = (
+    <>
+                        {attendee.title && <span className={`badge ${getPillClass(seniority, colorMaps.seniority || {})}`}>{seniority}</span>}
+                        {currentFunctions.size > 0 && Array.from(currentFunctions).map(f => (
+                          <span key={f} className={`badge ${getPillClass(f, colorMaps.function || {})}`}>{f}</span>
+                        ))}
+                        {currentStatuses.size > 0 ? Array.from(currentStatuses).map(s => (
+                          <span key={s} className={`badge ${getPillClass(s, colorMaps.status || {})}`}>{formatStatusLabel(s)}</span>
+                        )) : <span className="text-sm text-gray-400">—</span>}
+                        {attendee.company_type && <span className={getBadgeClass(attendee.company_type, colorMaps.company_type || {})}>{attendee.company_type}</span>}
+                        {/* LinkedIn icon */}
+                        {attendee.linkedin_url ? (
+                          <a href={attendee.linkedin_url} target="_blank" rel="noopener noreferrer" title="LinkedIn profile" className="flex-shrink-0">
+                            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="#0A66C2" aria-label="LinkedIn">
+                              <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                            </svg>
+                          </a>
+                        ) : (
+                          <a
+                            href={`https://www.linkedin.com/search/results/all/?keywords=${encodeURIComponent(`${attendee.first_name} ${attendee.last_name} ${attendee.company_name || ''}`.trim())}&origin=GLOBAL_SEARCH_HEADER`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Search LinkedIn"
+                            className="flex-shrink-0"
+                          >
+                            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="#9CA3AF" aria-label="No LinkedIn — search LinkedIn">
+                              <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                            </svg>
+                          </a>
+                        )}
+                        {/* Phone icon — only shown if phone exists */}
+                        {attendee.phone && (
+                          <div className="relative flex-shrink-0">
+                            <button
+                              onClick={() => setShowPhonePopup(p => !p)}
+                              title="Show phone number"
+                              className="flex items-center"
+                            >
+                              <svg className="h-5 w-5 text-gray-500 hover:text-brand-secondary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                              </svg>
+                            </button>
+                            {showPhonePopup && (
+                              <div className="absolute left-0 top-7 z-10 min-w-max rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-lg">
+                                <p className="text-xs text-gray-400 mb-1">Phone</p>
+                                <a href={`callto:${attendee.phone}`} className="text-sm font-medium text-brand-secondary hover:underline whitespace-nowrap">
+                                  {attendee.phone}
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        )}
+    </>
+  );
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <BackButton />
@@ -1083,57 +1141,11 @@ export default function AttendeeDetailPage() {
                           )}
                         </div>
                       )}
-                      <div className="flex flex-wrap items-center gap-2 mt-2">
-                        {attendee.title && <span className={`badge ${getPillClass(seniority, colorMaps.seniority || {})}`}>{seniority}</span>}
-                        {currentFunctions.size > 0 && Array.from(currentFunctions).map(f => (
-                          <span key={f} className={`badge ${getPillClass(f, colorMaps.function || {})}`}>{f}</span>
-                        ))}
-                        {currentStatuses.size > 0 ? Array.from(currentStatuses).map(s => (
-                          <span key={s} className={`badge ${getPillClass(s, colorMaps.status || {})}`}>{formatStatusLabel(s)}</span>
-                        )) : <span className="text-sm text-gray-400">—</span>}
-                        {attendee.company_type && <span className={getBadgeClass(attendee.company_type, colorMaps.company_type || {})}>{attendee.company_type}</span>}
-                        {/* LinkedIn icon */}
-                        {attendee.linkedin_url ? (
-                          <a href={attendee.linkedin_url} target="_blank" rel="noopener noreferrer" title="LinkedIn profile" className="flex-shrink-0">
-                            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="#0A66C2" aria-label="LinkedIn">
-                              <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-                            </svg>
-                          </a>
-                        ) : (
-                          <a
-                            href={`https://www.linkedin.com/search/results/all/?keywords=${encodeURIComponent(`${attendee.first_name} ${attendee.last_name} ${attendee.company_name || ''}`.trim())}&origin=GLOBAL_SEARCH_HEADER`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title="Search LinkedIn"
-                            className="flex-shrink-0"
-                          >
-                            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="#9CA3AF" aria-label="No LinkedIn — search LinkedIn">
-                              <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-                            </svg>
-                          </a>
-                        )}
-                        {/* Phone icon — only shown if phone exists */}
-                        {attendee.phone && (
-                          <div className="relative flex-shrink-0">
-                            <button
-                              onClick={() => setShowPhonePopup(p => !p)}
-                              title="Show phone number"
-                              className="flex items-center"
-                            >
-                              <svg className="h-5 w-5 text-gray-500 hover:text-brand-secondary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                              </svg>
-                            </button>
-                            {showPhonePopup && (
-                              <div className="absolute left-0 top-7 z-10 min-w-max rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-lg">
-                                <p className="text-xs text-gray-400 mb-1">Phone</p>
-                                <a href={`callto:${attendee.phone}`} className="text-sm font-medium text-brand-secondary hover:underline whitespace-nowrap">
-                                  {attendee.phone}
-                                </a>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                      {/* Desktop wraps them here; mobile gets a full-width
+                          scrolling row below, clear of the avatar column so the
+                          chevron lines up with the edit button. */}
+                      <div className="hidden sm:flex flex-wrap items-center gap-2 mt-2">
+                        {headerPills}
                       </div>
                     </div>
                   </div>
@@ -1144,6 +1156,9 @@ export default function AttendeeDetailPage() {
                     </button>
                   </div>
                 </div>
+                <ScrollRow className="sm:hidden mt-2" gapClass="gap-2">
+                  {headerPills}
+                </ScrollRow>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-100">
                   <div>
                     <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Company</p>
@@ -1200,6 +1215,34 @@ export default function AttendeeDetailPage() {
                               .catch(() => toast.error('Failed to copy email.'));
                           }}
                           title="Copy email"
+                          className="flex-shrink-0 text-gray-400 hover:text-brand-secondary transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                        </button>
+                      </div>
+                    ) : <p className="text-sm text-gray-400">—</p>}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-1">Phone</p>
+                    {attendee.phone ? (
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={`callto:${attendee.phone}`}
+                          className="text-sm text-brand-secondary hover:underline truncate"
+                          title={attendee.phone}
+                        >
+                          {attendee.phone}
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(attendee.phone!)
+                              .then(() => toast.success('Phone number copied to clipboard.'))
+                              .catch(() => toast.error('Failed to copy phone number.'));
+                          }}
+                          title="Copy phone number"
                           className="flex-shrink-0 text-gray-400 hover:text-brand-secondary transition-colors"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

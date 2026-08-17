@@ -31,6 +31,7 @@ import { CompanyDrawer } from '@/components/CompanyDrawer';
 import { ActivityTimelineModal } from '@/components/ActivityTimelineModal';
 import { useCapabilities } from '@/lib/useCapabilities';
 import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
+import { ScrollRow } from '@/components/ScrollRow';
 import { ClosedWonDealsSection } from '@/components/ClosedWonDealsSection';
 import type { ClosedDeal } from '@/lib/ClosedDealDraftContext';
 
@@ -802,6 +803,50 @@ export default function CompanyDetailPage() {
 
   if (!company) return null;
 
+  // Header pills render twice — one scrolling line on mobile, the
+  // wrapping row on desktop.
+  const headerPills = (
+    <>
+      {parseRepIds(company.assigned_user ?? '').map(id => userOptions.find(u => u.id === id)).filter(Boolean).map((user, i) => (
+                    <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
+                      <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      {getRepInitials(user!.value)}
+                    </span>
+                  ))}
+                  {company.company_type && (
+                    <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}>
+                      {company.entity_structure === 'Parent' && (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                      )}
+                      {company.entity_structure === 'Child' && (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4" />
+                        </svg>
+                      )}
+                      {company.company_type}
+                    </span>
+                  )}
+                  {company.profit_type && (
+                    <span className={`badge ${company.profit_type === 'for-profit' ? 'badge-green' : 'badge-gold'}`}>
+                      {company.profit_type}
+                    </span>
+                  )}
+                  {(() => {
+                    const pill = formatValuePill(company.wse, avgCostPerUnit);
+                    return pill ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
+                        {pill}
+                      </span>
+                    ) : null;
+                  })()}
+                  <span className="badge-gray whitespace-nowrap">{company.attendees.length} attendees</span>
+                </>
+  );
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <BackButton />
@@ -1064,82 +1109,54 @@ export default function CompanyDetailPage() {
                     </button>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {company.company_type && (
-                    <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}>
-                      {company.entity_structure === 'Parent' && (
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                        </svg>
-                      )}
-                      {company.entity_structure === 'Child' && (
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4" />
-                        </svg>
-                      )}
-                      {company.company_type}
-                    </span>
-                  )}
-                  {company.profit_type && (
-                    <span className={`badge ${company.profit_type === 'for-profit' ? 'badge-green' : 'badge-gold'}`}>
-                      {company.profit_type}
-                    </span>
-                  )}
-                  {(() => {
-                    const pill = formatValuePill(company.wse, avgCostPerUnit);
-                    return pill ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
-                        {pill}
-                      </span>
-                    ) : null;
-                  })()}
-                  <span className="badge-gray">{company.attendees.length} attendees</span>
-                  {parseRepIds(company.assigned_user ?? '').map(id => userOptions.find(u => u.id === id)).filter(Boolean).map((user, i) => (
-                    <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
-                      <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                      {getRepInitials(user!.value)}
-                    </span>
-                  ))}
-                </div>
-                {/* Mobile-only: icon buttons row below pills, above divider */}
-                <div className="flex sm:hidden items-center gap-2 mt-2">
-                  {icpOptions.length > 0 && normalizeIcpValue(company.icp, icpOptions) === icpOptions[0] && (
-                    <span title="Ideal Customer Profile" className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-100 flex-shrink-0">
-                      <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                    </span>
-                  )}
-                  {intelItems.length > 0 && (
-                    <button onClick={() => { setSelectedIntelIdx(0); setShowIntelDrawer(true); }} title="View company intel" className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 hover:bg-amber-200 transition-colors flex-shrink-0">
-                      <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                    </button>
-                  )}
-                  {planCapabilities?.intelligence_core?.activity_timeline && (
-                    <button type="button" title="View activity timeline" onClick={() => setTimelineOpen(true)} className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0">
-                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-brand-secondary" aria-hidden="true">
-                        <line x1="2" y1="10" x2="18" y2="10" /><circle cx="6" cy="6" r="1.5" fill="currentColor" stroke="none" /><circle cx="10" cy="13" r="1.5" fill="currentColor" stroke="none" /><circle cx="14" cy="5" r="1.5" fill="currentColor" stroke="none" /><line x1="6" y1="10" x2="6" y2="6" strokeWidth="1.4" /><line x1="10" y1="10" x2="10" y2="13" strokeWidth="1.4" /><line x1="14" y1="10" x2="14" y2="5" strokeWidth="1.4" />
-                      </svg>
-                    </button>
-                  )}
-                  {planCapabilities?.intelligence_core?.internal_relationship_mapping && (
-                    <button type="button" title="View relationship map" onClick={() => setRelMapOpen(true)} className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#EEEDFE] hover:bg-[#E0DEF8] transition-colors flex-shrink-0">
-                      <svg className="w-4 h-4 text-[#7F77DD]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                    </button>
-                  )}
-                  {company.website && (
-                    <a
-                      href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="View website"
-                      className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0"
-                    >
-                      <svg className="w-4 h-4 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" /></svg>
-                    </a>
-                  )}
+                {/* Mobile keeps these on one scrolling line; desktop wraps.
+                    The circular icon buttons below stay where they are. */}
+                <div className="hidden sm:flex flex-wrap gap-2 mt-2">
+                  {headerPills}
                 </div>
               </div>
+            </div>
+
+            {/* Mobile: the pill and icon rows run the full width of the card,
+                lining up with the avatar's left edge rather than the text
+                column, so the chevron has room. */}
+            <ScrollRow className="sm:hidden mt-2" gapClass="gap-2">
+              {headerPills}
+            </ScrollRow>
+            <div className="flex sm:hidden items-center gap-2 mt-2">
+              {icpOptions.length > 0 && normalizeIcpValue(company.icp, icpOptions) === icpOptions[0] && (
+                <span title="Ideal Customer Profile" className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-100 flex-shrink-0">
+                  <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                </span>
+              )}
+              {intelItems.length > 0 && (
+                <button onClick={() => { setSelectedIntelIdx(0); setShowIntelDrawer(true); }} title="View company intel" className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 hover:bg-amber-200 transition-colors flex-shrink-0">
+                  <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                </button>
+              )}
+              {planCapabilities?.intelligence_core?.activity_timeline && (
+                <button type="button" title="View activity timeline" onClick={() => setTimelineOpen(true)} className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0">
+                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-brand-secondary" aria-hidden="true">
+                    <line x1="2" y1="10" x2="18" y2="10" /><circle cx="6" cy="6" r="1.5" fill="currentColor" stroke="none" /><circle cx="10" cy="13" r="1.5" fill="currentColor" stroke="none" /><circle cx="14" cy="5" r="1.5" fill="currentColor" stroke="none" /><line x1="6" y1="10" x2="6" y2="6" strokeWidth="1.4" /><line x1="10" y1="10" x2="10" y2="13" strokeWidth="1.4" /><line x1="14" y1="10" x2="14" y2="5" strokeWidth="1.4" />
+                  </svg>
+                </button>
+              )}
+              {planCapabilities?.intelligence_core?.internal_relationship_mapping && (
+                <button type="button" title="View relationship map" onClick={() => setRelMapOpen(true)} className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#EEEDFE] hover:bg-[#E0DEF8] transition-colors flex-shrink-0">
+                  <svg className="w-4 h-4 text-[#7F77DD]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                </button>
+              )}
+              {company.website && (
+                <a
+                  href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="View website"
+                  className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0"
+                >
+                  <svg className="w-4 h-4 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" /></svg>
+                </a>
+              )}
             </div>
 
             {/* Metadata fields */}
@@ -1249,9 +1266,15 @@ export default function CompanyDetailPage() {
                 <div key={attendee.id} className="p-4 bg-white">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-2">
-                      <Link href={`/attendees/${attendee.id}`} className="font-semibold text-brand-secondary hover:underline text-sm">
+                      {/* The name opens the quick-view drawer rather than
+                          navigating to the profile, as elsewhere on mobile. */}
+                      <button
+                        type="button"
+                        onClick={() => setQuickView({ type: 'attendee', id: attendee.id, name: `${attendee.first_name} ${attendee.last_name}` })}
+                        className="font-semibold text-brand-secondary hover:underline text-sm text-left"
+                      >
                         {attendee.first_name} {attendee.last_name}
-                      </Link>
+                      </button>
                       {attendee.email && (
                         <button
                           type="button"

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { KebabPopover } from '@/components/KebabMenu';
 import toast from 'react-hot-toast';
 import { useUser } from '@/components/UserContext';
 import { OutreachCompanyCard, type OutreachCompany, type OutreachAttendeeFilter } from './OutreachCompanyCard';
@@ -112,6 +113,41 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
     );
   }
 
+  const anyOutreachFilter = assigneeFilter != null || statusFilter != null || myOutreachOnly;
+  const filterControls = (
+    <>
+      <select
+        value={assigneeFilter ?? ''}
+        onChange={e => setAssigneeFilter(e.target.value ? Number(e.target.value) : null)}
+        className="input-field text-xs py-1.5 w-full lg:w-auto"
+      >
+        <option value="">All Assignees</option>
+        {assigneeOptions.map(a => <option key={a.userId} value={a.userId}>{a.displayName}</option>)}
+      </select>
+      <select
+        value={statusFilter ?? ''}
+        onChange={e => setStatusFilter(e.target.value || null)}
+        className="input-field text-xs py-1.5 w-full lg:w-auto"
+      >
+        <option value="">All Statuses</option>
+        {STATUS_FILTER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+      {currentUser?.configId != null && (
+        <button
+          type="button"
+          onClick={() => setMyOutreachOnly(v => !v)}
+          className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-full border text-xs font-semibold transition-colors whitespace-nowrap flex-shrink-0 w-full lg:w-auto ${
+            myOutreachOnly
+              ? 'border-brand-secondary bg-brand-secondary/10 text-brand-secondary'
+              : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+          }`}
+        >
+          My Outreach
+        </button>
+      )}
+    </>
+  );
+
   return (
     <div className="card p-0 overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-nowrap overflow-x-auto">
@@ -124,35 +160,8 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
           )}
         </div>
         <div className="flex items-center gap-2 flex-nowrap flex-shrink-0">
-          <select
-            value={assigneeFilter ?? ''}
-            onChange={e => setAssigneeFilter(e.target.value ? Number(e.target.value) : null)}
-            className="input-field text-xs py-1.5"
-          >
-            <option value="">All Assignees</option>
-            {assigneeOptions.map(a => <option key={a.userId} value={a.userId}>{a.displayName}</option>)}
-          </select>
-          <select
-            value={statusFilter ?? ''}
-            onChange={e => setStatusFilter(e.target.value || null)}
-            className="input-field text-xs py-1.5"
-          >
-            <option value="">All Statuses</option>
-            {STATUS_FILTER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-          {currentUser?.configId != null && (
-            <button
-              type="button"
-              onClick={() => setMyOutreachOnly(v => !v)}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-xs font-semibold transition-colors whitespace-nowrap flex-shrink-0 ${
-                myOutreachOnly
-                  ? 'border-brand-secondary bg-brand-secondary/10 text-brand-secondary'
-                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-              }`}
-            >
-              My Outreach
-            </button>
-          )}
+          {/* Desktop keeps the filters inline; mobile tucks them into the kebab. */}
+          <div className="hidden lg:contents">{filterControls}</div>
           <button
             type="button"
             onClick={() => setAssignModalState({ currentAssigneeIds: [] })}
@@ -160,6 +169,9 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
           >
             Assign company
           </button>
+          <KebabPopover className="lg:hidden" title="Outreach filters" active={anyOutreachFilter}>
+            {filterControls}
+          </KebabPopover>
         </div>
       </div>
 

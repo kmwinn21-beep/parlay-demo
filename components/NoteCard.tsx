@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { ScrollRow } from '@/components/ScrollRow';
 import toast from 'react-hot-toast';
 import { formatStatusLabel, getBadgeClass, getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -282,50 +283,71 @@ export function NoteCard({
 
   return (
     <div className={`rounded-xl border p-4 hover:shadow-sm transition-all ${letsTalk ? 'border-amber-300 bg-amber-50/30' : 'border-gray-100 hover:border-gray-200'}`}>
+      {/* Mobile: timestamp and rep share the line above the tag row. */}
+      <div className="sm:hidden flex items-center justify-between gap-3 mb-1.5">
+        <span className="text-xs text-gray-400 whitespace-nowrap">{formatDateTime(note.created_at)}</span>
+        {repInitials && (
+          <span
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap flex-shrink-0 ${getPreset(colorMaps.user?.[note.rep ?? '']).badgeClass}`}
+            title={note.rep || undefined}
+          >
+            <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            {repInitials}
+          </span>
+        )}
+      </div>
       {/* Meta row */}
       <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="flex flex-wrap items-center gap-2 min-w-0">
-          <span className="text-xs text-gray-400 whitespace-nowrap">{formatDateTime(note.created_at)}</span>
-          {note.conference_name && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-brand-secondary text-xs font-medium border border-blue-100 whitespace-nowrap">
-              {note.conference_name}
-            </span>
-          )}
+        {/* One scrolling line rather than a wrapping block; the conference
+            trails the row since it is the least specific of the tags. The
+            timestamp sits with the rep pill above it on mobile. */}
+        <ScrollRow className="min-w-0 flex-1" gapClass="gap-2">
+          <span className="hidden sm:inline text-xs text-gray-400 whitespace-nowrap flex-shrink-0">{formatDateTime(note.created_at)}</span>
           {note.attendee_name && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-200 whitespace-nowrap">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-200 whitespace-nowrap flex-shrink-0">
               {note.attendee_name}
             </span>
           )}
           {note.company_name && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 text-xs font-medium border border-teal-200 whitespace-nowrap">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 text-xs font-medium border border-teal-200 whitespace-nowrap flex-shrink-0">
               {note.company_name}
             </span>
           )}
           {taggedNames.map(name => (
-            <span key={name} className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 text-xs font-medium border border-violet-200 whitespace-nowrap" title={`@${name}`}>
+            <span key={name} className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 text-xs font-medium border border-violet-200 whitespace-nowrap flex-shrink-0" title={`@${name}`}>
               @{getRepInitials(name)}
             </span>
           ))}
           {note.status && (
-            <span className={`${getBadgeClass(note.status, colorMaps.status || {})} whitespace-nowrap`}>
+            <span className={`${getBadgeClass(note.status, colorMaps.status || {})} whitespace-nowrap flex-shrink-0`}>
               {formatStatusLabel(note.status)}
             </span>
           )}
           {note.note_type === 'meeting_note' && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-xs font-medium border border-purple-200 whitespace-nowrap">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-xs font-medium border border-purple-200 whitespace-nowrap flex-shrink-0">
               <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
               </svg>
               Meeting Note
             </span>
           )}
-        </div>
+          {note.conference_name && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-brand-secondary text-xs font-medium border border-blue-100 whitespace-nowrap flex-shrink-0">
+              {note.conference_name}
+            </span>
+          )}
+        </ScrollRow>
         <div className="flex items-center gap-2 flex-shrink-0">
           {repInitials && (
             <span
-              className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold flex-shrink-0 ${getPreset(colorMaps.user?.[note.rep ?? '']).badgeClass}`}
+              className={`hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap flex-shrink-0 ${getPreset(colorMaps.user?.[note.rep ?? '']).badgeClass}`}
               title={note.rep || undefined}
             >
+              <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
               {repInitials}
             </span>
           )}
