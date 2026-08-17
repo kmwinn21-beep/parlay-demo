@@ -448,8 +448,9 @@ export function ClosedWonDealModal() {
   if (isMinimized) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={minimizeDeal}>
-      <div className="bg-white rounded-2xl shadow-2xl border border-brand-highlight w-full max-w-lg max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={minimizeDeal}>
+      {/* Rises from the bottom edge on a phone, like the drawers. */}
+      <div className="modal-sheet-mobile bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-brand-highlight w-full sm:max-w-lg max-h-[92vh] sm:max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
 
         {/* Header */}
         <div className="flex-shrink-0 flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">

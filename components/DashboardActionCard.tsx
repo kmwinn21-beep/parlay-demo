@@ -401,7 +401,13 @@ export function BadgeScanResultsModal({
 
 // ── TouchpointQuickModal ──────────────────────────────────────────────────────
 
-export function TouchpointQuickModal({ onClose, defaultConferenceId }: { onClose: () => void; defaultConferenceId?: number | null }) {
+export function TouchpointQuickModal({ onClose, defaultConferenceId, defaultCompanyId, defaultAttendeeId }: {
+  onClose: () => void;
+  defaultConferenceId?: number | null;
+  /** Opens with these already chosen — used when logging from a record. */
+  defaultCompanyId?: number | null;
+  defaultAttendeeId?: number | null;
+}) {
   const { user } = useUser();
   const [conferences, setConferences] = useState<Conference[]>([]);
   const [allCompanies, setAllCompanies] = useState<Company[]>([]);
@@ -447,7 +453,10 @@ export function TouchpointQuickModal({ onClose, defaultConferenceId }: { onClose
           ?? null;
         if (active) {
           setSelectedConference(active);
-          await loadConferenceCascade(active.id, Array.isArray(compRes) ? compRes : []);
+          await loadConferenceCascade(active.id, Array.isArray(compRes) ? compRes : [], {
+            companyId: defaultCompanyId ?? null,
+            attendeeId: defaultAttendeeId ?? null,
+          });
         }
       } catch { toast.error('Failed to load options.'); }
       finally { setLoading(false); }
@@ -455,7 +464,11 @@ export function TouchpointQuickModal({ onClose, defaultConferenceId }: { onClose
     void load();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadConferenceCascade = async (confId: number, companies: Company[]) => {
+  const loadConferenceCascade = async (
+    confId: number,
+    companies: Company[],
+    preselect?: { companyId: number | null; attendeeId: number | null },
+  ) => {
     setLoadingCascade(true);
     setConfAttendees([]);
     setConfCompanies([]);
@@ -473,7 +486,16 @@ export function TouchpointQuickModal({ onClose, defaultConferenceId }: { onClose
       }));
       setConfAttendees(atts);
       const companyIdSet = new Set(atts.map(a => a.company_id).filter(Boolean) as number[]);
-      setConfCompanies(companies.filter(c => companyIdSet.has(c.id)));
+      const scoped = companies.filter(c => companyIdSet.has(c.id));
+      setConfCompanies(scoped);
+      if (preselect?.companyId != null) {
+        const comp = scoped.find(c => c.id === preselect.companyId) ?? null;
+        if (comp) setSelectedCompany(comp);
+      }
+      if (preselect?.attendeeId != null) {
+        const att = atts.find(a => a.id === preselect.attendeeId);
+        if (att) setSelectedAttendees([att]);
+      }
     } catch { toast.error('Failed to load conference attendees.'); }
     finally { setLoadingCascade(false); }
   };

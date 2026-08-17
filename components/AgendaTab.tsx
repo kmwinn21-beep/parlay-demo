@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AgendaDescription } from '@/components/AgendaDescription';
 import { createPortal } from 'react-dom';
 import { MeetingNotesDrawer } from '@/components/MeetingNotesDrawer';
 import { useDrawerResize } from '@/lib/useDrawerResize';
@@ -447,7 +448,8 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
   function FullAgendaItem({ item, dayLabel }: { item: AgendaItem; dayLabel: string }) {
     const inMyAgenda = myAgendaItemIds.has(item.id);
     return (
-      <div className="flex gap-3 px-4 py-3">
+      <div>
+      <div className="flex gap-3 px-4 pt-3 pb-2">
         <div className="w-20 sm:w-28 shrink-0 pt-0.5">
           {(item.start_time || item.end_time) && (
             <p className="text-xs text-gray-500 tabular-nums leading-snug">
@@ -466,16 +468,6 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
             )}
             <p className="text-xs font-medium text-gray-800 leading-snug">{item.title}</p>
           </div>
-          {item.description && <p className="mt-0.5 text-xs text-gray-500">{item.description}</p>}
-          {item.location && (
-            <p className="mt-1 flex items-center gap-1 text-xs text-gray-500">
-              <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              {item.location}
-            </p>
-          )}
         </div>
         <div className="shrink-0 pl-2 pt-0.5">
           {inMyAgenda ? (
@@ -497,6 +489,9 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
             </button>
           )}
         </div>
+      </div>
+      {item.description && <AgendaDescription text={item.description} className="px-4 pb-1" />}
+      {item.location && <AgendaDescription text={item.location} icon={<svg className="h-3.5 w-3.5 shrink-0 mt-0.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>} className="px-4 pb-3" />}
       </div>
     );
   }
@@ -522,7 +517,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
     return (
       <div>
         {/* Main row — same layout as Full Agenda items */}
-        <div className={`flex gap-3 px-4 py-3 ${isMeeting ? 'bg-brand-accent/15' : ''}`}>
+        <div className={`flex gap-3 px-4 pt-3 pb-2 ${isMeeting ? 'bg-brand-accent/15' : ''}`}>
           <div className="w-20 sm:w-28 shrink-0 pt-0.5">
             {(item.start_time || item.end_time) && (
               <p className="text-xs text-gray-500 tabular-nums leading-snug">
@@ -543,18 +538,6 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
               {isMeeting && meetingStatusPill(item.meeting_status)}
             </div>
             {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
-            {item.description && (
-              <p className="mt-0.5 text-xs text-gray-500">{item.description}</p>
-            )}
-            {item.location && (
-              <p className="mt-1 flex items-center gap-1 text-xs text-gray-500">
-                <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                {item.location}
-              </p>
-            )}
             {/* Note preview when panel is closed */}
             {!noteOpen && currentVal && (
               <p className="mt-1 text-xs text-gray-400 italic line-clamp-2">{currentVal}</p>
@@ -626,6 +609,8 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
             )}
           </div>
         </div>
+        {item.description && <AgendaDescription text={item.description} className={`px-4 pb-1 -mt-1 ${isMeeting ? 'bg-brand-accent/15' : ''}`} />}
+        {item.location && <AgendaDescription text={item.location} icon={<svg className="h-3.5 w-3.5 shrink-0 mt-0.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>} className={`px-4 pb-2 ${isMeeting ? 'bg-brand-accent/15' : ''}`} />}
 
         {/* Notes panel — full width below the row (agenda items only; meetings use the notetaker modal) */}
         {noteOpen && !isMeeting && (
