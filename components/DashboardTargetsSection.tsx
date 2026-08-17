@@ -146,7 +146,7 @@ function DashboardTargetCard({
             title="Log activity"
             className="flex-shrink-0 -mr-1 -mt-1"
             items={[
-              { label: 'Touchpoint', onClick: () => onAction('touchpoint', entry) },
+              { label: '+ Touchpoint', onClick: () => onAction('touchpoint', entry) },
               { label: '+ Note', onClick: () => onAction('note', entry) },
               { label: '+ Follow Up', onClick: () => onAction('followup', entry) },
               { label: '+ Meeting', onClick: () => onAction('meeting', entry) },
