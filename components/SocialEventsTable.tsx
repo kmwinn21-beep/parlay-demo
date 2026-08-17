@@ -11,7 +11,7 @@ import { parseRepIds, getRepInitials } from '@/lib/useUserOptions';
 import { useUser } from '@/components/UserContext';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
 import { CustomColumnCell } from './CustomColumnCell';
-import { CardActionMenu, CardField, CardNotesButton, SocialEventCardBody } from './SocialEventCardParts';
+import { CardActionMenu, CardField, CardGuestListButton, CardNotesButton, SocialEventCardBody } from './SocialEventCardParts';
 import { ConferenceDatePicker } from './ConferenceDatePicker';
 import { SocialEventNotesDrawer } from './SocialEventNotesDrawer';
 
@@ -364,7 +364,7 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMap
   );
 }
 
-/* ─── Mobile: full-screen guest list bottom sheet ─── */
+/* ─── Guest list: bottom sheet on a phone, a 500px right drawer on desktop ─── */
 function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, onClose, colorMaps, companies, userOptionsFull, icpCompanyTypes }: {
   event: SocialEvent;
   invitedAttendees: Attendee[];
@@ -394,12 +394,11 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
     return activeFilters.some(f => s.includes(f));
   });
   return (
-    // Dimmed backdrop plus the shared slide-up animation and h-[90vh], so this
-    // matches every other mobile drawer on the site rather than appearing
-    // instantly at whatever height its content happens to need.
-    <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/40" onClick={onClose}>
+    // Dimmed backdrop plus the shared animation — slide-up on a phone, slide-in
+    // from the right at sm+, where it becomes a 500px-wide drawer.
+    <div className="fixed inset-0 z-[60] flex flex-col justify-end sm:flex-row sm:justify-end bg-black/40" onClick={onClose}>
       <div
-        className="drawer-mobile-responsive relative bg-white rounded-t-2xl shadow-2xl border border-brand-highlight flex flex-col h-[90vh]"
+        className="drawer-mobile-responsive relative bg-white rounded-t-2xl sm:rounded-none shadow-2xl border border-brand-highlight flex flex-col h-[90vh] sm:h-full sm:w-[500px] sm:max-w-full"
         onClick={e => e.stopPropagation()}
       >
         <div className="px-4 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
@@ -1160,6 +1159,7 @@ export function SocialEventsTable({
                   ) : undefined}
                   actions={(
                     <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <CardGuestListButton count={invited.length} onClick={() => setGuestListEventId(ev.id)} />
                       <CardNotesButton count={noteCounts[ev.id] ?? 0} onClick={() => setNotesEventId(ev.id)} />
                       <CardActionMenu
                         onEdit={() => handleEdit(ev)}
@@ -1209,7 +1209,7 @@ export function SocialEventsTable({
         </div>
       )}
 
-      {/* Mobile guest list overlay */}
+      {/* Guest list overlay — mobile sheet / desktop drawer */}
       {guestListEventId !== null && (() => {
         const ev = events.find(e => e.id === guestListEventId);
         if (!ev) return null;

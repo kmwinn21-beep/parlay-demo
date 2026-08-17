@@ -493,7 +493,7 @@ export default function ConferenceDetailPage() {
   const [showLogisticsDrawer, setShowLogisticsDrawer] = useState(false);
   const [showDebrief, setShowDebrief] = useState(false);
   const [activityMapOpen, setActivityMapOpen] = useState(false);
-  const [mobileReportMenuOpen, setMobileReportMenuOpen] = useState(false);
+  const [reportMenuOpen, setReportMenuOpen] = useState(false);
   const [executiveBriefOpen, setExecutiveBriefOpen] = useState(false);
   const [executiveBriefSnapshot, setExecutiveBriefSnapshot] = useState<ConferenceSnapshot | null>(null);
   const [executiveBriefYoY, setExecutiveBriefYoY] = useState<SeriesYoYData | null>(null);
@@ -2197,10 +2197,10 @@ export default function ConferenceDetailPage() {
           </div>
         ) : (
           <div>
-            {/* Top row: report nav (scrollable) + Field Report pinned at right */}
+            {/* Top row: report nav (scrollable) + actions kebab pinned at right */}
             <div className="flex items-start relative">
-              {/* Scrollable buttons — right padding reserves space for the absolutely-positioned button stack */}
-              <div className="flex items-center gap-5 overflow-x-auto flex-nowrap hide-scrollbar flex-1 min-w-0 pr-10 sm:pr-44">
+              {/* Scrollable buttons — right padding reserves space for the absolutely-positioned kebab */}
+              <div className="flex items-center gap-5 overflow-x-auto flex-nowrap hide-scrollbar flex-1 min-w-0 pr-10">
               <PreConferenceReview
                 conferenceId={conference.id}
                 conferenceName={conference.name}
@@ -2235,80 +2235,16 @@ export default function ConferenceDetailPage() {
                 Logistics
               </button>
               </div>
-              {/* Pinned right: divider + stacked Field Report / Activity map / Executive brief / Export CRM Files.
-                  Absolutely positioned so its height (now 4 rows tall) doesn't force the whole
-                  top row — and the gap below it — to grow with it. */}
-              {isInternalAttendee && (
-                <div className="hidden sm:flex absolute top-0 right-0 items-stretch gap-3 flex-shrink-0 bg-white pl-2">
-                  <div className="self-stretch w-px bg-gray-200" />
-                  <div className="flex flex-col gap-3 justify-center">
-                    <button
-                      type="button"
-                      onClick={() => setShowDebrief(true)}
-                      className="flex items-center gap-1.5 text-sm font-medium text-brand-accent hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
-                    >
-                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v4a1 1 0 0 0 1 1h4" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 17l0 -5" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 17l0 -1" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 17l0 -3" />
-                      </svg>
-                      Field Report
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActivityMapOpen(true)}
-                      className="flex items-center gap-1.5 text-sm font-medium text-brand-accent hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
-                    >
-                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 12h4l2 -6l4 12l2 -6h6" />
-                      </svg>
-                      Activity map
-                    </button>
-                    {capabilities?.planCapabilities?.revenue_intelligence?.executive_brief && (
-                    <button
-                      type="button"
-                      onClick={() => setExecutiveBriefOpen(true)}
-                      className="flex items-center gap-1.5 text-sm font-medium text-brand-accent hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
-                    >
-                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-10" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v4" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 20h6" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12v-4" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 12v-6" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12v-2" />
-                      </svg>
-                      Executive brief
-                    </button>
-                    )}
-                    {capabilities?.capabilities?.crm_export && (
-                      <button
-                        type="button"
-                        onClick={() => setShowCrmExport(true)}
-                        className="flex items-center gap-1.5 text-sm font-medium text-brand-accent hover:opacity-70 cursor-pointer transition-opacity flex-shrink-0"
-                      >
-                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                        </svg>
-                        Export CRM Files
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Mobile: same 4 links collapsed behind a kebab menu. Opaque bg + fixed width
-                  masks the scrollable button row underneath so it doesn't peek out. */}
+              {/* The report links collapsed behind a kebab menu at every width. Opaque
+                  bg + fixed width masks the scrollable button row underneath so it
+                  doesn't peek out. */}
               {/* Edit is always available here, so the kebab renders even when
                   the report links (internal attendees only) are absent. */}
               {(
-                <div className="sm:hidden absolute top-0 right-0 bottom-0 w-10 flex items-start justify-end bg-white flex-shrink-0">
+                <div className="absolute top-0 right-0 bottom-0 w-10 flex items-start justify-end bg-white flex-shrink-0">
                   <button
                     type="button"
-                    onClick={() => setMobileReportMenuOpen(v => !v)}
+                    onClick={() => setReportMenuOpen(v => !v)}
                     className="p-1.5 text-gray-500 hover:text-brand-accent transition-colors"
                     aria-label="More report options"
                   >
@@ -2318,14 +2254,14 @@ export default function ConferenceDetailPage() {
                       <circle cx="10" cy="16" r="1.5" />
                     </svg>
                   </button>
-                  {mobileReportMenuOpen && (
+                  {reportMenuOpen && (
                     <>
-                      <div className="fixed inset-0 z-10" onClick={() => setMobileReportMenuOpen(false)} />
+                      <div className="fixed inset-0 z-10" onClick={() => setReportMenuOpen(false)} />
                       <div className="absolute top-full right-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-100 py-1.5 z-20">
                         {isInternalAttendee && (
                         <button
                           type="button"
-                          onClick={() => { setShowDebrief(true); setMobileReportMenuOpen(false); }}
+                          onClick={() => { setShowDebrief(true); setReportMenuOpen(false); }}
                           className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-brand-accent hover:bg-gray-50 transition-colors"
                         >
                           <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
@@ -2341,7 +2277,7 @@ export default function ConferenceDetailPage() {
                         {isInternalAttendee && (
                         <button
                           type="button"
-                          onClick={() => { setActivityMapOpen(true); setMobileReportMenuOpen(false); }}
+                          onClick={() => { setActivityMapOpen(true); setReportMenuOpen(false); }}
                           className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-brand-accent hover:bg-gray-50 transition-colors"
                         >
                           <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
@@ -2353,7 +2289,7 @@ export default function ConferenceDetailPage() {
                         {isInternalAttendee && capabilities?.planCapabilities?.revenue_intelligence?.executive_brief && (
                           <button
                             type="button"
-                            onClick={() => { setExecutiveBriefOpen(true); setMobileReportMenuOpen(false); }}
+                            onClick={() => { setExecutiveBriefOpen(true); setReportMenuOpen(false); }}
                             className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-brand-accent hover:bg-gray-50 transition-colors"
                           >
                             <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
@@ -2371,7 +2307,7 @@ export default function ConferenceDetailPage() {
                         {isInternalAttendee && capabilities?.capabilities?.crm_export && (
                           <button
                             type="button"
-                            onClick={() => { setShowCrmExport(true); setMobileReportMenuOpen(false); }}
+                            onClick={() => { setShowCrmExport(true); setReportMenuOpen(false); }}
                             className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-brand-accent hover:bg-gray-50 transition-colors"
                           >
                             <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2385,7 +2321,7 @@ export default function ConferenceDetailPage() {
                         {isAdminUser && conferenceStage && (
                           <button
                             type="button"
-                            onClick={() => { setShowAdminStage(!showAdminStage); setMobileReportMenuOpen(false); }}
+                            onClick={() => { setShowAdminStage(!showAdminStage); setReportMenuOpen(false); }}
                             className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
                           >
                             <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2397,7 +2333,7 @@ export default function ConferenceDetailPage() {
                         )}
                         <button
                           type="button"
-                          onClick={() => { setIsEditing(true); setMobileReportMenuOpen(false); }}
+                          onClick={() => { setIsEditing(true); setReportMenuOpen(false); }}
                           className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
                         >
                           <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2415,7 +2351,7 @@ export default function ConferenceDetailPage() {
             {/* Main content */}
             <div className="mt-5">
 
-              {/* Row 1: Name + status + Stage Controls */}
+              {/* Row 1: Name + status. Stage Controls / Edit live in the header kebab. */}
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-bold text-brand-primary font-serif">
                   {conference.name}{conference.start_date ? ` - ${new Date(conference.start_date).getUTCFullYear()}` : ''}
@@ -2440,29 +2376,6 @@ export default function ConferenceDetailPage() {
                   </span>
                 )}
                 </div>
-                {isAdminUser && conferenceStage && (
-                  <button
-                    type="button"
-                    onClick={() => setShowAdminStage(!showAdminStage)}
-                    className="hidden sm:flex text-xs font-medium text-gray-400 hover:text-gray-600 items-center gap-1 transition-colors"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    Stage Controls
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setIsEditing(true)}
-                  className="hidden sm:flex text-xs font-medium text-gray-400 hover:text-gray-600 items-center gap-1 transition-colors"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                  Edit
-                </button>
               </div>
 
               {/* Row 2: Dates · Location · Website */}
@@ -2764,11 +2677,10 @@ export default function ConferenceDetailPage() {
                     className="input-field pl-9 w-full lg:w-56"
                   />
                 </div>
-                {/* Mobile: Scan / Add / Upload live in this menu instead of the toolbar */}
-                <KebabMenu
-                  className="lg:hidden"
-                  title="Attendee actions"
-                  items={[
+                {/* Scan / Add / Upload live in this menu at every width; the phone
+                    also folds the Filters toggle in, since it has no room for it. */}
+                {(() => {
+                  const actionItems = [
                     {
                       label: 'Scan',
                       onClick: () => setShowBatchScan(true),
@@ -2798,61 +2710,26 @@ export default function ConferenceDetailPage() {
                         </svg>
                       ),
                     },
-                    {
-                      label: 'Filters',
-                      onClick: () => setAttendeeFiltersOpen(v => !v),
-                      active: attendeeFiltersOpen || attendeeAdvancedFilterCount > 0,
-                      badge: attendeeAdvancedFilterCount,
-                      icon: (
-                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
-                        </svg>
-                      ),
-                    },
-                  ]}
-                />
+                  ];
+                  const filtersItem = {
+                    label: 'Filters',
+                    onClick: () => setAttendeeFiltersOpen(v => !v),
+                    active: attendeeFiltersOpen || attendeeAdvancedFilterCount > 0,
+                    badge: attendeeAdvancedFilterCount,
+                    icon: (
+                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
+                      </svg>
+                    ),
+                  };
+                  return (
+                    <>
+                      <KebabMenu className="lg:hidden" title="Attendee actions" items={[...actionItems, filtersItem]} />
+                      <KebabMenu className="hidden lg:block" title="Attendee actions" items={actionItems} />
+                    </>
+                  );
+                })()}
               </div>
-              <button
-                onClick={() => setShowBatchScan(true)}
-                className="hidden lg:flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium text-brand-primary"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                Scan
-              </button>
-              <button
-                onClick={() => setShowAddForm((v) => !v)}
-                className="hidden lg:flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium text-brand-primary"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                Add
-              </button>
-              <button
-                onClick={() => uploadFileRef.current?.click()}
-                disabled={isUploading}
-                className="hidden lg:flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium text-brand-primary disabled:opacity-50"
-              >
-                {isUploading ? (
-                  <>
-                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                    </svg>
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                    </svg>
-                    Upload
-                  </>
-                )}
-              </button>
               <input
                 ref={uploadFileRef}
                 type="file"
