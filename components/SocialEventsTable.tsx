@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { LocationAutocompleteInput } from './LocationAutocompleteInput';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -14,6 +14,7 @@ import { CustomColumnCell } from './CustomColumnCell';
 import { CardActionMenu, CardField, CardGuestListButton, CardNotesButton, SocialEventCardBody } from './SocialEventCardParts';
 import { ConferenceDatePicker } from './ConferenceDatePicker';
 import { SocialEventNotesDrawer } from './SocialEventNotesDrawer';
+import { AttendeeInitialsAvatar } from './AttendeePhoto';
 
 type RsvpStatus = 'yes' | 'no' | 'maybe' | 'attended';
 
@@ -66,6 +67,7 @@ interface Attendee {
   id: number;
   first_name: string;
   last_name: string;
+  photo_url?: string | null;
   title?: string | null;
   company_id?: number;
   company_name?: string;
@@ -195,7 +197,7 @@ function AssignedUserPill({ assignedUser, userOptionsFull }: {
 }
 
 /* ─── RSVP summary totals + Primary Company Type toggle ─── */
-function RSVPSummaryBar({ invitedIds, rsvpMap, selectedTypes, icpCompanyTypes, attendees, onToggleType, activeFilters, onToggleFilter, stackOperators }: {
+function RSVPSummaryBar({ invitedIds, rsvpMap, selectedTypes, icpCompanyTypes, attendees, onToggleType, activeFilters, onToggleFilter, stackOperators, leadingControl }: {
   invitedIds: number[];
   rsvpMap: Record<number, RsvpStatus[]>;
   selectedTypes: Set<string>;
@@ -205,6 +207,8 @@ function RSVPSummaryBar({ invitedIds, rsvpMap, selectedTypes, icpCompanyTypes, a
   activeFilters: RsvpStatus[];
   onToggleFilter: (f: RsvpStatus | null) => void;
   stackOperators?: boolean;
+  /** Sits at the left of the company-type chip row — the guest list editor. */
+  leadingControl?: ReactNode;
 }) {
   const filtered = selectedTypes.size > 0
     ? invitedIds.filter(id => {
@@ -243,8 +247,9 @@ function RSVPSummaryBar({ invitedIds, rsvpMap, selectedTypes, icpCompanyTypes, a
     </div>
   );
   // One toggle per ICP company type; multiple can be active at once.
-  const primaryTypeBtn = icpCompanyTypes.length > 0 ? (
+  const primaryTypeBtn = icpCompanyTypes.length > 0 || leadingControl ? (
     <div className="flex items-center gap-1.5 flex-wrap">
+      {leadingControl}
       {icpCompanyTypes.map(type => (
         <button
           key={type}
@@ -303,8 +308,23 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMap
   const has = (s: RsvpStatus) => statuses.includes(s);
   return (
     <div className="border border-gray-200 rounded-xl bg-white overflow-hidden">
-      <button type="button" className="w-full text-left p-3" onClick={() => setOpen(v => !v)}>
+      {/* A div rather than a button: the avatar inside is itself a button. */}
+      <div
+        role="button"
+        tabIndex={0}
+        className="w-full text-left p-3 cursor-pointer"
+        onClick={() => setOpen(v => !v)}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(v => !v); } }}
+      >
         <div className="flex items-start justify-between gap-2">
+          {/* Photo when the attendee has one — clicking it opens the photo card. */}
+          <AttendeeInitialsAvatar
+            name={`${attendee.first_name} ${attendee.last_name}`}
+            photoUrl={attendee.photo_url}
+            title={attendee.title}
+            companyName={attendee.company_name}
+            className="w-9 h-9 text-xs mt-0.5"
+          />
           <div className="min-w-0 flex-1">
             <a href={`/attendees/${attendee.id}`} onClick={e => e.stopPropagation()} className="font-semibold text-sm text-brand-primary hover:underline leading-tight block">{attendee.first_name} {attendee.last_name}</a>
             {attendee.title && <p className="text-xs text-gray-500 mt-0.5">{attendee.title}</p>}
@@ -338,7 +358,7 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMap
             )}
           </div>
         </div>
-      </button>
+      </div>
       {open && (
         <div className="px-3 pb-3 pt-0 border-t border-gray-100">
           <div className="flex gap-1.5 pt-2">
@@ -365,7 +385,7 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMap
 }
 
 /* ─── Guest list: bottom sheet on a phone, a 500px right drawer on desktop ─── */
-function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, onClose, colorMaps, companies, userOptionsFull, icpCompanyTypes }: {
+function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, onClose, colorMaps, companies, userOptionsFull, icpCompanyTypes, allAttendees, onSaveGuestList }: {
   event: SocialEvent;
   invitedAttendees: Attendee[];
   rsvpMap: Record<number, RsvpStatus[]>;
@@ -376,6 +396,9 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
   companies: CompanyOption[];
   userOptionsFull: Array<{ id: number; value: string }>;
   icpCompanyTypes: string[];
+  /** Everyone at the conference — the pool the guest list picker draws from. */
+  allAttendees: Attendee[];
+  onSaveGuestList: (ids: number[]) => void;
 }) {
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
   const toggleType = (t: string) => setSelectedTypes(prev => {
@@ -384,6 +407,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
     return next;
   });
   const [activeFilters, setActiveFilters] = useState<RsvpStatus[]>([]);
+  const [editingGuests, setEditingGuests] = useState(false);
   const handleToggleFilter = (f: RsvpStatus | null) => {
     if (f === null) { setActiveFilters([]); return; }
     setActiveFilters(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
@@ -393,12 +417,22 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
     const s = rsvpMap[a.id] || [];
     return activeFilters.some(f => s.includes(f));
   });
+  const buildGuestListBtn = (
+    <button
+      type="button"
+      onClick={() => setEditingGuests(true)}
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-brand-primary hover:bg-gray-200 transition-colors flex-shrink-0"
+    >
+      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+      Build Guest List
+    </button>
+  );
   return (
     // Dimmed backdrop plus the shared animation — slide-up on a phone, slide-in
     // from the right at sm+, where it becomes a 500px-wide drawer.
     <div className="fixed inset-0 z-[60] flex flex-col justify-end sm:flex-row sm:justify-end bg-black/40" onClick={onClose}>
       <div
-        className="drawer-mobile-responsive relative bg-white rounded-t-2xl sm:rounded-none shadow-2xl border border-brand-highlight flex flex-col h-[90vh] sm:h-full sm:w-[500px] sm:max-w-full"
+        className="drawer-mobile-responsive relative bg-white rounded-t-2xl sm:rounded-tr-none sm:rounded-br-none sm:rounded-bl-2xl shadow-2xl border border-brand-highlight flex flex-col h-[90vh] sm:h-full sm:w-[500px] sm:max-w-full overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         <div className="px-4 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
@@ -411,7 +445,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
-          <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} selectedTypes={selectedTypes} icpCompanyTypes={icpCompanyTypes} attendees={invitedAttendees} onToggleType={toggleType} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} stackOperators />
+          <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} selectedTypes={selectedTypes} icpCompanyTypes={icpCompanyTypes} attendees={invitedAttendees} onToggleType={toggleType} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} stackOperators leadingControl={buildGuestListBtn} />
         </div>
         <div className="overflow-y-auto flex-1 p-3 space-y-2 pb-24">
           {visible.length === 0
@@ -421,107 +455,17 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
             ))}
         </div>
       </div>
-    </div>
-  );
-}
-
-/* ─── Desktop: inline RSVP expansion below table row ─── */
-function RSVPExpansion({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, colorMaps, companies, userOptionsFull, icpCompanyTypes }: {
-  event: SocialEvent;
-  invitedAttendees: Attendee[];
-  rsvpMap: Record<number, RsvpStatus[]>;
-  onToggleRsvp: (attendeeId: number, s: RsvpStatus) => void;
-  onRemoveGuest: (attendeeId: number) => void;
-  colorMaps: Record<string, Record<string, string | null>>;
-  companies: CompanyOption[];
-  userOptionsFull: Array<{ id: number; value: string }>;
-  icpCompanyTypes: string[];
-}) {
-  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
-  const toggleType = (t: string) => setSelectedTypes(prev => {
-    const next = new Set(prev);
-    if (next.has(t)) next.delete(t); else next.add(t);
-    return next;
-  });
-  const [activeFilters, setActiveFilters] = useState<RsvpStatus[]>([]);
-  const handleToggleFilter = (f: RsvpStatus | null) => {
-    if (f === null) { setActiveFilters([]); return; }
-    setActiveFilters(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
-  };
-  const byPrimaryType = selectedTypes.size > 0 ? invitedAttendees.filter(a => a.company_type != null && selectedTypes.has(a.company_type)) : invitedAttendees;
-  const visible = activeFilters.length === 0 ? byPrimaryType : byPrimaryType.filter(a => {
-    const s = rsvpMap[a.id] || [];
-    return activeFilters.some(f => s.includes(f));
-  });
-  return (
-    <div className="p-4 bg-gray-50 border-t border-gray-200">
-      <div className="mb-4">
-        <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} selectedTypes={selectedTypes} icpCompanyTypes={icpCompanyTypes} attendees={invitedAttendees} onToggleType={toggleType} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} />
-      </div>
-      {visible.length === 0
-        ? <p className="text-sm text-gray-400 text-center py-4">No attendees to show.</p>
-        : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200">
-                {['Name','Title','Company','Type','Rep','RSVP (multi-select)',''].map(h => (
-                  <th key={h} className="pb-2 pr-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {visible.map(att => {
-                const co = companies.find(c => c.id === att.company_id);
-                const statuses = rsvpMap[att.id] || [];
-                const has = (opt: RsvpStatus) => statuses.includes(opt);
-                return (
-                  <tr key={att.id} className="hover:bg-white">
-                    <td className="py-2 pr-3 font-medium whitespace-nowrap"><Link href={`/attendees/${att.id}`} className="text-brand-primary hover:underline">{att.first_name} {att.last_name}</Link></td>
-                    <td className="py-2 pr-3 text-gray-700 text-sm whitespace-nowrap">{att.title || '—'}</td>
-                    <td className="py-2 pr-3 whitespace-nowrap">{att.company_id ? <Link href={`/companies/${att.company_id}`} className="text-brand-primary hover:underline">{att.company_name}</Link> : <span className="text-gray-700">{att.company_name || '—'}</span>}</td>
-                    <td className="py-2 pr-3">
-                      {att.company_type
-                        ? (att.company_type === 'Competitor'
-                          ? <CompetitorBadgeSE type={att.company_type} competitorType={att.company_competitor_type} badgeClass={getBadgeClass(att.company_type, colorMaps.company_type || {})} />
-                          : <span className={`${getBadgeClass(att.company_type, colorMaps.company_type || {})} text-[10px]`}>{att.company_type}</span>)
-                        : <span className="text-gray-400">—</span>}
-                    </td>
-                    <td className="py-2 pr-3"><AssignedUserPill assignedUser={co?.assigned_user} userOptionsFull={userOptionsFull} /></td>
-                    <td className="py-2 pr-3">
-                      <div className="flex gap-1">
-                        {(['yes','attended','no','maybe'] as RsvpStatus[]).map(opt => (
-                          <button key={opt} type="button" title={opt.charAt(0).toUpperCase() + opt.slice(1)} onClick={() => onToggleRsvp(att.id, opt)}
-                            className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors ${
-                              has(opt)
-                                ? opt === 'yes' ? 'bg-green-100 text-green-600' : opt === 'attended' ? 'bg-purple-100 text-purple-600' : opt === 'no' ? 'bg-red-50 text-red-500' : 'bg-gray-200 text-gray-600'
-                                : 'bg-gray-50 text-gray-300 hover:text-gray-500 hover:bg-gray-100'
-                            }`}>
-                            {opt === 'yes' && <CheckSvg cls="w-3 h-3" />}
-                            {opt === 'attended' && <StarSvg cls="w-3 h-3" />}
-                            {opt === 'no' && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>}
-                            {opt === 'maybe' && <span className="font-bold text-[10px] leading-none">?</span>}
-                          </button>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="py-2">
-                      <button
-                        type="button"
-                        title="Remove from guest list"
-                        onClick={() => onRemoveGuest(att.id)}
-                        className="p-1 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
+      {editingGuests && (
+        <div onClick={e => e.stopPropagation()}>
+        <GuestListModal
+          attendees={allAttendees}
+          selected={invitedAttendees.map(a => String(a.id))}
+          onConfirm={ids => onSaveGuestList(ids.map(Number).filter(n => !isNaN(n)))}
+          onClose={() => setEditingGuests(false)}
+          icpCompanyTypes={icpCompanyTypes}
+        />
+        </div>
+      )}
     </div>
   );
 }
@@ -697,21 +641,9 @@ export function SocialEventsTable({
   /* RSVP state */
   const [localRsvps, setLocalRsvps] = useState<Record<string, RsvpStatus[]>>({});
   const [guestListEventId, setGuestListEventId] = useState<number | null>(null);
-  // Below sm the RSVP table is too wide to read inline, so expanding opens the
-  // mobile guest-list sheet instead — same breakpoint the outreach cards use.
-  const toggleEvent = (id: number) => {
-    if (isDesktop) setExpandedEventId(v => (v === id ? null : id));
-    else setGuestListEventId(v => (v === id ? null : id));
-  };
-  const [isDesktop, setIsDesktop] = useState(true);
-  useEffect(() => {
-    const media = window.matchMedia('(min-width: 640px)');
-    const update = () => setIsDesktop(media.matches);
-    update();
-    media.addEventListener('change', update);
-    return () => media.removeEventListener('change', update);
-  }, []);
-  const [expandedEventId, setExpandedEventId] = useState<number | null>(null);
+  // The guest list only lives in the drawer now, so a card tap opens it at
+  // every width rather than expanding an inline table.
+  const toggleEvent = (id: number) => setGuestListEventId(v => (v === id ? null : id));
 
   /* note counts for the card badges — one request for all events */
   const eventIdKey = events.map(e => e.id).join(',');
@@ -878,6 +810,38 @@ export function SocialEventsTable({
       toast.error('Failed to remove from guest list.');
     }
   }, [onRefresh]);
+
+  /* Guest list edited from the RSVP drawer: add and remove against the
+     current list so each attendee's RSVP record follows them. */
+  const handleSaveGuestList = useCallback(async (eventId: number, ids: number[]) => {
+    const ev = events.find(e => e.id === eventId);
+    const current = parseRepIds(ev?.prospect_attendees ?? null);
+    const added = ids.filter(id => !current.includes(id));
+    const removed = current.filter(id => !ids.includes(id));
+    if (added.length === 0 && removed.length === 0) return;
+    try {
+      for (const attendee_id of added) {
+        const res = await fetch(`/api/social-events/${eventId}/guest`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ attendee_id }),
+        });
+        if (!res.ok) throw new Error();
+      }
+      for (const attendee_id of removed) {
+        const res = await fetch(`/api/social-events/${eventId}/guest`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ attendee_id }),
+        });
+        if (!res.ok) throw new Error();
+      }
+      toast.success('Guest list updated.');
+      onRefresh();
+    } catch {
+      toast.error('Failed to update the guest list.');
+    }
+  }, [events, onRefresh]);
 
   const handleDelete = async (eventId: number) => {
     if (!confirm('Delete this social event? This cannot be undone.')) return;
@@ -1129,8 +1093,7 @@ export function SocialEventsTable({
         <div className="flex gap-3 items-start">
         <div className="flex-1 min-w-0 space-y-2">
           {events.map(ev => {
-            const { invited, rsvpMap } = getEventData(ev);
-            const isExpanded = expandedEventId === ev.id;
+            const { invited } = getEventData(ev);
             return (
               <div key={ev.id} className="border border-gray-200 rounded-xl bg-white overflow-hidden hover:border-gray-300 transition-colors">
                 {/* ── Header + meta, shared with the pre-conference card ── */}
@@ -1146,7 +1109,6 @@ export function SocialEventsTable({
                   inviteOnly={ev.invite_only}
                   internalAttendees={ev.internal_attendees}
                   invitedCount={invited.length}
-                  isExpanded={isExpanded}
                   onToggle={() => toggleEvent(ev.id)}
                   extraFields={customColumns.filter(c => c.visible).length > 0 ? (
                     <div className="grid grid-cols-[1fr_1fr_auto] gap-x-3 sm:contents">
@@ -1170,27 +1132,6 @@ export function SocialEventsTable({
                     </div>
                   )}
                 />
-
-                {/* ── Expanded: RSVP table, unchanged ── */}
-                {isExpanded && (
-                  <div className="border-t border-gray-200 hidden sm:block">
-                    {invited.length > 0 ? (
-                      <RSVPExpansion
-                        event={ev}
-                        invitedAttendees={invited}
-                        rsvpMap={rsvpMap}
-                        onToggleRsvp={(aid, st) => handleToggleRsvp(ev.id, aid, st)}
-                        onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)}
-                        colorMaps={colorMaps}
-                        companies={companies}
-                        userOptionsFull={userOptionsFull}
-                        icpCompanyTypes={icpCompanyTypes}
-                      />
-                    ) : (
-                      <p className="text-xs text-gray-400 px-4 py-3">No guests invited yet.</p>
-                    )}
-                  </div>
-                )}
               </div>
             );
           })}
@@ -1215,7 +1156,7 @@ export function SocialEventsTable({
         if (!ev) return null;
         const { invited, rsvpMap } = getEventData(ev);
         return (
-          <GuestListSheet event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)} onClose={() => setGuestListEventId(null)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} icpCompanyTypes={icpCompanyTypes} />
+          <GuestListSheet event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)} onClose={() => setGuestListEventId(null)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} icpCompanyTypes={icpCompanyTypes} allAttendees={attendees} onSaveGuestList={ids => handleSaveGuestList(ev.id, ids)} />
         );
       })()}
     </div>

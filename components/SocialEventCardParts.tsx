@@ -192,12 +192,16 @@ export function SocialEventCardBody({
   inviteOnly: string | null;
   internalAttendees: string | null;
   invitedCount: number;
-  isExpanded: boolean;
+  /** Omit to drop the chevron — surfaces whose list opens in a drawer do. */
+  isExpanded?: boolean;
   onToggle: () => void;
   actions?: React.ReactNode;
   extraFields?: React.ReactNode;
 }) {
   const when = formatEventWhen(eventDate, eventTime);
+  const showChevron = isExpanded !== undefined;
+  // The meta rows clear the chevron; without one they start at the edge.
+  const indent = showChevron ? 'sm:pl-6' : '';
 
   return (
     <div className="flex items-start gap-2 px-3 py-3 sm:gap-3 sm:px-4">
@@ -211,24 +215,26 @@ export function SocialEventCardBody({
              stays on the header line. */
           className="flex items-center gap-2 min-w-0 text-left cursor-pointer"
         >
-          <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
+          {showChevron && (
+            <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          )}
           <span className="text-sm font-semibold text-gray-800 truncate min-w-0">{eventName || eventType || 'Social Event'}</span>
           {companyHosted && <CompanyHostedStar className="inline-flex ml-1.5" />}
         </div>
 
         {/* Padding matches the meta row below (none on mobile,
-            sm:pl-6 to clear the chevron) so the pill's left edge
+            sm:pl-6 to clear the chevron when there is one) so the pill's left edge
             lines up with the Location eyebrow. */}
         {when && (
-          <div className="flex items-center gap-2 flex-wrap mt-1.5 sm:pl-6">
+          <div className={`flex items-center gap-2 flex-wrap mt-1.5 ${indent}`}>
             <EventDatePill when={when} />
           </div>
         )}
 
         {/* ── Meta row: 2-up on mobile, inline from sm ── */}
-        <div className="mt-2.5 space-y-2 sm:pl-6 sm:space-y-0 sm:flex sm:flex-wrap sm:gap-x-8 sm:gap-y-2">
+        <div className={`mt-2.5 space-y-2 ${indent} sm:space-y-0 sm:flex sm:flex-wrap sm:gap-x-8 sm:gap-y-2`}>
           <CardField label="Location">
             <EventLocationLink venueName={venueName} location={location} />
           </CardField>

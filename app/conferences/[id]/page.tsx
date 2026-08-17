@@ -68,6 +68,7 @@ interface Attendee {
   id: number;
   first_name: string;
   last_name: string;
+  photo_url?: string | null;
   title?: string;
   company_id?: number;
   company_name?: string;
@@ -3843,7 +3844,7 @@ export default function ConferenceDetailPage() {
           userOptionsFull={userOptions}
           eventTypeOptions={eventTypeOptions}
           companies={conferenceCompanies.map(c => ({ id: c.id, name: c.name, assigned_user: c.assigned_user }))}
-          attendees={(conference?.attendees || []).map(a => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title, company_id: a.company_id, company_name: a.company_name, company_type: a.company_type }))}
+          attendees={(conference?.attendees || []).map(a => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, photo_url: a.photo_url, title: a.title, company_id: a.company_id, company_name: a.company_name, company_type: a.company_type }))}
         />
       )}
 
