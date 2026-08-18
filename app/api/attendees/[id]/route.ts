@@ -234,15 +234,27 @@ export async function PATCH(
       args.push((body.consent as string | undefined) || 'Consent Not Recorded');
     }
 
-    if (setClauses.length === 0) {
+    // company_type and wse live on the company, not the attendee, so a request
+    // carrying only those has nothing to set here — and must not be rejected.
+    const hasCompanyUpdate = ('company_type' in body) || ('company_wse' in body);
+
+    if (setClauses.length === 0 && !hasCompanyUpdate) {
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
     }
 
-    args.push(params.id);
-    const updatedResult = await db.execute({
-      sql: `UPDATE attendees SET ${setClauses.join(', ')}, updated_at = datetime('now') WHERE id = ? RETURNING *`,
-      args,
-    });
+    let updatedResult;
+    if (setClauses.length > 0) {
+      args.push(params.id);
+      updatedResult = await db.execute({
+        sql: `UPDATE attendees SET ${setClauses.join(', ')}, updated_at = datetime('now') WHERE id = ? RETURNING *`,
+        args,
+      });
+    } else {
+      updatedResult = await db.execute({
+        sql: 'SELECT * FROM attendees WHERE id = ?',
+        args: [params.id],
+      });
+    }
 
     // If status was provided and company_id is available, also update company status
     const effectiveCompanyId = company_id ?? existingResult.rows[0].company_id;
