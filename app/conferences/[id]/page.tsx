@@ -63,6 +63,7 @@ import type { SeriesYoYData } from '@/lib/get-series-yoy-data';
 import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 import { useDrawerResize } from '@/lib/useDrawerResize';
 import { LocationAutocompleteInput } from '@/components/LocationAutocompleteInput';
+import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
 
 interface Attendee {
   id: number;
@@ -495,6 +496,7 @@ export default function ConferenceDetailPage() {
   const [showDebrief, setShowDebrief] = useState(false);
   const [activityMapOpen, setActivityMapOpen] = useState(false);
   const [reportMenuOpen, setReportMenuOpen] = useState(false);
+  const [showAttendeePhotos, setShowAttendeePhotos] = useState(false);
   const [executiveBriefOpen, setExecutiveBriefOpen] = useState(false);
   const [executiveBriefSnapshot, setExecutiveBriefSnapshot] = useState<ConferenceSnapshot | null>(null);
   const [executiveBriefYoY, setExecutiveBriefYoY] = useState<SeriesYoYData | null>(null);
@@ -2603,7 +2605,22 @@ export default function ConferenceDetailPage() {
         <div className="card">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="text-lg font-semibold text-brand-primary font-serif">Attendee List</h2>
+              <h2 className="text-lg font-semibold text-brand-primary font-serif">Attendees</h2>
+              {/* Photos are off by default — on a phone they push the pill row
+                  down, so showing them is the reader's call. */}
+              <div className="flex items-center gap-2 lg:hidden">
+                <span className="text-xs font-medium text-gray-600">Show Pictures</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={showAttendeePhotos}
+                  aria-label="Show Pictures"
+                  onClick={() => setShowAttendeePhotos(v => !v)}
+                  className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none ${showAttendeePhotos ? 'bg-brand-secondary' : 'bg-gray-200'}`}
+                >
+                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform ${showAttendeePhotos ? 'translate-x-5' : 'translate-x-1'}`} />
+                </button>
+              </div>
               {titleMetaLoading && (
                 <span className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">
                   <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
@@ -3038,6 +3055,10 @@ export default function ConferenceDetailPage() {
                   const seniority = effectiveSeniority(attendee.seniority, attendee.title);
                   return (
                     <div key={attendee.id} className={`px-4 py-4 ${selectedAttendeeIds.has(attendee.id) ? 'bg-blue-50' : 'bg-white'}`}>
+                      {/* Name / title / company share a column so the photo can
+                          sit alongside all three rather than only the name. */}
+                      <div className="flex items-center gap-3">
+                      <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-2 min-w-0 flex-1">
                           <input type="checkbox" checked={selectedAttendeeIds.has(attendee.id)} onChange={() => toggleAttendeeSelect(attendee.id)} className="accent-brand-secondary flex-shrink-0" />
@@ -3079,6 +3100,17 @@ export default function ConferenceDetailPage() {
                           )}
                         </div>
                       )}
+                      </div>
+                      {showAttendeePhotos && (
+                        <AttendeeInitialsAvatar
+                          name={`${attendee.first_name} ${attendee.last_name}`}
+                          photoUrl={attendee.photo_url}
+                          title={attendee.title}
+                          companyName={attendee.company_name}
+                          className="w-11 h-11 text-xs"
+                        />
+                      )}
+                      </div>
                       {/* Everything else rides one scrolling line, company type first */}
                       <ScrollRow className="mt-2 ml-6" gapClass="gap-2">
                         {attendee.company_type && (
