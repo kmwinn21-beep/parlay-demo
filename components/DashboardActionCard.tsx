@@ -682,6 +682,9 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
   const { user } = useUser();
   const { activeConference } = useActiveConference();
   const [showCameraMenu, setShowCameraMenu] = useState(false);
+  // Second step of the Scan menu: a badge can come from the camera or from
+  // photos already on the phone.
+  const [badgeSourceStep, setBadgeSourceStep] = useState(false);
   const [scanningBadge, setScanningBadge] = useState(false);
   const [scanningNotes, setScanningNotes] = useState(false);
   const [badgeScanCards, setBadgeScanCards] = useState<BadgeScanCard[]>([]);
@@ -768,13 +771,14 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
 
   const cameraMenuRef = useRef<HTMLDivElement>(null);
   const badgeFileRef = useRef<HTMLInputElement>(null);
+  const badgeLibraryRef = useRef<HTMLInputElement>(null);
   const notesFileRef = useRef<HTMLInputElement>(null);
   const isScanning = scanningBadge || scanningNotes;
 
   useEffect(() => {
     if (!showCameraMenu) return;
     const h = (e: MouseEvent) => {
-      if (cameraMenuRef.current && !cameraMenuRef.current.contains(e.target as Node)) setShowCameraMenu(false);
+      if (cameraMenuRef.current && !cameraMenuRef.current.contains(e.target as Node)) { setShowCameraMenu(false); setBadgeSourceStep(false); }
     };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
@@ -909,7 +913,7 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
         <div className="lg:hidden flex-1 relative" ref={cameraMenuRef}>
           <button
             type="button"
-            onClick={() => setShowCameraMenu(v => !v)}
+            onClick={() => { setShowCameraMenu(v => !v); setBadgeSourceStep(false); }}
             disabled={isScanning}
             className={`w-full flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-blue-50 transition-all group disabled:opacity-50 ${meetingsOpen ? 'opacity-40 grayscale' : ''}`}
           >
@@ -926,27 +930,68 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
             <p className="text-xs text-gray-500 leading-tight">Scan</p>
           </button>
           {showCameraMenu && (
-            <div className="absolute left-0 top-full mt-1 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-50 min-w-[160px]">
-              <button
-                type="button"
-                onClick={() => { setShowCameraMenu(false); badgeFileRef.current?.click(); }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-brand-secondary transition-colors"
-              >
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2" />
-                </svg>
-                Scan Badge/Card
-              </button>
-              <button
-                type="button"
-                onClick={() => { setShowCameraMenu(false); notesFileRef.current?.click(); }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-brand-secondary transition-colors"
-              >
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Scan Notes
-              </button>
+            <div className="absolute left-0 top-full mt-1 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-50 min-w-[190px]">
+              {badgeSourceStep ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setBadgeSourceStep(false)}
+                    className="w-full flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                    Badge / Card
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowCameraMenu(false); setBadgeSourceStep(false); badgeFileRef.current?.click(); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-brand-secondary transition-colors"
+                  >
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Take Photo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowCameraMenu(false); setBadgeSourceStep(false); badgeLibraryRef.current?.click(); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-brand-secondary transition-colors"
+                  >
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Upload Photo
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setBadgeSourceStep(true)}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-brand-secondary transition-colors"
+                  >
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2" />
+                    </svg>
+                    <span className="flex-1 text-left">Scan Badge/Card</span>
+                    <svg className="w-3.5 h-3.5 flex-shrink-0 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowCameraMenu(false); notesFileRef.current?.click(); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-brand-secondary transition-colors"
+                  >
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Scan Notes
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -1053,6 +1098,14 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
         type="file"
         accept="image/*"
         capture="environment"
+        className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) void handleBadgeFile(f); e.target.value = ''; }}
+      />
+      {/* No capture attribute, so this one opens the phone's photo library */}
+      <input
+        ref={badgeLibraryRef}
+        type="file"
+        accept="image/*"
         className="hidden"
         onChange={e => { const f = e.target.files?.[0]; if (f) void handleBadgeFile(f); e.target.value = ''; }}
       />
