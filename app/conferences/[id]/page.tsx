@@ -25,7 +25,7 @@ import { useConfigOptions } from '@/lib/useConfigOptions';
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
 import { CustomColumnCell } from '@/components/CustomColumnCell';
-import { getBadgeClass, getHex, type ColorMap, formatStatusLabel} from '@/lib/colors';
+import { getBadgeClass, getHex, getPreset, type ColorMap, formatStatusLabel} from '@/lib/colors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { type UserOption, getRepInitials, parseRepIds } from '@/lib/useUserOptions';
 import { ColumnMappingModal } from '@/components/ColumnMappingModal';
@@ -3098,6 +3098,23 @@ export default function ConferenceDetailPage() {
                           ) : (
                             <span className="text-xs text-gray-700">{attendee.company_name}</span>
                           )}
+                          {/* Whoever owns the company, in the initialled pill
+                              used for reps everywhere else. */}
+                          {parseRepIds(attendee.company_assigned_user ?? '')
+                            .map(rid => userOptions.find(u => u.id === rid))
+                            .filter((u): u is UserOption => Boolean(u))
+                            .map(user => (
+                              <span
+                                key={user.id}
+                                title={user.value}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap flex-shrink-0 ${getPreset(colorMaps.user?.[user.value]).badgeClass}`}
+                              >
+                                <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                                {getRepInitials(user.value)}
+                              </span>
+                            ))}
                         </div>
                       )}
                       </div>
