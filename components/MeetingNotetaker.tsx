@@ -824,8 +824,11 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
       if (meeting) {
         fetch(`/api/meetings/${meetingId}/set-held`, { method: 'POST' }).catch(() => {});
       }
-      // Sync meeting note cards to entity feeds if AI analysis exists
-      if (meeting && summary) {
+      // Mirror the meeting onto the attendee / company / conference feeds.
+      // The AI summary is the card's text when there is one; otherwise the
+      // rep's own notes are — typed notes used to sync nowhere at all.
+      const feedText = (summary || '').trim() || notesText.trim();
+      if (meeting && feedText) {
         const actionItems = insights.filter(i => i.insight_type === 'next_step');
         const buyingSig = insights.filter(i => i.insight_type === 'buying_signal');
         const painPts = insights.filter(i => i.insight_type === 'pain_point');
@@ -833,7 +836,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            summary,
+            summary: feedText,
             attendee_id: meeting.attendee_id,
             company_id: meeting.company_id,
             conference_id: meeting.conference_id,

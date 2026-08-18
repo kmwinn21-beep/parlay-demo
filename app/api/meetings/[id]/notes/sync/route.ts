@@ -54,9 +54,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
     };
 
-    await upsertNote('attendee', body.attendee_id);
+    if (body.attendee_id) await upsertNote('attendee', body.attendee_id);
     if (body.company_id) await upsertNote('company', body.company_id);
-    await upsertNote('conference', body.conference_id);
+    if (body.conference_id) await upsertNote('conference', body.conference_id);
 
     return NextResponse.json({ success: true });
   } catch (error) {
