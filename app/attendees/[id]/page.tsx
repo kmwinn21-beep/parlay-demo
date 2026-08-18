@@ -884,6 +884,20 @@ export default function AttendeeDetailPage() {
   const currentProducts = new Set((attendee.products || '').split(',').map(s => s.trim()).filter(Boolean));
   // The header pills render twice — one scrolling line on mobile, the
   // wrapping row on desktop.
+  // The company's assigned reps as the initialled pills used site-wide.
+  const assignedRepPills = (() => {
+    const repUsers = parseRepIds(attendee.company_assigned_user ?? '').map(id => userOptionsFull.find(u => u.id === id)).filter(Boolean);
+    if (repUsers.length === 0) return <span className="text-sm text-gray-400">—</span>;
+    return repUsers.map((user, i) => (
+      <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0">
+          <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
+        </svg>
+        {getRepInitials(user!.value)}
+      </span>
+    ));
+  })();
+
   const headerPills = (
     <>
                         {attendee.title && <span className={`badge ${getPillClass(seniority, colorMaps.seniority || {})}`}>{seniority}</span>}
@@ -1162,29 +1176,22 @@ export default function AttendeeDetailPage() {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-100">
                   <div>
                     <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Company</p>
-                    {attendee.company_name ? (
-                      attendee.company_id ? (
-                        <Link href={`/companies/${attendee.company_id}`} className="text-sm font-medium text-gray-800 hover:text-brand-secondary hover:underline">{attendee.company_name}</Link>
-                      ) : (
-                        <p className="text-sm font-medium text-gray-800">{attendee.company_name}</p>
-                      )
-                    ) : <p className="text-sm text-gray-400">—</p>}
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Assigned Rep(s)</p>
-                    <div className="flex flex-wrap gap-1">
-                      {(() => {
-                        const repUsers = parseRepIds(attendee.company_assigned_user ?? '').map(id => userOptionsFull.find(u => u.id === id)).filter(Boolean);
-                        return repUsers.length > 0 ? repUsers.map((user, i) => (
-                          <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0">
-                              <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
-                            </svg>
-                            {getRepInitials(user!.value)}
-                          </span>
-                        )) : <p className="text-sm text-gray-400">—</p>;
-                      })()}
+                    {/* On a phone the rep pills ride alongside the company name
+                        rather than taking a field of their own. */}
+                    <div className="flex items-center gap-2 min-w-0">
+                      {attendee.company_name ? (
+                        attendee.company_id ? (
+                          <Link href={`/companies/${attendee.company_id}`} className="text-sm font-medium text-gray-800 hover:text-brand-secondary hover:underline min-w-0 truncate">{attendee.company_name}</Link>
+                        ) : (
+                          <p className="text-sm font-medium text-gray-800 min-w-0 truncate">{attendee.company_name}</p>
+                        )
+                      ) : <p className="text-sm text-gray-400">—</p>}
+                      <span className="flex sm:hidden flex-wrap gap-1 flex-shrink-0">{assignedRepPills}</span>
                     </div>
+                  </div>
+                  <div className="hidden sm:block">
+                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Assigned Rep(s)</p>
+                    <div className="flex flex-wrap gap-1">{assignedRepPills}</div>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-1">Email</p>
