@@ -12,7 +12,8 @@ import { useActiveConference } from '@/components/ActiveConferenceContext';
 import { SetConferenceButton } from '@/components/SetConferenceButton';
 import { resolveProductRelevance, type ProductRelevanceResult } from '@/lib/productRelevance';
 import { ProductRelevanceSection } from './ProductRelevanceSection';
-import { MeetingsTable, type Meeting } from '@/components/MeetingsTable';
+import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
+import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 import { useUserOptions } from '@/lib/useUserOptions';
 import { useConfigColors } from '@/lib/useConfigColors';
 
@@ -747,6 +748,24 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
     }
   }, []);
 
+  // The card kebab's two actions: the notetaker drawer and an inline edit.
+  const { openMeetingNotes } = useMeetingNotesDrawer();
+
+  const handleMeetingEdit = useCallback(async (meetingId: number, data: EditFormData) => {
+    setMeetings(prev => prev.map(m => (m.id === meetingId ? { ...m, ...data } : m)));
+    try {
+      const res = await fetch(`/api/meetings/${meetingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Meeting updated.');
+    } catch {
+      toast.error('Failed to update meeting.');
+    }
+  }, []);
+
   const cameraMenuRef = useRef<HTMLDivElement>(null);
   const badgeFileRef = useRef<HTMLInputElement>(null);
   const notesFileRef = useRef<HTMLInputElement>(null);
@@ -1020,6 +1039,8 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
                 colorMap={colorMaps.action || {}}
                 userOptions={userOptions}
                 onOutcomeChange={handleOutcomeChange}
+                onNotesClick={openMeetingNotes}
+                onEdit={handleMeetingEdit}
               />
             </div>
           )}
