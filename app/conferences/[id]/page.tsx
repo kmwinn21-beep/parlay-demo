@@ -64,6 +64,8 @@ import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 import { useDrawerResize } from '@/lib/useDrawerResize';
 import { LocationAutocompleteInput } from '@/components/LocationAutocompleteInput';
 import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
+import { DownloadModal, type DownloadColumn } from '@/components/DownloadModal';
+import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 
 interface Attendee {
   id: number;
@@ -497,6 +499,8 @@ export default function ConferenceDetailPage() {
   const [activityMapOpen, setActivityMapOpen] = useState(false);
   const [reportMenuOpen, setReportMenuOpen] = useState(false);
   const [showAttendeePhotos, setShowAttendeePhotos] = useState(false);
+  const [showAttendeeDownload, setShowAttendeeDownload] = useState(false);
+  const unitTypeLabel = useUnitTypeLabel();
   const [executiveBriefOpen, setExecutiveBriefOpen] = useState(false);
   const [executiveBriefSnapshot, setExecutiveBriefSnapshot] = useState<ConferenceSnapshot | null>(null);
   const [executiveBriefYoY, setExecutiveBriefYoY] = useState<SeriesYoYData | null>(null);
@@ -1547,6 +1551,110 @@ export default function ConferenceDetailPage() {
     return `${mon(start)} ${start.getDate()} - ${mon(end)} ${end.getDate()}, ${end.getFullYear()}`;
   })();
 
+  // Attendee toolbar actions. Shared so the phone's kebab (which also folds
+  // in Filters) and the desktop one beside the Filters button stay in step.
+  // Mirrors the company/attendee pages: optimistic complete, one PATCH per row.
+  const handleBulkToggleFollowUp = async (ids: number[]) => {
+    setConfFollowUps(prev => prev.map(fu => ids.includes(fu.id) ? { ...fu, completed: true } : fu));
+    try {
+      await Promise.all(ids.map(id =>
+        fetch('/api/follow-ups', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, completed: true }),
+        }).then(res => { if (!res.ok) throw new Error(); })
+      ));
+      toast.success(`${ids.length} task${ids.length === 1 ? '' : 's'} marked complete.`);
+    } catch {
+      setConfFollowUps(prev => prev.map(fu => ids.includes(fu.id) ? { ...fu, completed: false } : fu));
+      toast.error('Failed to mark all done.');
+      throw new Error();
+    }
+  };
+
+  const attendeeActionItems = [
+    {
+      label: 'Scan',
+      onClick: () => setShowBatchScan(true),
+      icon: (
+        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Add',
+      onClick: () => setShowAddForm(v => !v),
+      icon: (
+        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+        </svg>
+      ),
+    },
+    {
+      label: isUploading ? 'Uploading…' : 'Upload',
+      onClick: () => uploadFileRef.current?.click(),
+      disabled: isUploading,
+      icon: (
+        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+        </svg>
+      ),
+    },
+    {
+      label: 'Download',
+      onClick: () => setShowAttendeeDownload(true),
+      icon: (
+        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+      ),
+    },
+  ];
+  // What the attendee download offers; the rows are whatever the filters and
+  // search have left on screen.
+  const attendeeDownloadColumns: DownloadColumn<Attendee>[] = [
+    { key: 'name', label: 'Full Name', value: a => `${a.first_name} ${a.last_name}`.trim() },
+    { key: 'first_name', label: 'First Name', value: a => a.first_name || '', defaultOn: false },
+    { key: 'last_name', label: 'Last Name', value: a => a.last_name || '', defaultOn: false },
+    { key: 'title', label: 'Title', value: a => a.title || '' },
+    { key: 'company', label: 'Company', value: a => a.company_name || '' },
+    { key: 'company_type', label: 'Company Type', value: a => a.company_type || '' },
+    { key: 'email', label: 'Email', value: a => a.email || '' },
+    { key: 'status', label: 'Status', value: a => a.status || '' },
+    { key: 'seniority', label: 'Seniority', value: a => effectiveSeniority(a.seniority, a.title) },
+    { key: 'function', label: 'Function', value: a => a.function || '', defaultOn: false },
+    { key: 'icp', label: 'ICP', value: a => a.company_icp || '', defaultOn: false },
+    { key: 'company_wse', label: unitTypeLabel, value: a => (a.company_wse != null ? String(a.company_wse) : ''), defaultOn: false },
+    {
+      key: 'assigned_user',
+      label: 'Assigned Rep(s)',
+      value: a => parseRepIds(a.company_assigned_user ?? '')
+        .map(rid => userOptions.find(u => u.id === rid)?.value)
+        .filter(Boolean)
+        .join(', '),
+      defaultOn: false,
+    },
+    { key: 'conferences', label: '# Conferences', value: a => String(a.conference_count ?? 0), defaultOn: false },
+    { key: 'conference_names', label: 'Conference Names', value: a => a.conference_names || '', defaultOn: false },
+    { key: 'notes', label: '# Notes', value: a => String(a.entity_notes_count ?? 0), defaultOn: false },
+    { key: 'date_added', label: 'Date Added', value: a => fmtDate(a.created_at) },
+    { key: 'updated_on', label: 'Updated On', value: a => fmtDate(a.updated_at), defaultOn: false },
+  ];
+
+  const attendeeFiltersItem = {
+    label: 'Filters',
+    onClick: () => setAttendeeFiltersOpen(v => !v),
+    active: attendeeFiltersOpen || attendeeAdvancedFilterCount > 0,
+    badge: attendeeAdvancedFilterCount,
+    icon: (
+      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
+      </svg>
+    ),
+  };
+
   // Same treatment for the internal attendee pills.
   const internalAttendeePills = (
     <>
@@ -2248,7 +2356,13 @@ export default function ConferenceDetailPage() {
                   <button
                     type="button"
                     onClick={() => setReportMenuOpen(v => !v)}
-                    className="p-1.5 text-gray-500 hover:text-brand-accent transition-colors"
+                    /* Desktop rings the kebab; hovering or opening it tints the
+                       ring with a wash of the accent it turns on hover. */
+                    className={`p-1.5 hover:text-brand-accent transition-colors sm:rounded-full sm:border sm:hover:border-brand-accent/30 sm:hover:bg-brand-accent/10 ${
+                      reportMenuOpen
+                        ? 'text-brand-accent sm:bg-brand-accent/10 sm:border-brand-accent/30'
+                        : 'text-gray-500 sm:border-gray-200'
+                    }`}
                     aria-label="More report options"
                   >
                     <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
@@ -2600,6 +2714,16 @@ export default function ConferenceDetailPage() {
         </nav>
       </div>
 
+      {showAttendeeDownload && (
+        <DownloadModal
+          title="Download attendees"
+          fileBase={`${(conference.name || 'attendees').replace(/[^\w-]+/g, '-').toLowerCase()}-attendees`}
+          rows={filteredAttendees}
+          columns={attendeeDownloadColumns}
+          onClose={() => setShowAttendeeDownload(false)}
+        />
+      )}
+
       {/* Attendees Tab */}
       {activeTab === 'attendees' && (
         <div className="card">
@@ -2695,58 +2819,9 @@ export default function ConferenceDetailPage() {
                     className="input-field pl-9 w-full lg:w-56"
                   />
                 </div>
-                {/* Scan / Add / Upload live in this menu at every width; the phone
-                    also folds the Filters toggle in, since it has no room for it. */}
-                {(() => {
-                  const actionItems = [
-                    {
-                      label: 'Scan',
-                      onClick: () => setShowBatchScan(true),
-                      icon: (
-                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                      ),
-                    },
-                    {
-                      label: 'Add',
-                      onClick: () => setShowAddForm(v => !v),
-                      icon: (
-                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                      ),
-                    },
-                    {
-                      label: isUploading ? 'Uploading…' : 'Upload',
-                      onClick: () => uploadFileRef.current?.click(),
-                      disabled: isUploading,
-                      icon: (
-                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                        </svg>
-                      ),
-                    },
-                  ];
-                  const filtersItem = {
-                    label: 'Filters',
-                    onClick: () => setAttendeeFiltersOpen(v => !v),
-                    active: attendeeFiltersOpen || attendeeAdvancedFilterCount > 0,
-                    badge: attendeeAdvancedFilterCount,
-                    icon: (
-                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
-                      </svg>
-                    ),
-                  };
-                  return (
-                    <>
-                      <KebabMenu className="lg:hidden" title="Attendee actions" items={[...actionItems, filtersItem]} />
-                      <KebabMenu className="hidden lg:block" title="Attendee actions" items={actionItems} />
-                    </>
-                  );
-                })()}
+                {/* The phone has no room for the Filters button, so its kebab
+                    carries that too; desktop's sits beside the Filters toggle. */}
+                <KebabMenu className="lg:hidden" title="Attendee actions" items={[...attendeeActionItems, attendeeFiltersItem]} />
               </div>
               <input
                 ref={uploadFileRef}
@@ -2821,7 +2896,11 @@ export default function ConferenceDetailPage() {
                 return (
                   <>
                     <ScrollRow className="w-full lg:hidden" gapClass="gap-2">{attendeeFilterButtons}</ScrollRow>
-                    <div className="hidden lg:contents">{attendeeFilterButtons}{filtersToggle}</div>
+                    <div className="hidden lg:contents">
+                      {attendeeFilterButtons}
+                      {filtersToggle}
+                      <KebabMenu title="Attendee actions" items={attendeeActionItems} />
+                    </div>
                   </>
                 );
               })()}
@@ -3868,6 +3947,8 @@ export default function ConferenceDetailPage() {
                 toast.error('Failed to update next step.');
               }
             }}
+            onBulkToggle={handleBulkToggleFollowUp}
+            groupBy="attendee"
           />
             );
           })()}
