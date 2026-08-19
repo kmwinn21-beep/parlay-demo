@@ -10,6 +10,7 @@ import { invalidateConfsCache } from '@/components/Header';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
 import { MeetingDateFilterBar } from '@/components/MeetingDateFilterBar';
+import { isBoothHours } from '@/lib/meetingTime';
 import { KebabMenu } from '@/components/KebabMenu';
 import { ScrollRow } from '@/components/ScrollRow';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
@@ -355,6 +356,8 @@ export default function ConferenceDetailPage() {
   const [confPinnedNotes, setConfPinnedNotes] = useState<PinnedNote[]>([]);
   const [confMeetings, setConfMeetings] = useState<Meeting[]>([]);
   const meetingAttendeeIds = useMemo(() => new Set(confMeetings.map(m => m.attendee_id)), [confMeetings]);
+  // The chip only earns its place once something is booked for booth hours.
+  const hasBoothHoursMeetings = useMemo(() => confMeetings.some(m => isBoothHours(m.meeting_time)), [confMeetings]);
 
   // Optimistically insert a newly-scheduled meeting into this tab's list. Idempotent (checks
   // for an existing id) since both the local NewMeetingModal onSuccess and the global
@@ -504,6 +507,7 @@ export default function ConferenceDetailPage() {
   const [showAttendeePhotos, setShowAttendeePhotos] = useState(false);
   const [showAttendeeDownload, setShowAttendeeDownload] = useState(false);
   const [quickFilterPlaceholders, setQuickFilterPlaceholders] = useState(false);
+  const [boothHoursOnly, setBoothHoursOnly] = useState(false);
   // "Other (not in list)" on the add-attendee company picker
   const [addCompanyOther, setAddCompanyOther] = useState(false);
   const unitTypeLabel = useUnitTypeLabel();
@@ -3589,7 +3593,7 @@ export default function ConferenceDetailPage() {
       {activeTab === 'meetings' && (() => {
         const attendeeMap = new Map((conference?.attendees || []).map(a => [a.id, a]));
         const conferenceDates = conference ? getConferenceDates(conference.start_date, conference.end_date) : [];
-        const anyFilters = meetingFilterReps.length > 0 || meetingFilterDates.length > 0 || meetingFilterCompanyTypes.length > 0 || meetingFilterSeniorities.length > 0;
+        const anyFilters = meetingFilterReps.length > 0 || meetingFilterDates.length > 0 || meetingFilterCompanyTypes.length > 0 || meetingFilterSeniorities.length > 0 || boothHoursOnly;
         const activeFilterCount = [meetingFilterReps, meetingFilterDates, meetingFilterCompanyTypes, meetingFilterSeniorities].filter(f => f.length > 0).length;
         const myConfigId = currentUser?.configId ?? null;
         const myMeetingsAvailable = myConfigId != null;
@@ -3604,6 +3608,7 @@ export default function ConferenceDetailPage() {
             if (!meetingFilterReps.some(id => ids.includes(id))) return false;
           }
           if (meetingFilterDates.length > 0 && !meetingFilterDates.includes(m.meeting_date)) return false;
+          if (boothHoursOnly && !isBoothHours(m.meeting_time)) return false;
           if (meetingFilterCompanyTypes.length > 0) {
             const att = attendeeMap.get(m.attendee_id);
             if (!att?.company_type || !meetingFilterCompanyTypes.includes(att.company_type)) return false;
@@ -3623,6 +3628,7 @@ export default function ConferenceDetailPage() {
           ...meetingFilterDates.map(d => ({ label: formatDayLabel(d), shortLabel: formatDayLabel(d), onRemove: () => setMeetingFilterDates(meetingFilterDates.filter(x => x !== d)) })),
           ...meetingFilterCompanyTypes.map(t => ({ label: t, shortLabel: t, onRemove: () => setMeetingFilterCompanyTypes(meetingFilterCompanyTypes.filter(x => x !== t)) })),
           ...meetingFilterSeniorities.map(s => ({ label: s, shortLabel: s, onRemove: () => setMeetingFilterSeniorities(meetingFilterSeniorities.filter(x => x !== s)) })),
+          ...(boothHoursOnly ? [{ label: 'Booth Hours', shortLabel: 'Booth', onRemove: () => setBoothHoursOnly(false) }] : []),
         ];
         const newMeetingBlocked = stagePermissions != null && !stagePermissions.canLogMeeting;
         const newMeetingButton = (
@@ -3697,6 +3703,9 @@ export default function ConferenceDetailPage() {
                     selected={meetingFilterDates}
                     onChange={setMeetingFilterDates}
                     variant="long"
+                    showBoothHours={hasBoothHoursMeetings}
+                    boothHoursOnly={boothHoursOnly}
+                    onBoothHoursChange={setBoothHoursOnly}
                   />
                 </div>
                 <div className="ml-auto flex-shrink-0 flex items-center gap-2">
@@ -3760,6 +3769,9 @@ export default function ConferenceDetailPage() {
                   selected={meetingFilterDates}
                   onChange={setMeetingFilterDates}
                   variant="short"
+                  showBoothHours={hasBoothHoursMeetings}
+                  boothHoursOnly={boothHoursOnly}
+                  onBoothHoursChange={setBoothHoursOnly}
                 />
               </div>
 

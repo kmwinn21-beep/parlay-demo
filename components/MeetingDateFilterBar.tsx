@@ -19,13 +19,20 @@ function shortLabel(d: string) {
  * clicking the active day clears it. The row never wraps — it scrolls, with
  * chevrons appearing on either side once there is somewhere to scroll to.
  */
-export function MeetingDateFilterBar({ dates, selected, onChange, variant = 'long' }: {
+export function MeetingDateFilterBar({
+  dates, selected, onChange, variant = 'long',
+  showBoothHours = false, boothHoursOnly = false, onBoothHoursChange,
+}: {
   dates: string[];
   /** Dates currently filtered on — a button is active when its date is in here. */
   selected: string[];
   onChange: (dates: string[]) => void;
   /** 'long' = "Monday, Aug 17" (desktop), 'short' = "Mon, 8.17" (mobile). */
   variant?: 'long' | 'short';
+  /** Offered only when the conference actually has booth-hours meetings. */
+  showBoothHours?: boolean;
+  boothHoursOnly?: boolean;
+  onBoothHoursChange?: (next: boolean) => void;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const [canLeft, setCanLeft] = useState(false);
@@ -48,7 +55,7 @@ export function MeetingDateFilterBar({ dates, selected, onChange, variant = 'lon
     return () => { ro.disconnect(); window.removeEventListener('resize', updateArrows); };
   }, [updateArrows, dates.length]);
 
-  if (dates.length === 0) return null;
+  if (dates.length === 0 && !showBoothHours) return null;
 
   const scroll = (dir: -1 | 1) => rowRef.current?.scrollBy({ left: dir * 160, behavior: 'smooth' });
   const arrowCls = 'flex-shrink-0 w-5 h-5 rounded-full bg-white border border-gray-200 text-gray-400 hover:text-brand-secondary hover:border-gray-300 flex items-center justify-center transition-colors';
@@ -79,6 +86,21 @@ export function MeetingDateFilterBar({ dates, selected, onChange, variant = 'lon
             </button>
           );
         })}
+        {showBoothHours && onBoothHoursChange && (
+          <button
+            type="button"
+            onClick={() => onBoothHoursChange(!boothHoursOnly)}
+            aria-pressed={boothHoursOnly}
+            title="Meetings booked for booth hours rather than a set time"
+            className={`flex-shrink-0 whitespace-nowrap px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors ${
+              boothHoursOnly
+                ? 'border-brand-secondary text-brand-secondary bg-blue-50'
+                : 'border-gray-200 text-gray-600 hover:border-gray-400'
+            }`}
+          >
+            Booth Hours
+          </button>
+        )}
       </div>
       {canRight && (
         <button type="button" onClick={() => scroll(1)} className={arrowCls} title="Scroll right">
