@@ -2356,7 +2356,13 @@ export default function ConferenceDetailPage() {
                   <button
                     type="button"
                     onClick={() => setReportMenuOpen(v => !v)}
-                    className="p-1.5 text-gray-500 hover:text-brand-accent transition-colors"
+                    /* Desktop rings the kebab; hovering or opening it tints the
+                       ring with a wash of the accent it turns on hover. */
+                    className={`p-1.5 hover:text-brand-accent transition-colors sm:rounded-full sm:border sm:hover:border-brand-accent/30 sm:hover:bg-brand-accent/10 ${
+                      reportMenuOpen
+                        ? 'text-brand-accent sm:bg-brand-accent/10 sm:border-brand-accent/30'
+                        : 'text-gray-500 sm:border-gray-200'
+                    }`}
                     aria-label="More report options"
                   >
                     <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
