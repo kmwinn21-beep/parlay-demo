@@ -832,6 +832,25 @@ export default function FollowUpsPage() {
     }
   };
 
+  // Mirrors the company/attendee pages: optimistic complete, one PATCH per row.
+  const handleBulkToggleFollowUp = async (ids: number[]) => {
+    setFollowUps(prev => prev.map(fu => ids.includes(fu.id) ? { ...fu, completed: true } : fu));
+    try {
+      await Promise.all(ids.map(id =>
+        fetch('/api/follow-ups', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, completed: true }),
+        }).then(res => { if (!res.ok) throw new Error(); })
+      ));
+      toast.success(`${ids.length} task${ids.length === 1 ? '' : 's'} marked complete.`);
+    } catch {
+      setFollowUps(prev => prev.map(fu => ids.includes(fu.id) ? { ...fu, completed: false } : fu));
+      toast.error('Failed to mark all done.');
+      throw new Error();
+    }
+  };
+
   const handleDeleteFollowUp = async (id: number) => {
     if (!confirm('Are you sure you want to delete this follow-up?')) return;
     const prev = followUps;
@@ -1563,6 +1582,8 @@ export default function FollowUpsPage() {
                         userOptions={userOptions}
                         onRepChange={handleRepChange}
                         onNextStepsChange={handleNextStepsChange}
+                        onBulkToggle={handleBulkToggleFollowUp}
+                        groupBy="attendee"
                       />
                     )}
                   </div>

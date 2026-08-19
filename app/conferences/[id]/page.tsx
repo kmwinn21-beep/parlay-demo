@@ -1553,6 +1553,25 @@ export default function ConferenceDetailPage() {
 
   // Attendee toolbar actions. Shared so the phone's kebab (which also folds
   // in Filters) and the desktop one beside the Filters button stay in step.
+  // Mirrors the company/attendee pages: optimistic complete, one PATCH per row.
+  const handleBulkToggleFollowUp = async (ids: number[]) => {
+    setConfFollowUps(prev => prev.map(fu => ids.includes(fu.id) ? { ...fu, completed: true } : fu));
+    try {
+      await Promise.all(ids.map(id =>
+        fetch('/api/follow-ups', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, completed: true }),
+        }).then(res => { if (!res.ok) throw new Error(); })
+      ));
+      toast.success(`${ids.length} task${ids.length === 1 ? '' : 's'} marked complete.`);
+    } catch {
+      setConfFollowUps(prev => prev.map(fu => ids.includes(fu.id) ? { ...fu, completed: false } : fu));
+      toast.error('Failed to mark all done.');
+      throw new Error();
+    }
+  };
+
   const attendeeActionItems = [
     {
       label: 'Scan',
@@ -3922,6 +3941,8 @@ export default function ConferenceDetailPage() {
                 toast.error('Failed to update next step.');
               }
             }}
+            onBulkToggle={handleBulkToggleFollowUp}
+            groupBy="attendee"
           />
             );
           })()}

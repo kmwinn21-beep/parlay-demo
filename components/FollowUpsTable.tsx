@@ -33,6 +33,8 @@ export interface FollowUp {
   start_date: string;
   entity_notes_count: number;
   assigned_rep: string | null;
+  /** Stored as 'YYYY-MM-DD HH:MM:SS'; orders the entries within a grouped row. */
+  created_at?: string;
 }
 
 interface ConferenceGroup {
@@ -61,6 +63,17 @@ function formatDate(d: string) {
   return new Date(d + 'T00:00:00').toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
   });
+}
+
+/** created_at carries a time; only its date half is shown. */
+function formatTimestamp(ts: string | undefined) {
+  if (!ts) return '';
+  return formatDate(ts.slice(0, 10));
+}
+
+/** Oldest first, so a grouped row reads as the interaction history it is. */
+function sortByCreatedAt(tasks: FollowUp[]): FollowUp[] {
+  return [...tasks].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''));
 }
 
 function buildConferenceGroups(fus: FollowUp[]): ConferenceGroup[] {
@@ -161,7 +174,11 @@ export function FollowUpsTable({
   onNextStepsChange?: (id: number, nextSteps: string) => void;
   onBulkToggle?: (ids: number[]) => Promise<void>;
   tableName?: string;
-  groupBy?: 'conference' | 'conference-attendee' | 'none';
+  /**
+   * 'attendee' is 'conference-attendee' minus the conference header — for
+   * pages that already establish the conference around the table.
+   */
+  groupBy?: 'conference' | 'conference-attendee' | 'attendee' | 'none';
 }) {
   const nextStepsOpts = useConfigWithIds('next_steps');
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
@@ -481,6 +498,249 @@ export function FollowUpsTable({
     );
   }
 
+  // ── Consolidated attendee row (one row, one entry per follow-up) ─────────────
+
+  /** The notes under a next-step badge — identical in single and multi-entry cells. */
+  function renderNextStepNotes(fu: FollowUp, textCls: string) {
+    const taskLines = parseTaskLines(fu.next_steps_notes);
+    if (taskLines.length > 1) {
+      const isExpanded = expandedTaskIds.has(fu.id);
+      const visibleLines = isExpanded ? taskLines : taskLines.slice(0, 1);
+      return (
+        <div className="mt-0.5">
+          {visibleLines.map((line, i) => (
+            <p key={i} className={`${textCls} leading-snug${i > 0 ? ' mt-3' : ''}`}>- {line}</p>
+          ))}
+          {!isExpanded && <div className="border-t border-gray-100 mt-1 pt-1" />}
+          <button
+            type="button"
+            onClick={() => setExpandedTaskIds(prev => { const n = new Set(prev); if (n.has(fu.id)) n.delete(fu.id); else n.add(fu.id); return n; })}
+            className="text-[10px] text-brand-secondary hover:underline mt-0.5"
+          >
+            {isExpanded ? 'Show less' : `Show All (${taskLines.length})`}
+          </button>
+        </div>
+      );
+    }
+    if (fu.next_steps_notes) {
+      const lines = fu.next_steps_notes.split('\n').map(l => l.trim()).filter(Boolean);
+      return (
+        <div className="mt-0.5">
+          {lines.map((line, i) => (
+            <p key={i} className={`${textCls} leading-snug${i > 0 ? ' mt-2.5' : ''}`}>{line}</p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  }
+
+  /** One follow-up inside a stacked cell: badge, its notes, and when it landed. */
+  function renderNextStepEntry(fu: FollowUp, i: number, badgeExtraCls: string, notesCls: string) {
+    return (
+      <div key={fu.id} className={i > 0 ? 'pt-1.5 mt-1.5 border-t border-gray-100' : ''}>
+        {canEditNextSteps && editingNextStepsKey === fu.id ? (
+          <select
+            autoFocus
+            className="text-xs border border-brand-primary rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-brand-primary"
+            defaultValue={fu.next_steps}
+            onChange={(e) => { onNextStepsChange!(fu.id, e.target.value); setEditingNextStepsKey(null); }}
+            onBlur={() => setEditingNextStepsKey(null)}
+          >
+            {nextStepsOpts.map(opt => (
+              <option key={opt.id} value={String(opt.id)}>{opt.value}</option>
+            ))}
+          </select>
+        ) : (
+          <span
+            onClick={canEditNextSteps ? () => setEditingNextStepsKey(fu.id) : undefined}
+            className={`inline-flex px-2 py-0.5 rounded-lg font-medium leading-snug ${badgeExtraCls} ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'} ${canEditNextSteps ? 'cursor-pointer hover:opacity-75 transition-opacity' : ''}`}
+            title={canEditNextSteps ? 'Click to change' : undefined}
+          >
+            {resolveConfigValue(fu.next_steps, nextStepsOpts)}
+          </span>
+        )}
+        {renderNextStepNotes(fu, notesCls)}
+        {fu.created_at && (
+          <p className="text-gray-400 text-[10px] leading-snug mt-0.5">{formatTimestamp(fu.created_at)}</p>
+        )}
+      </div>
+    );
+  }
+
+  /** Editable rep pills for one entry, so a stacked row keeps per-follow-up reps. */
+  function renderRepCellBody(fu: FollowUp, size: 'sm' | 'xs' = 'sm') {
+    if (canEditRep && editingRepKey === fu.id) {
+      return (
+        <div className="w-36">
+          <RepMultiSelect options={userOptions} selectedIds={editingRepIds} onChange={setEditingRepIds} onClose={(ids) => finishEditRep(fu.id, ids)} placeholder="Select reps..." />
+        </div>
+      );
+    }
+    if (canEditRep) {
+      return (
+        <button type="button" onClick={() => startEditRep(fu)} className="group inline-flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity" title={fu.assigned_rep ? 'Click to change reps' : 'Click to assign rep'}>
+          {fu.assigned_rep ? (<RepPills assignedRep={fu.assigned_rep} userOptions={userOptions} size={size} />) : (<span className="text-gray-300 group-hover:text-blue-400 transition-colors">—</span>)}
+        </button>
+      );
+    }
+    return fu.assigned_rep
+      ? <RepPills assignedRep={fu.assigned_rep} userOptions={userOptions} size={size} />
+      : <span className="text-gray-300">—</span>;
+  }
+
+  /**
+   * The group's single Done control. It fires one PATCH per underlying row
+   * through the same onBulkToggle path a "Mark all done" click uses.
+   */
+  function renderGroupDoneButton(groupKey: string, rows: FollowUp[]) {
+    const incompleteIds = rows.filter(t => !t.completed).map(t => t.id);
+    const allDone = incompleteIds.length === 0;
+    const isLoading = bulkLoadingKeys.has(groupKey);
+    const hasError = bulkErrorKeys.has(groupKey);
+    return (
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          disabled={allDone || isLoading || !onBulkToggle}
+          onClick={() => handleMarkAllDone(groupKey, incompleteIds)}
+          title={allDone ? 'All follow-ups complete' : `Mark ${incompleteIds.length} follow-up${incompleteIds.length === 1 ? '' : 's'} done`}
+          className={`flex items-center gap-1 px-2 py-1 rounded-lg font-medium border-2 transition-all whitespace-nowrap ${
+            allDone
+              ? 'bg-green-500 text-white border-green-600 cursor-default'
+              : 'bg-white text-gray-500 border-gray-300 hover:border-green-400 hover:text-green-600 disabled:opacity-50'
+          }`}
+        >
+          {allDone ? (<><CheckIcon className="w-3 h-3 flex-shrink-0" />Done</>) : isLoading ? 'Saving…' : `Done (${incompleteIds.length})`}
+        </button>
+        {hasError && <span className="text-[10px] text-red-500">Failed</span>}
+      </div>
+    );
+  }
+
+  /** Desktop: one table row for an attendee, entries stacked inside the cells. */
+  function renderAttendeeGroupRow(rows: FollowUp[], groupKey: string) {
+    const head = rows[0];
+    const allDone = rows.every(r => r.completed);
+    return (
+      <tr key={groupKey} className={`transition-colors align-top ${allDone ? 'bg-green-50 hover:bg-green-50' : 'hover:bg-gray-50'}`}>
+        {orderedColumns.map(col => {
+          if (!isVisible(col.key)) return null;
+          switch (col.key) {
+            case 'name': return <td key="name" className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
+              <div className="flex items-center gap-1 group">
+                <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: head.attendee_id, name: `${head.first_name} ${head.last_name}` })} />
+                <Link href={`/attendees/${head.attendee_id}`} className="text-brand-secondary hover:underline leading-snug block truncate" title={`${head.first_name} ${head.last_name}`}>
+                  {head.first_name} {head.last_name}
+                </Link>
+              </div>
+            </td>;
+            case 'title': return <td key="title" className="px-3 py-2 text-gray-600 leading-snug">{head.title || <span className="text-gray-300">—</span>}</td>;
+            case 'company': return <td key="company" className="px-3 py-2 text-gray-600 leading-snug">
+              {head.company_name && head.company_id ? (
+                <div className="flex items-center gap-1 group">
+                  <QuickViewIcon onClick={() => setQuickView({ type: 'company', id: head.company_id!, name: head.company_name! })} />
+                  <Link href={`/companies/${head.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">{head.company_name}</Link>
+                </div>
+              ) : <span className="text-gray-300">—</span>}
+            </td>;
+            case 'next_step': return <td key="next_step" className="px-3 py-2" style={{ maxWidth: 240 }}>
+              {rows.map((row, i) => renderNextStepEntry(row, i, '', 'text-gray-500'))}
+            </td>;
+            case 'conference': return <td key="conference" className="px-3 py-2 text-gray-600 leading-snug">
+              <Link href={`/conferences/${head.conference_id}`} className="text-brand-secondary hover:underline">{head.conference_name}</Link>
+              <p className="text-gray-400">{formatDate(head.start_date)}</p>
+            </td>;
+            case 'rep': return <td key="rep" className="px-3 py-2">
+              {rows.map((row, i) => (
+                <div key={row.id} className={i > 0 ? 'pt-1.5 mt-1.5 border-t border-gray-100' : ''}>
+                  {renderRepCellBody(row)}
+                </div>
+              ))}
+            </td>;
+            case 'notes': return <td key="notes" className="px-3 py-2">
+              <FollowUpNotesPopover attendeeId={head.attendee_id} notesCount={Number(head.entity_notes_count)} conferenceName={head.conference_name} />
+            </td>;
+            case 'status': return <td key="status" className="px-3 py-2">
+              {renderGroupDoneButton(groupKey, rows)}
+            </td>;
+            default: return null;
+          }
+        })}
+        {customColumns.filter(c => c.visible).map(col => (
+          <td key={`custom_${col.id}`} className="px-3 py-2">
+            <CustomColumnCell column={col} value={(head as unknown as Record<string, unknown>)[col.data_key]} />
+          </td>
+        ))}
+        {onDelete && (
+          <td className="px-3 py-2">
+            {rows.map((row, i) => (
+              <div key={row.id} className={i > 0 ? 'pt-1.5 mt-1.5 border-t border-gray-100' : ''}>
+                <button type="button" onClick={() => onDelete(row.id)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">Delete</button>
+              </div>
+            ))}
+          </td>
+        )}
+      </tr>
+    );
+  }
+
+  /** Mobile twin of the row above. */
+  function renderAttendeeGroupCard(rows: FollowUp[], groupKey: string) {
+    const head = rows[0];
+    const allDone = rows.every(r => r.completed);
+    return (
+      <div key={groupKey} className={`p-4 ${allDone ? 'bg-green-50' : 'bg-white'}`}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <button
+              type="button"
+              onClick={() => setQuickView({ type: 'attendee', id: head.attendee_id, name: `${head.first_name} ${head.last_name}` })}
+              className="text-sm font-semibold text-brand-secondary hover:underline text-left"
+            >
+              {head.first_name} {head.last_name}
+            </button>
+            {head.title && <p className="text-xs text-gray-500 mt-0.5">{head.title}</p>}
+            {head.company_name && head.company_id ? (
+              <button
+                type="button"
+                onClick={() => setQuickView({ type: 'company', id: head.company_id!, name: head.company_name! })}
+                className="block text-xs text-brand-secondary hover:underline text-left"
+              >
+                {head.company_name}
+              </button>
+            ) : head.company_name ? (
+              <p className="text-xs text-gray-500">{head.company_name}</p>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0 text-xs">
+            {renderGroupDoneButton(groupKey, rows)}
+          </div>
+        </div>
+        <div className="mt-2 space-y-0">
+          {rows.map((row, i) => (
+            <div key={row.id} className={i > 0 ? 'pt-2 mt-2 border-t border-gray-100' : ''}>
+              <div className="flex items-center gap-2 flex-wrap">
+                {renderNextStepEntry(row, 0, 'text-xs', 'text-xs text-gray-500')}
+                {renderRepCellBody(row, 'xs')}
+                {onDelete && (
+                  <button type="button" onClick={() => onDelete(row.id)} className="text-red-400 hover:text-red-600 text-[10px] font-medium ml-auto">Delete</button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-1.5 flex items-center gap-2">
+          <Link href={`/conferences/${head.conference_id}`} className="text-xs text-brand-secondary hover:underline">
+            {head.conference_name}
+          </Link>
+          <span className="text-xs text-gray-400">· {formatDate(head.start_date)}</span>
+          <FollowUpNotesPopover attendeeId={head.attendee_id} notesCount={Number(head.entity_notes_count)} conferenceName={head.conference_name} />
+        </div>
+      </div>
+    );
+  }
+
   // ── Bulk action UI helpers ───────────────────────────────────────────────────
 
   function renderMarkAllDoneButton(groupKey: string, incompleteIds: number[]) {
@@ -653,39 +913,36 @@ export function FollowUpsTable({
     );
   }
 
-  // ── Conference + attendee grouped mode (company page) ────────────────────────
+  // ── Conference + attendee grouped mode ───────────────────────────────────────
+  // One row per attendee, their follow-ups stacked inside the cells. 'attendee'
+  // is the same thing without the conference header, for pages that already
+  // establish the conference around the table.
 
   const confAttGroups = buildConferenceAttendeeGroups(followUps);
+  const showConferenceHeader = groupBy === 'conference-attendee';
 
   return (
     <>
       {/* Mobile */}
       <div className="block lg:hidden">
         {confAttGroups.map((cg, cgi) => (
-          <div key={cg.conference_id} className={cgi > 0 ? 'mt-4' : ''}>
-            {/* Conference header — no bulk button at this level */}
-            <div className="px-4 py-2 bg-gray-50 border-y border-gray-100">
-              <span className="text-xs font-semibold text-gray-700">{cg.conference_name}</span>
-              <span className="text-xs text-gray-400 ml-2">{formatDate(cg.start_date)}</span>
+          <div key={cg.conference_id} className={cgi > 0 && showConferenceHeader ? 'mt-4' : ''}>
+            {showConferenceHeader && (
+              <div className="px-4 py-2 bg-gray-50 border-y border-gray-100">
+                <span className="text-xs font-semibold text-gray-700">{cg.conference_name}</span>
+                <span className="text-xs text-gray-400 ml-2">{formatDate(cg.start_date)}</span>
+              </div>
+            )}
+            <div className="divide-y divide-gray-100">
+              {cg.attendees.map(ag => {
+                const rows = sortByCreatedAt(ag.tasks);
+                const subKey = `${cg.conference_id}-${ag.attendee_id}`;
+                // A single follow-up renders exactly as it always has.
+                return rows.length === 1
+                  ? renderMobileCard(rows[0])
+                  : renderAttendeeGroupCard(rows, subKey);
+              })}
             </div>
-            {/* Attendee subgroups */}
-            {cg.attendees.map(ag => {
-              const incompleteIds = ag.tasks.filter(t => !t.completed).map(t => t.id);
-              const subKey = `${cg.conference_id}-${ag.attendee_id}`;
-              return (
-                <div key={ag.attendee_id}>
-                  <div className="px-4 py-1.5 flex items-center justify-between border-b border-gray-100 bg-white">
-                    <span className="text-[11px] font-medium text-gray-500 pl-1">
-                      {ag.first_name} {ag.last_name}
-                    </span>
-                    {renderMarkAllDoneButton(subKey, incompleteIds)}
-                  </div>
-                  <div className="divide-y divide-gray-100">
-                    {ag.tasks.map(fu => renderMobileCard(fu))}
-                  </div>
-                </div>
-              );
-            })}
           </div>
         ))}
       </div>
@@ -716,44 +973,30 @@ export function FollowUpsTable({
               {onDelete && <th className="px-3 py-2"></th>}
             </tr>
           </thead>
-          <tbody>
+          <tbody className={showConferenceHeader ? '' : 'divide-y divide-gray-100'}>
             {confAttGroups.map((cg, cgi) => (
               <Fragment key={cg.conference_id}>
-                {cgi > 0 && (
+                {showConferenceHeader && cgi > 0 && (
                   <tr>
                     <td colSpan={100} className="h-3 bg-white p-0 border-0" />
                   </tr>
                 )}
-                {/* Conference header row */}
-                <tr className="bg-gray-50 border-y border-gray-200">
-                  <td colSpan={100} className="px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-gray-700">{cg.conference_name}</span>
-                      <span className="text-xs text-gray-400">{formatDate(cg.start_date)}</span>
-                    </div>
-                  </td>
-                </tr>
-                {/* Attendee subgroups */}
+                {showConferenceHeader && (
+                  <tr className="bg-gray-50 border-y border-gray-200">
+                    <td colSpan={100} className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-gray-700">{cg.conference_name}</span>
+                        <span className="text-xs text-gray-400">{formatDate(cg.start_date)}</span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
                 {cg.attendees.map(ag => {
-                  const incompleteIds = ag.tasks.filter(t => !t.completed).map(t => t.id);
+                  const rows = sortByCreatedAt(ag.tasks);
                   const subKey = `${cg.conference_id}-${ag.attendee_id}`;
-                  return (
-                    <Fragment key={ag.attendee_id}>
-                      {/* Attendee subgroup header row */}
-                      <tr className="border-b border-gray-100">
-                        <td colSpan={100} className="px-3 py-1.5 pl-6">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-medium text-gray-500">
-                              {ag.first_name} {ag.last_name}
-                            </span>
-                            {renderMarkAllDoneButton(subKey, incompleteIds)}
-                          </div>
-                        </td>
-                      </tr>
-                      {/* Task rows */}
-                      {ag.tasks.map(fu => renderDesktopRow(fu))}
-                    </Fragment>
-                  );
+                  return rows.length === 1
+                    ? renderDesktopRow(rows[0])
+                    : renderAttendeeGroupRow(rows, subKey);
                 })}
               </Fragment>
             ))}
