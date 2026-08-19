@@ -67,6 +67,7 @@ import { LocationAutocompleteInput } from '@/components/LocationAutocompleteInpu
 import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
 import { SearchableSelect } from '@/components/SearchableSelect';
 import { DownloadModal, type DownloadColumn } from '@/components/DownloadModal';
+import ConferenceNotesModal from '@/components/ConferenceNotesModal';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 
 interface Attendee {
@@ -504,6 +505,7 @@ export default function ConferenceDetailPage() {
   const [showDebrief, setShowDebrief] = useState(false);
   const [activityMapOpen, setActivityMapOpen] = useState(false);
   const [reportMenuOpen, setReportMenuOpen] = useState(false);
+  const [showNotesModal, setShowNotesModal] = useState(false);
   const [showAttendeePhotos, setShowAttendeePhotos] = useState(false);
   const [showAttendeeDownload, setShowAttendeeDownload] = useState(false);
   const [quickFilterPlaceholders, setQuickFilterPlaceholders] = useState(false);
@@ -1030,6 +1032,19 @@ export default function ConferenceDetailPage() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // The notes popup edits one column, so it goes through the lightweight PATCH
+  // rather than the full-object PUT the edit form uses. Throws on failure so
+  // the modal can keep itself open and surface the error.
+  const handleSaveConferenceNotes = async (notes: string) => {
+    const res = await fetch(`/api/conferences/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes }),
+    });
+    if (!res.ok) throw new Error('Notes update failed');
+    setConference(prev => prev ? { ...prev, notes: notes || undefined } : prev);
   };
 
   const handleDelete = async () => {
@@ -2490,6 +2505,18 @@ export default function ConferenceDetailPage() {
                             Stage Controls
                           </button>
                         )}
+                        {!!conference.notes?.trim() && (
+                          <button
+                            type="button"
+                            onClick={() => { setShowNotesModal(true); setReportMenuOpen(false); }}
+                            className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                          >
+                            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Notes
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => { setIsEditing(true); setReportMenuOpen(false); }}
@@ -2763,6 +2790,14 @@ export default function ConferenceDetailPage() {
           rows={filteredAttendees}
           columns={attendeeDownloadColumns}
           onClose={() => setShowAttendeeDownload(false)}
+        />
+      )}
+
+      {showNotesModal && !!conference.notes && (
+        <ConferenceNotesModal
+          notes={conference.notes}
+          onSave={handleSaveConferenceNotes}
+          onClose={() => setShowNotesModal(false)}
         />
       )}
 
