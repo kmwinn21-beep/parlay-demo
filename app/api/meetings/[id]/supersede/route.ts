@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/getDb';
 import { getSessionUser } from '@/lib/auth';
 import { validateConferenceStage } from '@/lib/validate-conference-stage';
+import { serializeAttendeeIds } from '@/lib/additionalAttendees';
 
 // POST /api/meetings/[id]/supersede — "editing" a meeting from the outreach tab
 // doesn't mutate the row in place (unlike PUT /api/meetings/[id]): it inserts a
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const db = await getDb(user?.accountId);
     const { id } = params;
     const body = await request.json();
-    const { meeting_date, meeting_time, location, scheduled_by, additional_attendees, meeting_type } = body;
+    const { meeting_date, meeting_time, location, scheduled_by, additional_attendees, additional_attendee_ids, meeting_type } = body;
 
     if (!meeting_date || !meeting_time) {
       return NextResponse.json({ error: 'meeting_date and meeting_time are required' }, { status: 400 });
@@ -34,12 +35,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (stageBlock) return stageBlock;
 
     const inserted = await db.execute({
-      sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, additional_attendees, outcome, meeting_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+      sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, additional_attendees, additional_attendee_ids, outcome, meeting_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       args: [
         old.attendee_id, old.conference_id,
         meeting_date, meeting_time,
         location ?? null, scheduled_by ?? null, additional_attendees ?? null,
+        serializeAttendeeIds(additional_attendee_ids),
         old.outcome ?? null, meeting_type ?? null,
       ],
     });

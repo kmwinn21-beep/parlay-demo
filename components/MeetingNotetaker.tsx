@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { useCapabilities } from '@/lib/useCapabilities';
 import { AttendeePhotoModal } from '@/components/AttendeePhoto';
+import type { AdditionalAttendeeRecord } from '@/lib/additionalAttendees';
 
 interface TranscriptSegment {
   text: string;
@@ -54,6 +55,7 @@ interface MeetingContext {
   scheduled_by: string | null;
   scheduled_by_names: string[];
   additional_attendees: string | null;
+  additional_attendee_records?: AdditionalAttendeeRecord[];
   meeting_date: string | null;
   meeting_time: string | null;
 }
@@ -1677,7 +1679,29 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                     </button>
                   </div>
 
-                  {/* Additional external attendees */}
+                  {/* Additional attendees picked off the conference roster —
+                      shown with their own photo and title, like the primary. */}
+                  {(meeting.additional_attendee_records ?? []).map(extra => (
+                    <div key={extra.id} className="flex items-center gap-2 mb-1.5">
+                      <Avatar
+                        name={`${extra.first_name} ${extra.last_name}`}
+                        size={7}
+                        photoUrl={extra.photo_url}
+                        title={extra.title}
+                        companyName={extra.company_name}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => openRecord('attendee', extra.id)}
+                        className="text-left hover:text-brand-secondary transition-colors min-w-0"
+                      >
+                        <p className="text-xs font-medium text-gray-800 truncate">{extra.first_name} {extra.last_name}</p>
+                        {extra.title && <p className="text-[10px] text-gray-500 truncate">{extra.title}</p>}
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Free-text names that match no attendee record */}
                   {additionalAttendees.map(name => (
                     <div key={name} className="flex items-center gap-2 mb-1.5 group">
                       <Avatar name={name} size={7} />

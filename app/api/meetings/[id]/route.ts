@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/getDb';
 import { getSessionUser } from '@/lib/auth';
 import { validateConferenceStage } from '@/lib/validate-conference-stage';
+import { loadAdditionalAttendees, serializeAttendeeIds } from '@/lib/additionalAttendees';
 
 export async function GET(
   request: NextRequest,
@@ -14,7 +15,8 @@ export async function GET(
 
     const result = await db.execute({
       sql: `SELECT m.id, m.attendee_id, m.conference_id, m.scheduled_by,
-               m.additional_attendees, m.meeting_date, m.meeting_time, m.location,
+               m.additional_attendees, m.additional_attendee_ids,
+               m.meeting_date, m.meeting_time, m.location,
                a.first_name, a.last_name, a.title, a.photo_url,
                co.id AS company_id, co.name AS company_name, co.icp AS company_icp,
                c.name AS conference_name, c.internal_attendees AS conference_internal_attendees
@@ -49,9 +51,15 @@ export async function GET(
         scheduledByNames = ids; // already names (legacy data)
       }
     }
+    const extras = await loadAdditionalAttendees(db, [
+      { id: Number(r.id), additional_attendee_ids: r.additional_attendee_ids },
+    ]);
+
     return NextResponse.json({
       id: Number(r.id),
       attendee_id: Number(r.attendee_id),
+      additional_attendee_ids: r.additional_attendee_ids ? String(r.additional_attendee_ids) : null,
+      additional_attendee_records: extras.get(Number(r.id)) ?? [],
       conference_id: Number(r.conference_id),
       scheduled_by: r.scheduled_by ? String(r.scheduled_by) : null,
       scheduled_by_names: scheduledByNames,
@@ -84,7 +92,7 @@ export async function PUT(
     const db = await getDb(user?.accountId);
     const { id } = params;
     const body = await request.json();
-    const { meeting_date, meeting_time, location, scheduled_by, additional_attendees, meeting_type } = body;
+    const { meeting_date, meeting_time, location, scheduled_by, additional_attendees, additional_attendee_ids, meeting_type } = body;
 
     if (!meeting_date || !meeting_time) {
       return NextResponse.json({ error: 'meeting_date and meeting_time are required' }, { status: 400 });
@@ -103,8 +111,8 @@ export async function PUT(
     if (stageBlock) return stageBlock;
 
     await db.execute({
-      sql: `UPDATE meetings SET meeting_date = ?, meeting_time = ?, location = ?, scheduled_by = ?, additional_attendees = ?, meeting_type = ? WHERE id = ?`,
-      args: [meeting_date, meeting_time, location ?? null, scheduled_by ?? null, additional_attendees ?? null, meeting_type ?? null, id],
+      sql: `UPDATE meetings SET meeting_date = ?, meeting_time = ?, location = ?, scheduled_by = ?, additional_attendees = ?, additional_attendee_ids = ?, meeting_type = ? WHERE id = ?`,
+      args: [meeting_date, meeting_time, location ?? null, scheduled_by ?? null, additional_attendees ?? null, serializeAttendeeIds(additional_attendee_ids), meeting_type ?? null, id],
     });
 
     return NextResponse.json({ success: true });

@@ -275,6 +275,10 @@ export function NewMeetingModal({
   // Attendees rather than External (which is what any name here would become
   // if it went into the additional_attendees free-text list instead).
   const [additionalInternalUserIds, setAdditionalInternalUserIds] = useState<number[]>([]);
+  // Conference attendees picked from the same field, kept by id: the meeting
+  // then carries their photo and title, and shows on their own profile as a
+  // guest rather than as a meeting of their own.
+  const [additionalAttendeeIds, setAdditionalAttendeeIds] = useState<number[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [companyTypeLookup, setCompanyTypeLookup] = useState<Map<number, string | null>>(new Map());
   const [showFullCalendar, setShowFullCalendar] = useState(false);
@@ -439,15 +443,19 @@ export function NewMeetingModal({
       .map(id => userOptions.find(u => u.id === id))
       .filter((u): u is UserOption => !!u)
       .map(u => ({ key: `u-${u.id}`, name: u.value }));
+    const roster = additionalAttendeeIds
+      .map(id => attendees.find(a => a.id === id))
+      .filter((a): a is typeof attendees[number] => !!a)
+      .map(a => ({ key: `a-${a.id}`, name: `${a.first_name} ${a.last_name}`.trim() }));
     const external = additionalAttendees.map(name => ({ key: `ext-${name}`, name }));
-    return [...internal, ...external];
-  }, [additionalInternalUserIds, additionalAttendees, userOptions]);
+    return [...internal, ...roster, ...external];
+  }, [additionalInternalUserIds, additionalAttendeeIds, additionalAttendees, attendees, userOptions]);
 
   const handleAddAdditionalAttendee = (candidate: AdditionalAttendeeCandidate) => {
     if (candidate.source === 'user') {
       setAdditionalInternalUserIds(prev => prev.includes(candidate.id) ? prev : [...prev, candidate.id]);
     } else {
-      setAdditionalAttendees(prev => prev.includes(candidate.name) ? prev : [...prev, candidate.name]);
+      setAdditionalAttendeeIds(prev => prev.includes(candidate.id) ? prev : [...prev, candidate.id]);
     }
   };
 
@@ -455,6 +463,9 @@ export function NewMeetingModal({
     if (selection.key.startsWith('u-')) {
       const id = Number(selection.key.slice(2));
       setAdditionalInternalUserIds(prev => prev.filter(x => x !== id));
+    } else if (selection.key.startsWith('a-')) {
+      const id = Number(selection.key.slice(2));
+      setAdditionalAttendeeIds(prev => prev.filter(x => x !== id));
     } else {
       setAdditionalAttendees(prev => prev.filter(n => n !== selection.name));
     }
@@ -531,6 +542,7 @@ export function NewMeetingModal({
     setLocation('');
     setAdditionalAttendees([]);
     setAdditionalInternalUserIds([]);
+    setAdditionalAttendeeIds([]);
     setShowFullCalendar(false);
     setConferenceMeetings([]);
     setCollapsedDays(new Set());
@@ -561,6 +573,7 @@ export function NewMeetingModal({
           location: location || null,
           scheduled_by: scheduledByIds.length > 0 ? scheduledByIds.join(',') : null,
           additional_attendees: additionalAttendees.length > 0 ? additionalAttendees.join(', ') : null,
+          additional_attendee_ids: additionalAttendeeIds.length > 0 ? additionalAttendeeIds.join(',') : null,
         }),
       });
       if (!res.ok) {
@@ -583,6 +596,7 @@ export function NewMeetingModal({
           location: location || null,
           scheduled_by: scheduledByIds.length > 0 ? scheduledByIds.join(',') : null,
           additional_attendees: additionalAttendees.length > 0 ? additionalAttendees.join(', ') : null,
+          additional_attendee_ids: additionalAttendeeIds.length > 0 ? additionalAttendeeIds.join(',') : null,
           outcome: created.outcome || 'Scheduled',
           created_at: created.created_at || new Date().toISOString(),
           first_name: contact?.first_name || '',
