@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { BannerData } from '@/components/DashboardConferenceBanner';
 import { useDrawerResize } from '@/lib/useDrawerResize';
@@ -172,8 +172,21 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
   const [drawerConfName, setDrawerConfName] = useState<string>('');
   const [companyDrawerId, setCompanyDrawerId] = useState<number | null>(null);
   const [companyDrawerName, setCompanyDrawerName] = useState<string>('');
+  // On a phone the card is only its header; the cards themselves live in a
+  // drawer the header opens, so the dashboard isn't a wall of follow-ups.
+  const [listDrawerOpen, setListDrawerOpen] = useState(false);
+  const [isPhone, setIsPhone] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)');
+    setIsPhone(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setIsPhone(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
 
   const toggle = () => {
+    if (isPhone) { setListDrawerOpen(true); return; }
     setCollapsed(v => {
       const next = !v;
       localStorage.setItem('parlay_followups_collapsed', String(next));
@@ -238,25 +251,30 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
         </div>
         <div className="flex items-center gap-2">
           {collapsed && items.length > 0 && (
-            <span className="text-xs text-gray-400">{items.length} pending</span>
+            <span className="hidden sm:inline text-xs text-gray-400">{items.length} pending</span>
           )}
           {!collapsed && items.length > 0 && (
-            <Link href="/follow-ups" className="text-xs text-brand-secondary hover:underline" onClick={e => e.stopPropagation()}>
+            <Link href="/follow-ups" className="hidden sm:inline text-xs text-brand-secondary hover:underline" onClick={e => e.stopPropagation()}>
               View all →
             </Link>
           )}
+          {/* Desktop collapses in place; the phone opens the drawer, so its
+              chevron points the way in rather than up and down. */}
           <svg
-            className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}
+            className={`hidden sm:block w-4 h-4 text-gray-400 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}
             fill="none" stroke="currentColor" viewBox="0 0 24 24"
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+          <svg className="sm:hidden w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
         </div>
       </div>
 
       {/* Expanded content */}
       {!collapsed && (
-        <div className="mt-3 flex-1 flex flex-col min-h-0">
+        <div className="mt-3 flex-1 hidden sm:flex flex-col min-h-0">
           {items.length === 0 ? (
             <div className="flex items-center gap-2 py-6 justify-center">
               <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -289,6 +307,67 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
               </Link>
             </>
           )}
+        </div>
+      )}
+
+      {/* Phone: the whole list, in the same cards, one tap from the header. */}
+      {listDrawerOpen && (
+        <div className="sm:hidden fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setListDrawerOpen(false)} />
+          <div className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 h-[85vh] w-full bg-white shadow-2xl flex flex-col rounded-t-2xl z-50">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-semibold text-brand-primary font-serif">Open Follow-Ups</h3>
+                {items.length > 0 && (
+                  <span className="bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+                    {items.length}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setListDrawerOpen(false)}
+                className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
+                aria-label="Close"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {items.length === 0 ? (
+              <div className="flex items-center gap-2 py-10 justify-center">
+                <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-sm text-gray-500">All caught up — no open follow-ups</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex-1 overflow-y-auto px-4 py-3 min-h-0">
+                  {groups.map(([confId, group]) => (
+                    <ConferenceGroup
+                      key={confId}
+                      confId={confId}
+                      group={group}
+                      isCurrentConf={confId === activeConfId}
+                      onDone={id => void markDone(id)}
+                      onMarkAllDone={id => void markAllDone(id)}
+                      onMoreClick={(id, name) => { setDrawerConfId(id); setDrawerConfName(name); }}
+                      onCompanyClick={(id, name) => { setCompanyDrawerId(id); setCompanyDrawerName(name); }}
+                    />
+                  ))}
+                </div>
+                <Link
+                  href="/follow-ups"
+                  className="block text-center text-xs text-brand-secondary hover:underline px-4 py-3 border-t border-gray-100 flex-shrink-0"
+                >
+                  View all {items.length} open follow-ups →
+                </Link>
+              </>
+            )}
+          </div>
         </div>
       )}
 
