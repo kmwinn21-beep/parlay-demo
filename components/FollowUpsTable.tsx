@@ -1002,6 +1002,7 @@ export function FollowUpsTable({
 
   const confAttGroups = buildConferenceAttendeeGroups(followUps);
   const showConferenceHeader = groupBy === 'conference-attendee';
+  const anyGroupExpanded = expandedGroupKeys.size > 0;
 
   return (
     <>
@@ -1049,11 +1050,13 @@ export function FollowUpsTable({
                   case 'name': return <th key="name" className={thCls}>Name</th>;
                   case 'title': return <th key="title" className={thCls}>Title</th>;
                   case 'company': return <th key="company" className={thCls}>Company</th>;
-                  case 'next_step': return <th key="next_step" className={thCls}>Next Step</th>;
+                  // These three only carry values inside an open section, so
+                  // their headings wait until one is open.
+                  case 'next_step': return <th key="next_step" className={thCls}>{anyGroupExpanded ? 'Next Step' : ''}</th>;
                   case 'conference': return <th key="conference" className={thCls}>Conference</th>;
                   case 'rep': return <th key="rep" className={thCls}>Rep</th>;
-                  case 'notes': return <th key="notes" className={thCls}>Notes</th>;
-                  case 'status': return <th key="status" className={thCls}>Status</th>;
+                  case 'notes': return <th key="notes" className={thCls}>{anyGroupExpanded ? 'Notes' : ''}</th>;
+                  case 'status': return <th key="status" className={thCls}>{anyGroupExpanded ? 'Status' : ''}</th>;
                   default: return null;
                 }
               })}
