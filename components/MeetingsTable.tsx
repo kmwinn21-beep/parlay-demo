@@ -12,7 +12,7 @@ import { useConfigColors } from '@/lib/useConfigColors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { useUser } from '@/components/UserContext';
 import { OverlappingRepPills } from '@/components/OverlappingRepPills';
-import { AdditionalAttendeesSelect, type AdditionalAttendeeCandidate, type AdditionalAttendeeSelection } from '@/components/AdditionalAttendeesSelect';
+import { AdditionalAttendeesModal, AdditionalAttendeesButton } from '@/components/AdditionalAttendeesModal';
 import {
   type UserOption,
   parseRepIds,
@@ -302,18 +302,19 @@ function MeetingActionsMenu({ hasNotes, onNotes, onEdit }: {
 }
 
 /**
- * Additional Attendees for the inline editor — the same searchable picker the
- * schedule modal uses. Internal picks are routed into scheduled_by so the
- * notetaker treats them as Internal Attendees. Someone picked off the
- * conference roster is kept by id, which is what carries their photo and title
- * onto the row and puts the meeting on their own profile; a name that matches
- * no record stays as free text in additional_attendees.
+ * Additional Attendees for the inline editor — a button that opens the picker
+ * modal, since a dropdown wedged into a table row left no room to navigate.
+ * Internal picks are routed into scheduled_by so the notetaker treats them as
+ * Internal Attendees. Someone picked off the conference roster is kept by id,
+ * which is what carries their photo and title onto the row and puts the meeting
+ * on their own profile; a name that matches no record stays as free text in
+ * additional_attendees.
  */
 function EditAdditionalAttendees({
-  conferenceId, userOptions, freeText, onFreeTextChange, internalIds, onInternalIdsChange,
-  attendeeIds, onAttendeeIdsChange, inputClassName,
+  meeting, userOptions, freeText, onFreeTextChange, internalIds, onInternalIdsChange,
+  attendeeIds, onAttendeeIdsChange,
 }: {
-  conferenceId: number | null | undefined;
+  meeting: Meeting;
   userOptions: UserOption[];
   freeText: string;
   onFreeTextChange: (v: string) => void;
@@ -321,73 +322,32 @@ function EditAdditionalAttendees({
   onInternalIdsChange: (ids: number[]) => void;
   attendeeIds: number[];
   onAttendeeIdsChange: (ids: number[]) => void;
-  inputClassName?: string;
 }) {
-  const [attendees, setAttendees] = useState<Array<{ id: number; first_name: string; last_name: string; company_name?: string | null }>>([]);
-
-  useEffect(() => {
-    if (!conferenceId) { setAttendees([]); return; }
-    let cancelled = false;
-    fetch(`/api/conferences/${conferenceId}`)
-      .then(r => (r.ok ? r.json() : { attendees: [] }))
-      .then(d => { if (!cancelled) setAttendees(d.attendees ?? []); })
-      .catch(() => { if (!cancelled) setAttendees([]); });
-    return () => { cancelled = true; };
-  }, [conferenceId]);
-
-  const externalNames = freeText.split(',').map(n => n.trim()).filter(Boolean);
-
-  const candidates: AdditionalAttendeeCandidate[] = [
-    ...attendees.map(a => ({
-      key: `attendee-${a.id}`,
-      name: `${a.first_name} ${a.last_name}`.trim(),
-      sub: a.company_name ?? '',
-      source: 'attendee' as const,
-      id: a.id,
-    })),
-    ...userOptions.map(u => ({
-      key: `user-${u.id}`,
-      name: u.value,
-      sub: 'Team member',
-      source: 'user' as const,
-      id: u.id,
-    })),
-  ];
-
-  const selected: AdditionalAttendeeSelection[] = [
-    ...internalIds.map(id => ({
-      key: `user-${id}`,
-      name: userOptions.find(u => u.id === id)?.value ?? `User ${id}`,
-    })),
-    ...attendeeIds.map(id => {
-      const a = attendees.find(x => x.id === id);
-      return { key: `attendee-${id}`, name: a ? `${a.first_name} ${a.last_name}`.trim() : `Attendee ${id}` };
-    }),
-    ...externalNames.map(n => ({ key: `name-${n}`, name: n })),
-  ];
+  const [open, setOpen] = useState(false);
+  const freeTextCount = freeText.split(',').map(n => n.trim()).filter(Boolean).length;
 
   return (
-    <AdditionalAttendeesSelect
-      candidates={candidates}
-      selected={selected}
-      inputClassName={inputClassName}
-      onAdd={c => {
-        if (c.source === 'user') {
-          if (!internalIds.includes(c.id)) onInternalIdsChange([...internalIds, c.id]);
-        } else if (!attendeeIds.includes(c.id)) {
-          onAttendeeIdsChange([...attendeeIds, c.id]);
-        }
-      }}
-      onRemove={sel => {
-        if (sel.key.startsWith('user-')) {
-          onInternalIdsChange(internalIds.filter(x => x !== Number(sel.key.slice(5))));
-        } else if (sel.key.startsWith('attendee-')) {
-          onAttendeeIdsChange(attendeeIds.filter(x => x !== Number(sel.key.slice(9))));
-        } else {
-          onFreeTextChange(externalNames.filter(n => n !== sel.name).join(', '));
-        }
-      }}
-    />
+    <>
+      <AdditionalAttendeesButton
+        count={attendeeIds.length + internalIds.length + freeTextCount}
+        onClick={() => setOpen(true)}
+      />
+      {open && (
+        <AdditionalAttendeesModal
+          conferenceId={meeting.conference_id}
+          primaryAttendeeId={meeting.attendee_id}
+          primaryCompanyId={meeting.company_id}
+          userOptions={userOptions}
+          attendeeIds={attendeeIds}
+          onAttendeeIdsChange={onAttendeeIdsChange}
+          internalIds={internalIds}
+          onInternalIdsChange={onInternalIdsChange}
+          freeText={freeText}
+          onFreeTextChange={onFreeTextChange}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
   );
 }
 
@@ -572,7 +532,7 @@ function EditMeetingRow({
         <div>
           <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Additional Attendees</label>
           <EditAdditionalAttendees
-            conferenceId={meeting.conference_id}
+            meeting={meeting}
             userOptions={userOptions}
             freeText={form.additional_attendees}
             onFreeTextChange={v => setForm(f => ({ ...f, additional_attendees: v }))}
@@ -580,7 +540,6 @@ function EditMeetingRow({
             onInternalIdsChange={setAdditionalInternalIds}
             attendeeIds={additionalAttendeeIds}
             onAttendeeIdsChange={setAdditionalAttendeeIds}
-            inputClassName={inputClass}
           />
         </div>
       </div>
@@ -704,7 +663,7 @@ function EditMeetingTableRow({
             <div>
               <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Add&apos;l Attendees</label>
               <EditAdditionalAttendees
-                conferenceId={meeting.conference_id}
+                meeting={meeting}
                 userOptions={userOptions}
                 freeText={form.additional_attendees}
                 onFreeTextChange={v => setForm(f => ({ ...f, additional_attendees: v }))}
@@ -712,7 +671,6 @@ function EditMeetingTableRow({
                 onInternalIdsChange={setAdditionalInternalIds}
                 attendeeIds={additionalAttendeeIds}
                 onAttendeeIdsChange={setAdditionalAttendeeIds}
-                inputClassName={inputClass}
               />
             </div>
           </div>
@@ -1001,13 +959,13 @@ export function MeetingsTable({
                   <button
                     type="button"
                     onClick={() => setQuickView({ type: 'attendee', id: m.attendee_id, name: `${m.first_name} ${m.last_name}` })}
-                    className="text-sm font-semibold text-brand-secondary hover:underline text-left truncate"
+                    className="text-xs font-bold text-brand-secondary hover:underline text-left truncate"
                   >
                     {m.first_name} {m.last_name}
                   </button>
                   {m.as_additional_attendee && <AdditionalAttendeeBadge />}
                 </span>
-                {m.title && <p className="text-xs text-gray-500 mt-0.5">{m.title}</p>}
+                {m.title && <p className="text-xs font-bold text-gray-500 mt-0.5">{m.title}</p>}
                 {(m.additional_attendee_records ?? []).map(extra => (
                   <div key={extra.id} className="flex items-center gap-1.5 mt-1.5">
                     <AttendeeInitialsAvatar
@@ -1018,8 +976,8 @@ export function MeetingsTable({
                       className="w-6 h-6 text-[9px]"
                     />
                     <div className="min-w-0">
-                      <p className="text-xs text-gray-600 truncate">{extra.first_name} {extra.last_name}</p>
-                      {extra.title && <p className="text-[10px] text-gray-400 truncate">{extra.title}</p>}
+                      <p className="text-xs font-normal text-gray-600 truncate">{extra.first_name} {extra.last_name}</p>
+                      {extra.title && <p className="text-xs font-normal text-gray-400 truncate">{extra.title}</p>}
                     </div>
                   </div>
                 ))}
@@ -1027,12 +985,12 @@ export function MeetingsTable({
                   <button
                     type="button"
                     onClick={() => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! })}
-                    className="block text-xs text-brand-secondary hover:underline mt-0.5 text-left"
+                    className="block text-xs font-bold text-brand-secondary hover:underline mt-0.5 text-left"
                   >
                     {m.company_name}
                   </button>
                 ) : m.company_name ? (
-                  <p className="text-xs text-gray-400 mt-0.5">{m.company_name}</p>
+                  <p className="text-xs font-bold text-gray-400 mt-0.5">{m.company_name}</p>
                 ) : null)}
               </div>
               {(onEdit || onNotesClick) && (
@@ -1146,7 +1104,7 @@ export function MeetingsTable({
                   className="w-7 h-7 text-[10px]"
                 />
               )}
-              {attendeeNameNode(m, 'text-brand-secondary hover:underline leading-snug block truncate')}
+              {attendeeNameNode(m, 'text-xs font-bold text-brand-secondary hover:underline leading-snug block truncate')}
               {m.as_additional_attendee && <AdditionalAttendeeBadge />}
             </div>
             {/* Guests on the meeting, stacked under its subject and lined up
@@ -1160,7 +1118,7 @@ export function MeetingsTable({
                   companyName={extra.company_name}
                   className="w-6 h-6 text-[9px]"
                 />
-                <span className="text-xs text-gray-500 leading-snug truncate" title={`${extra.first_name} ${extra.last_name}`}>
+                <span className="text-xs font-normal text-gray-500 leading-snug truncate" title={`${extra.first_name} ${extra.last_name}`}>
                   {extra.first_name} {extra.last_name}
                 </span>
               </div>
@@ -1169,13 +1127,13 @@ export function MeetingsTable({
           case 'title': return <td key="title" className="px-3 py-2 text-gray-600 leading-snug align-top">
             {/* With guests below, each title line takes the height of the
                 matching name line's avatar so the two columns stay in step. */}
-            <span className={`block text-xs leading-snug break-words whitespace-normal ${
+            <span className={`block text-xs font-bold leading-snug break-words whitespace-normal ${
               (m.additional_attendee_records?.length ?? 0) > 0
                 ? `flex items-center ${showAttendeeAvatar ? 'min-h-[28px]' : 'min-h-[20px]'}`
                 : ''
             }`}>{m.title || <span className="text-gray-300">—</span>}</span>
             {(m.additional_attendee_records ?? []).map(extra => (
-              <span key={extra.id} className="flex items-center h-6 mt-1.5 text-xs text-gray-400 leading-snug truncate" title={extra.title ?? ''}>
+              <span key={extra.id} className="flex items-center h-6 mt-1.5 text-xs font-normal text-gray-400 leading-snug truncate" title={extra.title ?? ''}>
                 {extra.title || '—'}
               </span>
             ))}
@@ -1184,7 +1142,7 @@ export function MeetingsTable({
           case 'company': return !hideCompany ? <td key="company" className="px-3 py-2 text-gray-600 leading-snug">
             {m.company_name && m.company_id ? (
               <div className="flex items-center gap-1 group">
-                {companyNameNode(m, 'text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug')}
+                {companyNameNode(m, 'text-xs font-bold text-brand-secondary hover:underline break-words whitespace-normal leading-snug')}
               </div>
             ) : (<span className="text-gray-300">—</span>)}
           </td> : null;
