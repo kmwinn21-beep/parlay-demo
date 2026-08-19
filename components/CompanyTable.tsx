@@ -615,11 +615,25 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
 
   const activeFilterCount = (filterSFOwner ? 1 : 0) + (filterType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterConference ? 1 : 0) + (filterICP ? 1 : 0) + (wseFilterActive ? 1 : 0) + (filterUpdatedWithin ? 1 : 0) + (filterHierarchy ? 1 : 0);
 
+  // With a filter on, the others recede so the active one reads at a glance.
+  const anyQuickFilter = quickFilterIcp || quickFilterTypes.size > 0 || quickFilterMyAccounts;
+  const quickDim = (active: boolean) => (anyQuickFilter && !active ? ' opacity-40 grayscale' : '');
+
   // Quick filters + the Filters toggle. Mobile keeps them on one
   // horizontally scrolling line; desktop lays them out inline.
   const filterButtons = (
     <>
       {/* Quick-filter badges — common one-click filters, multi-select */}
+      {/* Mine first, in the Worth Engaging palette */}
+      {currentUser && (
+        <button
+          type="button"
+          onClick={() => setQuickFilterMyAccounts(v => !v)}
+          className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors border-brand-secondary bg-brand-secondary/10 text-brand-secondary${quickDim(quickFilterMyAccounts)}`}
+        >
+          My Accounts
+        </button>
+      )}
       <button
         type="button"
         onClick={() => setQuickFilterIcp(v => !v)}
@@ -627,7 +641,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
           quickFilterIcp
             ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
             : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
-        }`}
+        }${quickDim(quickFilterIcp)}`}
       >
         ICP
       </button>
@@ -640,24 +654,11 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
             quickFilterTypes.has(type)
               ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
               : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
-          }`}
+          }${quickDim(quickFilterTypes.has(type))}`}
         >
           {type === 'Customer' ? 'Customers' : type === 'Competitor' ? 'Competitors' : type}
         </button>
       ))}
-      {currentUser && (
-        <button
-          type="button"
-          onClick={() => setQuickFilterMyAccounts(v => !v)}
-          className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-            quickFilterMyAccounts
-              ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
-              : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
-          }`}
-        >
-          My Accounts
-        </button>
-      )}
       <button
         type="button"
         onClick={() => setFiltersOpen(o => !o)}

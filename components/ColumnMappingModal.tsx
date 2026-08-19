@@ -24,12 +24,38 @@ export function ColumnMappingModal({
   onCancel,
 }: Props) {
   const [mapping, setMapping] = useState<ColumnMapping>({ ...suggestions });
+  const [companyOnly, setCompanyOnly] = useState(false);
   const unitTypeLabel = useUnitTypeLabel();
 
   const hasName = !!(mapping.first_name || mapping.last_name || mapping.full_name);
+  const hasCompany = !!mapping.company;
+  // Company-only lists have no people to map, so Company carries the gate.
+  const canConfirm = companyOnly ? hasCompany : hasName;
+  const NAME_KEYS: SystemFieldKey[] = ['first_name', 'last_name', 'full_name'];
 
   const setField = (key: SystemFieldKey, value: string) => {
-    setMapping(prev => ({ ...prev, [key]: value || null }));
+    setMapping(prev => {
+      const next = { ...prev, [key]: value || null };
+      // Point the name fields at the company column too, so the mapping states
+      // plainly that every row stands in for a company.
+      if (companyOnly && key === 'company') {
+        next.first_name = value || null;
+        next.last_name = value || null;
+        next.full_name = null;
+      }
+      return next;
+    });
+  };
+
+  const toggleCompanyOnly = (on: boolean) => {
+    setCompanyOnly(on);
+    setMapping(prev => ({
+      ...prev,
+      company_only: on,
+      ...(on
+        ? { first_name: prev.company, last_name: prev.company, full_name: null }
+        : {}),
+    }));
   };
 
   const getSample = (col: string | null): string => {
@@ -60,9 +86,27 @@ export function ColumnMappingModal({
 
         {/* Body */}
         <div className="overflow-y-auto flex-1 px-6 py-4">
-          <p className="text-sm text-gray-500 mb-5">
+          <p className="text-sm text-gray-500 mb-4">
             Match each system field to a column in your file. Column names were auto-detected — adjust any that are wrong or leave optional fields as <em>(not mapped)</em>.
           </p>
+          {/* Some lists name only the companies attending. Ticking this maps
+              the name fields to the company column and stands in one
+              placeholder attendee per company. */}
+          <label className="flex items-start gap-2.5 mb-5 p-3 rounded-lg border border-gray-200 bg-gray-50 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={companyOnly}
+              onChange={e => toggleCompanyOnly(e.target.checked)}
+              className="accent-brand-secondary mt-0.5 flex-shrink-0"
+            />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-gray-800">Company names only</span>
+              <span className="block text-xs text-gray-500 mt-0.5">
+                This file lists companies, not people. Each company is added to the conference with a
+                placeholder attendee you can remove once you have real names.
+              </span>
+            </span>
+          </label>
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr>
@@ -78,20 +122,25 @@ export function ColumnMappingModal({
                 const description = key === 'wse' ? `Numeric count of ${unitTypeLabel} for this company` : meta.description;
                 const selected = mapping[key];
                 const sample = getSample(selected);
+                const locked = companyOnly && NAME_KEYS.includes(key);
+                const isRequired = companyOnly ? key === 'company' : meta.required;
                 return (
                   <tr key={key} className={i % 2 === 0 ? 'bg-gray-50/60' : ''}>
                     <td className="py-2 pr-4 align-top">
-                      <div className="font-medium text-gray-800 leading-tight">
+                      <div className={`font-medium leading-tight ${locked ? 'text-gray-400' : 'text-gray-800'}`}>
                         {label}
-                        {meta.required && <span className="text-red-400 ml-0.5 text-xs">*</span>}
+                        {isRequired && <span className="text-red-400 ml-0.5 text-xs">*</span>}
                       </div>
-                      <div className="text-xs text-gray-400 mt-0.5 leading-snug">{description}</div>
+                      <div className="text-xs text-gray-400 mt-0.5 leading-snug">
+                        {locked ? 'Filled in from the company column' : description}
+                      </div>
                     </td>
                     <td className="py-2 pr-4 sm:pr-4 align-top">
                       <select
                         value={selected ?? ''}
+                        disabled={locked}
                         onChange={e => setField(key, e.target.value)}
-                        className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-secondary bg-white"
+                        className={`w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-secondary ${locked ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white'}`}
                       >
                         <option value="">(not mapped)</option>
                         {headers.map(h => (
@@ -119,9 +168,11 @@ export function ColumnMappingModal({
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-100 flex-shrink-0">
-          {!hasName && (
+          {!canConfirm && (
             <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
-              Map at least <strong>First Name</strong> or <strong>Full Name</strong> to continue.
+              {companyOnly
+                ? <>Map <strong>Company</strong> to continue.</>
+                : <>Map at least <strong>First Name</strong> or <strong>Full Name</strong> to continue.</>}
             </p>
           )}
           <div className="flex items-center justify-end gap-3">
@@ -130,8 +181,8 @@ export function ColumnMappingModal({
             </button>
             <button
               type="button"
-              onClick={() => onConfirm(mapping)}
-              disabled={!hasName}
+              onClick={() => onConfirm({ ...mapping, company_only: companyOnly })}
+              disabled={!canConfirm}
               className="btn-primary text-sm"
             >
               Confirm &amp; Upload

@@ -2115,4 +2115,8 @@ export const migrations: string[] = [
   // appended here. Inserting one mid-array leaves the count unchanged for
   // anything already stamped, and the statement never runs.
   `ALTER TABLE attendees ADD COLUMN photo_url TEXT`,
+  // Marks the stand-in attendee a company-only upload creates so the company
+  // shows as present at the conference. Cleared by deleting the row once a
+  // real attendee for that company arrives.
+  `ALTER TABLE attendees ADD COLUMN is_placeholder INTEGER DEFAULT 0`,
 ];

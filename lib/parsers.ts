@@ -77,7 +77,16 @@ function parseRowsWithMapping(rows: Record<string, unknown>[], mapping: ColumnMa
     let firstName = '';
     let lastName = '';
 
-    if (mapping.first_name || mapping.last_name) {
+    if (mapping.company_only) {
+      // No people in this file. The company name carries the placeholder's
+      // last name so each company gets its own row — the upload dedupes
+      // attendees on name alone, and a shared "-" would collapse them all
+      // into one.
+      const company = mapping.company ? String(row[mapping.company] || '').trim() : '';
+      if (!company) continue;
+      firstName = '-';
+      lastName = company;
+    } else if (mapping.first_name || mapping.last_name) {
       firstName = mapping.first_name ? String(row[mapping.first_name] || '').trim() : '';
       lastName  = mapping.last_name  ? String(row[mapping.last_name]  || '').trim() : '';
     } else if (mapping.full_name) {
@@ -92,6 +101,7 @@ function parseRowsWithMapping(rows: Record<string, unknown>[], mapping: ColumnMa
     if (!firstName && !lastName) continue;
 
     const attendee: ParsedAttendee = { first_name: firstName, last_name: lastName };
+    if (mapping.company_only) attendee.is_placeholder = true;
 
     if (mapping.title         && row[mapping.title])         attendee.title         = String(row[mapping.title]).trim();
     if (mapping.company       && row[mapping.company])       attendee.company        = String(row[mapping.company]).trim();

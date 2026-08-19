@@ -1184,6 +1184,8 @@ export interface ParsedAttendee {
   function?: string;
   product?: string;
   consent?: string;
+  /** Stand-in row from a company-only upload — see ColumnMapping.company_only. */
+  is_placeholder?: boolean;
 }
 
 /**
