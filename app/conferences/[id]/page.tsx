@@ -2660,10 +2660,8 @@ export default function ConferenceDetailPage() {
                 {metaPillItems}
               </div>
 
-              {/* Banners */}
-              {conference.notes && (
-                <p className="text-sm text-gray-600 mt-3 max-w-2xl">{conference.notes}</p>
-              )}
+              {/* Banners. The notes themselves live behind the header kebab's
+                  Notes entry, so they no longer take a line here. */}
               {!!conference.is_historical && (
                 <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
                   This conference has a Calendar Recommendation Score.{' '}
