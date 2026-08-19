@@ -12,7 +12,8 @@ import { AgendaUploadModal } from './AgendaUploadModal';
 import { TouchpointQuickModal } from './DashboardActionCard';
 import { useClosedDealDraft } from '@/lib/ClosedDealDraftContext';
 import { GlobalSearchModal } from './GlobalSearch';
-import { HelpChatDrawer } from './HelpChatDrawer';
+import { useChatPanel } from './ChatPanelContext';
+import { MessagingMenu } from './MessagingMenu';
 import { NotificationBell } from './NotificationBell';
 import { useFloatingNavHidden } from './FloatingNavHiddenContext';
 import { OutstandingFollowUps } from './OutstandingFollowUps';
@@ -88,8 +89,9 @@ export function Header() {
   const pathname = usePathname();
   const { user } = useUser();
   const appName = useAppName();
-  const { navHidden, setNavHidden, setHelpChatOpen } = useFloatingNavHidden();
+  const { navHidden, setNavHidden } = useFloatingNavHidden();
   const { planCapabilities } = useCapabilities();
+  const { panelOpen, setPanelOpen, totalUnread } = useChatPanel();
   const title = getPageTitle(pathname);
   const [showConferences, setShowConferences] = useState(false);
   // Initialise directly from cache — if the fetch already completed the
@@ -106,8 +108,7 @@ export function Header() {
   const [showAddNew, setShowAddNew] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
-  const [showHelpChat, setShowHelpChat] = useState(false);
-  const [helpUnread, setHelpUnread] = useState(false);
+  const messagingRef = useRef<HTMLDivElement>(null);
   const [uploadJob, setUploadJob] = useState<{ jobId: string; total: number; processed: number } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const addNewRef = useRef<HTMLDivElement>(null);
@@ -496,23 +497,35 @@ export function Header() {
           </Link>
         )}
 
-        {/* Help / Parlay AI — desktop only; mobile uses FloatingNav */}
-        {planCapabilities?.core?.help_chat && (
-        <button
-          type="button"
-          aria-label="Ask Parlay AI"
-          onClick={() => { setShowHelpChat(true); setHelpUnread(false); setHelpChatOpen(true); }}
-          className="relative hidden lg:flex p-2 rounded-lg hover:bg-gray-100 transition-colors"
-          title="Ask Parlay AI"
-        >
-          <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
-          {helpUnread && (
-            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-blue-500 border border-white" />
+        {/* Messaging — desktop only; mobile opens the same menu as a sheet from
+            the FloatingNav. The menu hangs off this icon, and picking a thread
+            hands off to the chat drawer. */}
+        <div ref={messagingRef} className="relative hidden lg:block">
+          <button
+            type="button"
+            aria-label="Messaging"
+            onClick={() => setPanelOpen(!panelOpen)}
+            className={`relative flex p-2 rounded-lg transition-colors ${panelOpen ? 'bg-gray-100' : 'hover:bg-gray-100'}`}
+            title="Messaging"
+          >
+            <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            {totalUnread > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 border border-white text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                {totalUnread > 9 ? '9+' : totalUnread}
+              </span>
+            )}
+          </button>
+          {panelOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setPanelOpen(false)} />
+              <div className="absolute right-0 top-full mt-2 w-[380px] max-h-[460px] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden z-50">
+                <MessagingMenu onClose={() => setPanelOpen(false)} />
+              </div>
+            </>
           )}
-        </button>
-        )}
+        </div>
 
         {/* User menu — hidden on mobile */}
         {user && (
@@ -554,12 +567,6 @@ export function Header() {
       {showAgendaModal && <AgendaUploadModal onClose={() => setShowAgendaModal(false)} />}
       {showTouchpointsModal && <TouchpointQuickModal onClose={() => setShowTouchpointsModal(false)} />}
       {showSearch && <GlobalSearchModal onClose={() => setShowSearch(false)} />}
-      {showHelpChat && (
-        <HelpChatDrawer
-          onClose={() => { setShowHelpChat(false); setHelpChatOpen(false); }}
-          onUnread={() => { if (!showHelpChat) setHelpUnread(true); }}
-        />
-      )}
     </header>
   );
 }

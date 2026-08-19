@@ -7,8 +7,6 @@ interface FloatingNavHiddenCtx {
   setNavHidden: (v: boolean) => void;
   showUnhideHint: boolean;
   dismissHint: () => void;
-  helpChatOpen: boolean;
-  setHelpChatOpen: (v: boolean) => void;
 }
 
 const Ctx = createContext<FloatingNavHiddenCtx>({
@@ -16,8 +14,6 @@ const Ctx = createContext<FloatingNavHiddenCtx>({
   setNavHidden: () => {},
   showUnhideHint: false,
   dismissHint: () => {},
-  helpChatOpen: false,
-  setHelpChatOpen: () => {},
 });
 
 const KEY = 'floatingNavHidden';
@@ -119,7 +115,6 @@ export function FloatingNavHiddenProvider({ children }: { children: React.ReactN
   const [navHidden, setNavHiddenState] = useState(false);
   const [showUnhideHint, setShowUnhideHint] = useState(false);
   const [isEmbed, setIsEmbed] = useState(false);
-  const [helpChatOpen, setHelpChatOpen] = useState(false);
 
   useEffect(() => {
     const embed = new URLSearchParams(window.location.search).get('embed') === 'true';
@@ -145,7 +140,7 @@ export function FloatingNavHiddenProvider({ children }: { children: React.ReactN
   const dismissHint = useCallback(() => setShowUnhideHint(false), []);
 
   return (
-    <Ctx.Provider value={{ navHidden, setNavHidden, showUnhideHint, dismissHint, helpChatOpen, setHelpChatOpen }}>
+    <Ctx.Provider value={{ navHidden, setNavHidden, showUnhideHint, dismissHint }}>
       {children}
       {showUnhideHint && <UnhideNavOverlay onDismiss={dismissHint} />}
     </Ctx.Provider>
