@@ -924,14 +924,24 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
   );
 
   const [bulkCompletingKey, setBulkCompletingKey] = useState<string | null>(null);
+  // Attendee sections start collapsed, matching the follow-up tables.
+  const [expandedFuGroups, setExpandedFuGroups] = useState<Set<string>>(new Set());
 
   // Same grouping the follow-up tables use: one card per attendee, their
   // follow-ups stacked inside it.
   const followUpGroups = useMemo(() => {
-    const map = new Map<string, { key: string; attendeeName: string | null; rows: DebriefFollowUp[] }>();
+    const titles = new Map<number, string | null>((selectedCompany?.attendees ?? []).map(a => [a.id, a.title]));
+    const map = new Map<string, { key: string; attendeeName: string | null; title: string | null; rows: DebriefFollowUp[] }>();
     for (const fu of companyFollowUps) {
       const key = fu.attendeeId != null ? `a${fu.attendeeId}` : `n${fu.attendeeName ?? 'unassigned'}`;
-      if (!map.has(key)) map.set(key, { key, attendeeName: fu.attendeeName, rows: [] });
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          attendeeName: fu.attendeeName,
+          title: fu.attendeeId != null ? titles.get(fu.attendeeId) ?? null : null,
+          rows: [],
+        });
+      }
       map.get(key)!.rows.push(fu);
     }
     // Open work first, within a group and across them.
@@ -945,7 +955,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
       if ((openA > 0) !== (openB > 0)) return openA > 0 ? -1 : 1;
       return 0;
     });
-  }, [companyFollowUps]);
+  }, [companyFollowUps, selectedCompany]);
 
   const toggleFollowUp = useCallback(async (fu: DebriefFollowUp, companyId: number) => {
     setTogglingId(fu.id);
@@ -1533,15 +1543,44 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                       const bulkKey = openIds.join(',');
                       const isCompleting = bulkCompletingKey === bulkKey;
                       const single = rows.length === 1 ? rows[0] : null;
+                      const groupExpanded = expandedFuGroups.has(group.key);
                       return (
                         <div key={group.key} className={`p-3 ${allDone ? 'bg-green-50' : 'bg-white'}`}>
-                          {/* Attendee heads the group; Done covers everything under it */}
-                          <div className="flex items-start justify-between gap-2">
+                          {/* Collapsed bar: who they are, chevron on the right */}
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setExpandedFuGroups(prev => {
+                              const n = new Set(prev);
+                              n.has(group.key) ? n.delete(group.key) : n.add(group.key);
+                              return n;
+                            })}
+                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedFuGroups(prev => {
+                              const n = new Set(prev);
+                              n.has(group.key) ? n.delete(group.key) : n.add(group.key);
+                              return n;
+                            }); } }}
+                            aria-expanded={groupExpanded}
+                            className="w-full flex items-center gap-2 cursor-pointer"
+                          >
                             {group.attendeeName ? (
-                              <span className="inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                              <span className="inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 flex-shrink-0">
                                 {group.attendeeName}
                               </span>
-                            ) : <span className="text-xs text-gray-400">Unassigned</span>}
+                            ) : <span className="text-xs text-gray-400 flex-shrink-0">Unassigned</span>}
+                            {group.title && <span className="text-xs text-gray-500 truncate min-w-0">{group.title}</span>}
+                            <svg
+                              className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 ml-auto transition-transform ${groupExpanded ? '' : '-rotate-90'}`}
+                              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
+
+                          {groupExpanded && (
+                          <>
+                          {/* Done covers everything under the bar */}
+                          <div className="flex items-start justify-end gap-2 mt-2">
                             {single ? (
                               <button
                                 type="button"
@@ -1648,6 +1687,8 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                               );
                             })}
                           </div>
+                          </>
+                          )}
                         </div>
                       );
                     })}
