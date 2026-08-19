@@ -1569,18 +1569,10 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                               </span>
                             ) : <span className="text-xs text-gray-400 flex-shrink-0">Unassigned</span>}
                             {group.title && <span className="text-xs text-gray-500 truncate min-w-0">{group.title}</span>}
-                            <svg
-                              className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 ml-auto transition-transform ${groupExpanded ? '' : '-rotate-90'}`}
-                              fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                          </div>
-
-                          {groupExpanded && (
-                          <>
-                          {/* Done covers everything under the bar */}
-                          <div className="flex items-start justify-end gap-2 mt-2">
+                            {/* Done rides the bar, but only once it's open */}
+                            <span className="ml-auto flex items-center gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                              {groupExpanded && (
+                                <>
                             {single ? (
                               <button
                                 type="button"
@@ -1621,8 +1613,19 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                                 ) : isCompleting ? 'Saving…' : 'Done'}
                               </button>
                             )}
+                                </>
+                              )}
+                            </span>
+                            <svg
+                              className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${groupExpanded ? '' : '-rotate-90'}`}
+                              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
                           </div>
 
+                          {groupExpanded && (
+                          <>
                           {/* One entry per follow-up: hover trash, its pill, and
                               the detail behind a chevron. Source stays visible. */}
                           <div className="mt-1.5">
