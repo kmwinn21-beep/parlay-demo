@@ -2119,4 +2119,9 @@ export const migrations: string[] = [
   // shows as present at the conference. Cleared by deleting the row once a
   // real attendee for that company arrives.
   `ALTER TABLE attendees ADD COLUMN is_placeholder INTEGER DEFAULT 0`,
+  // Additional attendees picked from the conference roster, as a comma-separated
+  // list of attendee ids. meetings.additional_attendees stays the free-text list
+  // for names typed in that match no record; these ids are what let the meeting
+  // surface on those attendees' own profiles with their photo and title.
+  `ALTER TABLE meetings ADD COLUMN additional_attendee_ids TEXT`,
 ];

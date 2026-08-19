@@ -11,7 +11,7 @@ import { type Meeting } from '@/components/MeetingsTable';
 import { useUser } from '@/components/UserContext';
 import { MEETING_TIME_OPTIONS, formatMeetingTime, timeToMinutes, isBoothHours } from '@/lib/meetingTime';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
-import { AdditionalAttendeesSelect, type AdditionalAttendeeCandidate, type AdditionalAttendeeSelection } from '@/components/AdditionalAttendeesSelect';
+import { AdditionalAttendeesModal, AdditionalAttendeesButton } from '@/components/AdditionalAttendeesModal';
 import { SendCalendarInvitePrompt } from '@/components/SendCalendarInvitePrompt';
 import { ScrollingRepPills } from '@/components/OverlappingRepPills';
 import { buildGoogleCalendarUrl, buildOutlookCalendarUrl } from '@/lib/calendarInvite';
@@ -275,6 +275,11 @@ export function NewMeetingModal({
   // Attendees rather than External (which is what any name here would become
   // if it went into the additional_attendees free-text list instead).
   const [additionalInternalUserIds, setAdditionalInternalUserIds] = useState<number[]>([]);
+  // Conference attendees picked from the same field, kept by id: the meeting
+  // then carries their photo and title, and shows on their own profile as a
+  // guest rather than as a meeting of their own.
+  const [additionalAttendeeIds, setAdditionalAttendeeIds] = useState<number[]>([]);
+  const [showAttendeePicker, setShowAttendeePicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [companyTypeLookup, setCompanyTypeLookup] = useState<Map<number, string | null>>(new Map());
   const [showFullCalendar, setShowFullCalendar] = useState(false);
@@ -402,64 +407,6 @@ export function NewMeetingModal({
       .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`));
   }, [attendees, selectedCompanyId]);
 
-  // Search candidates for "Additional Attendees" — every conference attendee
-  // (searchable by name + company) plus every internal team member from the
-  // 'user' config category (Admin → Types → Users), minus whoever's already
-  // picked as the meeting's primary contact or already selected as a Rep
-  // above (picking a 'user' candidate here routes into scheduled_by, same as
-  // the Rep field, so it would just be a confusing duplicate).
-  const additionalAttendeeCandidates = useMemo<AdditionalAttendeeCandidate[]>(() => {
-    const primaryId = selectedAttendeeId ? Number(selectedAttendeeId) : null;
-    const attendeeCandidates: AdditionalAttendeeCandidate[] = attendees
-      .filter(a => a.id !== primaryId)
-      .map(a => ({
-        key: `a-${a.id}`,
-        name: `${a.first_name} ${a.last_name}`.trim(),
-        sub: a.company_name || '',
-        source: 'attendee',
-        id: a.id,
-      }));
-    const userCandidates: AdditionalAttendeeCandidate[] = userOptions
-      .filter(u => !selectedRepIds.includes(u.id) && !additionalInternalUserIds.includes(u.id))
-      .map(u => ({
-        key: `u-${u.id}`,
-        name: u.value,
-        sub: 'Internal team',
-        source: 'user',
-        id: u.id,
-      }));
-    return [...attendeeCandidates, ...userCandidates];
-  }, [attendees, userOptions, selectedAttendeeId, selectedRepIds, additionalInternalUserIds]);
-
-  // Chips shown in the Additional Attendees field — external names plus the
-  // display names of internal users picked through this field specifically
-  // (not the Rep field's own selection, which has its own chip row above).
-  const additionalAttendeeSelections = useMemo<AdditionalAttendeeSelection[]>(() => {
-    const internal = additionalInternalUserIds
-      .map(id => userOptions.find(u => u.id === id))
-      .filter((u): u is UserOption => !!u)
-      .map(u => ({ key: `u-${u.id}`, name: u.value }));
-    const external = additionalAttendees.map(name => ({ key: `ext-${name}`, name }));
-    return [...internal, ...external];
-  }, [additionalInternalUserIds, additionalAttendees, userOptions]);
-
-  const handleAddAdditionalAttendee = (candidate: AdditionalAttendeeCandidate) => {
-    if (candidate.source === 'user') {
-      setAdditionalInternalUserIds(prev => prev.includes(candidate.id) ? prev : [...prev, candidate.id]);
-    } else {
-      setAdditionalAttendees(prev => prev.includes(candidate.name) ? prev : [...prev, candidate.name]);
-    }
-  };
-
-  const handleRemoveAdditionalAttendee = (selection: AdditionalAttendeeSelection) => {
-    if (selection.key.startsWith('u-')) {
-      const id = Number(selection.key.slice(2));
-      setAdditionalInternalUserIds(prev => prev.filter(x => x !== id));
-    } else {
-      setAdditionalAttendees(prev => prev.filter(n => n !== selection.name));
-    }
-  };
-
   // Conference date chips
   const selectedConference = conferences.find(c => c.id === Number(selectedConferenceId));
   const conferenceDates: string[] = useMemo(() => {
@@ -531,6 +478,8 @@ export function NewMeetingModal({
     setLocation('');
     setAdditionalAttendees([]);
     setAdditionalInternalUserIds([]);
+    setAdditionalAttendeeIds([]);
+    setShowAttendeePicker(false);
     setShowFullCalendar(false);
     setConferenceMeetings([]);
     setCollapsedDays(new Set());
@@ -561,6 +510,7 @@ export function NewMeetingModal({
           location: location || null,
           scheduled_by: scheduledByIds.length > 0 ? scheduledByIds.join(',') : null,
           additional_attendees: additionalAttendees.length > 0 ? additionalAttendees.join(', ') : null,
+          additional_attendee_ids: additionalAttendeeIds.length > 0 ? additionalAttendeeIds.join(',') : null,
         }),
       });
       if (!res.ok) {
@@ -583,6 +533,7 @@ export function NewMeetingModal({
           location: location || null,
           scheduled_by: scheduledByIds.length > 0 ? scheduledByIds.join(',') : null,
           additional_attendees: additionalAttendees.length > 0 ? additionalAttendees.join(', ') : null,
+          additional_attendee_ids: additionalAttendeeIds.length > 0 ? additionalAttendeeIds.join(',') : null,
           outcome: created.outcome || 'Scheduled',
           created_at: created.created_at || new Date().toISOString(),
           first_name: contact?.first_name || '',
@@ -873,12 +824,9 @@ export function NewMeetingModal({
               </div>
               <div>
                 <label className={labelClass}>Additional Attendees</label>
-                <AdditionalAttendeesSelect
-                  candidates={additionalAttendeeCandidates}
-                  selected={additionalAttendeeSelections}
-                  onAdd={handleAddAdditionalAttendee}
-                  onRemove={handleRemoveAdditionalAttendee}
-                  inputClassName={inputClass}
+                <AdditionalAttendeesButton
+                  count={additionalAttendeeIds.length + additionalInternalUserIds.length + additionalAttendees.length}
+                  onClick={() => setShowAttendeePicker(true)}
                 />
               </div>
             </div>
@@ -935,6 +883,22 @@ export function NewMeetingModal({
           </div>
         )}
       </div>
+
+      {showAttendeePicker && (
+        <AdditionalAttendeesModal
+          conferenceId={selectedConferenceId ? Number(selectedConferenceId) : null}
+          primaryAttendeeId={selectedAttendeeId ? Number(selectedAttendeeId) : null}
+          primaryCompanyId={selectedCompanyId ? Number(selectedCompanyId) : null}
+          userOptions={userOptions.filter(u => !selectedRepIds.includes(u.id))}
+          attendeeIds={additionalAttendeeIds}
+          onAttendeeIdsChange={setAdditionalAttendeeIds}
+          internalIds={additionalInternalUserIds}
+          onInternalIdsChange={setAdditionalInternalUserIds}
+          freeText={additionalAttendees.join(', ')}
+          onFreeTextChange={v => setAdditionalAttendees(v.split(',').map(n => n.trim()).filter(Boolean))}
+          onClose={() => setShowAttendeePicker(false)}
+        />
+      )}
     </div>,
     document.body
   );

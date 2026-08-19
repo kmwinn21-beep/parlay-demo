@@ -12,7 +12,7 @@ import { useConfigColors } from '@/lib/useConfigColors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { useUser } from '@/components/UserContext';
 import { OverlappingRepPills } from '@/components/OverlappingRepPills';
-import { AdditionalAttendeesSelect, type AdditionalAttendeeCandidate, type AdditionalAttendeeSelection } from '@/components/AdditionalAttendeesSelect';
+import { AdditionalAttendeesModal, AdditionalAttendeesButton } from '@/components/AdditionalAttendeesModal';
 import {
   type UserOption,
   parseRepIds,
@@ -24,6 +24,7 @@ import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConf
 import { CustomColumnCell } from './CustomColumnCell';
 import { ScrollRow } from '@/components/ScrollRow';
 import { useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
+import type { AdditionalAttendeeRecord } from '@/lib/additionalAttendees';
 
 export interface Meeting {
   id: number;
@@ -34,6 +35,12 @@ export interface Meeting {
   location: string | null;
   scheduled_by: string | null;
   additional_attendees: string | null;
+  /** CSV of attendee ids picked off the conference roster. */
+  additional_attendee_ids?: string | null;
+  additional_attendee_records?: AdditionalAttendeeRecord[];
+  /** Set when the list was fetched for an attendee who is a guest on this
+   *  meeting rather than its subject — the row gets an AA badge. */
+  as_additional_attendee?: boolean;
   outcome: string | null;
   meeting_type: string | null;
   created_at: string;
@@ -46,6 +53,18 @@ export interface Meeting {
   company_wse: number | null;
   conference_name: string;
   has_notes?: boolean;
+}
+
+/** Circular marker for a row the viewer only attends as a guest. */
+function AdditionalAttendeeBadge() {
+  return (
+    <span
+      title="Additional Attendee"
+      className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30 text-[9px] font-bold flex-shrink-0 cursor-help"
+    >
+      AA
+    </span>
+  );
 }
 
 type SortKey = 'name' | 'title' | 'scheduled_by' | 'company' | 'datetime' | 'conference' | 'meeting_type' | 'outcome';
@@ -132,7 +151,11 @@ function MeetingDetailPills({ meeting, avgCostPerUnit, showConference = false }:
   /** For lists that span conferences, or sit outside a conference page. */
   showConference?: boolean;
 }) {
-  const extras = (meeting.additional_attendees || '').split(',').map(n => n.trim()).filter(Boolean);
+  // Roster picks and typed-in names read the same on the pill.
+  const extras = [
+    ...(meeting.additional_attendee_records ?? []).map(a => `${a.first_name} ${a.last_name}`.trim()),
+    ...(meeting.additional_attendees || '').split(',').map(n => n.trim()).filter(Boolean),
+  ];
   const value = meeting.company_wse != null && avgCostPerUnit > 0
     ? abbreviateValue(Math.round(meeting.company_wse * avgCostPerUnit))
     : null;
@@ -279,82 +302,52 @@ function MeetingActionsMenu({ hasNotes, onNotes, onEdit }: {
 }
 
 /**
- * Additional Attendees for the inline editor — the same searchable picker the
- * schedule modal uses. Internal picks are routed into scheduled_by so the
- * notetaker treats them as Internal Attendees; everyone else stays as free
- * text in additional_attendees.
+ * Additional Attendees for the inline editor — a button that opens the picker
+ * modal, since a dropdown wedged into a table row left no room to navigate.
+ * Internal picks are routed into scheduled_by so the notetaker treats them as
+ * Internal Attendees. Someone picked off the conference roster is kept by id,
+ * which is what carries their photo and title onto the row and puts the meeting
+ * on their own profile; a name that matches no record stays as free text in
+ * additional_attendees.
  */
 function EditAdditionalAttendees({
-  conferenceId, userOptions, freeText, onFreeTextChange, internalIds, onInternalIdsChange, inputClassName,
+  meeting, userOptions, freeText, onFreeTextChange, internalIds, onInternalIdsChange,
+  attendeeIds, onAttendeeIdsChange,
 }: {
-  conferenceId: number | null | undefined;
+  meeting: Meeting;
   userOptions: UserOption[];
   freeText: string;
   onFreeTextChange: (v: string) => void;
   internalIds: number[];
   onInternalIdsChange: (ids: number[]) => void;
-  inputClassName?: string;
+  attendeeIds: number[];
+  onAttendeeIdsChange: (ids: number[]) => void;
 }) {
-  const [attendees, setAttendees] = useState<Array<{ id: number; first_name: string; last_name: string; company_name?: string | null }>>([]);
-
-  useEffect(() => {
-    if (!conferenceId) { setAttendees([]); return; }
-    let cancelled = false;
-    fetch(`/api/conferences/${conferenceId}`)
-      .then(r => (r.ok ? r.json() : { attendees: [] }))
-      .then(d => { if (!cancelled) setAttendees(d.attendees ?? []); })
-      .catch(() => { if (!cancelled) setAttendees([]); });
-    return () => { cancelled = true; };
-  }, [conferenceId]);
-
-  const externalNames = freeText.split(',').map(n => n.trim()).filter(Boolean);
-
-  const candidates: AdditionalAttendeeCandidate[] = [
-    ...attendees.map(a => ({
-      key: `attendee-${a.id}`,
-      name: `${a.first_name} ${a.last_name}`.trim(),
-      sub: a.company_name ?? '',
-      source: 'attendee' as const,
-      id: a.id,
-    })),
-    ...userOptions.map(u => ({
-      key: `user-${u.id}`,
-      name: u.value,
-      sub: 'Team member',
-      source: 'user' as const,
-      id: u.id,
-    })),
-  ];
-
-  const selected: AdditionalAttendeeSelection[] = [
-    ...internalIds.map(id => ({
-      key: `user-${id}`,
-      name: userOptions.find(u => u.id === id)?.value ?? `User ${id}`,
-    })),
-    ...externalNames.map(n => ({ key: `name-${n}`, name: n })),
-  ];
+  const [open, setOpen] = useState(false);
+  const freeTextCount = freeText.split(',').map(n => n.trim()).filter(Boolean).length;
 
   return (
-    <AdditionalAttendeesSelect
-      candidates={candidates}
-      selected={selected}
-      inputClassName={inputClassName}
-      onAdd={c => {
-        if (c.source === 'user') {
-          if (!internalIds.includes(c.id)) onInternalIdsChange([...internalIds, c.id]);
-        } else if (!externalNames.includes(c.name)) {
-          onFreeTextChange([...externalNames, c.name].join(', '));
-        }
-      }}
-      onRemove={sel => {
-        if (sel.key.startsWith('user-')) {
-          const id = Number(sel.key.slice(5));
-          onInternalIdsChange(internalIds.filter(x => x !== id));
-        } else {
-          onFreeTextChange(externalNames.filter(n => n !== sel.name).join(', '));
-        }
-      }}
-    />
+    <>
+      <AdditionalAttendeesButton
+        count={attendeeIds.length + internalIds.length + freeTextCount}
+        onClick={() => setOpen(true)}
+      />
+      {open && (
+        <AdditionalAttendeesModal
+          conferenceId={meeting.conference_id}
+          primaryAttendeeId={meeting.attendee_id}
+          primaryCompanyId={meeting.company_id}
+          userOptions={userOptions}
+          attendeeIds={attendeeIds}
+          onAttendeeIdsChange={onAttendeeIdsChange}
+          internalIds={internalIds}
+          onInternalIdsChange={onInternalIdsChange}
+          freeText={freeText}
+          onFreeTextChange={onFreeTextChange}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
   );
 }
 
@@ -450,6 +443,8 @@ export interface EditFormData {
   location: string;
   scheduled_by: string;
   additional_attendees: string;
+  /** Roster picks, kept by id so the row and their profile can show them. */
+  additional_attendee_ids: string;
   meeting_type: string;
 }
 
@@ -481,6 +476,9 @@ function EditMeetingRow({
   // Internal people added through the attendees picker. They save into
   // scheduled_by with the reps, which is where the notetaker reads them from.
   const [additionalInternalIds, setAdditionalInternalIds] = useState<number[]>([]);
+  const [additionalAttendeeIds, setAdditionalAttendeeIds] = useState<number[]>(
+    () => parseRepIds(meeting.additional_attendee_ids)
+  );
 
   const inputClass = 'w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary focus:border-brand-secondary bg-white';
 
@@ -488,6 +486,7 @@ function EditMeetingRow({
     onSave(meeting.id, {
       ...form,
       scheduled_by: Array.from(new Set([...selectedRepIds, ...additionalInternalIds])).join(','),
+      additional_attendee_ids: additionalAttendeeIds.join(','),
     });
   };
 
@@ -533,13 +532,14 @@ function EditMeetingRow({
         <div>
           <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Additional Attendees</label>
           <EditAdditionalAttendees
-            conferenceId={meeting.conference_id}
+            meeting={meeting}
             userOptions={userOptions}
             freeText={form.additional_attendees}
             onFreeTextChange={v => setForm(f => ({ ...f, additional_attendees: v }))}
             internalIds={additionalInternalIds}
             onInternalIdsChange={setAdditionalInternalIds}
-            inputClassName={inputClass}
+            attendeeIds={additionalAttendeeIds}
+            onAttendeeIdsChange={setAdditionalAttendeeIds}
           />
         </div>
       </div>
@@ -605,6 +605,9 @@ function EditMeetingTableRow({
   // Internal people added through the attendees picker. They save into
   // scheduled_by with the reps, which is where the notetaker reads them from.
   const [additionalInternalIds, setAdditionalInternalIds] = useState<number[]>([]);
+  const [additionalAttendeeIds, setAdditionalAttendeeIds] = useState<number[]>(
+    () => parseRepIds(meeting.additional_attendee_ids)
+  );
 
   const inputClass = 'w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary focus:border-brand-secondary bg-white';
 
@@ -612,6 +615,7 @@ function EditMeetingTableRow({
     onSave(meeting.id, {
       ...form,
       scheduled_by: Array.from(new Set([...selectedRepIds, ...additionalInternalIds])).join(','),
+      additional_attendee_ids: additionalAttendeeIds.join(','),
     });
   };
 
@@ -659,13 +663,14 @@ function EditMeetingTableRow({
             <div>
               <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Add&apos;l Attendees</label>
               <EditAdditionalAttendees
-                conferenceId={meeting.conference_id}
+                meeting={meeting}
                 userOptions={userOptions}
                 freeText={form.additional_attendees}
                 onFreeTextChange={v => setForm(f => ({ ...f, additional_attendees: v }))}
                 internalIds={additionalInternalIds}
                 onInternalIdsChange={setAdditionalInternalIds}
-                inputClassName={inputClass}
+                attendeeIds={additionalAttendeeIds}
+                onAttendeeIdsChange={setAdditionalAttendeeIds}
               />
             </div>
           </div>
@@ -950,24 +955,42 @@ export function MeetingsTable({
               )}
               <div className="flex-1 min-w-0">
                 {/* Names open the quick-view drawer rather than the full profile */}
-                <button
-                  type="button"
-                  onClick={() => setQuickView({ type: 'attendee', id: m.attendee_id, name: `${m.first_name} ${m.last_name}` })}
-                  className="text-sm font-semibold text-brand-secondary hover:underline text-left"
-                >
-                  {m.first_name} {m.last_name}
-                </button>
-                {m.title && <p className="text-xs text-gray-500 mt-0.5">{m.title}</p>}
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => setQuickView({ type: 'attendee', id: m.attendee_id, name: `${m.first_name} ${m.last_name}` })}
+                    className="text-xs font-bold text-brand-secondary hover:underline text-left truncate"
+                  >
+                    {m.first_name} {m.last_name}
+                  </button>
+                  {m.as_additional_attendee && <AdditionalAttendeeBadge />}
+                </span>
+                {m.title && <p className="text-xs font-bold text-gray-500 mt-0.5">{m.title}</p>}
+                {(m.additional_attendee_records ?? []).map(extra => (
+                  <div key={extra.id} className="flex items-center gap-1.5 mt-1.5">
+                    <AttendeeInitialsAvatar
+                      name={`${extra.first_name} ${extra.last_name}`}
+                      photoUrl={extra.photo_url}
+                      title={extra.title}
+                      companyName={extra.company_name}
+                      className="w-6 h-6 text-[9px]"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-xs font-normal text-gray-600 truncate">{extra.first_name} {extra.last_name}</p>
+                      {extra.title && <p className="text-xs font-normal text-gray-400 truncate">{extra.title}</p>}
+                    </div>
+                  </div>
+                ))}
                 {!hideCompany && (m.company_name && m.company_id ? (
                   <button
                     type="button"
                     onClick={() => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! })}
-                    className="block text-xs text-brand-secondary hover:underline mt-0.5 text-left"
+                    className="block text-xs font-bold text-brand-secondary hover:underline mt-0.5 text-left"
                   >
                     {m.company_name}
                   </button>
                 ) : m.company_name ? (
-                  <p className="text-xs text-gray-400 mt-0.5">{m.company_name}</p>
+                  <p className="text-xs font-bold text-gray-400 mt-0.5">{m.company_name}</p>
                 ) : null)}
               </div>
               {(onEdit || onNotesClick) && (
@@ -1070,7 +1093,7 @@ export function MeetingsTable({
       {orderedColumns.map(col => {
         if (!isVisible(col.key)) return null;
         switch (col.key) {
-          case 'name': return <td key="name" className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
+          case 'name': return <td key="name" className="px-3 py-2 font-medium text-gray-800 overflow-hidden align-top" style={{ maxWidth: 220 }}>
             <div className="flex items-center gap-1.5 group">
               {showAttendeeAvatar && (
                 <AttendeeInitialsAvatar
@@ -1081,15 +1104,45 @@ export function MeetingsTable({
                   className="w-7 h-7 text-[10px]"
                 />
               )}
-              {attendeeNameNode(m, 'text-brand-secondary hover:underline leading-snug block truncate')}
+              {attendeeNameNode(m, 'text-xs font-bold text-brand-secondary hover:underline leading-snug block truncate')}
+              {m.as_additional_attendee && <AdditionalAttendeeBadge />}
             </div>
+            {/* Guests on the meeting, stacked under its subject and lined up
+                with their titles in the next column. */}
+            {(m.additional_attendee_records ?? []).map(extra => (
+              <div key={extra.id} className="flex items-center gap-1.5 mt-1.5">
+                <AttendeeInitialsAvatar
+                  name={`${extra.first_name} ${extra.last_name}`}
+                  photoUrl={extra.photo_url}
+                  title={extra.title}
+                  companyName={extra.company_name}
+                  className="w-6 h-6 text-[9px]"
+                />
+                <span className="text-xs font-normal text-gray-500 leading-snug truncate" title={`${extra.first_name} ${extra.last_name}`}>
+                  {extra.first_name} {extra.last_name}
+                </span>
+              </div>
+            ))}
           </td>;
-          case 'title': return <td key="title" className="px-3 py-2 text-gray-600 leading-snug"><span className="block text-xs leading-snug break-words whitespace-normal">{m.title || <span className="text-gray-300">—</span>}</span></td>;
+          case 'title': return <td key="title" className="px-3 py-2 text-gray-600 leading-snug align-top">
+            {/* With guests below, each title line takes the height of the
+                matching name line's avatar so the two columns stay in step. */}
+            <span className={`block text-xs font-bold leading-snug break-words whitespace-normal ${
+              (m.additional_attendee_records?.length ?? 0) > 0
+                ? `flex items-center ${showAttendeeAvatar ? 'min-h-[28px]' : 'min-h-[20px]'}`
+                : ''
+            }`}>{m.title || <span className="text-gray-300">—</span>}</span>
+            {(m.additional_attendee_records ?? []).map(extra => (
+              <span key={extra.id} className="flex items-center h-6 mt-1.5 text-xs font-normal text-gray-400 leading-snug truncate" title={extra.title ?? ''}>
+                {extra.title || '—'}
+              </span>
+            ))}
+          </td>;
           case 'rep': return <td key="rep" className="px-3 py-2 leading-snug"><RepPills scheduledBy={m.scheduled_by} userOptions={userOptions} /></td>;
           case 'company': return !hideCompany ? <td key="company" className="px-3 py-2 text-gray-600 leading-snug">
             {m.company_name && m.company_id ? (
               <div className="flex items-center gap-1 group">
-                {companyNameNode(m, 'text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug')}
+                {companyNameNode(m, 'text-xs font-bold text-brand-secondary hover:underline break-words whitespace-normal leading-snug')}
               </div>
             ) : (<span className="text-gray-300">—</span>)}
           </td> : null;

@@ -4,6 +4,7 @@ import { getDb } from '@/lib/getDb';
 import { getConfigIdByEmail, notifyForAttendee } from '@/lib/notifications';
 import { validateConferenceStage } from '@/lib/validate-conference-stage';
 import { trackEvent, trackFeature } from '@/lib/trackEvent';
+import { ADDITIONAL_ATTENDEE_MATCH_SQL, loadAdditionalAttendees, serializeAttendeeIds } from '@/lib/additionalAttendees';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -16,12 +17,21 @@ export async function GET(request: NextRequest) {
     const companyId = searchParams.get('company_id');
     const companyIds = searchParams.get('company_ids'); // comma-separated list
 
+    // Opt-in so only the attendee profile widens its list; every other caller
+    // keeps counting exactly the meetings the attendee is the primary on.
+    const includeAdditional = searchParams.get('include_additional') === '1';
+
     const conditions: string[] = [];
     const args: (string | number)[] = [];
 
     if (attendeeId) {
-      conditions.push('m.attendee_id = ?');
-      args.push(attendeeId);
+      if (includeAdditional) {
+        conditions.push(`(m.attendee_id = ? OR ${ADDITIONAL_ATTENDEE_MATCH_SQL})`);
+        args.push(attendeeId, attendeeId);
+      } else {
+        conditions.push('m.attendee_id = ?');
+        args.push(attendeeId);
+      }
     }
     if (conferenceId) {
       conditions.push('m.conference_id = ?');
@@ -51,6 +61,7 @@ export async function GET(request: NextRequest) {
           m.location,
           m.scheduled_by,
           m.additional_attendees,
+          m.additional_attendee_ids,
           m.outcome,
           m.meeting_type,
           m.created_at,
@@ -74,10 +85,20 @@ export async function GET(request: NextRequest) {
       args,
     });
 
+    const extras = await loadAdditionalAttendees(
+      db,
+      result.rows.map(r => ({ id: Number(r.id), additional_attendee_ids: r.additional_attendee_ids })),
+    );
+
     return NextResponse.json(
       result.rows.map((r) => ({
         id: Number(r.id),
         attendee_id: Number(r.attendee_id),
+        additional_attendee_ids: r.additional_attendee_ids != null ? String(r.additional_attendee_ids) : null,
+        additional_attendee_records: extras.get(Number(r.id)) ?? [],
+        // The viewer is a guest on this meeting, not its subject — the table
+        // badges it rather than treating it as one of their own.
+        as_additional_attendee: attendeeId != null && Number(r.attendee_id) !== Number(attendeeId),
         conference_id: Number(r.conference_id),
         photo_url: r.photo_url != null ? String(r.photo_url) : null,
         meeting_date: String(r.meeting_date ?? ''),
@@ -112,7 +133,7 @@ export async function POST(request: NextRequest) {
   const db = await getDb(user?.accountId);
   try {
     const body = await request.json();
-    const { attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, additional_attendees, meeting_type } = body;
+    const { attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, additional_attendees, additional_attendee_ids, meeting_type } = body;
 
     if (!attendee_id || !conference_id || !meeting_date || !meeting_time) {
       return NextResponse.json({ error: 'attendee_id, conference_id, meeting_date, and meeting_time are required' }, { status: 400 });
@@ -133,8 +154,8 @@ export async function POST(request: NextRequest) {
       : 'Scheduled';
 
     const result = await db.execute({
-      sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, additional_attendees, outcome, meeting_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, additional_attendees, additional_attendee_ids, outcome, meeting_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING *`,
       args: [
         attendee_id,
@@ -144,6 +165,7 @@ export async function POST(request: NextRequest) {
         location ?? null,
         scheduled_by ?? null,
         additional_attendees ?? null,
+        serializeAttendeeIds(additional_attendee_ids),
         meetingScheduledName,
         meeting_type ?? null,
       ],

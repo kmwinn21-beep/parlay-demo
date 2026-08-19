@@ -228,7 +228,9 @@ export default function AttendeeDetailPage() {
 
   const fetchMeetings = useCallback(async () => {
     try {
-      const res = await fetch(`/api/meetings?attendee_id=${id}`);
+      // include_additional widens the list to meetings this attendee only sits
+      // in on as a guest; the table badges those rows AA.
+      const res = await fetch(`/api/meetings?attendee_id=${id}&include_additional=1`);
       if (res.ok) setMeetings(await res.json());
     } catch { /* non-fatal */ }
   }, [id]);
