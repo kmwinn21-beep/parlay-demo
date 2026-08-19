@@ -655,6 +655,79 @@ export function FollowUpsTable({
     );
   }
 
+  /**
+   * Desktop bar: a real table row, so each field lands under its own column
+   * heading instead of running together on one line.
+   */
+  function renderAttendeeBarRow(rows: FollowUp[], groupKey: string) {
+    const head = rows[0];
+    const expanded = expandedGroupKeys.has(groupKey);
+    const visibleKeys = orderedColumns.filter(c => isVisible(c.key)).map(c => c.key);
+    const visibleCustom = customColumns.filter(c => c.visible);
+    // The chevron rides the final column, whichever that turns out to be.
+    const lastKey = visibleCustom.length > 0 ? null : visibleKeys[visibleKeys.length - 1];
+
+    const chevron = (
+      <svg
+        className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`}
+        fill="none" stroke="currentColor" viewBox="0 0 24 24"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      </svg>
+    );
+    const cell = (key: string, body: React.ReactNode, extra = '') => (
+      <td key={key} className={`px-3 py-2 align-middle ${extra}`}>
+        {key === lastKey
+          ? <div className="flex items-center justify-between gap-2">{body}{chevron}</div>
+          : body}
+      </td>
+    );
+
+    return (
+      <tr
+        key={groupKey}
+        role="button"
+        tabIndex={0}
+        onClick={() => toggleGroupKey(groupKey)}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroupKey(groupKey); } }}
+        aria-expanded={expanded}
+        className="bg-gray-50 border-y border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
+      >
+        {orderedColumns.map(col => {
+          if (!isVisible(col.key)) return null;
+          switch (col.key) {
+            case 'name': return cell('name',
+              <span className="flex items-center gap-1 min-w-0">
+                {attendeeNameNode(head, 'text-xs font-semibold text-brand-secondary hover:underline truncate')}
+              </span>, 'overflow-hidden');
+            case 'title': return cell('title',
+              <span className="text-xs text-gray-500 truncate block">{head.title || <span className="text-gray-300">—</span>}</span>);
+            case 'company': return cell('company',
+              head.company_name
+                ? <span className="flex items-center gap-1 min-w-0">
+                    {head.company_id
+                      ? companyNameNode(head, 'text-xs text-brand-secondary hover:underline truncate')
+                      : <span className="text-xs text-gray-500 truncate">{head.company_name}</span>}
+                  </span>
+                : <span className="text-gray-300">—</span>);
+            case 'next_step': return cell('next_step', <span />);
+            case 'conference': return cell('conference',
+              <span className="text-xs text-gray-500 truncate block">{head.conference_name}</span>);
+            case 'rep': return cell('rep', renderGroupRepBody(rows, 'xs'));
+            case 'notes': return cell('notes', <span />);
+            case 'status': return cell('status', <span />);
+            default: return null;
+          }
+        })}
+        {visibleCustom.map((col, i) => (
+          <td key={`custom_${col.id}`} className="px-3 py-2 align-middle">
+            {i === visibleCustom.length - 1 ? <div className="flex items-center justify-end">{chevron}</div> : null}
+          </td>
+        ))}
+      </tr>
+    );
+  }
+
   /** Desktop: one table row for an attendee, entries stacked inside the cells. */
   function renderAttendeeGroupRow(rows: FollowUp[], groupKey: string) {
     const head = rows[0];
@@ -1013,11 +1086,7 @@ export function FollowUpsTable({
                   const expanded = expandedGroupKeys.has(subKey);
                   return (
                     <Fragment key={subKey}>
-                      <tr className="bg-gray-50 border-y border-gray-200">
-                        <td colSpan={100} className="px-3 py-2">
-                          {renderAttendeeBar(rows, subKey)}
-                        </td>
-                      </tr>
+                      {renderAttendeeBarRow(rows, subKey)}
                       {expanded && (rows.length === 1
                         ? renderDesktopRow(rows[0])
                         : renderAttendeeGroupRow(rows, subKey))}
