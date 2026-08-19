@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { getPreset, type ColorMap } from '@/lib/colors';
 import { MEETING_TIME_OPTIONS, formatMeetingTime } from '@/lib/meetingTime';
+import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { useUser } from '@/components/UserContext';
@@ -38,6 +39,7 @@ export interface Meeting {
   created_at: string;
   first_name: string;
   last_name: string;
+  photo_url?: string | null;
   title: string | null;
   company_id: number | null;
   company_name: string | null;
@@ -747,6 +749,8 @@ export function MeetingsTable({
   groupByDate = false,
   cardsOnly = false,
   showConferencePill = false,
+  namesOpenDrawer = false,
+  showAttendeeAvatar = false,
 }: {
   meetings: Meeting[];
   actionOptions: string[];
@@ -766,6 +770,10 @@ export function MeetingsTable({
   cardsOnly?: boolean;
   /** Adds the conference name to the card's pill row. */
   showConferencePill?: boolean;
+  /** Names open their drawer instead of navigating, and the quick-view eyes go. */
+  namesOpenDrawer?: boolean;
+  /** Leads the name with the attendee's photo, or their initials. */
+  showAttendeeAvatar?: boolean;
 }) {
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
   const customColumns = useCustomColumns(tableName);
@@ -994,6 +1002,44 @@ export function MeetingsTable({
       </div>
   );
 
+  /** Attendee name — a drawer opener or a link, depending on the surface. */
+  const attendeeNameNode = (m: Meeting, className: string) => {
+    const name = `${m.first_name} ${m.last_name}`;
+    const openDrawer = () => setQuickView({ type: 'attendee', id: m.attendee_id, name });
+    if (namesOpenDrawer) {
+      return (
+        <button type="button" onClick={openDrawer} className={`${className} text-left`} title={name}>
+          {name}
+        </button>
+      );
+    }
+    return (
+      <>
+        <QuickViewIcon onClick={openDrawer} />
+        <Link href={`/attendees/${m.attendee_id}`} className={className} title={name}>{name}</Link>
+      </>
+    );
+  };
+
+  /** Company name — same treatment. */
+  const companyNameNode = (m: Meeting, className: string) => {
+    if (!m.company_name || !m.company_id) return null;
+    const openDrawer = () => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! });
+    if (namesOpenDrawer) {
+      return (
+        <button type="button" onClick={openDrawer} className={`${className} text-left`}>
+          {m.company_name}
+        </button>
+      );
+    }
+    return (
+      <>
+        <QuickViewIcon onClick={openDrawer} />
+        <Link href={`/companies/${m.company_id}`} className={className}>{m.company_name}</Link>
+      </>
+    );
+  };
+
   const renderTableRow = (m: Meeting) => (
   editingId === m.id && onEdit ? (
     <EditMeetingTableRow
@@ -1025,11 +1071,17 @@ export function MeetingsTable({
         if (!isVisible(col.key)) return null;
         switch (col.key) {
           case 'name': return <td key="name" className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
-            <div className="flex items-center gap-1 group">
-              <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: m.attendee_id, name: `${m.first_name} ${m.last_name}` })} />
-              <Link href={`/attendees/${m.attendee_id}`} className="text-brand-secondary hover:underline leading-snug block truncate" title={`${m.first_name} ${m.last_name}`}>
-                {m.first_name} {m.last_name}
-              </Link>
+            <div className="flex items-center gap-1.5 group">
+              {showAttendeeAvatar && (
+                <AttendeeInitialsAvatar
+                  name={`${m.first_name} ${m.last_name}`}
+                  photoUrl={m.photo_url}
+                  title={m.title}
+                  companyName={m.company_name}
+                  className="w-7 h-7 text-[10px]"
+                />
+              )}
+              {attendeeNameNode(m, 'text-brand-secondary hover:underline leading-snug block truncate')}
             </div>
           </td>;
           case 'title': return <td key="title" className="px-3 py-2 text-gray-600 leading-snug"><span className="block text-xs leading-snug break-words whitespace-normal">{m.title || <span className="text-gray-300">—</span>}</span></td>;
@@ -1037,8 +1089,7 @@ export function MeetingsTable({
           case 'company': return !hideCompany ? <td key="company" className="px-3 py-2 text-gray-600 leading-snug">
             {m.company_name && m.company_id ? (
               <div className="flex items-center gap-1 group">
-                <QuickViewIcon onClick={() => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! })} />
-                <Link href={`/companies/${m.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">{m.company_name}</Link>
+                {companyNameNode(m, 'text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug')}
               </div>
             ) : (<span className="text-gray-300">—</span>)}
           </td> : null;
