@@ -15,12 +15,14 @@ export async function POST(
   const db = await getDb(user?.accountId);
   try {
     const body = await request.json();
-    const { first_name, last_name, title, company, email, website, company_type } = body as {
+    const { first_name, last_name, title, company, email, phone, linkedin_url, website, company_type } = body as {
       first_name: string;
       last_name: string;
       title?: string;
       company?: string;
       email?: string;
+      phone?: string;
+      linkedin_url?: string;
       website?: string;
       /** Applied only when this call is what creates the company. */
       company_type?: string;
@@ -91,9 +93,13 @@ export async function POST(
       }
 
       const newAttendee = await db.execute({
-        sql: `INSERT INTO attendees (first_name, last_name, title, company_id, email)
-              VALUES (?, ?, ?, ?, ?) RETURNING *`,
-        args: [first_name, last_name, title ?? null, companyId, email ?? null],
+        sql: `INSERT INTO attendees (first_name, last_name, title, company_id, email, phone, linkedin_url)
+              VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+        args: [
+          first_name, last_name, title ?? null, companyId, email ?? null,
+          phone?.trim() || null,
+          linkedin_url?.trim() || null,
+        ],
       });
 
       attendeeId = Number(newAttendee.rows[0].id);
