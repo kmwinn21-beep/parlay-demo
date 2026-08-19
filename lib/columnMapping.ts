@@ -24,6 +24,11 @@ export interface ColumnMapping {
   function: string | null;
   product: string | null;
   consent: string | null;
+  /**
+   * Company-only list: the file has no people in it. The parser stands in a
+   * placeholder attendee per company so the company registers as present.
+   */
+  company_only?: boolean;
 }
 
 export interface SystemFieldMeta {

@@ -72,6 +72,8 @@ interface Attendee {
   first_name: string;
   last_name: string;
   photo_url?: string | null;
+  /** 1 when this row only stands in for a company from a company-only upload. */
+  is_placeholder?: number | boolean;
   title?: string;
   company_id?: number;
   company_name?: string;
@@ -500,6 +502,7 @@ export default function ConferenceDetailPage() {
   const [reportMenuOpen, setReportMenuOpen] = useState(false);
   const [showAttendeePhotos, setShowAttendeePhotos] = useState(false);
   const [showAttendeeDownload, setShowAttendeeDownload] = useState(false);
+  const [quickFilterPlaceholders, setQuickFilterPlaceholders] = useState(false);
   const unitTypeLabel = useUnitTypeLabel();
   const [executiveBriefOpen, setExecutiveBriefOpen] = useState(false);
   const [executiveBriefSnapshot, setExecutiveBriefSnapshot] = useState<ConferenceSnapshot | null>(null);
@@ -1488,6 +1491,30 @@ export default function ConferenceDetailPage() {
   const seniorityFilterOptions = configOptions.seniority ?? [];
   const companyTypeFilterOptions = configOptions.company_type ?? [];
 
+  // A placeholder is only stale once a real attendee from the same company
+  // turns up at this conference — until then it is the company's only presence
+  // here, and removing it would drop the company from the conference entirely.
+  const conflictedPlaceholderIds = useMemo(() => {
+    const attendees = conference?.attendees ?? [];
+    const realCompanyIds = new Set(
+      attendees
+        .filter(a => !a.is_placeholder && a.company_id != null)
+        .map(a => a.company_id as number),
+    );
+    return new Set(
+      attendees
+        .filter(a => a.is_placeholder && a.company_id != null && realCompanyIds.has(a.company_id))
+        .map(a => a.id),
+    );
+  }, [conference?.attendees]);
+
+  const conflictedPlaceholderCompanyCount = useMemo(() => {
+    const attendees = conference?.attendees ?? [];
+    return new Set(
+      attendees.filter(a => conflictedPlaceholderIds.has(a.id)).map(a => a.company_id),
+    ).size;
+  }, [conference?.attendees, conflictedPlaceholderIds]);
+
   const filteredAttendees = (conference?.attendees || [])
     .filter((a) => {
       if (attendeeSearch) {
@@ -1511,6 +1538,7 @@ export default function ConferenceDetailPage() {
       if (quickFilterIcp && a.company_icp !== 'Yes') return false;
       if (quickFilterTypes.size > 0 && !quickFilterTypes.has(a.company_type || '')) return false;
       if (quickFilterMyAccounts && !(currentUser?.configId != null && parseRepIds(a.company_assigned_user).includes(currentUser.configId))) return false;
+      if (quickFilterPlaceholders && !conflictedPlaceholderIds.has(a.id)) return false;
       return true;
     })
     .sort((a, b) => {
@@ -2835,10 +2863,23 @@ export default function ConferenceDetailPage() {
               {(() => {
                 // With a filter on, the others recede so the active one reads
                 // at a glance.
-                const anyQuickFilter = quickFilterIcp || quickFilterTypes.size > 0 || quickFilterMyAccounts;
+                const anyQuickFilter = quickFilterIcp || quickFilterTypes.size > 0 || quickFilterMyAccounts || quickFilterPlaceholders;
                 const quickDim = (active: boolean) => (anyQuickFilter && !active ? ' opacity-40 grayscale' : '');
                 const attendeeFilterButtons = (
                   <>
+                    {conflictedPlaceholderIds.size > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setQuickFilterPlaceholders(v => !v)}
+                        className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                          quickFilterPlaceholders
+                            ? 'border-amber-400 bg-amber-100 text-amber-800'
+                            : 'border-amber-300 bg-amber-50 text-amber-700 hover:border-amber-400'
+                        }${quickDim(quickFilterPlaceholders)}`}
+                      >
+                        Placeholders ({conflictedPlaceholderIds.size})
+                      </button>
+                    )}
                     {/* Mine first, in the Worth Engaging palette */}
                     {currentUser && (
                       <button
@@ -2907,6 +2948,31 @@ export default function ConferenceDetailPage() {
               })()}
             </div>
           </div>
+
+          {/* Placeholder cleanup — a company-only upload stands in one attendee
+              per company; once real attendees arrive those stand-ins are stale.
+              Only the stale ones are offered: filtering to them and removing
+              them can never strip a company off the conference. */}
+          {conflictedPlaceholderIds.size > 0 && (
+            <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl flex flex-wrap items-center gap-3">
+              <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+              <p className="text-sm text-amber-800 min-w-0">
+                <strong>{conflictedPlaceholderCompanyCount} {conflictedPlaceholderCompanyCount === 1 ? 'company has' : 'companies have'}</strong>
+                {' '}a placeholder attendee that can be removed now that real attendees are listed.
+              </p>
+              {!quickFilterPlaceholders && (
+                <button
+                  type="button"
+                  onClick={() => setQuickFilterPlaceholders(true)}
+                  className="ml-auto text-xs font-semibold px-3 py-1.5 rounded-lg border border-amber-300 bg-white text-amber-800 hover:bg-amber-100 transition-colors"
+                >
+                  Show {conflictedPlaceholderIds.size} placeholder{conflictedPlaceholderIds.size === 1 ? '' : 's'}
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Bulk edit panel */}
           {showAttendeeEdit && selectedAttendeeIds.size >= 1 && (
