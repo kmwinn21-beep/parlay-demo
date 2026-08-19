@@ -438,6 +438,89 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const toggleSelect = (id: number) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const selectedCompanies = localCompanies.filter(c => selectedIds.has(c.id));
 
+  /**
+   * The mobile card's contents, read-only, for the merge and parent/child
+   * pickers. Two records worth merging often carry the very same name, so the
+   * choice has to be made on everything else about them — rep, type, status,
+   * counts, units.
+   */
+  const companySummary = (company: Company) => (
+    <div className="min-w-0 flex-1">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-gray-800 leading-snug">{company.name}</p>
+          {company.parent_company_name && (
+            <p className="text-[10px] text-gray-400 mt-0.5">{company.parent_company_name}</p>
+          )}
+          {company.website && (
+            <p className="text-[10px] text-gray-400 mt-0.5 truncate">{company.website}</p>
+          )}
+        </div>
+        <span className="flex-shrink-0 inline-flex flex-wrap justify-end gap-1">
+          {parseRepIds(company.assigned_user ?? '').map(id => userOptionsFull.find(u => u.id === id)).filter(Boolean).map((user, i) => (
+            <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
+              <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              {getRepInitials(user!.value)}
+            </span>
+          ))}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+        {company.company_type && (
+          <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}>
+            <EntityStructureIcon structure={company.entity_structure} />{company.company_type}
+          </span>
+        )}
+        {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => (
+          <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{formatStatusLabel(s)}</span>
+        ))}
+        {(company.my_user_status_ids || []).map(optId => {
+          const label = userScopedStatusMap.get(optId);
+          return label ? <span key={optId} className={getBadgeClass(label, colorMaps.status || {})}>{formatStatusLabel(label)}</span> : null;
+        })}
+        <span className="inline-flex items-center gap-1 text-xs text-gray-500 whitespace-nowrap">
+          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+          {Number(company.attendee_count)}
+        </span>
+        <span className="inline-flex items-center gap-1 text-xs text-gray-500 whitespace-nowrap">
+          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+          {Number(company.conference_count)}
+        </span>
+        {Number(company.relationship_count) > 0 && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-green-100 text-green-700">
+            {Number(company.relationship_count)}
+          </span>
+        )}
+        {company.wse != null && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200 whitespace-nowrap">
+            <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+            {Number(company.wse).toLocaleString()}
+          </span>
+        )}
+        {(() => {
+          const pill = formatValuePill(company.wse, avgCostPerUnit);
+          return pill ? (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
+              {pill}
+            </span>
+          ) : null;
+        })()}
+      </div>
+      {company.conference_names && (
+        <p className="text-[10px] text-gray-400 mt-1.5 truncate" title={company.conference_names}>{company.conference_names}</p>
+      )}
+    </div>
+  );
+
+  const mergePickerItems = selectedCompanies.map(c => ({
+    id: c.id,
+    label: c.name,
+    sublabel: [c.company_type, c.profit_type ? `(${c.profit_type})` : ''].filter(Boolean).join(' '),
+    detail: companySummary(c),
+  }));
+
   const handleDeleteOne = async (id: number, name: string) => {
     if (!confirm(`Delete "${name}"? Attendees will be unlinked. Cannot be undone.`)) return;
     try { await fetch(`/api/companies/${id}`, { method: 'DELETE' }); toast.success(`"${name}" deleted.`); onRefresh(); }
@@ -1359,7 +1442,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
       )}
 
       <MergeModal isOpen={showMergeModal} onClose={() => setShowMergeModal(false)} onMerge={handleMerge}
-        items={selectedCompanies.map(c => ({ id: c.id, label: c.name, sublabel: [c.company_type, c.profit_type ? `(${c.profit_type})` : ''].filter(Boolean).join(' ') }))}
+        items={mergePickerItems}
         title="Merge Companies" description="Select the master record. All attendees from duplicates will be reassigned to master. Duplicates will be deleted."
         searchType="company" />
 
@@ -1367,7 +1450,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         isOpen={showParentChildModal}
         onClose={() => setShowParentChildModal(false)}
         onSubmit={handleParentChild}
-        items={selectedCompanies.map(c => ({ id: c.id, label: c.name, sublabel: [c.company_type, c.profit_type ? `(${c.profit_type})` : ''].filter(Boolean).join(' ') }))}
+        items={mergePickerItems}
       />
 
       <OperatorCapitalModal
