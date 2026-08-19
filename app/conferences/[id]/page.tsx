@@ -10,6 +10,7 @@ import { invalidateConfsCache } from '@/components/Header';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
 import { MeetingDateFilterBar } from '@/components/MeetingDateFilterBar';
+import { isBoothHours } from '@/lib/meetingTime';
 import { KebabMenu } from '@/components/KebabMenu';
 import { ScrollRow } from '@/components/ScrollRow';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
@@ -66,6 +67,7 @@ import { LocationAutocompleteInput } from '@/components/LocationAutocompleteInpu
 import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
 import { SearchableSelect } from '@/components/SearchableSelect';
 import { DownloadModal, type DownloadColumn } from '@/components/DownloadModal';
+import ConferenceNotesModal from '@/components/ConferenceNotesModal';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 
 interface Attendee {
@@ -355,6 +357,8 @@ export default function ConferenceDetailPage() {
   const [confPinnedNotes, setConfPinnedNotes] = useState<PinnedNote[]>([]);
   const [confMeetings, setConfMeetings] = useState<Meeting[]>([]);
   const meetingAttendeeIds = useMemo(() => new Set(confMeetings.map(m => m.attendee_id)), [confMeetings]);
+  // The chip only earns its place once something is booked for booth hours.
+  const hasBoothHoursMeetings = useMemo(() => confMeetings.some(m => isBoothHours(m.meeting_time)), [confMeetings]);
 
   // Optimistically insert a newly-scheduled meeting into this tab's list. Idempotent (checks
   // for an existing id) since both the local NewMeetingModal onSuccess and the global
@@ -501,9 +505,11 @@ export default function ConferenceDetailPage() {
   const [showDebrief, setShowDebrief] = useState(false);
   const [activityMapOpen, setActivityMapOpen] = useState(false);
   const [reportMenuOpen, setReportMenuOpen] = useState(false);
+  const [showNotesModal, setShowNotesModal] = useState(false);
   const [showAttendeePhotos, setShowAttendeePhotos] = useState(false);
   const [showAttendeeDownload, setShowAttendeeDownload] = useState(false);
   const [quickFilterPlaceholders, setQuickFilterPlaceholders] = useState(false);
+  const [boothHoursOnly, setBoothHoursOnly] = useState(false);
   // "Other (not in list)" on the add-attendee company picker
   const [addCompanyOther, setAddCompanyOther] = useState(false);
   const unitTypeLabel = useUnitTypeLabel();
@@ -1026,6 +1032,19 @@ export default function ConferenceDetailPage() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // The notes popup edits one column, so it goes through the lightweight PATCH
+  // rather than the full-object PUT the edit form uses. Throws on failure so
+  // the modal can keep itself open and surface the error.
+  const handleSaveConferenceNotes = async (notes: string) => {
+    const res = await fetch(`/api/conferences/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes }),
+    });
+    if (!res.ok) throw new Error('Notes update failed');
+    setConference(prev => prev ? { ...prev, notes: notes || undefined } : prev);
   };
 
   const handleDelete = async () => {
@@ -2486,6 +2505,18 @@ export default function ConferenceDetailPage() {
                             Stage Controls
                           </button>
                         )}
+                        {!!conference.notes?.trim() && (
+                          <button
+                            type="button"
+                            onClick={() => { setShowNotesModal(true); setReportMenuOpen(false); }}
+                            className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                          >
+                            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Notes
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => { setIsEditing(true); setReportMenuOpen(false); }}
@@ -2759,6 +2790,14 @@ export default function ConferenceDetailPage() {
           rows={filteredAttendees}
           columns={attendeeDownloadColumns}
           onClose={() => setShowAttendeeDownload(false)}
+        />
+      )}
+
+      {showNotesModal && !!conference.notes && (
+        <ConferenceNotesModal
+          notes={conference.notes}
+          onSave={handleSaveConferenceNotes}
+          onClose={() => setShowNotesModal(false)}
         />
       )}
 
@@ -3589,7 +3628,7 @@ export default function ConferenceDetailPage() {
       {activeTab === 'meetings' && (() => {
         const attendeeMap = new Map((conference?.attendees || []).map(a => [a.id, a]));
         const conferenceDates = conference ? getConferenceDates(conference.start_date, conference.end_date) : [];
-        const anyFilters = meetingFilterReps.length > 0 || meetingFilterDates.length > 0 || meetingFilterCompanyTypes.length > 0 || meetingFilterSeniorities.length > 0;
+        const anyFilters = meetingFilterReps.length > 0 || meetingFilterDates.length > 0 || meetingFilterCompanyTypes.length > 0 || meetingFilterSeniorities.length > 0 || boothHoursOnly;
         const activeFilterCount = [meetingFilterReps, meetingFilterDates, meetingFilterCompanyTypes, meetingFilterSeniorities].filter(f => f.length > 0).length;
         const myConfigId = currentUser?.configId ?? null;
         const myMeetingsAvailable = myConfigId != null;
@@ -3604,6 +3643,7 @@ export default function ConferenceDetailPage() {
             if (!meetingFilterReps.some(id => ids.includes(id))) return false;
           }
           if (meetingFilterDates.length > 0 && !meetingFilterDates.includes(m.meeting_date)) return false;
+          if (boothHoursOnly && !isBoothHours(m.meeting_time)) return false;
           if (meetingFilterCompanyTypes.length > 0) {
             const att = attendeeMap.get(m.attendee_id);
             if (!att?.company_type || !meetingFilterCompanyTypes.includes(att.company_type)) return false;
@@ -3623,6 +3663,7 @@ export default function ConferenceDetailPage() {
           ...meetingFilterDates.map(d => ({ label: formatDayLabel(d), shortLabel: formatDayLabel(d), onRemove: () => setMeetingFilterDates(meetingFilterDates.filter(x => x !== d)) })),
           ...meetingFilterCompanyTypes.map(t => ({ label: t, shortLabel: t, onRemove: () => setMeetingFilterCompanyTypes(meetingFilterCompanyTypes.filter(x => x !== t)) })),
           ...meetingFilterSeniorities.map(s => ({ label: s, shortLabel: s, onRemove: () => setMeetingFilterSeniorities(meetingFilterSeniorities.filter(x => x !== s)) })),
+          ...(boothHoursOnly ? [{ label: 'Booth Hours', shortLabel: 'Booth', onRemove: () => setBoothHoursOnly(false) }] : []),
         ];
         const newMeetingBlocked = stagePermissions != null && !stagePermissions.canLogMeeting;
         const newMeetingButton = (
@@ -3697,6 +3738,9 @@ export default function ConferenceDetailPage() {
                     selected={meetingFilterDates}
                     onChange={setMeetingFilterDates}
                     variant="long"
+                    showBoothHours={hasBoothHoursMeetings}
+                    boothHoursOnly={boothHoursOnly}
+                    onBoothHoursChange={setBoothHoursOnly}
                   />
                 </div>
                 <div className="ml-auto flex-shrink-0 flex items-center gap-2">
@@ -3760,6 +3804,9 @@ export default function ConferenceDetailPage() {
                   selected={meetingFilterDates}
                   onChange={setMeetingFilterDates}
                   variant="short"
+                  showBoothHours={hasBoothHoursMeetings}
+                  boothHoursOnly={boothHoursOnly}
+                  onBoothHoursChange={setBoothHoursOnly}
                 />
               </div>
 

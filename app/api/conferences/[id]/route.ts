@@ -264,7 +264,7 @@ export async function DELETE(
 
 // Lightweight single-field update — separate from the full-object PUT above
 // since callers like the dashboard banner's manual "Pre-conference review"
-// checklist toggle only ever need to flip this one column.
+// checklist toggle, or the header's notes popup, only ever touch one column.
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -274,15 +274,40 @@ export async function PATCH(
   const db = await getDb(authResult?.accountId);
   try {
     const body = await request.json();
-    if (!('pre_conference_review_marked' in body)) {
+    const setClauses: string[] = [];
+    const args: (string | null)[] = [];
+
+    let marked: boolean | undefined;
+    if ('pre_conference_review_marked' in body) {
+      marked = Boolean(body.pre_conference_review_marked);
+      setClauses.push('pre_conference_review_marked_at = ?');
+      args.push(marked ? new Date().toISOString() : null);
+    }
+
+    // Cleared notes are stored as NULL so the header's conditional render and
+    // the "has notes" check in the kebab agree on what empty means.
+    let notes: string | null | undefined;
+    if ('notes' in body) {
+      const nextNotes = typeof body.notes === 'string' ? body.notes.trim() || null : null;
+      notes = nextNotes;
+      setClauses.push('notes = ?');
+      args.push(nextNotes);
+    }
+
+    if (setClauses.length === 0) {
       return NextResponse.json({ error: 'No valid fields' }, { status: 400 });
     }
-    const marked = Boolean(body.pre_conference_review_marked);
+
+    args.push(params.id);
     await db.execute({
-      sql: `UPDATE conferences SET pre_conference_review_marked_at = ?, updated_at = datetime('now') WHERE id = ?`,
-      args: [marked ? new Date().toISOString() : null, params.id],
+      sql: `UPDATE conferences SET ${setClauses.join(', ')}, updated_at = datetime('now') WHERE id = ?`,
+      args,
     });
-    return NextResponse.json({ success: true, pre_conference_review_marked: marked });
+    return NextResponse.json({
+      success: true,
+      ...(marked !== undefined ? { pre_conference_review_marked: marked } : {}),
+      ...(notes !== undefined ? { notes } : {}),
+    });
   } catch (error) {
     console.error('PATCH /api/conferences/[id] error:', error);
     return NextResponse.json({ error: 'Failed to update conference' }, { status: 500 });
