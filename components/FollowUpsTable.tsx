@@ -215,6 +215,14 @@ export function FollowUpsTable({
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<number>>(new Set());
   const [bulkLoadingKeys, setBulkLoadingKeys] = useState<Set<string>>(new Set());
   const [bulkErrorKeys, setBulkErrorKeys] = useState<Set<string>>(new Set());
+  // Attendee sections start collapsed, the way the meetings table's days do.
+  const [expandedGroupKeys, setExpandedGroupKeys] = useState<Set<string>>(new Set());
+
+  const toggleGroupKey = (key: string) => setExpandedGroupKeys(prev => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
 
   function parseTaskLines(notes: string | null): string[] {
     if (!notes) return [];
@@ -550,6 +558,75 @@ export function FollowUpsTable({
     );
   }
 
+  /**
+   * Collapsed section header for one attendee: who they are, where, who owns
+   * them, and a chevron on the right that opens their follow-ups.
+   */
+  function renderAttendeeBar(rows: FollowUp[], groupKey: string) {
+    const head = rows[0];
+    const expanded = expandedGroupKeys.has(groupKey);
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => toggleGroupKey(groupKey)}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroupKey(groupKey); } }}
+        aria-expanded={expanded}
+        className="w-full flex items-start gap-2 cursor-pointer"
+      >
+        {/* One line from sm; stacked on a phone, where it would otherwise
+            truncate every field down to a couple of characters. */}
+        <div className="flex-1 min-w-0 flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
+          <div className="flex items-center gap-1 min-w-0">
+            <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: head.attendee_id, name: `${head.first_name} ${head.last_name}` })} />
+            <Link
+              href={`/attendees/${head.attendee_id}`}
+              onClick={e => e.stopPropagation()}
+              className="text-xs font-semibold text-brand-secondary hover:underline truncate"
+            >
+              {head.first_name} {head.last_name}
+            </Link>
+          </div>
+          {head.title && <span className="text-xs text-gray-500 truncate">{head.title}</span>}
+          <div className="flex items-center gap-1 min-w-0">
+            {head.company_name && (
+              <>
+                <span className="hidden sm:inline text-gray-300">·</span>
+                {head.company_id ? (
+                  <>
+                    <QuickViewIcon onClick={() => setQuickView({ type: 'company', id: head.company_id!, name: head.company_name! })} />
+                    <Link
+                      href={`/companies/${head.company_id}`}
+                      onClick={e => e.stopPropagation()}
+                      className="text-xs text-brand-secondary hover:underline truncate"
+                    >
+                      {head.company_name}
+                    </Link>
+                  </>
+                ) : <span className="text-xs text-gray-500 truncate">{head.company_name}</span>}
+              </>
+            )}
+            {head.conference_name && (
+              <>
+                <span className="text-gray-300">·</span>
+                <span className="text-xs text-gray-500 truncate">{head.conference_name}</span>
+              </>
+            )}
+          </div>
+        </div>
+        <span className="flex items-center gap-2 flex-shrink-0 pt-0.5 sm:pt-0">
+          {renderGroupRepBody(rows, 'xs')}
+          <svg
+            className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </span>
+      </div>
+    );
+  }
+
   /** Desktop: one table row for an attendee, entries stacked inside the cells. */
   function renderAttendeeGroupRow(rows: FollowUp[], groupKey: string) {
     const head = rows[0];
@@ -845,10 +922,18 @@ export function FollowUpsTable({
               {cg.attendees.map(ag => {
                 const rows = sortByCreatedAt(ag.tasks);
                 const subKey = `${cg.conference_id}-${ag.attendee_id}`;
-                // A single follow-up renders exactly as it always has.
-                return rows.length === 1
-                  ? renderMobileCard(rows[0])
-                  : renderAttendeeGroupCard(rows, subKey);
+                const expanded = expandedGroupKeys.has(subKey);
+                return (
+                  <div key={subKey}>
+                    <div className="px-4 py-2 bg-gray-50">
+                      {renderAttendeeBar(rows, subKey)}
+                    </div>
+                    {/* A single follow-up renders exactly as it always has. */}
+                    {expanded && (rows.length === 1
+                      ? renderMobileCard(rows[0])
+                      : renderAttendeeGroupCard(rows, subKey))}
+                  </div>
+                );
               })}
             </div>
           </div>
@@ -901,9 +986,19 @@ export function FollowUpsTable({
                 {cg.attendees.map(ag => {
                   const rows = sortByCreatedAt(ag.tasks);
                   const subKey = `${cg.conference_id}-${ag.attendee_id}`;
-                  return rows.length === 1
-                    ? renderDesktopRow(rows[0])
-                    : renderAttendeeGroupRow(rows, subKey);
+                  const expanded = expandedGroupKeys.has(subKey);
+                  return (
+                    <Fragment key={subKey}>
+                      <tr className="bg-gray-50 border-y border-gray-200">
+                        <td colSpan={100} className="px-3 py-2">
+                          {renderAttendeeBar(rows, subKey)}
+                        </td>
+                      </tr>
+                      {expanded && (rows.length === 1
+                        ? renderDesktopRow(rows[0])
+                        : renderAttendeeGroupRow(rows, subKey))}
+                    </Fragment>
+                  );
                 })}
               </Fragment>
             ))}
