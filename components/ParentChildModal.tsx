@@ -7,6 +7,10 @@ interface ParentChildItem {
   id: number;
   label: string;
   sublabel?: string;
+  /** Richer identification for the option — the caller's own card markup.
+   *  Shown instead of label/sublabel, which read identically when two records
+   *  share a name. */
+  detail?: React.ReactNode;
 }
 
 interface SearchResult {
@@ -131,12 +135,14 @@ export function ParentChildModal({
                   onChange={() => setParentId(item.id)}
                   className="mt-0.5 accent-brand-secondary"
                 />
-                <div>
-                  <p className="text-sm font-medium text-gray-800">{item.label}</p>
-                  {item.sublabel && (
-                    <p className="text-xs text-gray-500">{item.sublabel}</p>
-                  )}
-                </div>
+                {item.detail ?? (
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">{item.label}</p>
+                    {item.sublabel && (
+                      <p className="text-xs text-gray-500">{item.sublabel}</p>
+                    )}
+                  </div>
+                )}
               </label>
             ))}
           </div>

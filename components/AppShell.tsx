@@ -6,6 +6,7 @@ import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { FloatingNav } from './FloatingNav';
 import { FooterChat } from './FooterChat';
+import { SwipeToDismissSheets } from './SwipeToDismissSheets';
 import { ChatPanelProvider } from './ChatPanelContext';
 import { BottomNavProvider } from './BottomNavContext';
 import { FloatingNavHiddenProvider } from './FloatingNavHiddenContext';
@@ -181,6 +182,9 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
         {/* Footer chat — handles its own desktop/mobile rendering */}
         <FooterChat />
+
+        {/* Swipe-down-to-close for every mobile drawer and bottom sheet */}
+        <SwipeToDismissSheets />
       </BottomNavProvider>
       </FloatingNavHiddenProvider>
       </ChatPanelProvider>
