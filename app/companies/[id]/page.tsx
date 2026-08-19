@@ -31,6 +31,7 @@ import { CompanyDrawer } from '@/components/CompanyDrawer';
 import { ActivityTimelineModal } from '@/components/ActivityTimelineModal';
 import { useCapabilities } from '@/lib/useCapabilities';
 import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
+import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
 import { ScrollRow } from '@/components/ScrollRow';
 import { ClosedWonDealsSection } from '@/components/ClosedWonDealsSection';
 import type { ClosedDeal } from '@/lib/ClosedDealDraftContext';
@@ -41,6 +42,7 @@ interface Attendee {
   id: number;
   first_name: string;
   last_name: string;
+  photo_url?: string | null;
   title?: string;
   email?: string;
   seniority?: string;
@@ -1264,36 +1266,48 @@ export default function CompanyDetailPage() {
                 const seniority = effectiveSeniority(attendee.seniority, attendee.title);
                 return (
                 <div key={attendee.id} className="p-4 bg-white">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      {/* The name opens the quick-view drawer rather than
-                          navigating to the profile, as elsewhere on mobile. */}
-                      <button
-                        type="button"
-                        onClick={() => setQuickView({ type: 'attendee', id: attendee.id, name: `${attendee.first_name} ${attendee.last_name}` })}
-                        className="font-semibold text-brand-secondary hover:underline text-sm text-left"
-                      >
-                        {attendee.first_name} {attendee.last_name}
-                      </button>
-                      {attendee.email && (
-                        <button
-                          type="button"
-                          title={`Send email to ${attendee.email}`}
-                          onClick={() => setComposeTarget({ email: attendee.email!, name: `${attendee.first_name} ${attendee.last_name}` })}
-                          className="text-gray-400 hover:text-brand-secondary transition-colors"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                          </svg>
-                        </button>
+                  <div className="flex items-start gap-3">
+                    {/* Photo when they have one — clicking it opens the card */}
+                    <AttendeeInitialsAvatar
+                      name={`${attendee.first_name} ${attendee.last_name}`}
+                      photoUrl={attendee.photo_url}
+                      title={attendee.title}
+                      companyName={company?.name}
+                      className="w-9 h-9 text-xs mt-0.5"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {/* The name opens the quick-view drawer rather than
+                              navigating to the profile, as elsewhere on mobile. */}
+                          <button
+                            type="button"
+                            onClick={() => setQuickView({ type: 'attendee', id: attendee.id, name: `${attendee.first_name} ${attendee.last_name}` })}
+                            className="font-semibold text-brand-secondary hover:underline text-sm text-left truncate"
+                          >
+                            {attendee.first_name} {attendee.last_name}
+                          </button>
+                          {attendee.email && (
+                            <button
+                              type="button"
+                              title={`Send email to ${attendee.email}`}
+                              onClick={() => setComposeTarget({ email: attendee.email!, name: `${attendee.first_name} ${attendee.last_name}` })}
+                              className="text-gray-400 hover:text-brand-secondary transition-colors flex-shrink-0"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                        <ConferenceCountTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} />
+                      </div>
+                      {attendee.title && <p className="text-xs text-gray-500 mt-1">{attendee.title}</p>}
+                      {seniority && (
+                        <span className={`${getBadgeClass(seniority, colorMaps.seniority || {})} mt-1 inline-block text-[10px]`}>{seniority}</span>
                       )}
                     </div>
-                    <ConferenceCountTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} />
                   </div>
-                  {attendee.title && <p className="text-xs text-gray-500 mt-1">{attendee.title}</p>}
-                  {seniority && (
-                    <span className={`${getBadgeClass(seniority, colorMaps.seniority || {})} mt-1 inline-block text-[10px]`}>{seniority}</span>
-                  )}
                 </div>
                 );
               })}
@@ -1322,8 +1336,15 @@ export default function CompanyDetailPage() {
                     return (
                     <tr key={attendee.id} className="hover:bg-gray-50 transition-colors group">
                       <td className="px-4 py-3 font-medium overflow-hidden" style={{ maxWidth: 220 }}>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5">
                           <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: attendee.id, name: `${attendee.first_name} ${attendee.last_name}` })} />
+                          <AttendeeInitialsAvatar
+                            name={`${attendee.first_name} ${attendee.last_name}`}
+                            photoUrl={attendee.photo_url}
+                            title={attendee.title}
+                            companyName={company?.name}
+                            className="w-7 h-7 text-[10px]"
+                          />
                           <Link href={`/attendees/${attendee.id}`} className="text-brand-secondary hover:underline truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
                             {attendee.first_name} {attendee.last_name}
                           </Link>
