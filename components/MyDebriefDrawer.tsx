@@ -923,6 +923,30 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
     [selectedCompany, activeMeetingId]
   );
 
+  const [bulkCompletingKey, setBulkCompletingKey] = useState<string | null>(null);
+
+  // Same grouping the follow-up tables use: one card per attendee, their
+  // follow-ups stacked inside it.
+  const followUpGroups = useMemo(() => {
+    const map = new Map<string, { key: string; attendeeName: string | null; rows: DebriefFollowUp[] }>();
+    for (const fu of companyFollowUps) {
+      const key = fu.attendeeId != null ? `a${fu.attendeeId}` : `n${fu.attendeeName ?? 'unassigned'}`;
+      if (!map.has(key)) map.set(key, { key, attendeeName: fu.attendeeName, rows: [] });
+      map.get(key)!.rows.push(fu);
+    }
+    // Open work first, within a group and across them.
+    const groups = Array.from(map.values()).map(g => ({
+      ...g,
+      rows: [...g.rows.filter(f => !f.completed), ...g.rows.filter(f => f.completed)],
+    }));
+    return groups.sort((a, b) => {
+      const openA = a.rows.filter(f => !f.completed).length;
+      const openB = b.rows.filter(f => !f.completed).length;
+      if ((openA > 0) !== (openB > 0)) return openA > 0 ? -1 : 1;
+      return 0;
+    });
+  }, [companyFollowUps]);
+
   const toggleFollowUp = useCallback(async (fu: DebriefFollowUp, companyId: number) => {
     setTogglingId(fu.id);
     const next = !fu.completed;
@@ -945,6 +969,34 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
       toast.error('Failed to update follow-up');
     } finally {
       setTogglingId(null);
+    }
+  }, []);
+
+  // One PATCH per open follow-up, the same call the single toggle makes —
+  // the grouped Done button just fires it for every entry in the group.
+  const completeFollowUps = useCallback(async (ids: number[], companyId: number) => {
+    if (ids.length === 0) return;
+    setBulkCompletingKey(ids.join(','));
+    setFollowUps(prev => ({
+      ...prev,
+      [companyId]: (prev[companyId] ?? []).map(f => ids.includes(f.id) ? { ...f, completed: true } : f),
+    }));
+    try {
+      await Promise.all(ids.map(id =>
+        fetch('/api/follow-ups', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, completed: true }),
+        }).then(res => { if (!res.ok) throw new Error(); })
+      ));
+    } catch {
+      setFollowUps(prev => ({
+        ...prev,
+        [companyId]: (prev[companyId] ?? []).map(f => ids.includes(f.id) ? { ...f, completed: false } : f),
+      }));
+      toast.error('Failed to update follow-ups');
+    } finally {
+      setBulkCompletingKey(null);
     }
   }, []);
 
@@ -1474,70 +1526,32 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                   <p className="text-sm text-gray-400 p-4 text-center">No follow-ups.</p>
                 ) : (
                   <div className="divide-y divide-gray-100 overflow-y-auto flex-1">
-                    {[
-                      ...companyFollowUps.filter(f => !f.completed),
-                      ...companyFollowUps.filter(f => f.completed),
-                    ].map(fu => {
-                      const taskLines = parseTaskLines(fu.taskText);
-                      const isExpanded = expandedFuIds.has(fu.id);
-                      const visibleLines = isExpanded ? taskLines : taskLines.slice(0, 1);
-                      const multiLine = taskLines.length > 1;
+                    {followUpGroups.map(group => {
+                      const rows = group.rows;
+                      const openIds = rows.filter(f => !f.completed).map(f => f.id);
+                      const allDone = openIds.length === 0;
+                      const bulkKey = openIds.join(',');
+                      const isCompleting = bulkCompletingKey === bulkKey;
+                      const single = rows.length === 1 ? rows[0] : null;
                       return (
-                        <div key={fu.id} className={`p-3 ${fu.completed ? 'bg-green-50' : 'bg-white'}`}>
+                        <div key={group.key} className={`p-3 ${allDone ? 'bg-green-50' : 'bg-white'}`}>
+                          {/* Attendee heads the group; Done covers everything under it */}
                           <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
-                                {fu.nextSteps && (
-                                  <span className={`inline-flex px-2 py-0.5 rounded-lg text-[11px] font-semibold ${
-                                    fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'
-                                  }`}>{fu.nextSteps}</span>
-                                )}
-                                {fu.attendeeName && (
-                                  <span className="inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
-                                    {fu.attendeeName}
-                                  </span>
-                                )}
-                              </div>
-                              {taskLines.length === 0 ? (
-                                <p className="text-xs text-gray-700 leading-snug">{fu.taskText}</p>
-                              ) : (
-                                <div>
-                                  {visibleLines.map((line, i) => (
-                                    <p key={i} className={`flex items-start gap-1.5 text-xs text-gray-700 leading-snug${i > 0 ? ' mt-1.5' : ''}`}>
-                                      <span aria-hidden className="mt-[5px] w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#46bdf8' }} />
-                                      <span className="min-w-0">{line}</span>
-                                    </p>
-                                  ))}
-                                  {multiLine && (
-                                    <>
-                                      {!isExpanded && <div className="border-t border-gray-100 mt-1 pt-1" />}
-                                      <button
-                                        type="button"
-                                        onClick={() => setExpandedFuIds(prev => {
-                                          const n = new Set(prev);
-                                          n.has(fu.id) ? n.delete(fu.id) : n.add(fu.id);
-                                          return n;
-                                        })}
-                                        className="text-xs text-brand-secondary hover:underline mt-0.5"
-                                      >
-                                        {isExpanded ? 'Show less' : `Show All (${taskLines.length})`}
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                              )}
-                              <p className="text-xs text-gray-400 mt-1">{fu.source}</p>
-                            </div>
-                            <div className="flex items-center gap-1 flex-shrink-0">
+                            {group.attendeeName ? (
+                              <span className="inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                                {group.attendeeName}
+                              </span>
+                            ) : <span className="text-xs text-gray-400">Unassigned</span>}
+                            {single ? (
                               <button
                                 type="button"
-                                onClick={() => selectedCompany && toggleFollowUp(fu, selectedCompany.id)}
-                                disabled={togglingId === fu.id}
-                                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium border-2 transition-all disabled:opacity-50 ${
-                                  fu.completed ? 'bg-green-500 text-white border-green-600' : 'bg-white text-gray-500 border-gray-300 hover:border-green-400'
+                                onClick={() => selectedCompany && toggleFollowUp(single, selectedCompany.id)}
+                                disabled={togglingId === single.id}
+                                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium border-2 transition-all disabled:opacity-50 flex-shrink-0 ${
+                                  single.completed ? 'bg-green-500 text-white border-green-600' : 'bg-white text-gray-500 border-gray-300 hover:border-green-400'
                                 }`}
                               >
-                                {fu.completed ? (
+                                {single.completed ? (
                                   <>
                                     <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -1546,18 +1560,93 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                                   </>
                                 ) : 'Done'}
                               </button>
+                            ) : (
                               <button
                                 type="button"
-                                onClick={() => selectedCompany && deleteFollowUp(fu.id, selectedCompany.id)}
-                                disabled={deletingId === fu.id}
-                                className="text-red-300 hover:text-red-500 p-1 rounded transition-colors disabled:opacity-50"
-                                title="Delete"
+                                onClick={() => selectedCompany && completeFollowUps(openIds, selectedCompany.id)}
+                                disabled={allDone || isCompleting}
+                                title={allDone ? 'All follow-ups complete' : `Mark ${openIds.length} follow-ups done`}
+                                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium border-2 transition-all flex-shrink-0 ${
+                                  allDone
+                                    ? 'bg-green-500 text-white border-green-600 cursor-default'
+                                    : 'bg-white text-gray-500 border-gray-300 hover:border-green-400 disabled:opacity-50'
+                                }`}
                               >
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
+                                {allDone ? (
+                                  <>
+                                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Done
+                                  </>
+                                ) : isCompleting ? 'Saving…' : 'Done'}
                               </button>
-                            </div>
+                            )}
+                          </div>
+
+                          {/* One entry per follow-up: hover trash, its pill, and
+                              the detail behind a chevron. Source stays visible. */}
+                          <div className="mt-1.5">
+                            {rows.map((fu, i) => {
+                              const taskLines = parseTaskLines(fu.taskText);
+                              const hasDetail = taskLines.length > 0 || !!fu.taskText;
+                              const isExpanded = expandedFuIds.has(fu.id);
+                              return (
+                                <div key={fu.id} className={`group/fu ${i > 0 ? 'pt-1.5 mt-1.5 border-t border-gray-100' : ''}`}>
+                                  <div className="flex items-center gap-1 min-w-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => selectedCompany && deleteFollowUp(fu.id, selectedCompany.id)}
+                                      disabled={deletingId === fu.id}
+                                      title="Delete this follow-up"
+                                      aria-label="Delete this follow-up"
+                                      className="inline-flex items-center justify-center h-5 w-0 opacity-0 mr-0 rounded-full text-red-500 hover:text-red-600 hover:bg-red-50 transition-all flex-shrink-0 overflow-hidden disabled:opacity-50 group-hover/fu:w-5 group-hover/fu:opacity-100 group-hover/fu:mr-1 group-focus-within/fu:w-5 group-focus-within/fu:opacity-100 group-focus-within/fu:mr-1"
+                                    >
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                    </button>
+                                    {fu.nextSteps && (
+                                      <span className={`inline-flex px-2 py-0.5 rounded-lg text-[11px] font-semibold ${
+                                        fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'
+                                      }`}>{fu.nextSteps}</span>
+                                    )}
+                                    {hasDetail && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setExpandedFuIds(prev => {
+                                          const n = new Set(prev);
+                                          n.has(fu.id) ? n.delete(fu.id) : n.add(fu.id);
+                                          return n;
+                                        })}
+                                        aria-expanded={isExpanded}
+                                        title={isExpanded ? 'Hide details' : 'Show details'}
+                                        className="flex-shrink-0 p-0.5 text-gray-400 hover:text-brand-secondary transition-colors"
+                                      >
+                                        <svg className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                      </button>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-gray-400 mt-0.5">{fu.source}</p>
+                                  {isExpanded && (
+                                    taskLines.length === 0 ? (
+                                      <p className="text-xs text-gray-700 leading-snug mt-1">{fu.taskText}</p>
+                                    ) : (
+                                      <div className="mt-1">
+                                        {taskLines.map((line, li) => (
+                                          <p key={li} className={`flex items-start gap-1.5 text-xs text-gray-700 leading-snug${li > 0 ? ' mt-1.5' : ''}`}>
+                                            <span aria-hidden className="mt-[5px] w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#46bdf8' }} />
+                                            <span className="min-w-0">{line}</span>
+                                          </p>
+                                        ))}
+                                      </div>
+                                    )
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       );
