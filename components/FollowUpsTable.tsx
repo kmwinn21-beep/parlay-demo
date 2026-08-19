@@ -147,6 +147,31 @@ function RepPills({
   );
 }
 
+/**
+ * Trash that slides out from the left of a follow-up's pill on hover — the
+ * same reveal the Plan tab uses for a draft conference. Phones have no hover,
+ * so cards keep it visible.
+ */
+function EntryDeleteButton({ onClick, alwaysVisible }: { onClick: () => void; alwaysVisible?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Delete this follow-up"
+      aria-label="Delete this follow-up"
+      className={`inline-flex items-center justify-center h-5 rounded-full text-red-500 hover:text-red-600 hover:bg-red-50 transition-all flex-shrink-0 overflow-hidden ${
+        alwaysVisible
+          ? 'w-5 opacity-100 mr-1'
+          : 'w-0 opacity-0 mr-0 group-hover/entry:w-5 group-hover/entry:opacity-100 group-hover/entry:mr-1 group-focus-within/entry:w-5 group-focus-within/entry:opacity-100 group-focus-within/entry:mr-1'
+      }`}
+    >
+      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      </svg>
+    </button>
+  );
+}
+
 function CheckIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -300,70 +325,10 @@ export function FollowUpsTable({
             >
               {fu.completed ? (<><CheckIcon className="w-3 h-3" />Done</>) : 'Done'}
             </button>
-            {onDelete && (
-              <button type="button" onClick={() => onDelete(fu.id)} className="text-red-400 hover:text-red-600 p-1 rounded transition-colors" title="Delete follow-up">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
-            )}
           </div>
         </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          {canEditNextSteps && editingNextStepsKey === fu.id ? (
-            <select
-              autoFocus
-              className="text-xs border border-brand-primary rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-brand-primary"
-              defaultValue={fu.next_steps}
-              onChange={(e) => { onNextStepsChange!(fu.id, e.target.value); setEditingNextStepsKey(null); }}
-              onBlur={() => setEditingNextStepsKey(null)}
-            >
-              {nextStepsOpts.map(opt => (
-                <option key={opt.id} value={String(opt.id)}>{opt.value}</option>
-              ))}
-            </select>
-          ) : (
-            <span
-              onClick={canEditNextSteps ? () => setEditingNextStepsKey(fu.id) : undefined}
-              className={`inline-flex px-2 py-0.5 rounded-lg text-xs font-medium ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'} ${canEditNextSteps ? 'cursor-pointer hover:opacity-75 transition-opacity' : ''}`}
-              title={canEditNextSteps ? 'Click to change' : undefined}
-            >
-              {resolveConfigValue(fu.next_steps, nextStepsOpts)}
-            </span>
-          )}
-          {(() => {
-            const taskLines = parseTaskLines(fu.next_steps_notes);
-            if (taskLines.length > 1) {
-              const isExpanded = expandedTaskIds.has(fu.id);
-              const visibleLines = isExpanded ? taskLines : taskLines.slice(0, 1);
-              return (
-                <div className="mt-0.5 w-full">
-                  {visibleLines.map((line, i) => (
-                    <p key={i} className={`text-xs text-gray-500 leading-snug${i > 0 ? ' mt-3' : ''}`}>- {line}</p>
-                  ))}
-                  {!isExpanded && <div className="border-t border-gray-100 mt-1 pt-1" />}
-                  <button
-                    type="button"
-                    onClick={() => setExpandedTaskIds(prev => { const n = new Set(prev); if (n.has(fu.id)) n.delete(fu.id); else n.add(fu.id); return n; })}
-                    className="text-[10px] text-brand-secondary hover:underline mt-0.5"
-                  >
-                    {isExpanded ? 'Show less' : `Show All (${taskLines.length})`}
-                  </button>
-                </div>
-              );
-            }
-            if (fu.next_steps_notes) {
-              const lines = fu.next_steps_notes.split('\n').map(l => l.trim()).filter(Boolean);
-              return (
-                <div className="w-full">
-                  {lines.map((line, i) => (
-                    <p key={i} className={`text-xs text-gray-500 leading-snug${i > 0 ? ' mt-2.5' : ''}`}>{line}</p>
-                  ))}
-                </div>
-              );
-            }
-            return null;
-          })()}
+        <div className="mt-2">
+          {renderNextStepEntry(fu, 0, 'text-xs', 'text-xs text-gray-500', true)}
         </div>
         <div className="mt-1.5 flex items-center gap-2">
           <Link href={`/conferences/${fu.conference_id}`} className="text-xs text-brand-secondary hover:underline">
@@ -400,61 +365,8 @@ export function FollowUpsTable({
                 </div>
               ) : <span className="text-gray-300">—</span>}
             </td>;
-            case 'next_step': return <td key="next_step" className="px-3 py-2">
-              {canEditNextSteps && editingNextStepsKey === fu.id ? (
-                <select
-                  autoFocus
-                  className="text-xs border border-brand-primary rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-brand-primary"
-                  defaultValue={fu.next_steps}
-                  onChange={(e) => { onNextStepsChange!(fu.id, e.target.value); setEditingNextStepsKey(null); }}
-                  onBlur={() => setEditingNextStepsKey(null)}
-                >
-                  {nextStepsOpts.map(opt => (
-                    <option key={opt.id} value={String(opt.id)}>{opt.value}</option>
-                  ))}
-                </select>
-              ) : (
-                <span
-                  onClick={canEditNextSteps ? () => setEditingNextStepsKey(fu.id) : undefined}
-                  className={`inline-flex px-2 py-0.5 rounded-lg font-medium leading-snug ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'} ${canEditNextSteps ? 'cursor-pointer hover:opacity-75 transition-opacity' : ''}`}
-                  title={canEditNextSteps ? 'Click to change' : undefined}
-                >
-                  {resolveConfigValue(fu.next_steps, nextStepsOpts)}
-                </span>
-              )}
-              {(() => {
-                const taskLines = parseTaskLines(fu.next_steps_notes);
-                if (taskLines.length > 1) {
-                  const isExpanded = expandedTaskIds.has(fu.id);
-                  const visibleLines = isExpanded ? taskLines : taskLines.slice(0, 1);
-                  return (
-                    <div className="mt-2">
-                      {visibleLines.map((line, i) => (
-                        <p key={i} className={`text-gray-500 leading-snug${i > 0 ? ' mt-3' : ''}`}>- {line}</p>
-                      ))}
-                      {!isExpanded && <div className="border-t border-gray-100 mt-1 pt-1" />}
-                      <button
-                        type="button"
-                        onClick={() => setExpandedTaskIds(prev => { const n = new Set(prev); if (n.has(fu.id)) n.delete(fu.id); else n.add(fu.id); return n; })}
-                        className="text-[10px] text-brand-secondary hover:underline mt-0.5"
-                      >
-                        {isExpanded ? 'Show less' : `Show All (${taskLines.length})`}
-                      </button>
-                    </div>
-                  );
-                }
-                if (fu.next_steps_notes) {
-                  const lines = fu.next_steps_notes.split('\n').map(l => l.trim()).filter(Boolean);
-                  return (
-                    <div className="mt-0.5">
-                      {lines.map((line, i) => (
-                        <p key={i} className={`text-gray-500 leading-snug${i > 0 ? ' mt-2.5' : ''}`}>{line}</p>
-                      ))}
-                    </div>
-                  );
-                }
-                return null;
-              })()}
+            case 'next_step': return <td key="next_step" className="px-3 py-2" style={{ maxWidth: 240 }}>
+              {renderNextStepEntry(fu, 0, '', 'text-gray-500')}
             </td>;
             case 'conference': return <td key="conference" className="px-3 py-2 text-gray-600 leading-snug">
               <Link href={`/conferences/${fu.conference_id}`} className="text-brand-secondary hover:underline">{fu.conference_name}</Link>
@@ -489,103 +401,123 @@ export function FollowUpsTable({
             <CustomColumnCell column={col} value={(fu as unknown as Record<string, unknown>)[col.data_key]} />
           </td>
         ))}
-        {onDelete && (
-          <td className="px-3 py-2">
-            <button type="button" onClick={() => onDelete(fu.id)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">Delete</button>
-          </td>
-        )}
       </tr>
     );
   }
 
   // ── Consolidated attendee row (one row, one entry per follow-up) ─────────────
 
-  /** The notes under a next-step badge — identical in single and multi-entry cells. */
+  /** The subtext under a next-step badge, revealed by the entry's chevron. */
   function renderNextStepNotes(fu: FollowUp, textCls: string) {
+    if (!fu.next_steps_notes) return null;
     const taskLines = parseTaskLines(fu.next_steps_notes);
-    if (taskLines.length > 1) {
-      const isExpanded = expandedTaskIds.has(fu.id);
-      const visibleLines = isExpanded ? taskLines : taskLines.slice(0, 1);
-      return (
-        <div className="mt-0.5">
-          {visibleLines.map((line, i) => (
-            <p key={i} className={`${textCls} leading-snug${i > 0 ? ' mt-3' : ''}`}>- {line}</p>
-          ))}
-          {!isExpanded && <div className="border-t border-gray-100 mt-1 pt-1" />}
-          <button
-            type="button"
-            onClick={() => setExpandedTaskIds(prev => { const n = new Set(prev); if (n.has(fu.id)) n.delete(fu.id); else n.add(fu.id); return n; })}
-            className="text-[10px] text-brand-secondary hover:underline mt-0.5"
-          >
-            {isExpanded ? 'Show less' : `Show All (${taskLines.length})`}
-          </button>
-        </div>
-      );
-    }
-    if (fu.next_steps_notes) {
-      const lines = fu.next_steps_notes.split('\n').map(l => l.trim()).filter(Boolean);
-      return (
-        <div className="mt-0.5">
-          {lines.map((line, i) => (
-            <p key={i} className={`${textCls} leading-snug${i > 0 ? ' mt-2.5' : ''}`}>{line}</p>
-          ))}
-        </div>
-      );
-    }
-    return null;
-  }
-
-  /** One follow-up inside a stacked cell: badge, its notes, and when it landed. */
-  function renderNextStepEntry(fu: FollowUp, i: number, badgeExtraCls: string, notesCls: string) {
+    const lines = taskLines.length > 0
+      ? taskLines.map(l => `- ${l}`)
+      : fu.next_steps_notes.split('\n').map(l => l.trim()).filter(Boolean);
     return (
-      <div key={fu.id} className={i > 0 ? 'pt-1.5 mt-1.5 border-t border-gray-100' : ''}>
-        {canEditNextSteps && editingNextStepsKey === fu.id ? (
-          <select
-            autoFocus
-            className="text-xs border border-brand-primary rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-brand-primary"
-            defaultValue={fu.next_steps}
-            onChange={(e) => { onNextStepsChange!(fu.id, e.target.value); setEditingNextStepsKey(null); }}
-            onBlur={() => setEditingNextStepsKey(null)}
-          >
-            {nextStepsOpts.map(opt => (
-              <option key={opt.id} value={String(opt.id)}>{opt.value}</option>
-            ))}
-          </select>
-        ) : (
-          <span
-            onClick={canEditNextSteps ? () => setEditingNextStepsKey(fu.id) : undefined}
-            className={`inline-flex px-2 py-0.5 rounded-lg font-medium leading-snug ${badgeExtraCls} ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'} ${canEditNextSteps ? 'cursor-pointer hover:opacity-75 transition-opacity' : ''}`}
-            title={canEditNextSteps ? 'Click to change' : undefined}
-          >
-            {resolveConfigValue(fu.next_steps, nextStepsOpts)}
-          </span>
-        )}
-        {renderNextStepNotes(fu, notesCls)}
-        {fu.created_at && (
-          <p className="text-gray-400 text-[10px] leading-snug mt-0.5">{formatTimestamp(fu.created_at)}</p>
-        )}
+      <div className="mt-1">
+        {lines.map((line, i) => (
+          <p key={i} className={`${textCls} leading-snug${i > 0 ? ' mt-1.5' : ''}`}>{line}</p>
+        ))}
       </div>
     );
   }
 
-  /** Editable rep pills for one entry, so a stacked row keeps per-follow-up reps. */
-  function renderRepCellBody(fu: FollowUp, size: 'sm' | 'xs' = 'sm') {
-    if (canEditRep && editingRepKey === fu.id) {
+  /**
+   * One follow-up: its badge with a hover-delete on the left and a chevron on
+   * the right, the date it landed underneath, and the subtext behind the
+   * chevron. Used for single rows and for each entry of a grouped row.
+   */
+  function renderNextStepEntry(fu: FollowUp, i: number, badgeExtraCls: string, notesCls: string, deleteAlwaysVisible = false) {
+    const hasNotes = !!fu.next_steps_notes;
+    const isExpanded = expandedTaskIds.has(fu.id);
+    return (
+      <div key={fu.id} className={`group/entry ${i > 0 ? 'pt-1.5 mt-1.5 border-t border-gray-100' : ''}`}>
+        <div className="flex items-center gap-1 min-w-0">
+          {onDelete && <EntryDeleteButton onClick={() => onDelete(fu.id)} alwaysVisible={deleteAlwaysVisible} />}
+          {canEditNextSteps && editingNextStepsKey === fu.id ? (
+            <select
+              autoFocus
+              className="text-xs border border-brand-primary rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-brand-primary"
+              defaultValue={fu.next_steps}
+              onChange={(e) => { onNextStepsChange!(fu.id, e.target.value); setEditingNextStepsKey(null); }}
+              onBlur={() => setEditingNextStepsKey(null)}
+            >
+              {nextStepsOpts.map(opt => (
+                <option key={opt.id} value={String(opt.id)}>{opt.value}</option>
+              ))}
+            </select>
+          ) : (
+            <span
+              onClick={canEditNextSteps ? () => setEditingNextStepsKey(fu.id) : undefined}
+              className={`inline-flex px-2 py-0.5 rounded-lg font-medium leading-snug ${badgeExtraCls} ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'} ${canEditNextSteps ? 'cursor-pointer hover:opacity-75 transition-opacity' : ''}`}
+              title={canEditNextSteps ? 'Click to change' : undefined}
+            >
+              {resolveConfigValue(fu.next_steps, nextStepsOpts)}
+            </span>
+          )}
+          {hasNotes && (
+            <button
+              type="button"
+              onClick={() => setExpandedTaskIds(prev => { const n = new Set(prev); if (n.has(fu.id)) n.delete(fu.id); else n.add(fu.id); return n; })}
+              aria-expanded={isExpanded}
+              title={isExpanded ? 'Hide details' : 'Show details'}
+              className="flex-shrink-0 p-0.5 text-gray-400 hover:text-brand-secondary transition-colors"
+            >
+              <svg className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          )}
+        </div>
+        {fu.created_at && (
+          <p className="text-gray-400 text-[10px] leading-snug mt-0.5">{formatTimestamp(fu.created_at)}</p>
+        )}
+        {isExpanded && renderNextStepNotes(fu, notesCls)}
+      </div>
+    );
+  }
+
+  /**
+   * The group's rep, shown once. Editing it writes to every follow-up in the
+   * group — one onRepChange per row, the same shape the bulk Done uses.
+   */
+  function renderGroupRepBody(rows: FollowUp[], size: 'sm' | 'xs' = 'sm') {
+    const head = rows[0];
+    // They almost always match; when they don't, the union is what's true.
+    const unionRep = Array.from(new Set(rows.flatMap(r => parseRepIds(r.assigned_rep)))).join(',') || null;
+    if (canEditRep && editingRepKey === head.id) {
       return (
         <div className="w-36">
-          <RepMultiSelect options={userOptions} selectedIds={editingRepIds} onChange={setEditingRepIds} onClose={(ids) => finishEditRep(fu.id, ids)} placeholder="Select reps..." />
+          <RepMultiSelect
+            options={userOptions}
+            selectedIds={editingRepIds}
+            onChange={setEditingRepIds}
+            onClose={(ids) => {
+              const rep = ids.length > 0 ? ids.join(',') : null;
+              rows.forEach(r => onRepChange!(r.id, rep));
+              setEditingRepKey(null);
+              setEditingRepIds([]);
+            }}
+            placeholder="Select reps..."
+          />
         </div>
       );
     }
     if (canEditRep) {
       return (
-        <button type="button" onClick={() => startEditRep(fu)} className="group inline-flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity" title={fu.assigned_rep ? 'Click to change reps' : 'Click to assign rep'}>
-          {fu.assigned_rep ? (<RepPills assignedRep={fu.assigned_rep} userOptions={userOptions} size={size} />) : (<span className="text-gray-300 group-hover:text-blue-400 transition-colors">—</span>)}
+        <button
+          type="button"
+          onClick={() => { setEditingRepKey(head.id); setEditingRepIds(parseRepIds(unionRep)); }}
+          className="group inline-flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity"
+          title={unionRep ? 'Click to change reps for all of this attendee\u2019s follow-ups' : 'Click to assign rep'}
+        >
+          {unionRep ? (<RepPills assignedRep={unionRep} userOptions={userOptions} size={size} />) : (<span className="text-gray-300 group-hover:text-blue-400 transition-colors">—</span>)}
         </button>
       );
     }
-    return fu.assigned_rep
-      ? <RepPills assignedRep={fu.assigned_rep} userOptions={userOptions} size={size} />
+    return unionRep
+      ? <RepPills assignedRep={unionRep} userOptions={userOptions} size={size} />
       : <span className="text-gray-300">—</span>;
   }
 
@@ -611,7 +543,7 @@ export function FollowUpsTable({
               : 'bg-white text-gray-500 border-gray-300 hover:border-green-400 hover:text-green-600 disabled:opacity-50'
           }`}
         >
-          {allDone ? (<><CheckIcon className="w-3 h-3 flex-shrink-0" />Done</>) : isLoading ? 'Saving…' : `Done (${incompleteIds.length})`}
+          {allDone ? (<><CheckIcon className="w-3 h-3 flex-shrink-0" />Done</>) : isLoading ? 'Saving…' : 'Done'}
         </button>
         {hasError && <span className="text-[10px] text-red-500">Failed</span>}
       </div>
@@ -652,11 +584,7 @@ export function FollowUpsTable({
               <p className="text-gray-400">{formatDate(head.start_date)}</p>
             </td>;
             case 'rep': return <td key="rep" className="px-3 py-2">
-              {rows.map((row, i) => (
-                <div key={row.id} className={i > 0 ? 'pt-1.5 mt-1.5 border-t border-gray-100' : ''}>
-                  {renderRepCellBody(row)}
-                </div>
-              ))}
+              {renderGroupRepBody(rows)}
             </td>;
             case 'notes': return <td key="notes" className="px-3 py-2">
               <FollowUpNotesPopover attendeeId={head.attendee_id} notesCount={Number(head.entity_notes_count)} conferenceName={head.conference_name} />
@@ -672,15 +600,6 @@ export function FollowUpsTable({
             <CustomColumnCell column={col} value={(head as unknown as Record<string, unknown>)[col.data_key]} />
           </td>
         ))}
-        {onDelete && (
-          <td className="px-3 py-2">
-            {rows.map((row, i) => (
-              <div key={row.id} className={i > 0 ? 'pt-1.5 mt-1.5 border-t border-gray-100' : ''}>
-                <button type="button" onClick={() => onDelete(row.id)} className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors">Delete</button>
-              </div>
-            ))}
-          </td>
-        )}
       </tr>
     );
   }
@@ -714,21 +633,12 @@ export function FollowUpsTable({
             ) : null}
           </div>
           <div className="flex items-center gap-2 flex-shrink-0 text-xs">
+            {renderGroupRepBody(rows, 'xs')}
             {renderGroupDoneButton(groupKey, rows)}
           </div>
         </div>
-        <div className="mt-2 space-y-0">
-          {rows.map((row, i) => (
-            <div key={row.id} className={i > 0 ? 'pt-2 mt-2 border-t border-gray-100' : ''}>
-              <div className="flex items-center gap-2 flex-wrap">
-                {renderNextStepEntry(row, 0, 'text-xs', 'text-xs text-gray-500')}
-                {renderRepCellBody(row, 'xs')}
-                {onDelete && (
-                  <button type="button" onClick={() => onDelete(row.id)} className="text-red-400 hover:text-red-600 text-[10px] font-medium ml-auto">Delete</button>
-                )}
-              </div>
-            </div>
-          ))}
+        <div className="mt-2">
+          {rows.map((row, i) => renderNextStepEntry(row, i, 'text-xs', 'text-xs text-gray-500', true))}
         </div>
         <div className="mt-1.5 flex items-center gap-2">
           <Link href={`/conferences/${head.conference_id}`} className="text-xs text-brand-secondary hover:underline">
@@ -803,8 +713,7 @@ export function FollowUpsTable({
                 {customColumns.filter(c => c.visible).map(col => (
                   <th key={`custom_${col.id}`} className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">{col.label}</th>
                 ))}
-                {onDelete && <th className="px-3 py-2"></th>}
-              </tr>
+                </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {followUps.map(fu => renderDesktopRow(fu))}
@@ -871,8 +780,7 @@ export function FollowUpsTable({
                 {customColumns.filter(c => c.visible).map(col => (
                   <th key={`custom_${col.id}`} className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">{col.label}</th>
                 ))}
-                {onDelete && <th className="px-3 py-2"></th>}
-              </tr>
+                </tr>
             </thead>
             <tbody>
               {groups.map((group, gi) => {
@@ -970,7 +878,6 @@ export function FollowUpsTable({
               {customColumns.filter(c => c.visible).map(col => (
                 <th key={`custom_${col.id}`} className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">{col.label}</th>
               ))}
-              {onDelete && <th className="px-3 py-2"></th>}
             </tr>
           </thead>
           <tbody className={showConferenceHeader ? '' : 'divide-y divide-gray-100'}>
