@@ -1,455 +1,39 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { startPolling, stopPolling } from '@/lib/pollingManager';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useUser } from '@/components/UserContext';
 import { useChatPanel } from '@/components/ChatPanelContext';
-import { useFloatingNavHidden } from '@/components/FloatingNavHiddenContext';
+import { MessagingMenu } from '@/components/MessagingMenu';
+import { ChatDrawer } from '@/components/ChatDrawer';
+import { Avatar, GroupAvatar, getDisplayName, targetName } from '@/components/chatCommon';
 
-interface ChatUser {
-  id: number;
-  email: string;
-  displayName: string | null;
-}
-
-interface Conversation {
-  otherId: number;
-  otherEmail: string;
-  otherDisplayName: string | null;
-  lastContent: string;
-  lastCreatedAt: string;
-  lastSenderId: number;
-  unreadCount: number;
-}
-
-interface Message {
-  id: number;
-  senderId: number;
-  receiverId: number;
-  content: string;
-  createdAt: string;
-  readAt: string | null;
-  mine: boolean;
-}
-
-interface GroupConversation {
-  id: number;
-  name: string;
-  createdBy: number;
-  createdAt: string;
-  lastContent: string | null;
-  lastCreatedAt: string | null;
-  lastSenderId: number | null;
-  unreadCount: number;
-}
-
-interface GroupMessage {
-  id: number;
-  groupId: number;
-  senderId: number;
-  senderName: string;
-  content: string;
-  createdAt: string;
-  mine: boolean;
-}
-
-interface ConferenceOption {
-  id: number;
-  name: string;
-}
-
-function getDisplayName(email: string, displayName: string | null): string {
-  return displayName || email.split('@')[0];
-}
-
-function getInitials(name: string): string {
-  return name.split(/\s+/).filter(Boolean).map(p => p[0]).join('').toUpperCase().slice(0, 2) || '?';
-}
-
-function formatTime(iso: string): string {
-  const d = new Date(iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z');
-  if (isNaN(d.getTime())) return '';
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffDays = Math.floor(diffMs / 86400000);
-  if (diffDays === 0) return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return d.toLocaleDateString('en-US', { weekday: 'short' });
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-// Avatar circle with color based on name
-const AVATAR_COLORS = [
-  'bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500',
-  'bg-rose-500', 'bg-cyan-500', 'bg-indigo-500', 'bg-teal-500',
-];
-function avatarColor(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) & 0xfffff;
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
-}
-
-function Avatar({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' }) {
-  const cls = size === 'sm' ? 'w-8 h-8 text-xs' : 'w-9 h-9 text-sm';
-  return (
-    <div className={`${cls} ${avatarColor(name)} rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0`}>
-      {getInitials(name)}
-    </div>
-  );
-}
-
-// Individual chat window (can have multiple open)
-function ChatWindow({
-  other,
-  currentUserId,
-  onClose,
-  onNewMessage,
-  mobile,
-}: {
-  other: ChatUser;
-  currentUserId: number;
-  onClose: () => void;
-  onNewMessage: () => void;
-  mobile?: boolean;
-}) {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [text, setText] = useState('');
-  const [sending, setSending] = useState(false);
-  const [minimized, setMinimized] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const name = getDisplayName(other.email, other.displayName);
-
-  const fetchMessages = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/chat/messages?with=${other.id}`);
-      if (!res.ok) return;
-      const data = await res.json() as Message[];
-      setMessages(data);
-    } catch { /* silently ignore */ }
-  }, [other.id]);
-
-  useEffect(() => {
-    setLoading(true);
-    fetchMessages().finally(() => setLoading(false));
-    // Poll for new messages every 8 seconds
-    pollRef.current = setInterval(fetchMessages, 8000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [fetchMessages]);
-
-  useEffect(() => {
-    if (!minimized) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages, minimized]);
-
-  // Auto-resize textarea as the user types; reset to single row when cleared
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = text ? `${Math.min(el.scrollHeight, 120)}px` : '';
-  }, [text]);
-
-  const handleSend = async () => {
-    if (!text.trim() || sending) return;
-    setSending(true);
-    // Reset textarea height immediately before the state clear
-    if (textareaRef.current) textareaRef.current.style.height = '';
-    try {
-      const res = await fetch('/api/chat/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ receiverId: other.id, content: text.trim() }),
-      });
-      if (!res.ok) return;
-      const msg = await res.json() as Message;
-      setMessages(prev => [...prev, msg]);
-      setText('');
-      onNewMessage();
-    } catch { /* silently ignore */ } finally {
-      setSending(false);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  return (
-    // An open chat gets a fixed height rather than growing with its message
-    // count, which made short threads tiny and long ones unwieldy. Collapsed,
-    // it shrinks back to just the header.
-    <div className={`flex flex-col ${mobile ? 'w-full h-full rounded-xl' : `w-[420px] rounded-t-xl ${minimized ? '' : 'h-[600px] max-h-[80vh]'}`} bg-white shadow-2xl border border-gray-200 overflow-hidden`}>
-      {/* Header */}
-      <div
-        className="flex items-center gap-2 px-3 py-2.5 bg-white border-b border-gray-100 cursor-pointer select-none"
-        onClick={() => setMinimized(v => !v)}
-      >
-        <Avatar name={name} size="sm" />
-        <span className="flex-1 font-semibold text-sm text-gray-800 truncate">{name}</span>
-        <button
-          type="button"
-          onClick={e => { e.stopPropagation(); setMinimized(v => !v); }}
-          className="text-gray-400 hover:text-gray-600 p-0.5"
-          title={minimized ? 'Expand' : 'Minimize'}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={minimized ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'} />
-          </svg>
-        </button>
-        <button
-          type="button"
-          onClick={e => { e.stopPropagation(); onClose(); }}
-          className="text-gray-400 hover:text-gray-600 p-0.5"
-          title="Close"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-
-      {!minimized && (
-        <>
-          {/* Messages */}
-          <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1.5 bg-gray-50">
-            {loading && (
-              <div className="flex justify-center items-center h-full">
-                <div className="w-5 h-5 animate-spin rounded-full border-2 border-brand-secondary border-t-transparent" />
-              </div>
-            )}
-            {!loading && messages.length === 0 && (
-              <p className="text-xs text-gray-400 text-center py-8">No messages yet. Say hello!</p>
-            )}
-            {!loading && messages.map(msg => (
-              <div key={msg.id} className={`flex ${msg.mine ? 'justify-end' : 'justify-start'}`}>
-                <div
-                  className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm leading-snug break-words ${
-                    msg.mine
-                      ? 'bg-brand-secondary text-white rounded-br-sm'
-                      : 'bg-white text-gray-800 border border-gray-100 rounded-bl-sm shadow-sm'
-                  }`}
-                >
-                  {msg.content}
-                </div>
-              </div>
-            ))}
-            <div ref={bottomRef} />
-          </div>
-
-          {/* Input */}
-          <div className="px-2 py-2 bg-white border-t border-gray-100 flex items-end gap-1.5">
-            <textarea
-              ref={textareaRef}
-              value={text}
-              onChange={e => setText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Write a message…"
-              rows={1}
-              className="flex-1 resize-none rounded-2xl border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:border-brand-secondary text-gray-800 placeholder-gray-400 overflow-hidden"
-              style={{ lineHeight: '1.4' }}
-            />
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!text.trim() || sending}
-              className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-brand-secondary text-white disabled:opacity-40 hover:opacity-90 transition-opacity"
-              title="Send"
-            >
-              <svg className="w-4 h-4 -rotate-90" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-              </svg>
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// Group chat window — mirrors ChatWindow with sender labels on non-mine messages
-function GroupChatWindow({
-  group,
-  currentUserId,
-  onClose,
-  onNewMessage,
-  mobile,
-}: {
-  group: GroupConversation;
-  currentUserId: number;
-  onClose: () => void;
-  onNewMessage: () => void;
-  mobile?: boolean;
-}) {
-  const [messages, setMessages] = useState<GroupMessage[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [text, setText] = useState('');
-  const [sending, setSending] = useState(false);
-  const [minimized, setMinimized] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const fetchMessages = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/chat/groups/${group.id}/messages`);
-      if (!res.ok) return;
-      setMessages(await res.json() as GroupMessage[]);
-    } catch { /* silently ignore */ }
-  }, [group.id]);
-
-  useEffect(() => {
-    setLoading(true);
-    fetchMessages().finally(() => setLoading(false));
-    pollRef.current = setInterval(fetchMessages, 8000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [fetchMessages]);
-
-  useEffect(() => {
-    if (!minimized) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, minimized]);
-
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = text ? `${Math.min(el.scrollHeight, 120)}px` : '';
-  }, [text]);
-
-  const handleSend = async () => {
-    if (!text.trim() || sending) return;
-    setSending(true);
-    if (textareaRef.current) textareaRef.current.style.height = '';
-    try {
-      const res = await fetch(`/api/chat/groups/${group.id}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: text.trim() }),
-      });
-      if (!res.ok) return;
-      const msg = await res.json() as GroupMessage;
-      setMessages(prev => [...prev, msg]);
-      setText('');
-      onNewMessage();
-    } catch { /* silently ignore */ } finally {
-      setSending(false);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
-  };
-
-  return (
-    // An open chat gets a fixed height rather than growing with its message
-    // count, which made short threads tiny and long ones unwieldy. Collapsed,
-    // it shrinks back to just the header.
-    <div className={`flex flex-col ${mobile ? 'w-full h-full rounded-xl' : `w-[420px] rounded-t-xl ${minimized ? '' : 'h-[600px] max-h-[80vh]'}`} bg-white shadow-2xl border border-gray-200 overflow-hidden`}>
-      {/* Header */}
-      <div
-        className="flex items-center gap-2 px-3 py-2.5 bg-white border-b border-gray-100 cursor-pointer select-none"
-        onClick={() => setMinimized(v => !v)}
-      >
-        <div className="w-8 h-8 rounded-full bg-brand-secondary/10 flex items-center justify-center flex-shrink-0">
-          <svg className="w-4 h-4 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-        </div>
-        <span className="flex-1 font-semibold text-sm text-gray-800 truncate">{group.name}</span>
-        <button type="button" onClick={e => { e.stopPropagation(); setMinimized(v => !v); }} className="text-gray-400 hover:text-gray-600 p-0.5" title={minimized ? 'Expand' : 'Minimize'}>
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={minimized ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'} />
-          </svg>
-        </button>
-        <button type="button" onClick={e => { e.stopPropagation(); onClose(); }} className="text-gray-400 hover:text-gray-600 p-0.5" title="Close">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-
-      {!minimized && (
-        <>
-          <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1.5 bg-gray-50">
-            {loading && (
-              <div className="flex justify-center items-center h-full">
-                <div className="w-5 h-5 animate-spin rounded-full border-2 border-brand-secondary border-t-transparent" />
-              </div>
-            )}
-            {!loading && messages.length === 0 && (
-              <p className="text-xs text-gray-400 text-center py-8">No messages yet. Say hello!</p>
-            )}
-            {!loading && messages.map(msg => (
-              <div key={msg.id} className={`flex flex-col ${msg.mine ? 'items-end' : 'items-start'}`}>
-                {!msg.mine && (
-                  <p className="text-[10px] text-gray-400 mb-0.5 ml-1">{msg.senderName}</p>
-                )}
-                <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm leading-snug break-words ${
-                  msg.mine
-                    ? 'bg-brand-secondary text-white rounded-br-sm'
-                    : 'bg-white text-gray-800 border border-gray-100 rounded-bl-sm shadow-sm'
-                }`}>
-                  {msg.content}
-                </div>
-              </div>
-            ))}
-            <div ref={bottomRef} />
-          </div>
-          <div className="px-2 py-2 bg-white border-t border-gray-100 flex items-end gap-1.5">
-            <textarea
-              ref={textareaRef}
-              value={text}
-              onChange={e => setText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Write a message…"
-              rows={1}
-              className="flex-1 resize-none rounded-2xl border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:border-brand-secondary text-gray-800 placeholder-gray-400 overflow-hidden"
-              style={{ lineHeight: '1.4' }}
-            />
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!text.trim() || sending}
-              className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-brand-secondary text-white disabled:opacity-40 hover:opacity-90 transition-opacity"
-              title="Send"
-            >
-              <svg className="w-4 h-4 -rotate-90" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-              </svg>
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// The main footer messaging hub
 const BAR_POSITION_STORAGE_KEY = 'footerChatBarLeft';
-// Width of the bar once its panel is open. Dragging has to clamp against this
-// rather than the collapsed width, or a bar parked at the right edge pushes
-// the panel off screen when it expands.
-const OPEN_PANEL_WIDTH = 420;
+const BAR_WIDTH = 260;
 
-/** Furthest left offset that still fits the open panel on screen. */
+/** Furthest left offset that still leaves the whole bar on screen. */
 function maxBarLeft(): number {
-  return Math.max(8, window.innerWidth - OPEN_PANEL_WIDTH - 8);
+  return Math.max(8, window.innerWidth - BAR_WIDTH - 8);
 }
 
+/**
+ * The messaging dock: the draggable bar along the bottom edge, the mobile
+ * Direct/Groups sheet, and the conversation drawer.
+ *
+ * The bar is the handle for a minimised chat and the way back to the menu. It
+ * can be dismissed outright — via its own hide button, or by closing a chat —
+ * and the header's chat icon always brings it back.
+ */
 export function FooterChat() {
   const { user, loading: userLoading } = useUser();
-  const { panelOpen, setPanelOpen } = useChatPanel();
-  const { helpChatOpen } = useFloatingNavHidden();
-  // Horizontal position of the desktop messaging bar along the bottom edge —
-  // null means "anchored to the default bottom-right spot" (right: 16px).
-  // Once dragged, it's pinned to an explicit left offset (persisted across
-  // sessions) instead.
+  const {
+    panelOpen, setPanelOpen,
+    activeChat, chatMinimized, restoreChat, minimizeChat, exitChat,
+    barHidden, setBarHidden,
+    totalUnread,
+  } = useChatPanel();
+
+  // Horizontal position of the desktop bar — null means the default
+  // bottom-right spot; once dragged it pins to an explicit, persisted offset.
   const [barLeft, setBarLeft] = useState<number | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const dragMovedRef = useRef(false);
@@ -462,8 +46,8 @@ export function FooterChat() {
     }
   }, []);
 
-  // Re-clamp when the window narrows, so a position saved on a wider screen
-  // doesn't leave the panel hanging off the edge.
+  // Re-clamp when the window narrows so a position saved on a wider screen
+  // doesn't leave the bar hanging off the edge.
   useEffect(() => {
     const onResize = () => setBarLeft(prev => (prev == null ? prev : Math.min(Math.max(8, prev), maxBarLeft())));
     window.addEventListener('resize', onResize);
@@ -481,8 +65,7 @@ export function FooterChat() {
     const onMove = (ev: MouseEvent) => {
       const delta = ev.clientX - startMouseX;
       if (Math.abs(delta) > 4) dragMovedRef.current = true;
-      const next = Math.min(Math.max(8, startLeft + delta), maxBarLeft());
-      setBarLeft(next);
+      setBarLeft(Math.min(Math.max(8, startLeft + delta), maxBarLeft()));
     };
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
@@ -498,593 +81,43 @@ export function FooterChat() {
     document.addEventListener('mouseup', onUp);
   }, []);
 
-  // Direct message state
-  const [view, setView] = useState<'conversations' | 'new'>('conversations');
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [allUsers, setAllUsers] = useState<ChatUser[]>([]);
-  const [openChats, setOpenChats] = useState<ChatUser[]>([]);
-  const [userSearch, setUserSearch] = useState('');
-  const [convLoading, setConvLoading] = useState(false);
-  // Group chat state
-  const [panelTab, setPanelTab] = useState<'direct' | 'groups'>('direct');
-  const [groups, setGroups] = useState<GroupConversation[]>([]);
-  const [openGroups, setOpenGroups] = useState<GroupConversation[]>([]);
-  const [groupView, setGroupView] = useState<'list' | 'new-group'>('list');
-  const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupConferenceId, setNewGroupConferenceId] = useState<number | null>(null);
-  const [newGroupMemberIds, setNewGroupMemberIds] = useState<Set<number>>(new Set());
-  const [conferences, setConferences] = useState<ConferenceOption[]>([]);
-  const [groupCreating, setGroupCreating] = useState(false);
+  if (userLoading || !user) return null;
 
-  const dmUnread = conversations.reduce((s, c) => s + c.unreadCount, 0);
-  const groupUnread = groups.reduce((s, g) => s + g.unreadCount, 0);
-  const totalUnread = dmUnread + groupUnread;
-
-  const fetchConversations = useCallback(async () => {
-    try {
-      const res = await fetch('/api/chat/conversations');
-      if (!res.ok) return;
-      setConversations(await res.json() as Conversation[]);
-    } catch { /* silently ignore */ }
-  }, []);
-
-  const fetchGroups = useCallback(async () => {
-    try {
-      const res = await fetch('/api/chat/groups');
-      if (!res.ok) return;
-      setGroups(await res.json() as GroupConversation[]);
-    } catch { /* silently ignore */ }
-  }, []);
-
-  useEffect(() => {
-    if (!user) return;
-    fetchConversations();
-    fetchGroups();
-    startPolling('chat-footer', () => { fetchConversations(); fetchGroups(); }, 15_000, 30_000);
-    return () => stopPolling('chat-footer');
-  }, [user, fetchConversations, fetchGroups]);
-
-  const openChat = useCallback((other: ChatUser) => {
-    setOpenChats(prev => {
-      if (prev.find(c => c.id === other.id)) return prev;
-      const totalOpen = prev.length + openGroups.length;
-      const next = totalOpen >= 3 ? prev.slice(1) : prev;
-      return [...next, other];
-    });
-    setPanelOpen(false);
-    setConversations(prev => prev.map(c => c.otherId === other.id ? { ...c, unreadCount: 0 } : c));
-  }, [openGroups.length]);
-
-  const openChatFromConversation = useCallback((conv: Conversation) => {
-    openChat({ id: conv.otherId, email: conv.otherEmail, displayName: conv.otherDisplayName });
-  }, [openChat]);
-
-  const closeChat = useCallback((userId: number) => {
-    setOpenChats(prev => prev.filter(c => c.id !== userId));
-  }, []);
-
-  const openGroupChat = useCallback((group: GroupConversation) => {
-    setOpenGroups(prev => {
-      if (prev.find(g => g.id === group.id)) return prev;
-      const totalOpen = openChats.length + prev.length;
-      const next = totalOpen >= 3 ? prev.slice(1) : prev;
-      return [...next, group];
-    });
-    setPanelOpen(false);
-    setGroups(prev => prev.map(g => g.id === group.id ? { ...g, unreadCount: 0 } : g));
-  }, [openChats.length]);
-
-  const closeGroupChat = useCallback((groupId: number) => {
-    setOpenGroups(prev => prev.filter(g => g.id !== groupId));
-  }, []);
-
-  const handleNewMessageSent = useCallback(() => {
-    fetchConversations();
-    fetchGroups();
-  }, [fetchConversations, fetchGroups]);
-
-  const loadUsers = useCallback(async () => {
-    if (allUsers.length > 0) return;
-    try {
-      const res = await fetch('/api/chat/users');
-      if (!res.ok) return;
-      setAllUsers(await res.json() as ChatUser[]);
-    } catch { /* silently ignore */ }
-  }, [allUsers.length]);
-
-  const loadConferences = useCallback(async () => {
-    if (conferences.length > 0) return;
-    try {
-      const res = await fetch('/api/conferences?nav=1');
-      if (!res.ok) return;
-      const data = await res.json() as { id: number; name: string }[];
-      setConferences(data.map(c => ({ id: c.id, name: c.name })));
-    } catch { /* silently ignore */ }
-  }, [conferences.length]);
-
-  const handleOpenNewPanel = () => {
-    setView('new');
-    loadUsers();
-  };
-
-  const handleOpenNewGroup = () => {
-    setGroupView('new-group');
-    loadUsers();
-    loadConferences();
-  };
-
-  const toggleGroupMember = (uid: number) => {
-    setNewGroupMemberIds(prev => {
-      const next = new Set(prev);
-      if (next.has(uid)) next.delete(uid); else next.add(uid);
-      return next;
-    });
-  };
-
-  const handleCreateGroup = async () => {
-    if (!newGroupName.trim() || groupCreating) return;
-    setGroupCreating(true);
-    try {
-      const res = await fetch('/api/chat/groups', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newGroupName.trim(),
-          memberIds: Array.from(newGroupMemberIds),
-          ...(newGroupConferenceId ? { conferenceId: newGroupConferenceId } : {}),
-        }),
-      });
-      if (!res.ok) return;
-      const newGroup = await res.json() as { id: number; name: string; memberCount: number };
-      await fetchGroups();
-      setNewGroupName('');
-      setNewGroupConferenceId(null);
-      setNewGroupMemberIds(new Set());
-      setGroupView('list');
-      // Open the new group immediately
-      const created: GroupConversation = {
-        id: newGroup.id, name: newGroup.name, createdBy: user!.id,
-        createdAt: new Date().toISOString(), lastContent: null,
-        lastCreatedAt: null, lastSenderId: null, unreadCount: 0,
-      };
-      openGroupChat(created);
-    } catch { /* silently ignore */ } finally {
-      setGroupCreating(false);
-    }
-  };
-
-  const filteredUsers = userSearch.trim()
-    ? allUsers.filter(u => {
-        const name = getDisplayName(u.email, u.displayName).toLowerCase();
-        return name.includes(userSearch.toLowerCase()) || u.email.toLowerCase().includes(userSearch.toLowerCase());
-      })
-    : allUsers;
-
-  // Don't render for unauthenticated users or when Parlay AI chat is open
-  if (userLoading || !user || helpChatOpen) return null;
+  const showDrawer = activeChat != null && !chatMinimized;
 
   return (
     <>
-      {/* Mobile bottom-sheet overlay — same slide-up action/height as the
-          site's other mobile drawers (see .drawer-mobile-responsive). */}
+      {/* Mobile Direct/Groups sheet — the desktop menu hangs off the header
+          icon instead (see Header). */}
       {panelOpen && (
         <div className="lg:hidden fixed inset-0 z-50">
-          {/* Backdrop */}
           <div className="absolute inset-0 bg-black/30" onClick={() => setPanelOpen(false)} />
-          {/* Sheet */}
-          <div className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 h-[90vh] w-full bg-white rounded-t-2xl shadow-2xl flex flex-col z-50">
-            {/* Sheet header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              {(view === 'new' || groupView === 'new-group') ? (
-                <button
-                  type="button"
-                  onClick={() => { setView('conversations'); setGroupView('list'); setUserSearch(''); }}
-                  className="flex items-center gap-1.5 text-sm font-semibold text-gray-800 hover:text-brand-secondary"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                  {view === 'new' ? 'New Message' : 'New Group'}
-                </button>
-              ) : (
-                <div className="flex gap-1">
-                  <button onClick={() => setPanelTab('direct')} className={`px-3 py-0.5 rounded-full text-sm font-semibold transition-colors ${panelTab === 'direct' ? 'bg-brand-secondary text-white' : 'text-gray-500 hover:text-gray-800'}`}>
-                    Direct{dmUnread > 0 && <span className="ml-1 text-[9px]">({dmUnread})</span>}
-                  </button>
-                  <button onClick={() => setPanelTab('groups')} className={`px-3 py-0.5 rounded-full text-sm font-semibold transition-colors ${panelTab === 'groups' ? 'bg-brand-secondary text-white' : 'text-gray-500 hover:text-gray-800'}`}>
-                    Groups{groupUnread > 0 && <span className="ml-1 text-[9px]">({groupUnread})</span>}
-                  </button>
-                </div>
-              )}
-              <div className="flex items-center gap-1">
-                {view === 'conversations' && panelTab === 'direct' && groupView === 'list' && (
-                  <button type="button" onClick={handleOpenNewPanel} className="p-1.5 text-gray-500 hover:text-brand-secondary hover:bg-gray-100 rounded-full transition-colors" title="New message">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                  </button>
-                )}
-                {panelTab === 'groups' && groupView === 'list' && (
-                  <button type="button" onClick={handleOpenNewGroup} className="p-1.5 text-gray-500 hover:text-brand-secondary hover:bg-gray-100 rounded-full transition-colors" title="New group">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </button>
-                )}
-                <button type="button" onClick={() => setPanelOpen(false)} className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors" title="Close">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            {/* New DM search */}
-            {panelTab === 'direct' && view === 'new' && (
-              <div className="flex flex-col flex-1 overflow-hidden">
-                <div className="px-3 py-2 border-b border-gray-100">
-                  <input type="text" value={userSearch} onChange={e => setUserSearch(e.target.value)} placeholder="Search teammates…" autoFocus className="w-full text-sm border border-gray-200 rounded-full px-3 py-1.5 focus:outline-none focus:border-brand-secondary" />
-                </div>
-                <div className="flex-1 overflow-y-auto">
-                  {filteredUsers.length === 0 && <p className="text-xs text-gray-400 text-center py-6">No teammates found.</p>}
-                  {filteredUsers.map(u => {
-                    const name = getDisplayName(u.email, u.displayName);
-                    return (
-                      <button key={u.id} type="button" onClick={() => { openChat(u); setView('conversations'); setUserSearch(''); }} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-left transition-colors">
-                        <Avatar name={name} size="sm" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">{name}</p>
-                          <p className="text-xs text-gray-400 truncate">{u.email}</p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Direct conversations list */}
-            {panelTab === 'direct' && view === 'conversations' && (
-              <div className="flex-1 overflow-y-auto">
-                {conversations.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-                    <svg className="w-10 h-10 text-gray-200 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                    </svg>
-                    <p className="text-sm text-gray-400">No conversations yet.</p>
-                    <button type="button" onClick={handleOpenNewPanel} className="mt-2 text-xs text-brand-secondary hover:underline font-medium">Start one</button>
-                  </div>
-                )}
-                {conversations.map(conv => {
-                  const name = getDisplayName(conv.otherEmail, conv.otherDisplayName);
-                  const isMe = conv.lastSenderId === user.id;
-                  return (
-                    <button key={conv.otherId} type="button" onClick={() => { openChatFromConversation(conv); setPanelOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-left transition-colors border-b border-gray-50 last:border-0">
-                      <div className="relative flex-shrink-0">
-                        <Avatar name={name} size="sm" />
-                        {conv.unreadCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-brand-secondary text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">{conv.unreadCount > 9 ? '9+' : conv.unreadCount}</span>}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-1">
-                          <p className={`text-sm truncate ${conv.unreadCount > 0 ? 'font-bold text-gray-900' : 'font-medium text-gray-800'}`}>{name}</p>
-                          <span className="text-[10px] text-gray-400 whitespace-nowrap flex-shrink-0">{formatTime(conv.lastCreatedAt)}</span>
-                        </div>
-                        <p className={`text-xs truncate ${conv.unreadCount > 0 ? 'font-semibold text-gray-700' : 'text-gray-400'}`}>{isMe ? 'You: ' : ''}{conv.lastContent}</p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Groups list */}
-            {panelTab === 'groups' && groupView === 'list' && (
-              <div className="flex-1 overflow-y-auto">
-                {groups.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-                    <svg className="w-10 h-10 text-gray-200 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    <p className="text-sm text-gray-400">No group chats yet.</p>
-                    <button type="button" onClick={handleOpenNewGroup} className="mt-2 text-xs text-brand-secondary hover:underline font-medium">Create one</button>
-                  </div>
-                )}
-                {groups.map(group => (
-                  <button key={group.id} type="button" onClick={() => { openGroupChat(group); setPanelOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 text-left transition-colors border-b border-gray-50 last:border-0">
-                    <div className="relative flex-shrink-0">
-                      <div className="w-8 h-8 rounded-full bg-brand-secondary/10 flex items-center justify-center">
-                        <svg className="w-4 h-4 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                      </div>
-                      {group.unreadCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-brand-secondary text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">{group.unreadCount > 9 ? '9+' : group.unreadCount}</span>}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1">
-                        <p className={`text-sm truncate ${group.unreadCount > 0 ? 'font-bold text-gray-900' : 'font-medium text-gray-800'}`}>{group.name}</p>
-                        {group.lastCreatedAt && <span className="text-[10px] text-gray-400 whitespace-nowrap flex-shrink-0">{formatTime(group.lastCreatedAt)}</span>}
-                      </div>
-                      {group.lastContent && <p className={`text-xs truncate ${group.unreadCount > 0 ? 'font-semibold text-gray-700' : 'text-gray-400'}`}>{group.lastContent}</p>}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* New group form */}
-            {panelTab === 'groups' && groupView === 'new-group' && (
-              <div className="flex flex-col flex-1 overflow-hidden">
-                <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Group name</label>
-                    <input type="text" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="e.g. AHCA 2025 Team" autoFocus className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-secondary" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Conference (optional — auto-adds internal attendees)</label>
-                    <select value={newGroupConferenceId ?? ''} onChange={e => setNewGroupConferenceId(e.target.value ? Number(e.target.value) : null)} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-secondary bg-white">
-                      <option value="">None (ad-hoc group)</option>
-                      {conferences.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Add members</label>
-                    <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
-                      {allUsers.length === 0 && <p className="text-xs text-gray-400 text-center py-3">Loading…</p>}
-                      {allUsers.map(u => {
-                        const name = getDisplayName(u.email, u.displayName);
-                        return (
-                          <label key={u.id} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer">
-                            <input type="checkbox" checked={newGroupMemberIds.has(u.id)} onChange={() => toggleGroupMember(u.id)} className="accent-brand-secondary" />
-                            <Avatar name={name} size="sm" />
-                            <span className="text-sm text-gray-800 truncate">{name}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-                <div className="px-4 py-3 border-t border-gray-100">
-                  <button type="button" onClick={handleCreateGroup} disabled={!newGroupName.trim() || groupCreating} className="w-full btn-primary text-sm py-2 disabled:opacity-40">
-                    {groupCreating ? 'Creating…' : 'Create Group'}
-                  </button>
-                </div>
-              </div>
-            )}
+          <div className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 h-[90vh] w-full bg-white rounded-t-2xl shadow-2xl flex flex-col z-50 overflow-hidden">
+            <MessagingMenu onClose={() => setPanelOpen(false)} />
           </div>
         </div>
       )}
 
-      {/* Mobile DM windows */}
-      {openChats.map(other => (
-        <div key={other.id} className="lg:hidden fixed inset-0 z-[60]">
-          <div className="absolute inset-0 bg-black/20" onClick={() => closeChat(other.id)} />
-          <div className="absolute top-16 left-4 right-4 bottom-4">
-            <ChatWindow other={other} currentUserId={user.id} onClose={() => closeChat(other.id)} onNewMessage={handleNewMessageSent} mobile />
-          </div>
-        </div>
-      ))}
+      {showDrawer && <ChatDrawer target={activeChat} />}
 
-      {/* Mobile group chat windows */}
-      {openGroups.map(group => (
-        <div key={group.id} className="lg:hidden fixed inset-0 z-[60]">
-          <div className="absolute inset-0 bg-black/20" onClick={() => closeGroupChat(group.id)} />
-          <div className="absolute top-16 left-4 right-4 bottom-4">
-            <GroupChatWindow group={group} currentUserId={user.id} onClose={() => closeGroupChat(group.id)} onNewMessage={handleNewMessageSent} mobile />
-          </div>
-        </div>
-      ))}
-
-      {/* Desktop layout */}
-      <div
-        ref={barRef}
-        className="hidden lg:flex fixed bottom-0 z-50 flex-row-reverse items-end gap-2"
-        style={barLeft != null ? { left: barLeft } : { right: 16 }}
-      >
-      {/* Open DM windows */}
-      {openChats.map(other => (
-        <ChatWindow key={other.id} other={other} currentUserId={user.id} onClose={() => closeChat(other.id)} onNewMessage={handleNewMessageSent} />
-      ))}
-      {/* Open group windows */}
-      {openGroups.map(group => (
-        <GroupChatWindow key={group.id} group={group} currentUserId={user.id} onClose={() => closeGroupChat(group.id)} onNewMessage={handleNewMessageSent} />
-      ))}
-
-      {/* Messaging hub panel + tab */}
-      <div className="flex flex-col items-end">
-        {/* Expanded panel */}
-        {panelOpen && (
-          <div className="mb-0 w-[420px] bg-white rounded-t-xl shadow-2xl border border-gray-200 border-b-0 flex flex-col max-h-[420px]">
-            {/* Panel header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              {(view === 'new' || groupView === 'new-group') ? (
-                <button type="button" onClick={() => { setView('conversations'); setGroupView('list'); setUserSearch(''); }} className="flex items-center gap-1.5 text-sm font-semibold text-gray-800 hover:text-brand-secondary">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                  {view === 'new' ? 'New Message' : 'New Group'}
-                </button>
-              ) : (
-                <div className="flex gap-1">
-                  <button onClick={() => setPanelTab('direct')} className={`px-3 py-0.5 rounded-full text-sm font-semibold transition-colors ${panelTab === 'direct' ? 'bg-brand-secondary text-white' : 'text-gray-500 hover:text-gray-800'}`}>
-                    Direct{dmUnread > 0 && <span className="ml-1 text-[9px]">({dmUnread})</span>}
-                  </button>
-                  <button onClick={() => setPanelTab('groups')} className={`px-3 py-0.5 rounded-full text-sm font-semibold transition-colors ${panelTab === 'groups' ? 'bg-brand-secondary text-white' : 'text-gray-500 hover:text-gray-800'}`}>
-                    Groups{groupUnread > 0 && <span className="ml-1 text-[9px]">({groupUnread})</span>}
-                  </button>
-                </div>
-              )}
-              <div className="flex items-center gap-1">
-                {view === 'conversations' && panelTab === 'direct' && groupView === 'list' && (
-                  <button type="button" onClick={handleOpenNewPanel} className="p-1.5 text-gray-500 hover:text-brand-secondary hover:bg-gray-100 rounded-full transition-colors" title="New message">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                  </button>
-                )}
-                {panelTab === 'groups' && groupView === 'list' && (
-                  <button type="button" onClick={handleOpenNewGroup} className="p-1.5 text-gray-500 hover:text-brand-secondary hover:bg-gray-100 rounded-full transition-colors" title="New group">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </button>
-                )}
-                <button type="button" onClick={() => setPanelOpen(false)} className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors" title="Close">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            {/* New DM search */}
-            {panelTab === 'direct' && view === 'new' && (
-              <div className="flex flex-col flex-1 overflow-hidden">
-                <div className="px-3 py-2 border-b border-gray-100">
-                  <input type="text" value={userSearch} onChange={e => setUserSearch(e.target.value)} placeholder="Search teammates…" autoFocus className="w-full text-sm border border-gray-200 rounded-full px-3 py-1.5 focus:outline-none focus:border-brand-secondary" />
-                </div>
-                <div className="flex-1 overflow-y-auto">
-                  {filteredUsers.length === 0 && <p className="text-xs text-gray-400 text-center py-6">No teammates found.</p>}
-                  {filteredUsers.map(u => {
-                    const name = getDisplayName(u.email, u.displayName);
-                    return (
-                      <button key={u.id} type="button" onClick={() => { openChat(u); setView('conversations'); setUserSearch(''); }} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left transition-colors">
-                        <Avatar name={name} size="sm" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">{name}</p>
-                          <p className="text-xs text-gray-400 truncate">{u.email}</p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Direct conversations list */}
-            {panelTab === 'direct' && view === 'conversations' && (
-              <div className="flex-1 overflow-y-auto">
-                {!convLoading && conversations.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
-                    <svg className="w-10 h-10 text-gray-200 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                    </svg>
-                    <p className="text-sm text-gray-400">No conversations yet.</p>
-                    <button type="button" onClick={handleOpenNewPanel} className="mt-2 text-xs text-brand-secondary hover:underline font-medium">Start one</button>
-                  </div>
-                )}
-                {conversations.map(conv => {
-                  const name = getDisplayName(conv.otherEmail, conv.otherDisplayName);
-                  const isMe = conv.lastSenderId === user.id;
-                  return (
-                    <button key={conv.otherId} type="button" onClick={() => openChatFromConversation(conv)} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left transition-colors">
-                      <div className="relative flex-shrink-0">
-                        <Avatar name={name} size="sm" />
-                        {conv.unreadCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-brand-secondary text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">{conv.unreadCount > 9 ? '9+' : conv.unreadCount}</span>}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-1">
-                          <p className={`text-sm truncate ${conv.unreadCount > 0 ? 'font-bold text-gray-900' : 'font-medium text-gray-800'}`}>{name}</p>
-                          <span className="text-[10px] text-gray-400 whitespace-nowrap flex-shrink-0">{formatTime(conv.lastCreatedAt)}</span>
-                        </div>
-                        <p className={`text-xs truncate ${conv.unreadCount > 0 ? 'font-semibold text-gray-700' : 'text-gray-400'}`}>{isMe ? 'You: ' : ''}{conv.lastContent}</p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Groups list */}
-            {panelTab === 'groups' && groupView === 'list' && (
-              <div className="flex-1 overflow-y-auto">
-                {groups.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
-                    <svg className="w-10 h-10 text-gray-200 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    <p className="text-sm text-gray-400">No group chats yet.</p>
-                    <button type="button" onClick={handleOpenNewGroup} className="mt-2 text-xs text-brand-secondary hover:underline font-medium">Create one</button>
-                  </div>
-                )}
-                {groups.map(group => (
-                  <button key={group.id} type="button" onClick={() => openGroupChat(group)} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left transition-colors">
-                    <div className="relative flex-shrink-0">
-                      <div className="w-8 h-8 rounded-full bg-brand-secondary/10 flex items-center justify-center">
-                        <svg className="w-4 h-4 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                      </div>
-                      {group.unreadCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-brand-secondary text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">{group.unreadCount > 9 ? '9+' : group.unreadCount}</span>}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1">
-                        <p className={`text-sm truncate ${group.unreadCount > 0 ? 'font-bold text-gray-900' : 'font-medium text-gray-800'}`}>{group.name}</p>
-                        {group.lastCreatedAt && <span className="text-[10px] text-gray-400 whitespace-nowrap flex-shrink-0">{formatTime(group.lastCreatedAt)}</span>}
-                      </div>
-                      {group.lastContent && <p className={`text-xs truncate ${group.unreadCount > 0 ? 'font-semibold text-gray-700' : 'text-gray-400'}`}>{group.lastContent}</p>}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* New group form */}
-            {panelTab === 'groups' && groupView === 'new-group' && (
-              <div className="flex flex-col flex-1 overflow-hidden">
-                <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Group name</label>
-                    <input type="text" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="e.g. AHCA 2025 Team" autoFocus className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-secondary" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Conference (optional — auto-adds internal attendees)</label>
-                    <select value={newGroupConferenceId ?? ''} onChange={e => setNewGroupConferenceId(e.target.value ? Number(e.target.value) : null)} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-secondary bg-white">
-                      <option value="">None (ad-hoc group)</option>
-                      {conferences.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Add members</label>
-                    <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
-                      {allUsers.length === 0 && <p className="text-xs text-gray-400 text-center py-3">Loading…</p>}
-                      {allUsers.map(u => {
-                        const name = getDisplayName(u.email, u.displayName);
-                        return (
-                          <label key={u.id} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer">
-                            <input type="checkbox" checked={newGroupMemberIds.has(u.id)} onChange={() => toggleGroupMember(u.id)} className="accent-brand-secondary" />
-                            <Avatar name={name} size="sm" />
-                            <span className="text-sm text-gray-800 truncate">{name}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-                <div className="px-4 py-3 border-t border-gray-100">
-                  <button type="button" onClick={handleCreateGroup} disabled={!newGroupName.trim() || groupCreating} className="w-full btn-primary text-sm py-2 disabled:opacity-40">
-                    {groupCreating ? 'Creating…' : 'Create Group'}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Tab bar button */}
-        <button
-          type="button"
-          onClick={() => {
-            // A drag that moved the bar shouldn't also toggle the panel.
-            if (dragMovedRef.current) { dragMovedRef.current = false; return; }
-            setPanelOpen(!panelOpen); if (!panelOpen) { setView('conversations'); setConvLoading(false); }
-          }}
-          className={`flex items-center justify-between gap-2 px-4 py-2.5 border border-b-0 rounded-t-xl shadow-lg hover:opacity-90 transition-all duration-200 select-none ${panelOpen ? 'w-[420px]' : 'w-[160px]'} ${totalUnread > 0 && !panelOpen ? 'bg-brand-highlight/25 border-brand-highlight' : 'bg-white border-gray-200 hover:bg-gray-50'}`}
+      {/* Bottom bar — stood down while the drawer is up, since the drawer
+          carries the same controls and the bar would sit over its input. */}
+      {!barHidden && !showDrawer && (
+        <div
+          ref={barRef}
+          className="hidden lg:flex fixed bottom-0 z-50 items-end"
+          style={barLeft != null ? { left: barLeft } : { right: 16 }}
         >
-          <div className="flex items-center gap-2">
+          <div
+            className={`flex items-center gap-2 pl-2 pr-1.5 py-2 border border-b-0 rounded-t-xl shadow-lg transition-colors select-none ${
+              totalUnread > 0 ? 'bg-brand-highlight/25 border-brand-highlight' : 'bg-white border-gray-200'
+            }`}
+            style={{ width: BAR_WIDTH }}
+          >
             <span
               onMouseDown={handleDragStart}
               title="Drag to move"
-              className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 flex-shrink-0 -ml-1"
+              className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 flex-shrink-0"
             >
               <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                 <circle cx="8" cy="6" r="1.5" /><circle cx="16" cy="6" r="1.5" />
@@ -1092,25 +125,83 @@ export function FooterChat() {
                 <circle cx="8" cy="18" r="1.5" /><circle cx="16" cy="18" r="1.5" />
               </svg>
             </span>
-            <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
-            <span className="text-sm font-semibold text-gray-800">Messaging</span>
-            {totalUnread > 0 && (
-              <span className="min-w-[18px] h-[18px] px-1 bg-brand-secondary text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
-                {totalUnread > 99 ? '99+' : totalUnread}
-              </span>
+
+            {activeChat ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (dragMovedRef.current) { dragMovedRef.current = false; return; }
+                    if (chatMinimized) restoreChat(); else minimizeChat();
+                  }}
+                  className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                  title={chatMinimized ? 'Reopen chat' : 'Minimize chat'}
+                >
+                  {activeChat.kind === 'dm'
+                    ? <Avatar name={getDisplayName(activeChat.user.email, activeChat.user.displayName)} size="sm" />
+                    : <GroupAvatar />}
+                  <span className="text-sm font-semibold text-gray-800 truncate">{targetName(activeChat)}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => (chatMinimized ? restoreChat() : minimizeChat())}
+                  className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 flex-shrink-0"
+                  title={chatMinimized ? 'Reopen chat' : 'Minimize chat'}
+                  aria-label={chatMinimized ? 'Reopen chat' : 'Minimize chat'}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={chatMinimized ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'} />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={exitChat}
+                  className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 flex-shrink-0"
+                  title="Close chat"
+                  aria-label="Close chat"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (dragMovedRef.current) { dragMovedRef.current = false; return; }
+                    setPanelOpen(!panelOpen);
+                  }}
+                  className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                  title="Open messaging"
+                >
+                  <svg className="w-4 h-4 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  <span className="text-sm font-semibold text-gray-800">Messaging</span>
+                  {totalUnread > 0 && (
+                    <span className="min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none flex-shrink-0">
+                      {totalUnread > 99 ? '99+' : totalUnread}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setPanelOpen(false); setBarHidden(true); }}
+                  className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 flex-shrink-0"
+                  title="Hide the messaging bar"
+                  aria-label="Hide the messaging bar"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </>
             )}
           </div>
-          <svg
-            className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-150 ${panelOpen ? 'rotate-180' : ''}`}
-            fill="none" stroke="currentColor" viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-          </svg>
-        </button>
-      </div>
-      </div>
+        </div>
+      )}
     </>
   );
 }
