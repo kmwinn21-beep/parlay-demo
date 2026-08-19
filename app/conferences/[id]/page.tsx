@@ -3397,21 +3397,17 @@ export default function ConferenceDetailPage() {
                         switch (col.key) {
                           case 'name': return (
                             <td key="name" className="px-4 py-3 font-medium overflow-visible">
+                              {/* The name opens the drawer, so the icon that
+                                  used to do that is gone. */}
                               <div className="flex items-center gap-1 text-left">
                                 <button
                                   type="button"
                                   onClick={() => { setQuickViewId(attendee.id); setQuickViewType('attendee'); }}
-                                  className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-brand-secondary flex-shrink-0"
-                                  title="Quick view"
+                                  className="text-brand-secondary hover:underline block truncate text-left"
+                                  title={`${attendee.first_name} ${attendee.last_name}`}
                                 >
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                  </svg>
-                                </button>
-                                <Link href={`/attendees/${attendee.id}`} className="text-brand-secondary hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
                                   {attendee.first_name} {attendee.last_name}
-                                </Link>
+                                </button>
                               </div>
                             </td>
                           );
@@ -4053,6 +4049,7 @@ export default function ConferenceDetailPage() {
             }}
             onBulkToggle={handleBulkToggleFollowUp}
             groupBy="attendee"
+            namesOpenDrawer
           />
             );
           })()}

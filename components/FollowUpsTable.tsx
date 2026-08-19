@@ -190,6 +190,7 @@ export function FollowUpsTable({
   onBulkToggle,
   tableName = 'follow_ups',
   groupBy = 'none',
+  namesOpenDrawer = false,
 }: {
   followUps: FollowUp[];
   onToggle: (id: number, completed: boolean) => void;
@@ -204,6 +205,11 @@ export function FollowUpsTable({
    * pages that already establish the conference around the table.
    */
   groupBy?: 'conference' | 'conference-attendee' | 'attendee' | 'none';
+  /**
+   * Clicking a name opens its drawer instead of navigating, and the quick-view
+   * eyes drop away — one affordance rather than two.
+   */
+  namesOpenDrawer?: boolean;
 }) {
   const nextStepsOpts = useConfigWithIds('next_steps');
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
@@ -223,6 +229,48 @@ export function FollowUpsTable({
     if (next.has(key)) next.delete(key); else next.add(key);
     return next;
   });
+
+  /** Attendee name — a drawer opener or a link, depending on the surface. */
+  function attendeeNameNode(fu: FollowUp, className: string) {
+    const name = `${fu.first_name} ${fu.last_name}`;
+    const openDrawer = () => setQuickView({ type: 'attendee', id: fu.attendee_id, name });
+    if (namesOpenDrawer) {
+      return (
+        <button type="button" onClick={e => { e.stopPropagation(); openDrawer(); }} className={`${className} text-left`} title={name}>
+          {name}
+        </button>
+      );
+    }
+    return (
+      <>
+        <QuickViewIcon onClick={openDrawer} />
+        <Link href={`/attendees/${fu.attendee_id}`} onClick={e => e.stopPropagation()} className={className} title={name}>
+          {name}
+        </Link>
+      </>
+    );
+  }
+
+  /** Company name — same treatment. */
+  function companyNameNode(fu: FollowUp, className: string) {
+    if (!fu.company_name || !fu.company_id) return null;
+    const openDrawer = () => setQuickView({ type: 'company', id: fu.company_id!, name: fu.company_name! });
+    if (namesOpenDrawer) {
+      return (
+        <button type="button" onClick={e => { e.stopPropagation(); openDrawer(); }} className={`${className} text-left`}>
+          {fu.company_name}
+        </button>
+      );
+    }
+    return (
+      <>
+        <QuickViewIcon onClick={openDrawer} />
+        <Link href={`/companies/${fu.company_id}`} onClick={e => e.stopPropagation()} className={className}>
+          {fu.company_name}
+        </Link>
+      </>
+    );
+  }
 
   function parseTaskLines(notes: string | null): string[] {
     if (!notes) return [];
@@ -358,18 +406,14 @@ export function FollowUpsTable({
           switch (col.key) {
             case 'name': return <td key="name" className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
               <div className="flex items-center gap-1 group">
-                <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: fu.attendee_id, name: `${fu.first_name} ${fu.last_name}` })} />
-                <Link href={`/attendees/${fu.attendee_id}`} className="text-brand-secondary hover:underline leading-snug block truncate" title={`${fu.first_name} ${fu.last_name}`}>
-                  {fu.first_name} {fu.last_name}
-                </Link>
+                {attendeeNameNode(fu, 'text-brand-secondary hover:underline leading-snug block truncate')}
               </div>
             </td>;
             case 'title': return <td key="title" className="px-3 py-2 text-gray-600 leading-snug">{fu.title || <span className="text-gray-300">—</span>}</td>;
             case 'company': return <td key="company" className="px-3 py-2 text-gray-600 leading-snug">
               {fu.company_name && fu.company_id ? (
                 <div className="flex items-center gap-1 group">
-                  <QuickViewIcon onClick={() => setQuickView({ type: 'company', id: fu.company_id!, name: fu.company_name! })} />
-                  <Link href={`/companies/${fu.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">{fu.company_name}</Link>
+                  {companyNameNode(fu, 'text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug')}
                 </div>
               ) : <span className="text-gray-300">—</span>}
             </td>;
@@ -578,32 +622,16 @@ export function FollowUpsTable({
             truncate every field down to a couple of characters. */}
         <div className="flex-1 min-w-0 flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
           <div className="flex items-center gap-1 min-w-0">
-            <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: head.attendee_id, name: `${head.first_name} ${head.last_name}` })} />
-            <Link
-              href={`/attendees/${head.attendee_id}`}
-              onClick={e => e.stopPropagation()}
-              className="text-xs font-semibold text-brand-secondary hover:underline truncate"
-            >
-              {head.first_name} {head.last_name}
-            </Link>
+            {attendeeNameNode(head, 'text-xs font-semibold text-brand-secondary hover:underline truncate')}
           </div>
           {head.title && <span className="text-xs text-gray-500 truncate">{head.title}</span>}
           <div className="flex items-center gap-1 min-w-0">
             {head.company_name && (
               <>
                 <span className="hidden sm:inline text-gray-300">·</span>
-                {head.company_id ? (
-                  <>
-                    <QuickViewIcon onClick={() => setQuickView({ type: 'company', id: head.company_id!, name: head.company_name! })} />
-                    <Link
-                      href={`/companies/${head.company_id}`}
-                      onClick={e => e.stopPropagation()}
-                      className="text-xs text-brand-secondary hover:underline truncate"
-                    >
-                      {head.company_name}
-                    </Link>
-                  </>
-                ) : <span className="text-xs text-gray-500 truncate">{head.company_name}</span>}
+                {head.company_id
+                  ? companyNameNode(head, 'text-xs text-brand-secondary hover:underline truncate')
+                  : <span className="text-xs text-gray-500 truncate">{head.company_name}</span>}
               </>
             )}
             {head.conference_name && (
@@ -638,18 +666,14 @@ export function FollowUpsTable({
           switch (col.key) {
             case 'name': return <td key="name" className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
               <div className="flex items-center gap-1 group">
-                <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: head.attendee_id, name: `${head.first_name} ${head.last_name}` })} />
-                <Link href={`/attendees/${head.attendee_id}`} className="text-brand-secondary hover:underline leading-snug block truncate" title={`${head.first_name} ${head.last_name}`}>
-                  {head.first_name} {head.last_name}
-                </Link>
+                {attendeeNameNode(head, 'text-brand-secondary hover:underline leading-snug block truncate')}
               </div>
             </td>;
             case 'title': return <td key="title" className="px-3 py-2 text-gray-600 leading-snug">{head.title || <span className="text-gray-300">—</span>}</td>;
             case 'company': return <td key="company" className="px-3 py-2 text-gray-600 leading-snug">
               {head.company_name && head.company_id ? (
                 <div className="flex items-center gap-1 group">
-                  <QuickViewIcon onClick={() => setQuickView({ type: 'company', id: head.company_id!, name: head.company_name! })} />
-                  <Link href={`/companies/${head.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">{head.company_name}</Link>
+                  {companyNameNode(head, 'text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug')}
                 </div>
               ) : <span className="text-gray-300">—</span>}
             </td>;
