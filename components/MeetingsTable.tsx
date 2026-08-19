@@ -6,6 +6,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { getPreset, type ColorMap } from '@/lib/colors';
+import { MEETING_TIME_OPTIONS, formatMeetingTime } from '@/lib/meetingTime';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { useUser } from '@/components/UserContext';
@@ -57,13 +58,6 @@ function formatGroupDate(d: string) {
   return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
-function formatMeetingTime(t: string) {
-  if (!t) return '';
-  const [h, m] = t.split(':').map(Number);
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const hour12 = h % 12 || 12;
-  return `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
-}
 
 /** Render initials pills for a stored scheduled_by value (CSV of IDs or legacy name) */
 function RepPills({
@@ -509,7 +503,10 @@ function EditMeetingRow({
         </div>
         <div>
           <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Time *</label>
-          <input type="time" className={inputClass} value={form.meeting_time} onChange={e => setForm(f => ({ ...f, meeting_time: e.target.value }))} required />
+          <select className={inputClass} value={form.meeting_time} onChange={e => setForm(f => ({ ...f, meeting_time: e.target.value }))} required>
+            <option value="">Select time...</option>
+            {MEETING_TIME_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+          </select>
         </div>
         <div>
           <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Location</label>
@@ -632,7 +629,10 @@ function EditMeetingTableRow({
             </div>
             <div>
               <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Time *</label>
-              <input type="time" className={inputClass} value={form.meeting_time} onChange={e => setForm(f => ({ ...f, meeting_time: e.target.value }))} />
+              <select className={inputClass} value={form.meeting_time} onChange={e => setForm(f => ({ ...f, meeting_time: e.target.value }))}>
+                <option value="">Select time...</option>
+                {MEETING_TIME_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
             </div>
             <div>
               <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Meeting Type</label>

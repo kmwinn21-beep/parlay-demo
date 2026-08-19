@@ -9,6 +9,7 @@ import { parseRepIds, type UserOption } from '@/lib/useUserOptions';
 import { useHideBottomNav } from './BottomNavContext';
 import { type Meeting } from '@/components/MeetingsTable';
 import { useUser } from '@/components/UserContext';
+import { MEETING_TIME_OPTIONS, formatMeetingTime, timeToMinutes, isBoothHours } from '@/lib/meetingTime';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
 import { AdditionalAttendeesSelect, type AdditionalAttendeeCandidate, type AdditionalAttendeeSelection } from '@/components/AdditionalAttendeesSelect';
 import { SendCalendarInvitePrompt } from '@/components/SendCalendarInvitePrompt';
@@ -79,29 +80,14 @@ function formatChipDate(ymd: string): { short: string; full: string } {
   return { short, full };
 }
 
-function timeToMins(hhmm: string): number {
-  const [h, m] = hhmm.split(':').map(Number);
-  return h * 60 + m;
+/** null for a booth-hours meeting, which has no point on the clock. */
+function timeToMins(hhmm: string): number | null {
+  return timeToMinutes(hhmm);
 }
 
-function formatTime12(hhmm: string): string {
-  const [hStr, mStr] = hhmm.split(':');
-  const h = parseInt(hStr, 10);
-  const m = parseInt(mStr, 10);
-  const ampm = h < 12 ? 'AM' : 'PM';
-  const h12 = h % 12 || 12;
-  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
-}
+const formatTime12 = formatMeetingTime;
 
-// 6:00 AM → 9:45 PM in 15-min increments
-const TIME_OPTIONS: { value: string; label: string }[] = Array.from({ length: 64 }, (_, i) => {
-  const totalMins = 360 + i * 15;
-  const h24 = Math.floor(totalMins / 60);
-  const min = totalMins % 60;
-  const value = `${String(h24).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
-  const label = formatTime12(value);
-  return { value, label };
-});
+const TIME_OPTIONS = MEETING_TIME_OPTIONS;
 
 function SidebarContent({
   selectedConference,
@@ -198,9 +184,10 @@ function SidebarContent({
                 {!isCollapsed && (
                   <div className="px-4 pb-2 space-y-1.5">
                     {dayMeetings.map(m => {
-                      const selMins = meetingTime ? timeToMins(meetingTime) : -1;
-                      const mMins = m.meeting_time ? timeToMins(m.meeting_time) : -1;
-                      const isConflict = selMins >= 0 && mMins >= 0 && day === meetingDate && Math.abs(mMins - selMins) < 30;
+                      // null for booth-hours bookings, which can't clash.
+                      const selMins = timeToMins(meetingTime);
+                      const mMins = timeToMins(m.meeting_time);
+                      const isConflict = selMins != null && mMins != null && day === meetingDate && Math.abs(mMins - selMins) < 30;
                       const isRepConflict = isConflict && m.scheduled_by
                         ? m.scheduled_by.split(',').map(s => Number(s.trim())).some(id => selectedRepIds.includes(id))
                         : false;
@@ -484,6 +471,8 @@ export function NewMeetingModal({
   const conflicts = useMemo(() => {
     if (!meetingDate || !meetingTime || conferenceMeetings.length === 0) return { repConflict: false, overlapConflict: false };
     const selMins = timeToMins(meetingTime);
+    // A booth-hours booking isn't at a time, so nothing can clash with it.
+    if (selMins == null) return { repConflict: false, overlapConflict: false };
     const sameDayMeetings = conferenceMeetings.filter(m => m.meeting_date === meetingDate && m.meeting_time);
 
     // Rep conflict: selected rep has a meeting at the exact same time on this date (across any conference)
@@ -498,7 +487,7 @@ export function NewMeetingModal({
     // Overlap: any meeting on same date within 30-min window
     const overlapConflict = sameDayMeetings.some(m => {
       const mMins = timeToMins(m.meeting_time);
-      return Math.abs(mMins - selMins) < 30;
+      return mMins != null && Math.abs(mMins - selMins) < 30;
     });
 
     return { repConflict, overlapConflict };
@@ -612,7 +601,8 @@ export function NewMeetingModal({
 
         // Offer to draft a calendar invite instead of closing immediately — the modal stays
         // mounted (isOpen is still true) and swaps to the SendCalendarInvitePrompt below.
-        if (contact) {
+        // Booth-hours bookings have no start time, so there is no invite to build.
+        if (contact && !isBoothHours(meetingTime)) {
           const attendeeFirst = contact.first_name || 'Attendee';
           const repFirst = user?.firstName || 'Rep';
           setInviteContext({

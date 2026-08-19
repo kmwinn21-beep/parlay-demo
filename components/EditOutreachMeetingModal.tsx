@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { MEETING_TIME_OPTIONS } from '@/lib/meetingTime';
 import toast from 'react-hot-toast';
 import { RepMultiSelect } from './RepMultiSelect';
 import { type UserOption, parseRepIds } from '@/lib/useUserOptions';
@@ -95,7 +96,10 @@ export function EditOutreachMeetingModal({
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 mb-1">Time</label>
-                <input type="time" value={meetingTime} onChange={e => setMeetingTime(e.target.value)} className="input-field text-sm w-full" />
+                <select value={meetingTime} onChange={e => setMeetingTime(e.target.value)} className="input-field text-sm w-full">
+                  <option value="">Select time...</option>
+                  {MEETING_TIME_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                </select>
               </div>
             </div>
             <div>
