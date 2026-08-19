@@ -30,7 +30,7 @@ import { ComposeEmailModal } from '@/components/ComposeEmailModal';
 import { CompanyDrawer } from '@/components/CompanyDrawer';
 import { ActivityTimelineModal } from '@/components/ActivityTimelineModal';
 import { useCapabilities } from '@/lib/useCapabilities';
-import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
+import { QuickViewDrawer, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
 import { SearchableSelect } from '@/components/SearchableSelect';
 import { ScrollRow } from '@/components/ScrollRow';
@@ -1487,7 +1487,6 @@ export default function CompanyDetailPage() {
                     <tr key={attendee.id} className="hover:bg-gray-50 transition-colors group">
                       <td className="px-4 py-3 font-medium overflow-hidden" style={{ maxWidth: 220 }}>
                         <div className="flex items-center gap-1.5">
-                          <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: attendee.id, name: `${attendee.first_name} ${attendee.last_name}` })} />
                           <AttendeeInitialsAvatar
                             name={`${attendee.first_name} ${attendee.last_name}`}
                             photoUrl={attendee.photo_url}
@@ -1495,9 +1494,16 @@ export default function CompanyDetailPage() {
                             companyName={company?.name}
                             className="w-7 h-7 text-[10px]"
                           />
-                          <Link href={`/attendees/${attendee.id}`} className="text-brand-secondary hover:underline truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
+                          {/* The name is the quick view now — the separate eye
+                              icon is gone, matching the mobile card. */}
+                          <button
+                            type="button"
+                            onClick={() => setQuickView({ type: 'attendee', id: attendee.id, name: `${attendee.first_name} ${attendee.last_name}` })}
+                            className="text-brand-secondary hover:underline truncate text-left"
+                            title={`${attendee.first_name} ${attendee.last_name}`}
+                          >
                             {attendee.first_name} {attendee.last_name}
-                          </Link>
+                          </button>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-gray-600">
@@ -1599,6 +1605,7 @@ export default function CompanyDetailPage() {
               actionOptions={actionOptions}
               colorMap={colorMaps.action || {}}
               userOptions={userOptions}
+              namesOpenDrawer
               hideCompany
               tableName="company_meetings"
               onNotesClick={(id) => openMeetingNotes(id)}
@@ -1668,7 +1675,7 @@ export default function CompanyDetailPage() {
                 <span className="text-sm font-medium text-brand-primary">Follow Up</span>
               </button>
             </div>
-            <FollowUpsTable followUps={companyFollowUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} onNextStepsChange={handleNextStepsChange} onBulkToggle={handleBulkToggleFollowUp} tableName="company_follow_ups" groupBy="conference-attendee" />
+            <FollowUpsTable followUps={companyFollowUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} onNextStepsChange={handleNextStepsChange} onBulkToggle={handleBulkToggleFollowUp} tableName="company_follow_ups" groupBy="conference-attendee" namesOpenDrawer />
           </div>
 
           {/* Notes */}
