@@ -493,7 +493,7 @@ export default function ConferenceDetailPage() {
 
   // Add attendee inline form state
   const [showAddForm, setShowAddForm] = useState(false);
-  const [addFormData, setAddFormData] = useState({ first_name: '', last_name: '', title: '', company: '', email: '' });
+  const [addFormData, setAddFormData] = useState({ first_name: '', last_name: '', title: '', company: '', email: '', phone: '', linkedin_url: '' });
   const [isAddingAttendee, setIsAddingAttendee] = useState(false);
 
   const { openMeetingNotes } = useMeetingNotesDrawer();
@@ -1338,7 +1338,7 @@ export default function ConferenceDetailPage() {
         throw new Error(err.error || 'Failed to add attendee');
       }
       toast.success('Attendee added!');
-      setAddFormData({ first_name: '', last_name: '', title: '', company: '', email: '' });
+      setAddFormData({ first_name: '', last_name: '', title: '', company: '', email: '', phone: '', linkedin_url: '' });
       setAddCompanyOther(false);
       setShowAddForm(false);
       fetchConference();
@@ -3239,6 +3239,26 @@ export default function ConferenceDetailPage() {
                     placeholder="email@example.com"
                   />
                 </div>
+                <div>
+                  <label className="label text-xs">Phone</label>
+                  <input
+                    type="tel"
+                    value={addFormData.phone}
+                    onChange={(e) => setAddFormData((p) => ({ ...p, phone: e.target.value }))}
+                    className="input-field"
+                    placeholder="(555) 123-4567"
+                  />
+                </div>
+                <div>
+                  <label className="label text-xs">LinkedIn</label>
+                  <input
+                    type="url"
+                    value={addFormData.linkedin_url}
+                    onChange={(e) => setAddFormData((p) => ({ ...p, linkedin_url: e.target.value }))}
+                    className="input-field"
+                    placeholder="linkedin.com/in/…"
+                  />
+                </div>
               </div>
               <div className="flex gap-2 mt-3">
                 <button
@@ -3251,7 +3271,7 @@ export default function ConferenceDetailPage() {
                 <button
                   onClick={() => {
                     setShowAddForm(false);
-                    setAddFormData({ first_name: '', last_name: '', title: '', company: '', email: '' });
+                    setAddFormData({ first_name: '', last_name: '', title: '', company: '', email: '', phone: '', linkedin_url: '' });
                   }}
                   className="btn-secondary text-sm"
                 >
