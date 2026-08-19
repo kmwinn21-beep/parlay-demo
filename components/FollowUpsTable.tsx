@@ -190,6 +190,7 @@ export function FollowUpsTable({
   onBulkToggle,
   tableName = 'follow_ups',
   groupBy = 'none',
+  namesOpenDrawer = false,
 }: {
   followUps: FollowUp[];
   onToggle: (id: number, completed: boolean) => void;
@@ -204,6 +205,11 @@ export function FollowUpsTable({
    * pages that already establish the conference around the table.
    */
   groupBy?: 'conference' | 'conference-attendee' | 'attendee' | 'none';
+  /**
+   * Clicking a name opens its drawer instead of navigating, and the quick-view
+   * eyes drop away — one affordance rather than two.
+   */
+  namesOpenDrawer?: boolean;
 }) {
   const nextStepsOpts = useConfigWithIds('next_steps');
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
@@ -223,6 +229,48 @@ export function FollowUpsTable({
     if (next.has(key)) next.delete(key); else next.add(key);
     return next;
   });
+
+  /** Attendee name — a drawer opener or a link, depending on the surface. */
+  function attendeeNameNode(fu: FollowUp, className: string) {
+    const name = `${fu.first_name} ${fu.last_name}`;
+    const openDrawer = () => setQuickView({ type: 'attendee', id: fu.attendee_id, name });
+    if (namesOpenDrawer) {
+      return (
+        <button type="button" onClick={e => { e.stopPropagation(); openDrawer(); }} className={`${className} text-left`} title={name}>
+          {name}
+        </button>
+      );
+    }
+    return (
+      <>
+        <QuickViewIcon onClick={openDrawer} />
+        <Link href={`/attendees/${fu.attendee_id}`} onClick={e => e.stopPropagation()} className={className} title={name}>
+          {name}
+        </Link>
+      </>
+    );
+  }
+
+  /** Company name — same treatment. */
+  function companyNameNode(fu: FollowUp, className: string) {
+    if (!fu.company_name || !fu.company_id) return null;
+    const openDrawer = () => setQuickView({ type: 'company', id: fu.company_id!, name: fu.company_name! });
+    if (namesOpenDrawer) {
+      return (
+        <button type="button" onClick={e => { e.stopPropagation(); openDrawer(); }} className={`${className} text-left`}>
+          {fu.company_name}
+        </button>
+      );
+    }
+    return (
+      <>
+        <QuickViewIcon onClick={openDrawer} />
+        <Link href={`/companies/${fu.company_id}`} onClick={e => e.stopPropagation()} className={className}>
+          {fu.company_name}
+        </Link>
+      </>
+    );
+  }
 
   function parseTaskLines(notes: string | null): string[] {
     if (!notes) return [];
@@ -358,18 +406,14 @@ export function FollowUpsTable({
           switch (col.key) {
             case 'name': return <td key="name" className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
               <div className="flex items-center gap-1 group">
-                <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: fu.attendee_id, name: `${fu.first_name} ${fu.last_name}` })} />
-                <Link href={`/attendees/${fu.attendee_id}`} className="text-brand-secondary hover:underline leading-snug block truncate" title={`${fu.first_name} ${fu.last_name}`}>
-                  {fu.first_name} {fu.last_name}
-                </Link>
+                {attendeeNameNode(fu, 'text-brand-secondary hover:underline leading-snug block truncate')}
               </div>
             </td>;
             case 'title': return <td key="title" className="px-3 py-2 text-gray-600 leading-snug">{fu.title || <span className="text-gray-300">—</span>}</td>;
             case 'company': return <td key="company" className="px-3 py-2 text-gray-600 leading-snug">
               {fu.company_name && fu.company_id ? (
                 <div className="flex items-center gap-1 group">
-                  <QuickViewIcon onClick={() => setQuickView({ type: 'company', id: fu.company_id!, name: fu.company_name! })} />
-                  <Link href={`/companies/${fu.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">{fu.company_name}</Link>
+                  {companyNameNode(fu, 'text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug')}
                 </div>
               ) : <span className="text-gray-300">—</span>}
             </td>;
@@ -578,32 +622,16 @@ export function FollowUpsTable({
             truncate every field down to a couple of characters. */}
         <div className="flex-1 min-w-0 flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
           <div className="flex items-center gap-1 min-w-0">
-            <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: head.attendee_id, name: `${head.first_name} ${head.last_name}` })} />
-            <Link
-              href={`/attendees/${head.attendee_id}`}
-              onClick={e => e.stopPropagation()}
-              className="text-xs font-semibold text-brand-secondary hover:underline truncate"
-            >
-              {head.first_name} {head.last_name}
-            </Link>
+            {attendeeNameNode(head, 'text-xs font-semibold text-brand-secondary hover:underline truncate')}
           </div>
           {head.title && <span className="text-xs text-gray-500 truncate">{head.title}</span>}
           <div className="flex items-center gap-1 min-w-0">
             {head.company_name && (
               <>
                 <span className="hidden sm:inline text-gray-300">·</span>
-                {head.company_id ? (
-                  <>
-                    <QuickViewIcon onClick={() => setQuickView({ type: 'company', id: head.company_id!, name: head.company_name! })} />
-                    <Link
-                      href={`/companies/${head.company_id}`}
-                      onClick={e => e.stopPropagation()}
-                      className="text-xs text-brand-secondary hover:underline truncate"
-                    >
-                      {head.company_name}
-                    </Link>
-                  </>
-                ) : <span className="text-xs text-gray-500 truncate">{head.company_name}</span>}
+                {head.company_id
+                  ? companyNameNode(head, 'text-xs text-brand-secondary hover:underline truncate')
+                  : <span className="text-xs text-gray-500 truncate">{head.company_name}</span>}
               </>
             )}
             {head.conference_name && (
@@ -627,6 +655,79 @@ export function FollowUpsTable({
     );
   }
 
+  /**
+   * Desktop bar: a real table row, so each field lands under its own column
+   * heading instead of running together on one line.
+   */
+  function renderAttendeeBarRow(rows: FollowUp[], groupKey: string) {
+    const head = rows[0];
+    const expanded = expandedGroupKeys.has(groupKey);
+    const visibleKeys = orderedColumns.filter(c => isVisible(c.key)).map(c => c.key);
+    const visibleCustom = customColumns.filter(c => c.visible);
+    // The chevron rides the final column, whichever that turns out to be.
+    const lastKey = visibleCustom.length > 0 ? null : visibleKeys[visibleKeys.length - 1];
+
+    const chevron = (
+      <svg
+        className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`}
+        fill="none" stroke="currentColor" viewBox="0 0 24 24"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      </svg>
+    );
+    const cell = (key: string, body: React.ReactNode, extra = '') => (
+      <td key={key} className={`px-3 py-2 align-middle ${extra}`}>
+        {key === lastKey
+          ? <div className="flex items-center justify-between gap-2">{body}{chevron}</div>
+          : body}
+      </td>
+    );
+
+    return (
+      <tr
+        key={groupKey}
+        role="button"
+        tabIndex={0}
+        onClick={() => toggleGroupKey(groupKey)}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroupKey(groupKey); } }}
+        aria-expanded={expanded}
+        className="bg-gray-50 border-y border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
+      >
+        {orderedColumns.map(col => {
+          if (!isVisible(col.key)) return null;
+          switch (col.key) {
+            case 'name': return cell('name',
+              <span className="flex items-center gap-1 min-w-0">
+                {attendeeNameNode(head, 'text-xs font-semibold text-brand-secondary hover:underline truncate')}
+              </span>, 'overflow-hidden');
+            case 'title': return cell('title',
+              <span className="text-xs text-gray-500 truncate block">{head.title || <span className="text-gray-300">—</span>}</span>);
+            case 'company': return cell('company',
+              head.company_name
+                ? <span className="flex items-center gap-1 min-w-0">
+                    {head.company_id
+                      ? companyNameNode(head, 'text-xs text-brand-secondary hover:underline truncate')
+                      : <span className="text-xs text-gray-500 truncate">{head.company_name}</span>}
+                  </span>
+                : <span className="text-gray-300">—</span>);
+            case 'next_step': return cell('next_step', <span />);
+            case 'conference': return cell('conference',
+              <span className="text-xs text-gray-500 truncate block">{head.conference_name}</span>);
+            case 'rep': return cell('rep', renderGroupRepBody(rows, 'xs'));
+            case 'notes': return cell('notes', <span />);
+            case 'status': return cell('status', <span />);
+            default: return null;
+          }
+        })}
+        {visibleCustom.map((col, i) => (
+          <td key={`custom_${col.id}`} className="px-3 py-2 align-middle">
+            {i === visibleCustom.length - 1 ? <div className="flex items-center justify-end">{chevron}</div> : null}
+          </td>
+        ))}
+      </tr>
+    );
+  }
+
   /** Desktop: one table row for an attendee, entries stacked inside the cells. */
   function renderAttendeeGroupRow(rows: FollowUp[], groupKey: string) {
     const head = rows[0];
@@ -638,18 +739,14 @@ export function FollowUpsTable({
           switch (col.key) {
             case 'name': return <td key="name" className="px-3 py-2 font-medium text-gray-800 overflow-hidden" style={{ maxWidth: 220 }}>
               <div className="flex items-center gap-1 group">
-                <QuickViewIcon onClick={() => setQuickView({ type: 'attendee', id: head.attendee_id, name: `${head.first_name} ${head.last_name}` })} />
-                <Link href={`/attendees/${head.attendee_id}`} className="text-brand-secondary hover:underline leading-snug block truncate" title={`${head.first_name} ${head.last_name}`}>
-                  {head.first_name} {head.last_name}
-                </Link>
+                {attendeeNameNode(head, 'text-brand-secondary hover:underline leading-snug block truncate')}
               </div>
             </td>;
             case 'title': return <td key="title" className="px-3 py-2 text-gray-600 leading-snug">{head.title || <span className="text-gray-300">—</span>}</td>;
             case 'company': return <td key="company" className="px-3 py-2 text-gray-600 leading-snug">
               {head.company_name && head.company_id ? (
                 <div className="flex items-center gap-1 group">
-                  <QuickViewIcon onClick={() => setQuickView({ type: 'company', id: head.company_id!, name: head.company_name! })} />
-                  <Link href={`/companies/${head.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">{head.company_name}</Link>
+                  {companyNameNode(head, 'text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug')}
                 </div>
               ) : <span className="text-gray-300">—</span>}
             </td>;
@@ -905,6 +1002,7 @@ export function FollowUpsTable({
 
   const confAttGroups = buildConferenceAttendeeGroups(followUps);
   const showConferenceHeader = groupBy === 'conference-attendee';
+  const anyGroupExpanded = expandedGroupKeys.size > 0;
 
   return (
     <>
@@ -952,11 +1050,13 @@ export function FollowUpsTable({
                   case 'name': return <th key="name" className={thCls}>Name</th>;
                   case 'title': return <th key="title" className={thCls}>Title</th>;
                   case 'company': return <th key="company" className={thCls}>Company</th>;
-                  case 'next_step': return <th key="next_step" className={thCls}>Next Step</th>;
+                  // These three only carry values inside an open section, so
+                  // their headings wait until one is open.
+                  case 'next_step': return <th key="next_step" className={thCls}>{anyGroupExpanded ? 'Next Step' : ''}</th>;
                   case 'conference': return <th key="conference" className={thCls}>Conference</th>;
                   case 'rep': return <th key="rep" className={thCls}>Rep</th>;
-                  case 'notes': return <th key="notes" className={thCls}>Notes</th>;
-                  case 'status': return <th key="status" className={thCls}>Status</th>;
+                  case 'notes': return <th key="notes" className={thCls}>{anyGroupExpanded ? 'Notes' : ''}</th>;
+                  case 'status': return <th key="status" className={thCls}>{anyGroupExpanded ? 'Status' : ''}</th>;
                   default: return null;
                 }
               })}
@@ -989,11 +1089,7 @@ export function FollowUpsTable({
                   const expanded = expandedGroupKeys.has(subKey);
                   return (
                     <Fragment key={subKey}>
-                      <tr className="bg-gray-50 border-y border-gray-200">
-                        <td colSpan={100} className="px-3 py-2">
-                          {renderAttendeeBar(rows, subKey)}
-                        </td>
-                      </tr>
+                      {renderAttendeeBarRow(rows, subKey)}
                       {expanded && (rows.length === 1
                         ? renderDesktopRow(rows[0])
                         : renderAttendeeGroupRow(rows, subKey))}

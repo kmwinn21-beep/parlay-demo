@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isBoothHours, BOOTH_HOURS_LABEL } from '@/lib/meetingTime';
 import { AgendaDescription } from '@/components/AgendaDescription';
 import { createPortal } from 'react-dom';
 import { MeetingNotesDrawer } from '@/components/MeetingNotesDrawer';
@@ -107,6 +108,8 @@ async function fileToBase64(file: File): Promise<string> {
 
 function parseMinutes(time: string | null): number {
   if (!time) return 9999;
+  // Booth-hours meetings have no slot — park them at the end of the day.
+  if (isBoothHours(time)) return 9998;
   const t = time.trim().toUpperCase();
   const pm = t.includes('PM');
   const am = t.includes('AM');
@@ -453,7 +456,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
         <div className="w-20 sm:w-28 shrink-0 pt-0.5">
           {(item.start_time || item.end_time) && (
             <p className="text-xs text-gray-500 tabular-nums leading-snug">
-              {item.start_time ?? ''}
+              {isBoothHours(item.start_time) ? BOOTH_HOURS_LABEL : (item.start_time ?? '')}
               {item.start_time && item.end_time && <><br />–&nbsp;{item.end_time}</>}
               {!item.start_time && item.end_time ? item.end_time : ''}
             </p>
@@ -521,7 +524,7 @@ export function AgendaTab({ conferenceId, conferenceName, userEmail }: Props) {
           <div className="w-20 sm:w-28 shrink-0 pt-0.5">
             {(item.start_time || item.end_time) && (
               <p className="text-xs text-gray-500 tabular-nums leading-snug">
-                {item.start_time ?? ''}
+                {isBoothHours(item.start_time) ? BOOTH_HOURS_LABEL : (item.start_time ?? '')}
                 {item.start_time && item.end_time && <><br />–&nbsp;{item.end_time}</>}
                 {!item.start_time && item.end_time ? item.end_time : ''}
               </p>

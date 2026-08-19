@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { sweepConflictedPlaceholders } from '@/lib/placeholderAttendees';
 import { requireAuth } from '@/lib/auth';
 import { waitUntil } from '@vercel/functions';
 import { sendNotificationEmail } from '@/lib/email';
@@ -1047,6 +1048,9 @@ export async function POST(
       sql: 'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)',
       args: [conferenceId, aid],
     }));
+    // Real attendees just landed — clear any company-only stand-ins they make
+    // redundant. Runs once for the whole batch, after the links are written.
+    await sweepConflictedPlaceholders(db, conferenceId);
     await db.execute({ sql: "UPDATE conferences SET calendar_score_invalidated_at = datetime('now') WHERE id = ?", args: [conferenceId] }).catch(() => {});
     if (bgJobId) await db.execute({ sql: 'UPDATE upload_jobs SET processed_rows=? WHERE id=?', args: [Math.round(valid.length * 0.95), bgJobId] }).catch(() => {});
 

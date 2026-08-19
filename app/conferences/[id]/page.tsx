@@ -64,6 +64,7 @@ import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 import { useDrawerResize } from '@/lib/useDrawerResize';
 import { LocationAutocompleteInput } from '@/components/LocationAutocompleteInput';
 import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
+import { SearchableSelect } from '@/components/SearchableSelect';
 import { DownloadModal, type DownloadColumn } from '@/components/DownloadModal';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 
@@ -503,6 +504,8 @@ export default function ConferenceDetailPage() {
   const [showAttendeePhotos, setShowAttendeePhotos] = useState(false);
   const [showAttendeeDownload, setShowAttendeeDownload] = useState(false);
   const [quickFilterPlaceholders, setQuickFilterPlaceholders] = useState(false);
+  // "Other (not in list)" on the add-attendee company picker
+  const [addCompanyOther, setAddCompanyOther] = useState(false);
   const unitTypeLabel = useUnitTypeLabel();
   const [executiveBriefOpen, setExecutiveBriefOpen] = useState(false);
   const [executiveBriefSnapshot, setExecutiveBriefSnapshot] = useState<ConferenceSnapshot | null>(null);
@@ -915,6 +918,12 @@ export default function ConferenceDetailPage() {
     }
   }, [visibleConferenceTabs, loadCompanies]);
 
+  // The add-attendee company picker lists this conference's companies, so pull
+  // them in when the form opens rather than only when the Companies tab does.
+  useEffect(() => {
+    if (showAddForm) loadCompanies();
+  }, [showAddForm, loadCompanies]);
+
   // Track A onboarding: mark pre-conference review visited when this page loads for track A users
   useEffect(() => {
     if (onboardingTrack !== 'track_a' || !onboardingProgress) return;
@@ -1311,6 +1320,7 @@ export default function ConferenceDetailPage() {
       }
       toast.success('Attendee added!');
       setAddFormData({ first_name: '', last_name: '', title: '', company: '', email: '' });
+      setAddCompanyOther(false);
       setShowAddForm(false);
       fetchConference();
     } catch (err) {
@@ -3148,12 +3158,39 @@ export default function ConferenceDetailPage() {
                 </div>
                 <div>
                   <label className="label text-xs">Company</label>
-                  <input
-                    value={addFormData.company}
-                    onChange={(e) => setAddFormData((p) => ({ ...p, company: e.target.value }))}
-                    className="input-field"
-                    placeholder="Company name"
-                  />
+                  {/* Pick from the companies already at this conference; "Other"
+                      falls back to typing a new one, as the floor-note assign
+                      flow does. */}
+                  {addCompanyOther ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        autoFocus
+                        value={addFormData.company}
+                        onChange={(e) => setAddFormData((p) => ({ ...p, company: e.target.value }))}
+                        className="input-field flex-1 min-w-0"
+                        placeholder="New company name"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { setAddCompanyOther(false); setAddFormData(p => ({ ...p, company: '' })); }}
+                        title="Back to the company list"
+                        className="flex-shrink-0 p-1.5 text-gray-400 hover:text-gray-600"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <SearchableSelect
+                      options={conferenceCompanies}
+                      value={conferenceCompanies.find(c => c.name === addFormData.company) ?? null}
+                      onChange={(c) => setAddFormData(p => ({ ...p, company: c?.name ?? '' }))}
+                      getLabel={(c) => c.name}
+                      placeholder="Select a company…"
+                      onSelectOther={() => { setAddCompanyOther(true); setAddFormData(p => ({ ...p, company: '' })); }}
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="label text-xs">Email</label>
@@ -3360,21 +3397,17 @@ export default function ConferenceDetailPage() {
                         switch (col.key) {
                           case 'name': return (
                             <td key="name" className="px-4 py-3 font-medium overflow-visible">
+                              {/* The name opens the drawer, so the icon that
+                                  used to do that is gone. */}
                               <div className="flex items-center gap-1 text-left">
                                 <button
                                   type="button"
                                   onClick={() => { setQuickViewId(attendee.id); setQuickViewType('attendee'); }}
-                                  className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-brand-secondary flex-shrink-0"
-                                  title="Quick view"
+                                  className="text-brand-secondary hover:underline block truncate text-left"
+                                  title={`${attendee.first_name} ${attendee.last_name}`}
                                 >
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                  </svg>
-                                </button>
-                                <Link href={`/attendees/${attendee.id}`} className="text-brand-secondary hover:underline block truncate" title={`${attendee.first_name} ${attendee.last_name}`}>
                                   {attendee.first_name} {attendee.last_name}
-                                </Link>
+                                </button>
                               </div>
                             </td>
                           );
@@ -3798,6 +3831,8 @@ export default function ConferenceDetailPage() {
             <MeetingsTable
               tableName="conference_meetings"
               groupByDate
+              namesOpenDrawer
+              showAttendeeAvatar
               meetings={filteredMeetings}
               actionOptions={actionOptions}
               colorMap={colorMaps.action || {}}
@@ -4016,6 +4051,7 @@ export default function ConferenceDetailPage() {
             }}
             onBulkToggle={handleBulkToggleFollowUp}
             groupBy="attendee"
+            namesOpenDrawer
           />
             );
           })()}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { MEETING_TIME_OPTIONS } from '@/lib/meetingTime';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -1570,7 +1571,10 @@ export default function AttendeeDetailPage() {
                         </div>
                         <div>
                           <label className="label text-[10px]">Meeting Time *</label>
-                          <input type="time" value={meetingForm.meeting_time} onChange={e => setMeetingForm(p => ({ ...p, meeting_time: e.target.value }))} className="input-field text-xs" />
+                          <select value={meetingForm.meeting_time} onChange={e => setMeetingForm(p => ({ ...p, meeting_time: e.target.value }))} className="input-field text-xs">
+                            <option value="">Select time...</option>
+                            {MEETING_TIME_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                          </select>
                         </div>
                       </div>
                       <div>

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isBoothHours } from '@/lib/meetingTime';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { buildIcs } from '@/lib/calendarInvite';
@@ -45,6 +46,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const timeHM = r.meeting_time ? String(r.meeting_time) : '';
     if (!dateYMD || !timeHM) {
       return NextResponse.json({ error: 'Meeting has no date or time' }, { status: 400 });
+    }
+    // Booth-hours bookings are a standing "come find us" rather than a slot,
+    // so there is no start time to put in an invite.
+    if (isBoothHours(timeHM)) {
+      return NextResponse.json({ error: 'Booth-hours meetings have no start time to invite to' }, { status: 400 });
     }
 
     // The organizer is whoever is asking — their calendar is the one this lands in.
