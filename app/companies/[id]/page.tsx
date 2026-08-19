@@ -32,6 +32,7 @@ import { ActivityTimelineModal } from '@/components/ActivityTimelineModal';
 import { useCapabilities } from '@/lib/useCapabilities';
 import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
+import { SearchableSelect } from '@/components/SearchableSelect';
 import { ScrollRow } from '@/components/ScrollRow';
 import { ClosedWonDealsSection } from '@/components/ClosedWonDealsSection';
 import type { ClosedDeal } from '@/lib/ClosedDealDraftContext';
@@ -243,6 +244,25 @@ export default function CompanyDetailPage() {
       .then(data => { if (data?.items) setIntelItems(data.items); })
       .catch(() => {});
   }, [id]);
+
+  // Add-attendee form on the Attendees card. The company is fixed to this
+  // record; the conference is the choice the user has to make.
+  const [showAddAttendee, setShowAddAttendee] = useState(false);
+  const [allConferences, setAllConferences] = useState<ConferenceItem[]>([]);
+  const [addAttendee, setAddAttendee] = useState({ first_name: '', last_name: '', title: '', email: '' });
+  const [addAttendeeConf, setAddAttendeeConf] = useState<ConferenceItem | null>(null);
+  const [isAddingAttendee, setIsAddingAttendee] = useState(false);
+
+  useEffect(() => {
+    if (!showAddAttendee || allConferences.length > 0) return;
+    fetch('/api/conferences')
+      .then(r => (r.ok ? r.json() : []))
+      .then((rows: ConferenceItem[]) => {
+        if (!Array.isArray(rows)) return;
+        setAllConferences([...rows].sort((a, b) => (b.start_date || '').localeCompare(a.start_date || '')));
+      })
+      .catch(() => {});
+  }, [showAddAttendee, allConferences.length]);
 
   const fetchCompany = useCallback(async () => {
     try {
@@ -767,6 +787,46 @@ export default function CompanyDetailPage() {
     }
   };
 
+  const handleAddAttendee = async () => {
+    if (!company) return;
+    if (!addAttendee.first_name.trim() || !addAttendee.last_name.trim()) {
+      toast.error('First and last name are required.');
+      return;
+    }
+    if (!addAttendeeConf) {
+      toast.error('Choose a conference.');
+      return;
+    }
+    setIsAddingAttendee(true);
+    try {
+      const res = await fetch(`/api/conferences/${addAttendeeConf.id}/attendees/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          first_name: addAttendee.first_name.trim(),
+          last_name: addAttendee.last_name.trim(),
+          title: addAttendee.title.trim() || undefined,
+          email: addAttendee.email.trim() || undefined,
+          // Fixed to the record being viewed — the route matches it by name.
+          company: company.name,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to add attendee');
+      }
+      toast.success(`Added to ${addAttendeeConf.name}.`);
+      setAddAttendee({ first_name: '', last_name: '', title: '', email: '' });
+      setAddAttendeeConf(null);
+      setShowAddAttendee(false);
+      fetchCompany();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add attendee');
+    } finally {
+      setIsAddingAttendee(false);
+    }
+  };
+
   const handleBulkToggleFollowUp = async (ids: number[]) => {
     // Optimistic: mark all as complete immediately
     setCompanyFollowUps(prev => prev.map(fu => ids.includes(fu.id) ? { ...fu, completed: true } : fu));
@@ -1244,6 +1304,16 @@ export default function CompanyDetailPage() {
                 <span className="text-sm font-medium text-brand-primary">{touchpointTotal} Touchpoints</span>
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => setShowAddAttendee(v => !v)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
+              <span className="text-sm font-medium text-brand-primary">Attendee</span>
+            </button>
             {filteredAttendees.length > ATTENDEE_COLLAPSED_COUNT && (
               <button
                 onClick={() => setAttendeesExpanded(prev => !prev)}
@@ -1255,6 +1325,82 @@ export default function CompanyDetailPage() {
             )}
           </div>
         </div>
+
+        {showAddAttendee && (
+          <div className="mb-4 p-4 rounded-xl border border-brand-secondary/30 bg-brand-secondary/5">
+            <h3 className="text-sm font-semibold text-brand-primary mb-3">Add Attendee</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              <div>
+                <label className="label text-xs">First Name *</label>
+                <input
+                  value={addAttendee.first_name}
+                  onChange={e => setAddAttendee(p => ({ ...p, first_name: e.target.value }))}
+                  className="input-field"
+                  placeholder="First name"
+                />
+              </div>
+              <div>
+                <label className="label text-xs">Last Name *</label>
+                <input
+                  value={addAttendee.last_name}
+                  onChange={e => setAddAttendee(p => ({ ...p, last_name: e.target.value }))}
+                  className="input-field"
+                  placeholder="Last name"
+                />
+              </div>
+              <div>
+                <label className="label text-xs">Title</label>
+                <input
+                  value={addAttendee.title}
+                  onChange={e => setAddAttendee(p => ({ ...p, title: e.target.value }))}
+                  className="input-field"
+                  placeholder="Job title"
+                />
+              </div>
+              <div>
+                <label className="label text-xs">Company</label>
+                {/* Fixed to the record being viewed */}
+                <input value={company.name} readOnly disabled className="input-field bg-gray-100 text-gray-500 cursor-not-allowed" />
+              </div>
+              <div>
+                <label className="label text-xs">Conference *</label>
+                <SearchableSelect
+                  options={allConferences}
+                  value={addAttendeeConf}
+                  onChange={setAddAttendeeConf}
+                  getLabel={(c) => c.name}
+                  placeholder="Select a conference…"
+                />
+              </div>
+              <div>
+                <label className="label text-xs">Email</label>
+                <input
+                  value={addAttendee.email}
+                  onChange={e => setAddAttendee(p => ({ ...p, email: e.target.value }))}
+                  className="input-field"
+                  placeholder="email@example.com"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2 mt-3">
+              <button
+                type="button"
+                onClick={handleAddAttendee}
+                disabled={isAddingAttendee || !addAttendee.first_name.trim() || !addAttendee.last_name.trim() || !addAttendeeConf}
+                className="btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isAddingAttendee ? 'Adding…' : 'Add'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowAddAttendee(false); setAddAttendeeConf(null); setAddAttendee({ first_name: '', last_name: '', title: '', email: '' }); }}
+                className="btn-secondary text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {filteredAttendees.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-4">No attendees for this company yet.</p>

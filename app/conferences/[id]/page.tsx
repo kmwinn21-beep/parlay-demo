@@ -64,6 +64,7 @@ import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 import { useDrawerResize } from '@/lib/useDrawerResize';
 import { LocationAutocompleteInput } from '@/components/LocationAutocompleteInput';
 import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
+import { SearchableSelect } from '@/components/SearchableSelect';
 import { DownloadModal, type DownloadColumn } from '@/components/DownloadModal';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 
@@ -503,6 +504,8 @@ export default function ConferenceDetailPage() {
   const [showAttendeePhotos, setShowAttendeePhotos] = useState(false);
   const [showAttendeeDownload, setShowAttendeeDownload] = useState(false);
   const [quickFilterPlaceholders, setQuickFilterPlaceholders] = useState(false);
+  // "Other (not in list)" on the add-attendee company picker
+  const [addCompanyOther, setAddCompanyOther] = useState(false);
   const unitTypeLabel = useUnitTypeLabel();
   const [executiveBriefOpen, setExecutiveBriefOpen] = useState(false);
   const [executiveBriefSnapshot, setExecutiveBriefSnapshot] = useState<ConferenceSnapshot | null>(null);
@@ -915,6 +918,12 @@ export default function ConferenceDetailPage() {
     }
   }, [visibleConferenceTabs, loadCompanies]);
 
+  // The add-attendee company picker lists this conference's companies, so pull
+  // them in when the form opens rather than only when the Companies tab does.
+  useEffect(() => {
+    if (showAddForm) loadCompanies();
+  }, [showAddForm, loadCompanies]);
+
   // Track A onboarding: mark pre-conference review visited when this page loads for track A users
   useEffect(() => {
     if (onboardingTrack !== 'track_a' || !onboardingProgress) return;
@@ -1311,6 +1320,7 @@ export default function ConferenceDetailPage() {
       }
       toast.success('Attendee added!');
       setAddFormData({ first_name: '', last_name: '', title: '', company: '', email: '' });
+      setAddCompanyOther(false);
       setShowAddForm(false);
       fetchConference();
     } catch (err) {
@@ -3148,12 +3158,39 @@ export default function ConferenceDetailPage() {
                 </div>
                 <div>
                   <label className="label text-xs">Company</label>
-                  <input
-                    value={addFormData.company}
-                    onChange={(e) => setAddFormData((p) => ({ ...p, company: e.target.value }))}
-                    className="input-field"
-                    placeholder="Company name"
-                  />
+                  {/* Pick from the companies already at this conference; "Other"
+                      falls back to typing a new one, as the floor-note assign
+                      flow does. */}
+                  {addCompanyOther ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        autoFocus
+                        value={addFormData.company}
+                        onChange={(e) => setAddFormData((p) => ({ ...p, company: e.target.value }))}
+                        className="input-field flex-1 min-w-0"
+                        placeholder="New company name"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { setAddCompanyOther(false); setAddFormData(p => ({ ...p, company: '' })); }}
+                        title="Back to the company list"
+                        className="flex-shrink-0 p-1.5 text-gray-400 hover:text-gray-600"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <SearchableSelect
+                      options={conferenceCompanies}
+                      value={conferenceCompanies.find(c => c.name === addFormData.company) ?? null}
+                      onChange={(c) => setAddFormData(p => ({ ...p, company: c?.name ?? '' }))}
+                      getLabel={(c) => c.name}
+                      placeholder="Select a company…"
+                      onSelectOther={() => { setAddCompanyOther(true); setAddFormData(p => ({ ...p, company: '' })); }}
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="label text-xs">Email</label>
