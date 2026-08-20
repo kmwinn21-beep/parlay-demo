@@ -4,6 +4,7 @@ import { useState, Fragment } from 'react';
 import Link from 'next/link';
 import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { useFollowUpActions, followUpActionLabel } from '@/lib/useFollowUpActions';
+import { SlideInPanel } from '@/components/SlideInPanel';
 import { getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { FollowUpNotesPopover } from '@/components/FollowUpNotesPopover';
@@ -190,6 +191,7 @@ export function FollowUpsTable({
   onRepChange,
   onNextStepsChange,
   onFollowUpActionChange,
+  detailsInDrawer = false,
   onBulkToggle,
   tableName = 'follow_ups',
   groupBy = 'none',
@@ -203,6 +205,9 @@ export function FollowUpsTable({
   onNextStepsChange?: (id: number, nextSteps: string) => void;
   /** '' clears the action back to unset. */
   onFollowUpActionChange?: (id: number, action: string) => void;
+  /** Open an attendee's entries in the side panel the outreach and social
+   *  notes drawers use, instead of unfolding them inside the table. */
+  detailsInDrawer?: boolean;
   onBulkToggle?: (ids: number[]) => Promise<void>;
   tableName?: string;
   /**
@@ -270,6 +275,7 @@ export function FollowUpsTable({
   const [editingRepKey, setEditingRepKey] = useState<number | null>(null);
   const [editingNextStepsKey, setEditingNextStepsKey] = useState<number | null>(null);
   const [editingActionKey, setEditingActionKey] = useState<number | null>(null);
+  const [drawerGroupKey, setDrawerGroupKey] = useState<string | null>(null);
   const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
   const [editingRepIds, setEditingRepIds] = useState<number[]>([]);
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<number>>(new Set());
@@ -278,11 +284,19 @@ export function FollowUpsTable({
   // Attendee sections start collapsed, the way the meetings table's days do.
   const [expandedGroupKeys, setExpandedGroupKeys] = useState<Set<string>>(new Set());
 
-  const toggleGroupKey = (key: string) => setExpandedGroupKeys(prev => {
-    const next = new Set(prev);
-    if (next.has(key)) next.delete(key); else next.add(key);
-    return next;
-  });
+  const toggleGroupKey = (key: string) => {
+    // Where the details live in the panel, the chevron opens it rather than
+    // unfolding rows inside the table.
+    if (detailsInDrawer) {
+      setDrawerGroupKey(prev => (prev === key ? null : key));
+      return;
+    }
+    setExpandedGroupKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
 
   /** Attendee name — a drawer opener or a link, depending on the surface. */
   function attendeeNameNode(fu: FollowUp, className: string) {
@@ -668,7 +682,7 @@ export function FollowUpsTable({
    */
   function renderAttendeeBar(rows: FollowUp[], groupKey: string) {
     const head = rows[0];
-    const expanded = expandedGroupKeys.has(groupKey);
+    const expanded = detailsInDrawer ? drawerGroupKey === groupKey : expandedGroupKeys.has(groupKey);
     return (
       <div
         role="button"
@@ -721,7 +735,7 @@ export function FollowUpsTable({
    */
   function renderAttendeeBarRow(rows: FollowUp[], groupKey: string) {
     const head = rows[0];
-    const expanded = expandedGroupKeys.has(groupKey);
+    const expanded = detailsInDrawer ? drawerGroupKey === groupKey : expandedGroupKeys.has(groupKey);
     const visibleKeys = orderedColumns.filter(c => isVisible(c.key)).map(c => c.key);
     const visibleCustom = customColumns.filter(c => c.visible);
     // The chevron rides the final column, whichever that turns out to be.
@@ -1071,9 +1085,76 @@ export function FollowUpsTable({
   // is the same thing without the conference header, for pages that already
   // establish the conference around the table.
 
+  /**
+   * The expanded detail, moved into the side panel. Every control is the same
+   * renderer the table rows use, so the source pill, the action pill, the rep
+   * picker, the notes and Done all edit exactly as they do inline.
+   */
+  function renderDetailsPanel(groupKey: string) {
+    const group = confAttGroups
+      .flatMap(cg => cg.attendees.map(ag => ({ cg, ag })))
+      .find(({ cg, ag }) => `${cg.conference_id}-${ag.attendee_id}` === groupKey);
+    if (!group) return null;
+    const rows = sortByCreatedAt(group.ag.tasks);
+    const head = rows[0];
+    if (!head) return null;
+
+    return (
+      <SlideInPanel
+        title={<span className="text-sm">{head.first_name} {head.last_name}</span>}
+        subtitle={[head.title, head.company_name].filter(Boolean).join(' · ')}
+        onClose={() => setDrawerGroupKey(null)}
+        footer={
+          <div className="flex items-center justify-between gap-2">
+            <FollowUpNotesPopover
+              attendeeId={head.attendee_id}
+              notesCount={Number(head.entity_notes_count)}
+              conferenceName={head.conference_name}
+            />
+            {renderGroupDoneButton(groupKey, rows)}
+          </div>
+        }
+      >
+        <div className="p-3 space-y-3">
+          <div>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Conference</p>
+            <Link href={`/conferences/${head.conference_id}`} className="text-xs text-brand-secondary hover:underline">
+              {head.conference_name}
+            </Link>
+            <p className="text-[10px] text-gray-400">{formatDate(head.start_date)}</p>
+          </div>
+
+          <div>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Rep</p>
+            {renderGroupRepBody(rows)}
+          </div>
+
+          <div>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">
+              Follow Ups ({rows.length})
+            </p>
+            <div className="space-y-2">
+              {rows.map(row => (
+                <div key={row.id} className={`rounded-lg border p-2 ${row.completed ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-white'}`}>
+                  {renderNextStepEntry(row, 0, 'text-xs', 'text-xs text-gray-500', true)}
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400">Action</span>
+                    {actionPill(row)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </SlideInPanel>
+    );
+  }
+
   const confAttGroups = buildConferenceAttendeeGroups(followUps);
   const showConferenceHeader = groupBy === 'conference-attendee';
   const anyGroupExpanded = expandedGroupKeys.size > 0;
+
+  const drawer = detailsInDrawer && drawerGroupKey ? renderDetailsPanel(drawerGroupKey) : null;
 
   return (
     <>
@@ -1098,7 +1179,7 @@ export function FollowUpsTable({
                       {renderAttendeeBar(rows, subKey)}
                     </div>
                     {/* A single follow-up renders exactly as it always has. */}
-                    {expanded && (rows.length === 1
+                    {!detailsInDrawer && expanded && (rows.length === 1
                       ? renderMobileCard(rows[0])
                       : renderAttendeeGroupCard(rows, subKey))}
                   </div>
@@ -1109,8 +1190,11 @@ export function FollowUpsTable({
         ))}
       </div>
 
-      {/* Desktop */}
-      <div className="hidden lg:block overflow-x-auto">
+      {/* Desktop — the panel takes a column beside the table when open. The
+          row itself is always mounted so the panel renders once and handles
+          its own phone form (a bottom sheet) from inside. */}
+      <div className="lg:flex lg:gap-4 lg:items-start">
+      <div className="hidden lg:block flex-1 min-w-0 overflow-x-auto">
         <table className="w-full" style={{ fontSize: '0.7rem' }}>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
@@ -1162,7 +1246,7 @@ export function FollowUpsTable({
                   return (
                     <Fragment key={subKey}>
                       {renderAttendeeBarRow(rows, subKey)}
-                      {expanded && (rows.length === 1
+                      {!detailsInDrawer && expanded && (rows.length === 1
                         ? renderDesktopRow(rows[0])
                         : renderAttendeeGroupRow(rows, subKey))}
                     </Fragment>
@@ -1172,6 +1256,8 @@ export function FollowUpsTable({
             ))}
           </tbody>
         </table>
+      </div>
+        {drawer && <div className="lg:w-96 lg:flex-shrink-0">{drawer}</div>}
       </div>
       {quickView && (
         <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />

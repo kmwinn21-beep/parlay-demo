@@ -4035,6 +4035,7 @@ export default function ConferenceDetailPage() {
                 : confFollowUps;
             return (
           <FollowUpsTable
+            detailsInDrawer
             followUps={filteredFollowUps}
             onToggle={async (id, completed) => {
               setConfFollowUps(prev =>
