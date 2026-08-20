@@ -3,6 +3,7 @@
 import { useState, Fragment } from 'react';
 import Link from 'next/link';
 import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
+import { useFollowUpActions, followUpActionLabel } from '@/lib/useFollowUpActions';
 import { getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { FollowUpNotesPopover } from '@/components/FollowUpNotesPopover';
@@ -23,6 +24,7 @@ export interface FollowUp {
   conference_id: number;
   next_steps: string;
   next_steps_notes: string | null;
+  follow_up_action?: string | null;
   completed: boolean;
   first_name: string;
   last_name: string;
@@ -212,6 +214,21 @@ export function FollowUpsTable({
   namesOpenDrawer?: boolean;
 }) {
   const nextStepsOpts = useConfigWithIds('next_steps');
+  const followUpActions = useFollowUpActions();
+
+  /** The chosen action, shown by its short name; blank until a rep picks one. */
+  const actionPill = (stored: string | null | undefined) => {
+    const label = followUpActionLabel(stored, followUpActions);
+    if (!label) return <span className="text-gray-300">—</span>;
+    return (
+      <span
+        title={stored ?? ''}
+        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30 whitespace-nowrap"
+      >
+        {label}
+      </span>
+    );
+  };
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
   const customColumns = useCustomColumns(tableName);
   const [editingRepKey, setEditingRepKey] = useState<number | null>(null);
@@ -419,6 +436,9 @@ export function FollowUpsTable({
             </td>;
             case 'next_step': return <td key="next_step" className="px-3 py-2" style={{ maxWidth: 240 }}>
               {renderNextStepEntry(fu, 0, '', 'text-gray-500')}
+            </td>;
+            case 'follow_up_action': return <td key="follow_up_action" className="px-3 py-2 text-xs text-gray-600 leading-snug">
+              {actionPill(fu.follow_up_action)}
             </td>;
             case 'conference': return <td key="conference" className="px-3 py-2 text-gray-600 leading-snug">
               <Link href={`/conferences/${fu.conference_id}`} className="text-brand-secondary hover:underline">{fu.conference_name}</Link>
@@ -711,6 +731,7 @@ export function FollowUpsTable({
                   </span>
                 : <span className="text-gray-300">—</span>);
             case 'next_step': return cell('next_step', <span />);
+            case 'follow_up_action': return cell('follow_up_action', <span />);
             case 'conference': return cell('conference',
               <span className="text-xs text-gray-500 truncate block">{head.conference_name}</span>);
             case 'rep': return cell('rep', renderGroupRepBody(rows, 'xs'));
@@ -752,6 +773,9 @@ export function FollowUpsTable({
             </td>;
             case 'next_step': return <td key="next_step" className="px-3 py-2" style={{ maxWidth: 240 }}>
               {rows.map((row, i) => renderNextStepEntry(row, i, '', 'text-gray-500'))}
+            </td>;
+            case 'follow_up_action': return <td key="follow_up_action" className="px-3 py-2 text-xs text-gray-600 leading-snug">
+              {rows.map(row => <div key={row.id} className="py-1.5">{actionPill(row.follow_up_action)}</div>)}
             </td>;
             case 'conference': return <td key="conference" className="px-3 py-2 text-gray-600 leading-snug">
               <Link href={`/conferences/${head.conference_id}`} className="text-brand-secondary hover:underline">{head.conference_name}</Link>
@@ -877,6 +901,7 @@ export function FollowUpsTable({
                     case 'title': return <th key="title" className={thCls}>Title</th>;
                     case 'company': return <th key="company" className={thCls}>Company</th>;
                     case 'next_step': return <th key="next_step" className={thCls}>Source</th>;
+                    case 'follow_up_action': return <th key="follow_up_action" className={thCls}>Follow Up Action</th>;
                     case 'conference': return <th key="conference" className={thCls}>Conference</th>;
                     case 'rep': return <th key="rep" className={thCls}>Rep</th>;
                     case 'notes': return <th key="notes" className={thCls}>Notes</th>;
@@ -944,6 +969,7 @@ export function FollowUpsTable({
                     case 'title': return <th key="title" className={thCls}>Title</th>;
                     case 'company': return <th key="company" className={thCls}>Company</th>;
                     case 'next_step': return <th key="next_step" className={thCls}>Source</th>;
+                    case 'follow_up_action': return <th key="follow_up_action" className={thCls}>Follow Up Action</th>;
                     case 'conference': return <th key="conference" className={thCls}>Conference</th>;
                     case 'rep': return <th key="rep" className={thCls}>Rep</th>;
                     case 'notes': return <th key="notes" className={thCls}>Notes</th>;
@@ -1053,6 +1079,7 @@ export function FollowUpsTable({
                   // These three only carry values inside an open section, so
                   // their headings wait until one is open.
                   case 'next_step': return <th key="next_step" className={thCls}>{anyGroupExpanded ? 'Source' : ''}</th>;
+                  case 'follow_up_action': return <th key="follow_up_action" className={thCls}>{anyGroupExpanded ? 'Follow Up Action' : ''}</th>;
                   case 'conference': return <th key="conference" className={thCls}>Conference</th>;
                   case 'rep': return <th key="rep" className={thCls}>Rep</th>;
                   case 'notes': return <th key="notes" className={thCls}>{anyGroupExpanded ? 'Notes' : ''}</th>;

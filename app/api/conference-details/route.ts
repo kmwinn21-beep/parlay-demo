@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
   const db = await getDb(user?.accountId);
   try {
     const body = await request.json();
-    const { attendee_id, conference_id, action, next_steps, next_steps_notes, assigned_rep } = body;
+    const { attendee_id, conference_id, action, next_steps, next_steps_notes, assigned_rep, follow_up_action } = body;
 
     if (!attendee_id || !conference_id) {
       return NextResponse.json({ error: 'attendee_id and conference_id are required' }, { status: 400 });
@@ -62,8 +62,8 @@ export async function POST(request: NextRequest) {
 
     // Create a new follow-up in the dedicated follow_ups table
     const result = await db.execute({
-      sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, assigned_rep)
-            VALUES (?, ?, ?, ?, ?)
+      sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, assigned_rep, follow_up_action)
+            VALUES (?, ?, ?, ?, ?, ?)
             RETURNING *`,
       args: [
         attendee_id,
@@ -71,6 +71,7 @@ export async function POST(request: NextRequest) {
         next_steps ?? null,
         next_steps_notes ?? null,
         assigned_rep ?? null,
+        follow_up_action ?? null,
       ],
     });
 

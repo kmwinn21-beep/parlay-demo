@@ -2134,4 +2134,8 @@ export const migrations: string[] = [
   `INSERT OR IGNORE INTO config_options (category, value, description, sort_order) VALUES ('follow_up_actions', 'Add to nurture sequence', 'Nurture', 5)`,
   `INSERT OR IGNORE INTO config_options (category, value, description, sort_order) VALUES ('follow_up_actions', 'Invite to Event', 'Invitation', 6)`,
   `INSERT OR IGNORE INTO config_options (category, value, description, sort_order) VALUES ('follow_up_actions', 'No action needed', 'N/A', 7)`,
+  // What the rep decided to do about a follow-up. Nullable on purpose: the many
+  // automated creation paths (booth scan, form submission, a meeting marked
+  // Held) have no way to know, so the action is chosen later by a person.
+  `ALTER TABLE follow_ups ADD COLUMN follow_up_action TEXT`,
 ];
