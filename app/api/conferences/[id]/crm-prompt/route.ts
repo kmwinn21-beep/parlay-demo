@@ -53,15 +53,22 @@ function rootDomain(website: string | null): string | null {
 }
 
 /**
- * A meeting the rep can log: everything the CRM batch needs about it, for the
- * conference in the URL and the rep making the request.
- *
  * A meeting still sitting at Scheduled never happened by the time the field
- * report is being written up, so it goes over as Cancelled — as do meetings
- * with no outcome recorded at all, rather than being dropped silently.
+ * report is being written up, so it goes over as Cancelled — as does one with
+ * no outcome recorded at all.
+ *
+ * Outcomes are account-configurable: the same "Held" can carry a different
+ * action_key from one account to the next, and older rows carry none. So this
+ * reads the outcome's own text as well as its key, and anything it cannot
+ * classify passes through exactly as written rather than being dropped. No
+ * meeting the rep ran is ever silently missing from the batch.
  */
-const REPORTABLE_KEYS = new Set(['held', 'cancelled', 'rescheduled', 'no_show', 'meeting_scheduled']);
-const CANCELLED_KEYS = new Set(['meeting_scheduled']);
+function toStatus(outcome: string, actionKey: string | null): string {
+  const normalized = outcome.trim().toLowerCase();
+  if (!normalized) return 'Cancelled';
+  if (actionKey === 'meeting_scheduled' || normalized === 'scheduled') return 'Cancelled';
+  return outcome.trim();
+}
 
 export async function GET(
   request: NextRequest,
@@ -99,12 +106,14 @@ export async function GET(
       sql: `SELECT m.id, m.meeting_date, m.meeting_time, m.outcome,
                    a.id AS attendee_id, a.first_name, a.last_name, a.email, a.title,
                    co.id AS company_id, co.name AS company_name, co.website, co.assigned_user,
-                   act.action_key
+                   -- Subquery rather than a join: duplicate action rows with
+                   -- the same value would otherwise repeat the meeting.
+                   (SELECT co2.action_key FROM config_options co2
+                     WHERE co2.category = 'action' AND co2.value = m.outcome
+                     ORDER BY co2.id LIMIT 1) AS action_key
               FROM meetings m
               JOIN attendees a ON m.attendee_id = a.id
               LEFT JOIN companies co ON a.company_id = co.id
-              LEFT JOIN config_options act
-                ON act.category = 'action' AND act.value = m.outcome
              WHERE m.conference_id = ? AND ${csvContains('m.scheduled_by')}
              ORDER BY m.meeting_date, m.meeting_time`,
       args: [conferenceId, String(configId)],
@@ -144,15 +153,9 @@ export async function GET(
     }
 
     const meetings: CrmPromptMeeting[] = meetingRes.rows
-      .filter(r => {
-        const key = r.action_key != null ? String(r.action_key) : null;
-        // No outcome recorded reads the same as never dispositioned.
-        return key == null ? true : REPORTABLE_KEYS.has(key);
-      })
       .map(r => {
         const key = r.action_key != null ? String(r.action_key) : null;
-        const outcome = r.outcome != null ? String(r.outcome) : '';
-        const status = key == null || CANCELLED_KEYS.has(key) ? 'Cancelled' : outcome;
+        const status = toStatus(r.outcome != null ? String(r.outcome) : '', key);
         const time = r.meeting_time != null ? String(r.meeting_time) : '';
         const assigned = String(r.assigned_user ?? '')
           .split(',').map(s => s.trim()).filter(Boolean)
