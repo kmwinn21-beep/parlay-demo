@@ -11,32 +11,48 @@ function csvContains(col: string): string {
   return `',' || COALESCE(${col}, '') || ',' LIKE '%,' || ? || ',%'`;
 }
 
-/** 'Sep 23, 2026' — unambiguous to a person and to a parser. */
+/** Pacific, so a stamp reads as the rep's own clock rather than the server's. */
+const STAMP_ZONE = 'America/Los_Angeles';
+
+/**
+ * 'Sep 23, 2026' — a stored calendar date, rendered as that exact date.
+ *
+ * Deliberately not shifted into any zone: a meeting on the 23rd is on the 23rd
+ * wherever it is read, and converting midnight would land it on the 22nd.
+ */
 function formatDay(ymd: string): string {
-  const d = new Date(`${ymd.slice(0, 10)}T00:00:00`);
+  const d = new Date(`${ymd.slice(0, 10)}T00:00:00Z`);
   if (isNaN(d.getTime())) return ymd;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 }
 
-/** 'Aug 14, 2026 3:12 PM' — leads each note line. */
+/**
+ * 'Aug 14, 2026 3:12 PM' — leads each note line.
+ *
+ * Stored stamps are UTC, so they are read as UTC and written out in Pacific.
+ * Left to the server's own zone they came out hours ahead of when the note was
+ * actually written.
+ */
 function formatStamp(ts: string): string {
   const iso = ts.includes('T') ? ts : ts.replace(' ', 'T');
   const d = new Date(iso.endsWith('Z') || iso.includes('+') ? iso : `${iso}Z`);
   if (isNaN(d.getTime())) return ts;
-  return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+  const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: STAMP_ZONE });
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: STAMP_ZONE });
+  return `${date} ${time}`;
 }
 
 /** Three business days after the conference ends; weekends don't count. */
 function addBusinessDays(ymd: string, days: number): string {
-  const d = new Date(`${ymd.slice(0, 10)}T00:00:00`);
+  const d = new Date(`${ymd.slice(0, 10)}T00:00:00Z`);
   if (isNaN(d.getTime())) return ymd;
   let added = 0;
   while (added < days) {
-    d.setDate(d.getDate() + 1);
-    const day = d.getDay();
+    d.setUTCDate(d.getUTCDate() + 1);
+    const day = d.getUTCDay();
     if (day !== 0 && day !== 6) added++;
   }
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 }
 
 /** 'https://www.acme.com/about?x=1' → 'acme.com'. */
