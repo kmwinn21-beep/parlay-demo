@@ -79,7 +79,7 @@ export function SlideInPanel({
           transition: `transform ${ANIMATION_MS}ms ease, opacity ${ANIMATION_MS}ms ease`,
         } : undefined}
         className={isDesktop
-          ? 'border border-gray-200 rounded-xl bg-white shadow-md overflow-hidden sticky top-4 flex flex-col max-h-[calc(100vh-6rem)]'
+          ? 'border border-gray-400 rounded-xl bg-white shadow-md overflow-hidden sticky top-4 flex flex-col h-full max-h-[calc(100vh-6rem)]'
           : 'drawer-mobile-responsive fixed inset-x-0 bottom-0 z-50 h-[75vh] w-full rounded-t-2xl border border-gray-200 bg-white overflow-hidden flex flex-col'}
       >
         <div className="flex items-start justify-between gap-2 px-3 py-2.5 border-b border-gray-100 flex-shrink-0">

@@ -1304,7 +1304,7 @@ export function FollowUpsTable({
       {/* Desktop — the panel takes a column beside the table when open. The
           row itself is always mounted so the panel renders once and handles
           its own phone form (a bottom sheet) from inside. */}
-      <div className="lg:flex lg:items-start">
+      <div className="lg:flex lg:items-stretch">
       <div className="hidden lg:block flex-1 min-w-0 overflow-x-auto">
         <table className="w-full" style={{ fontSize: '0.7rem' }}>
           <thead>
