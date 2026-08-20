@@ -10,6 +10,7 @@ import { RepMultiSelect } from './RepMultiSelect';
 import { useUserOptions, parseRepIds, getRepInitials } from '@/lib/useUserOptions';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { FollowUpReassignNotePrompt, type ReassignNoteTarget } from './FollowUpReassignNotePrompt';
+import { CrmPromptDrawer } from './CrmPromptDrawer';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -811,6 +812,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
   const [editingRepFuId, setEditingRepFuId] = useState<number | null>(null);
   const [editingRepIds, setEditingRepIds] = useState<number[]>([]);
   const [reassignNote, setReassignNote] = useState<ReassignNoteTarget | null>(null);
+  const [crmPromptOpen, setCrmPromptOpen] = useState(false);
 
   /**
    * Reassigning here writes straight through to the follow-up, then offers the
@@ -1195,11 +1197,15 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                     Session Notes
                   </button>
                 )}
-                {/* Placeholder — behaviour still to be defined. */}
                 {data && (
                   <button
                     type="button"
-                    className="text-xs font-semibold px-3 py-1 rounded-full border transition-colors flex-shrink-0 bg-white/10 text-white/80 border-white/30 hover:bg-white/20 hover:text-white"
+                    onClick={() => setCrmPromptOpen(true)}
+                    className={`text-xs font-semibold px-3 py-1 rounded-full border transition-colors flex-shrink-0 ${
+                      crmPromptOpen
+                        ? 'bg-white text-brand-primary border-white'
+                        : 'bg-white/10 text-white/80 border-white/30 hover:bg-white/20 hover:text-white'
+                    }`}
                   >
                     CRM Prompt
                   </button>
@@ -2032,6 +2038,9 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
           </>
         )}
       </div>
+      {crmPromptOpen && (
+        <CrmPromptDrawer conferenceId={conferenceId} onClose={() => setCrmPromptOpen(false)} />
+      )}
       {reassignNote && (
         <FollowUpReassignNotePrompt
           target={reassignNote}
