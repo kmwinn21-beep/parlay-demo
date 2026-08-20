@@ -1195,6 +1195,15 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                     Session Notes
                   </button>
                 )}
+                {/* Placeholder — behaviour still to be defined. */}
+                {data && (
+                  <button
+                    type="button"
+                    className="text-xs font-semibold px-3 py-1 rounded-full border transition-colors flex-shrink-0 bg-white/10 text-white/80 border-white/30 hover:bg-white/20 hover:text-white"
+                  >
+                    CRM Prompt
+                  </button>
+                )}
                 {/* Mobile stats toggle */}
                 {data && (
                   <button
