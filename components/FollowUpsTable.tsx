@@ -876,7 +876,7 @@ export function FollowUpsTable({
                     case 'name': return <th key="name" className={thCls}>Name</th>;
                     case 'title': return <th key="title" className={thCls}>Title</th>;
                     case 'company': return <th key="company" className={thCls}>Company</th>;
-                    case 'next_step': return <th key="next_step" className={thCls}>Next Step</th>;
+                    case 'next_step': return <th key="next_step" className={thCls}>Source</th>;
                     case 'conference': return <th key="conference" className={thCls}>Conference</th>;
                     case 'rep': return <th key="rep" className={thCls}>Rep</th>;
                     case 'notes': return <th key="notes" className={thCls}>Notes</th>;
@@ -943,7 +943,7 @@ export function FollowUpsTable({
                     case 'name': return <th key="name" className={thCls}>Name</th>;
                     case 'title': return <th key="title" className={thCls}>Title</th>;
                     case 'company': return <th key="company" className={thCls}>Company</th>;
-                    case 'next_step': return <th key="next_step" className={thCls}>Next Step</th>;
+                    case 'next_step': return <th key="next_step" className={thCls}>Source</th>;
                     case 'conference': return <th key="conference" className={thCls}>Conference</th>;
                     case 'rep': return <th key="rep" className={thCls}>Rep</th>;
                     case 'notes': return <th key="notes" className={thCls}>Notes</th>;
@@ -1052,7 +1052,7 @@ export function FollowUpsTable({
                   case 'company': return <th key="company" className={thCls}>Company</th>;
                   // These three only carry values inside an open section, so
                   // their headings wait until one is open.
-                  case 'next_step': return <th key="next_step" className={thCls}>{anyGroupExpanded ? 'Next Step' : ''}</th>;
+                  case 'next_step': return <th key="next_step" className={thCls}>{anyGroupExpanded ? 'Source' : ''}</th>;
                   case 'conference': return <th key="conference" className={thCls}>Conference</th>;
                   case 'rep': return <th key="rep" className={thCls}>Rep</th>;
                   case 'notes': return <th key="notes" className={thCls}>{anyGroupExpanded ? 'Notes' : ''}</th>;

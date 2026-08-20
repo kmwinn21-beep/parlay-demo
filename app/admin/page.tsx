@@ -71,7 +71,8 @@ const CATEGORIES = [
   { key: 'entity_structure', label: 'Entity Structure' },
   { key: 'status', label: 'Status Options' },
   { key: 'action', label: 'Actions' },
-  { key: 'next_steps', label: 'Next Steps' },
+  { key: 'next_steps', label: 'Source' },
+  { key: 'follow_up_actions', label: 'Follow Up Actions' },
   { key: 'seniority', label: 'Seniority Levels' },
   { key: 'function', label: 'Function' },
   { key: 'product_category', label: 'Product Categories' },
@@ -304,7 +305,7 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
       if (showScopeDropdown) payload.scope = editScope;
       if (showAutoFollowUp) payload.auto_follow_up = editAutoFollowUp;
       if (category === 'products') payload.category_id = editCategoryId;
-      if (category === 'product_category') payload.description = editDescription.trim() || null;
+      if (category === 'product_category' || category === 'follow_up_actions') payload.description = editDescription.trim() || null;
       const res = await fetch(`/api/config/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -358,7 +359,7 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
     try {
       const addPayload: Record<string, unknown> = { category, value: trimmed, sort_order: localOptions.length + 1 };
       if (category === 'products') addPayload.category_id = newOptionCategoryId;
-      if (category === 'product_category' && newDesc) addPayload.description = newDesc;
+      if ((category === 'product_category' || category === 'follow_up_actions') && newDesc) addPayload.description = newDesc;
       const res = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(addPayload) });
       if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || 'Failed to add'); }
       const newOption = await res.json();
@@ -453,6 +454,11 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
                       ) : (
                         <span className="flex-1 text-sm text-gray-800 py-1.5 px-2 rounded flex items-center gap-2">
                           {opt.value}
+                          {/* The short name is what the rest of the app shows, so
+                              it is worth seeing beside the full one here. */}
+                          {category === 'follow_up_actions' && opt.description && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">{opt.description}</span>
+                          )}
                           {showScopeDropdown && opt.scope === 'user' && (
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700">User</span>
                           )}
@@ -619,14 +625,19 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
                             </select>
                           </div>
                         )}
-                        {category === 'product_category' && (
+                        {(category === 'product_category' || category === 'follow_up_actions') && (
                           <div>
-                            <label className="text-xs text-gray-500 mb-1 block">Description <span className="font-normal text-gray-400">(optional)</span></label>
+                            <label className="text-xs text-gray-500 mb-1 block">
+                              {category === 'follow_up_actions' ? 'Short Name' : 'Description'}{' '}
+                              <span className="font-normal text-gray-400">(optional)</span>
+                            </label>
                             <input
                               value={editDescription}
                               onChange={e => setEditDescription(e.target.value)}
                               className="input-field w-full text-sm"
-                              placeholder="Short description of this category"
+                              placeholder={category === 'follow_up_actions'
+                                ? 'Short name shown in tables and pills'
+                                : 'Short description of this category'}
                             />
                           </div>
                         )}
@@ -679,6 +690,9 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
             )}
             {category === 'product_category' && (
               <input name="newDescription" placeholder="Description (optional)" className="input-field w-full text-sm" autoComplete="off" />
+            )}
+            {category === 'follow_up_actions' && (
+              <input name="newDescription" placeholder="Short name (optional)" className="input-field w-full text-sm" autoComplete="off" />
             )}
           </form>
           )}

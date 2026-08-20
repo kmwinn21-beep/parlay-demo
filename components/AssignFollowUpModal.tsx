@@ -510,16 +510,16 @@ export function AssignFollowUpModal({
             </select>
           </div>
 
-          {/* Next Step Description — visible only when "Other" is selected */}
+          {/* Source description — visible only when "Other" is selected */}
           {isOther && (
             <div>
-              <label className="label">Next Step Description</label>
+              <label className="label">Source Description</label>
               <input
                 type="text"
                 value={nextStepDesc}
                 onChange={e => setNextStepDesc(e.target.value)}
                 className="input-field"
-                placeholder="Describe the next step…"
+                placeholder="Describe the source…"
               />
             </div>
           )}
