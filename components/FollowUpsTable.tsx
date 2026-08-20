@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { useFollowUpActions, followUpActionLabel } from '@/lib/useFollowUpActions';
 import { SlideInPanel } from '@/components/SlideInPanel';
+import { FollowUpReassignNotePrompt, type ReassignNoteTarget } from '@/components/FollowUpReassignNotePrompt';
 import { getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { FollowUpNotesPopover } from '@/components/FollowUpNotesPopover';
@@ -304,6 +305,20 @@ export function FollowUpsTable({
   const [editingNextStepsKey, setEditingNextStepsKey] = useState<number | null>(null);
   const [editingActionKey, setEditingActionKey] = useState<number | null>(null);
   const [drawerGroupKey, setDrawerGroupKey] = useState<string | null>(null);
+  const [reassignNote, setReassignNote] = useState<ReassignNoteTarget | null>(null);
+
+  /** Every reassignment offers a note; the prompt handles the rest. */
+  const askForReassignNote = (fu: FollowUp, ids: number[]) => {
+    setReassignNote({
+      attendeeId: fu.attendee_id,
+      attendeeName: `${fu.first_name} ${fu.last_name}`.trim() || null,
+      companyId: fu.company_id ?? null,
+      companyName: fu.company_name ?? null,
+      conferenceId: fu.conference_id ?? null,
+      conferenceName: fu.conference_name ?? null,
+      repIds: ids,
+    });
+  };
   const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
   const [editingRepIds, setEditingRepIds] = useState<number[]>([]);
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<number>>(new Set());
@@ -383,11 +398,13 @@ export function FollowUpsTable({
     setEditingRepIds(parseRepIds(fu.assigned_rep));
   };
 
-  const finishEditRep = (followUpId: number, ids: number[]) => {
+  const finishEditRep = (fu: FollowUp, ids: number[]) => {
     const rep = ids.length > 0 ? ids.join(',') : null;
-    onRepChange!(followUpId, rep);
+    const changed = rep !== (parseRepIds(fu.assigned_rep).join(',') || null);
+    onRepChange!(fu.id, rep);
     setEditingRepKey(null);
     setEditingRepIds([]);
+    if (changed) askForReassignNote(fu, ids);
   };
 
   async function handleMarkAllDone(groupKey: string, incompleteIds: number[]) {
@@ -435,7 +452,7 @@ export function FollowUpsTable({
               {canEditRep ? (
                 isEditingRep ? (
                   <div className="w-40">
-                    <RepMultiSelect options={userOptions} selectedIds={editingRepIds} onChange={setEditingRepIds} onClose={(ids) => finishEditRep(fu.id, ids)} placeholder="Select reps..." />
+                    <RepMultiSelect options={userOptions} selectedIds={editingRepIds} onChange={setEditingRepIds} onClose={(ids) => finishEditRep(fu, ids)} placeholder="Select reps..." />
                   </div>
                 ) : (
                   <button type="button" onClick={() => startEditRep(fu)} title={fu.assigned_rep ? 'Click to change reps' : 'Click to assign rep'}>
@@ -529,7 +546,7 @@ export function FollowUpsTable({
             case 'rep': return <td key="rep" className="px-3 py-2">
               {canEditRep && isEditingRep ? (
                 <div className="w-36">
-                  <RepMultiSelect options={userOptions} selectedIds={editingRepIds} onChange={setEditingRepIds} onClose={(ids) => finishEditRep(fu.id, ids)} placeholder="Select reps..." />
+                  <RepMultiSelect options={userOptions} selectedIds={editingRepIds} onChange={setEditingRepIds} onClose={(ids) => finishEditRep(fu, ids)} placeholder="Select reps..." />
                 </div>
               ) : canEditRep ? (
                 <button type="button" onClick={() => startEditRep(fu)} className="group inline-flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity" title={fu.assigned_rep ? 'Click to change reps' : 'Click to assign rep'}>
@@ -649,9 +666,11 @@ export function FollowUpsTable({
             onChange={setEditingRepIds}
             onClose={(ids) => {
               const rep = ids.length > 0 ? ids.join(',') : null;
+              const changed = rep !== (parseRepIds(unionRep).join(',') || null);
               rows.forEach(r => onRepChange!(r.id, rep));
               setEditingRepKey(null);
               setEditingRepIds([]);
+              if (changed) askForReassignNote(head, ids);
             }}
             placeholder="Select reps..."
           />
@@ -1018,6 +1037,13 @@ export function FollowUpsTable({
         {quickView && (
           <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
         )}
+        {reassignNote && (
+          <FollowUpReassignNotePrompt
+            target={reassignNote}
+            userOptions={userOptions}
+            onClose={() => setReassignNote(null)}
+          />
+        )}
       </>
     );
   }
@@ -1112,6 +1138,13 @@ export function FollowUpsTable({
         </div>
         {quickView && (
           <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
+        )}
+        {reassignNote && (
+          <FollowUpReassignNotePrompt
+            target={reassignNote}
+            userOptions={userOptions}
+            onClose={() => setReassignNote(null)}
+          />
         )}
       </>
     );
@@ -1372,6 +1405,13 @@ export function FollowUpsTable({
       </div>
       {quickView && (
         <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
+      )}
+      {reassignNote && (
+        <FollowUpReassignNotePrompt
+          target={reassignNote}
+          userOptions={userOptions}
+          onClose={() => setReassignNote(null)}
+        />
       )}
     </>
   );
