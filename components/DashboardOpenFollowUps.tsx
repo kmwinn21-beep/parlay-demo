@@ -74,7 +74,7 @@ function FollowUpRow({ item, onDone, onCompanyClick }: {
 // ── ConferenceGroup ───────────────────────────────────────────────────────────
 
 function ConferenceGroup({
-  confId, group, isCurrentConf, onDone, onMarkAllDone, onMoreClick, onCompanyClick,
+  confId, group, isCurrentConf, onDone, onMarkAllDone, onMoreClick, onCompanyClick, showAll = false,
 }: {
   confId: number;
   group: OpenFollowUp[];
@@ -83,6 +83,9 @@ function ConferenceGroup({
   onMarkAllDone: (confId: number) => void;
   onMoreClick: (confId: number, confName: string) => void;
   onCompanyClick: (id: number, name: string) => void;
+  /** The dashboard card has room for a sample; the drawer opened from it is
+   *  the place you actually work the list, so it shows every row. */
+  showAll?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(true);
   const confName = group[0]?.conference_name ?? '';
@@ -125,11 +128,11 @@ function ConferenceGroup({
       {/* Expanded rows */}
       {!collapsed && (
         <div className="px-3 pb-2">
-          {group.slice(0, 3).map(f => (
+          {(showAll ? group : group.slice(0, 3)).map(f => (
             <FollowUpRow key={f.id} item={f} onDone={() => onDone(f.id)} onCompanyClick={onCompanyClick} />
           ))}
           <div className="flex items-center justify-between mt-1">
-            {group.length > 3 ? (
+            {!showAll && group.length > 3 ? (
               <button
                 type="button"
                 onClick={() => onMoreClick(confId, confName)}
@@ -351,6 +354,7 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
                       key={confId}
                       confId={confId}
                       group={group}
+                      showAll
                       isCurrentConf={confId === activeConfId}
                       onDone={id => void markDone(id)}
                       onMarkAllDone={id => void markAllDone(id)}
