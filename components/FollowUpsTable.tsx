@@ -75,6 +75,34 @@ function formatTimestamp(ts: string | undefined) {
 }
 
 /** Oldest first, so a grouped row reads as the interaction history it is. */
+/**
+ * How many follow-ups an attendee has piled up at one conference, on a scale
+ * that reads at a glance: green while it is a normal load, blue once it is
+ * getting heavy, red past that. Full-strength text and border over a lighter
+ * fill of the same hue.
+ */
+const FOLLOW_UP_COUNT_STYLES: Record<number, string> = {
+  2: 'text-green-600 border-green-300 bg-green-50',
+  3: 'text-green-700 border-green-400 bg-green-100',
+  4: 'text-green-800 border-green-500 bg-green-200',
+  5: 'text-blue-600 border-blue-300 bg-blue-50',
+  6: 'text-blue-700 border-blue-400 bg-blue-100',
+  7: 'text-blue-800 border-blue-500 bg-blue-200',
+};
+
+function FollowUpCountPill({ count }: { count: number }) {
+  if (count < 2) return null;
+  const style = FOLLOW_UP_COUNT_STYLES[count] ?? 'text-red-700 border-red-500 bg-red-100';
+  return (
+    <span
+      title={`${count} follow-ups`}
+      className={`inline-flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold flex-shrink-0 ${style}`}
+    >
+      {count}
+    </span>
+  );
+}
+
 function sortByCreatedAt(tasks: FollowUp[]): FollowUp[] {
   return [...tasks].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''));
 }
@@ -695,8 +723,9 @@ export function FollowUpsTable({
         {/* One line from sm; stacked on a phone, where it would otherwise
             truncate every field down to a couple of characters. */}
         <div className="flex-1 min-w-0 flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
-          <div className="flex items-center gap-1 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0">
             {attendeeNameNode(head, 'text-xs font-semibold text-brand-secondary hover:underline truncate')}
+            <FollowUpCountPill count={rows.length} />
           </div>
           {head.title && <span className="text-xs text-gray-500 truncate">{head.title}</span>}
           <div className="flex items-center gap-1 min-w-0">
@@ -771,8 +800,9 @@ export function FollowUpsTable({
           if (!isVisible(col.key)) return null;
           switch (col.key) {
             case 'name': return cell('name',
-              <span className="flex items-center gap-1 min-w-0">
+              <span className="flex items-center gap-1.5 min-w-0">
                 {attendeeNameNode(head, 'text-xs font-semibold text-brand-secondary hover:underline truncate')}
+                <FollowUpCountPill count={rows.length} />
               </span>, 'overflow-hidden');
             case 'title': return cell('title',
               <span className="text-xs text-gray-500 truncate block">{head.title || <span className="text-gray-300">—</span>}</span>);
@@ -1086,6 +1116,73 @@ export function FollowUpsTable({
   // establish the conference around the table.
 
   /**
+   * One follow-up as the panel shows it: the date it landed and the word
+   * Action as eyebrows over a single row carrying the source pill and the
+   * action pill. The trash stays hidden until the entry is hovered, as it does
+   * in the table.
+   */
+  function renderDrawerEntry(fu: FollowUp) {
+    const hasNotes = !!fu.next_steps_notes;
+    const isExpanded = expandedTaskIds.has(fu.id);
+    return (
+      <div
+        key={fu.id}
+        className={`group/entry rounded-lg border p-2 ${fu.completed ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-white'}`}
+      >
+        <div className="flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] text-gray-400 leading-snug mb-1">
+              {fu.created_at ? formatTimestamp(fu.created_at) : '\u00A0'}
+            </p>
+            <div className="flex items-center gap-1 min-w-0">
+              {onDelete && <EntryDeleteButton onClick={() => onDelete(fu.id)} />}
+              {canEditNextSteps && editingNextStepsKey === fu.id ? (
+                <select
+                  autoFocus
+                  className="text-xs border border-brand-primary rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                  defaultValue={fu.next_steps}
+                  onChange={(e) => { onNextStepsChange!(fu.id, e.target.value); setEditingNextStepsKey(null); }}
+                  onBlur={() => setEditingNextStepsKey(null)}
+                >
+                  {nextStepsOpts.map(opt => (
+                    <option key={opt.id} value={String(opt.id)}>{opt.value}</option>
+                  ))}
+                </select>
+              ) : (
+                <span
+                  onClick={canEditNextSteps ? () => setEditingNextStepsKey(fu.id) : undefined}
+                  className={`inline-flex px-2 py-0.5 rounded-lg text-xs font-medium leading-snug ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'} ${canEditNextSteps ? 'cursor-pointer hover:opacity-75 transition-opacity' : ''}`}
+                  title={canEditNextSteps ? 'Click to change' : undefined}
+                >
+                  {resolveConfigValue(fu.next_steps, nextStepsOpts)}
+                </span>
+              )}
+              {hasNotes && (
+                <button
+                  type="button"
+                  onClick={() => setExpandedTaskIds(prev => { const n = new Set(prev); if (n.has(fu.id)) n.delete(fu.id); else n.add(fu.id); return n; })}
+                  aria-expanded={isExpanded}
+                  title={isExpanded ? 'Hide details' : 'Show details'}
+                  className="flex-shrink-0 p-0.5 text-gray-400 hover:text-brand-secondary transition-colors"
+                >
+                  <svg className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide leading-snug mb-1">Action</p>
+            {actionPill(fu)}
+          </div>
+        </div>
+        {isExpanded && renderNextStepNotes(fu, 'text-xs text-gray-500')}
+      </div>
+    );
+  }
+
+  /**
    * The expanded detail, moved into the side panel. Every control is the same
    * renderer the table rows use, so the source pill, the action pill, the rep
    * picker, the notes and Done all edit exactly as they do inline.
@@ -1116,17 +1213,19 @@ export function FollowUpsTable({
         }
       >
         <div className="p-3 space-y-3">
-          <div>
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Conference</p>
-            <Link href={`/conferences/${head.conference_id}`} className="text-xs text-brand-secondary hover:underline">
-              {head.conference_name}
-            </Link>
-            <p className="text-[10px] text-gray-400">{formatDate(head.start_date)}</p>
-          </div>
-
-          <div>
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Rep</p>
-            {renderGroupRepBody(rows)}
+          {/* Conference and rep share a line — both are context for the list. */}
+          <div className="flex items-start gap-4">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Conference</p>
+              <Link href={`/conferences/${head.conference_id}`} className="text-xs text-brand-secondary hover:underline">
+                {head.conference_name}
+              </Link>
+              <p className="text-[10px] text-gray-400">{formatDate(head.start_date)}</p>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Rep</p>
+              {renderGroupRepBody(rows)}
+            </div>
           </div>
 
           <div>
@@ -1134,15 +1233,7 @@ export function FollowUpsTable({
               Follow Ups ({rows.length})
             </p>
             <div className="space-y-2">
-              {rows.map(row => (
-                <div key={row.id} className={`rounded-lg border p-2 ${row.completed ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-white'}`}>
-                  {renderNextStepEntry(row, 0, 'text-xs', 'text-xs text-gray-500', true)}
-                  <div className="mt-1.5 flex items-center gap-1.5">
-                    <span className="text-[10px] text-gray-400">Action</span>
-                    {actionPill(row)}
-                  </div>
-                </div>
-              ))}
+              {rows.map(row => renderDrawerEntry(row))}
             </div>
           </div>
         </div>

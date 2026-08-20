@@ -1592,6 +1592,7 @@ export default function FollowUpsPage() {
                     {/* Follow-ups rows */}
                     {isExpanded && (
                       <FollowUpsTable
+                        detailsInDrawer
                         followUps={group.followUps}
                         onToggle={handleToggle}
                         onDelete={handleDeleteFollowUp}

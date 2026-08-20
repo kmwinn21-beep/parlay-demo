@@ -28,6 +28,16 @@ export function SlideInPanel({
 }) {
   const [phase, setPhase] = useState<'closed' | 'open' | 'closing'>('closed');
   const [isDesktop, setIsDesktop] = useState(true);
+  // A transform makes this element the containing block for any fixed-position
+  // descendant, which traps dropdowns and popovers inside the panel's
+  // overflow. So the transform only exists while the panel is animating.
+  const [settled, setSettled] = useState(false);
+
+  useEffect(() => {
+    if (phase !== 'open') { setSettled(false); return; }
+    const t = setTimeout(() => setSettled(true), ANIMATION_MS);
+    return () => clearTimeout(t);
+  }, [phase]);
 
   useEffect(() => {
     const media = window.matchMedia('(min-width: 640px)');
@@ -62,7 +72,7 @@ export function SlideInPanel({
         <div className="fixed inset-0 bg-black/30 z-40" onClick={handleClose} />
       )}
       <div
-        style={isDesktop ? {
+        style={isDesktop && !settled ? {
           transformOrigin: phase === 'closing' ? 'bottom' : 'top',
           transform: phase === 'open' ? 'scaleY(1)' : 'scaleY(0.05)',
           opacity: phase === 'open' ? 1 : 0,

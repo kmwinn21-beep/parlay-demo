@@ -1342,7 +1342,7 @@ export default function AttendeeDetailPage() {
                 <span className="text-sm font-medium text-brand-primary">Follow Up</span>
             </button>
             </div>
-            <FollowUpsTable followUps={followUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} onNextStepsChange={handleNextStepsChange} onFollowUpActionChange={handleFollowUpActionChange} onBulkToggle={handleBulkToggleFollowUp} tableName="attendee_follow_ups" groupBy="conference-attendee" />
+            <FollowUpsTable detailsInDrawer followUps={followUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} onNextStepsChange={handleNextStepsChange} onFollowUpActionChange={handleFollowUpActionChange} onBulkToggle={handleBulkToggleFollowUp} tableName="attendee_follow_ups" groupBy="conference-attendee" />
           </div>
 
           {/* Notes */}
