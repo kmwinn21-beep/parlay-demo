@@ -724,9 +724,6 @@ export function FollowUpsTable({
             truncate every field down to a couple of characters. */}
         <div className="flex-1 min-w-0 flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="w-5 flex-shrink-0 flex justify-center">
-              <FollowUpCountPill count={rows.length} />
-            </span>
             {attendeeNameNode(head, 'text-xs font-semibold text-brand-secondary hover:underline truncate')}
           </div>
           {head.title && <span className="text-xs text-gray-500 truncate">{head.title}</span>}
@@ -749,6 +746,7 @@ export function FollowUpsTable({
         </div>
         <span className="flex items-center gap-2 flex-shrink-0 pt-0.5 sm:pt-0">
           {renderGroupRepBody(rows, 'xs')}
+          <FollowUpCountPill count={rows.length} />
           <svg
             className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`}
             fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -803,11 +801,6 @@ export function FollowUpsTable({
           switch (col.key) {
             case 'name': return cell('name',
               <span className="flex items-center gap-1.5 min-w-0">
-                {/* Fixed slot so the pills form a column instead of landing
-                    wherever each name happens to end. */}
-                <span className="w-5 flex-shrink-0 flex justify-center">
-                  <FollowUpCountPill count={rows.length} />
-                </span>
                 {attendeeNameNode(head, 'text-xs font-semibold text-brand-secondary hover:underline truncate')}
               </span>, 'overflow-hidden');
             case 'title': return cell('title',
@@ -824,7 +817,15 @@ export function FollowUpsTable({
             case 'follow_up_action': return cell('follow_up_action', <span />);
             case 'conference': return cell('conference',
               <span className="text-xs text-gray-500 truncate block">{head.conference_name}</span>);
-            case 'rep': return cell('rep', renderGroupRepBody(rows, 'xs'));
+            case 'rep': return cell('rep',
+              <span className="flex items-center gap-2">
+                {/* The reps get a fixed block so the count pill beside them
+                    lands on the same x down the whole table. */}
+                <span className="min-w-[3.5rem]">{renderGroupRepBody(rows, 'xs')}</span>
+                <span className="w-5 flex-shrink-0 flex justify-center">
+                  <FollowUpCountPill count={rows.length} />
+                </span>
+              </span>);
             case 'notes': return cell('notes', <span />);
             case 'status': return cell('status', <span />);
             default: return null;
@@ -1137,7 +1138,7 @@ export function FollowUpsTable({
       >
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] text-gray-400 leading-snug mb-1">
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide leading-snug mb-1">
               {fu.created_at ? formatTimestamp(fu.created_at) : '\u00A0'}
             </p>
             <div className="flex items-center gap-1 min-w-0">
@@ -1181,6 +1182,19 @@ export function FollowUpsTable({
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide leading-snug mb-1">Action</p>
             {actionPill(fu)}
+          </div>
+          {/* Where the entry stands, so a finished one reads at a glance. */}
+          <div className="flex-shrink-0 pt-[18px]">
+            {fu.completed ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
+                <CheckIcon className="w-3 h-3 flex-shrink-0" />
+                Done
+              </span>
+            ) : (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-300 whitespace-nowrap">
+                Pending
+              </span>
+            )}
           </div>
         </div>
         {isExpanded && renderNextStepNotes(fu, 'text-xs text-gray-500')}
@@ -1290,7 +1304,7 @@ export function FollowUpsTable({
       {/* Desktop — the panel takes a column beside the table when open. The
           row itself is always mounted so the panel renders once and handles
           its own phone form (a bottom sheet) from inside. */}
-      <div className="lg:flex lg:gap-4 lg:items-start">
+      <div className="lg:flex lg:items-start">
       <div className="hidden lg:block flex-1 min-w-0 overflow-x-auto">
         <table className="w-full" style={{ fontSize: '0.7rem' }}>
           <thead>
@@ -1354,7 +1368,7 @@ export function FollowUpsTable({
           </tbody>
         </table>
       </div>
-        {drawer && <div className="lg:w-96 lg:flex-shrink-0">{drawer}</div>}
+        {drawer && <div className="lg:w-96 lg:flex-shrink-0 lg:pr-3">{drawer}</div>}
       </div>
       {quickView && (
         <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />

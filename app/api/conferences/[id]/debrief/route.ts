@@ -80,7 +80,7 @@ export async function GET(
       }),
       db.execute({
         sql: `SELECT fu.id, fu.attendee_id, fu.next_steps, fu.next_steps_notes, fu.completed,
-                     fu.assigned_rep, fu.meeting_id,
+                     fu.assigned_rep, fu.meeting_id, fu.created_at, fu.follow_up_action,
                      a.first_name, a.last_name, a.company_id, c.name as company_name,
                      COALESCE(ns_opt.value, fu.next_steps) AS next_steps_display
               FROM follow_ups fu
@@ -350,6 +350,8 @@ export async function GET(
           nextSteps: String(fu.next_steps_display ?? fu.next_steps ?? ''),
           completed: Boolean(fu.completed),
           meetingId: fu.meeting_id != null ? Number(fu.meeting_id) : null,
+          createdAt: fu.created_at != null ? String(fu.created_at) : null,
+          followUpAction: fu.follow_up_action != null ? String(fu.follow_up_action) : null,
           source: fu.meeting_id ? 'From meeting notes' : 'Manual',
         })),
       };
