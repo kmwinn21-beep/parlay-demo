@@ -11,32 +11,48 @@ function csvContains(col: string): string {
   return `',' || COALESCE(${col}, '') || ',' LIKE '%,' || ? || ',%'`;
 }
 
-/** 'Sep 23, 2026' — unambiguous to a person and to a parser. */
+/** Pacific, so a stamp reads as the rep's own clock rather than the server's. */
+const STAMP_ZONE = 'America/Los_Angeles';
+
+/**
+ * 'Sep 23, 2026' — a stored calendar date, rendered as that exact date.
+ *
+ * Deliberately not shifted into any zone: a meeting on the 23rd is on the 23rd
+ * wherever it is read, and converting midnight would land it on the 22nd.
+ */
 function formatDay(ymd: string): string {
-  const d = new Date(`${ymd.slice(0, 10)}T00:00:00`);
+  const d = new Date(`${ymd.slice(0, 10)}T00:00:00Z`);
   if (isNaN(d.getTime())) return ymd;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 }
 
-/** 'Aug 14, 2026 3:12 PM' — leads each note line. */
+/**
+ * 'Aug 14, 2026 3:12 PM' — leads each note line.
+ *
+ * Stored stamps are UTC, so they are read as UTC and written out in Pacific.
+ * Left to the server's own zone they came out hours ahead of when the note was
+ * actually written.
+ */
 function formatStamp(ts: string): string {
   const iso = ts.includes('T') ? ts : ts.replace(' ', 'T');
   const d = new Date(iso.endsWith('Z') || iso.includes('+') ? iso : `${iso}Z`);
   if (isNaN(d.getTime())) return ts;
-  return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+  const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: STAMP_ZONE });
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: STAMP_ZONE });
+  return `${date} ${time}`;
 }
 
 /** Three business days after the conference ends; weekends don't count. */
 function addBusinessDays(ymd: string, days: number): string {
-  const d = new Date(`${ymd.slice(0, 10)}T00:00:00`);
+  const d = new Date(`${ymd.slice(0, 10)}T00:00:00Z`);
   if (isNaN(d.getTime())) return ymd;
   let added = 0;
   while (added < days) {
-    d.setDate(d.getDate() + 1);
-    const day = d.getDay();
+    d.setUTCDate(d.getUTCDate() + 1);
+    const day = d.getUTCDay();
     if (day !== 0 && day !== 6) added++;
   }
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 }
 
 /** 'https://www.acme.com/about?x=1' → 'acme.com'. */
@@ -166,7 +182,12 @@ export async function GET(
     const followRes = await db.execute({
       sql: `SELECT fu.id, fu.next_steps, fu.follow_up_action, fu.assigned_rep, fu.meeting_id,
                    a.id AS attendee_id, a.first_name, a.last_name, a.email, a.title,
-                   co.id AS company_id, co.name AS company_name, co.assigned_user,
+                   co.id AS company_id, co.name AS company_name, co.website, co.assigned_user,
+                   -- The action stores its full name; the short one is what a
+                   -- task is titled with.
+                   (SELECT fa.description FROM config_options fa
+                     WHERE fa.category = 'follow_up_actions' AND fa.value = fu.follow_up_action
+                     ORDER BY fa.id LIMIT 1) AS action_short_name,
                    (SELECT ns.value FROM config_options ns
                      WHERE ns.category = 'next_steps'
                        AND (ns.id = CAST(fu.next_steps AS INTEGER) OR ns.value = fu.next_steps)
@@ -250,11 +271,12 @@ export async function GET(
         const attendeeName = `${String(r.first_name ?? '')} ${String(r.last_name ?? '')}`.trim();
         const source = String(r.source_value ?? r.next_steps ?? '').trim();
         const guests = r.meeting_id != null ? (extras.get(Number(r.meeting_id)) ?? []) : [];
+        // Short name where the action has one, the full name otherwise. Never
+        // the Source — that is where the follow-up came from, not what to do.
+        const actionFull = String(r.follow_up_action ?? '').trim();
+        const actionShort = String(r.action_short_name ?? '').trim();
         return {
-          // No action chosen yet leaves the title readable rather than blank.
-          action: r.follow_up_action != null && String(r.follow_up_action).trim()
-            ? String(r.follow_up_action).trim()
-            : source,
+          action: actionShort || actionFull,
           source,
           attendeeName,
           contacts: [
@@ -262,6 +284,7 @@ export async function GET(
             ...guests.map(g => contact(`${g.first_name} ${g.last_name}`.trim(), g.email, g.title)),
           ],
           companyName: r.company_name != null ? String(r.company_name) : null,
+          companyDomain: rootDomain(r.website != null ? String(r.website) : null),
           assignedRep: resolveReps(r.assigned_user),
           notes: (attendeeNotes.get(Number(r.attendee_id)) ?? []).join('\n'),
         };
