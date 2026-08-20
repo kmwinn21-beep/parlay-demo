@@ -6,6 +6,10 @@ import { useDrawerResize } from '@/lib/useDrawerResize';
 import { useSidebarCollapse, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_EXPANDED_WIDTH } from './SidebarCollapseContext';
 import toast from 'react-hot-toast';
 import { getPreset } from '@/lib/colors';
+import { RepMultiSelect } from './RepMultiSelect';
+import { useUserOptions, parseRepIds, getRepInitials } from '@/lib/useUserOptions';
+import { useConfigColors } from '@/lib/useConfigColors';
+import { FollowUpReassignNotePrompt, type ReassignNoteTarget } from './FollowUpReassignNotePrompt';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -46,6 +50,8 @@ interface DebriefFollowUp {
   meetingId: number | null;
   createdAt: string | null;
   followUpAction: string | null;
+  /** CSV of config_option ids, as follow_ups.assigned_rep stores it. */
+  assignedRep: string | null;
   source: string;
 }
 
@@ -800,6 +806,55 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [expandedFuIds, setExpandedFuIds] = useState<Set<number>>(new Set());
+  const userOptions = useUserOptions();
+  const colorMaps = useConfigColors();
+  const [editingRepFuId, setEditingRepFuId] = useState<number | null>(null);
+  const [editingRepIds, setEditingRepIds] = useState<number[]>([]);
+  const [reassignNote, setReassignNote] = useState<ReassignNoteTarget | null>(null);
+
+  /**
+   * Reassigning here writes straight through to the follow-up, then offers the
+   * same note prompt the tables do so the new owner hears why it moved.
+   */
+  const saveFollowUpRep = async (
+    fu: DebriefFollowUp,
+    ids: number[],
+    company: { id: number; name: string } | null,
+    conference: { id: number; name: string } | null,
+  ) => {
+    setEditingRepFuId(null);
+    setEditingRepIds([]);
+    const rep = ids.length > 0 ? ids.join(',') : null;
+    if (rep === (parseRepIds(fu.assignedRep).join(',') || null)) return;
+
+    setFollowUps(prev => {
+      const next: Record<number, DebriefFollowUp[]> = {};
+      for (const [key, list] of Object.entries(prev)) {
+        next[Number(key)] = list.map(f => (f.id === fu.id ? { ...f, assignedRep: rep } : f));
+      }
+      return next;
+    });
+    try {
+      const res = await fetch('/api/follow-ups', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: fu.id, assigned_rep: rep }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Follow-up reassigned.');
+      setReassignNote({
+        attendeeId: fu.attendeeId ?? 0,
+        attendeeName: fu.attendeeName,
+        companyId: company?.id ?? null,
+        companyName: company?.name ?? null,
+        conferenceId: conference?.id ?? null,
+        conferenceName: conference?.name ?? null,
+        repIds: ids,
+      });
+    } catch {
+      toast.error('Failed to reassign.');
+    }
+  };
   const [activeMeetingId, setActiveMeetingId] = useState<number | null>(null);
   const [col4Sections, setCol4Sections] = useState<Record<string, boolean>>({});
   const [col4FadeKey, setCol4FadeKey] = useState(0);
@@ -1696,6 +1751,38 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                                       ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30 whitespace-nowrap">{fu.followUpAction}</span>
                                       : <span className="text-gray-300">—</span>}
                                   </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide leading-snug mb-1">Rep</p>
+                                    {editingRepFuId === fu.id ? (
+                                      <div className="w-32">
+                                        <RepMultiSelect
+                                          options={userOptions}
+                                          selectedIds={editingRepIds}
+                                          onChange={setEditingRepIds}
+                                          onClose={(ids) => saveFollowUpRep(fu, ids, selectedCompany ? { id: selectedCompany.id, name: selectedCompany.name } : null, data ? { id: data.conference.id, name: data.conference.name } : null)}
+                                          placeholder="Select reps..."
+                                        />
+                                      </div>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => { setEditingRepFuId(fu.id); setEditingRepIds(parseRepIds(fu.assignedRep)); }}
+                                        title={fu.assignedRep ? 'Click to reassign' : 'Click to assign rep'}
+                                        className="group/rep inline-flex flex-wrap items-center gap-1 hover:opacity-80 transition-opacity"
+                                      >
+                                        {parseRepIds(fu.assignedRep).length > 0
+                                          ? parseRepIds(fu.assignedRep)
+                                              .map(id => userOptions.find(u => u.id === id))
+                                              .filter(Boolean)
+                                              .map((u, ui) => (
+                                                <span key={ui} className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[u!.value]).badgeClass}`}>
+                                                  {getRepInitials(u!.value)}
+                                                </span>
+                                              ))
+                                          : <span className="text-gray-300 group-hover/rep:text-blue-400 transition-colors">—</span>}
+                                      </button>
+                                    )}
+                                  </div>
                                   <div className="flex-shrink-0 pt-[18px]">
                                     {fu.completed ? (
                                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
@@ -1936,6 +2023,13 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
           </>
         )}
       </div>
+      {reassignNote && (
+        <FollowUpReassignNotePrompt
+          target={reassignNote}
+          userOptions={userOptions}
+          onClose={() => setReassignNote(null)}
+        />
+      )}
     </div>
   );
 

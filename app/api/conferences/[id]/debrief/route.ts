@@ -351,6 +351,7 @@ export async function GET(
           completed: Boolean(fu.completed),
           meetingId: fu.meeting_id != null ? Number(fu.meeting_id) : null,
           createdAt: fu.created_at != null ? String(fu.created_at) : null,
+          assignedRep: fu.assigned_rep != null ? String(fu.assigned_rep) : null,
           followUpAction: fu.follow_up_action != null ? String(fu.follow_up_action) : null,
           source: fu.meeting_id ? 'From meeting notes' : 'Manual',
         })),
