@@ -4095,6 +4095,23 @@ export default function ConferenceDetailPage() {
                 toast.error('Failed to update rep.');
               }
             }}
+            onFollowUpActionChange={async (id, action) => {
+              setConfFollowUps(prev =>
+                prev.map(fu => (fu.id === id ? { ...fu, follow_up_action: action || null } : fu))
+              );
+              try {
+                const res = await fetch('/api/follow-ups', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id, follow_up_action: action || null }),
+                });
+                if (!res.ok) throw new Error();
+                toast.success('Follow up action updated.');
+              } catch {
+                fetchConference();
+                toast.error('Failed to update follow up action.');
+              }
+            }}
             onNextStepsChange={async (id, nextSteps) => {
               setConfFollowUps(prev =>
                 prev.map(fu =>

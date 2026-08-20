@@ -143,7 +143,7 @@ export async function PATCH(request: NextRequest) {
   const db = await getDb(user?.accountId);
   try {
     const body = await request.json();
-    const { id, completed, assigned_rep, next_steps } = body;
+    const { id, completed, assigned_rep, next_steps, follow_up_action } = body;
 
     if (id == null) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
@@ -172,6 +172,12 @@ export async function PATCH(request: NextRequest) {
     if ('next_steps' in body && next_steps != null) {
       setClauses.push('next_steps = ?');
       args.push(String(next_steps));
+    }
+
+    // Stored by full name; '' clears it back to "no action chosen yet".
+    if ('follow_up_action' in body) {
+      setClauses.push('follow_up_action = ?');
+      args.push(follow_up_action ? String(follow_up_action) : null);
     }
 
     if (setClauses.length === 0) {

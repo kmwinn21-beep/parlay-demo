@@ -189,6 +189,7 @@ export function FollowUpsTable({
   userOptions = [],
   onRepChange,
   onNextStepsChange,
+  onFollowUpActionChange,
   onBulkToggle,
   tableName = 'follow_ups',
   groupBy = 'none',
@@ -200,6 +201,8 @@ export function FollowUpsTable({
   userOptions?: UserOption[];
   onRepChange?: (id: number, rep: string | null) => void;
   onNextStepsChange?: (id: number, nextSteps: string) => void;
+  /** '' clears the action back to unset. */
+  onFollowUpActionChange?: (id: number, action: string) => void;
   onBulkToggle?: (ids: number[]) => Promise<void>;
   tableName?: string;
   /**
@@ -216,14 +219,47 @@ export function FollowUpsTable({
   const nextStepsOpts = useConfigWithIds('next_steps');
   const followUpActions = useFollowUpActions();
 
-  /** The chosen action, shown by its short name; blank until a rep picks one. */
-  const actionPill = (stored: string | null | undefined) => {
-    const label = followUpActionLabel(stored, followUpActions);
-    if (!label) return <span className="text-gray-300">—</span>;
+  /**
+   * The chosen action, shown by its short name and clickable to change — blank
+   * until a rep picks one, and clearable back to blank.
+   */
+  const actionPill = (fu: FollowUp) => {
+    const label = followUpActionLabel(fu.follow_up_action, followUpActions);
+
+    if (canEditAction && editingActionKey === fu.id) {
+      return (
+        <select
+          autoFocus
+          className="text-xs border border-brand-primary rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-brand-primary"
+          defaultValue={fu.follow_up_action ?? ''}
+          onChange={(e) => { onFollowUpActionChange!(fu.id, e.target.value); setEditingActionKey(null); }}
+          onBlur={() => setEditingActionKey(null)}
+        >
+          <option value="">— None —</option>
+          {followUpActions.map(opt => (
+            <option key={opt.id} value={opt.value}>{opt.shortName}</option>
+          ))}
+        </select>
+      );
+    }
+
+    if (!label) {
+      return (
+        <span
+          onClick={canEditAction ? () => setEditingActionKey(fu.id) : undefined}
+          className={`text-gray-300 ${canEditAction ? 'cursor-pointer hover:text-brand-secondary transition-colors' : ''}`}
+          title={canEditAction ? 'Click to set' : undefined}
+        >
+          —
+        </span>
+      );
+    }
+
     return (
       <span
-        title={stored ?? ''}
-        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30 whitespace-nowrap"
+        onClick={canEditAction ? () => setEditingActionKey(fu.id) : undefined}
+        title={canEditAction ? 'Click to change' : (fu.follow_up_action ?? '')}
+        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30 whitespace-nowrap ${canEditAction ? 'cursor-pointer hover:opacity-75 transition-opacity' : ''}`}
       >
         {label}
       </span>
@@ -233,6 +269,7 @@ export function FollowUpsTable({
   const customColumns = useCustomColumns(tableName);
   const [editingRepKey, setEditingRepKey] = useState<number | null>(null);
   const [editingNextStepsKey, setEditingNextStepsKey] = useState<number | null>(null);
+  const [editingActionKey, setEditingActionKey] = useState<number | null>(null);
   const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
   const [editingRepIds, setEditingRepIds] = useState<number[]>([]);
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<number>>(new Set());
@@ -297,6 +334,7 @@ export function FollowUpsTable({
 
   const canEditRep = !!onRepChange && userOptions.length > 0;
   const canEditNextSteps = !!onNextStepsChange && nextStepsOpts.length > 0;
+  const canEditAction = !!onFollowUpActionChange && followUpActions.length > 0;
 
   const startEditRep = (fu: FollowUp) => {
     setEditingRepKey(fu.id);
@@ -403,6 +441,8 @@ export function FollowUpsTable({
         <div className="mt-2">
           {renderNextStepEntry(fu, 0, 'text-xs', 'text-xs text-gray-500', true)}
         </div>
+        {/* The action has no column on a phone, so it rides under the source. */}
+        <div className="mt-1.5">{actionPill(fu)}</div>
         <div className="mt-1.5 flex items-center gap-2">
           <Link href={`/conferences/${fu.conference_id}`} className="text-xs text-brand-secondary hover:underline">
             {fu.conference_name}
@@ -438,7 +478,7 @@ export function FollowUpsTable({
               {renderNextStepEntry(fu, 0, '', 'text-gray-500')}
             </td>;
             case 'follow_up_action': return <td key="follow_up_action" className="px-3 py-2 text-xs text-gray-600 leading-snug">
-              {actionPill(fu.follow_up_action)}
+              {actionPill(fu)}
             </td>;
             case 'conference': return <td key="conference" className="px-3 py-2 text-gray-600 leading-snug">
               <Link href={`/conferences/${fu.conference_id}`} className="text-brand-secondary hover:underline">{fu.conference_name}</Link>
@@ -775,7 +815,7 @@ export function FollowUpsTable({
               {rows.map((row, i) => renderNextStepEntry(row, i, '', 'text-gray-500'))}
             </td>;
             case 'follow_up_action': return <td key="follow_up_action" className="px-3 py-2 text-xs text-gray-600 leading-snug">
-              {rows.map(row => <div key={row.id} className="py-1.5">{actionPill(row.follow_up_action)}</div>)}
+              {rows.map(row => <div key={row.id} className="py-1.5">{actionPill(row)}</div>)}
             </td>;
             case 'conference': return <td key="conference" className="px-3 py-2 text-gray-600 leading-snug">
               <Link href={`/conferences/${head.conference_id}`} className="text-brand-secondary hover:underline">{head.conference_name}</Link>
@@ -835,8 +875,13 @@ export function FollowUpsTable({
             {renderGroupDoneButton(groupKey, rows)}
           </div>
         </div>
-        <div className="mt-2">
-          {rows.map((row, i) => renderNextStepEntry(row, i, 'text-xs', 'text-xs text-gray-500', true))}
+        <div className="mt-2 space-y-1.5">
+          {rows.map((row, i) => (
+            <div key={row.id}>
+              {renderNextStepEntry(row, i, 'text-xs', 'text-xs text-gray-500', true)}
+              <div className="mt-1.5">{actionPill(row)}</div>
+            </div>
+          ))}
         </div>
         <div className="mt-1.5 flex items-center gap-2">
           <Link href={`/conferences/${head.conference_id}`} className="text-xs text-brand-secondary hover:underline">
