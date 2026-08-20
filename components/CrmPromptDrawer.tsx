@@ -17,7 +17,7 @@ export function CrmPromptDrawer({
 }) {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
-  const [meetingCount, setMeetingCount] = useState(0);
+  const [counts, setCounts] = useState({ meetings: 0, tasks: 0, notes: 0 });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -32,7 +32,11 @@ export function CrmPromptDrawer({
       .then(r => (r.ok ? r.json() : Promise.reject()))
       .then((data: CrmPromptInput) => {
         if (cancelled) return;
-        setMeetingCount(data.meetings?.length ?? 0);
+        setCounts({
+          meetings: data.meetings?.length ?? 0,
+          tasks: data.tasks?.length ?? 0,
+          notes: data.notes?.length ?? 0,
+        });
         setText(buildCrmPrompt(data));
       })
       .catch(() => {
@@ -60,8 +64,8 @@ export function CrmPromptDrawer({
             <h3 className="text-sm font-semibold text-gray-800">CRM Prompt</h3>
             <p className="text-xs text-gray-500 mt-0.5">
               {loading
-                ? 'Gathering your meetings…'
-                : `${meetingCount} meeting${meetingCount === 1 ? '' : 's'}. Edit anything below, then copy it into your CRM agent.`}
+                ? 'Gathering your conference activity…'
+                : `${counts.meetings} meeting${counts.meetings === 1 ? '' : 's'} · ${counts.tasks} task${counts.tasks === 1 ? '' : 's'} · ${counts.notes} note${counts.notes === 1 ? '' : 's'}. Edit anything below, then copy it into your CRM agent.`}
             </p>
           </div>
           <button
