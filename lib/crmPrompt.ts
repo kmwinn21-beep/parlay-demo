@@ -30,13 +30,18 @@ export interface CrmPromptMeeting {
 }
 
 export interface CrmPromptTask {
-  /** The Follow Up Action, which titles the task. */
+  /**
+   * The Follow Up Action's short name, which titles the task — never the
+   * Source, which is a different field describing where the follow-up came
+   * from. Empty when no action has been chosen yet.
+   */
   action: string;
   /** The Source the follow-up came from, which opens the task notes. */
   source: string;
   attendeeName: string;
   contacts: CrmPromptContact[];
   companyName: string | null;
+  companyDomain: string | null;
   assignedRep: string | null;
   /** Same lines as a meeting's notes, but single-spaced. */
   notes: string;
@@ -164,16 +169,25 @@ ${contactLines(m.contacts)}
 
 /** A follow-up that isn't tied to a meeting write-up, as a standalone task. */
 function renderTask(t: CrmPromptTask, n: number, conferenceName: string, taskDueDate: string): string {
+  // With no action chosen the title would open on a stray separator, so the
+  // attendee leads instead. The Source is never substituted here.
+  const title = t.action ? `${t.action} - ${t.attendeeName}` : t.attendeeName;
   return `=====BEGIN TASK FOR CONTACT ${n} =====
 
 * Create task: Yes
-* Task title: ${t.action} - ${t.attendeeName} - ${conferenceName}
+* Task title: ${title} - ${conferenceName}
 * Assigned to: ${t.assignedRep ?? ''}
 * Due date: ${taskDueDate}
 * Due time: 8:00 PM
 * Timezone: America/New_York
 * Priority: High
 * Task notes: Follow up from ${t.source} ${t.notes}
+
+
+Company/account:
+
+* Name: ${t.companyName ?? ''}
+* Domain: ${t.companyDomain ?? ''}
 
 
 Contacts:
