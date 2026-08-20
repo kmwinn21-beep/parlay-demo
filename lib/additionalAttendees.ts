@@ -16,6 +16,7 @@ export interface AdditionalAttendeeRecord {
   first_name: string;
   last_name: string;
   title: string | null;
+  email: string | null;
   photo_url: string | null;
   company_id: number | null;
   company_name: string | null;
@@ -58,7 +59,7 @@ export async function loadAdditionalAttendees(
 
   const ids = Array.from(all);
   const rows = await db.execute({
-    sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.photo_url,
+    sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.photo_url,
                  co.id AS company_id, co.name AS company_name
             FROM attendees a
             LEFT JOIN companies co ON a.company_id = co.id
@@ -73,6 +74,7 @@ export async function loadAdditionalAttendees(
       first_name: String(r.first_name ?? ''),
       last_name: String(r.last_name ?? ''),
       title: r.title != null ? String(r.title) : null,
+      email: r.email != null ? String(r.email) : null,
       photo_url: r.photo_url != null ? String(r.photo_url) : null,
       company_id: r.company_id != null ? Number(r.company_id) : null,
       company_name: r.company_name != null ? String(r.company_name) : null,

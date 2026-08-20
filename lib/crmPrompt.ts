@@ -3,14 +3,19 @@
  *
  * The preamble is fixed text the user authored — it must go over verbatim, so
  * it lives here as a single constant rather than being assembled. Only the
- * meeting blocks below it are generated.
+ * three sections below it are generated: the meetings they ran, the follow-ups
+ * still outstanding, and the conference notes held against each company.
  */
 
+export interface CrmPromptContact {
+  name: string;
+  email: string | null;
+  title: string | null;
+}
+
 export interface CrmPromptMeeting {
-  meetingId: number;
   attendeeName: string;
-  attendeeEmail: string | null;
-  attendeeTitle: string | null;
+  contacts: CrmPromptContact[];
   companyName: string | null;
   companyDomain: string | null;
   /** Already mapped: a still-Scheduled meeting reads as Cancelled. */
@@ -24,11 +29,35 @@ export interface CrmPromptMeeting {
   assignedRep: string | null;
 }
 
+export interface CrmPromptTask {
+  /** The Follow Up Action, which titles the task. */
+  action: string;
+  /** The Source the follow-up came from, which opens the task notes. */
+  source: string;
+  attendeeName: string;
+  contacts: CrmPromptContact[];
+  companyName: string | null;
+  assignedRep: string | null;
+  /** Same lines as a meeting's notes, but single-spaced. */
+  notes: string;
+}
+
+export interface CrmPromptNote {
+  companyName: string | null;
+  companyDomain: string | null;
+  contacts: CrmPromptContact[];
+  notes: string;
+}
+
 export interface CrmPromptInput {
   conferenceName: string;
+  /** 'Sep 24, 2026' — the conference's last day. */
+  conferenceEndDate: string;
   /** 'Sep 29, 2026' — three business days after the conference ends. */
   taskDueDate: string;
   meetings: CrmPromptMeeting[];
+  tasks: CrmPromptTask[];
+  notes: CrmPromptNote[];
 }
 
 export const CRM_PROMPT_PREAMBLE = `Act as my CRM data-entry assistant.
@@ -80,9 +109,12 @@ After I confirm LOG:
 
 Here is my batch:`;
 
+function contactLines(contacts: CrmPromptContact[]): string {
+  return contacts.map(c => `* ${c.name} - ${c.email ?? ''} - ${c.title ?? ''}`).join('\n');
+}
+
 /** One meeting block, numbered; its task carries the same number. */
-function renderMeeting(m: CrmPromptMeeting, index: number, conferenceName: string, taskDueDate: string): string {
-  const n = index + 1;
+function renderMeeting(m: CrmPromptMeeting, n: number, conferenceName: string, taskDueDate: string): string {
   return `===== BEGIN MEETING ${n} =====
 
 * Activity Type: Meeting
@@ -95,32 +127,112 @@ function renderMeeting(m: CrmPromptMeeting, index: number, conferenceName: strin
 * Company/account name: ${m.companyName ?? ''}
 * Company domain: ${m.companyDomain ?? ''}
 
-Attendees:
 
-* ${m.attendeeName} - ${m.attendeeEmail ?? ''} - ${m.attendeeTitle ?? ''}
+Contacts:
+
+${contactLines(m.contacts)}
+
+
 * Notes: ${m.notes}
 
+
 Follow-up Task:
+
 --- BEGIN TASK FOR CONTACT ${n} ---
 
 * Create task: Yes
-* Task title: Follow Up with ${m.attendeeName} - ${conferenceName}
+* Task title: Meeting Follow Up with ${m.attendeeName} - ${conferenceName}
 * Assigned to: ${m.assignedRep ?? ''}
 * Due date: ${taskDueDate}
 * Due time: 8:00 PM
 * Timezone: America/New_York
 * Priority: High
+
+
+Contacts:
+
+${contactLines(m.contacts)}
+
+
 * Task notes: ${m.notes}
 * Associate with: ${m.companyName ?? ''} and the listed attendees in Meeting ${n}
 
 --- END TASK FOR CONTACT ${n} ---
 
-===== END MEETING ${n} =====`;
+===== END MEETING ${n}=====`;
+}
+
+/** A follow-up that isn't tied to a meeting write-up, as a standalone task. */
+function renderTask(t: CrmPromptTask, n: number, conferenceName: string, taskDueDate: string): string {
+  return `=====BEGIN TASK FOR CONTACT ${n} =====
+
+* Create task: Yes
+* Task title: ${t.action} - ${t.attendeeName} - ${conferenceName}
+* Assigned to: ${t.assignedRep ?? ''}
+* Due date: ${taskDueDate}
+* Due time: 8:00 PM
+* Timezone: America/New_York
+* Priority: High
+* Task notes: Follow up from ${t.source} ${t.notes}
+
+
+Contacts:
+
+${contactLines(t.contacts)}
+
+
+* Associate with: ${t.companyName ?? ''} and the listed contacts in Task for Contact ${n}
+
+--- END TASK FOR CONTACT ${n} ---`;
+}
+
+/** Everything written against one company at this conference, as a note. */
+function renderNote(note: CrmPromptNote, n: number, conferenceName: string, conferenceEndDate: string): string {
+  return `--- BEGIN NOTE ${n} ---
+
+* Activity Type: Note
+* Note title: ${conferenceName} - Notes
+* Date: ${conferenceEndDate}
+* Time: 8:00 PM
+* Timezone: America/New_York
+
+
+Company/account:
+
+* Name: ${note.companyName ?? ''}
+* Domain: ${note.companyDomain ?? ''}
+
+
+Contacts:
+
+${contactLines(note.contacts)}
+
+
+Note:
+${note.notes}
+
+* Associate with: ${note.companyName ?? ''} and the listed contacts in Note ${n}
+
+--- END NOTE ${n} ---`;
 }
 
 export function buildCrmPrompt(input: CrmPromptInput): string {
-  const blocks = input.meetings.map((m, i) =>
-    renderMeeting(m, i, input.conferenceName, input.taskDueDate),
+  const parts: string[] = [CRM_PROMPT_PREAMBLE];
+
+  const meetings = (input.meetings ?? []).map((m, i) =>
+    renderMeeting(m, i + 1, input.conferenceName, input.taskDueDate),
   );
-  return `${CRM_PROMPT_PREAMBLE}\n\n${blocks.join('\n\n')}\n`;
+  if (meetings.length > 0) parts.push(meetings.join('\n\n'));
+
+  const tasks = (input.tasks ?? []).map((t, i) =>
+    renderTask(t, i + 1, input.conferenceName, input.taskDueDate),
+  );
+  if (tasks.length > 0) parts.push(`Tasks Only:\n\n${tasks.join('\n\n')}`);
+
+  const notes = (input.notes ?? []).map((note, i) =>
+    renderNote(note, i + 1, input.conferenceName, input.conferenceEndDate),
+  );
+  if (notes.length > 0) parts.push(`Notes Only:\n\n${notes.join('\n\n')}`);
+
+  return `${parts.join('\n\n')}\n`;
 }
