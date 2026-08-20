@@ -724,8 +724,10 @@ export function FollowUpsTable({
             truncate every field down to a couple of characters. */}
         <div className="flex-1 min-w-0 flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
+            <span className="w-5 flex-shrink-0 flex justify-center">
+              <FollowUpCountPill count={rows.length} />
+            </span>
             {attendeeNameNode(head, 'text-xs font-semibold text-brand-secondary hover:underline truncate')}
-            <FollowUpCountPill count={rows.length} />
           </div>
           {head.title && <span className="text-xs text-gray-500 truncate">{head.title}</span>}
           <div className="flex items-center gap-1 min-w-0">
@@ -801,8 +803,12 @@ export function FollowUpsTable({
           switch (col.key) {
             case 'name': return cell('name',
               <span className="flex items-center gap-1.5 min-w-0">
+                {/* Fixed slot so the pills form a column instead of landing
+                    wherever each name happens to end. */}
+                <span className="w-5 flex-shrink-0 flex justify-center">
+                  <FollowUpCountPill count={rows.length} />
+                </span>
                 {attendeeNameNode(head, 'text-xs font-semibold text-brand-secondary hover:underline truncate')}
-                <FollowUpCountPill count={rows.length} />
               </span>, 'overflow-hidden');
             case 'title': return cell('title',
               <span className="text-xs text-gray-500 truncate block">{head.title || <span className="text-gray-300">—</span>}</span>);
