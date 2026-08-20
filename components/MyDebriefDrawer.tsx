@@ -29,6 +29,13 @@ interface DebriefAttendee {
   linkedinUrl: string | null;
 }
 
+/** 'Aug 14, 2026' — the same shape the follow-up drawer's date eyebrow uses. */
+function formatFollowUpDate(ts: string): string {
+  const d = new Date(`${ts.slice(0, 10)}T00:00:00`);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 interface DebriefFollowUp {
   id: number;
   attendeeId: number | null;
@@ -37,6 +44,8 @@ interface DebriefFollowUp {
   nextSteps: string;
   completed: boolean;
   meetingId: number | null;
+  createdAt: string | null;
+  followUpAction: string | null;
   source: string;
 }
 
@@ -1634,7 +1643,15 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                               const hasDetail = taskLines.length > 0 || !!fu.taskText;
                               const isExpanded = expandedFuIds.has(fu.id);
                               return (
-                                <div key={fu.id} className={`group/fu ${i > 0 ? 'pt-1.5 mt-1.5 border-t border-gray-100' : ''}`}>
+                                <div
+                                  key={fu.id}
+                                  className={`group/fu rounded-lg border p-2 ${i > 0 ? 'mt-2' : ''} ${fu.completed ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-white'}`}
+                                >
+                                  <div className="flex items-start gap-3">
+                                  <div className="min-w-0 flex-1">
+                                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide leading-snug mb-1">
+                                    {fu.createdAt ? formatFollowUpDate(fu.createdAt) : '\u00A0'}
+                                  </p>
                                   <div className="flex items-center gap-1 min-w-0">
                                     <button
                                       type="button"
@@ -1671,7 +1688,29 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                                       </button>
                                     )}
                                   </div>
-                                  <p className="text-xs text-gray-400 mt-0.5">{fu.source}</p>
+                                  <p className="text-[10px] text-gray-400 mt-1">{fu.source}</p>
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide leading-snug mb-1">Action</p>
+                                    {fu.followUpAction
+                                      ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30 whitespace-nowrap">{fu.followUpAction}</span>
+                                      : <span className="text-gray-300">—</span>}
+                                  </div>
+                                  <div className="flex-shrink-0 pt-[18px]">
+                                    {fu.completed ? (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
+                                        <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        Done
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-300 whitespace-nowrap">
+                                        Pending
+                                      </span>
+                                    )}
+                                  </div>
+                                  </div>
                                   {isExpanded && (
                                     taskLines.length === 0 ? (
                                       <p className="text-xs text-gray-700 leading-snug mt-1">{fu.taskText}</p>

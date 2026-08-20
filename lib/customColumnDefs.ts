@@ -13,7 +13,7 @@ export interface AvailableColumnDef {
 const attendeeColumns: AvailableColumnDef[] = [
   { key: 'email',               label: 'Email',              data_key: 'email',                    config_category: null,               is_user_field: false, default_display_type: 'text_value',    source: 'Attendee' },
   { key: 'action',              label: 'Action',             data_key: 'action',                   config_category: 'action',           is_user_field: false, default_display_type: 'pill_value',    source: 'Attendee' },
-  { key: 'next_steps',          label: 'Next Steps',         data_key: 'next_steps',               config_category: 'next_steps',       is_user_field: false, default_display_type: 'pill_value',    source: 'Attendee' },
+  { key: 'next_steps',          label: 'Source',             data_key: 'next_steps',               config_category: 'next_steps',       is_user_field: false, default_display_type: 'pill_value',    source: 'Attendee' },
   { key: 'co_website',          label: 'Co. Website',        data_key: 'company_website',          config_category: null,               is_user_field: false, default_display_type: 'text_value',    source: 'Company' },
   { key: 'co_assigned_user',    label: 'Co. SF Owner',       data_key: 'company_assigned_user',    config_category: null,               is_user_field: true,  default_display_type: 'user_icon_pill', source: 'Company' },
   { key: 'co_icp',              label: 'Co. ICP',            data_key: 'company_icp',              config_category: 'icp',              is_user_field: false, default_display_type: 'pill_value',    source: 'Company' },

@@ -107,6 +107,12 @@ export async function PUT(
             sql: 'UPDATE companies SET icp = ? WHERE icp = ?',
             args: [value, oldValue],
           });
+        } else if (category === 'follow_up_actions') {
+          // Stored by display value, so a rename has to follow it.
+          await db.execute({
+            sql: 'UPDATE follow_ups SET follow_up_action = ? WHERE follow_up_action = ?',
+            args: [value, oldValue],
+          });
         } else if (category === 'next_steps') {
           await db.execute({
             sql: 'UPDATE conference_attendee_details SET next_steps = ? WHERE next_steps = ?',

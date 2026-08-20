@@ -3,6 +3,8 @@
 import { useState, Fragment } from 'react';
 import Link from 'next/link';
 import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
+import { useFollowUpActions, followUpActionLabel } from '@/lib/useFollowUpActions';
+import { SlideInPanel } from '@/components/SlideInPanel';
 import { getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { FollowUpNotesPopover } from '@/components/FollowUpNotesPopover';
@@ -23,6 +25,7 @@ export interface FollowUp {
   conference_id: number;
   next_steps: string;
   next_steps_notes: string | null;
+  follow_up_action?: string | null;
   completed: boolean;
   first_name: string;
   last_name: string;
@@ -72,6 +75,34 @@ function formatTimestamp(ts: string | undefined) {
 }
 
 /** Oldest first, so a grouped row reads as the interaction history it is. */
+/**
+ * How many follow-ups an attendee has piled up at one conference, on a scale
+ * that reads at a glance: green while it is a normal load, blue once it is
+ * getting heavy, red past that. Full-strength text and border over a lighter
+ * fill of the same hue.
+ */
+const FOLLOW_UP_COUNT_STYLES: Record<number, string> = {
+  2: 'text-green-600 border-green-300 bg-green-50',
+  3: 'text-green-700 border-green-400 bg-green-100',
+  4: 'text-green-800 border-green-500 bg-green-200',
+  5: 'text-blue-600 border-blue-300 bg-blue-50',
+  6: 'text-blue-700 border-blue-400 bg-blue-100',
+  7: 'text-blue-800 border-blue-500 bg-blue-200',
+};
+
+function FollowUpCountPill({ count }: { count: number }) {
+  if (count < 2) return null;
+  const style = FOLLOW_UP_COUNT_STYLES[count] ?? 'text-red-700 border-red-500 bg-red-100';
+  return (
+    <span
+      title={`${count} follow-ups`}
+      className={`inline-flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold flex-shrink-0 ${style}`}
+    >
+      {count}
+    </span>
+  );
+}
+
 function sortByCreatedAt(tasks: FollowUp[]): FollowUp[] {
   return [...tasks].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''));
 }
@@ -187,6 +218,8 @@ export function FollowUpsTable({
   userOptions = [],
   onRepChange,
   onNextStepsChange,
+  onFollowUpActionChange,
+  detailsInDrawer = false,
   onBulkToggle,
   tableName = 'follow_ups',
   groupBy = 'none',
@@ -198,6 +231,11 @@ export function FollowUpsTable({
   userOptions?: UserOption[];
   onRepChange?: (id: number, rep: string | null) => void;
   onNextStepsChange?: (id: number, nextSteps: string) => void;
+  /** '' clears the action back to unset. */
+  onFollowUpActionChange?: (id: number, action: string) => void;
+  /** Open an attendee's entries in the side panel the outreach and social
+   *  notes drawers use, instead of unfolding them inside the table. */
+  detailsInDrawer?: boolean;
   onBulkToggle?: (ids: number[]) => Promise<void>;
   tableName?: string;
   /**
@@ -212,10 +250,60 @@ export function FollowUpsTable({
   namesOpenDrawer?: boolean;
 }) {
   const nextStepsOpts = useConfigWithIds('next_steps');
+  const followUpActions = useFollowUpActions();
+
+  /**
+   * The chosen action, shown by its short name and clickable to change — blank
+   * until a rep picks one, and clearable back to blank.
+   */
+  const actionPill = (fu: FollowUp) => {
+    const label = followUpActionLabel(fu.follow_up_action, followUpActions);
+
+    if (canEditAction && editingActionKey === fu.id) {
+      return (
+        <select
+          autoFocus
+          className="text-xs border border-brand-primary rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-brand-primary"
+          defaultValue={fu.follow_up_action ?? ''}
+          onChange={(e) => { onFollowUpActionChange!(fu.id, e.target.value); setEditingActionKey(null); }}
+          onBlur={() => setEditingActionKey(null)}
+        >
+          <option value="">— None —</option>
+          {followUpActions.map(opt => (
+            <option key={opt.id} value={opt.value}>{opt.shortName}</option>
+          ))}
+        </select>
+      );
+    }
+
+    if (!label) {
+      return (
+        <span
+          onClick={canEditAction ? () => setEditingActionKey(fu.id) : undefined}
+          className={`text-gray-300 ${canEditAction ? 'cursor-pointer hover:text-brand-secondary transition-colors' : ''}`}
+          title={canEditAction ? 'Click to set' : undefined}
+        >
+          —
+        </span>
+      );
+    }
+
+    return (
+      <span
+        onClick={canEditAction ? () => setEditingActionKey(fu.id) : undefined}
+        title={canEditAction ? 'Click to change' : (fu.follow_up_action ?? '')}
+        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30 whitespace-nowrap ${canEditAction ? 'cursor-pointer hover:opacity-75 transition-opacity' : ''}`}
+      >
+        {label}
+      </span>
+    );
+  };
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
   const customColumns = useCustomColumns(tableName);
   const [editingRepKey, setEditingRepKey] = useState<number | null>(null);
   const [editingNextStepsKey, setEditingNextStepsKey] = useState<number | null>(null);
+  const [editingActionKey, setEditingActionKey] = useState<number | null>(null);
+  const [drawerGroupKey, setDrawerGroupKey] = useState<string | null>(null);
   const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
   const [editingRepIds, setEditingRepIds] = useState<number[]>([]);
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<number>>(new Set());
@@ -224,11 +312,19 @@ export function FollowUpsTable({
   // Attendee sections start collapsed, the way the meetings table's days do.
   const [expandedGroupKeys, setExpandedGroupKeys] = useState<Set<string>>(new Set());
 
-  const toggleGroupKey = (key: string) => setExpandedGroupKeys(prev => {
-    const next = new Set(prev);
-    if (next.has(key)) next.delete(key); else next.add(key);
-    return next;
-  });
+  const toggleGroupKey = (key: string) => {
+    // Where the details live in the panel, the chevron opens it rather than
+    // unfolding rows inside the table.
+    if (detailsInDrawer) {
+      setDrawerGroupKey(prev => (prev === key ? null : key));
+      return;
+    }
+    setExpandedGroupKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
 
   /** Attendee name — a drawer opener or a link, depending on the surface. */
   function attendeeNameNode(fu: FollowUp, className: string) {
@@ -280,6 +376,7 @@ export function FollowUpsTable({
 
   const canEditRep = !!onRepChange && userOptions.length > 0;
   const canEditNextSteps = !!onNextStepsChange && nextStepsOpts.length > 0;
+  const canEditAction = !!onFollowUpActionChange && followUpActions.length > 0;
 
   const startEditRep = (fu: FollowUp) => {
     setEditingRepKey(fu.id);
@@ -386,6 +483,8 @@ export function FollowUpsTable({
         <div className="mt-2">
           {renderNextStepEntry(fu, 0, 'text-xs', 'text-xs text-gray-500', true)}
         </div>
+        {/* The action has no column on a phone, so it rides under the source. */}
+        <div className="mt-1.5">{actionPill(fu)}</div>
         <div className="mt-1.5 flex items-center gap-2">
           <Link href={`/conferences/${fu.conference_id}`} className="text-xs text-brand-secondary hover:underline">
             {fu.conference_name}
@@ -419,6 +518,9 @@ export function FollowUpsTable({
             </td>;
             case 'next_step': return <td key="next_step" className="px-3 py-2" style={{ maxWidth: 240 }}>
               {renderNextStepEntry(fu, 0, '', 'text-gray-500')}
+            </td>;
+            case 'follow_up_action': return <td key="follow_up_action" className="px-3 py-2 text-xs text-gray-600 leading-snug">
+              {actionPill(fu)}
             </td>;
             case 'conference': return <td key="conference" className="px-3 py-2 text-gray-600 leading-snug">
               <Link href={`/conferences/${fu.conference_id}`} className="text-brand-secondary hover:underline">{fu.conference_name}</Link>
@@ -608,7 +710,7 @@ export function FollowUpsTable({
    */
   function renderAttendeeBar(rows: FollowUp[], groupKey: string) {
     const head = rows[0];
-    const expanded = expandedGroupKeys.has(groupKey);
+    const expanded = detailsInDrawer ? drawerGroupKey === groupKey : expandedGroupKeys.has(groupKey);
     return (
       <div
         role="button"
@@ -621,7 +723,7 @@ export function FollowUpsTable({
         {/* One line from sm; stacked on a phone, where it would otherwise
             truncate every field down to a couple of characters. */}
         <div className="flex-1 min-w-0 flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
-          <div className="flex items-center gap-1 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0">
             {attendeeNameNode(head, 'text-xs font-semibold text-brand-secondary hover:underline truncate')}
           </div>
           {head.title && <span className="text-xs text-gray-500 truncate">{head.title}</span>}
@@ -644,6 +746,7 @@ export function FollowUpsTable({
         </div>
         <span className="flex items-center gap-2 flex-shrink-0 pt-0.5 sm:pt-0">
           {renderGroupRepBody(rows, 'xs')}
+          <FollowUpCountPill count={rows.length} />
           <svg
             className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`}
             fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -661,7 +764,7 @@ export function FollowUpsTable({
    */
   function renderAttendeeBarRow(rows: FollowUp[], groupKey: string) {
     const head = rows[0];
-    const expanded = expandedGroupKeys.has(groupKey);
+    const expanded = detailsInDrawer ? drawerGroupKey === groupKey : expandedGroupKeys.has(groupKey);
     const visibleKeys = orderedColumns.filter(c => isVisible(c.key)).map(c => c.key);
     const visibleCustom = customColumns.filter(c => c.visible);
     // The chevron rides the final column, whichever that turns out to be.
@@ -697,7 +800,7 @@ export function FollowUpsTable({
           if (!isVisible(col.key)) return null;
           switch (col.key) {
             case 'name': return cell('name',
-              <span className="flex items-center gap-1 min-w-0">
+              <span className="flex items-center gap-1.5 min-w-0">
                 {attendeeNameNode(head, 'text-xs font-semibold text-brand-secondary hover:underline truncate')}
               </span>, 'overflow-hidden');
             case 'title': return cell('title',
@@ -711,9 +814,18 @@ export function FollowUpsTable({
                   </span>
                 : <span className="text-gray-300">—</span>);
             case 'next_step': return cell('next_step', <span />);
+            case 'follow_up_action': return cell('follow_up_action', <span />);
             case 'conference': return cell('conference',
               <span className="text-xs text-gray-500 truncate block">{head.conference_name}</span>);
-            case 'rep': return cell('rep', renderGroupRepBody(rows, 'xs'));
+            case 'rep': return cell('rep',
+              <span className="flex items-center gap-2">
+                {/* The reps get a fixed block so the count pill beside them
+                    lands on the same x down the whole table. */}
+                <span className="min-w-[3.5rem]">{renderGroupRepBody(rows, 'xs')}</span>
+                <span className="w-5 flex-shrink-0 flex justify-center">
+                  <FollowUpCountPill count={rows.length} />
+                </span>
+              </span>);
             case 'notes': return cell('notes', <span />);
             case 'status': return cell('status', <span />);
             default: return null;
@@ -752,6 +864,9 @@ export function FollowUpsTable({
             </td>;
             case 'next_step': return <td key="next_step" className="px-3 py-2" style={{ maxWidth: 240 }}>
               {rows.map((row, i) => renderNextStepEntry(row, i, '', 'text-gray-500'))}
+            </td>;
+            case 'follow_up_action': return <td key="follow_up_action" className="px-3 py-2 text-xs text-gray-600 leading-snug">
+              {rows.map(row => <div key={row.id} className="py-1.5">{actionPill(row)}</div>)}
             </td>;
             case 'conference': return <td key="conference" className="px-3 py-2 text-gray-600 leading-snug">
               <Link href={`/conferences/${head.conference_id}`} className="text-brand-secondary hover:underline">{head.conference_name}</Link>
@@ -811,8 +926,13 @@ export function FollowUpsTable({
             {renderGroupDoneButton(groupKey, rows)}
           </div>
         </div>
-        <div className="mt-2">
-          {rows.map((row, i) => renderNextStepEntry(row, i, 'text-xs', 'text-xs text-gray-500', true))}
+        <div className="mt-2 space-y-1.5">
+          {rows.map((row, i) => (
+            <div key={row.id}>
+              {renderNextStepEntry(row, i, 'text-xs', 'text-xs text-gray-500', true)}
+              <div className="mt-1.5">{actionPill(row)}</div>
+            </div>
+          ))}
         </div>
         <div className="mt-1.5 flex items-center gap-2">
           <Link href={`/conferences/${head.conference_id}`} className="text-xs text-brand-secondary hover:underline">
@@ -876,7 +996,8 @@ export function FollowUpsTable({
                     case 'name': return <th key="name" className={thCls}>Name</th>;
                     case 'title': return <th key="title" className={thCls}>Title</th>;
                     case 'company': return <th key="company" className={thCls}>Company</th>;
-                    case 'next_step': return <th key="next_step" className={thCls}>Next Step</th>;
+                    case 'next_step': return <th key="next_step" className={thCls}>Source</th>;
+                    case 'follow_up_action': return <th key="follow_up_action" className={thCls}>Follow Up Action</th>;
                     case 'conference': return <th key="conference" className={thCls}>Conference</th>;
                     case 'rep': return <th key="rep" className={thCls}>Rep</th>;
                     case 'notes': return <th key="notes" className={thCls}>Notes</th>;
@@ -943,7 +1064,8 @@ export function FollowUpsTable({
                     case 'name': return <th key="name" className={thCls}>Name</th>;
                     case 'title': return <th key="title" className={thCls}>Title</th>;
                     case 'company': return <th key="company" className={thCls}>Company</th>;
-                    case 'next_step': return <th key="next_step" className={thCls}>Next Step</th>;
+                    case 'next_step': return <th key="next_step" className={thCls}>Source</th>;
+                    case 'follow_up_action': return <th key="follow_up_action" className={thCls}>Follow Up Action</th>;
                     case 'conference': return <th key="conference" className={thCls}>Conference</th>;
                     case 'rep': return <th key="rep" className={thCls}>Rep</th>;
                     case 'notes': return <th key="notes" className={thCls}>Notes</th>;
@@ -1000,9 +1122,150 @@ export function FollowUpsTable({
   // is the same thing without the conference header, for pages that already
   // establish the conference around the table.
 
+  /**
+   * One follow-up as the panel shows it: the date it landed and the word
+   * Action as eyebrows over a single row carrying the source pill and the
+   * action pill. The trash stays hidden until the entry is hovered, as it does
+   * in the table.
+   */
+  function renderDrawerEntry(fu: FollowUp) {
+    const hasNotes = !!fu.next_steps_notes;
+    const isExpanded = expandedTaskIds.has(fu.id);
+    return (
+      <div
+        key={fu.id}
+        className={`group/entry rounded-lg border p-2 ${fu.completed ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-white'}`}
+      >
+        <div className="flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide leading-snug mb-1">
+              {fu.created_at ? formatTimestamp(fu.created_at) : '\u00A0'}
+            </p>
+            <div className="flex items-center gap-1 min-w-0">
+              {onDelete && <EntryDeleteButton onClick={() => onDelete(fu.id)} />}
+              {canEditNextSteps && editingNextStepsKey === fu.id ? (
+                <select
+                  autoFocus
+                  className="text-xs border border-brand-primary rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                  defaultValue={fu.next_steps}
+                  onChange={(e) => { onNextStepsChange!(fu.id, e.target.value); setEditingNextStepsKey(null); }}
+                  onBlur={() => setEditingNextStepsKey(null)}
+                >
+                  {nextStepsOpts.map(opt => (
+                    <option key={opt.id} value={String(opt.id)}>{opt.value}</option>
+                  ))}
+                </select>
+              ) : (
+                <span
+                  onClick={canEditNextSteps ? () => setEditingNextStepsKey(fu.id) : undefined}
+                  className={`inline-flex px-2 py-0.5 rounded-lg text-xs font-medium leading-snug ${fu.completed ? 'bg-green-100 text-green-700' : 'bg-brand-primary text-white'} ${canEditNextSteps ? 'cursor-pointer hover:opacity-75 transition-opacity' : ''}`}
+                  title={canEditNextSteps ? 'Click to change' : undefined}
+                >
+                  {resolveConfigValue(fu.next_steps, nextStepsOpts)}
+                </span>
+              )}
+              {hasNotes && (
+                <button
+                  type="button"
+                  onClick={() => setExpandedTaskIds(prev => { const n = new Set(prev); if (n.has(fu.id)) n.delete(fu.id); else n.add(fu.id); return n; })}
+                  aria-expanded={isExpanded}
+                  title={isExpanded ? 'Hide details' : 'Show details'}
+                  className="flex-shrink-0 p-0.5 text-gray-400 hover:text-brand-secondary transition-colors"
+                >
+                  <svg className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide leading-snug mb-1">Action</p>
+            {actionPill(fu)}
+          </div>
+          {/* Where the entry stands, so a finished one reads at a glance. */}
+          <div className="flex-shrink-0 pt-[18px]">
+            {fu.completed ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
+                <CheckIcon className="w-3 h-3 flex-shrink-0" />
+                Done
+              </span>
+            ) : (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-300 whitespace-nowrap">
+                Pending
+              </span>
+            )}
+          </div>
+        </div>
+        {isExpanded && renderNextStepNotes(fu, 'text-xs text-gray-500')}
+      </div>
+    );
+  }
+
+  /**
+   * The expanded detail, moved into the side panel. Every control is the same
+   * renderer the table rows use, so the source pill, the action pill, the rep
+   * picker, the notes and Done all edit exactly as they do inline.
+   */
+  function renderDetailsPanel(groupKey: string) {
+    const group = confAttGroups
+      .flatMap(cg => cg.attendees.map(ag => ({ cg, ag })))
+      .find(({ cg, ag }) => `${cg.conference_id}-${ag.attendee_id}` === groupKey);
+    if (!group) return null;
+    const rows = sortByCreatedAt(group.ag.tasks);
+    const head = rows[0];
+    if (!head) return null;
+
+    return (
+      <SlideInPanel
+        title={<span className="text-sm">{head.first_name} {head.last_name}</span>}
+        subtitle={[head.title, head.company_name].filter(Boolean).join(' · ')}
+        onClose={() => setDrawerGroupKey(null)}
+        footer={
+          <div className="flex items-center justify-between gap-2">
+            <FollowUpNotesPopover
+              attendeeId={head.attendee_id}
+              notesCount={Number(head.entity_notes_count)}
+              conferenceName={head.conference_name}
+            />
+            {renderGroupDoneButton(groupKey, rows)}
+          </div>
+        }
+      >
+        <div className="p-3 space-y-3">
+          {/* Conference and rep share a line — both are context for the list. */}
+          <div className="flex items-start gap-4">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Conference</p>
+              <Link href={`/conferences/${head.conference_id}`} className="text-xs text-brand-secondary hover:underline">
+                {head.conference_name}
+              </Link>
+              <p className="text-[10px] text-gray-400">{formatDate(head.start_date)}</p>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Rep</p>
+              {renderGroupRepBody(rows)}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">
+              Follow Ups ({rows.length})
+            </p>
+            <div className="space-y-2">
+              {rows.map(row => renderDrawerEntry(row))}
+            </div>
+          </div>
+        </div>
+      </SlideInPanel>
+    );
+  }
+
   const confAttGroups = buildConferenceAttendeeGroups(followUps);
   const showConferenceHeader = groupBy === 'conference-attendee';
   const anyGroupExpanded = expandedGroupKeys.size > 0;
+
+  const drawer = detailsInDrawer && drawerGroupKey ? renderDetailsPanel(drawerGroupKey) : null;
 
   return (
     <>
@@ -1027,7 +1290,7 @@ export function FollowUpsTable({
                       {renderAttendeeBar(rows, subKey)}
                     </div>
                     {/* A single follow-up renders exactly as it always has. */}
-                    {expanded && (rows.length === 1
+                    {!detailsInDrawer && expanded && (rows.length === 1
                       ? renderMobileCard(rows[0])
                       : renderAttendeeGroupCard(rows, subKey))}
                   </div>
@@ -1038,8 +1301,11 @@ export function FollowUpsTable({
         ))}
       </div>
 
-      {/* Desktop */}
-      <div className="hidden lg:block overflow-x-auto">
+      {/* Desktop — the panel takes a column beside the table when open. The
+          row itself is always mounted so the panel renders once and handles
+          its own phone form (a bottom sheet) from inside. */}
+      <div className="lg:flex lg:items-stretch">
+      <div className="hidden lg:block flex-1 min-w-0 overflow-x-auto">
         <table className="w-full" style={{ fontSize: '0.7rem' }}>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
@@ -1052,7 +1318,8 @@ export function FollowUpsTable({
                   case 'company': return <th key="company" className={thCls}>Company</th>;
                   // These three only carry values inside an open section, so
                   // their headings wait until one is open.
-                  case 'next_step': return <th key="next_step" className={thCls}>{anyGroupExpanded ? 'Next Step' : ''}</th>;
+                  case 'next_step': return <th key="next_step" className={thCls}>{anyGroupExpanded ? 'Source' : ''}</th>;
+                  case 'follow_up_action': return <th key="follow_up_action" className={thCls}>{anyGroupExpanded ? 'Follow Up Action' : ''}</th>;
                   case 'conference': return <th key="conference" className={thCls}>Conference</th>;
                   case 'rep': return <th key="rep" className={thCls}>Rep</th>;
                   case 'notes': return <th key="notes" className={thCls}>{anyGroupExpanded ? 'Notes' : ''}</th>;
@@ -1090,7 +1357,7 @@ export function FollowUpsTable({
                   return (
                     <Fragment key={subKey}>
                       {renderAttendeeBarRow(rows, subKey)}
-                      {expanded && (rows.length === 1
+                      {!detailsInDrawer && expanded && (rows.length === 1
                         ? renderDesktopRow(rows[0])
                         : renderAttendeeGroupRow(rows, subKey))}
                     </Fragment>
@@ -1100,6 +1367,8 @@ export function FollowUpsTable({
             ))}
           </tbody>
         </table>
+      </div>
+        {drawer && <div className="lg:w-96 lg:flex-shrink-0 lg:pr-3">{drawer}</div>}
       </div>
       {quickView && (
         <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />

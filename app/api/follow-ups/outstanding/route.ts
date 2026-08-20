@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
         SELECT
           fu.id, fu.attendee_id, fu.conference_id, fu.assigned_rep,
           fu.next_steps_notes,
+          fu.follow_up_action,
           COALESCE(ns_opt.value, fu.next_steps) AS next_steps,
           a.first_name, a.last_name, a.title,
           co.name AS company_name,
@@ -47,6 +48,7 @@ export async function GET(request: NextRequest) {
         conference_id: Number(r.conference_id),
         next_steps: String(r.next_steps ?? ''),
         next_steps_notes: r.next_steps_notes != null ? String(r.next_steps_notes) : null,
+        follow_up_action: r.follow_up_action != null ? String(r.follow_up_action) : null,
         assigned_rep: r.assigned_rep != null ? String(r.assigned_rep) : null,
         first_name: String(r.first_name ?? ''),
         last_name: String(r.last_name ?? ''),

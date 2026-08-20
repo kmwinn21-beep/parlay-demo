@@ -2124,4 +2124,18 @@ export const migrations: string[] = [
   // for names typed in that match no record; these ids are what let the meeting
   // surface on those attendees' own profiles with their photo and title.
   `ALTER TABLE meetings ADD COLUMN additional_attendee_ids TEXT`,
+  // What a rep actually does about a follow-up, as opposed to where it came
+  // from (the 'next_steps' category, surfaced as Source). value holds the full
+  // name; description holds the short name the tables display.
+  `INSERT OR IGNORE INTO config_options (category, value, description, sort_order) VALUES ('follow_up_actions', 'Send collateral', 'Collateral', 1)`,
+  `INSERT OR IGNORE INTO config_options (category, value, description, sort_order) VALUES ('follow_up_actions', 'Send pricing/proposal', 'Proposal', 2)`,
+  `INSERT OR IGNORE INTO config_options (category, value, description, sort_order) VALUES ('follow_up_actions', 'Schedule F/U Meeting', 'Sch. Mtg', 3)`,
+  `INSERT OR IGNORE INTO config_options (category, value, description, sort_order) VALUES ('follow_up_actions', 'Connect on LinkedIn', 'LinkedIn', 4)`,
+  `INSERT OR IGNORE INTO config_options (category, value, description, sort_order) VALUES ('follow_up_actions', 'Add to nurture sequence', 'Nurture', 5)`,
+  `INSERT OR IGNORE INTO config_options (category, value, description, sort_order) VALUES ('follow_up_actions', 'Invite to Event', 'Invitation', 6)`,
+  `INSERT OR IGNORE INTO config_options (category, value, description, sort_order) VALUES ('follow_up_actions', 'No action needed', 'N/A', 7)`,
+  // What the rep decided to do about a follow-up. Nullable on purpose: the many
+  // automated creation paths (booth scan, form submission, a meeting marked
+  // Held) have no way to know, so the action is chosen later by a person.
+  `ALTER TABLE follow_ups ADD COLUMN follow_up_action TEXT`,
 ];

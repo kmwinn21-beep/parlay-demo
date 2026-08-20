@@ -9,6 +9,7 @@ import {
   useConfigWithIds,
   resolveRepNames,
 } from '@/lib/useUserOptions';
+import { useFollowUpActions } from '@/lib/useFollowUpActions';
 import { useHideBottomNav } from './BottomNavContext';
 import { useUser } from '@/components/UserContext';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
@@ -68,6 +69,7 @@ export function AssignFollowUpModal({
   const { activeConference } = useActiveConference();
   const userOptions = useUserOptions();
   const actionOptions = useConfigWithIds('next_steps');
+  const followUpActions = useFollowUpActions();
 
   // Form values
   const [repIds, setRepIds] = useState<number[]>([]);
@@ -76,6 +78,7 @@ export function AssignFollowUpModal({
   const [attendeeId, setAttendeeId] = useState<string>('');
   const [actionId, setActionId] = useState<string>('');
   const [nextStepDesc, setNextStepDesc] = useState('');
+  const [followUpAction, setFollowUpAction] = useState<string>('');
   const [notes, setNotes] = useState('');
 
   // Cascade data
@@ -210,6 +213,7 @@ export function AssignFollowUpModal({
     setAttendeeId('');
     setActionId('');
     setNextStepDesc('');
+    setFollowUpAction('');
     setNotes('');
     setConfCompanies([]);
     setCompanyAttendeesInConf([]);
@@ -298,8 +302,8 @@ export function AssignFollowUpModal({
   // ---------------------------------------------------------------------------
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!conferenceId || !companyId || !attendeeId || !actionId) {
-      toast.error('Conference, Company, Attendee, and Follow Up Action are required.');
+    if (!conferenceId || !companyId || !attendeeId || !actionId || !followUpAction) {
+      toast.error('Conference, Company, Attendee, Source, and Follow Up Action are required.');
       return;
     }
 
@@ -313,6 +317,8 @@ export function AssignFollowUpModal({
           conference_id: Number(conferenceId),
           next_steps: actionId, // stored as config option ID
           next_steps_notes: isOther ? (nextStepDesc.trim() || null) : null,
+          // Stored by full name; the tables render its short name.
+          follow_up_action: followUpAction || null,
           assigned_rep: repIds.length > 0 ? repIds.join(',') : null,
         }),
       });
@@ -492,9 +498,9 @@ export function AssignFollowUpModal({
             )}
           </div>
 
-          {/* Follow Up Action */}
+          {/* Source — where this follow-up came from */}
           <div>
-            <label className="label">Follow Up Action *</label>
+            <label className="label">Source *</label>
             <select
               value={actionId}
               onChange={e => setActionId(e.target.value)}
@@ -510,19 +516,37 @@ export function AssignFollowUpModal({
             </select>
           </div>
 
-          {/* Next Step Description — visible only when "Other" is selected */}
+          {/* Source description — visible only when "Other" is selected */}
           {isOther && (
             <div>
-              <label className="label">Next Step Description</label>
+              <label className="label">Source Description</label>
               <input
                 type="text"
                 value={nextStepDesc}
                 onChange={e => setNextStepDesc(e.target.value)}
                 className="input-field"
-                placeholder="Describe the next step…"
+                placeholder="Describe the source…"
               />
             </div>
           )}
+
+          {/* Follow Up Action — what the rep intends to do about it */}
+          <div>
+            <label className="label">Follow Up Action *</label>
+            <select
+              value={followUpAction}
+              onChange={e => setFollowUpAction(e.target.value)}
+              className="input-field"
+              required
+            >
+              <option value="">Select action…</option>
+              {followUpActions.map(a => (
+                <option key={a.id} value={a.value}>
+                  {a.shortName}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* Notes */}
           <div>

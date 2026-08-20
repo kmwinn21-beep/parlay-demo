@@ -915,6 +915,22 @@ export default function FollowUpsPage() {
     }
   };
 
+  const handleFollowUpActionChange = async (id: number, action: string) => {
+    setFollowUps((prev) => prev.map((fu) => fu.id === id ? { ...fu, follow_up_action: action || null } : fu));
+    try {
+      const res = await fetch('/api/follow-ups', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, follow_up_action: action || null }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Follow up action updated.');
+    } catch {
+      fetchData();
+      toast.error('Failed to update follow up action.');
+    }
+  };
+
   const handleNextStepsChange = async (id: number, nextSteps: string) => {
     setFollowUps((prev) => prev.map((fu) => fu.id === id ? { ...fu, next_steps: nextSteps } : fu));
     try {
@@ -1509,7 +1525,7 @@ export default function FollowUpsPage() {
                   </select>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Next Step</p>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Source</p>
                   <FilterDropdown
                     label="All next steps..."
                     options={nextStepsOptions}
@@ -1576,12 +1592,14 @@ export default function FollowUpsPage() {
                     {/* Follow-ups rows */}
                     {isExpanded && (
                       <FollowUpsTable
+                        detailsInDrawer
                         followUps={group.followUps}
                         onToggle={handleToggle}
                         onDelete={handleDeleteFollowUp}
                         userOptions={userOptions}
                         onRepChange={handleRepChange}
                         onNextStepsChange={handleNextStepsChange}
+                        onFollowUpActionChange={handleFollowUpActionChange}
                         onBulkToggle={handleBulkToggleFollowUp}
                         groupBy="attendee"
                       />

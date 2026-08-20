@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
           fu.conference_id,
           fu.next_steps,
           fu.next_steps_notes,
+          fu.follow_up_action,
           fu.completed,
           fu.assigned_rep,
           fu.created_at,
@@ -82,6 +83,7 @@ export async function GET(request: NextRequest) {
         conference_id: Number(r.conference_id),
         next_steps: String(r.next_steps ?? ''),
         next_steps_notes: r.next_steps_notes != null ? String(r.next_steps_notes) : null,
+        follow_up_action: r.follow_up_action != null ? String(r.follow_up_action) : null,
         completed: Number(r.completed ?? 0) === 1,
         created_at: r.created_at != null ? String(r.created_at) : '',
         first_name: String(r.first_name ?? ''),
@@ -141,7 +143,7 @@ export async function PATCH(request: NextRequest) {
   const db = await getDb(user?.accountId);
   try {
     const body = await request.json();
-    const { id, completed, assigned_rep, next_steps } = body;
+    const { id, completed, assigned_rep, next_steps, follow_up_action } = body;
 
     if (id == null) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
@@ -170,6 +172,12 @@ export async function PATCH(request: NextRequest) {
     if ('next_steps' in body && next_steps != null) {
       setClauses.push('next_steps = ?');
       args.push(String(next_steps));
+    }
+
+    // Stored by full name; '' clears it back to "no action chosen yet".
+    if ('follow_up_action' in body) {
+      setClauses.push('follow_up_action = ?');
+      args.push(follow_up_action ? String(follow_up_action) : null);
     }
 
     if (setClauses.length === 0) {
