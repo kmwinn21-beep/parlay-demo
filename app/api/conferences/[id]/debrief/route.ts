@@ -92,12 +92,18 @@ export async function GET(
               WHERE fu.conference_id = ? AND ${csvContains('fu.assigned_rep')}`,
         args: [conferenceId, cidStr],
       }),
+      // Touchpoints belong to whoever logged them, so logged_by comes back and
+      // is filtered in code — a rep keeps credit for the interaction they had
+      // even when the follow-up it spawned is later handed to someone else.
       db.execute({
-        sql: `SELECT at.attendee_id, COUNT(*) as cnt, a.company_id
+        sql: `SELECT at.attendee_id, at.logged_by, COUNT(*) as cnt,
+                     a.company_id, a.first_name, a.last_name, a.title,
+                     c.name as company_name
               FROM attendee_touchpoints at
               JOIN attendees a ON at.attendee_id = a.id
+              LEFT JOIN companies c ON a.company_id = c.id
               WHERE at.conference_id = ?
-              GROUP BY at.attendee_id`,
+              GROUP BY at.attendee_id, at.logged_by`,
         args: [conferenceId],
       }),
       db.execute({
@@ -139,8 +145,19 @@ export async function GET(
       insightsByMeeting.get(mid)!.push(row as Record<string, unknown>);
     }
 
+    // Touchpoints this rep logged, plus legacy rows predating logged_by, which
+    // carry no attribution and so stay on the old behaviour of counting against
+    // whichever companies the reader already has in view.
     const touchpointByAttendee = new Map<number, number>();
-    for (const row of touchpointResult.rows) touchpointByAttendee.set(Number(row.attendee_id), Number(row.cnt));
+    const myTouchpointRows: Record<string, unknown>[] = [];
+    for (const row of touchpointResult.rows) {
+      const loggedBy = String(row.logged_by ?? '').split(',').map(s => s.trim()).filter(Boolean);
+      const isMine = loggedBy.includes(cidStr);
+      if (!isMine && loggedBy.length > 0) continue;
+      const aid = Number(row.attendee_id);
+      touchpointByAttendee.set(aid, (touchpointByAttendee.get(aid) ?? 0) + Number(row.cnt));
+      if (isMine) myTouchpointRows.push(row as Record<string, unknown>);
+    }
 
     // Build best tier per company
     const tierByCompany = new Map<number, string>();
@@ -201,6 +218,24 @@ export async function GET(
         co.attendeeInfo.set(aid, { name: `${fu.first_name} ${fu.last_name}`, title: null });
       }
       co.followUps.push(fu);
+    }
+
+    // A touchpoint the rep logged puts that company in their report on its own.
+    // Without this, an interaction with someone at a company assigned to another
+    // rep would have nowhere to be counted.
+    for (const t of myTouchpointRows) {
+      const co = getOrCreateCompany(
+        t.company_id != null ? Number(t.company_id) : -1,
+        t.company_name ? String(t.company_name) : 'No Company',
+      );
+      const aid = Number(t.attendee_id);
+      co.attendeeIds.add(aid);
+      if (!co.attendeeInfo.has(aid)) {
+        co.attendeeInfo.set(aid, {
+          name: `${t.first_name ?? ''} ${t.last_name ?? ''}`.trim(),
+          title: t.title ? String(t.title) : null,
+        });
+      }
     }
 
     // 6b. Enrich companyMap: all conference attendees + company metadata
