@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db, dbReady } from '@/lib/db';
 import { createClient } from '@libsql/client';
 import { sendDebriefEmail } from '@/lib/email';
+import { createNotifications } from '@/lib/notifications';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -149,20 +150,23 @@ async function processAccount(
 
       const firstName = repName.split(' ')[0] || repName;
 
-      // In-app notification
-      try {
-        await tenantDb.execute({
-          sql: `INSERT INTO notifications
-                (user_id, type, record_id, record_name, message,
-                 changed_by_config_id, changed_by_email, entity_type, entity_id, is_read)
-                VALUES (?, 'conference', ?, ?, ?, NULL, 'system', 'conference', ?, 0)`,
-          args: [
-            userId, conferenceId, conferenceName,
-            `Your Field Report for ${conferenceName} is ready. ${meetingsHeld} meetings held · ${followUpsDue} follow-up${followUpsDue !== 1 ? 's' : ''} due.`,
-            conferenceId,
-          ],
-        });
-      } catch { /* non-blocking */ }
+      // In-app notification. Sent by the cron rather than a person, so there is
+      // no config id to credit and the sender reads as 'system' — both stated
+      // here rather than left implicit in the SQL. The debrief email below is
+      // the one the reader gets, so the helper's generic one is skipped.
+      await createNotifications({
+        db: tenantDb,
+        userIds: [userId],
+        type: 'conference',
+        recordId: conferenceId,
+        recordName: conferenceName,
+        message: `Your Field Report for ${conferenceName} is ready. ${meetingsHeld} meetings held · ${followUpsDue} follow-up${followUpsDue !== 1 ? 's' : ''} due.`,
+        changedByEmail: 'system',
+        changedByConfigId: null,
+        entityType: 'conference',
+        entityId: conferenceId,
+        skipEmail: true,
+      });
 
       // Email
       try {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getConfigOptionValues } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
+import { createNotifications, getConfigIdByEmail } from '@/lib/notifications';
 import type { Client } from '@libsql/client';
 import { trackEvent } from '@/lib/trackEvent';
 import { waitUntil } from '@vercel/functions';
@@ -1014,13 +1015,20 @@ export async function POST(request: NextRequest) {
                       skipped_count=0, completed_at=datetime('now') WHERE id=?`,
                 args: [count, jobId],
               });
-              await db.execute({
-                sql: `INSERT INTO notifications
-                      (user_id, type, record_id, record_name, message, changed_by_email, entity_type, entity_id, is_read)
-                      VALUES (?, 'conference', ?, ?, ?, ?, 'conference', ?, 0)`,
-                args: [authResult.id, conferenceId, name,
-                       `Upload complete: ${count} attendees imported`,
-                       authResult.email, conferenceId],
+              // The tailored email below is the one that goes out, so the
+              // helper's generic one is skipped.
+              await createNotifications({
+                db,
+                userIds: [authResult.id],
+                type: 'conference',
+                recordId: conferenceId,
+                recordName: name,
+                message: `Upload complete: ${count} attendees imported`,
+                changedByEmail: authResult.email,
+                changedByConfigId: await getConfigIdByEmail(authResult.email, db),
+                entityType: 'conference',
+                entityId: conferenceId,
+                skipEmail: true,
               });
               await sendNotificationEmail(
                 authResult.email,
