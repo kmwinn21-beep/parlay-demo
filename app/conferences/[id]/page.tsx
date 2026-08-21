@@ -3896,7 +3896,7 @@ export default function ConferenceDetailPage() {
             <MeetingsTable
               tableName="conference_meetings"
               groupByDate
-              namesOpenDrawer
+             
               showAttendeeAvatar
               meetings={filteredMeetings}
               actionOptions={actionOptions}
@@ -4134,7 +4134,7 @@ export default function ConferenceDetailPage() {
             }}
             onBulkToggle={handleBulkToggleFollowUp}
             groupBy="attendee"
-            namesOpenDrawer
+           
           />
             );
           })()}

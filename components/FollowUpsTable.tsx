@@ -2,7 +2,7 @@
 
 import { useState, Fragment } from 'react';
 import Link from 'next/link';
-import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
+import { QuickViewDrawer, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { useFollowUpActions, followUpActionLabel } from '@/lib/useFollowUpActions';
 import { SlideInPanel } from '@/components/SlideInPanel';
 import { FollowUpReassignNotePrompt, type ReassignNoteTarget } from '@/components/FollowUpReassignNotePrompt';
@@ -224,7 +224,6 @@ export function FollowUpsTable({
   onBulkToggle,
   tableName = 'follow_ups',
   groupBy = 'none',
-  namesOpenDrawer = false,
 }: {
   followUps: FollowUp[];
   onToggle: (id: number, completed: boolean) => void;
@@ -248,7 +247,6 @@ export function FollowUpsTable({
    * Clicking a name opens its drawer instead of navigating, and the quick-view
    * eyes drop away — one affordance rather than two.
    */
-  namesOpenDrawer?: boolean;
 }) {
   const nextStepsOpts = useConfigWithIds('next_steps');
   const followUpActions = useFollowUpActions();
@@ -344,42 +342,29 @@ export function FollowUpsTable({
   /** Attendee name — a drawer opener or a link, depending on the surface. */
   function attendeeNameNode(fu: FollowUp, className: string) {
     const name = `${fu.first_name} ${fu.last_name}`;
-    const openDrawer = () => setQuickView({ type: 'attendee', id: fu.attendee_id, name });
-    if (namesOpenDrawer) {
-      return (
-        <button type="button" onClick={e => { e.stopPropagation(); openDrawer(); }} className={`${className} text-left`} title={name}>
-          {name}
-        </button>
-      );
-    }
     return (
-      <>
-        <QuickViewIcon onClick={openDrawer} />
-        <Link href={`/attendees/${fu.attendee_id}`} onClick={e => e.stopPropagation()} className={className} title={name}>
-          {name}
-        </Link>
-      </>
+      <button
+        type="button"
+        onClick={e => { e.stopPropagation(); setQuickView({ type: 'attendee', id: fu.attendee_id, name }); }}
+        className={`${className} text-left`}
+        title={name}
+      >
+        {name}
+      </button>
     );
   }
 
   /** Company name — same treatment. */
   function companyNameNode(fu: FollowUp, className: string) {
     if (!fu.company_name || !fu.company_id) return null;
-    const openDrawer = () => setQuickView({ type: 'company', id: fu.company_id!, name: fu.company_name! });
-    if (namesOpenDrawer) {
-      return (
-        <button type="button" onClick={e => { e.stopPropagation(); openDrawer(); }} className={`${className} text-left`}>
-          {fu.company_name}
-        </button>
-      );
-    }
     return (
-      <>
-        <QuickViewIcon onClick={openDrawer} />
-        <Link href={`/companies/${fu.company_id}`} onClick={e => e.stopPropagation()} className={className}>
-          {fu.company_name}
-        </Link>
-      </>
+      <button
+        type="button"
+        onClick={e => { e.stopPropagation(); setQuickView({ type: 'company', id: fu.company_id!, name: fu.company_name! }); }}
+        className={`${className} text-left`}
+      >
+        {fu.company_name}
+      </button>
     );
   }
 
