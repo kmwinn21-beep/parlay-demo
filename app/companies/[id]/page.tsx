@@ -1621,7 +1621,7 @@ export default function CompanyDetailPage() {
               actionOptions={actionOptions}
               colorMap={colorMaps.action || {}}
               userOptions={userOptions}
-              namesOpenDrawer
+             
               hideCompany
               tableName="company_meetings"
               onNotesClick={(id) => openMeetingNotes(id)}
@@ -1691,7 +1691,7 @@ export default function CompanyDetailPage() {
                 <span className="text-sm font-medium text-brand-primary">Follow Up</span>
               </button>
             </div>
-            <FollowUpsTable detailsInDrawer followUps={companyFollowUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} onNextStepsChange={handleNextStepsChange} onFollowUpActionChange={handleFollowUpActionChange} onBulkToggle={handleBulkToggleFollowUp} tableName="company_follow_ups" groupBy="conference-attendee" namesOpenDrawer />
+            <FollowUpsTable detailsInDrawer followUps={companyFollowUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} onNextStepsChange={handleNextStepsChange} onFollowUpActionChange={handleFollowUpActionChange} onBulkToggle={handleBulkToggleFollowUp} tableName="company_follow_ups" groupBy="conference-attendee" />
           </div>
 
           {/* Notes */}
