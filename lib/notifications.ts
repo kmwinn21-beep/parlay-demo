@@ -25,6 +25,28 @@ interface CreateNotificationsInput {
   prefKey?: NotifPrefKey;
 }
 
+/** Entity types that open one record, keyed by the route that shows it. */
+const RECORD_PATHS: Record<string, string> = {
+  attendee: '/attendees', company: '/companies', conference: '/conferences',
+};
+
+/**
+ * Entity types with no single record to open, which land on a list instead —
+ * a batch reassignment spans attendees and conferences, so there is nothing
+ * more specific to point at.
+ */
+const LIST_PATHS: Record<string, string> = {
+  follow_up: '/follow-ups',
+};
+
+/** The email's "View Details" target, or null when the type has no page. */
+function entityLink(base: string, entityType: string, entityId: number): string | null {
+  const record = RECORD_PATHS[entityType];
+  if (record) return `${base}${record}/${entityId}`;
+  const list = LIST_PATHS[entityType];
+  return list ? `${base}${list}` : null;
+}
+
 /** Parse a comma-separated numeric ID string into an array of positive integers. */
 export function parseNotifIds(str: string | null | undefined): number[] {
   if (!str) return [];
@@ -119,12 +141,8 @@ export async function createNotifications(p: CreateNotificationsInput): Promise<
           sql: `SELECT id, email FROM users WHERE id IN (${ph3})`,
           args: emailIds,
         });
-        const typeToPath: Record<string, string> = {
-          attendee: '/attendees', company: '/companies', conference: '/conferences',
-        };
         const BASE = process.env.NEXT_PUBLIC_BASE_URL ?? '';
-        const path = typeToPath[p.entityType] ?? null;
-        const link = path ? `${BASE}${path}/${p.entityId}` : null;
+        const link = entityLink(BASE, p.entityType, p.entityId);
         const subject = `${APP_NAME} - ${p.recordName} Notification`;
         for (const row of userRows.rows) {
           await sendNotificationEmail(String(row.email), subject, p.message, link);
@@ -306,12 +324,8 @@ async function createOptInNotifications(p: CreateOptInNotificationsInput): Promi
           sql: `SELECT id, email FROM users WHERE id IN (${ph3})`,
           args: emailIds,
         });
-        const typeToPath: Record<string, string> = {
-          attendee: '/attendees', company: '/companies', conference: '/conferences',
-        };
         const BASE = process.env.NEXT_PUBLIC_BASE_URL ?? '';
-        const path = typeToPath[p.entityType] ?? null;
-        const link = path ? `${BASE}${path}/${p.entityId}` : null;
+        const link = entityLink(BASE, p.entityType, p.entityId);
         const subject = `${APP_NAME} - ${p.recordName} Notification`;
         for (const row of userRows.rows) {
           await sendNotificationEmail(String(row.email), subject, p.message, link);

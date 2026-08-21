@@ -68,6 +68,7 @@ function entityUrl(entityType: string, entityId: number): string {
   if (entityType === 'attendee') return `/attendees/${entityId}?from_notification=1`;
   if (entityType === 'conference') return `/conferences/${entityId}?from_notification=1`;
   if (entityType === 'meeting') return `/follow-ups?meeting_id=${entityId}&from_notification=1`;
+  if (entityType === 'follow_up') return '/follow-ups?from_notification=1';
   return '/notifications';
 }
 
