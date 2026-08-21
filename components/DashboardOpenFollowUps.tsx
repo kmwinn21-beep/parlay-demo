@@ -23,13 +23,7 @@ export interface OpenFollowUp {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function relativeTime(dateStr: string): string {
-  // Day arithmetic stays in UTC on both sides. Parsing 'YYYY-MM-DD' as local
-  // time put the server and the browser a day apart, which is a hydration
-  // mismatch every time the two straddle a date boundary.
-  const then = Date.parse(`${dateStr.slice(0, 10)}T00:00:00Z`);
-  const now = new Date();
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const diff = Math.floor((today - then) / 86400000);
+  const diff = Math.floor((Date.now() - new Date(dateStr + 'T00:00:00').getTime()) / 86400000);
   if (diff < 7) return `${diff}d ago`;
   if (diff < 30) return `${Math.floor(diff / 7)}w ago`;
   return `${Math.floor(diff / 30)}mo ago`;
@@ -171,17 +165,11 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
   const { panelStyle: companyPanelStyle, handleResizeStart: companyResizeStart } = useDrawerResize(480);
   const { panelStyle: confPanelStyle, handleResizeStart: confResizeStart } = useDrawerResize(520);
 
-  // Starts collapsed to match what the server rendered, then takes the stored
-  // preference after mount. Reading localStorage during the first render made
-  // the client disagree with the server HTML, and since this card sits inside a
-  // Suspense boundary that failed hydration hard enough to take the dashboard
-  // down with it (React #418 → #422).
-  const [collapsed, setCollapsed] = useState(true);
-
-  useEffect(() => {
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return true;
     const stored = localStorage.getItem('parlay_followups_collapsed');
-    setCollapsed(stored === null ? false : stored === 'true');
-  }, []);
+    return stored === null ? false : stored === 'true';
+  });
   const [items, setItems] = useState<OpenFollowUp[]>(followUps);
   const [drawerConfId, setDrawerConfId] = useState<number | null>(null);
   const [drawerConfName, setDrawerConfName] = useState<string>('');
