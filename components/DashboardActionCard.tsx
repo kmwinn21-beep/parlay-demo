@@ -903,7 +903,7 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
   }, [badgeScanRelevance]);
 
   return (
-    <div className="card flex flex-col justify-center">
+    <div className="card flex flex-col justify-center lg:relative">
       <div className="lg:hidden mb-3">
         <SetConferenceButton />
       </div>
@@ -1060,11 +1060,14 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
 
       {/* Upcoming meetings — mine, on the selected conference. The card layout
           is forced because this column is far narrower than the meetings tab. */}
+      {/* On desktop this drops over the page rather than growing the card —
+          otherwise the taller card stretches its grid row and shoves the whole
+          left column down. Mobile is a single column, so it still pushes. */}
       <div
-        className="overflow-hidden transition-all duration-300 ease-out"
+        className="overflow-hidden transition-all duration-300 ease-out lg:absolute lg:inset-x-0 lg:top-full lg:z-40 lg:mt-2 lg:rounded-2xl lg:border lg:border-gray-200 lg:bg-white lg:shadow-xl"
         style={{ maxHeight: meetingsOpen ? 520 : 0, opacity: meetingsOpen ? 1 : 0 }}
       >
-        <div className="mt-3 pt-3 border-t border-gray-100">
+        <div className="mt-3 pt-3 border-t border-gray-100 lg:mt-0 lg:pt-4 lg:px-4 lg:pb-4 lg:border-t-0">
           {!activeConference ? (
             <p className="text-xs text-gray-400 text-center py-4">Set an active conference to see your meetings.</p>
           ) : loadingMeetings ? (
@@ -1074,7 +1077,7 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
               No upcoming meetings for you at {activeConference.name}.
             </p>
           ) : (
-            <div className="max-h-[460px] overflow-y-auto -mx-4">
+            <div className="max-h-[460px] overflow-y-auto -mx-4 lg:mx-0">
               <MeetingsTable
                 cardsOnly
                 showConferencePill
