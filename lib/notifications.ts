@@ -245,6 +245,8 @@ export async function notifyMentionedUsers(opts: {
   entityName: string;
   entityType: string;
   entityId: number;
+  /** What the mention was written in. Defaults to a note. */
+  surface?: 'note' | 'comment';
 }): Promise<void> {
   if (opts.taggedConfigIds.length === 0) return;
   try {
@@ -252,7 +254,7 @@ export async function notifyMentionedUsers(opts: {
       opts.taggedConfigIds.join(','),
       opts.mentionerConfigId,
     );
-    const message = `${opts.mentionerName} mentioned you in a note related to ${opts.entityName}`;
+    const message = `${opts.mentionerName} mentioned you in a ${opts.surface ?? 'note'} related to ${opts.entityName}`;
     await createNotifications({
       userIds,
       type: opts.entityType as NotifType,
