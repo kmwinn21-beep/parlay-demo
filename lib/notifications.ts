@@ -15,6 +15,23 @@ export type NotifType = 'company' | 'attendee' | 'conference' | 'meeting';
 
 type NotifPrefKey = 'company_status_change' | 'follow_up_assigned' | 'note_tagged';
 
+/**
+ * The note-engagement preferences, which are off until a user turns them on.
+ *
+ * Both keys are interpolated straight into SQL, so they are spelled out here
+ * rather than taken as free strings. The email column is derived from the
+ * in-app one, which is the naming convention the table already follows and
+ * stops the pair from drifting apart.
+ */
+type OptInPrefKey =
+  | 'note_comment_received'
+  | 'note_comment_thread'
+  | 'note_reaction_received'
+  | 'note_lets_talk'
+  | 'comment_reaction_received';
+
+type OptInEmailPrefKey = `${OptInPrefKey}_email`;
+
 interface CreateNotificationsInput {
   userIds: number[];
   type: NotifType;
@@ -295,8 +312,8 @@ export async function notifyMentionedUsers(opts: {
 
 interface CreateOptInNotificationsInput {
   userIds: number[];
-  prefKey: string;
-  emailPrefKey: string;
+  prefKey: OptInPrefKey;
+  emailPrefKey: OptInEmailPrefKey;
   type: NotifType;
   recordId: number;
   recordName: string;
