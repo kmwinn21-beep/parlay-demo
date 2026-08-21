@@ -1763,10 +1763,12 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                                   <div className="min-w-0 flex-1">
                                     <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide leading-snug mb-1">Action</p>
                                     {fu.followUpAction
-                                      ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30 whitespace-nowrap">{fu.followUpAction}</span>
+                                      ? <span title={fu.followUpAction} className="block max-w-full truncate px-2 py-0.5 rounded-full text-[10px] font-semibold bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/30">{fu.followUpAction}</span>
                                       : <span className="text-gray-300">—</span>}
                                   </div>
-                                  <div className="min-w-0 flex-1">
+                                  {/* Rep takes only what its pills need, so a long
+                                      action name keeps the space it's using. */}
+                                  <div className="flex-shrink-0">
                                     <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide leading-snug mb-1">Rep</p>
                                     {editingRepFuId === fu.id ? (
                                       <div className="w-32">
