@@ -289,17 +289,32 @@ export async function GET(req: NextRequest) {
          GROUP BY cb.conference_id`,
         confIds,
       ).catch(() => [] as Row[]),
-      // j. Touchpoints per rep per conference (via meetings → attendees)
-      runQuery(db, 
-        `SELECT m.conference_id, m.scheduled_by AS rep_raw,
+      // j. Touchpoints per rep per conference.
+      // The rep who logged the touchpoint keeps it, whatever happens to the
+      // follow-up it spawned or to the company's ownership afterwards. Rows
+      // predating attendee_touchpoints.logged_by carry no attribution, so they
+      // fall back to the old inference — a meeting with that attendee at that
+      // same conference. The two branches cover disjoint sets of touchpoints.
+      runQuery(db,
+        `SELECT atp.conference_id, atp.logged_by AS rep_raw,
+                COUNT(DISTINCT atp.id) AS touchpoints
+         FROM attendee_touchpoints atp
+         WHERE atp.conference_id IN (${placeholders})
+           AND atp.logged_by IS NOT NULL AND atp.logged_by != ''
+         GROUP BY atp.conference_id, atp.logged_by
+         UNION ALL
+         SELECT m.conference_id, m.scheduled_by AS rep_raw,
                 COUNT(DISTINCT atp.id) AS touchpoints
          FROM meetings m
          JOIN attendees a ON m.attendee_id = a.id
-         JOIN attendee_touchpoints atp ON atp.attendee_id = a.id
+         JOIN attendee_touchpoints atp
+           ON atp.attendee_id = a.id
+          AND atp.conference_id = m.conference_id
          WHERE m.conference_id IN (${placeholders})
            AND m.scheduled_by IS NOT NULL AND m.scheduled_by != ''
+           AND (atp.logged_by IS NULL OR atp.logged_by = '')
          GROUP BY m.conference_id, m.scheduled_by`,
-        confIds,
+        [...confIds, ...confIds],
       ).catch(() => [] as Row[]),
       // k. Effectiveness defaults for pipeline influence + productivity scoring
       runQuery(db, 
