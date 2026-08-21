@@ -23,6 +23,19 @@ interface CreateNotificationsInput {
   entityType: string;   // 'company' | 'attendee' | 'conference'
   entityId: number;
   prefKey?: NotifPrefKey;
+  /**
+   * The database to write against. Accounts each have their own, and a
+   * notification written to the master DB for a tenant user reaches nobody —
+   * their users row isn't there. Callers holding a tenant client should pass
+   * it. Defaults to master, which is what every caller got before this existed.
+   */
+  db?: Client;
+  /**
+   * Skip the generic notification email. For callers that send their own,
+   * better one — an input request with decision links, a debrief with stats —
+   * so the reader doesn't get both.
+   */
+  skipEmail?: boolean;
 }
 
 /** Entity types that open one record, keyed by the route that shows it. */
@@ -98,11 +111,12 @@ export async function getConfigIdByEmail(email: string, tenantDb?: Client): Prom
 /** Insert notification rows — one per user. Respects notification_preferences opt-outs. Errors are swallowed. */
 export async function createNotifications(p: CreateNotificationsInput): Promise<void> {
   if (p.userIds.length === 0) return;
+  const client = p.db ?? db;
   try {
     let eligibleIds = p.userIds;
     if (p.prefKey) {
       const ph = p.userIds.map(() => '?').join(',');
-      const prefRows = await db.execute({
+      const prefRows = await client.execute({
         sql: `SELECT user_id FROM notification_preferences WHERE user_id IN (${ph}) AND ${p.prefKey} = 0`,
         args: p.userIds,
       });
@@ -110,7 +124,7 @@ export async function createNotifications(p: CreateNotificationsInput): Promise<
       eligibleIds = p.userIds.filter(id => !optedOut.has(id));
     }
     for (const uid of eligibleIds) {
-      await db.execute({
+      await client.execute({
         sql: `INSERT INTO notifications
               (user_id, type, record_id, record_name, message,
                changed_by_config_id, changed_by_email, entity_type, entity_id, is_read)
@@ -123,11 +137,13 @@ export async function createNotifications(p: CreateNotificationsInput): Promise<
       });
     }
 
+    if (p.skipEmail) return;
+
     // Send email notifications (best-effort, non-blocking)
     try {
       const ph2 = eligibleIds.map(() => '?').join(',');
       const emailColCheck = p.prefKey ? `${p.prefKey}_email = 0` : `email_notifications = 0`;
-      const emailOptOutRows = await db.execute({
+      const emailOptOutRows = await client.execute({
         sql: `SELECT user_id FROM notification_preferences
               WHERE user_id IN (${ph2}) AND ${emailColCheck}`,
         args: eligibleIds,
@@ -137,7 +153,7 @@ export async function createNotifications(p: CreateNotificationsInput): Promise<
 
       if (emailIds.length > 0) {
         const ph3 = emailIds.map(() => '?').join(',');
-        const userRows = await db.execute({
+        const userRows = await client.execute({
           sql: `SELECT id, email FROM users WHERE id IN (${ph3})`,
           args: emailIds,
         });
