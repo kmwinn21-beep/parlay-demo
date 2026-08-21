@@ -216,6 +216,7 @@ export async function PATCH(request: NextRequest) {
             changedByConfigId,
             entityType: 'attendee',
             entityId: id,
+            prefKey: 'follow_up_assigned',
           });
         }
       }
