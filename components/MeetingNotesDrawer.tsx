@@ -74,6 +74,15 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
     document.addEventListener('mouseup', onUp);
   }, [modalWidth]);
 
+  // Drives the rise on open: the panel starts below the edge and is released
+  // a frame later, so the browser has something to animate from.
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    if (!mounted || !meetingId) { setEntered(false); return; }
+    const raf = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(raf);
+  }, [mounted, meetingId]);
+
   if (!mounted || !meetingId) return null;
 
   return createPortal(
@@ -84,10 +93,6 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
           modal (unlike other drawers, this one isn't a right-edge panel
           on desktop). */}
       <style>{`
-        @keyframes meetingNotesSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-        .meeting-notes-mobile-slide { animation: meetingNotesSlideUp 0.25s ease-out; }
-        @media (min-width: 640px) { .meeting-notes-mobile-slide { animation: none; } }
-
         /* Mobile bottom sheet geometry. The panel is deliberately overshot
            past the bottom edge (bottom: -2.5rem plus matching padding) so no
            backdrop or rounded corner can peek out beneath it — iOS reports a
@@ -124,13 +129,12 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
           .meeting-notes-mobile-sheet above). Desktop (sm+): unchanged
           centered, resizable modal. */}
       <div
-        className={`fixed inset-0 z-[500] pointer-events-none transition-opacity duration-200 sm:flex sm:items-center sm:justify-center sm:p-3 sm:transition-all ${
-          minimized ? 'opacity-0 sm:scale-95' : 'opacity-100 sm:scale-100'
+        className={`fixed inset-0 z-[500] pointer-events-none transition-transform duration-200 ease-out sm:flex sm:items-end sm:justify-center sm:px-3 sm:pt-3 ${
+          minimized || !entered ? 'translate-y-full' : 'translate-y-0'
         }`}
-        style={{ visibility: minimized ? 'hidden' : 'visible' }}
       >
         <div
-          className="meeting-notes-mobile-slide meeting-notes-mobile-sheet pointer-events-auto flex flex-col bg-white shadow-2xl overflow-hidden relative fixed left-0 right-0 w-full rounded-t-2xl sm:static sm:h-full sm:rounded-xl"
+          className="meeting-notes-mobile-sheet pointer-events-auto flex flex-col bg-white shadow-2xl overflow-hidden relative fixed left-0 right-0 w-full rounded-t-2xl sm:static sm:h-full sm:rounded-b-none sm:rounded-t-2xl"
           style={{ width: window.innerWidth >= 640 ? Math.min(modalWidth, window.innerWidth - 24) : undefined }}
           onClick={e => e.stopPropagation()}
         >
@@ -153,10 +157,16 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
         </div>
       </div>
 
-      {/* Minimized pill bar — no close button */}
-      {minimized && (
+      {/* The bar it collapses into — the messaging bar's shape, riding the
+          bottom edge so the panel appears to fold down into it. Kept mounted
+          so the two movements can cross. */}
+      <div
+        className={`fixed bottom-0 left-1/2 -translate-x-1/2 z-[500] transition-transform duration-200 ease-out ${
+          minimized ? 'translate-y-0' : 'translate-y-full pointer-events-none'
+        }`}
+      >
         <div
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[500] flex items-center gap-3 bg-brand-accent/20 border border-brand-accent text-brand-primary rounded-full shadow-xl px-5 py-3 cursor-pointer hover:shadow-2xl transition-shadow select-none"
+          className="flex items-center gap-2.5 bg-white border border-b-0 border-gray-200 text-gray-800 rounded-t-xl shadow-lg pl-4 pr-3 py-2.5 cursor-pointer hover:bg-gray-50 transition-colors select-none"
           onClick={() => setMinimized(false)}
         >
           {isRecording && (
@@ -165,12 +175,12 @@ export function MeetingNotesDrawer({ meetingId, onClose }: Props) {
               REC
             </span>
           )}
-          <span className="text-sm font-medium max-w-xs truncate">{meetingLabel}</span>
-          <svg className="w-4 h-4 flex-shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <span className="text-sm font-semibold max-w-xs truncate">{meetingLabel}</span>
+          <svg className="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
           </svg>
         </div>
-      )}
+      </div>
     </>,
     document.body
   );
