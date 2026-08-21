@@ -16,6 +16,7 @@ import { MeetingsTable, type Meeting, type EditFormData } from '@/components/Mee
 import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 import { useUserOptions } from '@/lib/useUserOptions';
 import { useConfigColors } from '@/lib/useConfigColors';
+import { useIsDesktop } from '@/lib/useIsDesktop';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -678,7 +679,11 @@ export function TouchpointQuickModal({ onClose, defaultConferenceId, defaultComp
 
 // ── DashboardActionCard ───────────────────────────────────────────────────────
 
-export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 'upcoming' | 'none' }) {
+export function DashboardActionCard({ bannerState, agenda }: {
+  bannerState?: 'active' | 'upcoming' | 'none';
+  /** The agenda section, rendered here on phones where it has no column of its own. */
+  agenda?: React.ReactNode;
+}) {
   const { user } = useUser();
   const { activeConference } = useActiveConference();
   const [showCameraMenu, setShowCameraMenu] = useState(false);
@@ -696,6 +701,9 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
   const [showTouchpointsModal, setShowTouchpointsModal] = useState(false);
   const [badgeScanRelevance, setBadgeScanRelevance] = useState<Record<string, ProductRelevanceResult[]>>({});
   const [meetingsOpen, setMeetingsOpen] = useState(false);
+  const [agendaOpen, setAgendaOpen] = useState(false);
+  // Only one copy of the agenda may mount; the desktop slot owns the other one.
+  const isDesktop = useIsDesktop();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loadingMeetings, setLoadingMeetings] = useState(false);
   const [actionOptions, setActionOptions] = useState<string[]>([]);
@@ -909,93 +917,6 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
       </div>
       <div className="flex flex-row gap-1">
 
-        {/* Left — mobile: Scan camera, desktop: Follow Up */}
-        <div className="lg:hidden flex-1 relative" ref={cameraMenuRef}>
-          <button
-            type="button"
-            onClick={() => { setShowCameraMenu(v => !v); setBadgeSourceStep(false); }}
-            disabled={isScanning}
-            className={`w-full flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-blue-50 transition-all group disabled:opacity-50 ${meetingsOpen ? 'opacity-40 grayscale' : ''}`}
-          >
-            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center group-hover:bg-brand-secondary transition-colors flex-shrink-0">
-              {isScanning ? (
-                <div className="w-4 h-4 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <svg className="w-4 h-4 text-brand-secondary group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              )}
-            </div>
-            <p className="text-xs text-gray-500 leading-tight">Scan</p>
-          </button>
-          {showCameraMenu && (
-            <div className="absolute left-0 top-full mt-1 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-50 min-w-[190px]">
-              {badgeSourceStep ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setBadgeSourceStep(false)}
-                    className="w-full flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                    </svg>
-                    Badge / Card
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setShowCameraMenu(false); setBadgeSourceStep(false); badgeFileRef.current?.click(); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-brand-secondary transition-colors"
-                  >
-                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    Take Photo
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setShowCameraMenu(false); setBadgeSourceStep(false); badgeLibraryRef.current?.click(); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-brand-secondary transition-colors"
-                  >
-                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    Upload Photo
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setBadgeSourceStep(true)}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-brand-secondary transition-colors"
-                  >
-                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2" />
-                    </svg>
-                    <span className="flex-1 text-left">Scan Badge/Card</span>
-                    <svg className="w-3.5 h-3.5 flex-shrink-0 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setShowCameraMenu(false); notesFileRef.current?.click(); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-brand-secondary transition-colors"
-                  >
-                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    Scan Notes
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-
         {bannerState === 'active' && activeConference ? (
           <Link
             href={`/conferences/${activeConference.id}?fieldreport=true`}
@@ -1027,7 +948,7 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
         <button
           type="button"
           onClick={() => setShowTouchpointsModal(true)}
-          className={`flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-green-50 transition-all group ${meetingsOpen ? 'opacity-40 grayscale' : ''}`}
+          className={`flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-green-50 transition-all group ${meetingsOpen || agendaOpen ? 'opacity-40 grayscale' : ''}`}
         >
           <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center group-hover:bg-green-500 transition-colors flex-shrink-0">
             <svg className="w-4 h-4 text-green-600 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -1042,10 +963,26 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
           <p className="text-xs text-gray-500 leading-tight">Touchpoints</p>
         </button>
 
+        {/* Middle on mobile — Agenda. Desktop keeps its own agenda column, so
+            this button and its panel are phone-only. */}
+        <button
+          type="button"
+          onClick={() => { setAgendaOpen(o => !o); setMeetingsOpen(false); }}
+          aria-expanded={agendaOpen}
+          className={`lg:hidden flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-indigo-50 transition-colors group ${meetingsOpen ? 'opacity-40 grayscale' : ''}`}
+        >
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ${agendaOpen ? 'bg-indigo-500' : 'bg-indigo-100 group-hover:bg-indigo-500'}`}>
+            <svg className={`w-4 h-4 transition-colors ${agendaOpen ? 'text-white' : 'text-indigo-600 group-hover:text-white'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12h6m-6 4h6" />
+            </svg>
+          </div>
+          <p className="text-xs text-gray-500 leading-tight">Agenda</p>
+        </button>
+
         {/* Right — Meetings, which expands the list below rather than opening a modal */}
         <button
           type="button"
-          onClick={() => setMeetingsOpen(o => !o)}
+          onClick={() => { setMeetingsOpen(o => !o); setAgendaOpen(false); }}
           aria-expanded={meetingsOpen}
           className="flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-yellow-50 transition-colors group"
         >
@@ -1060,6 +997,18 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
 
       {/* Upcoming meetings — mine, on the selected conference. The card layout
           is forced because this column is far narrower than the meetings tab. */}
+      {/* Agenda, phone only — the same animation the meetings list uses. */}
+      {agenda && isDesktop === false && (
+        <div
+          className="lg:hidden overflow-hidden transition-all duration-300 ease-out"
+          style={{ maxHeight: agendaOpen ? 620 : 0, opacity: agendaOpen ? 1 : 0 }}
+        >
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <div className="max-h-[560px] overflow-y-auto">{agenda}</div>
+          </div>
+        </div>
+      )}
+
       {/* On desktop this drops over the page rather than growing the card —
           otherwise the taller card stretches its grid row and shoves the whole
           left column down. Mobile is a single column, so it still pushes. */}

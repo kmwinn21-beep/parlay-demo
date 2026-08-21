@@ -10,6 +10,7 @@ import { DashboardOpenFollowUps, type OpenFollowUp } from '@/components/Dashboar
 import { RecentSection, type DashboardConference } from '@/components/RecentSection';
 import { DashboardTargetsSection } from '@/components/DashboardTargetsSection';
 import { DashboardActionCard } from '@/components/DashboardActionCard';
+import { DesktopAgendaSlot } from '@/components/DesktopAgendaSlot';
 import { UpgradeSuccessBanner } from '@/components/UpgradeSuccessBanner';
 export const dynamic = 'force-dynamic';
 
@@ -334,7 +335,7 @@ function TargetsAndUpcomingSkeleton() {
 
 /* ---------- Async section components for Suspense ---------- */
 
-async function StatsSection() {
+async function StatsSection({ agenda }: { agenda: React.ReactNode }) {
   const sessionUser = await getServerSessionUser();
   const tenantDb = await getDb(sessionUser?.accountId);
   const bannerData = sessionUser ? await getBannerData(tenantDb, sessionUser.id) : { state: 'none' as const };
@@ -345,7 +346,7 @@ async function StatsSection() {
         <DashboardConferenceBanner bannerData={bannerData} />
       </div>
       <div className="lg:col-span-2">
-        <DashboardActionCard bannerState={bannerData.state} />
+        <DashboardActionCard bannerState={bannerData.state} agenda={agenda} />
       </div>
     </div>
   );
@@ -424,6 +425,14 @@ async function TargetsAndRecentSection() {
 }
 
 export default function DashboardPage() {
+  // One agenda, handed to both slots. Whichever one the viewport picks is the
+  // only one that mounts, so its fetches and open/closed state stay single.
+  const agenda = (
+    <Suspense fallback={<RecentSkeleton />}>
+      <RecentAgendaWrapper />
+    </Suspense>
+  );
+
   return (
     <div className="max-w-6xl mx-auto space-y-8">
       {/* Post-checkout success/cancel banner — useSearchParams requires Suspense */}
@@ -433,19 +442,16 @@ export default function DashboardPage() {
 
       {/* Overview stats + Conference Tracking banner */}
       <Suspense fallback={<StatsSkeleton />}>
-        <StatsSection />
+        <StatsSection agenda={agenda} />
       </Suspense>
 
-      {/* Quick Notes + Recent/My Agenda — side by side, max 489px */}
+      {/* Quick Notes + Recent/My Agenda — side by side, max 489px.
+          On phones the agenda lives in the action card instead. */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-stretch">
         <div className="lg:col-span-2 max-h-[489px] flex flex-col min-h-0">
           <QuickNotesSection />
         </div>
-        <div className="lg:col-span-2 flex flex-col min-h-0">
-          <Suspense fallback={<RecentSkeleton />}>
-            <RecentAgendaWrapper />
-          </Suspense>
-        </div>
+        <DesktopAgendaSlot>{agenda}</DesktopAgendaSlot>
       </div>
 
       {/* Targets + Recent */}
