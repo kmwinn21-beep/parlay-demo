@@ -8,7 +8,10 @@ import { sendNotificationEmail } from './email';
 
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub';
 
-export type NotifType = 'company' | 'attendee' | 'conference';
+// 'meeting' is written by the AI meeting-analysis notification. It is listed
+// here because that is what the column actually holds, rather than leaving
+// the one site that uses it outside the type.
+export type NotifType = 'company' | 'attendee' | 'conference' | 'meeting';
 
 type NotifPrefKey = 'company_status_change' | 'follow_up_assigned' | 'note_tagged';
 
