@@ -234,10 +234,15 @@ function BannerStateUpcoming({ data, collapsed, onToggle }: {
       <div className="cursor-pointer flex items-center justify-between" onClick={onToggle}>
         <div>
           <p className="text-white/60 text-xs font-medium">{data.daysUntil} days away</p>
-          <h1 className="text-2xl font-bold font-serif">{data.conference.name}</h1>
-          <p className="text-white/60 text-sm mt-0.5">
-            {formatDateRange(data.conference.start_date, data.conference.end_date)}
-          </p>
+          {/* Name and dates share a line on desktop. Narrow screens stack them,
+              where a leading dash on the wrapped line would just read as debris. */}
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-2">
+            <h1 className="text-2xl font-bold font-serif">{data.conference.name}</h1>
+            <span className="text-white/60 text-sm mt-0.5 sm:mt-0">
+              <span className="hidden sm:inline">&ndash; </span>
+              {formatDateRange(data.conference.start_date, data.conference.end_date)}
+            </span>
+          </div>
           {cityStateLabel(data.conference) && (
             <p className="text-white/60 text-sm mt-0.5">{cityStateLabel(data.conference)}</p>
           )}

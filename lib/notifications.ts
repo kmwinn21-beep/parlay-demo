@@ -8,9 +8,29 @@ import { sendNotificationEmail } from './email';
 
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub';
 
-export type NotifType = 'company' | 'attendee' | 'conference';
+// 'meeting' is written by the AI meeting-analysis notification. It is listed
+// here because that is what the column actually holds, rather than leaving
+// the one site that uses it outside the type.
+export type NotifType = 'company' | 'attendee' | 'conference' | 'meeting';
 
 type NotifPrefKey = 'company_status_change' | 'follow_up_assigned' | 'note_tagged';
+
+/**
+ * The note-engagement preferences, which are off until a user turns them on.
+ *
+ * Both keys are interpolated straight into SQL, so they are spelled out here
+ * rather than taken as free strings. The email column is derived from the
+ * in-app one, which is the naming convention the table already follows and
+ * stops the pair from drifting apart.
+ */
+type OptInPrefKey =
+  | 'note_comment_received'
+  | 'note_comment_thread'
+  | 'note_reaction_received'
+  | 'note_lets_talk'
+  | 'comment_reaction_received';
+
+type OptInEmailPrefKey = `${OptInPrefKey}_email`;
 
 interface CreateNotificationsInput {
   userIds: number[];
@@ -23,6 +43,41 @@ interface CreateNotificationsInput {
   entityType: string;   // 'company' | 'attendee' | 'conference'
   entityId: number;
   prefKey?: NotifPrefKey;
+  /**
+   * The database to write against. Accounts each have their own, and a
+   * notification written to the master DB for a tenant user reaches nobody —
+   * their users row isn't there. Callers holding a tenant client should pass
+   * it. Defaults to master, which is what every caller got before this existed.
+   */
+  db?: Client;
+  /**
+   * Skip the generic notification email. For callers that send their own,
+   * better one — an input request with decision links, a debrief with stats —
+   * so the reader doesn't get both.
+   */
+  skipEmail?: boolean;
+}
+
+/** Entity types that open one record, keyed by the route that shows it. */
+const RECORD_PATHS: Record<string, string> = {
+  attendee: '/attendees', company: '/companies', conference: '/conferences',
+};
+
+/**
+ * Entity types with no single record to open, which land on a list instead —
+ * a batch reassignment spans attendees and conferences, so there is nothing
+ * more specific to point at.
+ */
+const LIST_PATHS: Record<string, string> = {
+  follow_up: '/follow-ups',
+};
+
+/** The email's "View Details" target, or null when the type has no page. */
+function entityLink(base: string, entityType: string, entityId: number): string | null {
+  const record = RECORD_PATHS[entityType];
+  if (record) return `${base}${record}/${entityId}`;
+  const list = LIST_PATHS[entityType];
+  return list ? `${base}${list}` : null;
 }
 
 /** Parse a comma-separated numeric ID string into an array of positive integers. */
@@ -76,11 +131,12 @@ export async function getConfigIdByEmail(email: string, tenantDb?: Client): Prom
 /** Insert notification rows — one per user. Respects notification_preferences opt-outs. Errors are swallowed. */
 export async function createNotifications(p: CreateNotificationsInput): Promise<void> {
   if (p.userIds.length === 0) return;
+  const client = p.db ?? db;
   try {
     let eligibleIds = p.userIds;
     if (p.prefKey) {
       const ph = p.userIds.map(() => '?').join(',');
-      const prefRows = await db.execute({
+      const prefRows = await client.execute({
         sql: `SELECT user_id FROM notification_preferences WHERE user_id IN (${ph}) AND ${p.prefKey} = 0`,
         args: p.userIds,
       });
@@ -88,7 +144,7 @@ export async function createNotifications(p: CreateNotificationsInput): Promise<
       eligibleIds = p.userIds.filter(id => !optedOut.has(id));
     }
     for (const uid of eligibleIds) {
-      await db.execute({
+      await client.execute({
         sql: `INSERT INTO notifications
               (user_id, type, record_id, record_name, message,
                changed_by_config_id, changed_by_email, entity_type, entity_id, is_read)
@@ -101,11 +157,13 @@ export async function createNotifications(p: CreateNotificationsInput): Promise<
       });
     }
 
+    if (p.skipEmail) return;
+
     // Send email notifications (best-effort, non-blocking)
     try {
       const ph2 = eligibleIds.map(() => '?').join(',');
       const emailColCheck = p.prefKey ? `${p.prefKey}_email = 0` : `email_notifications = 0`;
-      const emailOptOutRows = await db.execute({
+      const emailOptOutRows = await client.execute({
         sql: `SELECT user_id FROM notification_preferences
               WHERE user_id IN (${ph2}) AND ${emailColCheck}`,
         args: eligibleIds,
@@ -115,16 +173,12 @@ export async function createNotifications(p: CreateNotificationsInput): Promise<
 
       if (emailIds.length > 0) {
         const ph3 = emailIds.map(() => '?').join(',');
-        const userRows = await db.execute({
+        const userRows = await client.execute({
           sql: `SELECT id, email FROM users WHERE id IN (${ph3})`,
           args: emailIds,
         });
-        const typeToPath: Record<string, string> = {
-          attendee: '/attendees', company: '/companies', conference: '/conferences',
-        };
         const BASE = process.env.NEXT_PUBLIC_BASE_URL ?? '';
-        const path = typeToPath[p.entityType] ?? null;
-        const link = path ? `${BASE}${path}/${p.entityId}` : null;
+        const link = entityLink(BASE, p.entityType, p.entityId);
         const subject = `${APP_NAME} - ${p.recordName} Notification`;
         for (const row of userRows.rows) {
           await sendNotificationEmail(String(row.email), subject, p.message, link);
@@ -227,6 +281,8 @@ export async function notifyMentionedUsers(opts: {
   entityName: string;
   entityType: string;
   entityId: number;
+  /** What the mention was written in. Defaults to a note. */
+  surface?: 'note' | 'comment';
 }): Promise<void> {
   if (opts.taggedConfigIds.length === 0) return;
   try {
@@ -234,7 +290,7 @@ export async function notifyMentionedUsers(opts: {
       opts.taggedConfigIds.join(','),
       opts.mentionerConfigId,
     );
-    const message = `${opts.mentionerName} mentioned you in a note related to ${opts.entityName}`;
+    const message = `${opts.mentionerName} mentioned you in a ${opts.surface ?? 'note'} related to ${opts.entityName}`;
     await createNotifications({
       userIds,
       type: opts.entityType as NotifType,
@@ -256,8 +312,8 @@ export async function notifyMentionedUsers(opts: {
 
 interface CreateOptInNotificationsInput {
   userIds: number[];
-  prefKey: string;
-  emailPrefKey: string;
+  prefKey: OptInPrefKey;
+  emailPrefKey: OptInEmailPrefKey;
   type: NotifType;
   recordId: number;
   recordName: string;
@@ -306,12 +362,8 @@ async function createOptInNotifications(p: CreateOptInNotificationsInput): Promi
           sql: `SELECT id, email FROM users WHERE id IN (${ph3})`,
           args: emailIds,
         });
-        const typeToPath: Record<string, string> = {
-          attendee: '/attendees', company: '/companies', conference: '/conferences',
-        };
         const BASE = process.env.NEXT_PUBLIC_BASE_URL ?? '';
-        const path = typeToPath[p.entityType] ?? null;
-        const link = path ? `${BASE}${path}/${p.entityId}` : null;
+        const link = entityLink(BASE, p.entityType, p.entityId);
         const subject = `${APP_NAME} - ${p.recordName} Notification`;
         for (const row of userRows.rows) {
           await sendNotificationEmail(String(row.email), subject, p.message, link);

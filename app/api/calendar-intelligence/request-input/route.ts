@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { createNotifications, getConfigIdByEmail } from '@/lib/notifications';
 import { buildInputRequestEmailHtml, sendInputRequestEmail } from '@/lib/email';
 import { getValidToken, sendViaGoogle, sendViaMicrosoft, type OAuthProvider } from '@/lib/oauthEmail';
 
@@ -82,6 +83,9 @@ export async function POST(request: NextRequest) {
   }).catch(() => ({ rows: [] }));
   const oauthConn = oauthRow.rows[0] as unknown as { provider: string; provider_email: string | null } | undefined;
 
+  // Resolved once — the sender is the same for every recipient in the loop.
+  const requesterConfigId = await getConfigIdByEmail(authResult.email, db);
+
   let requestsSent = 0;
 
   for (const recipient of recipients) {
@@ -128,21 +132,23 @@ export async function POST(request: NextRequest) {
       args: [conferenceId, authResult.id, email, name, title, recipientUserId],
     });
 
-    // In-app notification for system users
+    // In-app notification for system users. The request email sent below
+    // carries the one-click decision links, so the helper's generic one is
+    // skipped rather than arriving alongside it.
     if (recipientUserId) {
-      await db.execute({
-        sql: `INSERT INTO notifications
-                (user_id, type, record_id, record_name, message, changed_by_email, entity_type, entity_id, is_read)
-              VALUES (?, 'conference', ?, ?, ?, ?, 'conference', ?, 0)`,
-        args: [
-          recipientUserId,
-          conferenceId,
-          conferenceName,
-          `${requesterName} has requested your input on ${conferenceName}`,
-          authResult.email,
-          conferenceId,
-        ],
-      }).catch(() => {}); // best-effort
+      await createNotifications({
+        db,
+        userIds: [recipientUserId],
+        type: 'conference',
+        recordId: conferenceId,
+        recordName: conferenceName,
+        message: `${requesterName} has requested your input on ${conferenceName}`,
+        changedByEmail: authResult.email,
+        changedByConfigId: requesterConfigId,
+        entityType: 'conference',
+        entityId: conferenceId,
+        skipEmail: true,
+      });
     }
 
     // Encode account — undefined means master DB; use sentinel 'master' so it round-trips cleanly
