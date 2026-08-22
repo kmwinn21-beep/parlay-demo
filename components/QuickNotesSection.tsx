@@ -1,5 +1,6 @@
 'use client';
 
+import { useMobileCollapse } from '@/lib/useMobileCollapse';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
@@ -1084,12 +1085,12 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
   const { activeConference } = useActiveConference();
   const [notes, setNotes] = useState<QuickNote[]>([]);
   const [conferences, setConferences] = useState<Conference[]>([]);
-  const [sectionExpanded, setSectionExpanded] = useState(true);
+  const { isMobile, expanded: sectionExpanded, toggle: toggleSection, expand: expandSection, showBody } = useMobileCollapse();
   const [showAddModal, setShowAddModal] = useState(false);
   const [assigningNote, setAssigningNote] = useState<QuickNote | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+
   const [showCameraMenu, setShowCameraMenu] = useState(false);
   // Second step of the scan menu: camera, or a picture already on the phone.
   const [badgeSourceStep, setBadgeSourceStep] = useState(false);
@@ -1117,13 +1118,6 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
   }, []);
 
   useEffect(() => {
-    const media = window.matchMedia('(max-width: 1023px)');
-    const update = () => { const m = media.matches; setIsMobile(m); if (!m) setSectionExpanded(true); };
-    update(); media.addEventListener('change', update);
-    return () => media.removeEventListener('change', update);
-  }, []);
-
-  useEffect(() => {
     fetch('/api/quick-notes').then(r => r.ok ? r.json() : [])
       .then(data => { setNotes(data); setLoading(false); }).catch(() => setLoading(false));
     fetch('/api/conferences?nav=1').then(r => r.ok ? r.json() : [])
@@ -1141,11 +1135,11 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
     const handler = (e: Event) => {
       const note = (e as CustomEvent<QuickNote>).detail;
       setNotes(prev => prev.some(n => n.id === note.id) ? prev : [note, ...prev]);
-      setSectionExpanded(true);
+      expandSection();
     };
     window.addEventListener('quicknote:saved', handler);
     return () => window.removeEventListener('quicknote:saved', handler);
-  }, []);
+  }, [expandSection]);
 
   useEffect(() => {
     if (!showCameraMenu) return;
@@ -1162,13 +1156,13 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
     if (res.ok) {
       const note = await res.json() as QuickNote;
       setNotes(prev => [note, ...prev]);
-      setSectionExpanded(true);
+      expandSection();
       toast.success('Note saved!');
       return note;
     }
     toast.error('Failed to save note.');
     return null;
-  }, [activeConference]);
+  }, [activeConference, expandSection]);
 
   const handleDelete = async (id: number) => {
     if (!confirm('Delete this floor note? This cannot be undone.')) return;
@@ -1279,7 +1273,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
     if (res.ok) {
       const note = await res.json() as QuickNote;
       setNotes(prev => [note, ...prev]);
-      setSectionExpanded(true);
+      expandSection();
       const label = secondaryTag === 'booth-demo' ? 'Demo logged'
         : secondaryTag === 'booth-meeting' ? 'Meeting logged'
         : secondaryTag === 'booth-followup' ? 'Follow-up logged'
@@ -1296,7 +1290,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
       if (next.length === 0) setTimeout(() => setShowScanModal(false), secondaryTag ? 1500 : 0);
       return next;
     });
-  }, [badgeScanRelevance, activeConference]);
+  }, [badgeScanRelevance, activeConference, expandSection]);
 
   const handleAssignNote = useCallback(async (note: QuickNote) => {
     if (note.tag !== 'card-badge') { setAssigningNote(note); return; }
@@ -1323,13 +1317,13 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
     } catch { toast.error('Failed to search for match.'); }
   }, []);
 
-  const showBody = !isMobile || sectionExpanded;
   const isScanning = scanningBadge || scanningNotes;
 
   return (
     <div className={`card h-full flex flex-col overflow-hidden ${className}`}>
       <div className="flex items-center justify-between mb-1 flex-shrink-0">
-        <button type="button" onClick={() => { if (isMobile) setSectionExpanded(v => !v); }}
+        <button type="button" onClick={toggleSection}
+          aria-expanded={!isMobile || sectionExpanded}
           className={`flex items-center gap-2 text-left group ${isMobile ? '' : 'cursor-default'}`}>
           <svg className="w-5 h-5 text-brand-secondary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />

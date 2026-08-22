@@ -11,6 +11,7 @@ import { NewMeetingModal } from '@/components/NewMeetingModal';
 import { NewNoteModal } from '@/components/NewNoteModal';
 import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
 import { TouchpointQuickModal } from '@/components/DashboardActionCard';
+import { useMobileCollapse } from '@/lib/useMobileCollapse';
 
 /** Steps the target grid one row at a time. */
 function PagerButton({ dir, disabled, onClick }: {
@@ -296,6 +297,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
   const [tierDrawerKey, setTierDrawerKey] = useState<string | null>(null);
   // Which activity modal a card's kebab opened, and for whom.
   const [cardAction, setCardAction] = useState<{ action: TargetAction; entry: TargetEntry } | null>(null);
+  const { isMobile, expanded, toggle, showBody } = useMobileCollapse();
 
 
   function toggleTier(key: string) {
@@ -378,7 +380,12 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
     <div className="flex flex-col gap-4">
       {/* Header row */}
       <div className="flex flex-col gap-2">
-        <h2 className="text-lg font-semibold text-brand-primary font-serif flex items-center gap-2">
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={!isMobile || expanded}
+          className={`text-lg font-semibold text-brand-primary font-serif flex items-center gap-2 text-left group ${isMobile ? '' : 'cursor-default'}`}
+        >
           Targets
           <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-100">
             <svg
@@ -398,8 +405,11 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
               <line x1="18" y1="12" x2="22" y2="12" />
             </svg>
           </span>
-        </h2>
-        {sortedConferences.length > 0 && (
+          <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200 lg:hidden ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {showBody && sortedConferences.length > 0 && (
           <div className="flex items-center gap-2">
           <select
             value={selectedConfId ?? ''}
@@ -454,6 +464,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
         )}
       </div>
 
+      {showBody && (<>
       {/* Tier filter cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {TIER_CONFIG.map(tier => {
@@ -530,6 +541,8 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
           )}
         </div>
       )}
+
+      </>)}
 
       {/* Mobile: the selected tier's targets, in a drawer */}
       {tierDrawerKey !== null && (() => {

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { getPreset } from '@/lib/colors';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
 import { TouchpointQuickModal } from '@/components/DashboardActionCard';
+import { useMobileCollapse } from '@/lib/useMobileCollapse';
 
 interface TouchpointOption {
   id: number;
@@ -22,6 +23,7 @@ export function DashboardTouchpointsSection() {
   const [options, setOptions] = useState<TouchpointOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalTouchpointId, setModalTouchpointId] = useState<number | null>(null);
+  const { isMobile, expanded, toggle, showBody } = useMobileCollapse();
 
   useEffect(() => {
     let cancelled = false;
@@ -39,7 +41,12 @@ export function DashboardTouchpointsSection() {
   return (
     <>
       <div className="card h-full flex flex-col">
-        <div className="flex items-center gap-2 mb-3 flex-shrink-0">
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={!isMobile || expanded}
+          className={`flex items-center gap-2 flex-shrink-0 text-left group ${showBody ? 'mb-3' : ''} ${isMobile ? '' : 'cursor-default'}`}
+        >
           <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
             <circle cx="12" cy="12" r="4" />
@@ -48,10 +55,16 @@ export function DashboardTouchpointsSection() {
             <line x1="2" y1="12" x2="6" y2="12" />
             <line x1="18" y1="12" x2="22" y2="12" />
           </svg>
-          <h2 className="text-base font-semibold text-brand-primary font-serif">Touchpoints</h2>
-        </div>
+          <h2 className="text-base font-semibold text-brand-primary font-serif group-hover:text-brand-secondary transition-colors">Touchpoints</h2>
+          {options.length > 0 && (
+            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-green-100 text-green-700 text-[10px] font-bold leading-none">{options.length}</span>
+          )}
+          <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200 lg:hidden ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
 
-        {loading ? (
+        {showBody && (loading ? (
           <div className="grid grid-cols-2 gap-2">
             {[1, 2, 3, 4].map(i => <div key={i} className="h-11 rounded-lg bg-gray-100 animate-pulse" />)}
           </div>
@@ -75,7 +88,7 @@ export function DashboardTouchpointsSection() {
               );
             })}
           </div>
-        )}
+        ))}
       </div>
 
       {modalTouchpointId != null && (
