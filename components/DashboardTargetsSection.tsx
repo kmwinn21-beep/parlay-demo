@@ -386,8 +386,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
           aria-expanded={!isMobile || expanded}
           className={`text-lg font-semibold text-brand-primary font-serif flex items-center gap-2 text-left group ${isMobile ? '' : 'cursor-default'}`}
         >
-          Targets
-          <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-100">
+          <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-100 flex-shrink-0">
             <svg
               className="w-5 h-5 text-red-500"
               fill="none"
@@ -405,6 +404,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
               <line x1="18" y1="12" x2="22" y2="12" />
             </svg>
           </span>
+          Targets
           <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200 lg:hidden ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>

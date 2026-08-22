@@ -47,15 +47,10 @@ export function DashboardTouchpointsSection() {
           aria-expanded={!isMobile || expanded}
           className={`flex items-center gap-2 flex-shrink-0 text-left group ${showBody ? 'mb-3' : ''} ${isMobile ? '' : 'cursor-default'}`}
         >
-          <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10" />
-            <circle cx="12" cy="12" r="4" />
-            <line x1="12" y1="2" x2="12" y2="6" />
-            <line x1="12" y1="18" x2="12" y2="22" />
-            <line x1="2" y1="12" x2="6" y2="12" />
-            <line x1="18" y1="12" x2="22" y2="12" />
+          <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11" />
           </svg>
-          <h2 className="text-base font-semibold text-brand-primary font-serif group-hover:text-brand-secondary transition-colors">Touchpoints</h2>
+          <h2 className="text-lg font-semibold text-brand-primary font-serif group-hover:text-brand-secondary transition-colors">Touchpoints</h2>
           {options.length > 0 && (
             <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-green-100 text-green-700 text-[10px] font-bold leading-none">{options.length}</span>
           )}
