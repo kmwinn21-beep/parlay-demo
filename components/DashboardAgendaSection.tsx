@@ -10,10 +10,37 @@ import { MeetingNotesDrawer } from '@/components/MeetingNotesDrawer';
 import { useDrawerResize } from '@/lib/useDrawerResize';
 import { KebabMenu } from '@/components/KebabMenu';
 
+/** Same scale the follow-up count pills use, so a number reads the same way. */
+const DAY_COUNT_STYLES: Record<number, string> = {
+  1: 'text-gray-600 border-gray-300 bg-gray-100',
+  2: 'text-green-600 border-green-300 bg-green-50',
+  3: 'text-green-700 border-green-400 bg-green-100',
+  4: 'text-green-800 border-green-500 bg-green-200',
+  5: 'text-blue-600 border-blue-300 bg-blue-50',
+  6: 'text-blue-700 border-blue-400 bg-blue-100',
+  7: 'text-blue-800 border-blue-500 bg-blue-200',
+};
+
+/**
+ * 'FRIDAY - AUG 14, 2026'. The sources spell their days differently — My
+ * Agenda carries a sortable date, the uploaded agenda only its own label —
+ * so anything unparseable is left exactly as it came.
+ */
+function formatDayBarLabel(raw: string, isoDate?: string): string {
+  const d = isoDate ? new Date(`${isoDate.slice(0, 10)}T00:00:00`) : new Date(raw);
+  if (isNaN(d.getTime())) return raw;
+  const weekday = d.toLocaleDateString('en-US', { weekday: 'long' });
+  const rest = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return `${weekday} - ${rest}`;
+}
+
 /**
  * The day bar the meetings tab uses in conference details, so the agenda
  * groups read the same way. Full width — the rows below it run edge to edge
  * rather than sitting inside a card of their own.
+ *
+ * The chevron is a fixed width and the count is pushed right, so every bar's
+ * date starts at the same x and every count sits in one column.
  */
 function AgendaDayBar({ label, count, expanded, onToggle }: {
   label: string;
@@ -21,12 +48,13 @@ function AgendaDayBar({ label, count, expanded, onToggle }: {
   expanded: boolean;
   onToggle: () => void;
 }) {
+  const countStyle = DAY_COUNT_STYLES[count] ?? 'text-red-700 border-red-500 bg-red-100';
   return (
     <button
       type="button"
       onClick={onToggle}
       aria-expanded={expanded}
-      className="w-full flex items-center gap-2 text-left px-4 py-2 bg-gray-50 border-b border-gray-200 hover:bg-gray-100 transition-colors"
+      className="w-full flex items-center gap-2 text-left px-4 py-3 bg-gray-50 border-b border-gray-200 hover:bg-gray-100 transition-colors"
     >
       <svg
         className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`}
@@ -34,8 +62,13 @@ function AgendaDayBar({ label, count, expanded, onToggle }: {
       >
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
       </svg>
-      <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">{label}</span>
-      <span className="text-xs text-gray-400">({count})</span>
+      <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider truncate">{label}</span>
+      <span
+        title={`${count} item${count === 1 ? '' : 's'}`}
+        className={`ml-auto flex-shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold ${countStyle}`}
+      >
+        {count}
+      </span>
     </button>
   );
 }
@@ -383,7 +416,7 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
               return (
                 <div key={group.day_label} className="bg-white">
                   <AgendaDayBar
-                    label={group.day_label}
+                    label={formatDayBarLabel(group.day_label, group.sort_date)}
                     count={group.items.length}
                     expanded={expanded}
                     onToggle={() => setMyExpandedDays(prev => { const s = new Set(prev); s.has(group.day_label) ? s.delete(group.day_label) : s.add(group.day_label); return s; })}
@@ -527,7 +560,7 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
               return (
                 <div key={day.day_label} className="bg-white">
                   <AgendaDayBar
-                    label={day.day_label}
+                    label={formatDayBarLabel(day.day_label)}
                     count={day.items.length}
                     expanded={expanded}
                     onToggle={() => setFullExpandedDays(prev => { const s = new Set(prev); s.has(day.day_label) ? s.delete(day.day_label) : s.add(day.day_label); return s; })}
