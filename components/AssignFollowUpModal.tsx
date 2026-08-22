@@ -387,34 +387,50 @@ export function AssignFollowUpModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl border border-brand-highlight w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-lg font-semibold text-brand-secondary font-serif">
-            Add Follow Up
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={onClose}>
+      {/* Below sm this behaves like the app's drawers — it rises from the
+          bottom edge and keeps its rounded top corners. */}
+      <div
+        className="modal-sheet-mobile bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-brand-highlight w-full sm:max-w-lg max-h-[92vh] sm:max-h-[90vh] min-h-0 flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header — a phone stacks the title above full-width Cancel/Assign
+            buttons, so the action is reachable without scrolling the form;
+            sm+ keeps the single row it always had. */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-3 px-4 sm:px-6 py-3 border-b border-gray-100 shrink-0">
+          <div className="flex items-center justify-between gap-3 sm:flex-1 sm:min-w-0">
+            <h2 className="text-lg font-semibold text-brand-secondary font-serif min-w-0 truncate">Add Follow Up</h2>
+            <button type="button" onClick={onClose} className="sm:hidden text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0" aria-label="Close">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="flex items-center gap-3 sm:gap-2 sm:flex-shrink-0">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 text-sm sm:text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              form="assign-follow-up-form"
+              disabled={isSubmitting || !!user?.demoVisitor}
+              className="flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 text-sm sm:text-xs font-semibold text-white bg-brand-secondary rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? 'Assigning…' : 'Assign Follow Up'}
+            </button>
+            <button type="button" onClick={onClose} className="hidden sm:inline-flex text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0" aria-label="Close">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form id="assign-follow-up-form" onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4 space-y-4">
           {/* Assign To */}
           <div>
             <label className="label">Assign To</label>
@@ -560,18 +576,6 @@ export function AssignFollowUpModal({
             />
           </div>
 
-          <div className="flex gap-3 pt-2">
-            <button
-              type="submit"
-              disabled={isSubmitting || !!user?.demoVisitor}
-              className="btn-primary flex-1"
-            >
-              {isSubmitting ? 'Assigning…' : 'Assign Follow Up'}
-            </button>
-            <button type="button" onClick={onClose} className="btn-secondary">
-              Cancel
-            </button>
-          </div>
         </form>
       </div>
     </div>
