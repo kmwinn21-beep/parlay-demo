@@ -4,10 +4,11 @@ import Link from 'next/link';
 import { dbReady } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
 import { QuickNotesSection } from '@/components/QuickNotesSection';
+import { DashboardTouchpointsSection } from '@/components/DashboardTouchpointsSection';
 import { getServerSessionUser } from '@/lib/auth';
 import { DashboardConferenceBanner, type BannerData } from '@/components/DashboardConferenceBanner';
 import { DashboardOpenFollowUps, type OpenFollowUp } from '@/components/DashboardOpenFollowUps';
-import { RecentSection, type DashboardConference } from '@/components/RecentSection';
+import type { DashboardConference } from '@/components/RecentSection';
 import { DashboardTargetsSection } from '@/components/DashboardTargetsSection';
 import { DashboardActionCard } from '@/components/DashboardActionCard';
 import { UpgradeSuccessBanner } from '@/components/UpgradeSuccessBanner';
@@ -197,33 +198,6 @@ async function getOpenFollowUps(tenantDb: Client): Promise<OpenFollowUp[]> {
   } catch { return []; }
 }
 
-async function getAwaitingUploadConferences(tenantDb: Client): Promise<{ id: number; name: string; start_date: string; end_date: string; location: string; internal_attendees: string[]; attendee_count: number }[]> {
-  await dbReady;
-  try {
-    const today = new Date().toISOString().slice(0, 10);
-    const result = await tenantDb.execute({
-    sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location, c.internal_attendees,
-            (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) as attendee_count
-          FROM conferences c
-          WHERE c.start_date >= ?
-            AND (SELECT COUNT(*) FROM conference_attendees ca WHERE ca.conference_id = c.id) = 0
-          ORDER BY c.start_date ASC`,
-    args: [today],
-  });
-    return result.rows.map((r) => ({
-      id: Number(r.id),
-      name: String(r.name ?? ''),
-      start_date: String(r.start_date ?? ''),
-      end_date: String(r.end_date ?? ''),
-      location: String(r.location ?? ''),
-      internal_attendees: r.internal_attendees ? String(r.internal_attendees).split(',').map(s => s.trim()).filter(Boolean) : [],
-      attendee_count: Number(r.attendee_count ?? 0),
-    }));
-  } catch {
-    return [];
-  }
-}
-
 async function getAllConferences(tenantDb: Client): Promise<DashboardConference[]> {
   await dbReady;
   try {
@@ -284,23 +258,6 @@ function StatsSkeleton() {
   );
 }
 
-function RecentSkeleton() {
-  return (
-    <div className="card h-full animate-pulse">
-      <div className="h-8 w-48 bg-gray-200 rounded mb-5" />
-      <div className="grid grid-cols-2 gap-3">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="p-4 rounded-xl border border-gray-100">
-            <div className="h-5 w-32 bg-gray-200 rounded mb-2" />
-            <div className="h-3 w-24 bg-gray-200 rounded mb-1" />
-            <div className="h-3 w-20 bg-gray-200 rounded" />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function TargetsAndUpcomingSkeleton() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-pulse">
@@ -351,56 +308,6 @@ async function StatsSection() {
   );
 }
 
-async function RecentAgendaWrapper() {
-  const sessionUser = await getServerSessionUser();
-  const tenantDb = await getDb(sessionUser?.accountId);
-  const [allConferences, awaitingUploadConferences] = await Promise.all([
-    getAllConferences(tenantDb),
-    getAwaitingUploadConferences(tenantDb),
-  ]);
-
-  let defaultConferenceId: number | null = null;
-  const inProgress = allConferences.filter(c => c.status === 'in_progress');
-  if (inProgress.length > 0) {
-    if (sessionUser) {
-      try {
-        const configResult = await tenantDb.execute({
-          sql: 'SELECT co.value FROM users u JOIN config_options co ON u.config_id = co.id WHERE u.id = ?',
-          args: [sessionUser.id],
-        });
-        if (configResult.rows.length > 0) {
-          const displayName = String(configResult.rows[0].value ?? '').trim().toLowerCase();
-          for (const conf of inProgress) {
-            if (conf.internal_attendees.some(a => a.toLowerCase() === displayName)) {
-              defaultConferenceId = conf.id;
-              break;
-            }
-          }
-        }
-      } catch {
-        defaultConferenceId = null;
-      }
-    }
-  }
-
-  const upcomingConferences = allConferences
-    .filter(c => c.status !== 'past')
-    .sort((a, b) => {
-      if (a.status === 'in_progress' && b.status !== 'in_progress') return -1;
-      if (b.status === 'in_progress' && a.status !== 'in_progress') return 1;
-      return a.start_date.localeCompare(b.start_date);
-    });
-
-  return (
-    <RecentSection
-      upcomingConferences={upcomingConferences}
-      awaitingUploadConferences={awaitingUploadConferences}
-      allConferences={allConferences}
-      defaultConferenceId={defaultConferenceId}
-    />
-  );
-}
-
 async function TargetsAndRecentSection() {
   const sessionUser = await getServerSessionUser();
   const tenantDb = await getDb(sessionUser?.accountId);
@@ -436,15 +343,13 @@ export default function DashboardPage() {
         <StatsSection />
       </Suspense>
 
-      {/* Quick Notes + Recent/My Agenda — side by side, max 489px */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-stretch">
+      {/* Floor Notes, with the touchpoint types beside it */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
         <div className="lg:col-span-2 max-h-[489px] flex flex-col min-h-0">
           <QuickNotesSection />
         </div>
-        <div className="lg:col-span-2 flex flex-col min-h-0">
-          <Suspense fallback={<RecentSkeleton />}>
-            <RecentAgendaWrapper />
-          </Suspense>
+        <div className="lg:col-span-1 flex flex-col min-h-0">
+          <DashboardTouchpointsSection />
         </div>
       </div>
 
