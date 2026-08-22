@@ -18,6 +18,8 @@ import { useUserOptions } from '@/lib/useUserOptions';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { DashboardDrawer } from '@/components/DashboardDrawer';
 import { AgendaDrawer } from '@/components/AgendaDrawer';
+import { MeetingDateFilterBar } from '@/components/MeetingDateFilterBar';
+import { isBoothHours } from '@/lib/meetingTime';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -701,6 +703,8 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
   const [badgeScanRelevance, setBadgeScanRelevance] = useState<Record<string, ProductRelevanceResult[]>>({});
   const [meetingsOpen, setMeetingsOpen] = useState(false);
   const [agendaOpen, setAgendaOpen] = useState(false);
+  const [drawerDateFilter, setDrawerDateFilter] = useState<string[]>([]);
+  const [drawerBoothOnly, setDrawerBoothOnly] = useState(false);
   // Whoever is signed in, by first name where we have one.
   const meetingsOwner = (user?.firstName || user?.displayName || user?.repName || 'My').split(' ')[0];
   const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -742,6 +746,22 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
       })
       .sort((a, b) => `${a.meeting_date} ${a.meeting_time}`.localeCompare(`${b.meeting_date} ${b.meeting_time}`));
   }, [meetings, user?.configId]);
+
+  // Day buttons come from the meetings actually in the drawer rather than every
+  // day of the conference, so a button can never filter down to nothing.
+  const drawerDates = useMemo(
+    () => Array.from(new Set(myUpcomingMeetings.map(m => m.meeting_date).filter(Boolean) as string[])).sort(),
+    [myUpcomingMeetings],
+  );
+  const drawerHasBoothHours = useMemo(
+    () => myUpcomingMeetings.some(m => isBoothHours(m.meeting_time)),
+    [myUpcomingMeetings],
+  );
+  const filteredDrawerMeetings = useMemo(() => myUpcomingMeetings.filter(m => {
+    if (drawerDateFilter.length > 0 && !drawerDateFilter.includes(m.meeting_date)) return false;
+    if (drawerBoothOnly && !isBoothHours(m.meeting_time)) return false;
+    return true;
+  }), [myUpcomingMeetings, drawerDateFilter, drawerBoothOnly]);
 
   const handleOutcomeChange = useCallback(async (meetingId: number, outcome: string) => {
     setMeetings(prev => prev.map(m => (m.id === meetingId ? { ...m, outcome } : m)));
@@ -979,7 +999,7 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
         {/* Right — Meetings, which opens the drawer */}
         <button
           type="button"
-          onClick={() => { setMeetingsOpen(true); setAgendaOpen(false); }}
+          onClick={() => { setMeetingsOpen(true); setAgendaOpen(false); setDrawerDateFilter([]); setDrawerBoothOnly(false); }}
           aria-expanded={meetingsOpen}
           className="flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-yellow-50 transition-colors group"
         >
@@ -1008,12 +1028,29 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
               No upcoming meetings for you at {activeConference.name}.
             </p>
           ) : (
+            <>
+              {drawerDates.length > 1 && (
+                <div className="px-4 pt-3 pb-1">
+                  <MeetingDateFilterBar
+                    dates={drawerDates}
+                    selected={drawerDateFilter}
+                    onChange={setDrawerDateFilter}
+                    variant="short"
+                    showBoothHours={drawerHasBoothHours}
+                    boothHoursOnly={drawerBoothOnly}
+                    onBoothHoursChange={setDrawerBoothOnly}
+                  />
+                </div>
+              )}
+              {filteredDrawerMeetings.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-8">No meetings match those filters.</p>
+              ) : (
             <MeetingsTable
               cardsOnly
               groupByDate
               showConferencePill
               tableName="conference_meetings"
-              meetings={myUpcomingMeetings}
+              meetings={filteredDrawerMeetings}
               actionOptions={actionOptions}
               colorMap={colorMaps.action || {}}
               userOptions={userOptions}
@@ -1021,6 +1058,8 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
               onNotesClick={openMeetingNotes}
               onEdit={handleMeetingEdit}
             />
+              )}
+            </>
           )}
         </DashboardDrawer>
       )}

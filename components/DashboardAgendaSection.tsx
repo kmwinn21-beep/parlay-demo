@@ -54,7 +54,7 @@ function AgendaDayBar({ label, count, expanded, onToggle }: {
       type="button"
       onClick={onToggle}
       aria-expanded={expanded}
-      className="w-full flex items-center gap-2 text-left px-4 py-3 bg-gray-50 border-b border-gray-200 hover:bg-gray-100 transition-colors"
+      className="w-full flex items-center gap-2 text-left pl-4 pr-6 py-3 bg-gray-50 border-b border-gray-200 hover:bg-gray-100 transition-colors"
     >
       <svg
         className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`}
