@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { dbReady } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
 import { QuickNotesSection } from '@/components/QuickNotesSection';
+import { DashboardTouchpointsSection } from '@/components/DashboardTouchpointsSection';
 import { getServerSessionUser } from '@/lib/auth';
 import { DashboardConferenceBanner, type BannerData } from '@/components/DashboardConferenceBanner';
 import { DashboardOpenFollowUps, type OpenFollowUp } from '@/components/DashboardOpenFollowUps';
@@ -342,10 +343,14 @@ export default function DashboardPage() {
         <StatsSection />
       </Suspense>
 
-      {/* Quick Notes — the agenda that used to sit beside it now opens from the
-          action card's Agenda button instead. */}
-      <div className="max-h-[489px] flex flex-col min-h-0">
-        <QuickNotesSection />
+      {/* Floor Notes, with the touchpoint types beside it */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+        <div className="lg:col-span-2 max-h-[489px] flex flex-col min-h-0">
+          <QuickNotesSection />
+        </div>
+        <div className="lg:col-span-1 flex flex-col min-h-0">
+          <DashboardTouchpointsSection />
+        </div>
       </div>
 
       {/* Targets + Recent */}

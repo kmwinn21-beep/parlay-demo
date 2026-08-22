@@ -404,12 +404,14 @@ export function BadgeScanResultsModal({
 
 // ── TouchpointQuickModal ──────────────────────────────────────────────────────
 
-export function TouchpointQuickModal({ onClose, defaultConferenceId, defaultCompanyId, defaultAttendeeId }: {
+export function TouchpointQuickModal({ onClose, defaultConferenceId, defaultCompanyId, defaultAttendeeId, defaultTouchpointId }: {
   onClose: () => void;
   defaultConferenceId?: number | null;
   /** Opens with these already chosen — used when logging from a record. */
   defaultCompanyId?: number | null;
   defaultAttendeeId?: number | null;
+  /** Opens with this type already picked — used by the dashboard's type buttons. */
+  defaultTouchpointId?: number | null;
 }) {
   const { user } = useUser();
   const [conferences, setConferences] = useState<Conference[]>([]);
@@ -425,7 +427,7 @@ export function TouchpointQuickModal({ onClose, defaultConferenceId, defaultComp
   const [selectedConference, setSelectedConference] = useState<Conference | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [selectedAttendees, setSelectedAttendees] = useState<Attendee[]>([]);
-  const [selectedTouchpointId, setSelectedTouchpointId] = useState<number | null>(null);
+  const [selectedTouchpointId, setSelectedTouchpointId] = useState<number | null>(defaultTouchpointId ?? null);
   const [submitting, setSubmitting] = useState(false);
 
   // Load conferences, all companies, and touchpoint options on mount
