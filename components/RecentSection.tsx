@@ -59,27 +59,31 @@ export function RecentSection({ allConferences, defaultConferenceId }: Props) {
   const pastConfs = allConferences.filter(c => c.status === 'past').sort((a, b) => b.start_date.localeCompare(a.start_date));
 
   return (
-    <div className="card h-full flex flex-col overflow-hidden">
+    // The card is desktop-only: on a phone this already sits inside the action
+    // card, so a second one just nested a panel in a panel. Without it the day
+    // bars run the full width of the section.
+    <div className="h-full flex flex-col overflow-hidden p-0 lg:bg-white lg:rounded-xl lg:shadow-sm lg:border lg:border-gray-100 lg:p-6">
       {/* Header */}
-      <div className="flex flex-col gap-2 mb-5 flex-shrink-0">
-        {/* Row 1: My/Full Agenda toggle + View link */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+      <div className="flex flex-col gap-2 mb-4 flex-shrink-0 px-4 lg:px-0">
+        {/* Row 1: My/Full Agenda toggle — full width on a phone, where the
+            View link is dropped and there is nothing to share the row with */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-1 lg:flex-none items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
             <button
               onClick={() => setAgendaView('my')}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${agendaView === 'my' ? 'bg-white text-brand-primary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`flex-1 lg:flex-none px-3 py-1.5 lg:py-1 rounded-md text-xs font-medium transition-all ${agendaView === 'my' ? 'bg-white text-brand-primary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
             >
               My Agenda
             </button>
             <button
               onClick={() => setAgendaView('full')}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${agendaView === 'full' ? 'bg-white text-brand-primary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`flex-1 lg:flex-none px-3 py-1.5 lg:py-1 rounded-md text-xs font-medium transition-all ${agendaView === 'full' ? 'bg-white text-brand-primary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
             >
               Full Agenda
             </button>
           </div>
           {selectedConference && (
-            <Link href={`/conferences/${selectedConference.id}`} className="text-sm text-brand-secondary hover:underline">View →</Link>
+            <Link href={`/conferences/${selectedConference.id}`} className="hidden lg:inline text-sm text-brand-secondary hover:underline">View →</Link>
           )}
         </div>
 
