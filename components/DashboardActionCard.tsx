@@ -18,6 +18,7 @@ import { useUserOptions } from '@/lib/useUserOptions';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { DashboardDrawer } from '@/components/DashboardDrawer';
 import { AgendaDrawer } from '@/components/AgendaDrawer';
+import { AttendeesDrawer } from '@/components/AttendeesDrawer';
 import { MeetingDateFilterBar } from '@/components/MeetingDateFilterBar';
 import { isBoothHours } from '@/lib/meetingTime';
 
@@ -703,6 +704,7 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
   const [badgeScanRelevance, setBadgeScanRelevance] = useState<Record<string, ProductRelevanceResult[]>>({});
   const [meetingsOpen, setMeetingsOpen] = useState(false);
   const [agendaOpen, setAgendaOpen] = useState(false);
+  const [attendeesOpen, setAttendeesOpen] = useState(false);
   const [drawerDateFilter, setDrawerDateFilter] = useState<string[]>([]);
   const [drawerBoothOnly, setDrawerBoothOnly] = useState(false);
   // Whoever is signed in, by first name where we have one.
@@ -963,11 +965,26 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
           </button>
         )}
 
-        {/* Middle — Touchpoints */}
+        {/* Phones log touchpoints from the Touchpoints section beside Floor
+            Notes, so this slot gives way to Attendees there. */}
+        <button
+          type="button"
+          onClick={() => { setAttendeesOpen(true); setAgendaOpen(false); setMeetingsOpen(false); }}
+          className="lg:hidden flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-sky-50 transition-colors group"
+        >
+          <div className="w-8 h-8 rounded-full bg-sky-100 flex items-center justify-center group-hover:bg-sky-500 transition-colors flex-shrink-0">
+            <svg className="w-4 h-4 text-sky-600 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+          </div>
+          <p className="text-xs text-gray-500 leading-tight">Attendees</p>
+        </button>
+
+        {/* Middle — Touchpoints, desktop only */}
         <button
           type="button"
           onClick={() => setShowTouchpointsModal(true)}
-          className={`flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-green-50 transition-all group ${meetingsOpen ? 'opacity-40 grayscale' : ''}`}
+          className={`hidden lg:flex flex-1 flex-col items-center gap-1 p-2 rounded-xl hover:bg-green-50 transition-all group ${meetingsOpen ? 'opacity-40 grayscale' : ''}`}
         >
           <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center group-hover:bg-green-500 transition-colors flex-shrink-0">
             <svg className="w-4 h-4 text-green-600 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -1013,6 +1030,8 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
       </div>
 
       {agendaOpen && <AgendaDrawer onClose={() => setAgendaOpen(false)} />}
+
+      {attendeesOpen && <AttendeesDrawer onClose={() => setAttendeesOpen(false)} />}
 
       {meetingsOpen && (
         <DashboardDrawer

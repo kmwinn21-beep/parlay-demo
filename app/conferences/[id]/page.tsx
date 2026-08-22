@@ -16,6 +16,7 @@ import { ScrollRow } from '@/components/ScrollRow';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { PinnedNotesSection, type PinnedNote } from '@/components/PinnedNotesSection';
 import { NotesPopover } from '@/components/NotesPopover';
+import { MobileAttendeeCard, ConferenceCountTooltip, type AttendeeCardRow } from '@/components/MobileAttendeeCard';
 import { INLINE_EDIT_FIELD_CLASS, InlineEditRow, InlineEditPlaceholder } from '@/components/InlineEditField';
 import { CompanyTable } from '@/components/CompanyTable';
 import { SocialEventsTable, type SocialEvent } from '@/components/SocialEventsTable';
@@ -110,33 +111,6 @@ function conferenceBadgeClass(count: number) {
   if (count === 3) return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700';
   if (count === 2) return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700';
   return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600';
-}
-
-function ConferenceCountTooltip({ count, names }: { count: number; names?: string }) {
-  const [pos, setPos] = useState<{ top: number; left: number; width: number; above: boolean } | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-  const list = names ? names.split(',').map(n => n.trim()).filter(Boolean) : [];
-  const handleMouseEnter = () => {
-    if (!ref.current || list.length === 0) return;
-    const rect = ref.current.getBoundingClientRect();
-    const w = Math.min(240, window.innerWidth - 16);
-    const left = Math.max(8, Math.min(rect.left + rect.width / 2 - w / 2, window.innerWidth - w - 8));
-    const above = rect.top > 180;
-    setPos({ top: above ? rect.top - 8 : rect.bottom + 8, left, width: w, above });
-  };
-  return (
-    <div ref={ref} className="relative inline-block" onMouseEnter={handleMouseEnter} onMouseLeave={() => setPos(null)}>
-      <span className={conferenceBadgeClass(count)} style={{ cursor: list.length > 0 ? 'pointer' : 'default' }}>{count}</span>
-      {pos && list.length > 0 && (
-        <div style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999, transform: pos.above ? 'translateY(-100%)' : 'translateY(0)' }}>
-          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2.5">
-            <p className="font-semibold mb-1.5 text-gray-300 uppercase tracking-wide text-[10px]">Conferences Attended</p>
-            <ul className="space-y-1">{list.map((name, i) => <li key={i} className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />{name}</li>)}</ul>
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }
 
 interface Conference {
@@ -3291,111 +3265,21 @@ export default function ConferenceDetailPage() {
             <>
               {/* Mobile card list */}
               <div className="block lg:hidden divide-y divide-gray-100 -mx-6">
-                {paginatedAttendees.map((attendee) => {
-                  const seniority = effectiveSeniority(attendee.seniority, attendee.title);
-                  return (
-                    <div key={attendee.id} className={`px-4 py-4 ${selectedAttendeeIds.has(attendee.id) ? 'bg-blue-50' : 'bg-white'}`}>
-                      {/* Name / title / company share a column so the photo can
-                          sit alongside all three rather than only the name. */}
-                      <div className="flex items-center gap-3">
-                      <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <input type="checkbox" checked={selectedAttendeeIds.has(attendee.id)} onChange={() => toggleAttendeeSelect(attendee.id)} className="accent-brand-secondary flex-shrink-0" />
-                          {/* The name opens the quick-view drawer, so the icon
-                              that used to do that is gone. */}
-                          <button
-                            type="button"
-                            onClick={() => { setQuickViewId(attendee.id); setQuickViewType('attendee'); }}
-                            className="font-semibold text-brand-secondary hover:underline text-sm truncate text-left"
-                          >
-                            {attendee.first_name} {attendee.last_name}
-                          </button>
-                        </div>
-                      </div>
-                      {attendee.title && (
-                        <div className="flex items-center gap-1 mt-1 ml-6">
-                          <button type="button" onClick={() => setClassifyingAttendee({ id: attendee.id, title: attendee.title! })} className="text-xs text-gray-500 hover:text-brand-secondary text-left">
-                            {attendee.title}
-                          </button>
-                          {!titleMetaLoading && shouldWarnForTitleMetadata(titleMetaMap[attendee.id]) && (
-                            <span className="text-amber-500 flex-shrink-0 pointer-events-none">
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      {attendee.company_name && (
-                        <div className="mt-1 ml-6 flex items-center gap-1.5 flex-wrap">
-                          {attendee.company_id ? (
-                            <button
-                              type="button"
-                              onClick={() => { setQuickViewId(attendee.company_id!); setQuickViewType('company'); }}
-                              className="text-xs text-gray-700 hover:text-brand-secondary hover:underline text-left"
-                            >
-                              {attendee.company_name}
-                            </button>
-                          ) : (
-                            <span className="text-xs text-gray-700">{attendee.company_name}</span>
-                          )}
-                          {/* Whoever owns the company, in the initialled pill
-                              used for reps everywhere else. */}
-                          {parseRepIds(attendee.company_assigned_user ?? '')
-                            .map(rid => userOptions.find(u => u.id === rid))
-                            .filter((u): u is UserOption => Boolean(u))
-                            .map(user => (
-                              <span
-                                key={user.id}
-                                title={user.value}
-                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap flex-shrink-0 ${getPreset(colorMaps.user?.[user.value]).badgeClass}`}
-                              >
-                                <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                </svg>
-                                {getRepInitials(user.value)}
-                              </span>
-                            ))}
-                        </div>
-                      )}
-                      </div>
-                      {showAttendeePhotos && (
-                        <AttendeeInitialsAvatar
-                          name={`${attendee.first_name} ${attendee.last_name}`}
-                          photoUrl={attendee.photo_url}
-                          title={attendee.title}
-                          companyName={attendee.company_name}
-                          className="w-11 h-11 text-xs"
-                        />
-                      )}
-                      </div>
-                      {/* Everything else rides one scrolling line, company type first */}
-                      <ScrollRow className="mt-2 ml-6" gapClass="gap-2">
-                        {attendee.company_type && (
-                          <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs flex-shrink-0 whitespace-nowrap`}>{attendee.company_type}</span>
-                        )}
-                        {(attendee.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => (
-                          <span key={s} className={`${getBadgeClass(s, colorMaps.status || {})} flex-shrink-0 whitespace-nowrap`}>{formatStatusLabel(s)}</span>
-                        ))}
-                        <span className={`${getBadgeClass(seniority, colorMaps.seniority || {})} inline-flex items-center gap-1 flex-shrink-0 whitespace-nowrap`}>
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                          {seniority}
-                        </span>
-                        <span className="inline-flex items-center gap-1 flex-shrink-0 whitespace-nowrap">
-                          <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                          <ConferenceCountTooltip count={Number(attendee.conference_count ?? 0)} names={attendee.conference_names as string | undefined} />
-                        </span>
-                        {Number(attendee.entity_notes_count ?? 0) > 0 && (
-                          <span className="flex-shrink-0">
-                            <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.entity_notes_count)} />
-                          </span>
-                        )}
-                        {attendee.created_at && (
-                          <span className="text-[11px] text-gray-400 flex-shrink-0 whitespace-nowrap">Added {fmtDate(attendee.created_at)}</span>
-                        )}
-                      </ScrollRow>
-                    </div>
-                  );
-                })}
+                {paginatedAttendees.map((attendee) => (
+                  <MobileAttendeeCard
+                    key={attendee.id}
+                    attendee={attendee as unknown as AttendeeCardRow}
+                    showPhotos={showAttendeePhotos}
+                    selected={selectedAttendeeIds.has(attendee.id)}
+                    onToggleSelect={toggleAttendeeSelect}
+                    onOpenAttendee={(id) => { setQuickViewId(id); setQuickViewType('attendee'); }}
+                    onOpenCompany={(id) => { setQuickViewId(id); setQuickViewType('company'); }}
+                    onClassifyTitle={(id, title) => setClassifyingAttendee({ id, title })}
+                    titleWarning={!titleMetaLoading && shouldWarnForTitleMetadata(titleMetaMap[attendee.id])}
+                    userOptions={userOptions}
+                    colorMaps={colorMaps}
+                  />
+                ))}
               </div>
 
               {/* Desktop table */}

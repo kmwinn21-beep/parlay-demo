@@ -1340,7 +1340,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
         {/* Mobile: camera + plus icon buttons */}
         <div className="flex items-center gap-1.5 lg:hidden">
           <div className="relative" ref={cameraMenuRef}>
-            <button type="button" onClick={() => { setShowCameraMenu(v => !v); setBadgeSourceStep(false); }} disabled={isScanning}
+            <button type="button" onClick={() => { expandSection(); setShowCameraMenu(v => !v); setBadgeSourceStep(false); }} disabled={isScanning}
               className="border border-brand-secondary/30 hover:border-brand-secondary hover:bg-blue-50 p-1.5 rounded-lg text-brand-secondary transition-colors disabled:opacity-50" title="Scan">
               {isScanning
                 ? <div className="w-4 h-4 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin" />
