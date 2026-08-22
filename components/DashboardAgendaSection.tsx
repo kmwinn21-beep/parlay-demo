@@ -8,6 +8,37 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { MeetingNotesDrawer } from '@/components/MeetingNotesDrawer';
 import { useDrawerResize } from '@/lib/useDrawerResize';
+import { KebabMenu } from '@/components/KebabMenu';
+
+/**
+ * The day bar the meetings tab uses in conference details, so the agenda
+ * groups read the same way. Full width — the rows below it run edge to edge
+ * rather than sitting inside a card of their own.
+ */
+function AgendaDayBar({ label, count, expanded, onToggle }: {
+  label: string;
+  count: number;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={expanded}
+      className="w-full flex items-center gap-2 text-left px-4 py-2 bg-gray-50 border-b border-gray-200 hover:bg-gray-100 transition-colors"
+    >
+      <svg
+        className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`}
+        fill="none" stroke="currentColor" viewBox="0 0 24 24"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      </svg>
+      <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">{label}</span>
+      <span className="text-xs text-gray-400">({count})</span>
+    </button>
+  );
+}
 
 interface AgendaItem {
   id: number;
@@ -346,23 +377,19 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
             <Link href={`/conferences/${conferenceId}`} className="mt-2 inline-block text-xs text-brand-secondary hover:underline">Go to conference →</Link>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div>
             {myDayGroups.map(group => {
               const expanded = myExpandedDays.has(group.day_label);
               return (
-                <div key={group.day_label} className="rounded-xl border border-brand-secondary bg-white overflow-hidden">
-                  <button onClick={() => setMyExpandedDays(prev => { const s = new Set(prev); s.has(group.day_label) ? s.delete(group.day_label) : s.add(group.day_label); return s; })}
-                    className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-blue-50/30 transition-colors">
-                    <div className="flex items-center gap-2">
-                      <svg className="h-3.5 w-3.5 text-brand-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        {expanded ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /> : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />}
-                      </svg>
-                      <span className="text-xs font-semibold text-brand-primary">{group.day_label}</span>
-                    </div>
-                    <span className="text-xs text-gray-400">{group.items.length} item{group.items.length !== 1 ? 's' : ''}</span>
-                  </button>
+                <div key={group.day_label} className="bg-white">
+                  <AgendaDayBar
+                    label={group.day_label}
+                    count={group.items.length}
+                    expanded={expanded}
+                    onToggle={() => setMyExpandedDays(prev => { const s = new Set(prev); s.has(group.day_label) ? s.delete(group.day_label) : s.add(group.day_label); return s; })}
+                  />
                   {expanded && (
-                    <div className="divide-y divide-gray-200 border-t border-brand-secondary/30">
+                    <div className="divide-y divide-gray-200">
                       {group.items.map(item => {
                         const isMeeting = item.sourceType === 'meeting';
                         const noteOpen = expandedNotes.has(item.key);
@@ -373,11 +400,13 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
                         const subtitle = isMeeting ? [item.attendee_title, item.company_name].filter(Boolean).join(' · ') : null;
                         return (
                           <div key={item.key}>
-                            <div className={`flex gap-3 px-4 pt-2.5 pb-1.5 ${isMeeting ? 'bg-brand-accent/15' : ''}`}>
-                              <div className="w-20 shrink-0 pt-0.5">
-                                {item.start_time && <p className="text-xs text-gray-500 tabular-nums leading-snug">{formatTime12h(item.start_time)}</p>}
-                              </div>
+                            <div className={`flex items-start gap-2 px-4 pt-2.5 pb-1.5 ${isMeeting ? 'bg-brand-accent/15' : ''}`}>
                               <div className="flex-1 min-w-0">
+                                {item.start_time && (
+                                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide tabular-nums leading-snug mb-0.5">
+                                    {formatTime12h(item.start_time)}
+                                  </p>
+                                )}
                                 <ExpandableItemText>
                                   <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
                                     <p className="text-xs font-medium text-gray-800 leading-snug">{item.title}</p>
@@ -388,48 +417,38 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
                                 </ExpandableItemText>
                                 {!noteOpen && currentVal && !isMeeting && <p className="mt-1 text-xs text-gray-400 italic line-clamp-1">{currentVal}</p>}
                               </div>
-                              <div className="shrink-0 pl-1 pt-0.5">
-                                {isMeeting ? (
-                                  <button
-                                    onClick={() => setNotetakerMeetingId(item.sourceId)}
-                                    className="text-xs text-gray-400 hover:text-brand-secondary transition-colors"
-                                  >
-                                    Notes
-                                  </button>
-                                ) : (
-                                  <div className="flex items-center gap-1.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setNoteDrawerItem(item);
-                                        setDrawerDraft(currentVal);
-                                        setDrawerDiscardPrompt(false);
-                                      }}
-                                      className="text-gray-300 hover:text-brand-secondary transition-colors"
-                                      title="Expand notes"
-                                    >
-                                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                                      </svg>
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        if (noteOpen) {
-                                          if (isDirty) {
-                                            setPendingCloseKey(item.key);
-                                          } else {
-                                            setPendingCloseKey(null);
-                                            setExpandedNotes(prev => { const s = new Set(prev); s.delete(item.key); return s; });
-                                          }
-                                        } else {
-                                          setPendingCloseKey(null);
-                                          setExpandedNotes(prev => { const s = new Set(prev); s.add(item.key); return s; });
-                                        }
-                                      }}
-                                      className="text-xs text-gray-400 hover:text-brand-secondary transition-colors"
-                                    >{noteOpen ? 'Close' : 'Notes'}</button>
-                                  </div>
-                                )}
+                              <div className="shrink-0 -mr-1">
+                                <KebabMenu
+                                  title="Item actions"
+                                  items={isMeeting
+                                    ? [{ label: 'Notes', onClick: () => setNotetakerMeetingId(item.sourceId) }]
+                                    : [
+                                        {
+                                          label: noteOpen ? 'Close notes' : 'Notes',
+                                          onClick: () => {
+                                            if (noteOpen) {
+                                              if (isDirty) {
+                                                setPendingCloseKey(item.key);
+                                              } else {
+                                                setPendingCloseKey(null);
+                                                setExpandedNotes(prev => { const s = new Set(prev); s.delete(item.key); return s; });
+                                              }
+                                            } else {
+                                              setPendingCloseKey(null);
+                                              setExpandedNotes(prev => { const s = new Set(prev); s.add(item.key); return s; });
+                                            }
+                                          },
+                                        },
+                                        {
+                                          label: 'Expand notes',
+                                          onClick: () => {
+                                            setNoteDrawerItem(item);
+                                            setDrawerDraft(currentVal);
+                                            setDrawerDiscardPrompt(false);
+                                          },
+                                        },
+                                      ]}
+                                />
                               </div>
                             </div>
                             {item.description && <AgendaDescription text={item.description} className={`px-4 pb-1 ${isMeeting ? 'bg-brand-accent/15' : ''}`} />}
@@ -502,31 +521,29 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
             <Link href={`/conferences/${conferenceId}`} className="mt-2 inline-block text-xs text-brand-secondary hover:underline">Go to conference →</Link>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div>
             {days.map(day => {
               const expanded = fullExpandedDays.has(day.day_label);
               return (
-                <div key={day.day_label} className="rounded-xl border border-brand-primary/30 bg-white overflow-hidden">
-                  <button onClick={() => setFullExpandedDays(prev => { const s = new Set(prev); s.has(day.day_label) ? s.delete(day.day_label) : s.add(day.day_label); return s; })}
-                    className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-gray-50 transition-colors">
-                    <div className="flex items-center gap-2">
-                      <svg className="h-3.5 w-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        {expanded ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /> : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />}
-                      </svg>
-                      <span className="text-xs font-semibold text-brand-primary">{day.day_label}</span>
-                    </div>
-                    <span className="text-xs text-gray-400">{day.items.length} session{day.items.length !== 1 ? 's' : ''}</span>
-                  </button>
+                <div key={day.day_label} className="bg-white">
+                  <AgendaDayBar
+                    label={day.day_label}
+                    count={day.items.length}
+                    expanded={expanded}
+                    onToggle={() => setFullExpandedDays(prev => { const s = new Set(prev); s.has(day.day_label) ? s.delete(day.day_label) : s.add(day.day_label); return s; })}
+                  />
                   {expanded && (
-                    <div className="divide-y divide-gray-200 border-t border-brand-primary/20">
+                    <div className="divide-y divide-gray-200">
                       {day.items.map(item => {
                         const inMyAgenda = myAgendaItemIds.has(item.id);
                         return (
-                          <div key={item.id} className="flex gap-3 px-4 pt-2.5 pb-1.5">
-                            <div className="w-20 shrink-0 pt-0.5">
-                              {item.start_time && <p className="text-xs text-gray-500 tabular-nums">{formatTime12h(item.start_time)}</p>}
-                            </div>
+                          <div key={item.id} className="flex items-start gap-2 px-4 pt-2.5 pb-1.5">
                             <div className="flex-1 min-w-0">
+                              {item.start_time && (
+                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide tabular-nums leading-snug mb-0.5">
+                                  {formatTime12h(item.start_time)}
+                                </p>
+                              )}
                               <ExpandableItemText>
                                 <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
                                   {item.session_type && <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${sessionBadgeClass(item.session_type)}`}>{item.session_type}</span>}

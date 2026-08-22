@@ -59,9 +59,11 @@ export function RecentSection({ allConferences, defaultConferenceId }: Props) {
   const pastConfs = allConferences.filter(c => c.status === 'past').sort((a, b) => b.start_date.localeCompare(a.start_date));
 
   return (
-    <div className="card h-full flex flex-col overflow-hidden">
+    // Phones drop the card's side padding so the agenda day bars run edge to
+    // edge like the meetings list; the header keeps its own inset.
+    <div className="card h-full flex flex-col overflow-hidden px-0 lg:px-6">
       {/* Header */}
-      <div className="flex flex-col gap-2 mb-5 flex-shrink-0">
+      <div className="flex flex-col gap-2 mb-5 flex-shrink-0 px-6 lg:px-0">
         {/* Row 1: My/Full Agenda toggle + View link */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
