@@ -136,83 +136,6 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
-/**
- * Reassign a set of follow-ups in one go, notifying each newly-assigned rep
- * once for the whole batch.
- *
- * A rep counts as newly assigned only for the rows they weren't already on, so
- * adding someone to a selection they already partly own tells them about the
- * rows that actually changed hands. A batch that turns out to move a single row
- * for a given rep sends that rep the ordinary single-follow-up notification,
- * pointing at the attendee; a genuine batch points at the follow-ups list,
- * since the rows can span attendees and conferences.
- */
-async function batchAssignRep(
-  db: Awaited<ReturnType<typeof getDb>>,
-  user: { id: number; email: string },
-  idList: number[],
-  assignedRep: string | null,
-): Promise<void> {
-  const ph = idList.map(() => '?').join(',');
-
-  const before = await db.execute({
-    sql: `SELECT fu.id, fu.assigned_rep, fu.attendee_id, a.first_name, a.last_name
-            FROM follow_ups fu LEFT JOIN attendees a ON fu.attendee_id = a.id
-           WHERE fu.id IN (${ph})`,
-    args: idList,
-  });
-
-  await db.execute({
-    sql: `UPDATE follow_ups SET assigned_rep = ? WHERE id IN (${ph})`,
-    args: [assignedRep, ...idList],
-  });
-
-  if (!assignedRep) return;
-
-  // Per rep: the rows they were not already assigned to.
-  const newIds = parseNotifIds(assignedRep);
-  const gained = new Map<number, { id: number; attendeeId: number | null; attendeeName: string }[]>();
-  for (const row of before.rows) {
-    const prev = new Set(parseNotifIds(row.assigned_rep as string | null));
-    const name = `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim();
-    for (const repId of newIds) {
-      if (prev.has(repId)) continue;
-      const list = gained.get(repId) ?? [];
-      list.push({
-        id: Number(row.id),
-        attendeeId: row.attendee_id != null ? Number(row.attendee_id) : null,
-        attendeeName: name,
-      });
-      gained.set(repId, list);
-    }
-  }
-  if (gained.size === 0) return;
-
-  const changedByConfigId = await getConfigIdByEmail(user.email, db);
-
-  for (const [repId, rows] of Array.from(gained.entries())) {
-    const userIds = await resolveUserIds(String(repId), changedByConfigId);
-    if (userIds.length === 0) continue;
-
-    const single = rows.length === 1 && rows[0].attendeeId != null;
-    await createNotifications({
-      userIds,
-      type: 'attendee',
-      recordId: rows[0].id,
-      recordName: single ? rows[0].attendeeName : `${rows.length} follow-ups`,
-      message: single
-        ? `You've been assigned to a follow-up for ${rows[0].attendeeName}`
-        : `You've been assigned to ${rows.length} follow-ups`,
-      changedByEmail: user.email,
-      changedByConfigId,
-      // A batch has no single attendee to land on, so it opens the list.
-      entityType: single ? 'attendee' : 'follow_up',
-      entityId: single ? rows[0].attendeeId! : rows[0].id,
-      prefKey: 'follow_up_assigned',
-    });
-  }
-}
-
 export async function PATCH(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
@@ -220,25 +143,7 @@ export async function PATCH(request: NextRequest) {
   const db = await getDb(user?.accountId);
   try {
     const body = await request.json();
-    const { id, ids, completed, assigned_rep, next_steps, follow_up_action } = body;
-
-    // Batch reassignment. Taking the rows together is what lets one rep get a
-    // single "you've been assigned to N follow-ups" instead of N separate
-    // notifications and N separate emails.
-    const idList = Array.isArray(ids)
-      ? Array.from(new Set(ids.map(Number).filter((n: number) => Number.isInteger(n) && n > 0)))
-      : null;
-
-    if (idList) {
-      if (idList.length === 0) {
-        return NextResponse.json({ error: 'ids must contain at least one id' }, { status: 400 });
-      }
-      if (!('assigned_rep' in body)) {
-        return NextResponse.json({ error: 'ids is only supported with assigned_rep' }, { status: 400 });
-      }
-      await batchAssignRep(db, user, idList, assigned_rep ?? null);
-      return NextResponse.json({ success: true, updated: idList.length });
-    }
+    const { id, completed, assigned_rep, next_steps, follow_up_action } = body;
 
     if (id == null) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
@@ -293,9 +198,7 @@ export async function PATCH(request: NextRequest) {
       const addedIds = newIds.filter(repId => !prevIds.has(repId));
       if (addedIds.length > 0) {
         const fuRow = await db.execute({
-          sql: `SELECT fu.attendee_id, a.first_name, a.last_name
-                  FROM follow_ups fu JOIN attendees a ON fu.attendee_id = a.id
-                 WHERE fu.id = ?`,
+          sql: `SELECT a.first_name, a.last_name FROM follow_ups fu JOIN attendees a ON fu.attendee_id = a.id WHERE fu.id = ?`,
           args: [id],
         });
         if (fuRow.rows.length > 0) {
@@ -312,11 +215,7 @@ export async function PATCH(request: NextRequest) {
             changedByEmail: user.email,
             changedByConfigId,
             entityType: 'attendee',
-            // The attendee the follow-up is about. This used to be the
-            // follow-up's own id, which sent the reader to whichever unrelated
-            // attendee happened to share that number.
-            entityId: Number(a.attendee_id),
-            prefKey: 'follow_up_assigned',
+            entityId: id,
           });
         }
       }

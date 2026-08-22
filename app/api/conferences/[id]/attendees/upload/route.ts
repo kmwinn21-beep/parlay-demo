@@ -7,7 +7,6 @@ import { sendNotificationEmail } from '@/lib/email';
 export const maxDuration = 300;
 import { getConfigOptionValues } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
-import { createNotifications, getConfigIdByEmail } from '@/lib/notifications';
 import type { Client } from '@libsql/client';
 import { parseFile, parseFileWithMapping, classifyCompanyType, classifySeniority, classifyFunction, matchConfigOption, type ColumnMapping } from '@/lib/parsers';
 import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
@@ -1145,21 +1144,18 @@ export async function POST(
                   WHERE id = ?`,
             args: [result.new_count, result.updated_count, result.skipped_count, jobId],
           }).catch(() => {});
-          // In-app notification. The email below is the one the reader gets,
-          // so the helper's generic one is skipped.
-          await createNotifications({
-            db,
-            userIds: [currentUser.id],
-            type: 'conference',
-            recordId: conferenceId,
-            recordName: conferenceName,
-            message: `Upload complete for ${conferenceName}: ${result.new_count} new attendee(s) added, ${result.updated_count} record(s) updated.`,
-            changedByEmail: currentUser.email,
-            changedByConfigId: await getConfigIdByEmail(currentUser.email, db),
-            entityType: 'conference',
-            entityId: conferenceId,
-            skipEmail: true,
-          });
+          // In-app notification
+          await db.execute({
+            sql: `INSERT INTO notifications
+                  (user_id, type, record_id, record_name, message, changed_by_email,
+                   entity_type, entity_id, is_read)
+                  VALUES (?, 'conference', ?, ?, ?, ?, 'conference', ?, 0)`,
+            args: [
+              currentUser.id, conferenceId, conferenceName,
+              `Upload complete for ${conferenceName}: ${result.new_count} new attendee(s) added, ${result.updated_count} record(s) updated.`,
+              currentUser.email, conferenceId,
+            ],
+          }).catch(() => {});
           // Email notification
           const BASE = process.env.NEXT_PUBLIC_BASE_URL ?? '';
           await sendNotificationEmail(
@@ -1174,21 +1170,17 @@ export async function POST(
             sql: `UPDATE upload_jobs SET status = 'error', error_message = ?, completed_at = datetime('now') WHERE id = ?`,
             args: [msg, jobId],
           }).catch(() => {});
-          // In-app only, as before — someone watching the upload fail in the UI
-          // doesn't need an email about it too.
-          await createNotifications({
-            db,
-            userIds: [currentUser.id],
-            type: 'conference',
-            recordId: conferenceId,
-            recordName: conferenceName,
-            message: `Upload failed for ${conferenceName}. Please try again or contact support if the issue persists.`,
-            changedByEmail: currentUser.email,
-            changedByConfigId: await getConfigIdByEmail(currentUser.email, db),
-            entityType: 'conference',
-            entityId: conferenceId,
-            skipEmail: true,
-          });
+          await db.execute({
+            sql: `INSERT INTO notifications
+                  (user_id, type, record_id, record_name, message, changed_by_email,
+                   entity_type, entity_id, is_read)
+                  VALUES (?, 'conference', ?, ?, ?, ?, 'conference', ?, 0)`,
+            args: [
+              currentUser.id, conferenceId, conferenceName,
+              `Upload failed for ${conferenceName}. Please try again or contact support if the issue persists.`,
+              currentUser.email, conferenceId,
+            ],
+          }).catch(() => {});
         })
       );
 

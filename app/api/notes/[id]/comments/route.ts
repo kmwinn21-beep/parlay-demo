@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
-import { getConfigIdByEmail, notifyNoteComment, notifyMentionedUsers, parseNotifIds } from '@/lib/notifications';
+import { getConfigIdByEmail, notifyNoteComment } from '@/lib/notifications';
 
 export async function GET(
   request: NextRequest,
@@ -157,23 +157,6 @@ export async function POST(
     } catch { /* non-fatal */ }
 
     const commenterConfigId = await getConfigIdByEmail(user.email, db);
-
-    // The comment stored tagged_users but nobody was ever told about it.
-    // Same gate as a mention in the note itself, only the wording differs.
-    const taggedConfigIds = parseNotifIds(tagged_users);
-    if (taggedConfigIds.length > 0) {
-      notifyMentionedUsers({
-        taggedConfigIds,
-        mentionerName: commenterName,
-        mentionerEmail: user.email,
-        mentionerConfigId: commenterConfigId,
-        entityName: recordName,
-        entityType: String(note.entity_type),
-        entityId: Number(note.entity_id),
-        surface: 'comment',
-      });
-    }
-
     notifyNoteComment({
       noteId,
       noteAuthorUserId: note.author_user_id != null ? Number(note.author_user_id) : null,

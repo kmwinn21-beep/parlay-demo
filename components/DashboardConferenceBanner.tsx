@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 
@@ -360,16 +360,10 @@ function BannerStateNone() {
 // ── Main export ────────────────────────────────────────────────────────────────
 
 export function DashboardConferenceBanner({ bannerData }: { bannerData: BannerData }) {
-  // Starts expanded to match what the server rendered, then takes the stored
-  // preference after mount. Reading localStorage during the first render made
-  // anyone who had collapsed the banner disagree with the server HTML, and this
-  // banner sits in a Suspense boundary, so that mismatch took the whole
-  // dashboard down (React #418 → #422 → a crash inside React's recovery).
-  const [collapsed, setCollapsed] = useState(false);
-
-  useEffect(() => {
-    setCollapsed(localStorage.getItem('parlay_banner_collapsed') === 'true');
-  }, []);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('parlay_banner_collapsed') === 'true';
+  });
 
   const toggle = () => {
     setCollapsed(v => {

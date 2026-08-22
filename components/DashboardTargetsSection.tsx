@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
 import { useUser } from '@/components/UserContext';
 import type { DashboardConference } from './RecentSection';
@@ -11,31 +11,6 @@ import { NewMeetingModal } from '@/components/NewMeetingModal';
 import { NewNoteModal } from '@/components/NewNoteModal';
 import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
 import { TouchpointQuickModal } from '@/components/DashboardActionCard';
-
-/** Steps the target grid one row at a time. */
-function PagerButton({ dir, disabled, onClick }: {
-  dir: 'up' | 'down';
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={dir === 'up' ? 'Show previous targets' : 'Show more targets'}
-      title={dir === 'up' ? 'Previous' : 'More'}
-      className="p-1 rounded-lg text-gray-400 hover:text-brand-secondary hover:bg-gray-50 transition-colors disabled:opacity-30 disabled:hover:text-gray-400 disabled:hover:bg-transparent disabled:cursor-default"
-    >
-      <svg
-        className={`w-4 h-4 ${dir === 'up' ? 'rotate-180' : ''}`}
-        fill="none" stroke="currentColor" viewBox="0 0 24 24"
-      >
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-      </svg>
-    </button>
-  );
-}
 
 interface TargetEntry {
   attendeeId: number;
@@ -297,7 +272,6 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
   // Which activity modal a card's kebab opened, and for whom.
   const [cardAction, setCardAction] = useState<{ action: TargetAction; entry: TargetEntry } | null>(null);
 
-
   function toggleTier(key: string) {
     setSelectedTier(prev => (prev === key ? null : key));
     setTierDrawerKey(prev => (prev === key ? null : key));
@@ -306,73 +280,6 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
   const filteredTargets = scopedTargets
     .filter(t => selectedTier === null || t.tier === selectedTier)
     .sort((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier));
-
-  // ── Desktop: show three rows of cards, page through the rest ───────────────
-  // Row heights aren't uniform — a card with a long company name is taller than
-  // its neighbours — so rows are measured from the cards themselves rather than
-  // assumed, and paging snaps to a real row boundary.
-  const VISIBLE_ROWS = 3;
-  const gridRef = useRef<HTMLDivElement>(null);
-  const rowsRef = useRef<{ top: number; bottom: number }[]>([]);
-  const [viewportH, setViewportH] = useState<number | null>(null);
-  const [atTop, setAtTop] = useState(true);
-  const [atBottom, setAtBottom] = useState(false);
-
-  const measureRows = useCallback(() => {
-    const el = gridRef.current;
-    if (!el) return;
-    const kids = Array.from(el.children) as HTMLElement[];
-    if (kids.length === 0) { rowsRef.current = []; setViewportH(null); return; }
-
-    // Cards sharing an offsetTop are one grid row; the row's bottom is the
-    // tallest card in it.
-    const byTop = new Map<number, { top: number; bottom: number }>();
-    for (const k of kids) {
-      const top = k.offsetTop;
-      const bottom = top + k.offsetHeight;
-      const row = byTop.get(top);
-      if (row) row.bottom = Math.max(row.bottom, bottom);
-      else byTop.set(top, { top, bottom });
-    }
-    const rows = Array.from(byTop.values()).sort((a, b) => a.top - b.top);
-    rowsRef.current = rows;
-    setViewportH(rows.length > VISIBLE_ROWS ? rows[VISIBLE_ROWS - 1].bottom - rows[0].top : null);
-  }, []);
-
-  useLayoutEffect(() => { measureRows(); }, [measureRows, filteredTargets, loading]);
-
-  useEffect(() => {
-    const el = gridRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    // Cards reflow on width changes and when their content settles.
-    const ro = new ResizeObserver(() => measureRows());
-    ro.observe(el);
-    Array.from(el.children).forEach(c => ro.observe(c));
-    return () => ro.disconnect();
-  }, [measureRows, filteredTargets]);
-
-  const syncEdges = useCallback(() => {
-    const el = gridRef.current;
-    if (!el) return;
-    setAtTop(el.scrollTop <= 1);
-    setAtBottom(el.scrollTop + el.clientHeight >= el.scrollHeight - 1);
-  }, []);
-
-  useEffect(() => { syncEdges(); }, [syncEdges, viewportH, filteredTargets]);
-
-  const pageRows = useCallback((dir: 1 | -1) => {
-    const el = gridRef.current;
-    const rows = rowsRef.current;
-    if (!el || rows.length === 0) return;
-    const base = rows[0].top;
-    // The row currently at the top of the viewport, then step one row from it.
-    let idx = rows.findIndex(r => r.top - base >= el.scrollTop - 1);
-    if (idx < 0) idx = rows.length - 1;
-    const next = Math.min(Math.max(idx + dir, 0), rows.length - 1);
-    el.scrollTo({ top: rows[next].top - base, behavior: 'smooth' });
-  }, []);
-
-  const paged = viewportH != null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -494,40 +401,17 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
             : 'No targets match the selected filters.'}
         </p>
       ) : (
-        <div className="hidden sm:block">
-          <div
-            ref={gridRef}
-            onScroll={syncEdges}
-            style={viewportH != null ? { maxHeight: viewportH } : undefined}
-            className={`relative grid grid-cols-1 sm:grid-cols-2 gap-3 ${paged ? 'overflow-y-auto pr-1' : ''}`}
-          >
-            {filteredTargets.map(entry => (
-              <DashboardTargetCard
-                key={entry.attendeeId}
-                entry={entry}
-                hasMeeting={meetingAttendeeIds.has(entry.attendeeId)}
-                avgCostPerUnit={avgCostPerUnit}
-                onAttendeeClick={(id, name) => { setDrawerAttendeeId(id); setDrawerAttendeeName(name); }}
-                onAction={(action, target) => setCardAction({ action, entry: target })}
-              />
-            ))}
-          </div>
-
-          {/* Only worth showing once there's a fourth row to reach. */}
-          {paged && (
-            <div className="flex items-center justify-center gap-2 pt-2">
-              <PagerButton
-                dir="up"
-                disabled={atTop}
-                onClick={() => pageRows(-1)}
-              />
-              <PagerButton
-                dir="down"
-                disabled={atBottom}
-                onClick={() => pageRows(1)}
-              />
-            </div>
-          )}
+        <div className="hidden sm:grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {filteredTargets.map(entry => (
+            <DashboardTargetCard
+              key={entry.attendeeId}
+              entry={entry}
+              hasMeeting={meetingAttendeeIds.has(entry.attendeeId)}
+              avgCostPerUnit={avgCostPerUnit}
+              onAttendeeClick={(id, name) => { setDrawerAttendeeId(id); setDrawerAttendeeName(name); }}
+              onAction={(action, target) => setCardAction({ action, entry: target })}
+            />
+          ))}
         </div>
       )}
 

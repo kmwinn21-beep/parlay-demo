@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
-import { createNotifications, getConfigIdByEmail } from '@/lib/notifications';
 import Anthropic from '@anthropic-ai/sdk';
 import { trackEvent, trackFeature } from '@/lib/trackEvent';
 import { resolvePlanState } from '@/lib/trialState';
@@ -436,22 +435,21 @@ RULES
 
     // Mark analysis complete and create in-app notification
     await db.execute({ sql: `UPDATE meeting_notes SET analysis_status = 'complete', updated_at = datetime('now') WHERE meeting_id = ?`, args: [meetingId] });
-    const attendeeName = `${mtg.first_name} ${mtg.last_name}`;
-    // Tells the person who ran the analysis that it finished. In-app only, as
-    // before — they are the one who kicked it off and are waiting on screen.
-    await createNotifications({
-      db,
-      userIds: [Number(user.id)],
-      type: 'meeting',
-      recordId: meetingId,
-      recordName: attendeeName,
-      message: `Meeting analysis ready: ${attendeeName} · ${mtg.conference_name}`,
-      changedByEmail: user.email ?? '',
-      changedByConfigId: await getConfigIdByEmail(user.email ?? '', db),
-      entityType: 'meeting',
-      entityId: meetingId,
-      skipEmail: true,
-    });
+    try {
+      const attendeeName = `${mtg.first_name} ${mtg.last_name}`;
+      await db.execute({
+        sql: `INSERT INTO notifications (user_id, type, record_id, record_name, message, changed_by_email, entity_type, entity_id)
+              VALUES (?, 'meeting', ?, ?, ?, ?, 'meeting', ?)`,
+        args: [
+          Number(user.id),
+          meetingId,
+          attendeeName,
+          `Meeting analysis ready: ${attendeeName} · ${mtg.conference_name}`,
+          user.email ?? '',
+          meetingId,
+        ],
+      });
+    } catch { /* non-blocking — analysis result is still returned */ }
 
     trackEvent(user?.accountId, 'ai_analysis', user?.id).catch(() => {});
     trackFeature(user?.accountId, 'meeting_ai', user?.id).catch(() => {});
