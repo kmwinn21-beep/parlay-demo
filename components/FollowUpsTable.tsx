@@ -1355,16 +1355,7 @@ export function FollowUpsTable({
         // On a phone the same two controls sit under the attendee's name —
         // Done first, notes to its right — rather than at the foot of a sheet
         // that can be most of a screen away from the follow-ups they act on.
-        mobileHeaderActions={
-          <>
-            {renderGroupDoneButton(groupKey, rows)}
-            <FollowUpNotesPopover
-              attendeeId={head.attendee_id}
-              notesCount={Number(head.entity_notes_count)}
-              conferenceName={head.conference_name}
-            />
-          </>
-        }
+        mobileHeaderActions={renderGroupDoneButton(groupKey, rows)}
       >
         <div className="p-3 space-y-3">
           {/* Conference and rep share a line — both are context for the list. */}
@@ -1379,6 +1370,15 @@ export function FollowUpsTable({
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Rep</p>
               {renderGroupRepBody(rows)}
+            </div>
+            {/* Phone only — on desktop the notes control stays in the footer. */}
+            <div className="min-w-0 flex-1 sm:hidden">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Notes</p>
+              <FollowUpNotesPopover
+                attendeeId={head.attendee_id}
+                notesCount={Number(head.entity_notes_count)}
+                conferenceName={head.conference_name}
+              />
             </div>
           </div>
 

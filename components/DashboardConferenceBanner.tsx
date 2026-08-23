@@ -105,25 +105,35 @@ function BannerStateActive({ data, collapsed, onToggle }: {
   collapsed: boolean;
   onToggle: () => void;
 }) {
+  const statPills = (
+    <>
+      <span className="text-xs px-2 py-1 rounded-full bg-white/10 text-white whitespace-nowrap">{data.todayMeetings.length} meetings</span>
+      {data.stats.mustTargetUnengaged > 0 && (
+        <span className="text-xs px-2 py-1 rounded-full bg-red-500/30 text-red-200 whitespace-nowrap">{data.stats.mustTargetUnengaged} unengaged</span>
+      )}
+    </>
+  );
+
   return (
     <div className="bg-brand-primary rounded-2xl p-6 text-white h-full flex flex-col lg:relative">
       {/* Collapsed header — always visible */}
-      <div className="cursor-pointer flex items-center justify-between" onClick={onToggle}>
-        <div>
-          <p className="text-white/60 text-xs font-medium">Today · Day {data.dayNumber} of {data.totalDays}</p>
-          <h1 className="text-2xl font-bold font-serif">{data.conference.name}</h1>
+      <div className="cursor-pointer" onClick={onToggle}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-white/60 text-xs font-medium">Today · Day {data.dayNumber} of {data.totalDays}</p>
+            <h1 className="text-2xl font-bold font-serif">{data.conference.name}</h1>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* From sm the pills ride the name row; on a phone they'd squeeze
+                the conference name down to a couple of words, so they drop to
+                their own row below. */}
+            {collapsed && <span className="hidden sm:contents">{statPills}</span>}
+            <ChevronIcon collapsed={collapsed} />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          {collapsed && (
-            <>
-              <span className="text-xs px-2 py-1 rounded-full bg-white/10 text-white">{data.todayMeetings.length} meetings</span>
-              {data.stats.mustTargetUnengaged > 0 && (
-                <span className="text-xs px-2 py-1 rounded-full bg-red-500/30 text-red-200">{data.stats.mustTargetUnengaged} unengaged</span>
-              )}
-            </>
-          )}
-          <ChevronIcon collapsed={collapsed} />
-        </div>
+        {collapsed && (
+          <div className="flex items-center gap-2 mt-2 sm:hidden">{statPills}</div>
+        )}
       </div>
 
       {/* Expanded content */}
