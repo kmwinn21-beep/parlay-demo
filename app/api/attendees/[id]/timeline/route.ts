@@ -1,8 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { getMeetingHeld, isMeetingHeld } from '@/lib/meetingHeld';
 
-const MEETING_ACTION_KEYS = ['meeting_held', 'meeting_scheduled', 'rescheduled', 'cancelled', 'no_show'];
+/**
+ * The four things that make a conference count as real engagement, and what
+ * each is worth. They sum to exactly 100.
+ *
+ * Was six components: "meeting outcome recorded" and "note logged" were dropped
+ * and their weight redistributed, and "touchpoint" now reads the touchpoints
+ * table instead of inferring one from an action key.
+ *
+ * Duplicated verbatim in app/api/conferences/[id]/post-conference/route.ts and
+ * app/api/conferences/[id]/pre-conference/route.ts — keep all three in step.
+ */
+const DEPTH_POINTS = {
+  meetingHeld: 35,
+  socialAttended: 25,
+  followUpCompleted: 20,
+  touchpointLogged: 20,
+} as const;
 
 export async function GET(
   request: NextRequest,
@@ -40,11 +57,9 @@ export async function GET(
 
   const attendee = attRow.rows[0];
 
-  // Build action value → action_key lookup
-  const actionKeyMap = new Map<string, string>();
-  for (const row of actionOptsRes.rows) {
-    if (row.action_key) actionKeyMap.set(String(row.value), String(row.action_key));
-  }
+  // How this account spells "the meeting happened" — by action_key where one
+  // exists, falling back to the seeded 'Held'.
+  const heldOutcome = await getMeetingHeld(db);
 
   const confRows = await db.execute({
     sql: `SELECT c.id, c.name, c.start_date, c.end_date, c.location
@@ -59,7 +74,7 @@ export async function GET(
     confRows.rows.map(async (conf) => {
       const confId = conf.id as number;
 
-      const [detailsRes, meetingsRes, notesRes, followUpsRes, socialRes] = await Promise.all([
+      const [detailsRes, meetingsRes, notesRes, followUpsRes, socialRes, tpRes] = await Promise.all([
         db.execute({
           sql: `SELECT action, notes, next_steps, assigned_rep, completed
                 FROM conference_attendee_details WHERE attendee_id = ? AND conference_id = ?`,
@@ -71,11 +86,18 @@ export async function GET(
           args: [attendeeId, confId],
         }),
         db.execute({
+          // Matched on the conference id, falling back to the stored name only
+          // for rows written before entity_notes.conference_id existed. Renaming
+          // a conference used to orphan its whole note history here.
           sql: `SELECT id, content, created_at, conference_name, rep
                 FROM entity_notes
                 WHERE entity_type = 'attendee' AND entity_id = ?
-                  AND (conference_name = ? OR conference_name IS NULL OR conference_name = '')`,
-          args: [attendeeId, conf.name],
+                  AND (
+                    conference_id = ?
+                    OR (conference_id IS NULL AND LOWER(TRIM(COALESCE(conference_name, ''))) = LOWER(TRIM(?)))
+                    OR conference_name IS NULL OR conference_name = ''
+                  )`,
+          args: [attendeeId, confId, conf.name],
         }),
         db.execute({
           sql: `SELECT f.id, f.conference_id,
@@ -95,6 +117,13 @@ export async function GET(
                 WHERE r.attendee_id = ? AND se.conference_id = ?`,
           args: [attendeeId, confId],
         }),
+        // Every source counts — how a touchpoint was captured says nothing
+        // about whether the interaction happened.
+        db.execute({
+          sql: `SELECT COUNT(*) as cnt FROM attendee_touchpoints
+                WHERE attendee_id = ? AND conference_id = ?`,
+          args: [attendeeId, confId],
+        }).catch(() => ({ rows: [{ cnt: 0 }] as Record<string, unknown>[] })),
       ]);
 
       const details = detailsRes.rows[0] ?? null;
@@ -103,27 +132,25 @@ export async function GET(
       const followUps = followUpsRes.rows;
       const socialEvents = socialRes.rows;
 
-      // Resolve action_keys from conference_attendee_details.action
       const detailActions = (details?.action ? String(details.action) : '').split(',').map(s => s.trim()).filter(Boolean);
-      const detailActionKeys = detailActions.map(v => actionKeyMap.get(v) ?? null).filter((k): k is string => k !== null);
 
-      const hasMeetingHeld = detailActionKeys.some(k => k === 'meeting_held');
-      const meetingHasOutcome = hasMeetingHeld && meetings.some(m => m.outcome && String(m.outcome).trim().length > 0);
+      const hasMeetingHeld = detailActions.some(v => isMeetingHeld(v, heldOutcome));
+      // No longer scored, but still what decides whether a conference is a ghost.
       const hasNotes = notes.length > 0 || (details?.notes != null && String(details.notes).trim().length > 0);
       // Stored RSVP vocabulary is yes|no|maybe|attended — 'attending' is never written.
       const hasSocialAttending = socialEvents.some(e => String(e.rsvp_status).split(',').map(s => s.trim()).includes('attended'));
       const hasFollowUps = followUps.length > 0;
       const hasCompletedFu = followUps.some(f => Number(f.completed) === 1);
-      // Non-meeting touchpoint: action is set and its key is not a formal meeting action
-      const hasTouchpoint = detailActions.length > 0 && detailActionKeys.some(k => !MEETING_ACTION_KEYS.includes(k));
+      // A real read of attendee_touchpoints, not the action-key inference this
+      // used to do — that only ever fired on "Pending" and never on an actual
+      // logged touchpoint.
+      const hasTouchpoint = Number(tpRes.rows[0]?.cnt ?? 0) > 0;
 
       let depth = 0;
-      if (hasMeetingHeld) depth += 25;
-      if (meetingHasOutcome) depth += 20;
-      if (hasNotes) depth += 10;
-      if (hasSocialAttending) depth += 20;
-      if (hasFollowUps && hasCompletedFu) depth += 15;
-      if (hasTouchpoint) depth += 10;
+      if (hasMeetingHeld) depth += DEPTH_POINTS.meetingHeld;
+      if (hasSocialAttending) depth += DEPTH_POINTS.socialAttended;
+      if (hasFollowUps && hasCompletedFu) depth += DEPTH_POINTS.followUpCompleted;
+      if (hasTouchpoint) depth += DEPTH_POINTS.touchpointLogged;
       depth = Math.min(100, depth);
 
       const isZeroEngagement = !hasMeetingHeld && !hasNotes && !hasSocialAttending && !hasFollowUps;
@@ -206,7 +233,9 @@ export async function GET(
   const completedFus = allFollowUps.filter((f) => Number(f.completed) === 1).length;
   const followUpCompletionRate = totalFus > 0 ? Math.round((completedFus / totalFus) * 100) : null;
 
-  const followUpScore = totalFus > 0 ? (completedFus / totalFus) * 100 : 50;
+  // 0, not 50 — someone with no follow-ups shouldn't score as if half of them
+  // were completed. Matches the other two copies.
+  const followUpScore = totalFus > 0 ? (completedFus / totalFus) * 100 : 0;
 
   const ghostCount = touchpointResults.filter(r => r.isZeroEngagement).length;
   const ghostPenalty = totalConferences > 0 ? (ghostCount / totalConferences) * 100 : 0;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { getMeetingHeld, isMeetingHeld } from '@/lib/meetingHeld';
 import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
 import { classifySeniority } from '@/lib/parsers';
 import { computeStrategyAssessment, buildDefaultTierConfig } from '@/lib/strategyAssessment';
@@ -151,7 +152,7 @@ export async function GET(
 
   const attendeeIds = attendees.map((a) => a.id);
 
-  const [internalRelsRes, companyNotesRes, attendeeConfsRes, detailsRes, allUserOptsRes, relStatusOptsRes, socialRsvpsRes, xMeetingsRes, xFollowUpsRes, xSocialRes, xNotesRes, unitTypeRes, clientStatusRes, seniorityOptsRes, competitorColorRes, brandPrimaryRes, openOppStatusRes, brandSecondaryRes, territoriesRes] = await Promise.all([
+  const [internalRelsRes, companyNotesRes, attendeeConfsRes, detailsRes, allUserOptsRes, relStatusOptsRes, socialRsvpsRes, xMeetingsRes, xFollowUpsRes, xSocialRes, xNotesRes, xTouchpointsRes, unitTypeRes, clientStatusRes, seniorityOptsRes, competitorColorRes, brandPrimaryRes, openOppStatusRes, brandSecondaryRes, territoriesRes] = await Promise.all([
     companyIds.length > 0
       ? db.execute({
           sql: `SELECT id, company_id, rep_ids, contact_ids, relationship_status, description
@@ -244,14 +245,30 @@ export async function GET(
     // Cross-conference entity_notes per attendee (for health score depth + ghost)
     attendeeIds.length > 0
       ? db.execute({
-          sql: `SELECT en.entity_id as attendee_id, c.id as conference_id
+          // Resolved by the note's conference id, falling back to its stored
+          // name only for rows written before entity_notes.conference_id
+          // existed. Renaming a conference used to orphan its note history.
+          sql: `SELECT en.entity_id as attendee_id,
+                       COALESCE(en.conference_id, c.id) as conference_id
                 FROM entity_notes en
-                JOIN conferences c ON c.name = en.conference_name
+                LEFT JOIN conferences c
+                  ON LOWER(TRIM(c.name)) = LOWER(TRIM(en.conference_name))
                 WHERE en.entity_type = 'attendee'
                   AND en.entity_id IN (${attendeeIds.map(() => '?').join(',')})
-                GROUP BY en.entity_id, c.id`,
+                  AND COALESCE(en.conference_id, c.id) IS NOT NULL
+                GROUP BY en.entity_id, COALESCE(en.conference_id, c.id)`,
           args: attendeeIds,
         })
+      : Promise.resolve({ rows: [] }),
+    // Cross-conference logged touchpoints per attendee (health score depth).
+    // Every source counts — how a touchpoint was captured says nothing about
+    // whether the interaction happened.
+    attendeeIds.length > 0
+      ? db.execute({
+          sql: `SELECT DISTINCT attendee_id, conference_id FROM attendee_touchpoints
+                WHERE attendee_id IN (${attendeeIds.map(() => '?').join(',')})`,
+          args: attendeeIds,
+        }).catch(() => ({ rows: [] }))
       : Promise.resolve({ rows: [] }),
     db.execute({ sql: `SELECT value FROM config_options WHERE category = 'unit_type' LIMIT 1`, args: [] }),
     db.execute({ sql: `SELECT value FROM config_options WHERE category = 'company_type' AND LOWER(TRIM(value)) = 'customer' LIMIT 1`, args: [] }),
@@ -297,12 +314,26 @@ export async function GET(
     relStatusMap.set(row.id as number, String(row.value));
   }
 
-  // Build action value → action_key lookup for depth scoring
-  const actionKeyMap = new Map<string, string>();
-  for (const row of actionOptsRes.rows) {
-    if (row.action_key) actionKeyMap.set(String(row.value), String(row.action_key));
-  }
-  const MEETING_ACTION_KEYS = ['meeting_held', 'meeting_scheduled', 'rescheduled', 'cancelled', 'no_show'];
+  // How this account spells "the meeting happened" — by action_key where one
+  // exists, falling back to the seeded 'Held'.
+  const heldOutcome = await getMeetingHeld(db);
+  /**
+   * The four things that make a conference count as real engagement, and what
+   * each is worth. They sum to exactly 100.
+   *
+   * Was six components: "meeting outcome recorded" and "note logged" were
+   * dropped and their weight redistributed, and "touchpoint" now reads the
+   * touchpoints table instead of inferring one from an action key.
+   *
+   * Duplicated verbatim in app/api/conferences/[id]/post-conference/route.ts
+   * and app/api/attendees/[id]/timeline/route.ts — keep all three in step.
+   */
+  const DEPTH_POINTS = {
+    meetingHeld: 35,
+    socialAttended: 25,
+    followUpCompleted: 20,
+    touchpointLogged: 20,
+  } as const;
 
   function resolveIdList(raw: unknown, map: Map<number, string>): string | null {
     if (!raw) return null;
@@ -359,6 +390,11 @@ export async function GET(
     xNotesSet.add(`${row.attendee_id}_${row.conference_id}`);
   }
 
+  const xTouchpointSet = new Set<string>();
+  for (const row of xTouchpointsRes.rows) {
+    xTouchpointSet.add(`${row.attendee_id}_${row.conference_id}`);
+  }
+
   function calcAttendeeHealth(aid: number): number {
     const confs = attendeeConfMap.get(aid) ?? [];
     const totalConfs = confs.length;
@@ -376,23 +412,23 @@ export async function GET(
       const fuData = xFollowUpMap.get(key);
 
       const detailActions = (det?.action ? String(det.action) : '').split(',').map(s => s.trim()).filter(Boolean);
-      const detailActionKeys = detailActions.map(v => actionKeyMap.get(v) ?? null).filter((k): k is string => k !== null);
 
-      const hasMeetingHeld = detailActionKeys.some(k => k === 'meeting_held');
-      const hasOutcome = hasMeetingHeld && (meetData?.outcome_count ?? 0) > 0;
+      const hasMeetingHeld = detailActions.some(v => isMeetingHeld(v, heldOutcome));
+      // No longer scored, but still what decides whether a conference is a ghost.
       const hasNotes = xNotesSet.has(key) || (det?.notes != null && String(det.notes).trim().length > 0);
       const hasSocial = xSocialSet.has(key);
       const hasFu = (fuData?.total_fus ?? 0) > 0;
       const hasFuCompleted = (fuData?.completed_fus ?? 0) > 0;
-      const hasTouchpoint = detailActions.length > 0 && detailActionKeys.some(k => !MEETING_ACTION_KEYS.includes(k));
+      // A real read of attendee_touchpoints, not the action-key inference this
+      // used to do — that only ever fired on "Pending" and never on an actual
+      // logged touchpoint.
+      const hasTouchpoint = xTouchpointSet.has(key);
 
       let d = 0;
-      if (hasMeetingHeld) d += 25;
-      if (hasOutcome) d += 20;
-      if (hasNotes) d += 10;
-      if (hasSocial) d += 20;
-      if (hasFu && hasFuCompleted) d += 15;
-      if (hasTouchpoint) d += 10;
+      if (hasMeetingHeld) d += DEPTH_POINTS.meetingHeld;
+      if (hasSocial) d += DEPTH_POINTS.socialAttended;
+      if (hasFu && hasFuCompleted) d += DEPTH_POINTS.followUpCompleted;
+      if (hasTouchpoint) d += DEPTH_POINTS.touchpointLogged;
       totalDepth += Math.min(100, d);
 
       if (!hasMeetingHeld && !hasNotes && !hasSocial && !hasFu) ghostCount++;
@@ -404,7 +440,9 @@ export async function GET(
     }
 
     const avgDepthScore = totalDepth / totalConfs;
-    const followUpScore = totalFus > 0 ? (completedFus / totalFus) * 100 : 50;
+    // 0, not 50 — someone with no follow-ups shouldn't score as if half of them
+    // were completed. Matches the other two copies.
+    const followUpScore = totalFus > 0 ? (completedFus / totalFus) * 100 : 0;
     const ghostPenalty = (ghostCount / totalConfs) * 100;
 
     const rawScore = avgDepthScore * 0.60 + followUpScore * 0.30 - ghostPenalty * 0.10;
