@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { getIcpConfig } from '@/lib/icpRules';
+import { getIcpCompanyTypes, icpCompanyTypeSql } from '@/lib/icpCompanyTypes';
 import { buildDefaultTierConfig, type TierThresholdConfig } from '@/lib/strategyAssessment';
 import { resolveAttendeeTitleMetadata } from '@/lib/titleNormalizationRules';
 import {
@@ -82,15 +83,12 @@ export async function GET(
     const conferenceRes = await db.execute({ sql: 'SELECT id FROM conferences WHERE id = ?', args: [conferenceId] });
     if (conferenceRes.rows.length === 0) return NextResponse.json({ error: 'Conference not found' }, { status: 404 });
 
-    const [settingsRes, seniorityRes, functionRes, actionsRes, prospectTypeRes, effectivenessRes, userOptsRes, territoriesRes] = await Promise.all([
+    const [settingsRes, seniorityRes, functionRes, actionsRes, icpCompanyTypes, effectivenessRes, userOptsRes, territoriesRes] = await Promise.all([
       db.execute({ sql: 'SELECT key, value FROM site_settings', args: [] }),
       db.execute({ sql: "SELECT id, value FROM config_options WHERE category = 'seniority'", args: [] }),
       db.execute({ sql: "SELECT id, value FROM config_options WHERE category = 'function'", args: [] }),
       db.execute({ sql: "SELECT id, value, action_key FROM config_options WHERE category = 'target_recommended_action' ORDER BY sort_order, id", args: [] }).catch(() => ({ rows: [] as Row[] })),
-      db.execute({
-        sql: "SELECT id, value FROM config_options WHERE category = 'company_type' AND action_key = 'prospect' ORDER BY id LIMIT 1",
-        args: [],
-      }).catch(() => ({ rows: [] as Row[] })),
+      getIcpCompanyTypes(db),
       db.execute({ sql: `SELECT key, value FROM effectiveness_defaults WHERE key IN ('avg_annual_deal_size','avg_cost_per_unit')`, args: [] }).catch(() => ({ rows: [] as Row[] })),
       db.execute({ sql: "SELECT id, value FROM config_options WHERE category = 'user'", args: [] }).catch(() => ({ rows: [] as Row[] })),
       db.execute({ sql: 'SELECT id, name, color, assigned_user_ids FROM sales_territories', args: [] }).catch(() => ({ rows: [] as Row[] })),
@@ -121,22 +119,14 @@ export async function GET(
       if (key) actionLabels.set(key, String(r.value));
     }
     const recommendedActions: RecommendedTargetAction[] = DEFAULT_RECOMMENDED_ACTIONS.map(a => ({ ...a, label: actionLabels.get(a.key) ?? a.label }));
-    const prospectTypeId = prospectTypeRes.rows.length > 0 ? Number(prospectTypeRes.rows[0].id) : null;
-    const prospectTypeIdValue = prospectTypeId == null || !Number.isFinite(prospectTypeId) ? null : String(prospectTypeId);
-    const prospectTypeValue = prospectTypeRes.rows.length > 0 ? String(prospectTypeRes.rows[0].value ?? '') : '';
-
+    // Eligible company types come from the ICP Parameters "Company Types" rule.
+    // The single option that used to carry action_key = 'prospect' is gone: it
+    // was only ever set by a migration matching the literal 'Prospect', so an
+    // account with a different taxonomy had nothing carrying it and every
+    // company was silently excluded. With no rule configured, nothing is
+    // excluded on type.
+    const prospectTypeId = icpCompanyTypes.ids.length > 0 ? Number(icpCompanyTypes.ids[0]) : null;
     const icpConfig = await getIcpConfig(db);
-
-    // Eligible company types = every type configured in the ICP Parameters "Company Types"
-    // rule, plus the legacy single "prospect"-flagged type for backward compatibility.
-    // Previously this only used the single flagged type, which silently excluded every
-    // company from Target Recommendations if their type wasn't that exact flagged value —
-    // even when that type was explicitly marked ICP-eligible via the ICP rule.
-    const companyTypeRule = icpConfig.rules.find(r => r.category === 'company_type');
-    const icpAllowedTypes = (companyTypeRule?.conditions ?? []).map(c => c.option_value).filter(Boolean);
-    const allowedCompanyTypes = Array.from(new Set(
-      [...icpAllowedTypes, prospectTypeValue].filter(Boolean).map(v => v.toLowerCase())
-    ));
     const weights = parseJson<TargetPriorityWeights>(settings.icp_target_priority_weights, { icp_fit: 40, buyer_access: 30, relationship_leverage: 20, conference_opportunity: 10 });
 
     // Build tier config from saved settings; only use it when at least one operator is explicitly saved
@@ -181,7 +171,9 @@ export async function GET(
     const batchMode = request.nextUrl.searchParams.get('batch') === '1' || requestedLimit > 0;
     const batchLimit = batchMode ? Math.max(1, Math.min(50, requestedLimit || 25)) : Number.MAX_SAFE_INTEGER;
 
-    if (allowedCompanyTypes.length === 0) {
+    // Only bail when a rule exists but resolves to no usable type. An account
+    // with no rule at all scores every company rather than none.
+    if (icpCompanyTypes.configured && icpCompanyTypes.ids.length === 0 && icpCompanyTypes.values.length === 0) {
       return NextResponse.json({
         conference_id: conferenceId,
         generated_at: new Date().toISOString(),
@@ -204,19 +196,18 @@ export async function GET(
       });
     }
 
-    const typeOrClause = allowedCompanyTypes.map(() => 'LOWER(c.company_type) = ?').join(' OR ');
+    // Matches a company_type cell that lists ids or values, so a company typed
+    // "Operator,Customer" is caught by either.
+    const icpClause = icpCompanyTypeSql('c.company_type', icpCompanyTypes);
     const attendeesRes = await db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority, a.company_id,
                    c.name as company_name, c.company_type, c.services, c.status, c.icp, c.wse, c.assigned_user, c.territory_id
             FROM conference_attendees ca
             JOIN attendees a ON a.id = ca.attendee_id
             JOIN companies c ON c.id = a.company_id
-            WHERE ca.conference_id = ?
-              AND (${typeOrClause}${prospectTypeIdValue ? ' OR c.company_type = ?' : ''})
+            WHERE ca.conference_id = ?${icpClause ? ` AND ${icpClause.sql}` : ''}
             ORDER BY c.name, a.last_name, a.first_name`,
-      args: prospectTypeIdValue
-        ? [conferenceId, ...allowedCompanyTypes, prospectTypeIdValue]
-        : [conferenceId, ...allowedCompanyTypes],
+      args: [conferenceId, ...(icpClause?.args ?? [])],
     });
 
     const rawCompanyMap = new Map<number, { company: TargetingCompanyInput; territoryId: number | null; attendeeRows: Row[] }>();

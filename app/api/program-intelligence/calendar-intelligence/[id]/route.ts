@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { getIcpCompanyTypes, icpCompanyTypeSql, type IcpCompanyTypes } from '@/lib/icpCompanyTypes';
 import type { InValue, Client } from '@libsql/client';
 import { assembleFinalScore, computeCalendarStrategyScores, buildStrategyRationale } from '@/lib/scoring/calendar-intelligence';
 import type { ComponentScores } from '@/lib/scoring/calendar-intelligence';
@@ -117,12 +118,13 @@ async function runTargetingForConference(
   db: Client,
   conferenceId: number,
   config: TargetingScoringConfig,
-  prospectTypeIdValue: string | null,
-  prospectTypeValue: string,
+  icpCompanyTypes: IcpCompanyTypes,
   seniorityLabels: Map<number, string>,
   functionLabels: Map<number, string>,
 ): Promise<TargetingAggregation | null> {
-  if (!prospectTypeIdValue) return null;
+  // Company types come from the ICP Parameters rule; with none configured every
+  // company is scored rather than none.
+  const icpClause = icpCompanyTypeSql('c.company_type', icpCompanyTypes);
 
   const attendeesRes = await db.execute({
     sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority, a.company_id,
@@ -130,10 +132,9 @@ async function runTargetingForConference(
           FROM conference_attendees ca
           JOIN attendees a ON a.id = ca.attendee_id
           JOIN companies c ON c.id = a.company_id
-          WHERE ca.conference_id = ?
-            AND (c.company_type = ? OR LOWER(c.company_type) = LOWER(?))
+          WHERE ca.conference_id = ?${icpClause ? ` AND ${icpClause.sql}` : ''}
           ORDER BY c.name, a.last_name, a.first_name`,
-    args: [conferenceId, prospectTypeIdValue, prospectTypeValue],
+    args: [conferenceId, ...(icpClause?.args ?? [])],
   });
 
   const rawCompanyMap = new Map<number, { company: TargetingCompanyInput; attendeeRows: Row[] }>();
@@ -420,7 +421,7 @@ export async function GET(
   const includeFuture = new URL(request.url).searchParams.get('includeFuture') === '1';
 
   // Load conference metadata + global config in parallel
-  const [confRes, settingsRes, seniorityRes, functionRes, actionsRes, prospectTypeRes, effectivenessRes] = await Promise.all([
+  const [confRes, settingsRes, seniorityRes, functionRes, actionsRes, icpCompanyTypes, effectivenessRes] = await Promise.all([
     db.execute({
       sql: `WITH cmp AS (
               SELECT ca.conference_id,
@@ -450,7 +451,7 @@ export async function GET(
     db.execute({ sql: "SELECT id, value FROM config_options WHERE category = 'seniority'", args: [] }),
     db.execute({ sql: "SELECT id, value FROM config_options WHERE category = 'function'", args: [] }),
     db.execute({ sql: "SELECT id, value, action_key, is_actionable FROM config_options WHERE category='target_recommended_action' ORDER BY sort_order, id", args: [] }).catch(() => ({ rows: [] as Row[] })),
-    db.execute({ sql: "SELECT id, value FROM config_options WHERE category = 'company_type' AND action_key = 'prospect' ORDER BY id LIMIT 1", args: [] }).catch(() => ({ rows: [] as Row[] })),
+    getIcpCompanyTypes(db),
     db.execute({ sql: `SELECT key, value FROM effectiveness_defaults WHERE key IN ('avg_annual_deal_size','avg_cost_per_unit')`, args: [] }).catch(() => ({ rows: [] as Row[] })),
   ]);
 
@@ -473,9 +474,7 @@ export async function GET(
   const recommendedActions: RecommendedTargetAction[] = DEFAULT_RECOMMENDED_ACTIONS.map(a => ({ ...a, label: actionLabelMap.get(a.key) ?? a.label }));
   const actionableCount = actions.filter(a => Number(a.is_actionable ?? 0) === 1).length;
 
-  const prospectTypeId = (prospectTypeRes.rows as Row[]).length > 0 ? Number((prospectTypeRes.rows as Row[])[0].id) : null;
-  const prospectTypeIdValue = prospectTypeId == null || !Number.isFinite(prospectTypeId) ? null : String(prospectTypeId);
-  const prospectTypeValue = (prospectTypeRes.rows as Row[]).length > 0 ? String((prospectTypeRes.rows as Row[])[0].value ?? '') : '';
+  const prospectTypeId = icpCompanyTypes.ids.length > 0 ? Number(icpCompanyTypes.ids[0]) : null;
 
   const effMap: Record<string, string> = {};
   for (const r of (effectivenessRes.rows as Row[])) effMap[String(r.key)] = String(r.value);
@@ -539,8 +538,7 @@ export async function GET(
     db,
     conferenceId,
     targetingConfig,
-    prospectTypeIdValue,
-    prospectTypeValue,
+    icpCompanyTypes,
     seniorityLabels,
     functionLabels,
   );

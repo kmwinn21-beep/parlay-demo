@@ -3,6 +3,9 @@ import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { classifySeniority } from '@/lib/parsers';
 import { computeRelationshipFloorBatch } from '@/lib/relationship-floor';
+import { getIcpCompanyTypes, matchesIcpCompanyType, icpCompanyTypeSql } from '@/lib/icpCompanyTypes';
+import { getMeetingHeld, isMeetingHeld, type MeetingHeld } from '@/lib/meetingHeld';
+import { getSeniorSeniorityLabels, isSeniorSeniority } from '@/lib/seniorityPriority';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -60,6 +63,11 @@ interface ActionItem {
 
 // ── Health score helper ────────────────────────────────────────────────────────
 
+/** The ICP flag is a stored word, so 'Yes' and 'yes' have to read the same. */
+function isIcpYes(icp: string | null | undefined): boolean {
+  return String(icp ?? '').trim().toLowerCase() === 'yes';
+}
+
 const MEETING_ACTION_KEYS = ['meeting_held', 'meeting_scheduled', 'rescheduled', 'cancelled', 'no_show'];
 
 function computeHealthScore(params: {
@@ -70,11 +78,12 @@ function computeHealthScore(params: {
   noteCountByConf: Map<number, number>;
   socialByConf: Map<number, { rsvp_status: string }[]>;
   actionKeyMap: Map<string, string>;
+  heldOutcome: MeetingHeld;
   excludeConfId?: number;
   floor?: number;
 }): number {
   const { attendeeConfs, detailsByConf, meetingsByConf, followUpsByConf,
-    noteCountByConf, socialByConf, actionKeyMap, excludeConfId, floor = 0 } = params;
+    noteCountByConf, socialByConf, actionKeyMap, heldOutcome, excludeConfId, floor = 0 } = params;
   const confs = excludeConfId ? attendeeConfs.filter(c => c !== excludeConfId) : attendeeConfs;
   if (confs.length === 0) return floor;
   let totalDepth = 0, totalFus = 0, completedFus = 0, ghostCount = 0;
@@ -87,7 +96,7 @@ function computeHealthScore(params: {
     const actionStr = details?.action ?? '';
     const actionVals = actionStr.split(',').map(s => s.trim()).filter(Boolean);
     const actionKeys = actionVals.map(v => actionKeyMap.get(v)).filter(Boolean) as string[];
-    const hasMeetingHeld = actionKeys.includes('meeting_held');
+    const hasMeetingHeld = actionVals.some(v => isMeetingHeld(v, heldOutcome));
     const meetingHasOutcome = hasMeetingHeld && meetings.some(m => m.outcome && String(m.outcome).trim().length > 0);
     const hasNotes = noteCount > 0 || (details?.notes != null && String(details.notes).trim().length > 0);
     const hasSocialAttending = social.some(e => String(e.rsvp_status).split(',').map(s => s.trim()).includes('attended'));
@@ -191,7 +200,7 @@ export async function GET(
   }
 
   // ── Phase 1: attendees, config ────────────────────────────────────────────
-  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, prospectsTypeRes, eventAttendeesRes, formSubmissionsRes, confEntityNotesRes, confDetailsNotesRes, avgCostRes, unitTypeRes] = await Promise.all([
+  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, icpCompanyTypes, meetingHeld, seniorLabels, eventAttendeesRes, formSubmissionsRes, confEntityNotesRes, confDetailsNotesRes, avgCostRes, unitTypeRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority,
                    a.company_id, c.name as company_name, c.company_type, c.icp,
@@ -219,15 +228,9 @@ export async function GET(
             WHERE f.conference_id = ? AND f.next_steps IS NOT NULL AND f.next_steps != ''`,
       args: [confId],
     }),
-    db.execute({
-      sql: `SELECT id, value, action_key
-            FROM config_options
-            WHERE category = 'company_type'
-              AND action_key = 'prospect'
-            ORDER BY id ASC
-            LIMIT 1`,
-      args: [],
-    }),
+    getIcpCompanyTypes(db),
+    getMeetingHeld(db),
+    getSeniorSeniorityLabels(db),
     db.execute({
       sql: `SELECT COUNT(*) as count FROM social_event_rsvps r
             JOIN social_events se ON r.social_event_id = se.id
@@ -241,8 +244,8 @@ export async function GET(
     // Notes logged — all attendees, not just operators
     db.execute({
       sql: `SELECT COUNT(*) as count FROM entity_notes
-            WHERE conference_name = ? AND entity_type = 'attendee'`,
-      args: [confName],
+            WHERE (conference_id = ? OR (conference_id IS NULL AND LOWER(TRIM(conference_name)) = LOWER(TRIM(?)))) AND entity_type = 'attendee'`,
+      args: [confId, confName],
     }),
     db.execute({
       sql: `SELECT COUNT(*) as count FROM conference_attendee_details
@@ -260,20 +263,14 @@ export async function GET(
 
   const unitType = String((unitTypeRes as { rows: { value: unknown }[] }).rows[0]?.value ?? 'Units');
 
-  const prospectsTypeId = prospectsTypeRes.rows[0]?.id ? Number(prospectsTypeRes.rows[0].id) : null;
-  const prospectsTypeValue = prospectsTypeRes.rows[0]?.value ? String(prospectsTypeRes.rows[0].value).trim() : null;
-
-  // Filter by the configured "Prospects" company_type option id.
-  // Some legacy datasets still persist display values in company_type, so we also
-  // accept the resolved config value for backwards compatibility while keeping the
-  // lookup anchored to config_options.
+  // The audience comes from the ICP Parameters "Company Types" rule. With no
+  // rule configured every attendee counts and the modal says so, rather than
+  // the debrief reading zero against real activity.
   const attendees = attendeesRes.rows.filter(a => {
-    if ((prospectsTypeId == null && !prospectsTypeValue) || !a.company_type) return false;
-    const types = String(a.company_type).split(',').map(s => s.trim()).filter(Boolean);
-    const hasId = prospectsTypeId != null && types.includes(String(prospectsTypeId));
-    const hasValue = prospectsTypeValue != null && types.some(t => t.toLowerCase() === prospectsTypeValue.toLowerCase());
-    return hasId || hasValue;
+    return matchesIcpCompanyType(a.company_type as string | null, icpCompanyTypes);
   });
+
+  const icpClause = icpCompanyTypeSql('c.company_type', icpCompanyTypes);
 
   const actionKeyMap = new Map<string, string>();
   for (const r of actionOptsRes.rows) {
@@ -312,10 +309,12 @@ export async function GET(
       args: attendeeIds,
     }),
     db.execute({
-      sql: `SELECT en.entity_id as attendee_id, en.conference_name
+      sql: `SELECT en.entity_id as attendee_id,
+                   COALESCE(en.conference_id, c.id) as conference_id
             FROM entity_notes en
-            JOIN conferences c ON c.name = en.conference_name
-            WHERE en.entity_type = 'attendee' AND en.entity_id IN (${idPlaceholders})`,
+            LEFT JOIN conferences c ON LOWER(TRIM(c.name)) = LOWER(TRIM(en.conference_name))
+            WHERE en.entity_type = 'attendee' AND en.entity_id IN (${idPlaceholders})
+              AND COALESCE(en.conference_id, c.id) IS NOT NULL`,
       args: attendeeIds,
     }),
     db.execute({
@@ -364,8 +363,8 @@ export async function GET(
     }),
     db.execute({
       sql: `SELECT DISTINCT entity_id as attendee_id FROM entity_notes
-            WHERE conference_name = ? AND entity_type = 'attendee'`,
-      args: [confName],
+            WHERE (conference_id = ? OR (conference_id IS NULL AND LOWER(TRIM(conference_name)) = LOWER(TRIM(?)))) AND entity_type = 'attendee'`,
+      args: [confId, confName],
     }),
     db.execute({
       sql: `SELECT attendee_id, buyer_role FROM attendee_product_signals WHERE conference_id = ?`,
@@ -484,20 +483,17 @@ export async function GET(
               FROM conference_attendees ca
               JOIN attendees a ON a.id = ca.attendee_id
               JOIN companies c ON a.company_id = c.id
-              WHERE (
-                (',' || COALESCE(c.company_type, '') || ',') LIKE ?
-                OR LOWER(',' || COALESCE(c.company_type, '') || ',') LIKE LOWER(?)
-              ) AND ca.conference_id IN (${ph})
+              WHERE ${icpClause ? `${icpClause.sql} AND ` : ''}ca.conference_id IN (${ph})
               GROUP BY ca.conference_id`,
-        args: [`%,${prospectsTypeId ?? -1},%`, `%,${prospectsTypeValue ?? '__no_match__'},%`, ...priorIdList],
+        args: [...(icpClause?.args ?? []), ...priorIdList],
       }),
       db.execute({
         sql: `SELECT m.conference_id, COUNT(*) as meetings
               FROM meetings m
-              JOIN config_options co ON LOWER(co.value) = LOWER(m.outcome) AND co.action_key = 'meeting_held'
-              WHERE m.conference_id IN (${ph})
+              WHERE LOWER(TRIM(COALESCE(m.outcome, ''))) = ?
+                AND m.conference_id IN (${ph})
               GROUP BY m.conference_id`,
-        args: priorIdList,
+        args: [meetingHeld.value, ...priorIdList],
       }),
       db.execute({
         sql: `SELECT conference_id,
@@ -508,10 +504,12 @@ export async function GET(
         args: priorIdList,
       }),
       db.execute({
-        sql: `SELECT cf.id as conference_id, COUNT(*) as notes
-              FROM entity_notes en JOIN conferences cf ON cf.name = en.conference_name
-              WHERE en.entity_type = 'attendee' AND cf.id IN (${ph})
-              GROUP BY cf.id`,
+        sql: `SELECT COALESCE(en.conference_id, cf.id) as conference_id, COUNT(*) as notes
+              FROM entity_notes en
+              LEFT JOIN conferences cf ON LOWER(TRIM(cf.name)) = LOWER(TRIM(en.conference_name))
+              WHERE en.entity_type = 'attendee'
+                AND COALESCE(en.conference_id, cf.id) IN (${ph})
+              GROUP BY COALESCE(en.conference_id, cf.id)`,
         args: priorIdList,
       }),
       db.execute({
@@ -526,13 +524,10 @@ export async function GET(
               FROM conference_attendees ca
               JOIN attendees a ON a.id = ca.attendee_id
               JOIN companies c ON a.company_id = c.id
-              WHERE (
-                (',' || COALESCE(c.company_type, '') || ',') LIKE ?
-                OR LOWER(',' || COALESCE(c.company_type, '') || ',') LIKE LOWER(?)
-              ) AND LOWER(c.icp) = 'yes'
+              WHERE ${icpClause ? `${icpClause.sql} AND ` : ''}LOWER(c.icp) = 'yes'
               AND ca.conference_id IN (${ph})
               GROUP BY ca.conference_id`,
-        args: [`%,${prospectsTypeId ?? -1},%`, `%,${prospectsTypeValue ?? '__no_match__'},%`, ...priorIdList],
+        args: [...(icpClause?.args ?? []), ...priorIdList],
       }),
       db.execute({
         sql: `SELECT id, internal_attendees FROM conferences WHERE id IN (${ph})`,
@@ -615,13 +610,12 @@ export async function GET(
   // noteCountByAttConf: `${aid}_${cid}` -> count
   const noteCountByAttConf = new Map<string, number>();
   for (const r of allNotesRes.rows) {
-    // match note to conference_id via conference_name
-    Array.from(confById.entries()).forEach(([cid, c]) => {
-      if (c.name === String(r.conference_name)) {
-        const key = `${r.attendee_id}_${cid}`;
-        noteCountByAttConf.set(key, (noteCountByAttConf.get(key) ?? 0) + 1);
-      }
-    });
+    // The query already resolved the conference, by id or by the note's stored
+    // name where the id predates the column.
+    const cid = r.conference_id == null ? null : Number(r.conference_id);
+    if (cid == null || !confById.has(cid)) continue;
+    const key = `${r.attendee_id}_${cid}`;
+    noteCountByAttConf.set(key, (noteCountByAttConf.get(key) ?? 0) + 1);
   }
 
   // socialByAttConf: `${aid}_${cid}` -> {rsvp_status}[]
@@ -722,6 +716,7 @@ export async function GET(
       noteCountByConf: maps.noteCountByConf,
       socialByConf: maps.socialByConf,
       actionKeyMap,
+      heldOutcome: meetingHeld,
       floor,
     });
     const healthBefore = priorConfs.length === 0 ? floor : computeHealthScore({
@@ -732,6 +727,7 @@ export async function GET(
       noteCountByConf: maps.noteCountByConf,
       socialByConf: maps.socialByConf,
       actionKeyMap,
+      heldOutcome: meetingHeld,
       excludeConfId: confId,
       floor,
     });
@@ -743,7 +739,7 @@ export async function GET(
     const currentActionStr = currentDet?.action ? String(currentDet.action) : '';
     const currentActionVals = currentActionStr.split(',').map(s => s.trim()).filter(Boolean);
     const currentActionKeys = currentActionVals.map(v => actionKeyMap.get(v)).filter(Boolean) as string[];
-    const meetingHeld = currentActionKeys.includes('meeting_held');
+    const attendeeMeetingHeld = currentActionVals.some(v => isMeetingHeld(v, meetingHeld));
     const hasNotes = (noteCountByAttConf.get(`${aid}_${confId}`) ?? 0) > 0
       || (currentDet?.notes != null && String(currentDet.notes).trim().length > 0);
 
@@ -773,7 +769,7 @@ export async function GET(
       lastEngagementType: lastActionVal,
       healthScore: healthAfter,
       healthDelta,
-      meetingHeld,
+      meetingHeld: attendeeMeetingHeld,
       hasNotes,
     });
   }
@@ -815,8 +811,8 @@ export async function GET(
   // Sort: ICP first, then seniority
   const senioritySortMap: Record<string, number> = { 'C-Suite': 0, 'VP/SVP': 1, 'Director': 2, 'Manager': 3 };
   const sortContacts = (a: ContactRow, b: ContactRow) => {
-    const aIcp = a.icp === 'Yes' ? 0 : 1;
-    const bIcp = b.icp === 'Yes' ? 0 : 1;
+    const aIcp = isIcpYes(a.icp) ? 0 : 1;
+    const bIcp = isIcpYes(b.icp) ? 0 : 1;
     if (aIcp !== bIcp) return aIcp - bIcp;
     return (senioritySortMap[a.seniority ?? ''] ?? 99) - (senioritySortMap[b.seniority ?? ''] ?? 99);
   };
@@ -832,8 +828,8 @@ export async function GET(
     const neNotesRes = await db.execute({
       sql: `SELECT entity_id as attendee_id, rep FROM entity_notes
             WHERE entity_type = 'attendee' AND entity_id IN (${nePh})
-            AND conference_name = ? AND rep IS NOT NULL AND rep != ''`,
-      args: [...neAttendeeIds, confName],
+            AND (conference_id = ? OR (conference_id IS NULL AND LOWER(TRIM(conference_name)) = LOWER(TRIM(?)))) AND rep IS NOT NULL AND rep != ''`,
+      args: [...neAttendeeIds, confId, confName],
     });
 
     for (const f of confFollowUpsRes.rows) {
@@ -846,7 +842,7 @@ export async function GET(
       const aid = Number(m.attendee_id);
       if (!newlyEngagedRepsMap.has(aid)) continue;
       const outcomeStr = m.outcome ? String(m.outcome).trim() : '';
-      if ((actionKeyMap.get(outcomeStr) ?? null) === 'meeting_held') {
+      if (isMeetingHeld(outcomeStr, meetingHeld)) {
         for (const name of resolveIds(m.scheduled_by)) newlyEngagedRepsMap.get(aid)!.add(name);
       }
     }
@@ -884,8 +880,8 @@ export async function GET(
     const engTargetNotesRes = await db.execute({
       sql: `SELECT entity_id as attendee_id, rep FROM entity_notes
             WHERE entity_type = 'attendee' AND entity_id IN (${engPh})
-            AND conference_name = ? AND rep IS NOT NULL AND rep != ''`,
-      args: [...engTargetIds, confName],
+            AND (conference_id = ? OR (conference_id IS NULL AND LOWER(TRIM(conference_name)) = LOWER(TRIM(?)))) AND rep IS NOT NULL AND rep != ''`,
+      args: [...engTargetIds, confId, confName],
     });
 
     for (const f of confFollowUpsRes.rows) {
@@ -897,7 +893,7 @@ export async function GET(
       const aid = Number(m.attendee_id);
       if (!targetsEngagedRepsMap.has(aid)) continue;
       const outcomeStr = m.outcome ? String(m.outcome).trim() : '';
-      if ((actionKeyMap.get(outcomeStr) ?? null) === 'meeting_held') {
+      if (isMeetingHeld(outcomeStr, meetingHeld)) {
         for (const name of resolveIds(m.scheduled_by)) targetsEngagedRepsMap.get(aid)!.add(name);
       }
     }
@@ -918,8 +914,8 @@ export async function GET(
   reEngagements.sort(sortContacts);
   // Unengaged: ICP first, then by priorConferenceCount desc
   stillUnengaged.sort((a, b) => {
-    const aIcp = a.icp === 'Yes' ? 0 : 1;
-    const bIcp = b.icp === 'Yes' ? 0 : 1;
+    const aIcp = isIcpYes(a.icp) ? 0 : 1;
+    const bIcp = isIcpYes(b.icp) ? 0 : 1;
     if (aIcp !== bIcp) return aIcp - bIcp;
     return b.priorConferenceCount - a.priorConferenceCount;
   });
@@ -949,7 +945,7 @@ export async function GET(
     if (outcomeKey === 'no_show') status = 'no_show';
     else if (outcomeKey === 'rescheduled') status = 'rescheduled';
     else if (outcomeKey === 'cancelled') status = 'cancelled';
-    else if (outcomeKey === 'meeting_held') status = 'held';
+    else if (isMeetingHeld(outcomeStr, meetingHeld)) status = 'held';
 
     meetingRows.push({
       id: Number(m.id),
@@ -1026,7 +1022,7 @@ export async function GET(
     const repRawMeetings = confMeetingsRes.rows.filter(m => rawFieldMatchesName(m.scheduled_by, repName));
     const heldMeetings = repRawMeetings.filter(m => {
       const outcomeStr = m.outcome ? String(m.outcome).trim() : '';
-      return (actionKeyMap.get(outcomeStr) ?? null) === 'meeting_held';
+      return isMeetingHeld(outcomeStr, meetingHeld);
     });
     const walkIns = heldMeetings.filter(m => String(m.meeting_type ?? '') === unplannedValue);
 
@@ -1108,7 +1104,7 @@ export async function GET(
   const heldMeetingAttIds = new Set<number>();
   for (const m of confMeetingsRes.rows) {
     const outcomeStr = m.outcome ? String(m.outcome).trim() : '';
-    if ((actionKeyMap.get(outcomeStr) ?? null) === 'meeting_held') {
+    if (isMeetingHeld(outcomeStr, meetingHeld)) {
       heldMeetingAttIds.add(Number(m.attendee_id));
     }
   }
@@ -1259,7 +1255,7 @@ export async function GET(
         if (!attendeeIds.has(Number(m.attendee_id))) continue;
         if (!rawFieldMatchesName(m.scheduled_by, rep.repName)) continue;
         const outcomeStr = m.outcome ? String(m.outcome).trim() : '';
-        if ((actionKeyMap.get(outcomeStr) ?? null) === 'meeting_held') {
+        if (isMeetingHeld(outcomeStr, meetingHeld)) {
           repMeetings++;
           hasAnyActivity = true;
         }
@@ -1283,7 +1279,8 @@ export async function GET(
       }
     }
 
-    const icp = contacts[0].icp === 'Yes' ? 'Yes' : contacts[0].icp === 'No' ? 'No' : null;
+    const icpRaw = String(contacts[0].icp ?? '').trim().toLowerCase();
+    const icp = icpRaw === 'yes' ? 'Yes' : icpRaw === 'no' ? 'No' : null;
 
     companyRollup.push({
       company_id: companyId,
@@ -1359,7 +1356,7 @@ export async function GET(
     const confActionStr = confDet?.action ?? '';
     const confActionVals = confActionStr.split(',').map(s => s.trim()).filter(Boolean);
     const confActionKeys = confActionVals.map(v => actionKeyMap.get(v)).filter(Boolean) as string[];
-    const hadMeeting = confActionKeys.includes('meeting_held');
+    const hadMeeting = confActionVals.some(v => isMeetingHeld(v, meetingHeld));
     const hadOutcome = hadMeeting && confMeetingsList.some(m => m.outcome && String(m.outcome).trim().length > 0);
     const hadNotes = confNoteCount > 0 || (confDet?.notes != null && String(confDet.notes).trim().length > 0);
     const hadSocial = confSocialList.some(e => String(e.rsvp_status).split(',').map(s => s.trim()).includes('attended'));
@@ -1452,7 +1449,7 @@ export async function GET(
   }
 
   // Pipeline: ICP contacts with meeting held but no follow-up (high)
-  for (const c of contactRows.filter(c => c.icp === 'Yes' && c.meetingHeld)) {
+  for (const c of contactRows.filter(c => isIcpYes(c.icp) && c.meetingHeld)) {
     const hasFu = followUpRows.some(f => f.attendee_id === c.attendee_id);
     if (!hasFu) {
       actionItems.push({
@@ -1466,8 +1463,7 @@ export async function GET(
   }
 
   // New ICP C-Suite/VP contacts with no follow-up (medium)
-  const seniorLevels = ['C-Suite', 'VP/SVP'];
-  for (const c of newlyEngaged.filter(c => c.icp === 'Yes' && c.seniority && seniorLevels.includes(c.seniority))) {
+  for (const c of newlyEngaged.filter(c => isIcpYes(c.icp) && isSeniorSeniority(c.seniority, seniorLabels))) {
     const hasFu = followUpRows.some(f => f.attendee_id === c.attendee_id);
     if (!hasFu) {
       actionItems.push({
@@ -1486,7 +1482,7 @@ export async function GET(
   const fuRate = totalFus > 0 ? Math.round((completedFus / totalFus) * 100) : 0;
   const heldCount = meetingRows.filter(m => m.status === 'held').length;
   const walkInCount = meetingRows.filter(m => m.isWalkIn).length;
-  const icpCount = contactRows.filter(c => c.icp === 'Yes').length;
+  const icpCount = contactRows.filter(c => isIcpYes(c.icp)).length;
   const icpCaptureRate = attendees.length > 0 ? Math.round((icpCount / attendees.length) * 100) : 0;
 
   // Notes logged for this conference — all attendees, not operator-filtered
@@ -1583,5 +1579,11 @@ export async function GET(
     companyRollup,
     avgCostPerUnit,
     unitType,
+    // Lets the modal say when it is counting every company type because no ICP
+    // company types are configured.
+    icpFilter: {
+      configured: icpCompanyTypes.configured,
+      types: icpCompanyTypes.values,
+    },
   });
 }
