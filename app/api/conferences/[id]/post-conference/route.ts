@@ -5,6 +5,7 @@ import { classifySeniority } from '@/lib/parsers';
 import { computeRelationshipFloorBatch } from '@/lib/relationship-floor';
 import { getIcpCompanyTypes, matchesIcpCompanyType, icpCompanyTypeSql } from '@/lib/icpCompanyTypes';
 import { getMeetingHeld, isMeetingHeld, type MeetingHeld } from '@/lib/meetingHeld';
+import { getSeniorSeniorityLabels, isSeniorSeniority } from '@/lib/seniorityPriority';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -61,6 +62,11 @@ interface ActionItem {
 }
 
 // ── Health score helper ────────────────────────────────────────────────────────
+
+/** The ICP flag is a stored word, so 'Yes' and 'yes' have to read the same. */
+function isIcpYes(icp: string | null | undefined): boolean {
+  return String(icp ?? '').trim().toLowerCase() === 'yes';
+}
 
 const MEETING_ACTION_KEYS = ['meeting_held', 'meeting_scheduled', 'rescheduled', 'cancelled', 'no_show'];
 
@@ -194,7 +200,7 @@ export async function GET(
   }
 
   // ── Phase 1: attendees, config ────────────────────────────────────────────
-  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, icpCompanyTypes, meetingHeld, eventAttendeesRes, formSubmissionsRes, confEntityNotesRes, confDetailsNotesRes, avgCostRes, unitTypeRes] = await Promise.all([
+  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, icpCompanyTypes, meetingHeld, seniorLabels, eventAttendeesRes, formSubmissionsRes, confEntityNotesRes, confDetailsNotesRes, avgCostRes, unitTypeRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority,
                    a.company_id, c.name as company_name, c.company_type, c.icp,
@@ -224,6 +230,7 @@ export async function GET(
     }),
     getIcpCompanyTypes(db),
     getMeetingHeld(db),
+    getSeniorSeniorityLabels(db),
     db.execute({
       sql: `SELECT COUNT(*) as count FROM social_event_rsvps r
             JOIN social_events se ON r.social_event_id = se.id
@@ -237,8 +244,8 @@ export async function GET(
     // Notes logged — all attendees, not just operators
     db.execute({
       sql: `SELECT COUNT(*) as count FROM entity_notes
-            WHERE conference_name = ? AND entity_type = 'attendee'`,
-      args: [confName],
+            WHERE (conference_id = ? OR (conference_id IS NULL AND LOWER(TRIM(conference_name)) = LOWER(TRIM(?)))) AND entity_type = 'attendee'`,
+      args: [confId, confName],
     }),
     db.execute({
       sql: `SELECT COUNT(*) as count FROM conference_attendee_details
@@ -302,10 +309,12 @@ export async function GET(
       args: attendeeIds,
     }),
     db.execute({
-      sql: `SELECT en.entity_id as attendee_id, en.conference_name
+      sql: `SELECT en.entity_id as attendee_id,
+                   COALESCE(en.conference_id, c.id) as conference_id
             FROM entity_notes en
-            JOIN conferences c ON c.name = en.conference_name
-            WHERE en.entity_type = 'attendee' AND en.entity_id IN (${idPlaceholders})`,
+            LEFT JOIN conferences c ON LOWER(TRIM(c.name)) = LOWER(TRIM(en.conference_name))
+            WHERE en.entity_type = 'attendee' AND en.entity_id IN (${idPlaceholders})
+              AND COALESCE(en.conference_id, c.id) IS NOT NULL`,
       args: attendeeIds,
     }),
     db.execute({
@@ -354,8 +363,8 @@ export async function GET(
     }),
     db.execute({
       sql: `SELECT DISTINCT entity_id as attendee_id FROM entity_notes
-            WHERE conference_name = ? AND entity_type = 'attendee'`,
-      args: [confName],
+            WHERE (conference_id = ? OR (conference_id IS NULL AND LOWER(TRIM(conference_name)) = LOWER(TRIM(?)))) AND entity_type = 'attendee'`,
+      args: [confId, confName],
     }),
     db.execute({
       sql: `SELECT attendee_id, buyer_role FROM attendee_product_signals WHERE conference_id = ?`,
@@ -495,10 +504,12 @@ export async function GET(
         args: priorIdList,
       }),
       db.execute({
-        sql: `SELECT cf.id as conference_id, COUNT(*) as notes
-              FROM entity_notes en JOIN conferences cf ON cf.name = en.conference_name
-              WHERE en.entity_type = 'attendee' AND cf.id IN (${ph})
-              GROUP BY cf.id`,
+        sql: `SELECT COALESCE(en.conference_id, cf.id) as conference_id, COUNT(*) as notes
+              FROM entity_notes en
+              LEFT JOIN conferences cf ON LOWER(TRIM(cf.name)) = LOWER(TRIM(en.conference_name))
+              WHERE en.entity_type = 'attendee'
+                AND COALESCE(en.conference_id, cf.id) IN (${ph})
+              GROUP BY COALESCE(en.conference_id, cf.id)`,
         args: priorIdList,
       }),
       db.execute({
@@ -599,13 +610,12 @@ export async function GET(
   // noteCountByAttConf: `${aid}_${cid}` -> count
   const noteCountByAttConf = new Map<string, number>();
   for (const r of allNotesRes.rows) {
-    // match note to conference_id via conference_name
-    Array.from(confById.entries()).forEach(([cid, c]) => {
-      if (c.name === String(r.conference_name)) {
-        const key = `${r.attendee_id}_${cid}`;
-        noteCountByAttConf.set(key, (noteCountByAttConf.get(key) ?? 0) + 1);
-      }
-    });
+    // The query already resolved the conference, by id or by the note's stored
+    // name where the id predates the column.
+    const cid = r.conference_id == null ? null : Number(r.conference_id);
+    if (cid == null || !confById.has(cid)) continue;
+    const key = `${r.attendee_id}_${cid}`;
+    noteCountByAttConf.set(key, (noteCountByAttConf.get(key) ?? 0) + 1);
   }
 
   // socialByAttConf: `${aid}_${cid}` -> {rsvp_status}[]
@@ -801,8 +811,8 @@ export async function GET(
   // Sort: ICP first, then seniority
   const senioritySortMap: Record<string, number> = { 'C-Suite': 0, 'VP/SVP': 1, 'Director': 2, 'Manager': 3 };
   const sortContacts = (a: ContactRow, b: ContactRow) => {
-    const aIcp = a.icp === 'Yes' ? 0 : 1;
-    const bIcp = b.icp === 'Yes' ? 0 : 1;
+    const aIcp = isIcpYes(a.icp) ? 0 : 1;
+    const bIcp = isIcpYes(b.icp) ? 0 : 1;
     if (aIcp !== bIcp) return aIcp - bIcp;
     return (senioritySortMap[a.seniority ?? ''] ?? 99) - (senioritySortMap[b.seniority ?? ''] ?? 99);
   };
@@ -818,8 +828,8 @@ export async function GET(
     const neNotesRes = await db.execute({
       sql: `SELECT entity_id as attendee_id, rep FROM entity_notes
             WHERE entity_type = 'attendee' AND entity_id IN (${nePh})
-            AND conference_name = ? AND rep IS NOT NULL AND rep != ''`,
-      args: [...neAttendeeIds, confName],
+            AND (conference_id = ? OR (conference_id IS NULL AND LOWER(TRIM(conference_name)) = LOWER(TRIM(?)))) AND rep IS NOT NULL AND rep != ''`,
+      args: [...neAttendeeIds, confId, confName],
     });
 
     for (const f of confFollowUpsRes.rows) {
@@ -870,8 +880,8 @@ export async function GET(
     const engTargetNotesRes = await db.execute({
       sql: `SELECT entity_id as attendee_id, rep FROM entity_notes
             WHERE entity_type = 'attendee' AND entity_id IN (${engPh})
-            AND conference_name = ? AND rep IS NOT NULL AND rep != ''`,
-      args: [...engTargetIds, confName],
+            AND (conference_id = ? OR (conference_id IS NULL AND LOWER(TRIM(conference_name)) = LOWER(TRIM(?)))) AND rep IS NOT NULL AND rep != ''`,
+      args: [...engTargetIds, confId, confName],
     });
 
     for (const f of confFollowUpsRes.rows) {
@@ -904,8 +914,8 @@ export async function GET(
   reEngagements.sort(sortContacts);
   // Unengaged: ICP first, then by priorConferenceCount desc
   stillUnengaged.sort((a, b) => {
-    const aIcp = a.icp === 'Yes' ? 0 : 1;
-    const bIcp = b.icp === 'Yes' ? 0 : 1;
+    const aIcp = isIcpYes(a.icp) ? 0 : 1;
+    const bIcp = isIcpYes(b.icp) ? 0 : 1;
     if (aIcp !== bIcp) return aIcp - bIcp;
     return b.priorConferenceCount - a.priorConferenceCount;
   });
@@ -1269,7 +1279,8 @@ export async function GET(
       }
     }
 
-    const icp = contacts[0].icp === 'Yes' ? 'Yes' : contacts[0].icp === 'No' ? 'No' : null;
+    const icpRaw = String(contacts[0].icp ?? '').trim().toLowerCase();
+    const icp = icpRaw === 'yes' ? 'Yes' : icpRaw === 'no' ? 'No' : null;
 
     companyRollup.push({
       company_id: companyId,
@@ -1438,7 +1449,7 @@ export async function GET(
   }
 
   // Pipeline: ICP contacts with meeting held but no follow-up (high)
-  for (const c of contactRows.filter(c => c.icp === 'Yes' && c.meetingHeld)) {
+  for (const c of contactRows.filter(c => isIcpYes(c.icp) && c.meetingHeld)) {
     const hasFu = followUpRows.some(f => f.attendee_id === c.attendee_id);
     if (!hasFu) {
       actionItems.push({
@@ -1452,8 +1463,7 @@ export async function GET(
   }
 
   // New ICP C-Suite/VP contacts with no follow-up (medium)
-  const seniorLevels = ['C-Suite', 'VP/SVP'];
-  for (const c of newlyEngaged.filter(c => c.icp === 'Yes' && c.seniority && seniorLevels.includes(c.seniority))) {
+  for (const c of newlyEngaged.filter(c => isIcpYes(c.icp) && isSeniorSeniority(c.seniority, seniorLabels))) {
     const hasFu = followUpRows.some(f => f.attendee_id === c.attendee_id);
     if (!hasFu) {
       actionItems.push({
@@ -1472,7 +1482,7 @@ export async function GET(
   const fuRate = totalFus > 0 ? Math.round((completedFus / totalFus) * 100) : 0;
   const heldCount = meetingRows.filter(m => m.status === 'held').length;
   const walkInCount = meetingRows.filter(m => m.isWalkIn).length;
-  const icpCount = contactRows.filter(c => c.icp === 'Yes').length;
+  const icpCount = contactRows.filter(c => isIcpYes(c.icp)).length;
   const icpCaptureRate = attendees.length > 0 ? Math.round((icpCount / attendees.length) * 100) : 0;
 
   // Notes logged for this conference — all attendees, not operator-filtered

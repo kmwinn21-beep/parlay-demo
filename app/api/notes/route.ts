@@ -124,13 +124,27 @@ export async function POST(request: NextRequest) {
       resolvedRep = user.email;
     }
 
+    // Callers pass the conference by name; resolve it to an id here so counting
+    // notes per conference doesn't depend on that text staying identical.
+    let resolvedConferenceId: number | null = null;
+    if (conference_name && String(conference_name).trim()) {
+      try {
+        const confRow = await db.execute({
+          sql: `SELECT id FROM conferences WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1`,
+          args: [String(conference_name)],
+        });
+        if (confRow.rows.length > 0) resolvedConferenceId = Number(confRow.rows[0].id);
+      } catch { /* non-fatal — the name is still stored */ }
+    }
+
     const result = await db.execute({
-      sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_name, rep, attendee_name, company_name, tagged_users, author_user_id, note_type, meeting_id, insight_counts, touchpoint_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_name, conference_id, rep, attendee_name, company_name, tagged_users, author_user_id, note_type, meeting_id, insight_counts, touchpoint_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id, entity_type, entity_id, content, created_at, conference_name, rep, attendee_name, company_name, tagged_users, author_user_id, note_type, meeting_id, insight_counts, touchpoint_type`,
       args: [
         entity_type, entity_id, content.trim(),
-        conference_name || null, resolvedRep,
+        conference_name || null, resolvedConferenceId,
+        resolvedRep,
         attendee_name || null, company_name || null,
         tagged_users || null, user.id,
         note_type || 'note', meeting_id ?? null, insight_counts ?? null,

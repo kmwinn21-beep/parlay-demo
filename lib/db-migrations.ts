@@ -2143,4 +2143,15 @@ export const migrations: string[] = [
   // than its config_options id so the note's pill survives the type being
   // renamed or removed, the same way conference_name and company_name do.
   `ALTER TABLE entity_notes ADD COLUMN touchpoint_type TEXT`,
+  // Notes recorded the conference by name, so anything that counts notes per
+  // conference matched on text — and stopped counting the moment a conference
+  // was renamed. The id is written alongside from now on; existing rows are
+  // backfilled wherever the stored name still resolves to a conference.
+  `ALTER TABLE entity_notes ADD COLUMN conference_id INTEGER`,
+  `UPDATE entity_notes SET conference_id = (
+     SELECT c.id FROM conferences c
+     WHERE LOWER(TRIM(c.name)) = LOWER(TRIM(entity_notes.conference_name))
+     LIMIT 1
+   ) WHERE conference_id IS NULL AND conference_name IS NOT NULL AND TRIM(conference_name) != ''`,
+  `CREATE INDEX IF NOT EXISTS idx_entity_notes_conference_id ON entity_notes(conference_id)`,
 ];
