@@ -1329,9 +1329,9 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
           </svg>
           <span className="text-lg font-semibold text-brand-primary font-serif group-hover:text-brand-secondary transition-colors">Floor Notes</span>
-          {notes.length > 0 && (
-            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-brand-secondary text-white text-[10px] font-bold leading-none">{notes.length}</span>
-          )}
+          {/* Always shown, even at zero, so the header reads the same as
+              Touchpoints beside it. */}
+          <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-brand-secondary/10 text-brand-secondary text-[10px] font-bold leading-none">{notes.length}</span>
           <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200 lg:hidden ${sectionExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>

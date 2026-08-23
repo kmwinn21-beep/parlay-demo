@@ -480,7 +480,7 @@ export default function ConferenceDetailPage() {
   const [activityMapOpen, setActivityMapOpen] = useState(false);
   const [reportMenuOpen, setReportMenuOpen] = useState(false);
   const [showNotesModal, setShowNotesModal] = useState(false);
-  const [showAttendeePhotos, setShowAttendeePhotos] = useState(false);
+  const [showAttendeePhotos, setShowAttendeePhotos] = useState(true);
   const [showAttendeeDownload, setShowAttendeeDownload] = useState(false);
   const [quickFilterPlaceholders, setQuickFilterPlaceholders] = useState(false);
   const [boothHoursOnly, setBoothHoursOnly] = useState(false);
@@ -2779,8 +2779,8 @@ export default function ConferenceDetailPage() {
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div className="flex items-center gap-3 flex-wrap">
               <h2 className="text-lg font-semibold text-brand-primary font-serif">Attendees</h2>
-              {/* Photos are off by default — on a phone they push the pill row
-                  down, so showing them is the reader's call. */}
+              {/* Photos are on by default; the toggle is there for readers who
+                  would rather have the tighter rows. */}
               <div className="flex items-center gap-2 lg:hidden">
                 <span className="text-xs font-medium text-gray-600">Show Pictures</span>
                 <button
