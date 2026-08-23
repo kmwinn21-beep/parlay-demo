@@ -253,7 +253,9 @@ export function DashboardOpenFollowUps({ followUps, bannerData }: {
   });
 
   return (
-    <div className="card flex flex-col overflow-hidden">
+    // Desktop only. On a phone the open follow-ups live on /follow-ups and in
+    // the notification bell, so the dashboard doesn't carry them too.
+    <div className="card hidden lg:flex flex-col overflow-hidden">
       {/* Card header */}
       <div className="flex items-center justify-between cursor-pointer flex-shrink-0" onClick={toggle}>
         <div className="flex items-center gap-2">
