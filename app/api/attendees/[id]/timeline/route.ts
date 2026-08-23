@@ -86,11 +86,18 @@ export async function GET(
           args: [attendeeId, confId],
         }),
         db.execute({
+          // Matched on the conference id, falling back to the stored name only
+          // for rows written before entity_notes.conference_id existed. Renaming
+          // a conference used to orphan its whole note history here.
           sql: `SELECT id, content, created_at, conference_name, rep
                 FROM entity_notes
                 WHERE entity_type = 'attendee' AND entity_id = ?
-                  AND (conference_name = ? OR conference_name IS NULL OR conference_name = '')`,
-          args: [attendeeId, conf.name],
+                  AND (
+                    conference_id = ?
+                    OR (conference_id IS NULL AND LOWER(TRIM(COALESCE(conference_name, ''))) = LOWER(TRIM(?)))
+                    OR conference_name IS NULL OR conference_name = ''
+                  )`,
+          args: [attendeeId, confId, conf.name],
         }),
         db.execute({
           sql: `SELECT f.id, f.conference_id,

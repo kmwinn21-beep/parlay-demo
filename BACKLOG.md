@@ -50,28 +50,38 @@ pre-conference should include it at all.
 
 **`app/api/attendees/[id]/timeline/route.ts`**
 
-The per-conference notes query is:
+The per-conference notes query still carries this clause:
 
 ```sql
-SELECT ... FROM entity_notes
-WHERE entity_type = 'attendee' AND entity_id = ?
-  AND (conference_name = ? OR conference_name IS NULL OR conference_name = '')
+OR conference_name IS NULL OR conference_name = ''
 ```
 
-The `OR conference_name IS NULL OR conference_name = ''` clause means a single
-note with no conference set is returned for **every** conference that attendee
-has ever attended. The other two copies match on the conference only.
+A single note with no conference set is therefore returned for **every**
+conference that attendee has ever attended. The other two copies match on the
+conference only.
 
 `hasNotes` no longer contributes to the depth score after the reweighting, but
 it still decides whether a conference counts as a "ghost" — so one unassigned
 note currently suppresses the ghost penalty across an attendee's entire history
 on this endpoint and nowhere else.
 
-The query also still matches on `conference_name` text rather than the
-`entity_notes.conference_id` column added on this branch.
+**Not** a matching-by-name problem any more: both this query and the
+pre-conference equivalent now resolve notes by `entity_notes.conference_id`,
+falling back to the stored name only for rows written before that column
+existed. What remains is purely the deliberate-looking NULL/empty clause, which
+needs a product decision — should an unassigned note count as engagement at
+every conference, at none, or only at the conference that was active when it
+was written?
 
-Found while rebalancing the depth components and deliberately left alone.
+### Note counting by conference name outside the health score
 
+**`app/api/conferences/[id]/crm-prompt/route.ts:226`**
+
+`WHERE ... AND conference_name = ?` against `entity_notes`. Same defect the
+health-score paths had: rename a conference and its notes stop being included in
+the CRM prompt. `entity_notes.conference_id` is available and backfilled; this
+query was left alone because it belongs to a different feature and changing what
+lands in a CRM export is a user-visible behaviour change, not a scoring fix.
 
 ### 🔴 LIVE BUG — notification helpers write to the master DB for tenant users
 

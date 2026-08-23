@@ -245,12 +245,18 @@ export async function GET(
     // Cross-conference entity_notes per attendee (for health score depth + ghost)
     attendeeIds.length > 0
       ? db.execute({
-          sql: `SELECT en.entity_id as attendee_id, c.id as conference_id
+          // Resolved by the note's conference id, falling back to its stored
+          // name only for rows written before entity_notes.conference_id
+          // existed. Renaming a conference used to orphan its note history.
+          sql: `SELECT en.entity_id as attendee_id,
+                       COALESCE(en.conference_id, c.id) as conference_id
                 FROM entity_notes en
-                JOIN conferences c ON c.name = en.conference_name
+                LEFT JOIN conferences c
+                  ON LOWER(TRIM(c.name)) = LOWER(TRIM(en.conference_name))
                 WHERE en.entity_type = 'attendee'
                   AND en.entity_id IN (${attendeeIds.map(() => '?').join(',')})
-                GROUP BY en.entity_id, c.id`,
+                  AND COALESCE(en.conference_id, c.id) IS NOT NULL
+                GROUP BY en.entity_id, COALESCE(en.conference_id, c.id)`,
           args: attendeeIds,
         })
       : Promise.resolve({ rows: [] }),
