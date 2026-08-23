@@ -440,7 +440,9 @@ export async function GET(
     }
 
     const avgDepthScore = totalDepth / totalConfs;
-    const followUpScore = totalFus > 0 ? (completedFus / totalFus) * 100 : 50;
+    // 0, not 50 — someone with no follow-ups shouldn't score as if half of them
+    // were completed. Matches the other two copies.
+    const followUpScore = totalFus > 0 ? (completedFus / totalFus) * 100 : 0;
     const ghostPenalty = (ghostCount / totalConfs) * 100;
 
     const rawScore = avgDepthScore * 0.60 + followUpScore * 0.30 - ghostPenalty * 0.10;
