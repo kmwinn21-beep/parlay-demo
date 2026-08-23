@@ -2138,4 +2138,9 @@ export const migrations: string[] = [
   // automated creation paths (booth scan, form submission, a meeting marked
   // Held) have no way to know, so the action is chosen later by a person.
   `ALTER TABLE follow_ups ADD COLUMN follow_up_action TEXT`,
+  // The touchpoint a note was captured alongside, when it came from the Log
+  // Touchpoint modal's "Log w/ Note". Holds the touchpoint type's label rather
+  // than its config_options id so the note's pill survives the type being
+  // renamed or removed, the same way conference_name and company_name do.
+  `ALTER TABLE entity_notes ADD COLUMN touchpoint_type TEXT`,
 ];

@@ -27,6 +27,10 @@ export interface EntityNote {
   insight_counts?: string | null;
   /** Status/sentiment chosen when the note came from a Log Interaction capture. */
   status?: string | null;
+  /** The touchpoint this note was captured alongside, for notes logged from
+   *  the Log Touchpoint modal. Shown as a pill so the note says where it came
+   *  from. */
+  touchpoint_type?: string | null;
 }
 
 

@@ -433,6 +433,13 @@ export function TouchpointQuickModal({ onClose, defaultConferenceId, defaultComp
   const [selectedTouchpointId, setSelectedTouchpointId] = useState<number | null>(defaultTouchpointId ?? null);
   const [submitting, setSubmitting] = useState(false);
 
+  // "Log w/ Note" logs the touchpoint first, then swaps the body for a note
+  // field. Once we're here the touchpoint is already saved, so closing without
+  // writing a note loses nothing.
+  const [noteStep, setNoteStep] = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+
   // Load conferences, all companies, and touchpoint options on mount
   useEffect(() => {
     const load = async () => {
@@ -529,7 +536,90 @@ export function TouchpointQuickModal({ onClose, defaultConferenceId, defaultComp
     ? confAttendees.filter(a => a.company_id === selectedCompany.id)
     : confAttendees;
 
-  const handleSubmit = async () => {
+  const selectedTouchpoint = touchpointOptions.find(o => o.id === selectedTouchpointId) ?? null;
+
+  /**
+   * Writes the note to every record the touchpoint touched — each attendee, the
+   * company behind them, and the conference — so it reads the same wherever the
+   * reader happens to be. Only the attendee copies notify; the rest are the
+   * same note cross-posted, and notifying on each would fire three times.
+   */
+  const handleSaveNote = async () => {
+    const content = noteText.trim();
+    if (!content || !selectedConference) return;
+    setSavingNote(true);
+    try {
+      const conferenceName = selectedConference.name;
+      const rep = user?.displayName || null;
+      const touchpointLabel = selectedTouchpoint?.value ?? null;
+
+      // The company is whichever was picked, or failing that each attendee's own.
+      const companyIds = new Set<number>();
+      if (selectedCompany) companyIds.add(selectedCompany.id);
+      else for (const att of selectedAttendees) if (att.company_id) companyIds.add(att.company_id);
+
+      const companyNameFor = (id: number) =>
+        allCompanies.find(c => c.id === id)?.name ?? null;
+      const attendeeLabels = selectedAttendees.map(a => `${a.first_name} ${a.last_name}`);
+      const sharedCompanyName = companyIds.size === 1
+        ? companyNameFor(Array.from(companyIds)[0])
+        : selectedCompany?.name ?? null;
+
+      const post = (body: Record<string, unknown>) =>
+        fetch('/api/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content,
+            conference_name: conferenceName,
+            rep,
+            touchpoint_type: touchpointLabel,
+            ...body,
+          }),
+        });
+
+      const posts: Promise<Response>[] = [
+        ...selectedAttendees.map(att => post({
+          entity_type: 'attendee',
+          entity_id: att.id,
+          attendee_name: `${att.first_name} ${att.last_name}`,
+          company_name: att.company_id ? companyNameFor(att.company_id) : sharedCompanyName,
+        })),
+        ...Array.from(companyIds).map(cid => post({
+          entity_type: 'company',
+          entity_id: cid,
+          attendee_name: attendeeLabels.join(', ') || null,
+          company_name: companyNameFor(cid),
+          skip_notification: true,
+        })),
+        post({
+          entity_type: 'conference',
+          entity_id: selectedConference.id,
+          attendee_name: attendeeLabels.join(', ') || null,
+          company_name: sharedCompanyName,
+          skip_notification: true,
+        }),
+      ];
+
+      const results = await Promise.allSettled(posts);
+      const failures = results.filter(r =>
+        r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.ok)
+      ).length;
+      if (failures === results.length) {
+        toast.error('Failed to save the note.');
+        return;
+      }
+      if (failures > 0) toast.error(`Note saved, but ${failures} of ${results.length} records missed it.`);
+      else toast.success('Note saved.');
+      onClose();
+    } catch {
+      toast.error('Failed to save the note.');
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
+  const handleSubmit = async (withNote = false) => {
     if (!selectedConference || selectedAttendees.length === 0 || !selectedTouchpointId) {
       toast.error('Please select a conference, at least one attendee, and a touchpoint type.');
       return;
@@ -550,7 +640,8 @@ export function TouchpointQuickModal({ onClose, defaultConferenceId, defaultComp
       ).length;
       if (failures === 0) {
         toast.success(`Touchpoint logged for ${selectedAttendees.length} attendee${selectedAttendees.length > 1 ? 's' : ''}.`);
-        onClose();
+        if (withNote) setNoteStep(true);
+        else onClose();
       } else {
         toast.error(`${failures} of ${selectedAttendees.length} touchpoints failed to save.`);
       }
@@ -565,7 +656,7 @@ export function TouchpointQuickModal({ onClose, defaultConferenceId, defaultComp
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
-          <h3 className="text-base font-semibold text-brand-primary font-serif">Log Touchpoint</h3>
+          <h3 className="text-base font-semibold text-brand-primary font-serif">{noteStep ? 'Add a Note' : 'Log Touchpoint'}</h3>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -576,6 +667,47 @@ export function TouchpointQuickModal({ onClose, defaultConferenceId, defaultComp
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : noteStep ? (
+          <div className="px-6 py-4 overflow-y-auto flex-1 space-y-3">
+            {/* What the note will be filed against, so it's clear before saving */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {selectedTouchpoint && (
+                <span
+                  className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border whitespace-nowrap"
+                  style={{
+                    borderColor: `${getPreset(selectedTouchpoint.color).hex}55`,
+                    backgroundColor: `${getPreset(selectedTouchpoint.color).hex}18`,
+                    color: getPreset(selectedTouchpoint.color).hex,
+                  }}
+                >
+                  {selectedTouchpoint.value}
+                </span>
+              )}
+              {selectedAttendees.map(a => (
+                <span key={a.id} className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-200 whitespace-nowrap">
+                  {a.first_name} {a.last_name}
+                </span>
+              ))}
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-brand-secondary text-xs font-medium border border-blue-100 whitespace-nowrap">
+                {selectedConference?.name}
+              </span>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Note</label>
+              <textarea
+                autoFocus
+                value={noteText}
+                onChange={e => setNoteText(e.target.value)}
+                rows={5}
+                placeholder="What came out of it?"
+                className="input-field resize-none w-full text-sm"
+              />
+            </div>
+            <p className="text-xs text-gray-400">
+              The touchpoint is already logged. The note is saved to the attendee
+              {selectedAttendees.length > 1 ? 's' : ''}, their company, and the conference.
+            </p>
           </div>
         ) : (
           <div className="px-6 py-4 overflow-y-auto flex-1 space-y-4">
@@ -668,15 +800,39 @@ export function TouchpointQuickModal({ onClose, defaultConferenceId, defaultComp
         )}
 
         <div className="flex justify-end gap-2 px-6 pb-5 pt-2 flex-shrink-0">
-          <button type="button" onClick={onClose} className="btn-secondary text-sm">Cancel</button>
-          <button
-            type="button"
-            onClick={() => void handleSubmit()}
-            disabled={!canSubmit || !!user?.demoVisitor}
-            className="btn-primary text-sm"
-          >
-            {submitting ? 'Saving…' : 'Log Touchpoint'}
-          </button>
+          {noteStep ? (
+            <>
+              <button type="button" onClick={onClose} className="btn-secondary text-sm">Skip</button>
+              <button
+                type="button"
+                onClick={() => void handleSaveNote()}
+                disabled={savingNote || !noteText.trim() || !!user?.demoVisitor}
+                className="btn-primary text-sm disabled:opacity-50"
+              >
+                {savingNote ? 'Saving…' : 'Save Note'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" onClick={onClose} className="btn-secondary text-sm">Cancel</button>
+              <button
+                type="button"
+                onClick={() => void handleSubmit(true)}
+                disabled={!canSubmit || !!user?.demoVisitor}
+                className="btn-secondary text-sm whitespace-nowrap"
+              >
+                Log w/ Note
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSubmit(false)}
+                disabled={!canSubmit || !!user?.demoVisitor}
+                className="btn-primary text-sm whitespace-nowrap"
+              >
+                {submitting ? 'Saving…' : 'Log Touchpoint'}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
