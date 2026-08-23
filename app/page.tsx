@@ -277,7 +277,8 @@ function TargetsAndUpcomingSkeleton() {
           ))}
         </div>
       </div>
-      <div className="card">
+      {/* Open Follow-Ups placeholder — desktop only, like the card itself */}
+      <div className="card hidden lg:block">
         <div className="h-6 w-36 bg-gray-200 rounded mb-5" />
         <div className="space-y-3">
           {[1, 2, 3].map(i => (
