@@ -592,8 +592,8 @@ export function FollowUpsTable({
             case 'notes': return <td key="notes" className="px-3 py-2">
               <FollowUpNotesPopover attendeeId={fu.attendee_id} notesCount={Number(fu.entity_notes_count)} conferenceName={fu.conference_name} />
             </td>;
-            case 'status': return <td key="status" className="px-3 py-2">
-              <button type="button" onClick={() => onToggle(fu.id, !fu.completed)} className={`flex items-center gap-1 px-2 py-1 rounded-lg font-medium border-2 transition-all whitespace-nowrap ${fu.completed ? 'bg-green-500 text-white border-green-600 hover:bg-green-600' : 'bg-white text-gray-500 border-gray-300 hover:border-green-400 hover:text-green-600'}`}>
+            case 'status': return <td key="status" className="px-3 py-2 text-center">
+              <button type="button" onClick={() => onToggle(fu.id, !fu.completed)} className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg font-medium border-2 transition-all whitespace-nowrap ${fu.completed ? 'bg-green-500 text-white border-green-600 hover:bg-green-600' : 'bg-white text-gray-500 border-gray-300 hover:border-green-400 hover:text-green-600'}`}>
                 {fu.completed ? (<><CheckIcon className="w-3 h-3 flex-shrink-0" />Done</>) : 'Done'}
               </button>
             </td>;
@@ -881,17 +881,13 @@ export function FollowUpsTable({
             case 'conference': return cell('conference',
               <span className="text-xs text-gray-500 truncate block">{head.conference_name}</span>);
             case 'rep': return cell('rep',
-              <span className="flex items-center gap-2">
-                {/* The reps get a fixed block so the count pill beside them
-                    lands on the same x down the whole table. */}
+              <span className="flex items-center">
                 <span className="min-w-[3.5rem]">{renderGroupRepBody(rows, 'xs', true)}</span>
-                <span className="w-5 flex-shrink-0 flex justify-center">
-                  <FollowUpCountPill count={rows.length} />
-                </span>
               </span>);
             case 'notes': return cell('notes', <span />);
             // One pill for the group: done only when every entry under it is.
-            case 'status': return cell('status', <StatusPill completed={rows.every(r => r.completed)} />);
+            case 'status': return cell('status',
+              <span className="flex justify-center"><StatusPill completed={rows.every(r => r.completed)} /></span>);
             default: return null;
           }
         })}
@@ -943,7 +939,7 @@ export function FollowUpsTable({
               <FollowUpNotesPopover attendeeId={head.attendee_id} notesCount={Number(head.entity_notes_count)} conferenceName={head.conference_name} />
             </td>;
             case 'status': return <td key="status" className="px-3 py-2">
-              {renderGroupDoneButton(groupKey, rows)}
+              <span className="flex justify-center">{renderGroupDoneButton(groupKey, rows)}</span>
             </td>;
             default: return null;
           }
@@ -1065,7 +1061,8 @@ export function FollowUpsTable({
                     case 'conference': return <th key="conference" className={thCls}>Conference</th>;
                     case 'rep': return <th key="rep" className={thCls}>Rep</th>;
                     case 'notes': return <th key="notes" className={thCls}>Notes</th>;
-                    case 'status': return <th key="status" className={thCls}>Status</th>;
+                    // Centred so the pill below sits under the middle of the word.
+                  case 'status': return <th key="status" className={`${thCls} text-center`}>Status</th>;
                     default: return null;
                   }
                 })}
@@ -1140,7 +1137,8 @@ export function FollowUpsTable({
                     case 'conference': return <th key="conference" className={thCls}>Conference</th>;
                     case 'rep': return <th key="rep" className={thCls}>Rep</th>;
                     case 'notes': return <th key="notes" className={thCls}>Notes</th>;
-                    case 'status': return <th key="status" className={thCls}>Status</th>;
+                    // Centred so the pill below sits under the middle of the word.
+                  case 'status': return <th key="status" className={`${thCls} text-center`}>Status</th>;
                     default: return null;
                   }
                 })}
@@ -1402,7 +1400,8 @@ export function FollowUpsTable({
                   case 'conference': return <th key="conference" className={thCls}>Conference</th>;
                   case 'rep': return <th key="rep" className={thCls}>Rep</th>;
                   case 'notes': return <th key="notes" className={thCls}>{anyGroupExpanded ? 'Notes' : ''}</th>;
-                  case 'status': return <th key="status" className={thCls}>Status</th>;
+                  // Centred so the pill below sits under the middle of the word.
+                  case 'status': return <th key="status" className={`${thCls} text-center`}>Status</th>;
                   default: return null;
                 }
               })}
