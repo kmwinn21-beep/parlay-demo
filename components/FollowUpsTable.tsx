@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useLayoutEffect, Fragment } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, Fragment } from 'react';
 import Link from 'next/link';
 import { QuickViewDrawer, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { useFollowUpActions, followUpActionLabel } from '@/lib/useFollowUpActions';
@@ -357,7 +357,9 @@ export function FollowUpsTable({
       const panelH = drawerPanelRef.current?.offsetHeight ?? 0;
       // The spacer sits outside the table, so growing it can't move the row
       // this was measured against.
-      setDrawerOverhang(panelH > 0 ? Math.max(0, Math.round(offset + panelH + 16 - wrap.offsetHeight)) : 0);
+      // The gutter also covers whatever is pinned to the bottom of the window
+      // over this column, so the scroll below can clear it.
+      setDrawerOverhang(panelH > 0 ? Math.max(0, Math.round(offset + panelH + 96 - wrap.offsetHeight)) : 0);
     };
     measure();
     if (typeof ResizeObserver === 'undefined') return;
@@ -366,6 +368,47 @@ export function FollowUpsTable({
     if (drawerPanelRef.current) ro.observe(drawerPanelRef.current);
     return () => ro.disconnect();
   }, [detailsInDrawer, drawerGroupKey, followUps]);
+
+  // Once the spacer is in place and the panel has finished unfurling, bring it
+  // into view rather than leaving the reader to find it. Only scrolls by the
+  // amount actually needed, so the row it belongs to stays on screen.
+  useEffect(() => {
+    if (!detailsInDrawer || !drawerGroupKey) return;
+    // The panel scales up over ~220ms; measuring mid-animation reads short.
+    const t = setTimeout(() => {
+      const panel = drawerPanelRef.current;
+      if (!panel || panel.offsetHeight === 0) return;
+
+      // The page scrolls inside a container here, not the window.
+      let scroller: HTMLElement | null = panel.parentElement;
+      while (scroller && scroller !== document.body) {
+        const oy = getComputedStyle(scroller).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && scroller.scrollHeight > scroller.clientHeight) break;
+        scroller = scroller.parentElement;
+      }
+      const usesWindow = !scroller || scroller === document.body;
+
+      const pr = panel.getBoundingClientRect();
+      let bottomLimit = usesWindow ? window.innerHeight : scroller!.getBoundingClientRect().bottom;
+      // Anything pinned to the bottom of the window over the panel's own column
+      // — the messaging bar — would cover the end of the card, so scroll clear
+      // of it rather than to the container's edge.
+      for (const el of Array.from(document.querySelectorAll<HTMLElement>('body *'))) {
+        if (getComputedStyle(el).position !== 'fixed') continue;
+        const r = el.getBoundingClientRect();
+        if (r.height === 0 || r.width === 0) continue;
+        if (r.bottom < window.innerHeight - 4 || r.top > window.innerHeight) continue;
+        if (r.right < pr.left || r.left > pr.right) continue;
+        bottomLimit = Math.min(bottomLimit, r.top);
+      }
+      const delta = Math.round(pr.bottom - (bottomLimit - 12));
+      if (delta <= 0) return;
+
+      if (usesWindow) window.scrollBy({ top: delta, behavior: 'smooth' });
+      else scroller!.scrollBy({ top: delta, behavior: 'smooth' });
+    }, 280);
+    return () => clearTimeout(t);
+  }, [detailsInDrawer, drawerGroupKey, drawerOverhang]);
 
   const [reassignNote, setReassignNote] = useState<ReassignNoteTarget | null>(null);
 
