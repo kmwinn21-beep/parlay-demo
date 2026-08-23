@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Fragment } from 'react';
+import { useState, useRef, useLayoutEffect, Fragment } from 'react';
 import Link from 'next/link';
 import { QuickViewDrawer, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { useFollowUpActions, followUpActionLabel } from '@/lib/useFollowUpActions';
@@ -303,6 +303,11 @@ export function FollowUpsTable({
   const [editingNextStepsKey, setEditingNextStepsKey] = useState<number | null>(null);
   const [editingActionKey, setEditingActionKey] = useState<number | null>(null);
   const [drawerGroupKey, setDrawerGroupKey] = useState<string | null>(null);
+  // The panel starts level with the row it belongs to rather than at the top of
+  // the table, so the two read as one thing. Measured from the row because the
+  // rows aren't a uniform height.
+  const tableWrapRef = useRef<HTMLDivElement>(null);
+  const [drawerOffset, setDrawerOffset] = useState(0);
   const [reassignNote, setReassignNote] = useState<ReassignNoteTarget | null>(null);
 
   /** Every reassignment offers a note; the prompt handles the rest. */
@@ -790,15 +795,26 @@ export function FollowUpsTable({
       </td>
     );
 
+    // With the panel open, everything but the row it belongs to fades back so
+    // the selected one reads as the subject.
+    const dimmed = detailsInDrawer && drawerGroupKey != null && !expanded;
+
     return (
       <tr
         key={groupKey}
+        data-group-key={groupKey}
         role="button"
         tabIndex={0}
         onClick={() => toggleGroupKey(groupKey)}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroupKey(groupKey); } }}
         aria-expanded={expanded}
-        className="bg-gray-50 border-y border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
+        className={`border-y border-gray-200 cursor-pointer transition-all ${
+          dimmed
+            ? 'bg-gray-50/60 opacity-40 hover:opacity-100 hover:bg-gray-100'
+            : expanded
+              ? 'bg-white ring-1 ring-inset ring-brand-secondary/40 hover:bg-white'
+              : 'bg-gray-50 hover:bg-gray-100'
+        }`}
       >
         {orderedColumns.map(col => {
           if (!isVisible(col.key)) return null;
@@ -1236,6 +1252,7 @@ export function FollowUpsTable({
 
     return (
       <SlideInPanel
+        fitContent
         title={<span className="text-sm">{head.first_name} {head.last_name}</span>}
         subtitle={[head.title, head.company_name].filter(Boolean).join(' · ')}
         onClose={() => setDrawerGroupKey(null)}
@@ -1278,6 +1295,23 @@ export function FollowUpsTable({
       </SlideInPanel>
     );
   }
+
+  useLayoutEffect(() => {
+    if (!detailsInDrawer || !drawerGroupKey) { setDrawerOffset(0); return; }
+    const wrap = tableWrapRef.current;
+    const row = wrap?.querySelector<HTMLElement>(`tr[data-group-key="${CSS.escape(drawerGroupKey)}"]`);
+    if (!wrap || !row) { setDrawerOffset(0); return; }
+    const measure = () => {
+      const r = row.getBoundingClientRect();
+      const w = wrap.getBoundingClientRect();
+      setDrawerOffset(Math.max(0, Math.round(r.top - w.top)));
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, [detailsInDrawer, drawerGroupKey, followUps]);
 
   const confAttGroups = buildConferenceAttendeeGroups(followUps);
   const showConferenceHeader = groupBy === 'conference-attendee';
@@ -1322,8 +1356,8 @@ export function FollowUpsTable({
       {/* Desktop — the panel takes a column beside the table when open. The
           row itself is always mounted so the panel renders once and handles
           its own phone form (a bottom sheet) from inside. */}
-      <div className="lg:flex lg:items-stretch">
-      <div className="hidden lg:block flex-1 min-w-0 overflow-x-auto">
+      <div className="lg:flex lg:items-start">
+      <div ref={tableWrapRef} className="hidden lg:block flex-1 min-w-0 overflow-x-auto">
         <table className="w-full" style={{ fontSize: '0.7rem' }}>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
@@ -1386,7 +1420,11 @@ export function FollowUpsTable({
           </tbody>
         </table>
       </div>
-        {drawer && <div className="lg:w-96 lg:flex-shrink-0 lg:pr-3">{drawer}</div>}
+        {drawer && (
+          <div className="lg:w-96 lg:flex-shrink-0 lg:pr-3" style={{ paddingTop: drawerOffset }}>
+            {drawer}
+          </div>
+        )}
       </div>
       {quickView && (
         <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
