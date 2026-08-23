@@ -247,18 +247,6 @@ export function Header() {
         <NotificationBell />
         {/* Outstanding Follow Ups */}
         <OutstandingFollowUps />
-        {/* Global Search — desktop only; mobile uses FloatingNav */}
-        <button
-          type="button"
-          onClick={() => setShowSearch(true)}
-          className="hidden lg:flex items-center gap-1.5 px-2 lg:px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
-          title="Search (⌘K)"
-        >
-          <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <span className="text-sm font-medium text-brand-primary hidden lg:block">Search</span>
-        </button>
         {/* Add New Dropdown */}
         <div className="relative" ref={addNewRef}>
           <button
@@ -482,11 +470,13 @@ export function Header() {
           </svg>
         </button>
 
-        {/* Admin Panel — hidden on mobile, only visible to administrators */}
+        {/* Admin Panel — administrators only, and only between sm and lg. On a
+            phone in landscape this is the sole way into Admin Settings; desktop
+            reaches it from the sidebar, so the header doesn't repeat it. */}
         {user?.role === 'administrator' && (
           <Link
             href="/admin"
-            className={`hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors ${pathname === '/admin' ? 'bg-gray-100' : ''}`}
+            className={`hidden sm:flex lg:hidden items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors ${pathname === '/admin' ? 'bg-gray-100' : ''}`}
             title="Admin Settings"
           >
             <svg className="w-4 h-4 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -526,6 +516,20 @@ export function Header() {
             </>
           )}
         </div>
+
+        {/* Global Search — desktop only, to the right of messaging; mobile uses
+            the icon above and FloatingNav. */}
+        <button
+          type="button"
+          onClick={() => setShowSearch(true)}
+          className="hidden lg:flex items-center gap-1.5 px-2 lg:px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+          title="Search (⌘K)"
+        >
+          <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <span className="text-sm font-medium text-brand-primary hidden lg:block">Search</span>
+        </button>
 
         {/* User menu — hidden on mobile */}
         {user && (

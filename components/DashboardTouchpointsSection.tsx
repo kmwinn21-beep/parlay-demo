@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { getPreset } from '@/lib/colors';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
 import { TouchpointForm, TouchpointQuickModal } from '@/components/DashboardActionCard';
@@ -25,10 +25,22 @@ export function DashboardTouchpointsSection() {
   const [options, setOptions] = useState<TouchpointOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalTouchpointId, setModalTouchpointId] = useState<number | null>(null);
+  // The pill counts what has actually been logged at the set conference, not
+  // how many types exist.
+  const [loggedCount, setLoggedCount] = useState<number | null>(null);
   const { isMobile, expanded, toggle, showBody } = useMobileCollapse();
   // Gated rather than CSS-hidden: the form loads every company in the account,
   // which a phone should never pay for.
   const isDesktop = useIsDesktop();
+  // The active conference is read from sessionStorage in the provider's mount
+  // effect, which lands after this component's first render. Waiting a frame
+  // means the form opens on the set conference rather than defaulting to
+  // whichever one happens to be in progress and then jumping.
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setSettled(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   // Remounts the inline form after a save so it comes back empty rather than
   // holding the attendees that were just logged.
@@ -47,6 +59,19 @@ export function DashboardTouchpointsSection() {
     return () => { cancelled = true; };
   }, []);
 
+  const confId = activeConference?.id ?? null;
+  const refreshCount = useCallback(async () => {
+    if (confId == null) { setLoggedCount(null); return; }
+    try {
+      const r = await fetch(`/api/conferences/${confId}/touchpoints`, { cache: 'no-store' });
+      if (!r.ok) { setLoggedCount(null); return; }
+      const data = await r.json() as { total?: number };
+      setLoggedCount(Number(data.total ?? 0));
+    } catch { setLoggedCount(null); }
+  }, [confId]);
+
+  useEffect(() => { void refreshCount(); }, [refreshCount]);
+
   return (
     <>
       <div className="card h-full flex flex-col">
@@ -60,8 +85,11 @@ export function DashboardTouchpointsSection() {
             <path d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11" />
           </svg>
           <h2 className="text-lg font-semibold text-brand-primary font-serif group-hover:text-brand-secondary transition-colors">Touchpoints</h2>
-          {options.length > 0 && (
-            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-green-100 text-green-700 text-[10px] font-bold leading-none">{options.length}</span>
+          {loggedCount != null && (
+            <span
+              title={`${loggedCount} touchpoint${loggedCount === 1 ? '' : 's'} logged at ${activeConference?.name ?? 'this conference'}`}
+              className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-green-100 text-green-700 text-[10px] font-bold leading-none"
+            >{loggedCount}</span>
           )}
           <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200 lg:hidden ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -69,14 +97,15 @@ export function DashboardTouchpointsSection() {
         </button>
 
         {/* Desktop: the full form, conference already set */}
-        {isDesktop && (
+        {isDesktop && settled && (
         <div className="flex flex-col flex-1 min-h-0">
           <TouchpointForm
-            key={formKey}
+            key={`${activeConference?.id ?? 'none'}-${formKey}`}
             defaultConferenceId={activeConference?.id ?? null}
             onDone={() => setFormKey(k => k + 1)}
-            bodyClassName="space-y-4 flex-1 min-h-0 overflow-y-auto"
-            footerClassName="flex justify-end gap-2 pt-4 flex-shrink-0"
+            onLogged={() => void refreshCount()}
+            bodyClassName="space-y-4 flex-1 min-h-0"
+            footerClassName="grid grid-cols-2 gap-2 pt-4 flex-shrink-0"
             cancelLabel={null}
           />
         </div>
@@ -114,7 +143,7 @@ export function DashboardTouchpointsSection() {
 
       {modalTouchpointId != null && (
         <TouchpointQuickModal
-          onClose={() => setModalTouchpointId(null)}
+          onClose={() => { setModalTouchpointId(null); void refreshCount(); }}
           defaultConferenceId={activeConference?.id ?? null}
           defaultTouchpointId={modalTouchpointId}
         />

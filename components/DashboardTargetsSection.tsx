@@ -238,25 +238,35 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
   const [drawerAttendeeId, setDrawerAttendeeId] = useState<number | null>(null);
   const [drawerAttendeeName, setDrawerAttendeeName] = useState<string>('');
 
+  // The active conference arrives from sessionStorage after mount, so the
+  // dropdown's first value is superseded a beat later and two fetches end up in
+  // flight. Whichever answered last used to win, which is why the targets for
+  // the set conference often didn't appear until it was reselected.
+  const targetsReqRef = useRef(0);
+
   const fetchTargets = useCallback(async (confId: number) => {
+    const req = ++targetsReqRef.current;
     setLoading(true);
     try {
       const [targetsRes, meetingsRes] = await Promise.all([
         fetch(`/api/conferences/${confId}/targets`),
         fetch(`/api/meetings?conference_id=${confId}`),
       ]);
+      if (req !== targetsReqRef.current) return;
       if (targetsRes.ok) {
         const data = await targetsRes.json() as TargetEntry[];
+        if (req !== targetsReqRef.current) return;
         setTargets(data);
       }
       if (meetingsRes.ok) {
         const meetings = await meetingsRes.json() as { attendee_id: number }[];
+        if (req !== targetsReqRef.current) return;
         setMeetingAttendeeIds(new Set(meetings.map(m => m.attendee_id)));
       } else {
         setMeetingAttendeeIds(new Set());
       }
     } catch { /* ignore */ } finally {
-      setLoading(false);
+      if (req === targetsReqRef.current) setLoading(false);
     }
   }, []);
 

@@ -196,10 +196,12 @@ function SearchableSelect<T extends { id: number }>({
 // ── SearchableMultiSelect ─────────────────────────────────────────────────────
 
 function SearchableMultiSelect<T extends { id: number }>({
-  options, selected, onChange, getLabel, placeholder,
+  options, selected, onChange, getLabel, placeholder, onSelectOther,
 }: {
   options: T[]; selected: T[]; onChange: (items: T[]) => void;
   getLabel: (v: T) => string; placeholder: string;
+  /** Adds an "Other (not in list)" entry above the results when provided. */
+  onSelectOther?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -279,6 +281,15 @@ function SearchableMultiSelect<T extends { id: number }>({
             />
           </div>
           <div className="overflow-y-auto">
+            {onSelectOther && (
+              <button
+                type="button"
+                onClick={() => { onSelectOther(); setOpen(false); setSearch(''); }}
+                className="w-full text-left px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 border-b border-gray-100 font-medium"
+              >
+                Other (not in list)
+              </button>
+            )}
             {filtered.length === 0 ? (
               <p className="text-sm text-gray-400 px-3 py-2">No results</p>
             ) : filtered.map(o => (
@@ -418,6 +429,7 @@ export function TouchpointForm({
   footerClassName = 'flex justify-end gap-2 px-6 pb-5 pt-2 flex-shrink-0',
   cancelLabel = 'Cancel',
   onStepChange,
+  onLogged,
 }: {
   /** Called once the touchpoint (and any note) is saved, and by Cancel/Skip. */
   onDone: () => void;
@@ -433,6 +445,8 @@ export function TouchpointForm({
   cancelLabel?: string | null;
   /** Lets the wrapper retitle itself when the note step opens. */
   onStepChange?: (step: 'form' | 'note') => void;
+  /** Fired after touchpoints save, so a caller can refresh its own counts. */
+  onLogged?: () => void;
 }) {
   const onClose = onDone;
   const { user } = useUser();
@@ -458,6 +472,32 @@ export function TouchpointForm({
   const [noteStep, setNoteStep] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  const [showAllTypes, setShowAllTypes] = useState(false);
+
+  // "Other (not in list)" — the company and/or attendee is typed in here and
+  // created on submit, the same way the floor-note assign flow does it.
+  const [companyIsOther, setCompanyIsOther] = useState(false);
+  const [newCompanyName, setNewCompanyName] = useState('');
+  const [newCompanyType, setNewCompanyType] = useState('');
+  const [companyTypeOptions, setCompanyTypeOptions] = useState<string[]>([]);
+  const [attendeeIsOther, setAttendeeIsOther] = useState(false);
+  const [manualFirst, setManualFirst] = useState('');
+  const [manualLast, setManualLast] = useState('');
+  const [manualTitle, setManualTitle] = useState('');
+  const [manualEmail, setManualEmail] = useState('');
+
+  const resetCompanyOther = () => { setCompanyIsOther(false); setNewCompanyName(''); setNewCompanyType(''); };
+  const resetAttendeeOther = () => { setAttendeeIsOther(false); setManualFirst(''); setManualLast(''); setManualTitle(''); setManualEmail(''); };
+
+  const newCompanyReady = companyIsOther && newCompanyName.trim().length > 0;
+  const newAttendeeReady = attendeeIsOther && manualFirst.trim().length > 0 && manualLast.trim().length > 0;
+
+  useEffect(() => {
+    fetch('/api/config?category=company_type')
+      .then(r => (r.ok ? r.json() : []))
+      .then((opts: { value: string }[]) => setCompanyTypeOptions(Array.isArray(opts) ? opts.map(o => o.value).filter(Boolean) : []))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => { onStepChange?.(noteStep ? 'note' : 'form'); }, [noteStep, onStepChange]);
 
@@ -559,6 +599,21 @@ export function TouchpointForm({
 
   const selectedTouchpoint = touchpointOptions.find(o => o.id === selectedTouchpointId) ?? null;
 
+  // Two per row, so three rows is six types. A picked type is always shown,
+  // even when it lives in the collapsed remainder.
+  const TYPE_ROWS = 3;
+  const TYPES_PER_ROW = 2;
+  const typeCap = TYPE_ROWS * TYPES_PER_ROW;
+  const hiddenTypeCount = Math.max(0, touchpointOptions.length - typeCap);
+  const visibleTouchpointOptions = showAllTypes || hiddenTypeCount === 0
+    ? touchpointOptions
+    : (() => {
+        const head = touchpointOptions.slice(0, typeCap);
+        if (selectedTouchpointId == null || head.some(o => o.id === selectedTouchpointId)) return head;
+        const picked = touchpointOptions.find(o => o.id === selectedTouchpointId);
+        return picked ? [...head.slice(0, typeCap - 1), picked] : head;
+      })();
+
   /**
    * Writes the note to every record the touchpoint touched — each attendee, the
    * company behind them, and the conference — so it reads the same wherever the
@@ -640,15 +695,76 @@ export function TouchpointForm({
     }
   };
 
+  /**
+   * Creates whatever was typed into the Other fields and returns the attendees
+   * to log against. A new attendee is added to the conference by the same
+   * endpoint the attendee list uses, which creates the company alongside it.
+   */
+  const materialiseOthers = async (): Promise<Attendee[] | null> => {
+    if (!selectedConference) return null;
+    let companyId = selectedCompany?.id ?? null;
+    let companyName = selectedCompany?.name ?? null;
+
+    if (newCompanyReady && !newAttendeeReady) {
+      const res = await fetch('/api/companies', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newCompanyName.trim(), company_type: newCompanyType || null }),
+      });
+      if (!res.ok) { toast.error('Failed to create the company.'); return null; }
+      const created = await res.json();
+      companyId = Number(created.id);
+      companyName = String(created.name ?? newCompanyName.trim());
+      const comp: Company = { id: companyId, name: companyName };
+      setAllCompanies(prev => (prev.some(c => c.id === comp.id) ? prev : [...prev, comp]));
+      setConfCompanies(prev => (prev.some(c => c.id === comp.id) ? prev : [...prev, comp]));
+      setSelectedCompany(comp);
+      resetCompanyOther();
+    }
+
+    if (newAttendeeReady) {
+      const res = await fetch(`/api/conferences/${selectedConference.id}/attendees/add`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          first_name: manualFirst.trim(),
+          last_name: manualLast.trim(),
+          title: manualTitle.trim() || undefined,
+          email: manualEmail.trim() || undefined,
+          company: newCompanyReady ? newCompanyName.trim() : (companyName ?? undefined),
+          company_type: newCompanyReady ? (newCompanyType || undefined) : undefined,
+        }),
+      });
+      if (!res.ok) { toast.error('Failed to create the attendee.'); return null; }
+      const created = await res.json() as { id?: number; attendee_id?: number; company_id?: number | null };
+      const newId = Number(created.id ?? created.attendee_id);
+      if (!newId || isNaN(newId)) { toast.error('Failed to create the attendee.'); return null; }
+      const att: Attendee = {
+        id: newId,
+        first_name: manualFirst.trim(),
+        last_name: manualLast.trim(),
+        company_id: created.company_id ?? companyId,
+      };
+      setConfAttendees(prev => (prev.some(a => a.id === att.id) ? prev : [...prev, att]));
+      const next = [...selectedAttendees, att];
+      setSelectedAttendees(next);
+      resetAttendeeOther();
+      resetCompanyOther();
+      return next;
+    }
+
+    return selectedAttendees;
+  };
+
   const handleSubmit = async (withNote = false) => {
-    if (!selectedConference || selectedAttendees.length === 0 || !selectedTouchpointId) {
+    if (!selectedConference || !selectedTouchpointId || (selectedAttendees.length === 0 && !newAttendeeReady)) {
       toast.error('Please select a conference, at least one attendee, and a touchpoint type.');
       return;
     }
     setSubmitting(true);
     try {
+      const attendees = await materialiseOthers();
+      if (!attendees || attendees.length === 0) { setSubmitting(false); return; }
       const results = await Promise.allSettled(
-        selectedAttendees.map(att =>
+        attendees.map(att =>
           fetch(`/api/attendees/${att.id}/touchpoints`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -660,18 +776,22 @@ export function TouchpointForm({
         r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.ok)
       ).length;
       if (failures === 0) {
-        toast.success(`Touchpoint logged for ${selectedAttendees.length} attendee${selectedAttendees.length > 1 ? 's' : ''}.`);
+        toast.success(`Touchpoint logged for ${attendees.length} attendee${attendees.length > 1 ? 's' : ''}.`);
+        onLogged?.();
         if (withNote) setNoteStep(true);
         else onClose();
       } else {
-        toast.error(`${failures} of ${selectedAttendees.length} touchpoints failed to save.`);
+        toast.error(`${failures} of ${attendees.length} touchpoints failed to save.`);
       }
     } catch { toast.error('Failed to log touchpoints.'); }
     finally { setSubmitting(false); }
   };
 
   const isBusy = loading || loadingCascade;
-  const canSubmit = !submitting && !isBusy && !!selectedConference && selectedAttendees.length > 0 && !!selectedTouchpointId;
+  const canSubmit = !submitting && !isBusy && !!selectedConference && !!selectedTouchpointId
+    && (selectedAttendees.length > 0 || newAttendeeReady)
+    && !(companyIsOther && !newCompanyReady)
+    && !(attendeeIsOther && !newAttendeeReady);
 
   return (
     <>
@@ -741,6 +861,26 @@ export function TouchpointForm({
                   <div className="w-3.5 h-3.5 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin flex-shrink-0" />
                   Loading companies…
                 </div>
+              ) : companyIsOther ? (
+                <div className="space-y-2">
+                  <input
+                    autoFocus type="text" value={newCompanyName}
+                    onChange={e => setNewCompanyName(e.target.value)}
+                    placeholder="Company name *"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white"
+                  />
+                  <select
+                    value={newCompanyType}
+                    onChange={e => setNewCompanyType(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-secondary"
+                  >
+                    <option value="">Company type (optional)</option>
+                    {companyTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <button type="button" onClick={resetCompanyOther} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                    ← Pick an existing company
+                  </button>
+                </div>
               ) : (
                 <GroupedCompanyDropdown
                   companies={confCompanies}
@@ -750,6 +890,7 @@ export function TouchpointForm({
                     handleCompanyChange(comp);
                   }}
                   onClear={() => handleCompanyChange(null)}
+                  onSelectOther={() => { handleCompanyChange(null); setCompanyIsOther(true); }}
                   placeholder={selectedConference ? 'Filter by company…' : 'Select a conference first'}
                   disabled={!selectedConference}
                   inputClassName="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left bg-white disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-1 focus:ring-brand-secondary"
@@ -764,6 +905,22 @@ export function TouchpointForm({
                   <div className="w-3.5 h-3.5 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin flex-shrink-0" />
                   Loading attendees…
                 </div>
+              ) : attendeeIsOther ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <input autoFocus type="text" value={manualFirst} onChange={e => setManualFirst(e.target.value)} placeholder="First name *"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white" />
+                    <input type="text" value={manualLast} onChange={e => setManualLast(e.target.value)} placeholder="Last name *"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white" />
+                  </div>
+                  <input type="text" value={manualTitle} onChange={e => setManualTitle(e.target.value)} placeholder="Title"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white" />
+                  <input type="email" value={manualEmail} onChange={e => setManualEmail(e.target.value)} placeholder="Email"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white" />
+                  <button type="button" onClick={resetAttendeeOther} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                    ← Pick an existing attendee
+                  </button>
+                </div>
               ) : (
                 <SearchableMultiSelect<Attendee>
                   options={filteredAttendees}
@@ -771,6 +928,7 @@ export function TouchpointForm({
                   onChange={setSelectedAttendees}
                   getLabel={a => `${a.first_name} ${a.last_name}`}
                   placeholder={selectedConference ? 'Select attendee(s)…' : 'Select a conference first'}
+                  onSelectOther={selectedConference ? () => setAttendeeIsOther(true) : undefined}
                 />
               )}
             </div>
@@ -781,7 +939,7 @@ export function TouchpointForm({
                 <p className="text-sm text-gray-400">No touchpoint types configured.</p>
               ) : (
                 <div className="grid grid-cols-2 gap-2">
-                  {touchpointOptions.map(opt => {
+                  {visibleTouchpointOptions.map(opt => {
                     const isSelected = selectedTouchpointId === opt.id;
                     const preset = getPreset(opt.color);
                     return (
@@ -805,6 +963,21 @@ export function TouchpointForm({
                     );
                   })}
                 </div>
+              )}
+              {/* Three rows fit; the rest open on the chevron rather than a
+                  scrollbar inside the card. */}
+              {hiddenTypeCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllTypes(v => !v)}
+                  aria-expanded={showAllTypes}
+                  className="w-full mt-2 flex items-center justify-center gap-1 py-1 text-xs font-medium text-gray-400 hover:text-brand-secondary transition-colors"
+                >
+                  {showAllTypes ? 'Show fewer' : `${hiddenTypeCount} more`}
+                  <svg className={`w-4 h-4 transition-transform duration-200 ${showAllTypes ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
               )}
             </div>
           </div>
@@ -832,7 +1005,7 @@ export function TouchpointForm({
                 type="button"
                 onClick={() => void handleSubmit(true)}
                 disabled={!canSubmit || !!user?.demoVisitor}
-                className="btn-secondary text-sm whitespace-nowrap"
+                className="btn-secondary text-sm whitespace-nowrap w-full"
               >
                 Log w/ Note
               </button>
@@ -840,7 +1013,7 @@ export function TouchpointForm({
                 type="button"
                 onClick={() => void handleSubmit(false)}
                 disabled={!canSubmit || !!user?.demoVisitor}
-                className="btn-primary text-sm whitespace-nowrap"
+                className="btn-primary text-sm whitespace-nowrap w-full"
               >
                 {submitting ? 'Saving…' : 'Log Touchpoint'}
               </button>

@@ -307,9 +307,11 @@ export default function DashboardPage() {
         <StatsSection />
       </Suspense>
 
-      {/* Floor Notes, with the touchpoint types beside it */}
+      {/* Floor Notes, with the touchpoint types beside it. No max height on the
+          notes column any more — it stretches to whatever the Touchpoints form
+          beside it needs, and its own list scrolls inside that. */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
-        <div className="lg:col-span-2 max-h-[489px] flex flex-col min-h-0">
+        <div className="lg:col-span-2 max-h-[489px] lg:max-h-none flex flex-col min-h-0">
           <QuickNotesSection />
         </div>
         <div className="lg:col-span-1 flex flex-col min-h-0">
