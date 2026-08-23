@@ -3,6 +3,8 @@ import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { classifySeniority } from '@/lib/parsers';
 import { computeRelationshipFloorBatch } from '@/lib/relationship-floor';
+import { getIcpCompanyTypes, matchesIcpCompanyType, icpCompanyTypeSql } from '@/lib/icpCompanyTypes';
+import { getMeetingHeld, isMeetingHeld, type MeetingHeld } from '@/lib/meetingHeld';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -70,11 +72,12 @@ function computeHealthScore(params: {
   noteCountByConf: Map<number, number>;
   socialByConf: Map<number, { rsvp_status: string }[]>;
   actionKeyMap: Map<string, string>;
+  heldOutcome: MeetingHeld;
   excludeConfId?: number;
   floor?: number;
 }): number {
   const { attendeeConfs, detailsByConf, meetingsByConf, followUpsByConf,
-    noteCountByConf, socialByConf, actionKeyMap, excludeConfId, floor = 0 } = params;
+    noteCountByConf, socialByConf, actionKeyMap, heldOutcome, excludeConfId, floor = 0 } = params;
   const confs = excludeConfId ? attendeeConfs.filter(c => c !== excludeConfId) : attendeeConfs;
   if (confs.length === 0) return floor;
   let totalDepth = 0, totalFus = 0, completedFus = 0, ghostCount = 0;
@@ -87,7 +90,7 @@ function computeHealthScore(params: {
     const actionStr = details?.action ?? '';
     const actionVals = actionStr.split(',').map(s => s.trim()).filter(Boolean);
     const actionKeys = actionVals.map(v => actionKeyMap.get(v)).filter(Boolean) as string[];
-    const hasMeetingHeld = actionKeys.includes('meeting_held');
+    const hasMeetingHeld = actionVals.some(v => isMeetingHeld(v, heldOutcome));
     const meetingHasOutcome = hasMeetingHeld && meetings.some(m => m.outcome && String(m.outcome).trim().length > 0);
     const hasNotes = noteCount > 0 || (details?.notes != null && String(details.notes).trim().length > 0);
     const hasSocialAttending = social.some(e => String(e.rsvp_status).split(',').map(s => s.trim()).includes('attended'));
@@ -191,7 +194,7 @@ export async function GET(
   }
 
   // ── Phase 1: attendees, config ────────────────────────────────────────────
-  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, prospectsTypeRes, eventAttendeesRes, formSubmissionsRes, confEntityNotesRes, confDetailsNotesRes, avgCostRes, unitTypeRes] = await Promise.all([
+  const [attendeesRes, actionOptsRes, unplannedTypeRes, confMeetingsRes, confFollowUpsRes, icpCompanyTypes, meetingHeld, eventAttendeesRes, formSubmissionsRes, confEntityNotesRes, confDetailsNotesRes, avgCostRes, unitTypeRes] = await Promise.all([
     db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.seniority,
                    a.company_id, c.name as company_name, c.company_type, c.icp,
@@ -219,15 +222,8 @@ export async function GET(
             WHERE f.conference_id = ? AND f.next_steps IS NOT NULL AND f.next_steps != ''`,
       args: [confId],
     }),
-    db.execute({
-      sql: `SELECT id, value, action_key
-            FROM config_options
-            WHERE category = 'company_type'
-              AND action_key = 'prospect'
-            ORDER BY id ASC
-            LIMIT 1`,
-      args: [],
-    }),
+    getIcpCompanyTypes(db),
+    getMeetingHeld(db),
     db.execute({
       sql: `SELECT COUNT(*) as count FROM social_event_rsvps r
             JOIN social_events se ON r.social_event_id = se.id
@@ -260,20 +256,14 @@ export async function GET(
 
   const unitType = String((unitTypeRes as { rows: { value: unknown }[] }).rows[0]?.value ?? 'Units');
 
-  const prospectsTypeId = prospectsTypeRes.rows[0]?.id ? Number(prospectsTypeRes.rows[0].id) : null;
-  const prospectsTypeValue = prospectsTypeRes.rows[0]?.value ? String(prospectsTypeRes.rows[0].value).trim() : null;
-
-  // Filter by the configured "Prospects" company_type option id.
-  // Some legacy datasets still persist display values in company_type, so we also
-  // accept the resolved config value for backwards compatibility while keeping the
-  // lookup anchored to config_options.
+  // The audience comes from the ICP Parameters "Company Types" rule. With no
+  // rule configured every attendee counts and the modal says so, rather than
+  // the debrief reading zero against real activity.
   const attendees = attendeesRes.rows.filter(a => {
-    if ((prospectsTypeId == null && !prospectsTypeValue) || !a.company_type) return false;
-    const types = String(a.company_type).split(',').map(s => s.trim()).filter(Boolean);
-    const hasId = prospectsTypeId != null && types.includes(String(prospectsTypeId));
-    const hasValue = prospectsTypeValue != null && types.some(t => t.toLowerCase() === prospectsTypeValue.toLowerCase());
-    return hasId || hasValue;
+    return matchesIcpCompanyType(a.company_type as string | null, icpCompanyTypes);
   });
+
+  const icpClause = icpCompanyTypeSql('c.company_type', icpCompanyTypes);
 
   const actionKeyMap = new Map<string, string>();
   for (const r of actionOptsRes.rows) {
@@ -484,20 +474,17 @@ export async function GET(
               FROM conference_attendees ca
               JOIN attendees a ON a.id = ca.attendee_id
               JOIN companies c ON a.company_id = c.id
-              WHERE (
-                (',' || COALESCE(c.company_type, '') || ',') LIKE ?
-                OR LOWER(',' || COALESCE(c.company_type, '') || ',') LIKE LOWER(?)
-              ) AND ca.conference_id IN (${ph})
+              WHERE ${icpClause ? `${icpClause.sql} AND ` : ''}ca.conference_id IN (${ph})
               GROUP BY ca.conference_id`,
-        args: [`%,${prospectsTypeId ?? -1},%`, `%,${prospectsTypeValue ?? '__no_match__'},%`, ...priorIdList],
+        args: [...(icpClause?.args ?? []), ...priorIdList],
       }),
       db.execute({
         sql: `SELECT m.conference_id, COUNT(*) as meetings
               FROM meetings m
-              JOIN config_options co ON LOWER(co.value) = LOWER(m.outcome) AND co.action_key = 'meeting_held'
-              WHERE m.conference_id IN (${ph})
+              WHERE LOWER(TRIM(COALESCE(m.outcome, ''))) = ?
+                AND m.conference_id IN (${ph})
               GROUP BY m.conference_id`,
-        args: priorIdList,
+        args: [meetingHeld.value, ...priorIdList],
       }),
       db.execute({
         sql: `SELECT conference_id,
@@ -526,13 +513,10 @@ export async function GET(
               FROM conference_attendees ca
               JOIN attendees a ON a.id = ca.attendee_id
               JOIN companies c ON a.company_id = c.id
-              WHERE (
-                (',' || COALESCE(c.company_type, '') || ',') LIKE ?
-                OR LOWER(',' || COALESCE(c.company_type, '') || ',') LIKE LOWER(?)
-              ) AND LOWER(c.icp) = 'yes'
+              WHERE ${icpClause ? `${icpClause.sql} AND ` : ''}LOWER(c.icp) = 'yes'
               AND ca.conference_id IN (${ph})
               GROUP BY ca.conference_id`,
-        args: [`%,${prospectsTypeId ?? -1},%`, `%,${prospectsTypeValue ?? '__no_match__'},%`, ...priorIdList],
+        args: [...(icpClause?.args ?? []), ...priorIdList],
       }),
       db.execute({
         sql: `SELECT id, internal_attendees FROM conferences WHERE id IN (${ph})`,
@@ -722,6 +706,7 @@ export async function GET(
       noteCountByConf: maps.noteCountByConf,
       socialByConf: maps.socialByConf,
       actionKeyMap,
+      heldOutcome: meetingHeld,
       floor,
     });
     const healthBefore = priorConfs.length === 0 ? floor : computeHealthScore({
@@ -732,6 +717,7 @@ export async function GET(
       noteCountByConf: maps.noteCountByConf,
       socialByConf: maps.socialByConf,
       actionKeyMap,
+      heldOutcome: meetingHeld,
       excludeConfId: confId,
       floor,
     });
@@ -743,7 +729,7 @@ export async function GET(
     const currentActionStr = currentDet?.action ? String(currentDet.action) : '';
     const currentActionVals = currentActionStr.split(',').map(s => s.trim()).filter(Boolean);
     const currentActionKeys = currentActionVals.map(v => actionKeyMap.get(v)).filter(Boolean) as string[];
-    const meetingHeld = currentActionKeys.includes('meeting_held');
+    const attendeeMeetingHeld = currentActionVals.some(v => isMeetingHeld(v, meetingHeld));
     const hasNotes = (noteCountByAttConf.get(`${aid}_${confId}`) ?? 0) > 0
       || (currentDet?.notes != null && String(currentDet.notes).trim().length > 0);
 
@@ -773,7 +759,7 @@ export async function GET(
       lastEngagementType: lastActionVal,
       healthScore: healthAfter,
       healthDelta,
-      meetingHeld,
+      meetingHeld: attendeeMeetingHeld,
       hasNotes,
     });
   }
@@ -846,7 +832,7 @@ export async function GET(
       const aid = Number(m.attendee_id);
       if (!newlyEngagedRepsMap.has(aid)) continue;
       const outcomeStr = m.outcome ? String(m.outcome).trim() : '';
-      if ((actionKeyMap.get(outcomeStr) ?? null) === 'meeting_held') {
+      if (isMeetingHeld(outcomeStr, meetingHeld)) {
         for (const name of resolveIds(m.scheduled_by)) newlyEngagedRepsMap.get(aid)!.add(name);
       }
     }
@@ -897,7 +883,7 @@ export async function GET(
       const aid = Number(m.attendee_id);
       if (!targetsEngagedRepsMap.has(aid)) continue;
       const outcomeStr = m.outcome ? String(m.outcome).trim() : '';
-      if ((actionKeyMap.get(outcomeStr) ?? null) === 'meeting_held') {
+      if (isMeetingHeld(outcomeStr, meetingHeld)) {
         for (const name of resolveIds(m.scheduled_by)) targetsEngagedRepsMap.get(aid)!.add(name);
       }
     }
@@ -949,7 +935,7 @@ export async function GET(
     if (outcomeKey === 'no_show') status = 'no_show';
     else if (outcomeKey === 'rescheduled') status = 'rescheduled';
     else if (outcomeKey === 'cancelled') status = 'cancelled';
-    else if (outcomeKey === 'meeting_held') status = 'held';
+    else if (isMeetingHeld(outcomeStr, meetingHeld)) status = 'held';
 
     meetingRows.push({
       id: Number(m.id),
@@ -1026,7 +1012,7 @@ export async function GET(
     const repRawMeetings = confMeetingsRes.rows.filter(m => rawFieldMatchesName(m.scheduled_by, repName));
     const heldMeetings = repRawMeetings.filter(m => {
       const outcomeStr = m.outcome ? String(m.outcome).trim() : '';
-      return (actionKeyMap.get(outcomeStr) ?? null) === 'meeting_held';
+      return isMeetingHeld(outcomeStr, meetingHeld);
     });
     const walkIns = heldMeetings.filter(m => String(m.meeting_type ?? '') === unplannedValue);
 
@@ -1108,7 +1094,7 @@ export async function GET(
   const heldMeetingAttIds = new Set<number>();
   for (const m of confMeetingsRes.rows) {
     const outcomeStr = m.outcome ? String(m.outcome).trim() : '';
-    if ((actionKeyMap.get(outcomeStr) ?? null) === 'meeting_held') {
+    if (isMeetingHeld(outcomeStr, meetingHeld)) {
       heldMeetingAttIds.add(Number(m.attendee_id));
     }
   }
@@ -1259,7 +1245,7 @@ export async function GET(
         if (!attendeeIds.has(Number(m.attendee_id))) continue;
         if (!rawFieldMatchesName(m.scheduled_by, rep.repName)) continue;
         const outcomeStr = m.outcome ? String(m.outcome).trim() : '';
-        if ((actionKeyMap.get(outcomeStr) ?? null) === 'meeting_held') {
+        if (isMeetingHeld(outcomeStr, meetingHeld)) {
           repMeetings++;
           hasAnyActivity = true;
         }
@@ -1359,7 +1345,7 @@ export async function GET(
     const confActionStr = confDet?.action ?? '';
     const confActionVals = confActionStr.split(',').map(s => s.trim()).filter(Boolean);
     const confActionKeys = confActionVals.map(v => actionKeyMap.get(v)).filter(Boolean) as string[];
-    const hadMeeting = confActionKeys.includes('meeting_held');
+    const hadMeeting = confActionVals.some(v => isMeetingHeld(v, meetingHeld));
     const hadOutcome = hadMeeting && confMeetingsList.some(m => m.outcome && String(m.outcome).trim().length > 0);
     const hadNotes = confNoteCount > 0 || (confDet?.notes != null && String(confDet.notes).trim().length > 0);
     const hadSocial = confSocialList.some(e => String(e.rsvp_status).split(',').map(s => s.trim()).includes('attended'));
@@ -1583,5 +1569,11 @@ export async function GET(
     companyRollup,
     avgCostPerUnit,
     unitType,
+    // Lets the modal say when it is counting every company type because no ICP
+    // company types are configured.
+    icpFilter: {
+      configured: icpCompanyTypes.configured,
+      types: icpCompanyTypes.values,
+    },
   });
 }

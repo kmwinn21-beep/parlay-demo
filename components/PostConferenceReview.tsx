@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, type CSSProperties } from 'react';
+import Link from 'next/link';
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { useConferenceReviewModals } from '@/lib/ConferenceReviewModalsContext';
 import { useSidebarCollapse, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_EXPANDED_WIDTH } from './SidebarCollapseContext';
@@ -146,6 +147,8 @@ export interface PostConferenceData {
   companyRollup: CompanyRollupRow[];
   avgCostPerUnit: number;
   unitType: string;
+  /** Which company types the numbers cover. Absent on older responses. */
+  icpFilter?: { configured: boolean; types: string[] };
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -340,6 +343,25 @@ export function PostConferenceReviewModal() {
 
           {data && (
             <>
+              {/* No ICP company types configured — every type is being counted,
+                  which is worth saying on every tab rather than once. */}
+              {data.icpFilter && !data.icpFilter.configured && (
+                <div className="flex items-start gap-2 px-4 sm:px-6 py-2.5 bg-amber-50 border-b border-amber-200 flex-shrink-0">
+                  <svg className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                  </svg>
+                  <p className="text-xs text-amber-700 leading-snug">
+                    <span className="font-semibold">All company types are being counted.</span>{' '}
+                    No ICP company types are configured, so this debrief covers every attendee
+                    rather than your target audience. Set them in{' '}
+                    <Link href="/admin?tab=icp" className="underline font-medium hover:text-amber-900">
+                      Admin Settings → ICP Parameters
+                    </Link>{' '}
+                    for accurate results.
+                  </p>
+                </div>
+              )}
+
               {/* Tab nav */}
               <div className="border-b border-gray-200 bg-white overflow-x-auto flex-shrink-0">
                 <DraggableTabNav
