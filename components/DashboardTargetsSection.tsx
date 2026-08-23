@@ -238,25 +238,35 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
   const [drawerAttendeeId, setDrawerAttendeeId] = useState<number | null>(null);
   const [drawerAttendeeName, setDrawerAttendeeName] = useState<string>('');
 
+  // The active conference arrives from sessionStorage after mount, so the
+  // dropdown's first value is superseded a beat later and two fetches end up in
+  // flight. Whichever answered last used to win, which is why the targets for
+  // the set conference often didn't appear until it was reselected.
+  const targetsReqRef = useRef(0);
+
   const fetchTargets = useCallback(async (confId: number) => {
+    const req = ++targetsReqRef.current;
     setLoading(true);
     try {
       const [targetsRes, meetingsRes] = await Promise.all([
         fetch(`/api/conferences/${confId}/targets`),
         fetch(`/api/meetings?conference_id=${confId}`),
       ]);
+      if (req !== targetsReqRef.current) return;
       if (targetsRes.ok) {
         const data = await targetsRes.json() as TargetEntry[];
+        if (req !== targetsReqRef.current) return;
         setTargets(data);
       }
       if (meetingsRes.ok) {
         const meetings = await meetingsRes.json() as { attendee_id: number }[];
+        if (req !== targetsReqRef.current) return;
         setMeetingAttendeeIds(new Set(meetings.map(m => m.attendee_id)));
       } else {
         setMeetingAttendeeIds(new Set());
       }
     } catch { /* ignore */ } finally {
-      setLoading(false);
+      if (req === targetsReqRef.current) setLoading(false);
     }
   }, []);
 
@@ -378,13 +388,14 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Header row */}
-      <div className="flex flex-col gap-2">
+      {/* Header row — the picker and My Targets ride alongside the header on
+          desktop, and drop onto their own line on a phone. */}
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
         <button
           type="button"
           onClick={toggle}
           aria-expanded={!isMobile || expanded}
-          className={`text-lg font-semibold text-brand-primary font-serif flex items-center gap-2 text-left group ${isMobile ? '' : 'cursor-default'}`}
+          className={`text-lg font-semibold text-brand-primary font-serif flex items-center gap-2 text-left group flex-shrink-0 ${isMobile ? '' : 'cursor-default'}`}
         >
           <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-100 flex-shrink-0">
             <svg
@@ -410,7 +421,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
           </svg>
         </button>
         {showBody && sortedConferences.length > 0 && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 lg:justify-end lg:min-w-0">
           <select
             value={selectedConfId ?? ''}
             onChange={e => {
@@ -418,7 +429,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
               setSelectedTier(null);
               setTierDrawerKey(null);
             }}
-            className="input-field text-sm w-full min-w-0"
+            className="input-field text-sm w-full min-w-0 lg:w-64"
           >
             {allConferences.some(c => c.status === 'in_progress') && (
               <optgroup label="In Progress">

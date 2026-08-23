@@ -73,6 +73,20 @@ function getMeetingStatus(outcome: string | null): { label: string; className: s
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
+/**
+ * On desktop the expanded half of the banner is lifted out of flow and painted
+ * over the Floor Notes section below, so opening the banner no longer pushes
+ * the rest of the dashboard down and leaves a gap where it used to sit. The
+ * shadow is what separates the two. Purely how it paints — the element mounts
+ * and unmounts exactly as before, on the same `collapsed` state.
+ */
+const EXPANDED_BODY_CLASS = [
+  'mt-4 flex-1 flex flex-col',
+  'lg:absolute lg:left-0 lg:right-0 lg:top-[calc(100%-1.5rem)] lg:z-30',
+  'lg:mt-0 lg:flex-none lg:bg-brand-primary lg:rounded-b-2xl',
+  'lg:px-6 lg:pt-4 lg:pb-6 lg:shadow-2xl',
+].join(' ');
+
 function ChevronIcon({ collapsed }: { collapsed: boolean }) {
   return (
     <svg
@@ -92,7 +106,7 @@ function BannerStateActive({ data, collapsed, onToggle }: {
   onToggle: () => void;
 }) {
   return (
-    <div className="bg-brand-primary rounded-2xl p-6 text-white h-full flex flex-col">
+    <div className="bg-brand-primary rounded-2xl p-6 text-white h-full flex flex-col lg:relative">
       {/* Collapsed header — always visible */}
       <div className="cursor-pointer flex items-center justify-between" onClick={onToggle}>
         <div>
@@ -114,7 +128,7 @@ function BannerStateActive({ data, collapsed, onToggle }: {
 
       {/* Expanded content */}
       {!collapsed && (
-        <div className="mt-4 flex-1 flex flex-col">
+        <div className={EXPANDED_BODY_CLASS}>
           {/* Quick stats row */}
           <div className="grid grid-cols-3 gap-3">
             {[
@@ -229,7 +243,7 @@ function BannerStateUpcoming({ data, collapsed, onToggle }: {
   const allDone = doneCount === checklistItems.length;
 
   return (
-    <div className="bg-brand-primary rounded-2xl p-6 text-white h-full flex flex-col">
+    <div className="bg-brand-primary rounded-2xl p-6 text-white h-full flex flex-col lg:relative">
       {/* Collapsed header — always visible */}
       <div className="cursor-pointer flex items-center justify-between" onClick={onToggle}>
         <div>
@@ -259,7 +273,7 @@ function BannerStateUpcoming({ data, collapsed, onToggle }: {
 
       {/* Expanded content */}
       {!collapsed && (
-        <div className="mt-4 flex-1 flex flex-col">
+        <div className={EXPANDED_BODY_CLASS}>
           {/* Prep checklist */}
           <div className="bg-white/10 rounded-xl p-3">
             <div className="flex items-center justify-between mb-2">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Fragment } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, Fragment } from 'react';
 import Link from 'next/link';
 import { QuickViewDrawer, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { useFollowUpActions, followUpActionLabel } from '@/lib/useFollowUpActions';
@@ -147,14 +147,39 @@ function buildConferenceAttendeeGroups(fus: FollowUp[]): ConferenceAttendeeGroup
 }
 
 /** Render initials pills for a stored assigned_rep value (CSV of IDs or legacy name) */
+/** Open or done, as one circular pill. */
+function StatusPill({ completed }: { completed: boolean }) {
+  return completed ? (
+    <span
+      title="Completed"
+      className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-700 border border-green-300 flex-shrink-0"
+    >
+      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+      </svg>
+    </span>
+  ) : (
+    <span
+      title="Open"
+      className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-50 text-amber-600 border border-amber-300 text-[10px] font-bold leading-none flex-shrink-0"
+    >
+      O
+    </span>
+  );
+}
+
 function RepPills({
   assignedRep,
   userOptions,
   size = 'sm',
+  stack = false,
 }: {
   assignedRep: string | null;
   userOptions: UserOption[];
   size?: 'sm' | 'xs';
+  /** Desktop table: one rep per line, so the column keeps its width and the
+   *  row grows instead. */
+  stack?: boolean;
 }) {
   const colorMaps = useConfigColors();
   const users = parseRepIds(assignedRep).map(id => userOptions.find(u => u.id === id)).filter(Boolean);
@@ -166,7 +191,7 @@ function RepPills({
       : 'inline-flex items-center justify-center gap-1 px-1.5 py-0.5 min-w-[48px] whitespace-nowrap rounded text-xs font-medium';
 
   return (
-    <span className="inline-flex flex-wrap gap-1">
+    <span className={stack ? 'flex flex-col items-start gap-1' : 'inline-flex flex-wrap gap-1'}>
       {users.map((user, i) => (
         <span key={i} className={`${baseClass} ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-2.5 h-2.5 flex-shrink-0">
@@ -303,6 +328,88 @@ export function FollowUpsTable({
   const [editingNextStepsKey, setEditingNextStepsKey] = useState<number | null>(null);
   const [editingActionKey, setEditingActionKey] = useState<number | null>(null);
   const [drawerGroupKey, setDrawerGroupKey] = useState<string | null>(null);
+  // The panel starts level with the row it belongs to rather than at the top of
+  // the table, so the two read as one thing. Measured from the row because the
+  // rows aren't a uniform height.
+  const tableWrapRef = useRef<HTMLDivElement>(null);
+  const drawerPanelRef = useRef<HTMLDivElement>(null);
+  const [drawerOffset, setDrawerOffset] = useState(0);
+  // A panel anchored to a row near the bottom would hang off the end of the
+  // table with nothing below to scroll to. The table grows by however much it
+  // overhangs, for as long as the panel is open, so the rest of the card can be
+  // scrolled to without the panel leaving its row.
+  const [drawerOverhang, setDrawerOverhang] = useState(0);
+
+  useLayoutEffect(() => {
+    if (!detailsInDrawer || !drawerGroupKey) {
+      setDrawerOffset(0);
+      setDrawerOverhang(0);
+      return;
+    }
+    const wrap = tableWrapRef.current;
+    const row = wrap?.querySelector<HTMLElement>(`tr[data-group-key="${CSS.escape(drawerGroupKey)}"]`);
+    if (!wrap || !row) { setDrawerOffset(0); setDrawerOverhang(0); return; }
+    const measure = () => {
+      const r = row.getBoundingClientRect();
+      const w = wrap.getBoundingClientRect();
+      const offset = Math.max(0, Math.round(r.top - w.top));
+      setDrawerOffset(offset);
+      const panelH = drawerPanelRef.current?.offsetHeight ?? 0;
+      // The spacer sits outside the table, so growing it can't move the row
+      // this was measured against.
+      // The gutter also covers whatever is pinned to the bottom of the window
+      // over this column, so the scroll below can clear it.
+      setDrawerOverhang(panelH > 0 ? Math.max(0, Math.round(offset + panelH + 96 - wrap.offsetHeight)) : 0);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(wrap);
+    if (drawerPanelRef.current) ro.observe(drawerPanelRef.current);
+    return () => ro.disconnect();
+  }, [detailsInDrawer, drawerGroupKey, followUps]);
+
+  // Once the spacer is in place and the panel has finished unfurling, bring it
+  // into view rather than leaving the reader to find it. Only scrolls by the
+  // amount actually needed, so the row it belongs to stays on screen.
+  useEffect(() => {
+    if (!detailsInDrawer || !drawerGroupKey) return;
+    // The panel scales up over ~220ms; measuring mid-animation reads short.
+    const t = setTimeout(() => {
+      const panel = drawerPanelRef.current;
+      if (!panel || panel.offsetHeight === 0) return;
+
+      // The page scrolls inside a container here, not the window.
+      let scroller: HTMLElement | null = panel.parentElement;
+      while (scroller && scroller !== document.body) {
+        const oy = getComputedStyle(scroller).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && scroller.scrollHeight > scroller.clientHeight) break;
+        scroller = scroller.parentElement;
+      }
+      const usesWindow = !scroller || scroller === document.body;
+
+      const pr = panel.getBoundingClientRect();
+      let bottomLimit = usesWindow ? window.innerHeight : scroller!.getBoundingClientRect().bottom;
+      // Anything pinned to the bottom of the window over the panel's own column
+      // — the messaging bar — would cover the end of the card, so scroll clear
+      // of it rather than to the container's edge.
+      for (const el of Array.from(document.querySelectorAll<HTMLElement>('body *'))) {
+        if (getComputedStyle(el).position !== 'fixed') continue;
+        const r = el.getBoundingClientRect();
+        if (r.height === 0 || r.width === 0) continue;
+        if (r.bottom < window.innerHeight - 4 || r.top > window.innerHeight) continue;
+        if (r.right < pr.left || r.left > pr.right) continue;
+        bottomLimit = Math.min(bottomLimit, r.top);
+      }
+      const delta = Math.round(pr.bottom - (bottomLimit - 12));
+      if (delta <= 0) return;
+
+      if (usesWindow) window.scrollBy({ top: delta, behavior: 'smooth' });
+      else scroller!.scrollBy({ top: delta, behavior: 'smooth' });
+    }, 280);
+    return () => clearTimeout(t);
+  }, [detailsInDrawer, drawerGroupKey, drawerOverhang]);
+
   const [reassignNote, setReassignNote] = useState<ReassignNoteTarget | null>(null);
 
   /** Every reassignment offers a note; the prompt handles the rest. */
@@ -535,17 +642,17 @@ export function FollowUpsTable({
                 </div>
               ) : canEditRep ? (
                 <button type="button" onClick={() => startEditRep(fu)} className="group inline-flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity" title={fu.assigned_rep ? 'Click to change reps' : 'Click to assign rep'}>
-                  {fu.assigned_rep ? (<RepPills assignedRep={fu.assigned_rep} userOptions={userOptions} />) : (<span className="text-gray-300 group-hover:text-blue-400 transition-colors">—</span>)}
+                  {fu.assigned_rep ? (<RepPills assignedRep={fu.assigned_rep} userOptions={userOptions} stack />) : (<span className="text-gray-300 group-hover:text-blue-400 transition-colors">—</span>)}
                 </button>
               ) : (
-                fu.assigned_rep ? (<RepPills assignedRep={fu.assigned_rep} userOptions={userOptions} />) : (<span className="text-gray-300">—</span>)
+                fu.assigned_rep ? (<RepPills assignedRep={fu.assigned_rep} userOptions={userOptions} stack />) : (<span className="text-gray-300">—</span>)
               )}
             </td>;
             case 'notes': return <td key="notes" className="px-3 py-2">
               <FollowUpNotesPopover attendeeId={fu.attendee_id} notesCount={Number(fu.entity_notes_count)} conferenceName={fu.conference_name} />
             </td>;
-            case 'status': return <td key="status" className="px-3 py-2">
-              <button type="button" onClick={() => onToggle(fu.id, !fu.completed)} className={`flex items-center gap-1 px-2 py-1 rounded-lg font-medium border-2 transition-all whitespace-nowrap ${fu.completed ? 'bg-green-500 text-white border-green-600 hover:bg-green-600' : 'bg-white text-gray-500 border-gray-300 hover:border-green-400 hover:text-green-600'}`}>
+            case 'status': return <td key="status" className="px-3 py-2 text-center">
+              <button type="button" onClick={() => onToggle(fu.id, !fu.completed)} className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg font-medium border-2 transition-all whitespace-nowrap ${fu.completed ? 'bg-green-500 text-white border-green-600 hover:bg-green-600' : 'bg-white text-gray-500 border-gray-300 hover:border-green-400 hover:text-green-600'}`}>
                 {fu.completed ? (<><CheckIcon className="w-3 h-3 flex-shrink-0" />Done</>) : 'Done'}
               </button>
             </td>;
@@ -638,7 +745,7 @@ export function FollowUpsTable({
    * The group's rep, shown once. Editing it writes to every follow-up in the
    * group — one onRepChange per row, the same shape the bulk Done uses.
    */
-  function renderGroupRepBody(rows: FollowUp[], size: 'sm' | 'xs' = 'sm') {
+  function renderGroupRepBody(rows: FollowUp[], size: 'sm' | 'xs' = 'sm', stack = false) {
     const head = rows[0];
     // They almost always match; when they don't, the union is what's true.
     const unionRep = Array.from(new Set(rows.flatMap(r => parseRepIds(r.assigned_rep)))).join(',') || null;
@@ -670,12 +777,12 @@ export function FollowUpsTable({
           className="group inline-flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity"
           title={unionRep ? 'Click to change reps for all of this attendee\u2019s follow-ups' : 'Click to assign rep'}
         >
-          {unionRep ? (<RepPills assignedRep={unionRep} userOptions={userOptions} size={size} />) : (<span className="text-gray-300 group-hover:text-blue-400 transition-colors">—</span>)}
+          {unionRep ? (<RepPills assignedRep={unionRep} userOptions={userOptions} size={size} stack={stack} />) : (<span className="text-gray-300 group-hover:text-blue-400 transition-colors">—</span>)}
         </button>
       );
     }
     return unionRep
-      ? <RepPills assignedRep={unionRep} userOptions={userOptions} size={size} />
+      ? <RepPills assignedRep={unionRep} userOptions={userOptions} size={size} stack={stack} />
       : <span className="text-gray-300">—</span>;
   }
 
@@ -790,15 +897,26 @@ export function FollowUpsTable({
       </td>
     );
 
+    // With the panel open, everything but the row it belongs to fades back so
+    // the selected one reads as the subject.
+    const dimmed = detailsInDrawer && drawerGroupKey != null && !expanded;
+
     return (
       <tr
         key={groupKey}
+        data-group-key={groupKey}
         role="button"
         tabIndex={0}
         onClick={() => toggleGroupKey(groupKey)}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroupKey(groupKey); } }}
         aria-expanded={expanded}
-        className="bg-gray-50 border-y border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
+        className={`border-y border-gray-200 cursor-pointer transition-all ${
+          dimmed
+            ? 'bg-gray-50/60 opacity-[0.22] hover:opacity-100 hover:bg-gray-100'
+            : expanded
+              ? 'bg-white ring-1 ring-inset ring-brand-secondary/40 hover:bg-white'
+              : 'bg-gray-50 hover:bg-gray-100'
+        }`}
       >
         {orderedColumns.map(col => {
           if (!isVisible(col.key)) return null;
@@ -822,16 +940,13 @@ export function FollowUpsTable({
             case 'conference': return cell('conference',
               <span className="text-xs text-gray-500 truncate block">{head.conference_name}</span>);
             case 'rep': return cell('rep',
-              <span className="flex items-center gap-2">
-                {/* The reps get a fixed block so the count pill beside them
-                    lands on the same x down the whole table. */}
-                <span className="min-w-[3.5rem]">{renderGroupRepBody(rows, 'xs')}</span>
-                <span className="w-5 flex-shrink-0 flex justify-center">
-                  <FollowUpCountPill count={rows.length} />
-                </span>
+              <span className="flex items-center">
+                <span className="min-w-[3.5rem]">{renderGroupRepBody(rows, 'xs', true)}</span>
               </span>);
             case 'notes': return cell('notes', <span />);
-            case 'status': return cell('status', <span />);
+            // One pill for the group: done only when every entry under it is.
+            case 'status': return cell('status',
+              <span className="flex justify-center"><StatusPill completed={rows.every(r => r.completed)} /></span>);
             default: return null;
           }
         })}
@@ -877,13 +992,13 @@ export function FollowUpsTable({
               <p className="text-gray-400">{formatDate(head.start_date)}</p>
             </td>;
             case 'rep': return <td key="rep" className="px-3 py-2">
-              {renderGroupRepBody(rows)}
+              {renderGroupRepBody(rows, 'sm', true)}
             </td>;
             case 'notes': return <td key="notes" className="px-3 py-2">
               <FollowUpNotesPopover attendeeId={head.attendee_id} notesCount={Number(head.entity_notes_count)} conferenceName={head.conference_name} />
             </td>;
             case 'status': return <td key="status" className="px-3 py-2">
-              {renderGroupDoneButton(groupKey, rows)}
+              <span className="flex justify-center">{renderGroupDoneButton(groupKey, rows)}</span>
             </td>;
             default: return null;
           }
@@ -1005,7 +1120,8 @@ export function FollowUpsTable({
                     case 'conference': return <th key="conference" className={thCls}>Conference</th>;
                     case 'rep': return <th key="rep" className={thCls}>Rep</th>;
                     case 'notes': return <th key="notes" className={thCls}>Notes</th>;
-                    case 'status': return <th key="status" className={thCls}>Status</th>;
+                    // Centred so the pill below sits under the middle of the word.
+                  case 'status': return <th key="status" className={`${thCls} text-center`}>Status</th>;
                     default: return null;
                   }
                 })}
@@ -1080,7 +1196,8 @@ export function FollowUpsTable({
                     case 'conference': return <th key="conference" className={thCls}>Conference</th>;
                     case 'rep': return <th key="rep" className={thCls}>Rep</th>;
                     case 'notes': return <th key="notes" className={thCls}>Notes</th>;
-                    case 'status': return <th key="status" className={thCls}>Status</th>;
+                    // Centred so the pill below sits under the middle of the word.
+                  case 'status': return <th key="status" className={`${thCls} text-center`}>Status</th>;
                     default: return null;
                   }
                 })}
@@ -1236,6 +1353,7 @@ export function FollowUpsTable({
 
     return (
       <SlideInPanel
+        fitContent
         title={<span className="text-sm">{head.first_name} {head.last_name}</span>}
         subtitle={[head.title, head.company_name].filter(Boolean).join(' · ')}
         onClose={() => setDrawerGroupKey(null)}
@@ -1322,8 +1440,8 @@ export function FollowUpsTable({
       {/* Desktop — the panel takes a column beside the table when open. The
           row itself is always mounted so the panel renders once and handles
           its own phone form (a bottom sheet) from inside. */}
-      <div className="lg:flex lg:items-stretch">
-      <div className="hidden lg:block flex-1 min-w-0 overflow-x-auto">
+      <div className="lg:relative">
+      <div ref={tableWrapRef} className="hidden lg:block min-w-0 overflow-x-auto">
         <table className="w-full" style={{ fontSize: '0.7rem' }}>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
@@ -1341,7 +1459,8 @@ export function FollowUpsTable({
                   case 'conference': return <th key="conference" className={thCls}>Conference</th>;
                   case 'rep': return <th key="rep" className={thCls}>Rep</th>;
                   case 'notes': return <th key="notes" className={thCls}>{anyGroupExpanded ? 'Notes' : ''}</th>;
-                  case 'status': return <th key="status" className={thCls}>{anyGroupExpanded ? 'Status' : ''}</th>;
+                  // Centred so the pill below sits under the middle of the word.
+                  case 'status': return <th key="status" className={`${thCls} text-center`}>Status</th>;
                   default: return null;
                 }
               })}
@@ -1386,7 +1505,21 @@ export function FollowUpsTable({
           </tbody>
         </table>
       </div>
-        {drawer && <div className="lg:w-96 lg:flex-shrink-0 lg:pr-3">{drawer}</div>}
+        {/* Floats over the table's right-hand side so the columns underneath
+            stay where they are — only what the panel actually covers is
+            hidden, rather than the table being squeezed into what's left. */}
+        {drawer && (
+          <>
+            {/* Room below the table for a panel anchored near the bottom */}
+            <div className="hidden lg:block" style={{ height: drawerOverhang }} aria-hidden />
+            <div
+              className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-96 lg:pr-3 lg:z-20 lg:pointer-events-none"
+              style={{ paddingTop: drawerOffset }}
+            >
+              <div ref={drawerPanelRef} className="lg:pointer-events-auto">{drawer}</div>
+            </div>
+          </>
+        )}
       </div>
       {quickView && (
         <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />

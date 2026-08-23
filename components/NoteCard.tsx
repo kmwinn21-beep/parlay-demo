@@ -325,6 +325,17 @@ export function NoteCard({
               {formatStatusLabel(note.status)}
             </span>
           )}
+          {/* Where the note came from, when it was captured alongside a
+              touchpoint. Coloured from the touchpoints config so it reads the
+              same as the type buttons that logged it. */}
+          {note.touchpoint_type && (
+            <span className={`${getBadgeClass(note.touchpoint_type, colorMaps.touchpoints || {})} inline-flex items-center gap-1 whitespace-nowrap flex-shrink-0`}>
+              <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11" />
+              </svg>
+              {note.touchpoint_type}
+            </span>
+          )}
           {note.note_type === 'meeting_note' && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-xs font-medium border border-purple-200 whitespace-nowrap flex-shrink-0">
               <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
