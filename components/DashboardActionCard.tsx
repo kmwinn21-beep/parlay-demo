@@ -999,7 +999,17 @@ export function TouchpointForm({
           ) : (
             <>
               {cancelLabel && (
-                <button type="button" onClick={onClose} className="btn-secondary text-sm">{cancelLabel}</button>
+                // On a phone the three buttons don't fit spelled out, so cancel
+                // shrinks to a × and the two actions keep their labels.
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label={cancelLabel}
+                  className="btn-secondary text-sm px-3 sm:px-4"
+                >
+                  <span className="sm:hidden" aria-hidden="true">&times;</span>
+                  <span className="hidden sm:inline">{cancelLabel}</span>
+                </button>
               )}
               <button
                 type="button"

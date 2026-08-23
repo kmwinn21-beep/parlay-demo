@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
+import { QuickViewDrawer, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { getPreset, type ColorMap } from '@/lib/colors';
 import { MEETING_TIME_OPTIONS, formatMeetingTime } from '@/lib/meetingTime';
 import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
@@ -754,7 +754,6 @@ export function MeetingsTable({
   groupByDate = false,
   cardsOnly = false,
   showConferencePill = false,
-  namesOpenDrawer = false,
   showAttendeeAvatar = false,
 }: {
   meetings: Meeting[];
@@ -775,8 +774,6 @@ export function MeetingsTable({
   cardsOnly?: boolean;
   /** Adds the conference name to the card's pill row. */
   showConferencePill?: boolean;
-  /** Names open their drawer instead of navigating, and the quick-view eyes go. */
-  namesOpenDrawer?: boolean;
   /** Leads the name with the attendee's photo, or their initials. */
   showAttendeeAvatar?: boolean;
 }) {
@@ -1025,41 +1022,33 @@ export function MeetingsTable({
       </div>
   );
 
-  /** Attendee name — a drawer opener or a link, depending on the surface. */
+  /** The name is the control — it opens the quick view, so the separate eye
+   *  beside it is gone. The drawer links on to the full record. */
   const attendeeNameNode = (m: Meeting, className: string) => {
     const name = `${m.first_name} ${m.last_name}`;
-    const openDrawer = () => setQuickView({ type: 'attendee', id: m.attendee_id, name });
-    if (namesOpenDrawer) {
-      return (
-        <button type="button" onClick={openDrawer} className={`${className} text-left`} title={name}>
-          {name}
-        </button>
-      );
-    }
     return (
-      <>
-        <QuickViewIcon onClick={openDrawer} />
-        <Link href={`/attendees/${m.attendee_id}`} className={className} title={name}>{name}</Link>
-      </>
+      <button
+        type="button"
+        onClick={() => setQuickView({ type: 'attendee', id: m.attendee_id, name })}
+        className={`${className} text-left`}
+        title={name}
+      >
+        {name}
+      </button>
     );
   };
 
   /** Company name — same treatment. */
   const companyNameNode = (m: Meeting, className: string) => {
     if (!m.company_name || !m.company_id) return null;
-    const openDrawer = () => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! });
-    if (namesOpenDrawer) {
-      return (
-        <button type="button" onClick={openDrawer} className={`${className} text-left`}>
-          {m.company_name}
-        </button>
-      );
-    }
     return (
-      <>
-        <QuickViewIcon onClick={openDrawer} />
-        <Link href={`/companies/${m.company_id}`} className={className}>{m.company_name}</Link>
-      </>
+      <button
+        type="button"
+        onClick={() => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! })}
+        className={`${className} text-left`}
+      >
+        {m.company_name}
+      </button>
     );
   };
 
