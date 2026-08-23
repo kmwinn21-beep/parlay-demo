@@ -378,13 +378,14 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Header row */}
-      <div className="flex flex-col gap-2">
+      {/* Header row — the picker and My Targets ride alongside the header on
+          desktop, and drop onto their own line on a phone. */}
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
         <button
           type="button"
           onClick={toggle}
           aria-expanded={!isMobile || expanded}
-          className={`text-lg font-semibold text-brand-primary font-serif flex items-center gap-2 text-left group ${isMobile ? '' : 'cursor-default'}`}
+          className={`text-lg font-semibold text-brand-primary font-serif flex items-center gap-2 text-left group flex-shrink-0 ${isMobile ? '' : 'cursor-default'}`}
         >
           <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-100 flex-shrink-0">
             <svg
@@ -410,7 +411,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
           </svg>
         </button>
         {showBody && sortedConferences.length > 0 && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 lg:justify-end lg:min-w-0">
           <select
             value={selectedConfId ?? ''}
             onChange={e => {
@@ -418,7 +419,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
               setSelectedTier(null);
               setTierDrawerKey(null);
             }}
-            className="input-field text-sm w-full min-w-0"
+            className="input-field text-sm w-full min-w-0 lg:w-64"
           >
             {allConferences.some(c => c.status === 'in_progress') && (
               <optgroup label="In Progress">

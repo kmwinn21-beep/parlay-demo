@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { getPreset } from '@/lib/colors';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
-import { TouchpointQuickModal } from '@/components/DashboardActionCard';
+import { TouchpointForm, TouchpointQuickModal } from '@/components/DashboardActionCard';
 import { useMobileCollapse } from '@/lib/useMobileCollapse';
+import { useIsDesktop } from '@/lib/useIsDesktop';
 
 interface TouchpointOption {
   id: number;
@@ -14,9 +15,10 @@ interface TouchpointOption {
 }
 
 /**
- * One button per touchpoint type, beside Floor Notes. Picking a type opens the
- * usual Log Touchpoint modal with that type and the conference in the header
- * already chosen, so all that is left is who it was with.
+ * Beside Floor Notes. Desktop gets the whole Log Touchpoint form inline —
+ * there's room for it, and it saves a modal. A phone gets one button per
+ * touchpoint type instead, which opens that same form in the modal with the
+ * type and conference already chosen.
  */
 export function DashboardTouchpointsSection() {
   const { activeConference } = useActiveConference();
@@ -24,6 +26,13 @@ export function DashboardTouchpointsSection() {
   const [loading, setLoading] = useState(true);
   const [modalTouchpointId, setModalTouchpointId] = useState<number | null>(null);
   const { isMobile, expanded, toggle, showBody } = useMobileCollapse();
+  // Gated rather than CSS-hidden: the form loads every company in the account,
+  // which a phone should never pay for.
+  const isDesktop = useIsDesktop();
+
+  // Remounts the inline form after a save so it comes back empty rather than
+  // holding the attendees that were just logged.
+  const [formKey, setFormKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,31 +68,48 @@ export function DashboardTouchpointsSection() {
           </svg>
         </button>
 
-        {showBody && (loading ? (
-          <div className="grid grid-cols-2 gap-2">
-            {[1, 2, 3, 4].map(i => <div key={i} className="h-11 rounded-lg bg-gray-100 animate-pulse" />)}
-          </div>
-        ) : options.length === 0 ? (
-          <p className="text-xs text-gray-400 text-center py-6">No touchpoint types configured.</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            {options.map(opt => {
-              const preset = getPreset(opt.color);
-              return (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => setModalTouchpointId(opt.id)}
-                  title={`Log a ${opt.value} touchpoint`}
-                  className="rounded-lg border-2 text-xs font-medium py-2.5 px-2 text-center transition-all hover:shadow-sm"
-                  style={{ borderColor: `${preset.hex}55`, backgroundColor: `${preset.hex}12`, color: preset.hex }}
-                >
-                  {opt.value}
-                </button>
-              );
-            })}
-          </div>
-        ))}
+        {/* Desktop: the full form, conference already set */}
+        {isDesktop && (
+        <div className="flex flex-col flex-1 min-h-0">
+          <TouchpointForm
+            key={formKey}
+            defaultConferenceId={activeConference?.id ?? null}
+            onDone={() => setFormKey(k => k + 1)}
+            bodyClassName="space-y-4 flex-1 min-h-0 overflow-y-auto"
+            footerClassName="flex justify-end gap-2 pt-4 flex-shrink-0"
+            cancelLabel={null}
+          />
+        </div>
+        )}
+
+        {/* Phone: one button per type, opening the form in the modal */}
+        <div className="lg:hidden">
+          {showBody && (loading ? (
+            <div className="grid grid-cols-2 gap-2">
+              {[1, 2, 3, 4].map(i => <div key={i} className="h-11 rounded-lg bg-gray-100 animate-pulse" />)}
+            </div>
+          ) : options.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-6">No touchpoint types configured.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {options.map(opt => {
+                const preset = getPreset(opt.color);
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setModalTouchpointId(opt.id)}
+                    title={`Log a ${opt.value} touchpoint`}
+                    className="rounded-lg border-2 text-xs font-medium py-2.5 px-2 text-center transition-all hover:shadow-sm"
+                    style={{ borderColor: `${preset.hex}55`, backgroundColor: `${preset.hex}12`, color: preset.hex }}
+                  >
+                    {opt.value}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
       </div>
 
       {modalTouchpointId != null && (

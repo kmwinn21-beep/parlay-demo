@@ -7,7 +7,7 @@ import { QuickNotesSection } from '@/components/QuickNotesSection';
 import { DashboardTouchpointsSection } from '@/components/DashboardTouchpointsSection';
 import { getServerSessionUser } from '@/lib/auth';
 import { DashboardConferenceBanner, type BannerData } from '@/components/DashboardConferenceBanner';
-import { DashboardOpenFollowUps, type OpenFollowUp } from '@/components/DashboardOpenFollowUps';
+import { DashboardNotificationsSection } from '@/components/DashboardNotificationsSection';
 import type { DashboardConference } from '@/components/RecentSection';
 import { DashboardTargetsSection } from '@/components/DashboardTargetsSection';
 import { DashboardActionCard } from '@/components/DashboardActionCard';
@@ -167,37 +167,6 @@ async function getBannerData(tenantDb: Client, userId: number): Promise<BannerDa
   }
 }
 
-async function getOpenFollowUps(tenantDb: Client): Promise<OpenFollowUp[]> {
-  await dbReady;
-  try {
-    const result = await tenantDb.execute({
-      sql: `SELECT fu.id, fu.next_steps, fu.completed, fu.conference_id,
-                   a.first_name, a.last_name, a.company_id,
-                   co.name AS company_name,
-                   c.name AS conference_name, c.end_date AS conference_end_date
-            FROM follow_ups fu
-            JOIN attendees a ON fu.attendee_id = a.id
-            LEFT JOIN companies co ON a.company_id = co.id
-            JOIN conferences c ON fu.conference_id = c.id
-            WHERE fu.completed = 0 AND fu.next_steps IS NOT NULL AND fu.next_steps != ''
-            ORDER BY c.end_date ASC, fu.rowid ASC`,
-      args: [],
-    });
-    return result.rows.map(r => ({
-      id: Number(r.id),
-      next_steps: String(r.next_steps ?? ''),
-      completed: false,
-      conference_id: Number(r.conference_id),
-      first_name: String(r.first_name ?? ''),
-      last_name: String(r.last_name ?? ''),
-      company_id: r.company_id ? Number(r.company_id) : null,
-      company_name: r.company_name ? String(r.company_name) : null,
-      conference_name: String(r.conference_name ?? ''),
-      conference_end_date: String(r.conference_end_date ?? ''),
-    }));
-  } catch { return []; }
-}
-
 async function getAllConferences(tenantDb: Client): Promise<DashboardConference[]> {
   await dbReady;
   try {
@@ -312,21 +281,15 @@ async function StatsSection() {
 async function TargetsAndRecentSection() {
   const sessionUser = await getServerSessionUser();
   const tenantDb = await getDb(sessionUser?.accountId);
-  const [allConferences, openFollowUps, bannerData] = await Promise.all([
-    getAllConferences(tenantDb),
-    getOpenFollowUps(tenantDb),
-    sessionUser ? getBannerData(tenantDb, sessionUser.id) : Promise.resolve({ state: 'none' as const }),
-  ]);
+  const allConferences = await getAllConferences(tenantDb);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 card">
         <DashboardTargetsSection allConferences={allConferences} />
       </div>
-      <DashboardOpenFollowUps
-        followUps={openFollowUps}
-        bannerData={bannerData}
-      />
+      {/* Desktop only — a phone reads notifications from the header bell. */}
+      <DashboardNotificationsSection />
     </div>
   );
 }

@@ -405,17 +405,36 @@ export function BadgeScanResultsModal({
   );
 }
 
-// ── TouchpointQuickModal ──────────────────────────────────────────────────────
+// ── TouchpointForm ────────────────────────────────────────────────────────────
 
-export function TouchpointQuickModal({ onClose, defaultConferenceId, defaultCompanyId, defaultAttendeeId, defaultTouchpointId }: {
-  onClose: () => void;
+/**
+ * The Log Touchpoint fields, without any chrome. The modal wraps this, and the
+ * desktop dashboard renders it inline in the Touchpoints section — one form so
+ * the two can't drift.
+ */
+export function TouchpointForm({
+  onDone, defaultConferenceId, defaultCompanyId, defaultAttendeeId, defaultTouchpointId,
+  bodyClassName = 'px-6 py-4 overflow-y-auto flex-1 space-y-4',
+  footerClassName = 'flex justify-end gap-2 px-6 pb-5 pt-2 flex-shrink-0',
+  cancelLabel = 'Cancel',
+  onStepChange,
+}: {
+  /** Called once the touchpoint (and any note) is saved, and by Cancel/Skip. */
+  onDone: () => void;
   defaultConferenceId?: number | null;
   /** Opens with these already chosen — used when logging from a record. */
   defaultCompanyId?: number | null;
   defaultAttendeeId?: number | null;
   /** Opens with this type already picked — used by the dashboard's type buttons. */
   defaultTouchpointId?: number | null;
+  bodyClassName?: string;
+  footerClassName?: string;
+  /** Hidden entirely when null — inline there's nothing to cancel out of. */
+  cancelLabel?: string | null;
+  /** Lets the wrapper retitle itself when the note step opens. */
+  onStepChange?: (step: 'form' | 'note') => void;
 }) {
+  const onClose = onDone;
   const { user } = useUser();
   const [conferences, setConferences] = useState<Conference[]>([]);
   const [allCompanies, setAllCompanies] = useState<Company[]>([]);
@@ -439,6 +458,8 @@ export function TouchpointQuickModal({ onClose, defaultConferenceId, defaultComp
   const [noteStep, setNoteStep] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+
+  useEffect(() => { onStepChange?.(noteStep ? 'note' : 'form'); }, [noteStep, onStepChange]);
 
   // Load conferences, all companies, and touchpoint options on mount
   useEffect(() => {
@@ -653,23 +674,13 @@ export function TouchpointQuickModal({ onClose, defaultConferenceId, defaultComp
   const canSubmit = !submitting && !isBusy && !!selectedConference && selectedAttendees.length > 0 && !!selectedTouchpointId;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
-          <h3 className="text-base font-semibold text-brand-primary font-serif">{noteStep ? 'Add a Note' : 'Log Touchpoint'}</h3>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
+    <>
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full animate-spin" />
           </div>
         ) : noteStep ? (
-          <div className="px-6 py-4 overflow-y-auto flex-1 space-y-3">
+          <div className={`${bodyClassName} !space-y-3`}>
             {/* What the note will be filed against, so it's clear before saving */}
             <div className="flex flex-wrap items-center gap-1.5">
               {selectedTouchpoint && (
@@ -710,7 +721,7 @@ export function TouchpointQuickModal({ onClose, defaultConferenceId, defaultComp
             </p>
           </div>
         ) : (
-          <div className="px-6 py-4 overflow-y-auto flex-1 space-y-4">
+          <div className={bodyClassName}>
             {/* Conference */}
             <div>
               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Conference *</label>
@@ -799,7 +810,7 @@ export function TouchpointQuickModal({ onClose, defaultConferenceId, defaultComp
           </div>
         )}
 
-        <div className="flex justify-end gap-2 px-6 pb-5 pt-2 flex-shrink-0">
+        <div className={footerClassName}>
           {noteStep ? (
             <>
               <button type="button" onClick={onClose} className="btn-secondary text-sm">Skip</button>
@@ -814,7 +825,9 @@ export function TouchpointQuickModal({ onClose, defaultConferenceId, defaultComp
             </>
           ) : (
             <>
-              <button type="button" onClick={onClose} className="btn-secondary text-sm">Cancel</button>
+              {cancelLabel && (
+                <button type="button" onClick={onClose} className="btn-secondary text-sm">{cancelLabel}</button>
+              )}
               <button
                 type="button"
                 onClick={() => void handleSubmit(true)}
@@ -834,6 +847,33 @@ export function TouchpointQuickModal({ onClose, defaultConferenceId, defaultComp
             </>
           )}
         </div>
+    </>
+  );
+}
+
+// ── TouchpointQuickModal ──────────────────────────────────────────────────────
+
+/** The same form, in a modal. */
+export function TouchpointQuickModal({ onClose, ...defaults }: {
+  onClose: () => void;
+  defaultConferenceId?: number | null;
+  defaultCompanyId?: number | null;
+  defaultAttendeeId?: number | null;
+  defaultTouchpointId?: number | null;
+}) {
+  const [step, setStep] = useState<'form' | 'note'>('form');
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
+          <h3 className="text-base font-semibold text-brand-primary font-serif">{step === 'note' ? 'Add a Note' : 'Log Touchpoint'}</h3>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <TouchpointForm {...defaults} onDone={onClose} onStepChange={setStep} />
       </div>
     </div>
   );
@@ -856,7 +896,6 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
   const [batchModalCards, setBatchModalCards] = useState<ScannedCard[]>([]);
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
-  const [showTouchpointsModal, setShowTouchpointsModal] = useState(false);
   const [badgeScanRelevance, setBadgeScanRelevance] = useState<Record<string, ProductRelevanceResult[]>>({});
   const [meetingsOpen, setMeetingsOpen] = useState(false);
   const [agendaOpen, setAgendaOpen] = useState(false);
@@ -1136,24 +1175,8 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
           <p className="text-xs text-gray-500 leading-tight">Attendees</p>
         </button>
 
-        {/* Middle — Touchpoints, desktop only */}
-        <button
-          type="button"
-          onClick={() => setShowTouchpointsModal(true)}
-          className={`hidden lg:flex flex-1 flex-col items-center gap-1 p-2 rounded-xl hover:bg-green-50 transition-all group ${meetingsOpen ? 'opacity-40 grayscale' : ''}`}
-        >
-          <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center group-hover:bg-green-500 transition-colors flex-shrink-0">
-            <svg className="w-4 h-4 text-green-600 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <circle cx="12" cy="12" r="4" />
-              <line x1="12" y1="2" x2="12" y2="6" />
-              <line x1="12" y1="18" x2="12" y2="22" />
-              <line x1="2" y1="12" x2="6" y2="12" />
-              <line x1="18" y1="12" x2="22" y2="12" />
-            </svg>
-          </div>
-          <p className="text-xs text-gray-500 leading-tight">Touchpoints</p>
-        </button>
+        {/* No Touchpoints button here — desktop logs them from the full form in
+            the Touchpoints section, phones from that section's type buttons. */}
 
         {/* Agenda — sits beside Meetings on both breakpoints */}
         <button
@@ -1271,7 +1294,6 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
         onClose={() => setShowFollowUpModal(false)}
         onSuccess={() => setShowFollowUpModal(false)}
       />
-      {showTouchpointsModal && <TouchpointQuickModal onClose={() => setShowTouchpointsModal(false)} defaultConferenceId={activeConference?.id} />}
       {showScanModal && badgeScanCards.length > 0 && (
         <BadgeScanResultsModal
           cards={badgeScanCards}
