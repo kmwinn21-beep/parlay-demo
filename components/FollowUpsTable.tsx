@@ -91,19 +91,6 @@ const FOLLOW_UP_COUNT_STYLES: Record<number, string> = {
   7: 'text-blue-800 border-blue-500 bg-blue-200',
 };
 
-function FollowUpCountPill({ count }: { count: number }) {
-  if (count < 2) return null;
-  const style = FOLLOW_UP_COUNT_STYLES[count] ?? 'text-red-700 border-red-500 bg-red-100';
-  return (
-    <span
-      title={`${count} follow-ups`}
-      className={`inline-flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold flex-shrink-0 ${style}`}
-    >
-      {count}
-    </span>
-  );
-}
-
 function sortByCreatedAt(tasks: FollowUp[]): FollowUp[] {
   return [...tasks].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''));
 }
@@ -847,17 +834,15 @@ export function FollowUpsTable({
                   : <span className="text-xs text-gray-500 truncate">{head.company_name}</span>}
               </>
             )}
-            {head.conference_name && (
-              <>
-                <span className="text-gray-300">·</span>
-                <span className="text-xs text-gray-500 truncate">{head.conference_name}</span>
-              </>
-            )}
           </div>
         </div>
-        <span className="flex items-center gap-2 flex-shrink-0 pt-0.5 sm:pt-0">
-          {renderGroupRepBody(rows, 'xs')}
-          <FollowUpCountPill count={rows.length} />
+        {/* Rep, then the group's status beneath it — the conference is already
+            the page you're on, and the entry count is in the drawer. */}
+        <span className="flex items-start gap-2 flex-shrink-0 pt-0.5 sm:pt-0">
+          <span className="flex flex-col items-end gap-1">
+            {renderGroupRepBody(rows, 'xs')}
+            <StatusPill completed={rows.every(r => r.completed)} />
+          </span>
           <svg
             className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`}
             fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -1366,6 +1351,19 @@ export function FollowUpsTable({
             />
             {renderGroupDoneButton(groupKey, rows)}
           </div>
+        }
+        // On a phone the same two controls sit under the attendee's name —
+        // Done first, notes to its right — rather than at the foot of a sheet
+        // that can be most of a screen away from the follow-ups they act on.
+        mobileHeaderActions={
+          <>
+            {renderGroupDoneButton(groupKey, rows)}
+            <FollowUpNotesPopover
+              attendeeId={head.attendee_id}
+              notesCount={Number(head.entity_notes_count)}
+              conferenceName={head.conference_name}
+            />
+          </>
         }
       >
         <div className="p-3 space-y-3">
