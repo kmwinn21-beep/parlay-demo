@@ -308,6 +308,24 @@ export function FollowUpsTable({
   // rows aren't a uniform height.
   const tableWrapRef = useRef<HTMLDivElement>(null);
   const [drawerOffset, setDrawerOffset] = useState(0);
+
+  useLayoutEffect(() => {
+    if (!detailsInDrawer || !drawerGroupKey) { setDrawerOffset(0); return; }
+    const wrap = tableWrapRef.current;
+    const row = wrap?.querySelector<HTMLElement>(`tr[data-group-key="${CSS.escape(drawerGroupKey)}"]`);
+    if (!wrap || !row) { setDrawerOffset(0); return; }
+    const measure = () => {
+      const r = row.getBoundingClientRect();
+      const w = wrap.getBoundingClientRect();
+      setDrawerOffset(Math.max(0, Math.round(r.top - w.top)));
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, [detailsInDrawer, drawerGroupKey, followUps]);
+
   const [reassignNote, setReassignNote] = useState<ReassignNoteTarget | null>(null);
 
   /** Every reassignment offers a note; the prompt handles the rest. */
@@ -1295,23 +1313,6 @@ export function FollowUpsTable({
       </SlideInPanel>
     );
   }
-
-  useLayoutEffect(() => {
-    if (!detailsInDrawer || !drawerGroupKey) { setDrawerOffset(0); return; }
-    const wrap = tableWrapRef.current;
-    const row = wrap?.querySelector<HTMLElement>(`tr[data-group-key="${CSS.escape(drawerGroupKey)}"]`);
-    if (!wrap || !row) { setDrawerOffset(0); return; }
-    const measure = () => {
-      const r = row.getBoundingClientRect();
-      const w = wrap.getBoundingClientRect();
-      setDrawerOffset(Math.max(0, Math.round(r.top - w.top)));
-    };
-    measure();
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(wrap);
-    return () => ro.disconnect();
-  }, [detailsInDrawer, drawerGroupKey, followUps]);
 
   const confAttGroups = buildConferenceAttendeeGroups(followUps);
   const showConferenceHeader = groupBy === 'conference-attendee';

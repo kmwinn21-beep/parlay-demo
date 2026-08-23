@@ -104,8 +104,8 @@ export function DashboardTouchpointsSection() {
             defaultConferenceId={activeConference?.id ?? null}
             onDone={() => setFormKey(k => k + 1)}
             onLogged={() => void refreshCount()}
-            bodyClassName="space-y-4 flex-1 min-h-0"
-            footerClassName="grid grid-cols-2 gap-2 pt-4 flex-shrink-0"
+            bodyClassName="space-y-4"
+            footerClassName="grid grid-cols-2 gap-2 pt-4"
             cancelLabel={null}
           />
         </div>
