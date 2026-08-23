@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import toast from 'react-hot-toast';
 import { DashboardDrawer } from '@/components/DashboardDrawer';
 import { MobileAttendeeCard, type AttendeeCardRow } from '@/components/MobileAttendeeCard';
 import { ScrollRow } from '@/components/ScrollRow';
@@ -35,20 +36,52 @@ export function AttendeesDrawer({ onClose }: { onClose: () => void }) {
   const [quickMine, setQuickMine] = useState(false);
   const [quickTypes, setQuickTypes] = useState<Set<string>>(new Set());
   const [quickView, setQuickView] = useState<{ type: 'attendee' | 'company'; id: number } | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const EMPTY_ADD = { first_name: '', last_name: '', title: '', company: '', email: '', phone: '', linkedin_url: '' };
+  const [addForm, setAddForm] = useState(EMPTY_ADD);
 
-  useEffect(() => {
+  const loadAttendees = useCallback(async () => {
     if (!activeConference) { setLoading(false); return; }
-    let cancelled = false;
-    fetch(`/api/conferences/${activeConference.id}`)
-      .then(r => (r.ok ? r.json() : null))
-      .then(data => {
-        if (cancelled) return;
-        setAttendees(Array.isArray(data?.attendees) ? data.attendees : []);
-      })
-      .catch(() => { if (!cancelled) setAttendees([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    try {
+      // no-store: the refetch after adding someone was being served the
+      // pre-add response from the browser cache, so the new row never appeared.
+      const r = await fetch(`/api/conferences/${activeConference.id}`, { cache: 'no-store' });
+      const data = r.ok ? await r.json() : null;
+      setAttendees(Array.isArray(data?.attendees) ? data.attendees : []);
+    } catch {
+      setAttendees([]);
+    } finally {
+      setLoading(false);
+    }
   }, [activeConference]);
+
+  useEffect(() => { void loadAttendees(); }, [loadAttendees]);
+
+  const handleAdd = async () => {
+    if (!activeConference) return;
+    if (!addForm.first_name.trim() || !addForm.last_name.trim()) {
+      toast.error('First and last name are required.');
+      return;
+    }
+    setAdding(true);
+    try {
+      const res = await fetch(`/api/conferences/${activeConference.id}/attendees/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(addForm),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to add attendee');
+      toast.success('Attendee added!');
+      setAddForm(EMPTY_ADD);
+      setShowAddForm(false);
+      await loadAttendees();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add attendee');
+    } finally {
+      setAdding(false);
+    }
+  };
 
   // The company types actually present, so no button filters to nothing.
   const typeButtons = useMemo(() => {
@@ -109,7 +142,7 @@ export function AttendeesDrawer({ onClose }: { onClose: () => void }) {
               <KebabMenu
                 title="Attendee actions"
                 items={[
-                  { label: 'Clear filters', onClick: () => { setSearch(''); setQuickIcp(false); setQuickMine(false); setQuickTypes(new Set()); }, disabled: !anyQuick && !search },
+                  { label: 'Add Attendee', onClick: () => setShowAddForm(v => !v), disabled: !activeConference },
                   { label: showPhotos ? 'Hide pictures' : 'Show pictures', onClick: () => setShowPhotos(v => !v) },
                 ]}
               />
@@ -157,6 +190,52 @@ export function AttendeesDrawer({ onClose }: { onClose: () => void }) {
             ))}
           </ScrollRow>
         </div>
+
+        {/* Same fields and endpoint the conference details list posts to, so an
+            attendee added here lands exactly where one added there would. */}
+        {showAddForm && activeConference && (
+          <div className="m-4 p-4 bg-blue-50 border border-brand-secondary rounded-xl">
+            <h3 className="text-sm font-semibold text-brand-primary mb-3">Add Attendee to Conference</h3>
+            <div className="grid grid-cols-1 gap-3">
+              {([
+                ['first_name', 'First Name *', 'text'],
+                ['last_name', 'Last Name *', 'text'],
+                ['title', 'Title', 'text'],
+                ['company', 'Company', 'text'],
+                ['email', 'Email', 'email'],
+                ['phone', 'Phone', 'tel'],
+                ['linkedin_url', 'LinkedIn URL', 'url'],
+              ] as const).map(([key, label, type]) => (
+                <div key={key}>
+                  <label className="label text-xs">{label}</label>
+                  <input
+                    type={type}
+                    value={addForm[key]}
+                    onChange={e => setAddForm(p => ({ ...p, [key]: e.target.value }))}
+                    className="input-field text-sm"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-3">
+              <button
+                type="button"
+                onClick={handleAdd}
+                disabled={adding || !addForm.first_name.trim() || !addForm.last_name.trim()}
+                className="flex-1 px-3 py-2 text-sm font-semibold text-white bg-brand-secondary rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {adding ? 'Adding…' : 'Add Attendee'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowAddForm(false); setAddForm(EMPTY_ADD); }}
+                className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {!activeConference ? (
           <p className="text-sm text-gray-400 text-center py-10">Set an active conference to see its attendees.</p>

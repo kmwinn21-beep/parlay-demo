@@ -611,7 +611,9 @@ export function DashboardAgendaSection({ conferenceId, conferenceName, view, onV
     <MeetingNotesDrawer meetingId={notetakerMeetingId} onClose={() => setNotetakerMeetingId(null)} />
     {/* Note Expand Drawer */}
     {noteDrawerItem && typeof document !== 'undefined' && createPortal(
-      <div className="fixed inset-0 z-50 flex items-end sm:items-stretch sm:justify-end">
+      // Above the dashboard Agenda drawer (z-[70]) — this section now renders
+      // inside it, and at z-50 the note editor landed behind the drawer.
+      <div className="fixed inset-0 z-[75] flex items-end sm:items-stretch sm:justify-end">
         <div className="absolute inset-0 bg-black/40" onClick={() => {
           const drawerSavedVal = savedNoteContents.get(noteDrawerItem.key) ?? noteDrawerItem.note_content ?? '';
           if (drawerDraft !== drawerSavedVal) {
