@@ -19,6 +19,60 @@ Follow the same pattern as `app/api/cron/debrief-notifications/route.ts` (the on
 
 ## Bugs
 
+### Relationship health: floor is read stale in one of the three copies
+
+**`app/api/attendees/[id]/timeline/route.ts` vs `post-conference/route.ts` / `pre-conference/route.ts`**
+
+The three copies of the health-score calculation disagree about where the
+relationship floor comes from:
+
+| copy | floor source | capped at 100? |
+|---|---|---|
+| post-conference | recomputed live via `computeRelationshipFloorBatch()` | no |
+| attendee timeline | reads the stored `attendees.relationship_floor` column | no |
+| pre-conference | **no floor at all** | yes |
+
+`attendees.relationship_floor` is only written when `computeRelationshipFloor*`
+runs, which happens on the post-conference path. So the attendee timeline shows
+a floor that can be arbitrarily out of date — add a Strong/Trusted internal
+relationship and the timeline's health score won't move until someone opens an
+Activity Debrief. Pre-conference ignores the floor entirely, so the same person
+scores lower there than anywhere else.
+
+Found while rebalancing the depth components (branch
+`claude/add-company-level-targets-EMwKD`) and deliberately left alone — it is a
+separate behavioural question, not part of the reweighting.
+
+**Decide:** one source of truth for the floor across all three, and whether
+pre-conference should include it at all.
+
+### Relationship health: the attendee timeline counts unassigned notes at every conference
+
+**`app/api/attendees/[id]/timeline/route.ts`**
+
+The per-conference notes query is:
+
+```sql
+SELECT ... FROM entity_notes
+WHERE entity_type = 'attendee' AND entity_id = ?
+  AND (conference_name = ? OR conference_name IS NULL OR conference_name = '')
+```
+
+The `OR conference_name IS NULL OR conference_name = ''` clause means a single
+note with no conference set is returned for **every** conference that attendee
+has ever attended. The other two copies match on the conference only.
+
+`hasNotes` no longer contributes to the depth score after the reweighting, but
+it still decides whether a conference counts as a "ghost" — so one unassigned
+note currently suppresses the ghost penalty across an attendee's entire history
+on this endpoint and nowhere else.
+
+The query also still matches on `conference_name` text rather than the
+`entity_notes.conference_id` column added on this branch.
+
+Found while rebalancing the depth components and deliberately left alone.
+
+
 ### 🔴 LIVE BUG — notification helpers write to the master DB for tenant users
 
 **`lib/notifications.ts` — every wrapper except direct `createNotifications({ db })` callers**

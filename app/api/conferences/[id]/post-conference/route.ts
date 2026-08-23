@@ -68,7 +68,23 @@ function isIcpYes(icp: string | null | undefined): boolean {
   return String(icp ?? '').trim().toLowerCase() === 'yes';
 }
 
-const MEETING_ACTION_KEYS = ['meeting_held', 'meeting_scheduled', 'rescheduled', 'cancelled', 'no_show'];
+/**
+ * The four things that make a conference count as real engagement, and what
+ * each is worth. They sum to exactly 100.
+ *
+ * Was six components: "meeting outcome recorded" and "note logged" were dropped
+ * and their weight redistributed, and "touchpoint" now reads the touchpoints
+ * table instead of inferring one from an action key.
+ *
+ * Duplicated verbatim in app/api/attendees/[id]/timeline/route.ts and
+ * app/api/conferences/[id]/pre-conference/route.ts — keep all three in step.
+ */
+const DEPTH_POINTS = {
+  meetingHeld: 35,
+  socialAttended: 25,
+  followUpCompleted: 20,
+  touchpointLogged: 20,
+} as const;
 
 function computeHealthScore(params: {
   attendeeConfs: number[];
@@ -77,39 +93,38 @@ function computeHealthScore(params: {
   followUpsByConf: Map<number, { completed: number }[]>;
   noteCountByConf: Map<number, number>;
   socialByConf: Map<number, { rsvp_status: string }[]>;
-  actionKeyMap: Map<string, string>;
+  touchpointConfs: Set<number>;
   heldOutcome: MeetingHeld;
   excludeConfId?: number;
   floor?: number;
 }): number {
   const { attendeeConfs, detailsByConf, meetingsByConf, followUpsByConf,
-    noteCountByConf, socialByConf, actionKeyMap, heldOutcome, excludeConfId, floor = 0 } = params;
+    noteCountByConf, socialByConf, touchpointConfs, heldOutcome, excludeConfId, floor = 0 } = params;
   const confs = excludeConfId ? attendeeConfs.filter(c => c !== excludeConfId) : attendeeConfs;
   if (confs.length === 0) return floor;
   let totalDepth = 0, totalFus = 0, completedFus = 0, ghostCount = 0;
   for (const confId of confs) {
     const details = detailsByConf.get(confId);
-    const meetings = meetingsByConf.get(confId) ?? [];
     const fus = followUpsByConf.get(confId) ?? [];
     const noteCount = noteCountByConf.get(confId) ?? 0;
     const social = socialByConf.get(confId) ?? [];
     const actionStr = details?.action ?? '';
     const actionVals = actionStr.split(',').map(s => s.trim()).filter(Boolean);
-    const actionKeys = actionVals.map(v => actionKeyMap.get(v)).filter(Boolean) as string[];
     const hasMeetingHeld = actionVals.some(v => isMeetingHeld(v, heldOutcome));
-    const meetingHasOutcome = hasMeetingHeld && meetings.some(m => m.outcome && String(m.outcome).trim().length > 0);
+    // No longer scored, but still what decides whether a conference is a ghost.
     const hasNotes = noteCount > 0 || (details?.notes != null && String(details.notes).trim().length > 0);
     const hasSocialAttending = social.some(e => String(e.rsvp_status).split(',').map(s => s.trim()).includes('attended'));
     const hasFus = fus.length > 0;
     const hasCompletedFu = fus.some(f => Number(f.completed) === 1);
-    const hasTouchpoint = actionVals.length > 0 && actionKeys.some(k => !MEETING_ACTION_KEYS.includes(k));
+    // A real read of attendee_touchpoints, not the action-key inference this
+    // used to do — that only ever fired on "Pending" and never on an actual
+    // logged touchpoint.
+    const hasTouchpoint = touchpointConfs.has(confId);
     let depth = 0;
-    if (hasMeetingHeld) depth += 25;
-    if (meetingHasOutcome) depth += 20;
-    if (hasNotes) depth += 10;
-    if (hasSocialAttending) depth += 20;
-    if (hasFus && hasCompletedFu) depth += 15;
-    if (hasTouchpoint) depth += 10;
+    if (hasMeetingHeld) depth += DEPTH_POINTS.meetingHeld;
+    if (hasSocialAttending) depth += DEPTH_POINTS.socialAttended;
+    if (hasFus && hasCompletedFu) depth += DEPTH_POINTS.followUpCompleted;
+    if (hasTouchpoint) depth += DEPTH_POINTS.touchpointLogged;
     depth = Math.min(100, depth);
     totalDepth += depth;
     totalFus += fus.length;
@@ -285,7 +300,8 @@ export async function GET(
   // ── Phase 2: full history for all attendees ────────────────────────────────
   const [allConfAttRes, allDetailsRes, allMeetingsRes, allFuRes, allNotesRes,
     allSocialRes, allConfsRes, confTouchpointsRes, confSocialEventsRes, confTouchpointRowsRes,
-    confTargetsRes, confEngDetailsRes, confEngEntityNotesRes, confProductSignalsRes] = await Promise.all([
+    confTargetsRes, confEngDetailsRes, confEngEntityNotesRes, confProductSignalsRes,
+    allTouchpointConfsRes] = await Promise.all([
     db.execute({
       sql: `SELECT ca.attendee_id, ca.conference_id
             FROM conference_attendees ca
@@ -370,7 +386,22 @@ export async function GET(
       sql: `SELECT attendee_id, buyer_role FROM attendee_product_signals WHERE conference_id = ?`,
       args: [confId],
     }).catch(() => ({ rows: [] as { attendee_id: unknown; buyer_role: unknown }[] })),
+    // Which conferences each attendee has a logged touchpoint at. Every source
+    // counts — how a touchpoint was captured says nothing about whether the
+    // interaction happened.
+    db.execute({
+      sql: `SELECT DISTINCT attendee_id, conference_id FROM attendee_touchpoints
+            WHERE attendee_id IN (${idPlaceholders})`,
+      args: attendeeIds,
+    }).catch(() => ({ rows: [] as { attendee_id: unknown; conference_id: unknown }[] })),
   ]);
+
+  // `${attendeeId}_${conferenceId}` for every attendee/conference pair with a
+  // touchpoint logged.
+  const touchpointAttConfKeys = new Set<string>();
+  for (const r of allTouchpointConfsRes.rows) {
+    touchpointAttConfKeys.add(`${Number(r.attendee_id)}_${Number(r.conference_id)}`);
+  }
 
   // ── Social events for this conference ────────────────────────────────────
   const confSocialEventIds = confSocialEventsRes.rows.map(r => Number(r.id));
@@ -662,6 +693,7 @@ export async function GET(
     const fusByConf = new Map<number, { completed: number }[]>();
     const noteCountByConf = new Map<number, number>();
     const socialByConf = new Map<number, { rsvp_status: string }[]>();
+    const touchpointConfs = new Set<number>();
     for (const cid of confs) {
       const k = `${aid}_${cid}`;
       const det = detailsByAttConf.get(k);
@@ -674,8 +706,9 @@ export async function GET(
       if (nc) noteCountByConf.set(cid, nc);
       const s = socialByAttConf.get(k);
       if (s) socialByConf.set(cid, s);
+      if (touchpointAttConfKeys.has(k)) touchpointConfs.add(cid);
     }
-    return { detailsByConf, meetingsByConf, fusByConf, noteCountByConf, socialByConf };
+    return { detailsByConf, meetingsByConf, fusByConf, noteCountByConf, socialByConf, touchpointConfs };
   }
 
   // Check per-attendee engagement at this conference
@@ -715,7 +748,7 @@ export async function GET(
       followUpsByConf: maps.fusByConf,
       noteCountByConf: maps.noteCountByConf,
       socialByConf: maps.socialByConf,
-      actionKeyMap,
+      touchpointConfs: maps.touchpointConfs,
       heldOutcome: meetingHeld,
       floor,
     });
@@ -726,7 +759,7 @@ export async function GET(
       followUpsByConf: maps.fusByConf,
       noteCountByConf: maps.noteCountByConf,
       socialByConf: maps.socialByConf,
-      actionKeyMap,
+      touchpointConfs: maps.touchpointConfs,
       heldOutcome: meetingHeld,
       excludeConfId: confId,
       floor,
@@ -1355,21 +1388,19 @@ export async function GET(
     const confSocialList = socialByAttConf.get(confKey) ?? [];
     const confActionStr = confDet?.action ?? '';
     const confActionVals = confActionStr.split(',').map(s => s.trim()).filter(Boolean);
-    const confActionKeys = confActionVals.map(v => actionKeyMap.get(v)).filter(Boolean) as string[];
     const hadMeeting = confActionVals.some(v => isMeetingHeld(v, meetingHeld));
-    const hadOutcome = hadMeeting && confMeetingsList.some(m => m.outcome && String(m.outcome).trim().length > 0);
     const hadNotes = confNoteCount > 0 || (confDet?.notes != null && String(confDet.notes).trim().length > 0);
     const hadSocial = confSocialList.some(e => String(e.rsvp_status).split(',').map(s => s.trim()).includes('attended'));
     const hadFus = confFuList.length > 0;
     const hadCompletedFu = confFuList.some(f => Number(f.completed) === 1);
-    const hadTouchpoint = confActionVals.length > 0 && confActionKeys.some(k => !MEETING_ACTION_KEYS.includes(k));
+    const hadTouchpoint = touchpointAttConfKeys.has(`${aid}_${confId}`);
+    // Mirrors the four scoring components exactly — this is what explains the
+    // number to the reader, so a stale label here reads as a stale system.
     const conferenceBreakdown: { label: string; points: number }[] = [];
-    if (hadMeeting) conferenceBreakdown.push({ label: 'Meeting held', points: 25 });
-    if (hadOutcome) conferenceBreakdown.push({ label: 'Meeting outcome logged', points: 20 });
-    if (hadNotes) conferenceBreakdown.push({ label: 'Notes logged', points: 10 });
-    if (hadSocial) conferenceBreakdown.push({ label: 'Social event attendance', points: 20 });
-    if (hadFus && hadCompletedFu) conferenceBreakdown.push({ label: 'Follow-up completed', points: 15 });
-    if (hadTouchpoint) conferenceBreakdown.push({ label: 'Touchpoint logged', points: 10 });
+    if (hadMeeting) conferenceBreakdown.push({ label: 'Meeting held', points: DEPTH_POINTS.meetingHeld });
+    if (hadSocial) conferenceBreakdown.push({ label: 'Social event attendance', points: DEPTH_POINTS.socialAttended });
+    if (hadFus && hadCompletedFu) conferenceBreakdown.push({ label: 'Follow-up completed', points: DEPTH_POINTS.followUpCompleted });
+    if (hadTouchpoint) conferenceBreakdown.push({ label: 'Touchpoint logged', points: DEPTH_POINTS.touchpointLogged });
     if (conferenceBreakdown.length === 0) conferenceBreakdown.push({ label: 'No engagement logged', points: 0 });
 
     const row: RelationshipShiftRow = {
