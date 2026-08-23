@@ -332,22 +332,38 @@ export function FollowUpsTable({
   // the table, so the two read as one thing. Measured from the row because the
   // rows aren't a uniform height.
   const tableWrapRef = useRef<HTMLDivElement>(null);
+  const drawerPanelRef = useRef<HTMLDivElement>(null);
   const [drawerOffset, setDrawerOffset] = useState(0);
+  // A panel anchored to a row near the bottom would hang off the end of the
+  // table with nothing below to scroll to. The table grows by however much it
+  // overhangs, for as long as the panel is open, so the rest of the card can be
+  // scrolled to without the panel leaving its row.
+  const [drawerOverhang, setDrawerOverhang] = useState(0);
 
   useLayoutEffect(() => {
-    if (!detailsInDrawer || !drawerGroupKey) { setDrawerOffset(0); return; }
+    if (!detailsInDrawer || !drawerGroupKey) {
+      setDrawerOffset(0);
+      setDrawerOverhang(0);
+      return;
+    }
     const wrap = tableWrapRef.current;
     const row = wrap?.querySelector<HTMLElement>(`tr[data-group-key="${CSS.escape(drawerGroupKey)}"]`);
-    if (!wrap || !row) { setDrawerOffset(0); return; }
+    if (!wrap || !row) { setDrawerOffset(0); setDrawerOverhang(0); return; }
     const measure = () => {
       const r = row.getBoundingClientRect();
       const w = wrap.getBoundingClientRect();
-      setDrawerOffset(Math.max(0, Math.round(r.top - w.top)));
+      const offset = Math.max(0, Math.round(r.top - w.top));
+      setDrawerOffset(offset);
+      const panelH = drawerPanelRef.current?.offsetHeight ?? 0;
+      // The spacer sits outside the table, so growing it can't move the row
+      // this was measured against.
+      setDrawerOverhang(panelH > 0 ? Math.max(0, Math.round(offset + panelH + 16 - wrap.offsetHeight)) : 0);
     };
     measure();
     if (typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(measure);
     ro.observe(wrap);
+    if (drawerPanelRef.current) ro.observe(drawerPanelRef.current);
     return () => ro.disconnect();
   }, [detailsInDrawer, drawerGroupKey, followUps]);
 
@@ -1450,12 +1466,16 @@ export function FollowUpsTable({
             stay where they are — only what the panel actually covers is
             hidden, rather than the table being squeezed into what's left. */}
         {drawer && (
-          <div
-            className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-96 lg:pr-3 lg:z-20 lg:pointer-events-none"
-            style={{ paddingTop: drawerOffset }}
-          >
-            <div className="lg:pointer-events-auto">{drawer}</div>
-          </div>
+          <>
+            {/* Room below the table for a panel anchored near the bottom */}
+            <div className="hidden lg:block" style={{ height: drawerOverhang }} aria-hidden />
+            <div
+              className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-96 lg:pr-3 lg:z-20 lg:pointer-events-none"
+              style={{ paddingTop: drawerOffset }}
+            >
+              <div ref={drawerPanelRef} className="lg:pointer-events-auto">{drawer}</div>
+            </div>
+          </>
         )}
       </div>
       {quickView && (
