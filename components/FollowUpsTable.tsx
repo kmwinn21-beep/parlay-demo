@@ -853,7 +853,7 @@ export function FollowUpsTable({
         aria-expanded={expanded}
         className={`border-y border-gray-200 cursor-pointer transition-all ${
           dimmed
-            ? 'bg-gray-50/60 opacity-40 hover:opacity-100 hover:bg-gray-100'
+            ? 'bg-gray-50/60 opacity-[0.22] hover:opacity-100 hover:bg-gray-100'
             : expanded
               ? 'bg-white ring-1 ring-inset ring-brand-secondary/40 hover:bg-white'
               : 'bg-gray-50 hover:bg-gray-100'
@@ -1381,8 +1381,8 @@ export function FollowUpsTable({
       {/* Desktop — the panel takes a column beside the table when open. The
           row itself is always mounted so the panel renders once and handles
           its own phone form (a bottom sheet) from inside. */}
-      <div className="lg:flex lg:items-start">
-      <div ref={tableWrapRef} className="hidden lg:block flex-1 min-w-0 overflow-x-auto">
+      <div className="lg:relative">
+      <div ref={tableWrapRef} className="hidden lg:block min-w-0 overflow-x-auto">
         <table className="w-full" style={{ fontSize: '0.7rem' }}>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
@@ -1446,9 +1446,15 @@ export function FollowUpsTable({
           </tbody>
         </table>
       </div>
+        {/* Floats over the table's right-hand side so the columns underneath
+            stay where they are — only what the panel actually covers is
+            hidden, rather than the table being squeezed into what's left. */}
         {drawer && (
-          <div className="lg:w-96 lg:flex-shrink-0 lg:pr-3" style={{ paddingTop: drawerOffset }}>
-            {drawer}
+          <div
+            className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-96 lg:pr-3 lg:z-20 lg:pointer-events-none"
+            style={{ paddingTop: drawerOffset }}
+          >
+            <div className="lg:pointer-events-auto">{drawer}</div>
           </div>
         )}
       </div>
