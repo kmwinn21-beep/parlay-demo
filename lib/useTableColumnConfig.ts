@@ -61,8 +61,10 @@ export const TABLE_COLUMN_DEFS: Record<string, ColumnDef[]> = {
     { key: 'follow_up_action', label: 'Follow Up Action' },
     { key: 'conference', label: 'Conference' },
     { key: 'rep',        label: 'Rep' },
-    { key: 'notes',      label: 'Notes' },
+    // Status rides beside Rep rather than trailing the row, so the state of a
+    // follow-up reads with who owns it.
     { key: 'status',     label: 'Status' },
+    { key: 'notes',      label: 'Notes' },
   ],
   meetings: [
     { key: 'name',         label: 'Name' },
@@ -92,8 +94,10 @@ export const TABLE_COLUMN_DEFS: Record<string, ColumnDef[]> = {
     { key: 'follow_up_action', label: 'Follow Up Action' },
     { key: 'conference', label: 'Conference' },
     { key: 'rep',        label: 'Rep' },
-    { key: 'notes',      label: 'Notes' },
+    // Status rides beside Rep rather than trailing the row, so the state of a
+    // follow-up reads with who owns it.
     { key: 'status',     label: 'Status' },
+    { key: 'notes',      label: 'Notes' },
   ],
   company_meetings: [
     { key: 'name',         label: 'Name' },
@@ -122,8 +126,10 @@ export const TABLE_COLUMN_DEFS: Record<string, ColumnDef[]> = {
     { key: 'follow_up_action', label: 'Follow Up Action' },
     { key: 'conference', label: 'Conference' },
     { key: 'rep',        label: 'Rep' },
-    { key: 'notes',      label: 'Notes' },
+    // Status rides beside Rep rather than trailing the row, so the state of a
+    // follow-up reads with who owns it.
     { key: 'status',     label: 'Status' },
+    { key: 'notes',      label: 'Notes' },
   ],
   social_events: [
     { key: 'entered_by',  label: 'Entered By' },

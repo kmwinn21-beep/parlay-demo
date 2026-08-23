@@ -307,12 +307,13 @@ export default function DashboardPage() {
         <StatsSection />
       </Suspense>
 
-      {/* Floor Notes, with the touchpoint types beside it. No max height on the
-          notes column any more — it stretches to whatever the Touchpoints form
-          beside it needs, and its own list scrolls inside that. */}
+      {/* Floor Notes, with the touchpoint types beside it. On desktop the notes
+          card is taken out of flow so the number of notes can't drive the row —
+          Touchpoints sets the height and the notes page through it on their own
+          chevron. */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
-        <div className="lg:col-span-2 max-h-[489px] lg:max-h-none flex flex-col min-h-0">
-          <QuickNotesSection />
+        <div className="lg:col-span-2 max-h-[489px] lg:max-h-none flex flex-col min-h-0 lg:block lg:relative">
+          <QuickNotesSection className="lg:absolute lg:inset-0" />
         </div>
         <div className="lg:col-span-1 flex flex-col min-h-0">
           <DashboardTouchpointsSection />
