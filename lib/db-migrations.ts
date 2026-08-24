@@ -2154,4 +2154,15 @@ export const migrations: string[] = [
      LIMIT 1
    ) WHERE conference_id IS NULL AND conference_name IS NOT NULL AND TRIM(conference_name) != ''`,
   `CREATE INDEX IF NOT EXISTS idx_entity_notes_conference_id ON entity_notes(conference_id)`,
+  // entity_structure used to be a free-text dropdown on the company edit form,
+  // set by hand and unrelated to companies.parent_company_id — the column the
+  // Related Entities section, the child rollups and the "Subsidiary of" line all
+  // actually read. A company could be labelled 'Parent' with no children, or
+  // linked as a child with no label. It's now derived from the links on read,
+  // so recompute the stored column once to match what the links say.
+  `UPDATE companies SET entity_structure = CASE
+     WHEN parent_company_id IS NOT NULL THEN 'Child'
+     WHEN EXISTS (SELECT 1 FROM companies kid WHERE kid.parent_company_id = companies.id) THEN 'Parent'
+     ELSE NULL
+   END`,
 ];

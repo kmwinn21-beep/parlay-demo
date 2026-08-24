@@ -181,7 +181,8 @@ export async function POST(request: NextRequest) {
       if (master.website && master.website !== co.website) { setClauses.push('website = ?'); args.push(master.website); }
       if (master.hqState && master.hqState !== co.hqState) { setClauses.push('hq_state = ?'); args.push(master.hqState); }
       if (master.territoryId != null && master.territoryId !== co.territoryId) { setClauses.push('territory_id = ?'); args.push(master.territoryId); }
-      if (master.entityStructure && master.entityStructure !== co.entityStructure) { setClauses.push('entity_structure = ?'); args.push(master.entityStructure); }
+      // entity_structure deliberately not synced — it is derived from a
+      // company's parent/child links, not something a master sheet can assert.
       if (master.services && master.services !== co.services) { setClauses.push('services = ?'); args.push(master.services); }
       if (master.wse != null && master.wse !== co.wse) { setClauses.push('wse = ?'); args.push(master.wse); }
 

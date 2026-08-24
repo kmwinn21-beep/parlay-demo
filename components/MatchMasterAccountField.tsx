@@ -86,13 +86,8 @@ function buildFieldRows(
       currentDisplay: currentTerritoryName || '—',
       patch: record.territoryId != null ? { territory_id: record.territoryId } : null,
     },
-    {
-      key: 'entity_structure',
-      label: 'Entity Structure',
-      masterDisplay: record.entityStructure ?? '—',
-      currentDisplay: current.entity_structure || '—',
-      patch: record.entityStructure ? { entity_structure: record.entityStructure } : null,
-    },
+    // No entity_structure row — it is derived from a company's parent/child
+    // links, so a master record can't assert it.
     {
       key: 'services',
       label: 'Services',

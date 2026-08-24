@@ -145,7 +145,7 @@ export async function GET(
       }),
       company.parent_company_id
         ? db.execute({
-            sql: 'SELECT id, name FROM companies WHERE id = ?',
+            sql: 'SELECT id, name, company_type FROM companies WHERE id = ?',
             args: [company.parent_company_id],
           })
         : Promise.resolve({ rows: [] }),
@@ -201,8 +201,23 @@ export async function GET(
     }));
 
     const parent_company = parentResult.rows.length > 0
-      ? { id: Number(parentResult.rows[0].id), name: String(parentResult.rows[0].name) }
+      ? {
+          id: Number(parentResult.rows[0].id),
+          name: String(parentResult.rows[0].name),
+          // Carried so the child's Related Entities card can show the same
+          // company-type pill the tables use.
+          company_type: parentResult.rows[0].company_type ? String(parentResult.rows[0].company_type) : null,
+        }
       : null;
+
+    // Derived, not read from the stored column: a company is a Child when it
+    // has a parent and a Parent when it has children. The column used to be
+    // typed by hand and could disagree with the links it claims to describe.
+    const entity_structure = parent_company
+      ? 'Child'
+      : child_companies.length > 0
+        ? 'Parent'
+        : null;
 
     const related_companies = relatedResult.rows.map((r) => ({
       id: Number(r.id),
@@ -226,6 +241,7 @@ export async function GET(
 
     return NextResponse.json({
       ...company,
+      entity_structure,
       status: cleanStatus,
       services: parseServices(company.services),
       icp: company.icp ? String(company.icp) : null,
@@ -253,7 +269,9 @@ export async function PUT(
   const db = await getDb(user?.accountId);
   try {
     const body = await request.json();
-    const { name, website, profit_type, company_type, notes, assigned_user, entity_structure, wse, services, icp, industry, territory_id, hq_state } = body;
+    // entity_structure is derived from parent_company_id / children on read,
+    // so nothing writes it here — the parent/child action owns the links.
+    const { name, website, profit_type, company_type, notes, assigned_user, wse, services, icp, industry, territory_id, hq_state } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Company name is required' }, { status: 400 });
@@ -269,8 +287,8 @@ export async function PUT(
     const prevAssignedUser = existingResult.rows[0].assigned_user as string | null;
 
     const updatedResult = await db.execute({
-      sql: 'UPDATE companies SET name = ?, website = ?, profit_type = ?, company_type = ?, notes = ?, assigned_user = ?, entity_structure = ?, wse = ?, services = ?, icp = ?, industry = ?, territory_id = ?, hq_state = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
-      args: [name, website || null, profit_type || null, company_type || null, notes || null, assigned_user || null, entity_structure || null, wse != null && wse !== '' ? Number(wse) : null, serializeServices(services), icp || null, industry || null, territory_id != null && territory_id !== '' ? Number(territory_id) : null, hq_state || null, params.id],
+      sql: 'UPDATE companies SET name = ?, website = ?, profit_type = ?, company_type = ?, notes = ?, assigned_user = ?, wse = ?, services = ?, icp = ?, industry = ?, territory_id = ?, hq_state = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
+      args: [name, website || null, profit_type || null, company_type || null, notes || null, assigned_user || null, wse != null && wse !== '' ? Number(wse) : null, serializeServices(services), icp || null, industry || null, territory_id != null && territory_id !== '' ? Number(territory_id) : null, hq_state || null, params.id],
     });
 
     // Cascade assigned_user to all child companies
@@ -442,7 +460,9 @@ export async function DELETE(
     await db.batch(
       [
         { sql: 'UPDATE attendees SET company_id = NULL WHERE company_id = ?', args: [params.id] },
-        { sql: 'UPDATE companies SET parent_company_id = NULL WHERE parent_company_id = ?', args: [params.id] },
+        // Clear the stale label along with the link, or the orphans keep
+        // rendering as children of a company that no longer exists.
+        { sql: "UPDATE companies SET parent_company_id = NULL, entity_structure = NULL WHERE parent_company_id = ?", args: [params.id] },
         { sql: 'DELETE FROM company_relationships WHERE company_id_1 = ? OR company_id_2 = ?', args: [params.id, params.id] },
         { sql: 'DELETE FROM companies WHERE id = ?', args: [params.id] },
       ],

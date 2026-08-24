@@ -63,7 +63,16 @@ export async function GET(request: NextRequest) {
 
     const result = await db.execute({
       sql: `SELECT co.id, co.name, co.website, co.profit_type, co.company_type, co.notes, co.wse, co.services,
-              co.status, co.icp, co.assigned_user, co.parent_company_id, co.entity_structure, co.created_at, co.updated_at,
+              co.status, co.icp, co.assigned_user, co.parent_company_id, co.created_at, co.updated_at,
+              -- Derived, not read from the stored column: a company is a Child
+              -- when it has a parent and a Parent when it has children. The
+              -- column used to be typed by hand and could disagree with the
+              -- links it claims to describe.
+              CASE
+                WHEN co.parent_company_id IS NOT NULL THEN 'Child'
+                WHEN EXISTS (SELECT 1 FROM companies kid WHERE kid.parent_company_id = co.id) THEN 'Parent'
+                ELSE NULL
+              END as entity_structure,
               COALESCE(att_agg.attendee_count, 0) as attendee_count,
               COALESCE(conf_agg.conference_count, 0) as conference_count,
               conf_agg.conference_names,
