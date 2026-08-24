@@ -1252,21 +1252,17 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                     if (!isVisible(col.key)) return null;
                     switch (col.key) {
                       case 'name': return <td key="name" className="px-3 py-3" style={{ maxWidth: colWidths.name }}>
+                        {/* The name opens the details drawer, the way the
+                            phone's card already does — which leaves the eye
+                            icon that used to do it saying the same thing. */}
                         <div className="flex items-center gap-1 text-left">
                           <button
                             type="button"
                             onClick={() => setQuickViewId(company.id)}
-                            className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-brand-secondary flex-shrink-0"
-                            title="Quick view"
+                            className="font-medium text-brand-secondary hover:underline text-sm break-words whitespace-normal leading-snug text-left"
                           >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                          </button>
-                          <Link href={`/companies/${company.id}`} className="font-medium text-brand-secondary hover:underline text-sm break-words whitespace-normal leading-snug">
                             {company.name}
-                          </Link>
+                          </button>
                         </div>
                         {company.parent_company_name && (
                           <p className="text-[10px] text-gray-400 mt-0.5">
