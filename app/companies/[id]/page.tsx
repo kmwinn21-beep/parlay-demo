@@ -171,7 +171,6 @@ export default function CompanyDetailPage() {
   const [companyTypeOptions, setCompanyTypeOptions] = useState<string[]>([]);
   const [profitTypeOptions, setProfitTypeOptions] = useState<string[]>([]);
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
-  const [entityStructureOptions, setEntityStructureOptions] = useState<string[]>([]);
   const [territoryOptions, setTerritoryOptions] = useState<{ id: number; name: string; color: string }[]>([]);
   const [servicesOptions, setServicesOptions] = useState<string[]>([]);
   const [industryOptions, setIndustryOptions] = useState<string[]>([]);
@@ -266,14 +265,13 @@ export default function CompanyDetailPage() {
 
   const fetchCompany = useCallback(async () => {
     try {
-      const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, entityStructureRes, servicesRes, icpRes, allCompaniesRes, relTypeRes, icpConfigRes, industryRes, productsRes, territoriesRes] = await Promise.all([
+      const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, servicesRes, icpRes, allCompaniesRes, relTypeRes, icpConfigRes, industryRes, productsRes, territoriesRes] = await Promise.all([
         fetch(`/api/companies/${id}`),
         fetch('/api/config?category=status&form=company_detail'),
         fetch('/api/config?category=company_type&form=company_detail'),
         fetch('/api/config?category=profit_type&form=company_detail'),
         fetch('/api/config?category=action&form=company_detail'),
         fetch('/api/config?category=user&form=company_detail'),
-        fetch('/api/config?category=entity_structure&form=company_detail'),
         fetch('/api/config?category=services&form=company_detail'),
         fetch('/api/config?category=icp&form=company_detail'),
         fetch('/api/companies'),
@@ -314,7 +312,6 @@ export default function CompanyDetailPage() {
       if (profitRes.ok) setProfitTypeOptions((await profitRes.json()).map((o: { value: string }) => o.value));
       if (actionRes.ok) setActionOptions((await actionRes.json()).map((o: { value: string }) => o.value));
       if (userRes.ok) setUserOptions((await userRes.json()).map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
-      if (entityStructureRes.ok) setEntityStructureOptions((await entityStructureRes.json()).map((o: { value: string }) => o.value));
       if (servicesRes.ok) setServicesOptions((await servicesRes.json()).map((o: { value: string }) => o.value));
       if (industryRes.ok) setIndustryOptions((await industryRes.json()).map((o: { value: string }) => o.value));
       if (territoriesRes.ok) {
@@ -1024,19 +1021,11 @@ export default function CompanyDetailPage() {
                   placeholder="Select users..."
                 />
               </div>
-              <div>
-                <label className="label">Entity Structure</label>
-                <select
-                  value={editData.entity_structure || ''}
-                  onChange={(e) => setEditData((p) => ({ ...p, entity_structure: e.target.value }))}
-                  className="input-field"
-                >
-                  <option value="">Select...</option>
-                  {entityStructureOptions.map(opt => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-              </div>
+              {/* Entity Structure isn't editable here. It describes whether a
+                  company has a parent or children, which only the companies
+                  table's Create Parent/Child Relationship action sets — typing
+                  it by hand marked a company a child of nobody, so the
+                  "Subsidiary of" line had nothing to render. */}
               <div>
                 <label className="label">Territory</label>
                 <select
