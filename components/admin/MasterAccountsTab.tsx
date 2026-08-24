@@ -32,6 +32,7 @@ interface AccountRecord {
   entityStructure: string | null;
   services: string | null;
   wse: number | null;
+  crmLink: string | null;
 }
 
 interface ColumnMapping {
@@ -43,6 +44,7 @@ interface ColumnMapping {
   entityStructure?: string;
   services?: string;
   units?: string;
+  crmLink?: string;
 }
 
 interface UploadResult {
@@ -70,6 +72,7 @@ function getMappingFields(unitLabel: string): { key: keyof ColumnMapping; label:
     { key: 'entityStructure', label: 'Entity structure', required: false },
     { key: 'services', label: 'Services', required: false },
     { key: 'units', label: unitLabel, required: false },
+    { key: 'crmLink', label: 'CRM link', required: false },
   ];
 }
 
@@ -158,7 +161,7 @@ export function MasterAccountsTab() {
     if (isLargeList || allRecordsCache == null) return;
     const term = debouncedSearch.trim().toLowerCase();
     const filtered = term
-      ? allRecordsCache.filter(r => [r.companyName, r.domain, r.assignedRepName, r.hqState, r.territoryName, r.entityStructure, r.services].some(v => (v ?? '').toLowerCase().includes(term)))
+      ? allRecordsCache.filter(r => [r.companyName, r.domain, r.assignedRepName, r.hqState, r.territoryName, r.entityStructure, r.services, r.crmLink].some(v => (v ?? '').toLowerCase().includes(term)))
       : allRecordsCache;
     setRecordsTotal(filtered.length);
     setRecords(filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE));
@@ -667,6 +670,7 @@ export function MasterAccountsTab() {
                     <th className="px-2.5 py-1.5 text-left font-medium text-gray-500">Services</th>
                     <th className="px-2.5 py-1.5 text-left font-medium text-gray-500">{unitLabel}</th>
                     <th className="px-2.5 py-1.5 text-left font-medium text-gray-500">HQ state</th>
+                    <th className="px-2.5 py-1.5 text-left font-medium text-gray-500">CRM link</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -680,6 +684,7 @@ export function MasterAccountsTab() {
                       <td className="px-2.5 py-1.5 text-gray-500 truncate max-w-[160px]">{r.services ?? '—'}</td>
                       <td className="px-2.5 py-1.5 text-gray-500">{r.wse ?? '—'}</td>
                       <td className="px-2.5 py-1.5 text-gray-500">{r.hqState ?? '—'}</td>
+                      <td className="px-2.5 py-1.5 text-gray-500 truncate max-w-[160px]">{r.crmLink ?? '—'}</td>
                     </tr>
                   ))}
                 </tbody>

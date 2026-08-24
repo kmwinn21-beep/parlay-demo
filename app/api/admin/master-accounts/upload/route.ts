@@ -25,6 +25,7 @@ interface MasterAccountColumnMapping {
   entityStructure?: string;
   services?: string;
   units?: string;
+  crmLink?: string;
 }
 
 function r2Client() {
@@ -206,6 +207,7 @@ export async function POST(request: NextRequest) {
       entityStructure: string | null;
       services: string | null;
       wse: number | null;
+      crmLink: string | null;
       rawRow: Record<string, unknown>;
     }
 
@@ -224,6 +226,7 @@ export async function POST(request: NextRequest) {
       const entityStructureRaw = mapping.entityStructure ? String(row[mapping.entityStructure] ?? '').trim() || null : null;
       const servicesRaw = mapping.services ? String(row[mapping.services] ?? '').trim() || null : null;
       const unitsRaw = mapping.units ? String(row[mapping.units] ?? '').trim() : '';
+      const crmLink = mapping.crmLink ? String(row[mapping.crmLink] ?? '').trim() || null : null;
 
       let assignedRepId: number | null = null;
       let assignedRepName: string | null = null;
@@ -270,6 +273,7 @@ export async function POST(request: NextRequest) {
         entityStructure: entityStructureRaw,
         services,
         wse,
+        crmLink,
         rawRow: row,
       });
     }
@@ -309,12 +313,12 @@ export async function POST(request: NextRequest) {
       const insertStmts = processedRows.map(r => ({
         sql: `INSERT INTO master_account_list
                 (upload_id, company_name, company_name_normalized, website, domain, assigned_rep_id, assigned_rep_name, hq_state,
-                 territory_id, territory_name, entity_structure, services, wse, raw_row)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 territory_id, territory_name, entity_structure, services, wse, crm_link, raw_row)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           uploadId, r.companyName, r.companyNameNormalized, r.website, r.domain,
           r.assignedRepId, r.assignedRepName, r.hqState,
-          r.territoryId, r.territoryName, r.entityStructure, r.services, r.wse, JSON.stringify(r.rawRow),
+          r.territoryId, r.territoryName, r.entityStructure, r.services, r.wse, r.crmLink, JSON.stringify(r.rawRow),
         ] as (string | number | null)[],
       }));
       await batchExec(db, insertStmts);
@@ -323,7 +327,7 @@ export async function POST(request: NextRequest) {
       // uploads, not just the most recent one) by normalized company name.
       const activeRows = await db.execute({
         sql: `SELECT id, company_name_normalized, website, domain, assigned_rep_id, assigned_rep_name, hq_state,
-                     territory_id, territory_name, entity_structure, services, wse
+                     territory_id, territory_name, entity_structure, services, wse, crm_link
               FROM master_account_list
               WHERE upload_id IN (SELECT id FROM master_account_list_uploads WHERE status = 'active' AND id != ?)`,
         args: [uploadId],
@@ -331,6 +335,7 @@ export async function POST(request: NextRequest) {
       const existingByNormalized = new Map<string, {
         id: number; website: string | null; domain: string | null; assignedRepId: number | null; assignedRepName: string | null; hqState: string | null;
         territoryId: number | null; territoryName: string | null; entityStructure: string | null; services: string | null; wse: number | null;
+        crmLink: string | null;
       }>();
       for (const r of activeRows.rows) {
         existingByNormalized.set(String(r.company_name_normalized), {
@@ -345,6 +350,7 @@ export async function POST(request: NextRequest) {
           entityStructure: r.entity_structure != null ? String(r.entity_structure) : null,
           services: r.services != null ? String(r.services) : null,
           wse: r.wse != null ? Number(r.wse) : null,
+          crmLink: r.crm_link != null ? String(r.crm_link) : null,
         });
       }
 
@@ -359,11 +365,11 @@ export async function POST(request: NextRequest) {
           insertStmts.push({
             sql: `INSERT INTO master_account_list
                     (upload_id, company_name, company_name_normalized, website, domain, assigned_rep_id, assigned_rep_name, hq_state,
-                     territory_id, territory_name, entity_structure, services, wse, raw_row)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                     territory_id, territory_name, entity_structure, services, wse, crm_link, raw_row)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             args: [
               uploadId, r.companyName, r.companyNameNormalized, r.website, r.domain, r.assignedRepId, r.assignedRepName, r.hqState,
-              r.territoryId, r.territoryName, r.entityStructure, r.services, r.wse, JSON.stringify(r.rawRow),
+              r.territoryId, r.territoryName, r.entityStructure, r.services, r.wse, r.crmLink, JSON.stringify(r.rawRow),
             ],
           });
           continue;
@@ -378,7 +384,8 @@ export async function POST(request: NextRequest) {
           || existing.territoryName !== r.territoryName
           || existing.entityStructure !== r.entityStructure
           || existing.services !== r.services
-          || existing.wse !== r.wse;
+          || existing.wse !== r.wse
+          || existing.crmLink !== r.crmLink;
 
         if (!changed) { unchanged++; continue; }
 
@@ -386,11 +393,11 @@ export async function POST(request: NextRequest) {
         updateStmts.push({
           sql: `UPDATE master_account_list
                 SET company_name = ?, website = ?, domain = ?, assigned_rep_id = ?, assigned_rep_name = ?, hq_state = ?,
-                    territory_id = ?, territory_name = ?, entity_structure = ?, services = ?, wse = ?, raw_row = ?, updated_at = datetime('now')
+                    territory_id = ?, territory_name = ?, entity_structure = ?, services = ?, wse = ?, crm_link = ?, raw_row = ?, updated_at = datetime('now')
                 WHERE id = ?`,
           args: [
             r.companyName, r.website, r.domain, r.assignedRepId, r.assignedRepName, r.hqState,
-            r.territoryId, r.territoryName, r.entityStructure, r.services, r.wse, JSON.stringify(r.rawRow), existing.id,
+            r.territoryId, r.territoryName, r.entityStructure, r.services, r.wse, r.crmLink, JSON.stringify(r.rawRow), existing.id,
           ],
         });
       }
