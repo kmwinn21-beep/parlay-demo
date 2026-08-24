@@ -7,7 +7,6 @@ import { useUser } from '@/components/UserContext';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
 import { AssignFollowUpModal } from './AssignFollowUpModal';
 import { getPreset } from '@/lib/colors';
-import Link from 'next/link';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
 import { SetConferenceButton } from '@/components/SetConferenceButton';
 import { resolveProductRelevance, type ProductRelevanceResult } from '@/lib/productRelevance';
@@ -1310,24 +1309,27 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
   }, [badgeScanRelevance]);
 
   return (
-    <div className="card flex flex-col justify-center lg:relative">
+    <div className="card h-full flex flex-col justify-center lg:relative">
       <div className="lg:hidden mb-3">
         <SetConferenceButton />
       </div>
       <div className="flex flex-row gap-1">
 
+        {/* During a conference the desktop panel opens the attendee list here,
+            the same drawer the phone's first slot opens. */}
         {bannerState === 'active' && activeConference ? (
-          <Link
-            href={`/conferences/${activeConference.id}?fieldreport=true`}
-            className={`hidden lg:flex flex-1 flex-col items-center gap-1 p-2 rounded-xl hover:bg-purple-50 transition-all group `}
+          <button
+            type="button"
+            onClick={() => { setAttendeesOpen(true); setAgendaOpen(false); setMeetingsOpen(false); }}
+            className="hidden lg:flex flex-1 flex-col items-center gap-1 p-2 rounded-xl hover:bg-sky-50 transition-colors group"
           >
-            <div className="w-8 h-8 rounded-full flex items-center justify-center group-hover:bg-purple-500 transition-colors flex-shrink-0" style={{ backgroundColor: '#f5f3ff' }}>
-              <svg className="w-4 h-4 group-hover:text-white transition-colors" style={{ color: '#7c3aed' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            <div className="w-8 h-8 rounded-full bg-sky-100 flex items-center justify-center group-hover:bg-sky-500 transition-colors flex-shrink-0">
+              <svg className="w-4 h-4 text-sky-600 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
             </div>
-            <p className="text-xs text-gray-500 leading-tight">Field Report</p>
-          </Link>
+            <p className="text-xs text-gray-500 leading-tight">Attendees</p>
+          </button>
         ) : (
           <button
             type="button"
