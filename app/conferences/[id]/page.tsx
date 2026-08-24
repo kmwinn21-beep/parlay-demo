@@ -2802,60 +2802,6 @@ export default function ConferenceDetailPage() {
               )}
             </div>
             <div className="flex items-center gap-3 flex-wrap">
-              {selectedAttendeeIds.size >= 1 && (
-                <>
-                  <button
-                    onClick={() => setShowAttendeeEdit(v => !v)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-300 text-blue-700 hover:bg-blue-100 transition-colors text-sm font-medium"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                    Edit Fields ({selectedAttendeeIds.size})
-                  </button>
-                  <button
-                    onClick={handleDecoupleSelected}
-                    disabled={isRemoving}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-300 text-amber-700 hover:bg-amber-100 transition-colors text-sm font-medium disabled:opacity-50"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                    </svg>
-                    Decouple ({selectedAttendeeIds.size})
-                  </button>
-                  {selectedAttendeeIds.size >= 2 && (
-                    <button
-                      onClick={() => setShowMergeModal(true)}
-                      className="btn-gold flex items-center gap-2 text-sm"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                      </svg>
-                      Merge ({selectedAttendeeIds.size})
-                    </button>
-                  )}
-                  <button
-                    onClick={handleRemoveSelected}
-                    disabled={isRemoving}
-                    className="btn-danger flex items-center gap-2 text-sm"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                    Remove ({selectedAttendeeIds.size})
-                  </button>
-                  {!titleMetaLoading && (() => {
-                    const warnCount = (conference?.attendees ?? []).filter(a => selectedAttendeeIds.has(a.id) && a.title && shouldWarnForTitleMetadata(titleMetaMap[a.id])).length;
-                    const titleCount = (conference?.attendees ?? []).filter(a => selectedAttendeeIds.has(a.id) && a.title).length;
-                    return titleCount > 0 ? (
-                      <button onClick={() => setShowBulkClassify(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors text-sm font-medium">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>
-                        Classify Titles ({titleCount}{warnCount > 0 ? `, ${warnCount} flagged` : ''})
-                      </button>
-                    ) : null;
-                  })()}
-                </>
-              )}
               <div className="flex items-center gap-2 w-full lg:w-auto">
                 <div className="relative flex-1 lg:flex-none">
                   <svg className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2969,6 +2915,66 @@ export default function ConferenceDetailPage() {
               })()}
             </div>
           </div>
+
+          {/* Bulk actions — their own labelled row under the search and
+              filters, so selecting rows doesn't reflow the toolbar above. */}
+          {selectedAttendeeIds.size >= 1 && (
+            <div className="mb-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Bulk Actions</p>
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  onClick={() => setShowAttendeeEdit(v => !v)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-300 text-blue-700 hover:bg-blue-100 transition-colors text-sm font-medium"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Edit Fields ({selectedAttendeeIds.size})
+                </button>
+                <button
+                  onClick={handleDecoupleSelected}
+                  disabled={isRemoving}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-300 text-amber-700 hover:bg-amber-100 transition-colors text-sm font-medium disabled:opacity-50"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                  Decouple ({selectedAttendeeIds.size})
+                </button>
+                {selectedAttendeeIds.size >= 2 && (
+                  <button
+                    onClick={() => setShowMergeModal(true)}
+                    className="btn-gold flex items-center gap-2 text-sm"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                    </svg>
+                    Merge ({selectedAttendeeIds.size})
+                  </button>
+                )}
+                <button
+                  onClick={handleRemoveSelected}
+                  disabled={isRemoving}
+                  className="btn-danger flex items-center gap-2 text-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Remove ({selectedAttendeeIds.size})
+                </button>
+                {!titleMetaLoading && (() => {
+                  const warnCount = (conference?.attendees ?? []).filter(a => selectedAttendeeIds.has(a.id) && a.title && shouldWarnForTitleMetadata(titleMetaMap[a.id])).length;
+                  const titleCount = (conference?.attendees ?? []).filter(a => selectedAttendeeIds.has(a.id) && a.title).length;
+                  return titleCount > 0 ? (
+                    <button onClick={() => setShowBulkClassify(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors text-sm font-medium">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>
+                      Classify Titles ({titleCount}{warnCount > 0 ? `, ${warnCount} flagged` : ''})
+                    </button>
+                  ) : null;
+                })()}
+              </div>
+            </div>
+          )}
 
           {/* Placeholder cleanup — a company-only upload stands in one attendee
               per company; once real attendees arrive those stand-ins are stale.
