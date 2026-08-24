@@ -196,6 +196,10 @@ function EntityStructureIcon({ structure }: { structure?: string }) {
   return null;
 }
 
+/** Bulk-action button — a thin outline, no fill; colour is what varies. */
+const BULK_BTN_BASE = 'flex-shrink-0 whitespace-nowrap flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-sm font-medium transition-colors hover:bg-gray-50';
+const BULK_BTN = `${BULK_BTN_BASE} border-gray-200 text-gray-600 hover:text-brand-secondary hover:border-gray-300`;
+
 type SortKey = 'name' | 'company_type' | 'status' | 'attendee_count' | 'conference_count';
 type SortDir = 'asc' | 'desc';
 
@@ -776,12 +780,47 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         <ScrollRow className="w-full lg:hidden" gapClass="gap-2">{filterButtons}</ScrollRow>
         <div className="hidden lg:contents">{filterButtons}</div>
 
-        {selectedIds.size >= 1 && (
-          <>
+      </div>
+
+      {/* Bulk actions — one line under the toolbar, chevrons rather than a
+          scrollbar. Borderless so nine actions read as a menu of verbs
+          instead of nine competing buttons; colour still carries the two
+          destructive ones. */}
+      {selectedIds.size >= 1 && (
+        <div className="mb-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Bulk Actions</p>
+          <ScrollRow gapClass="gap-1" step={200}>
+            <button onClick={() => { setShowMassEdit(v => !v); setMassEditFields({}); }} className={BULK_BTN}>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+              Edit Fields ({selectedIds.size})
+            </button>
+            <button onClick={() => setShowMergeModal(true)} className={BULK_BTN}>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+              Merge ({selectedIds.size})
+            </button>
+            {conferenceId != null && (
+              <button onClick={() => setShowBulkAssignOutreach(true)} className={BULK_BTN}>
+                + Assign Outreach ({selectedIds.size})
+              </button>
+            )}
+            <button onClick={() => setShowRepRelModal(true)} className={BULK_BTN}>
+              + Rep Relationship
+            </button>
+            <button onClick={() => setShowOperatorCapitalModal(true)} className={BULK_BTN}>
+              + Other Relationship
+            </button>
+            {selectedIds.size >= 2 && (
+              <button onClick={() => setShowParentChildModal(true)} className={BULK_BTN}>
+                + Parent/Child Relationship
+              </button>
+            )}
+            <button onClick={() => setShowAddToConf(true)} className={BULK_BTN}>
+              + to Conference
+            </button>
             {onDecoupleSelected && (
               <button
                 onClick={() => { onDecoupleSelected(selectedIds); setSelectedIds(new Set()); }}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-300 text-amber-700 hover:bg-amber-100 transition-colors text-sm font-medium"
+                className={`${BULK_BTN_BASE} border-amber-200 text-amber-700 hover:text-amber-800 hover:border-amber-300`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
@@ -789,49 +828,13 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 Decouple ({selectedIds.size})
               </button>
             )}
-            <button onClick={() => { setShowMassEdit(v => !v); setMassEditFields({}); }} className="btn-secondary flex items-center gap-2 text-sm">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-              Edit Fields ({selectedIds.size})
-            </button>
-            <button onClick={handleDeleteSelected} className="btn-danger flex items-center gap-2 text-sm">
+            <button onClick={handleDeleteSelected} className={`${BULK_BTN_BASE} border-red-200 text-red-600 hover:text-red-700 hover:border-red-300`}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
               Delete ({selectedIds.size})
             </button>
-            <button onClick={() => setShowRepRelModal(true)} className="btn-secondary flex items-center gap-2 text-sm">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-              + Rep Relationship
-            </button>
-            <button onClick={() => setShowAddToConf(true)} className="btn-secondary flex items-center gap-2 text-sm">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-              Add to Conference
-            </button>
-            {conferenceId != null && (
-              <button onClick={() => setShowBulkAssignOutreach(true)} className="btn-secondary flex items-center gap-2 text-sm">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
-                Assign Outreach ({selectedIds.size})
-              </button>
-            )}
-          </>
-        )}
-        {selectedIds.size >= 1 && (
-          <>
-          <button onClick={() => setShowMergeModal(true)} className="btn-gold flex items-center gap-2 text-sm">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
-            Merge ({selectedIds.size})
-          </button>
-          <button onClick={() => setShowOperatorCapitalModal(true)} className="btn-secondary flex items-center gap-2 text-sm">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
-            Create Operator/Capital Relationship
-          </button>
-          </>
-        )}
-        {selectedIds.size >= 2 && (
-          <button onClick={() => setShowParentChildModal(true)} className="btn-secondary flex items-center gap-2 text-sm">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-            Create Parent/Child Relationship
-          </button>
-        )}
-      </div>
+          </ScrollRow>
+        </div>
+      )}
 
       {/* Collapsible filter pane */}
       {filtersOpen && (

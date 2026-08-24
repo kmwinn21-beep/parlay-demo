@@ -620,8 +620,14 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
         <ScrollRow className="w-full lg:hidden" gapClass="gap-2">{filterButtons}</ScrollRow>
         <div className="hidden lg:contents">{filterButtons}</div>
 
-        {selectedIds.size >= 1 && (
-          <>
+      </div>
+
+      {/* Bulk actions — their own labelled row under the search and filters,
+          so selecting rows doesn't reflow the toolbar above. */}
+      {selectedIds.size >= 1 && (
+        <div className="mb-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Bulk Actions</p>
+          <div className="flex items-center gap-3 flex-wrap">
             <button onClick={() => { setShowMassEdit(v => !v); setMassEditFields({}); }} className="btn-secondary flex items-center gap-2 text-sm">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
               Edit Fields ({selectedIds.size})
@@ -648,15 +654,13 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                 Classify Titles ({confTitleCount}{confWarnCount > 0 ? `, ${confWarnCount} flagged` : ''})
               </button>
             )}
-          </>
-        )}
-        {selectedIds.size >= 1 && (
-          <button onClick={() => setShowMergeModal(true)} className="btn-gold flex items-center gap-2 text-sm">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
-            Merge ({selectedIds.size})
-          </button>
-        )}
-      </div>
+            <button onClick={() => setShowMergeModal(true)} className="btn-gold flex items-center gap-2 text-sm">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+              Merge ({selectedIds.size})
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Collapsible filter pane */}
       {filtersOpen && (
