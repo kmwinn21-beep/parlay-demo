@@ -15,6 +15,7 @@ interface MasterRow {
   services: string | null;
   wse: number | null;
   website: string | null;
+  crmLink: string | null;
 }
 
 interface CompanyRow {
@@ -27,6 +28,7 @@ interface CompanyRow {
   services: string | null;
   entityStructure: string | null;
   territoryId: number | null;
+  crmLink: string | null;
 }
 
 // Same match precedence used by the conference upload routes' master-account
@@ -46,10 +48,10 @@ function matchMaster(
 
 async function loadData(db: Awaited<ReturnType<typeof getDb>>) {
   const [companyRows, masterRows, userRows] = await Promise.all([
-    db.execute({ sql: `SELECT id, name, website, assigned_user, hq_state, wse, services, entity_structure, territory_id FROM companies`, args: [] }),
+    db.execute({ sql: `SELECT id, name, website, assigned_user, hq_state, wse, services, entity_structure, territory_id, crm_link FROM companies`, args: [] }),
     db.execute({
       sql: `SELECT company_name_normalized, domain, assigned_rep_id, assigned_rep_name, hq_state,
-                   territory_id, territory_name, entity_structure, services, wse, website
+                   territory_id, territory_name, entity_structure, services, wse, website, crm_link
             FROM master_account_list
             WHERE upload_id IN (SELECT id FROM master_account_list_uploads WHERE status = 'active')`,
       args: [],
@@ -67,6 +69,7 @@ async function loadData(db: Awaited<ReturnType<typeof getDb>>) {
     services: r.services ? String(r.services) : null,
     entityStructure: r.entity_structure ? String(r.entity_structure) : null,
     territoryId: r.territory_id != null ? Number(r.territory_id) : null,
+    crmLink: r.crm_link ? String(r.crm_link) : null,
   }));
 
   const byDomain = new Map<string, MasterRow>();
@@ -84,6 +87,7 @@ async function loadData(db: Awaited<ReturnType<typeof getDb>>) {
       services: row.services != null ? String(row.services) : null,
       wse: row.wse != null ? Number(row.wse) : null,
       website: row.website != null ? String(row.website) : null,
+      crmLink: row.crm_link != null ? String(row.crm_link) : null,
     };
     if (entry.domain) byDomain.set(entry.domain.toLowerCase(), entry);
     if (byNormalizedName.has(entry.companyNameNormalized)) {
@@ -146,7 +150,8 @@ export async function POST(request: NextRequest) {
           (master.territoryId != null && master.territoryId !== co.territoryId) ||
           (master.entityStructure && master.entityStructure !== co.entityStructure) ||
           (master.services && master.services !== co.services) ||
-          (master.wse != null && master.wse !== co.wse);
+          (master.wse != null && master.wse !== co.wse) ||
+          (master.crmLink && master.crmLink !== co.crmLink);
         if (hasFieldChange) directUpdateCount++;
 
         const currentRepId = singleAssignedRepId(co.assignedUser);
@@ -185,6 +190,7 @@ export async function POST(request: NextRequest) {
       // company's parent/child links, not something a master sheet can assert.
       if (master.services && master.services !== co.services) { setClauses.push('services = ?'); args.push(master.services); }
       if (master.wse != null && master.wse !== co.wse) { setClauses.push('wse = ?'); args.push(master.wse); }
+      if (master.crmLink && master.crmLink !== co.crmLink) { setClauses.push('crm_link = ?'); args.push(master.crmLink); }
 
       const currentRepId = singleAssignedRepId(co.assignedUser);
       if (master.assignedRepId != null) {

@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       }),
       db.execute({
         sql: `SELECT id, company_name, website, domain, assigned_rep_id, assigned_rep_name, hq_state,
-                     territory_id, territory_name, entity_structure, services, wse
+                     territory_id, territory_name, entity_structure, services, wse, crm_link
               FROM master_account_list
               WHERE ${activeFilter} ${searchFilter}
               ORDER BY company_name ASC
@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
       entityStructure: r.entity_structure ? String(r.entity_structure) : null,
       services: r.services ? String(r.services) : null,
       wse: r.wse != null ? Number(r.wse) : null,
+      crmLink: r.crm_link ? String(r.crm_link) : null,
     }));
 
     return NextResponse.json({ records, total: Number(countRes.rows[0]?.cnt ?? 0) });

@@ -2165,4 +2165,9 @@ export const migrations: string[] = [
      WHEN EXISTS (SELECT 1 FROM companies kid WHERE kid.parent_company_id = companies.id) THEN 'Parent'
      ELSE NULL
    END`,
+  // A link straight to the company's record in whatever CRM the account runs
+  // on — Salesforce, HubSpot, anything with a per-account URL. Free text
+  // rather than an id, since there's no one CRM to build a URL for.
+  `ALTER TABLE companies ADD COLUMN crm_link TEXT`,
+  `ALTER TABLE master_account_list ADD COLUMN crm_link TEXT`,
 ];

@@ -16,6 +16,7 @@ interface MasterAccountRecord {
   entityStructure: string | null;
   services: string | null;
   wse: number | null;
+  crmLink: string | null;
 }
 
 export interface MasterAccountApplyPatch {
@@ -26,6 +27,7 @@ export interface MasterAccountApplyPatch {
   entity_structure?: string;
   services?: string[];
   wse?: number;
+  crm_link?: string;
 }
 
 interface CurrentValues {
@@ -36,6 +38,7 @@ interface CurrentValues {
   entity_structure: string | null | undefined;
   services: string[] | undefined;
   wse: number | null | undefined;
+  crm_link: string | null | undefined;
 }
 
 interface FieldRow {
@@ -101,6 +104,13 @@ function buildFieldRows(
       masterDisplay: record.wse != null ? String(record.wse) : '—',
       currentDisplay: current.wse != null ? String(current.wse) : '—',
       patch: record.wse != null ? { wse: record.wse } : null,
+    },
+    {
+      key: 'crm_link',
+      label: 'CRM Link',
+      masterDisplay: record.crmLink ?? '—',
+      currentDisplay: current.crm_link || '—',
+      patch: record.crmLink ? { crm_link: record.crmLink } : null,
     },
   ];
 }
