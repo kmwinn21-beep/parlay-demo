@@ -196,9 +196,9 @@ function EntityStructureIcon({ structure }: { structure?: string }) {
   return null;
 }
 
-/** Borderless bulk-action button; colour is the only thing that varies. */
-const BULK_BTN_BASE = 'flex-shrink-0 whitespace-nowrap flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm font-medium transition-colors hover:bg-gray-50';
-const BULK_BTN = `${BULK_BTN_BASE} text-gray-600 hover:text-brand-secondary`;
+/** Bulk-action button — a thin outline, no fill; colour is what varies. */
+const BULK_BTN_BASE = 'flex-shrink-0 whitespace-nowrap flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-sm font-medium transition-colors hover:bg-gray-50';
+const BULK_BTN = `${BULK_BTN_BASE} border-gray-200 text-gray-600 hover:text-brand-secondary hover:border-gray-300`;
 
 type SortKey = 'name' | 'company_type' | 'status' | 'attendee_count' | 'conference_count';
 type SortDir = 'asc' | 'desc';
@@ -800,32 +800,27 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
             </button>
             {conferenceId != null && (
               <button onClick={() => setShowBulkAssignOutreach(true)} className={BULK_BTN}>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
                 + Assign Outreach ({selectedIds.size})
               </button>
             )}
             <button onClick={() => setShowRepRelModal(true)} className={BULK_BTN}>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
               + Rep Relationship
             </button>
             <button onClick={() => setShowOperatorCapitalModal(true)} className={BULK_BTN}>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
               + Other Relationship
             </button>
             {selectedIds.size >= 2 && (
               <button onClick={() => setShowParentChildModal(true)} className={BULK_BTN}>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                 + Parent/Child Relationship
               </button>
             )}
             <button onClick={() => setShowAddToConf(true)} className={BULK_BTN}>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
               + to Conference
             </button>
             {onDecoupleSelected && (
               <button
                 onClick={() => { onDecoupleSelected(selectedIds); setSelectedIds(new Set()); }}
-                className={`${BULK_BTN_BASE} text-amber-700 hover:text-amber-800`}
+                className={`${BULK_BTN_BASE} border-amber-200 text-amber-700 hover:text-amber-800 hover:border-amber-300`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
@@ -833,7 +828,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 Decouple ({selectedIds.size})
               </button>
             )}
-            <button onClick={handleDeleteSelected} className={`${BULK_BTN_BASE} text-red-600 hover:text-red-700`}>
+            <button onClick={handleDeleteSelected} className={`${BULK_BTN_BASE} border-red-200 text-red-600 hover:text-red-700 hover:border-red-300`}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
               Delete ({selectedIds.size})
             </button>
