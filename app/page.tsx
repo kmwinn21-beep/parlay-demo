@@ -267,11 +267,14 @@ async function StatsSection() {
   const bannerData = sessionUser ? await getBannerData(tenantDb, sessionUser.id) : { state: 'none' as const };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+    // Three columns, banner over two and the action panel over one. Stretched
+    // rather than top-aligned so the two cards share a height instead of the
+    // banner floating short beside a taller panel.
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
       <div className="lg:col-span-2">
         <DashboardConferenceBanner bannerData={bannerData} />
       </div>
-      <div className="lg:col-span-2">
+      <div className="h-full">
         <DashboardActionCard bannerState={bannerData.state} />
       </div>
     </div>
