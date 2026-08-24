@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { deepNormalizeCompanyName, extractDomainFromWebsite } from '@/lib/matching';
+import { SYNC_FIELDS, type SyncField } from '@/lib/masterAccountSyncFields';
 
 interface MasterRow {
   companyNameNormalized: string;
@@ -29,15 +30,22 @@ interface CompanyRow {
   entityStructure: string | null;
   territoryId: number | null;
   crmLink: string | null;
+  masterAccountKey: string | null;
 }
 
-// Same match precedence used by the conference upload routes' master-account
-// fallback: exact domain match first, then exact normalized-name match.
+// A link a person made by hand wins over any guess — including the ambiguity
+// rule below, since they've already said which row they mean. Otherwise the
+// same match precedence the conference upload routes' master-account fallback
+// uses: exact domain match first, then exact normalized-name match.
 function matchMaster(
   company: CompanyRow,
   byDomain: Map<string, MasterRow>,
-  byNormalizedName: Map<string, MasterRow | null>
+  byNormalizedName: Map<string, MasterRow | null>,
+  byKey: Map<string, MasterRow>
 ): MasterRow | null {
+  if (company.masterAccountKey) {
+    return byKey.get(company.masterAccountKey) ?? null;
+  }
   const domain = company.website ? extractDomainFromWebsite(company.website) : null;
   if (domain) {
     const hit = byDomain.get(domain.toLowerCase());
@@ -48,7 +56,7 @@ function matchMaster(
 
 async function loadData(db: Awaited<ReturnType<typeof getDb>>) {
   const [companyRows, masterRows, userRows] = await Promise.all([
-    db.execute({ sql: `SELECT id, name, website, assigned_user, hq_state, wse, services, entity_structure, territory_id, crm_link FROM companies`, args: [] }),
+    db.execute({ sql: `SELECT id, name, website, assigned_user, hq_state, wse, services, entity_structure, territory_id, crm_link, master_account_key FROM companies`, args: [] }),
     db.execute({
       sql: `SELECT company_name_normalized, domain, assigned_rep_id, assigned_rep_name, hq_state,
                    territory_id, territory_name, entity_structure, services, wse, website, crm_link
@@ -70,10 +78,14 @@ async function loadData(db: Awaited<ReturnType<typeof getDb>>) {
     entityStructure: r.entity_structure ? String(r.entity_structure) : null,
     territoryId: r.territory_id != null ? Number(r.territory_id) : null,
     crmLink: r.crm_link ? String(r.crm_link) : null,
+    masterAccountKey: r.master_account_key ? String(r.master_account_key) : null,
   }));
 
   const byDomain = new Map<string, MasterRow>();
   const byNormalizedName = new Map<string, MasterRow | null>();
+  // Unlike byNormalizedName, this keeps the first row for a duplicated name
+  // rather than blanking it — a hand-made link is an answer to the ambiguity.
+  const byKey = new Map<string, MasterRow>();
   for (const row of masterRows.rows) {
     const entry: MasterRow = {
       companyNameNormalized: String(row.company_name_normalized),
@@ -90,6 +102,7 @@ async function loadData(db: Awaited<ReturnType<typeof getDb>>) {
       crmLink: row.crm_link != null ? String(row.crm_link) : null,
     };
     if (entry.domain) byDomain.set(entry.domain.toLowerCase(), entry);
+    if (!byKey.has(entry.companyNameNormalized)) byKey.set(entry.companyNameNormalized, entry);
     if (byNormalizedName.has(entry.companyNameNormalized)) {
       byNormalizedName.set(entry.companyNameNormalized, null);
     } else {
@@ -104,7 +117,7 @@ async function loadData(db: Awaited<ReturnType<typeof getDb>>) {
     if (id && display) repNameById.set(id, display);
   }
 
-  return { companies, byDomain, byNormalizedName, repNameById };
+  return { companies, byDomain, byNormalizedName, byKey, repNameById };
 }
 
 // A company's assigned_user is a comma-separated list for multi-owner
@@ -127,8 +140,20 @@ export async function POST(request: NextRequest) {
   const db = await getDb(authResult.accountId);
 
   try {
-    const body = await request.json().catch(() => ({})) as { apply?: boolean; resolutions?: Record<string, 'accept' | 'ignore'> };
-    const { companies, byDomain, byNormalizedName, repNameById } = await loadData(db);
+    const body = await request.json().catch(() => ({})) as {
+      apply?: boolean;
+      resolutions?: Record<string, 'accept' | 'ignore'>;
+      fields?: string[];
+    };
+    // No list means every field, so an older caller behaves as it always did.
+    const selected = new Set<SyncField>(
+      Array.isArray(body.fields)
+        ? SYNC_FIELDS.filter(f => body.fields!.includes(f))
+        : SYNC_FIELDS
+    );
+    const wants = (f: SyncField) => selected.has(f);
+
+    const { companies, byDomain, byNormalizedName, byKey, repNameById } = await loadData(db);
 
     if (!body.apply) {
       // ── Preview: report match count + rep conflicts only. Non-rep field
@@ -140,22 +165,21 @@ export async function POST(request: NextRequest) {
       const conflicts: Array<{ entityType: 'company'; entityId: number; entityName: string; field: string; fieldLabel: string; currentValue: string; proposedValue: string }> = [];
 
       for (const co of companies) {
-        const master = matchMaster(co, byDomain, byNormalizedName);
+        const master = matchMaster(co, byDomain, byNormalizedName, byKey);
         if (!master) continue;
         matchedCount++;
 
         const hasFieldChange =
-          (master.website && master.website !== co.website) ||
-          (master.hqState && master.hqState !== co.hqState) ||
-          (master.territoryId != null && master.territoryId !== co.territoryId) ||
-          (master.entityStructure && master.entityStructure !== co.entityStructure) ||
-          (master.services && master.services !== co.services) ||
-          (master.wse != null && master.wse !== co.wse) ||
-          (master.crmLink && master.crmLink !== co.crmLink);
+          (wants('website') && master.website && master.website !== co.website) ||
+          (wants('hq_state') && master.hqState && master.hqState !== co.hqState) ||
+          (wants('territory_id') && master.territoryId != null && master.territoryId !== co.territoryId) ||
+          (wants('services') && master.services && master.services !== co.services) ||
+          (wants('wse') && master.wse != null && master.wse !== co.wse) ||
+          (wants('crm_link') && master.crmLink && master.crmLink !== co.crmLink);
         if (hasFieldChange) directUpdateCount++;
 
         const currentRepId = singleAssignedRepId(co.assignedUser);
-        if (master.assignedRepId != null && currentRepId != null && currentRepId !== master.assignedRepId) {
+        if (wants('assigned_user') && master.assignedRepId != null && currentRepId != null && currentRepId !== master.assignedRepId) {
           conflicts.push({
             entityType: 'company',
             entityId: co.id,
@@ -177,23 +201,23 @@ export async function POST(request: NextRequest) {
     let updated = 0, repUpdated = 0, repSkipped = 0;
 
     for (const co of companies) {
-      const master = matchMaster(co, byDomain, byNormalizedName);
+      const master = matchMaster(co, byDomain, byNormalizedName, byKey);
       if (!master) continue;
 
       const setClauses: string[] = [];
       const args: (string | number | null)[] = [];
 
-      if (master.website && master.website !== co.website) { setClauses.push('website = ?'); args.push(master.website); }
-      if (master.hqState && master.hqState !== co.hqState) { setClauses.push('hq_state = ?'); args.push(master.hqState); }
-      if (master.territoryId != null && master.territoryId !== co.territoryId) { setClauses.push('territory_id = ?'); args.push(master.territoryId); }
+      if (wants('website') && master.website && master.website !== co.website) { setClauses.push('website = ?'); args.push(master.website); }
+      if (wants('hq_state') && master.hqState && master.hqState !== co.hqState) { setClauses.push('hq_state = ?'); args.push(master.hqState); }
+      if (wants('territory_id') && master.territoryId != null && master.territoryId !== co.territoryId) { setClauses.push('territory_id = ?'); args.push(master.territoryId); }
       // entity_structure deliberately not synced — it is derived from a
       // company's parent/child links, not something a master sheet can assert.
-      if (master.services && master.services !== co.services) { setClauses.push('services = ?'); args.push(master.services); }
-      if (master.wse != null && master.wse !== co.wse) { setClauses.push('wse = ?'); args.push(master.wse); }
-      if (master.crmLink && master.crmLink !== co.crmLink) { setClauses.push('crm_link = ?'); args.push(master.crmLink); }
+      if (wants('services') && master.services && master.services !== co.services) { setClauses.push('services = ?'); args.push(master.services); }
+      if (wants('wse') && master.wse != null && master.wse !== co.wse) { setClauses.push('wse = ?'); args.push(master.wse); }
+      if (wants('crm_link') && master.crmLink && master.crmLink !== co.crmLink) { setClauses.push('crm_link = ?'); args.push(master.crmLink); }
 
       const currentRepId = singleAssignedRepId(co.assignedUser);
-      if (master.assignedRepId != null) {
+      if (wants('assigned_user') && master.assignedRepId != null) {
         if (currentRepId == null) {
           // Blank (or ambiguous multi-owner) — only fill in when truly blank.
           if (!co.assignedUser) {

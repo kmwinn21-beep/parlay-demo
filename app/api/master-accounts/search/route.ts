@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     if (q.length < 2) return NextResponse.json({ records: [] });
 
     const rowsRes = await db.execute({
-      sql: `SELECT id, company_name, website, domain, assigned_rep_id, assigned_rep_name, hq_state,
+      sql: `SELECT id, company_name, company_name_normalized, website, domain, assigned_rep_id, assigned_rep_name, hq_state,
                    territory_id, territory_name, entity_structure, services, wse, crm_link
             FROM master_account_list
             WHERE upload_id IN (SELECT id FROM master_account_list_uploads WHERE status = 'active')
@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
     const records = rowsRes.rows.map(r => ({
       id: Number(r.id),
       companyName: String(r.company_name),
+      companyNameNormalized: String(r.company_name_normalized ?? ''),
       website: r.website ? String(r.website) : null,
       domain: r.domain ? String(r.domain) : null,
       assignedRepId: r.assigned_rep_id != null ? Number(r.assigned_rep_id) : null,

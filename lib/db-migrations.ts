@@ -2170,4 +2170,14 @@ export const migrations: string[] = [
   // rather than an id, since there's no one CRM to build a URL for.
   `ALTER TABLE companies ADD COLUMN crm_link TEXT`,
   `ALTER TABLE master_account_list ADD COLUMN crm_link TEXT`,
+  // A deliberate link between a company and a row on the master account list,
+  // made by a person from the Match Master Account field. The sync used to
+  // match on domain and then normalized name every run, so a company whose
+  // name or website didn't line up could never be matched at all. The key is
+  // the master row's company_name_normalized rather than its id, because a
+  // replace-mode upload writes all-new rows and would strand an id — that
+  // normalized name is also what merge mode matches rows on across uploads.
+  // The name is carried alongside purely so the UI can say what it's linked to.
+  `ALTER TABLE companies ADD COLUMN master_account_key TEXT`,
+  `ALTER TABLE companies ADD COLUMN master_account_name TEXT`,
 ];

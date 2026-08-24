@@ -79,6 +79,8 @@ interface Company {
   services?: string[];
   icp?: string;
   crm_link?: string;
+  master_account_key?: string | null;
+  master_account_name?: string | null;
   industry?: string;
   territory_id?: number | null;
   hq_state?: string | null;
@@ -328,6 +330,8 @@ export default function CompanyDetailPage() {
         territory_id: data.territory_id ?? null,
         hq_state: data.hq_state ?? null,
         crm_link: data.crm_link || '',
+        master_account_key: data.master_account_key ?? null,
+        master_account_name: data.master_account_name ?? null,
       });
       if (statusRes.ok) {
         const statusData = await statusRes.json() as StatusOptionMeta[];
@@ -1121,6 +1125,8 @@ export default function CompanyDetailPage() {
                     services: Array.isArray(editData.services) ? editData.services : [],
                     wse: editData.wse,
                     crm_link: editData.crm_link,
+                    master_account_key: editData.master_account_key,
+                    master_account_name: editData.master_account_name,
                   }}
                   userOptions={userOptions}
                   territoryOptions={territoryOptions}

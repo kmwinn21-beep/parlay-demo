@@ -271,7 +271,7 @@ export async function PUT(
     const body = await request.json();
     // entity_structure is derived from parent_company_id / children on read,
     // so nothing writes it here — the parent/child action owns the links.
-    const { name, website, profit_type, company_type, notes, assigned_user, wse, services, icp, industry, territory_id, hq_state, crm_link } = body;
+    const { name, website, profit_type, company_type, notes, assigned_user, wse, services, icp, industry, territory_id, hq_state, crm_link, master_account_key, master_account_name } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Company name is required' }, { status: 400 });
@@ -287,8 +287,8 @@ export async function PUT(
     const prevAssignedUser = existingResult.rows[0].assigned_user as string | null;
 
     const updatedResult = await db.execute({
-      sql: 'UPDATE companies SET name = ?, website = ?, profit_type = ?, company_type = ?, notes = ?, assigned_user = ?, wse = ?, services = ?, icp = ?, industry = ?, territory_id = ?, hq_state = ?, crm_link = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
-      args: [name, website || null, profit_type || null, company_type || null, notes || null, assigned_user || null, wse != null && wse !== '' ? Number(wse) : null, serializeServices(services), icp || null, industry || null, territory_id != null && territory_id !== '' ? Number(territory_id) : null, hq_state || null, crm_link || null, params.id],
+      sql: 'UPDATE companies SET name = ?, website = ?, profit_type = ?, company_type = ?, notes = ?, assigned_user = ?, wse = ?, services = ?, icp = ?, industry = ?, territory_id = ?, hq_state = ?, crm_link = ?, master_account_key = ?, master_account_name = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
+      args: [name, website || null, profit_type || null, company_type || null, notes || null, assigned_user || null, wse != null && wse !== '' ? Number(wse) : null, serializeServices(services), icp || null, industry || null, territory_id != null && territory_id !== '' ? Number(territory_id) : null, hq_state || null, crm_link || null, master_account_key || null, master_account_name || null, params.id],
     });
 
     // Cascade assigned_user to all child companies

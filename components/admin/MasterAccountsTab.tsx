@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
+import { SYNC_FIELDS, syncFieldLabel, type SyncField } from '@/lib/masterAccountSyncFields';
 import toast from 'react-hot-toast';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import { ConflictResolutionModal, type ConflictItem } from '@/components/ConflictResolutionModal';
@@ -113,6 +114,10 @@ export function MasterAccountsTab() {
   const [syncConflicts, setSyncConflicts] = useState<ConflictItem[] | null>(null);
   const [syncPreviewCounts, setSyncPreviewCounts] = useState<{ matchedCount: number; directUpdateCount: number } | null>(null);
   const [syncApplying, setSyncApplying] = useState(false);
+  // Every field on by default, so accepting the dialog does what the button
+  // did before it asked.
+  const [syncFieldPicker, setSyncFieldPicker] = useState(false);
+  const [syncFields, setSyncFields] = useState<Set<SyncField>>(new Set(SYNC_FIELDS));
 
   const hasActiveUpload = uploads.some(u => u.status === 'active');
   const isLargeList = totalActiveRecords >= LARGE_LIST_THRESHOLD;
@@ -286,10 +291,11 @@ export function MasterAccountsTab() {
 
   // ── Sync to master list ──────────────────────────────────────────────────
 
-  const handleSyncClick = async () => {
+  const runSync = async (fields: SyncField[]) => {
+    setSyncFieldPicker(false);
     setSyncing(true);
     try {
-      const res = await fetch('/api/admin/master-accounts/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+      const res = await fetch('/api/admin/master-accounts/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields }) });
       if (!res.ok) throw new Error();
       const data = await res.json() as { matchedCount: number; directUpdateCount: number; conflicts: ConflictItem[] };
       if (data.matchedCount === 0) {
@@ -300,7 +306,7 @@ export function MasterAccountsTab() {
       if (data.conflicts.length > 0) {
         setSyncConflicts(data.conflicts);
       } else {
-        await applySync({});
+        await applySync({}, fields);
       }
     } catch {
       toast.error('Failed to check companies against the master account list');
@@ -309,13 +315,13 @@ export function MasterAccountsTab() {
     }
   };
 
-  const applySync = async (resolutions: Record<string, 'accept' | 'ignore'>) => {
+  const applySync = async (resolutions: Record<string, 'accept' | 'ignore'>, fields: SyncField[] = Array.from(syncFields)) => {
     setSyncApplying(true);
     try {
       const res = await fetch('/api/admin/master-accounts/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apply: true, resolutions }),
+        body: JSON.stringify({ apply: true, resolutions, fields }),
       });
       if (!res.ok) throw new Error();
       const data = await res.json() as { updated: number; repUpdated: number; repSkipped: number };
@@ -344,14 +350,75 @@ export function MasterAccountsTab() {
         </div>
         <button
           type="button"
-          onClick={handleSyncClick}
+          onClick={() => setSyncFieldPicker(true)}
           disabled={syncing || !hasActiveUpload}
           className="btn-secondary text-xs px-3 py-1.5 flex-shrink-0 disabled:opacity-50 whitespace-nowrap"
-          title={hasActiveUpload ? 'Match companies in the system to the active master account list and update their fields' : 'Upload a master account list first'}
+          title={hasActiveUpload ? 'Match companies in the system to the active master account list and update the fields you choose' : 'Upload a master account list first'}
         >
-          {syncing ? 'Checking…' : 'Sync Companies to Master List'}
+          {syncing ? 'Checking…' : 'Sync Master List'}
         </button>
       </div>
+
+      {/* Which fields this run is allowed to write. Everything starts on, so
+          taking the default does what the button did before it asked. */}
+      {syncFieldPicker && (
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center sm:p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+          <div className="bg-white w-full sm:max-w-md flex flex-col rounded-t-2xl sm:rounded-2xl shadow-2xl" style={{ maxHeight: '90vh' }}>
+            <div className="px-4 sm:px-6 py-4 border-b border-gray-200 flex-shrink-0">
+              <h2 className="text-base font-bold text-brand-primary font-serif">Sync Master List</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Values move from the master list onto your companies. Pick which fields this run is allowed to change — a
+                field is only written when the master has a value for it and that value differs.
+              </p>
+            </div>
+
+            <div className="px-4 sm:px-6 py-2 border-b border-gray-100 bg-gray-50 flex items-center justify-between flex-shrink-0">
+              <span className="text-xs text-gray-400">{syncFields.size} of {SYNC_FIELDS.length} selected</span>
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={() => setSyncFields(new Set(SYNC_FIELDS))} className="text-xs font-semibold text-brand-secondary hover:underline">Select all</button>
+                <button type="button" onClick={() => setSyncFields(new Set())} className="text-xs font-semibold text-gray-500 hover:underline">Clear</button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
+              {SYNC_FIELDS.map(field => (
+                <label key={field} className="flex items-start gap-2.5 px-4 sm:px-6 py-2.5 cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="checkbox"
+                    checked={syncFields.has(field)}
+                    onChange={() => setSyncFields(prev => {
+                      const next = new Set(prev);
+                      if (next.has(field)) next.delete(field); else next.add(field);
+                      return next;
+                    })}
+                    className="accent-brand-secondary mt-0.5 flex-shrink-0"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm text-gray-800">{syncFieldLabel(field, unitLabel)}</span>
+                    {field === 'assigned_user' && (
+                      <span className="block text-xs text-gray-400 mt-0.5">
+                        The only field that asks before overwriting — a company that already has a different rep is listed as a conflict.
+                      </span>
+                    )}
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 px-4 sm:px-6 py-4 border-t border-gray-200 flex-shrink-0">
+              <button type="button" onClick={() => setSyncFieldPicker(false)} className="btn-secondary text-sm">Cancel</button>
+              <button
+                type="button"
+                onClick={() => void runSync(Array.from(syncFields))}
+                disabled={syncFields.size === 0}
+                className="btn-primary text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Sync {syncFields.size} field{syncFields.size === 1 ? '' : 's'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {syncPreviewCounts && syncConflicts && syncConflicts.length > 0 && (
         <p className="text-xs text-gray-500 -mt-2">
