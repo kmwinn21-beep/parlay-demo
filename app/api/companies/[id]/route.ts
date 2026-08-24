@@ -145,7 +145,7 @@ export async function GET(
       }),
       company.parent_company_id
         ? db.execute({
-            sql: 'SELECT id, name FROM companies WHERE id = ?',
+            sql: 'SELECT id, name, company_type FROM companies WHERE id = ?',
             args: [company.parent_company_id],
           })
         : Promise.resolve({ rows: [] }),
@@ -201,7 +201,13 @@ export async function GET(
     }));
 
     const parent_company = parentResult.rows.length > 0
-      ? { id: Number(parentResult.rows[0].id), name: String(parentResult.rows[0].name) }
+      ? {
+          id: Number(parentResult.rows[0].id),
+          name: String(parentResult.rows[0].name),
+          // Carried so the child's Related Entities card can show the same
+          // company-type pill the tables use.
+          company_type: parentResult.rows[0].company_type ? String(parentResult.rows[0].company_type) : null,
+        }
       : null;
 
     // Derived, not read from the stored column: a company is a Child when it

@@ -86,7 +86,7 @@ interface Company {
   status_markers?: StatusMarker[];
   attendees: Attendee[];
   conferences?: ConferenceItem[];
-  parent_company?: { id: number; name: string } | null;
+  parent_company?: { id: number; name: string; company_type?: string | null } | null;
   child_companies?: { id: number; name: string; website: string | null; company_type: string | null; attendee_count: number }[];
   related_companies?: { id: number; name: string; company_type: string | null; notes: string | null }[];
 }
@@ -98,6 +98,33 @@ function normalizeIcpValue(raw: string | null | undefined, options: string[]): s
   if (lower === 'true' || lower === 'yes' || lower === 'y' || lower === '1') return options[0] ?? raw;
   if (lower === 'false' || lower === 'no' || lower === 'n' || lower === '0') return options[1] ?? raw;
   return raw;
+}
+
+/**
+ * What a related company is to the one being viewed. Carries the same
+ * parent/child glyphs the companies table puts on its company-type pill, so
+ * the two readings of the relationship look like the same thing.
+ */
+function EntityDesignationPill({ designation }: { designation: 'Parent' | 'Child' }) {
+  const isParent = designation === 'Parent';
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${
+        isParent
+          ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+          : 'bg-teal-50 text-teal-700 border-teal-200'
+      }`}
+    >
+      <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        {isParent ? (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+        ) : (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4" />
+        )}
+      </svg>
+      {designation}
+    </span>
+  );
 }
 
 function ConferenceCountTooltip({ count, names }: { count: number; names?: string }) {
@@ -1811,27 +1838,51 @@ export default function CompanyDetailPage() {
                   })()}
                 </div>
               ),
-              communities: (company.child_companies && company.child_companies.length > 0) ? (
-                <div key="communities" className="card">
-                  <h2 className="text-base font-semibold text-brand-primary font-serif mb-3">
-                    {getSectionLabel('communities')} ({company.child_companies.length})
-                  </h2>
-                  <div className="space-y-2">
-                    {company.child_companies.map(child => (
-                      <Link key={child.id} href={`/companies/${child.id}`} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-brand-secondary hover:bg-blue-50 transition-all">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">{child.name}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            {child.company_type && <span className="text-xs text-gray-500">{child.company_type}</span>}
-                            <span className="text-xs text-gray-400">{child.attendee_count} attendees</span>
+              communities: (() => {
+                // Both directions of the link, so a child sees the parent it
+                // belongs to and not just a parent seeing its children. Each
+                // row is labelled with what that company is to this one.
+                const related: { id: number; name: string; company_type: string | null; designation: 'Parent' | 'Child' }[] = [
+                  ...(company.parent_company
+                    ? [{
+                        id: company.parent_company.id,
+                        name: company.parent_company.name,
+                        company_type: company.parent_company.company_type ?? null,
+                        designation: 'Parent' as const,
+                      }]
+                    : []),
+                  ...(company.child_companies ?? []).map(child => ({
+                    id: child.id,
+                    name: child.name,
+                    company_type: child.company_type,
+                    designation: 'Child' as const,
+                  })),
+                ];
+                if (related.length === 0) return null;
+                return (
+                  <div key="communities" className="card">
+                    <h2 className="text-base font-semibold text-brand-primary font-serif mb-3">
+                      {getSectionLabel('communities')} ({related.length})
+                    </h2>
+                    <div className="space-y-2">
+                      {related.map(rel => (
+                        <Link key={`${rel.designation}-${rel.id}`} href={`/companies/${rel.id}`} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-brand-secondary hover:bg-blue-50 transition-all">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-800 truncate">{rel.name}</p>
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              {rel.company_type && (
+                                <span className={`${getBadgeClass(rel.company_type, colorMaps.company_type || {})} text-xs`}>{rel.company_type}</span>
+                              )}
+                              <EntityDesignationPill designation={rel.designation} />
+                            </div>
                           </div>
-                        </div>
-                        <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                      </Link>
-                    ))}
+                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                        </Link>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ) : null,
+                );
+              })(),
               relationships: (
                 <InternalRelationshipsSection
                   key="relationships"
