@@ -7,6 +7,7 @@ import { resolveRepNames } from '@/lib/useUserOptions';
 interface MasterAccountRecord {
   id: number;
   companyName: string;
+  companyNameNormalized: string;
   website: string | null;
   assignedRepId: number | null;
   assignedRepName: string | null;
@@ -28,6 +29,9 @@ export interface MasterAccountApplyPatch {
   services?: string[];
   wse?: number;
   crm_link?: string;
+  /** The master row's normalized name — what the sync matches a pinned link on. */
+  master_account_key?: string | null;
+  master_account_name?: string | null;
 }
 
 interface CurrentValues {
@@ -39,6 +43,8 @@ interface CurrentValues {
   services: string[] | undefined;
   wse: number | null | undefined;
   crm_link: string | null | undefined;
+  master_account_key: string | null | undefined;
+  master_account_name: string | null | undefined;
 }
 
 interface FieldRow {
@@ -134,6 +140,7 @@ function MatchModal({
 }) {
   const rows = buildFieldRows(record, current, userOptions, territoryOptions, unitTypeLabel);
   const [appliedKeys, setAppliedKeys] = useState<Set<string>>(new Set());
+  const [linked, setLinked] = useState(current.master_account_key === record.companyNameNormalized);
 
   const applyRow = (row: FieldRow) => {
     if (!row.patch) return;
@@ -169,6 +176,31 @@ function MatchModal({
             </svg>
           </button>
         </div>
+
+        {/* The link itself, above the field-by-field copying. Copying values
+            is a one-time transfer; linking is what makes every later sync run
+            use this row for this company instead of guessing from the name
+            and website. */}
+        <label className="flex items-start gap-2.5 px-4 sm:px-6 py-3 border-b border-gray-100 bg-blue-50/50 cursor-pointer flex-shrink-0">
+          <input
+            type="checkbox"
+            checked={linked}
+            onChange={e => {
+              const on = e.target.checked;
+              setLinked(on);
+              onApply(on
+                ? { master_account_key: record.companyNameNormalized, master_account_name: record.companyName }
+                : { master_account_key: null, master_account_name: null });
+            }}
+            className="accent-brand-secondary mt-0.5 flex-shrink-0"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-brand-primary">Link this company to {record.companyName}</span>
+            <span className="block text-xs text-gray-500 mt-0.5">
+              Master account syncs will use this record for this company, whatever its name or website says.
+            </span>
+          </span>
+        </label>
 
         <div className="px-4 sm:px-6 py-2.5 border-b border-gray-100 bg-gray-50 flex items-center justify-between flex-shrink-0">
           <span className="text-xs text-gray-400">{appliedKeys.size}/{rows.filter(r => r.patch).length} applied</span>
@@ -320,6 +352,26 @@ export function MatchMasterAccountField({
           className="input-field"
           placeholder="Search master account list…"
         />
+        {/* Whether this company is pinned to a master row is otherwise only
+            visible inside the modal, which you'd have to re-find the record
+            to open. */}
+        {currentValues.master_account_key && (
+          <p className="flex items-center gap-1.5 text-xs text-gray-500 mt-1.5">
+            <svg className="w-3.5 h-3.5 text-brand-secondary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg>
+            <span className="truncate">
+              Linked to <span className="font-medium text-gray-700">{currentValues.master_account_name || currentValues.master_account_key}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => onApply({ master_account_key: null, master_account_name: null })}
+              className="text-brand-secondary hover:underline flex-shrink-0"
+            >
+              Unlink
+            </button>
+          </p>
+        )}
         {open && query.trim().length >= 2 && (
           <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
             {isSearching ? (
