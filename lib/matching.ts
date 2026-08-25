@@ -104,9 +104,14 @@ export function normalizeCompanyName(raw: string): string {
   s = s.replace(/&/g, 'and');
   // Strip legal suffixes
   s = s.replace(LEGAL_REGEX, ' ');
-  // Strip stray punctuation (commas, periods, dashes at boundaries)
-  s = s.replace(/[.,\-]+$/g, '').replace(/^[.,\-]+/g, '');
-  // Collapse whitespace
+  // Collapse whitespace BEFORE stripping boundary punctuation. The other order
+  // left a comma stranded behind the space the suffix was replaced with:
+  // "Grace Management, Inc" became "grace management," and so failed to match
+  // "Grace Management" on an exact-normalized comparison, dropping a pair that
+  // is obviously the same company down into fuzzy matching.
+  s = s.replace(/\s+/g, ' ').trim();
+  // Strip stray punctuation at either boundary, spaces included, then tidy up.
+  s = s.replace(/[.,\-\s]+$/g, '').replace(/^[.,\-\s]+/g, '');
   s = s.replace(/\s+/g, ' ').trim();
   return s;
 }
@@ -138,9 +143,83 @@ export function normalizeAttendeeName(first: string, last: string): string {
   return s;
 }
 
+/* ─── Fuzzy-match guards ───────────────────────────────────────────────────── */
+
+/**
+ * A normalized name shorter than this never fuzzy-matches. Three- and
+ * four-letter names are almost all characters-in-common by accident: "BWE" hit
+ * "Bethesda", "UPS" hit "USHS", "SUMA" hit "Smallwood". None of them share a
+ * word; the strings are just too short for edit distance to mean anything.
+ */
+export const MIN_FUZZY_NAME_LENGTH = 5;
+
+/**
+ * Two names must share at least this much before a fuzzy hit is even worth
+ * showing someone. Measured on real collisions from four conference lists:
+ * "BWE"/"Bethesda" scores 0.13 and "SUMA"/"Smallwood" 0.12, while every pair a
+ * person would want to look at scores above 0.5.
+ */
+export const MIN_FUZZY_OVERLAP = 0.35;
+
+/** Character trigrams, padded so the start and end of the string count. */
+function trigrams(s: string): Set<string> {
+  const padded = `  ${s}  `;
+  const out = new Set<string>();
+  for (let i = 0; i < padded.length - 2; i++) out.add(padded.slice(i, i + 3));
+  return out;
+}
+
+/**
+ * How much two names have in common, 0–1, by shared character trigrams.
+ *
+ * Deliberately not the same measure as the fuzzy score: this one is only asked
+ * to spot pairs with nothing in common. It doesn't try to separate a real match
+ * from a plausible-looking one, because nothing reliably does — that's what the
+ * person reviewing is for.
+ */
+export function nameOverlap(a: string, b: string): number {
+  const A = trigrams(a);
+  const B = trigrams(b);
+  if (A.size === 0 || B.size === 0) return 0;
+  let shared = 0;
+  A.forEach(g => { if (B.has(g)) shared++; });
+  return (2 * shared) / (A.size + B.size);
+}
+
 /* ─── Matching engine ──────────────────────────────────────────────────────── */
 
-export type MatchResult<T> = { match: T; score: number } | null;
+/**
+ * Which rule produced a match. Everything but 'fuzzy' is an equality of some
+ * kind and can be acted on; 'fuzzy' is a guess and callers must treat it as a
+ * proposal for someone to confirm.
+ */
+export type CompanyMatchStage = 'confirmed' | 'exact' | 'normalized' | 'deep' | 'domain' | 'fuzzy';
+
+export type MatchResult<T> = { match: T; score: number; stage?: CompanyMatchStage } | null;
+
+/**
+ * Decisions a person has already made about company names, so the same
+ * question isn't asked at every upload.
+ *  - confirmed: this uploaded name IS this company. Binds without asking.
+ *  - rejected:  this uploaded name is NOT this company. That candidate is
+ *               dropped, so the name falls through to being created.
+ * Keyed by deep-normalized name.
+ */
+export interface CompanyNameDecisions {
+  confirmed: Map<string, number>;
+  rejected: Map<string, Set<number>>;
+}
+
+export const NO_DECISIONS: CompanyNameDecisions = { confirmed: new Map(), rejected: new Map() };
+
+/**
+ * The `field` an identity question carries, so the route that asks it and the
+ * route that reads the answer agree on one key. Lives here rather than beside
+ * the modal because a server route can't import from a client component.
+ */
+export function identityConflictField(normalizedUploadName: string): string {
+  return `identity:${normalizedUploadName}`;
+}
 
 /**
  * Multi-stage company matching:
@@ -158,35 +237,55 @@ export function matchCompany<T extends { id: number; name: string; website?: str
   /** Optional email/website for domain-based matching */
   email?: string,
   website?: string,
+  /** Answers a person has already given about this name. */
+  decisions: CompanyNameDecisions = NO_DECISIONS,
 ): MatchResult<T> {
   const m = matcher ?? buildCompanyMatcher(existing);
   const rawKey = companyName.toLowerCase().trim();
   const normKey = normalizeCompanyName(companyName);
   const deepKey = deepNormalizeCompanyName(companyName);
 
+  // Stage 0: a decision someone already made outranks every rule below it.
+  const confirmedId = decisions.confirmed.get(deepKey);
+  if (confirmedId != null) {
+    const hit = existing.find(c => c.id === confirmedId) ?? m.byId?.get(confirmedId);
+    if (hit) return { match: hit, score: 0, stage: 'confirmed' };
+  }
+
   // Stage 1: exact on raw lowercase
   const exact = m.exactMap.get(rawKey);
-  if (exact) return { match: exact, score: 0 };
+  if (exact) return { match: exact, score: 0, stage: 'exact' };
 
   // Stage 2: exact on normalised
   const normExact = m.normMap.get(normKey);
-  if (normExact) return { match: normExact, score: 0.05 };
+  if (normExact) return { match: normExact, score: 0.05, stage: 'normalized' };
 
   // Stage 3: exact on deep-normalised
   const deepExact = m.deepMap.get(deepKey);
-  if (deepExact) return { match: deepExact, score: 0.1 };
+  if (deepExact) return { match: deepExact, score: 0.1, stage: 'deep' };
 
   // Stage 4: domain-based matching
   const domain = extractDomain(email, website);
   if (domain) {
     const domainHit = m.domainMap.get(domain);
-    if (domainHit) return { match: domainHit, score: 0.15 };
+    if (domainHit) return { match: domainHit, score: 0.15, stage: 'domain' };
   }
 
-  // Stage 5: fuzzy on normalised names
-  const hits = m.fuse.search(normKey);
-  if (hits.length > 0 && (hits[0].score ?? 1) <= FUZZY_MATCH_THRESHOLD) {
-    return { match: hits[0].item._original, score: hits[0].score ?? FUZZY_MATCH_THRESHOLD };
+  // Stage 5: fuzzy on normalised names. A hit here is a PROPOSAL, never a
+  // decision — callers must check `stage` and route it to a person. Two guards
+  // stop the obvious nonsense from ever being proposed: names too short for
+  // edit distance to mean anything, and pairs with almost no characters in
+  // common. Anything a person has already rejected is skipped outright.
+  if (normKey.length < MIN_FUZZY_NAME_LENGTH) return null;
+  const rejected = decisions.rejected.get(deepKey);
+  for (const hit of m.fuse.search(normKey)) {
+    const score = hit.score ?? 1;
+    if (score > FUZZY_MATCH_THRESHOLD) break;
+    const candidate = hit.item._original;
+    if (rejected?.has(candidate.id)) continue;
+    if (normalizeCompanyName(candidate.name).length < MIN_FUZZY_NAME_LENGTH) continue;
+    if (nameOverlap(normKey, hit.item._normalized) < MIN_FUZZY_OVERLAP) continue;
+    return { match: candidate, score, stage: 'fuzzy' };
   }
 
   return null;
@@ -197,6 +296,7 @@ export interface CompanyMatcher<T extends { id: number; name: string; website?: 
   normMap: Map<string, T>;
   deepMap: Map<string, T>;
   domainMap: Map<string, T>;
+  byId: Map<number, T>;
   fuse: Fuse<{ _normalized: string; _original: T }>;
 }
 
@@ -208,10 +308,12 @@ export function buildCompanyMatcher<T extends { id: number; name: string; websit
   const normMap = new Map<string, T>();
   const deepMap = new Map<string, T>();
   const domainMap = new Map<string, T>();
+  const byId = new Map<number, T>();
 
   const fuseItems: { _normalized: string; _original: T }[] = [];
 
   for (const c of existing) {
+    byId.set(c.id, c);
     const rawKey = c.name.toLowerCase().trim();
     const normKey = normalizeCompanyName(c.name);
     const deepKey = deepNormalizeCompanyName(c.name);
@@ -236,7 +338,7 @@ export function buildCompanyMatcher<T extends { id: number; name: string; websit
     includeScore: true,
   });
 
-  return { exactMap, normMap, deepMap, domainMap, fuse };
+  return { exactMap, normMap, deepMap, domainMap, byId, fuse };
 }
 
 /**

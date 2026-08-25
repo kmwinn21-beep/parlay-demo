@@ -20,7 +20,9 @@ import {
   confirmAttendeeMatch,
   deepNormalizeCompanyName,
   extractDomainFromWebsite,
+  identityConflictField,
 } from '@/lib/matching';
+import { loadCompanyNameDecisions, recordCompanyNameDecision } from '@/lib/companyNameDecisions';
 import { normalizeNameKey, normalizeReversedNameKey, splitOwnerTokens } from '@/lib/normalize';
 
 function normalizeConsentValue(raw: string | undefined | null): string {
@@ -345,6 +347,9 @@ export async function POST(
     const hasResolutions = resolutionsJson != null;
 
     const coRes = (coId: number, field: string) => resolutions[`company_${coId}_${field}`] ?? null;
+    /** How the person answered "is this uploaded name that existing company?" */
+    const identityRes = (coId: number, uploadedName: string) =>
+      resolutions[`company_identity_${coId}_${identityConflictField(deepNormalizeCompanyName(uploadedName))}`] ?? null;
     const atRes = (atId: number, field: string) => resolutions[`attendee_${atId}_${field}`] ?? null;
 
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -465,6 +470,7 @@ export async function POST(
       territory_id: r.territory_id ? Number(r.territory_id) : null,
     }));
     const companyMatcher = buildCompanyMatcher(existingCompanies);
+    const nameDecisions = await loadCompanyNameDecisions(db);
 
     // Collect unique company names with associated email/website/company_type/assigned_user for domain matching
     const companyIdCache = new Map<string, number>();
@@ -546,14 +552,35 @@ export async function POST(
       }
     }
 
-    // Match companies using name + domain matching
+    // Match companies using name + domain matching.
+    //
+    // Only an equality of some kind may bind on its own. A fuzzy hit is a
+    // guess, and a guess that binds silently is how attendees at one company
+    // end up filed under another — so it takes effect only when someone said
+    // yes to it in the conflict step. Left unanswered, the name becomes a new
+    // company, which is the recoverable outcome.
+    const identityDecisions: { uploadedName: string; companyId: number; decision: 'confirmed' | 'rejected' }[] = [];
     companyEntries.forEach((entry, coName) => {
-      const hit = matchCompany(coName, existingCompanies, companyMatcher, entry.email, entry.website);
-      if (hit) {
-        companyIdCache.set(coName, hit.match.id);
-      } else {
-        companyIdCache.set(coName, -1);
+      const hit = matchCompany(coName, existingCompanies, companyMatcher, entry.email, entry.website, nameDecisions);
+      if (!hit) { companyIdCache.set(coName, -1); return; }
+
+      if (hit.stage === 'fuzzy') {
+        const answer = identityRes(hit.match.id, coName);
+        if (answer === 'accept') {
+          companyIdCache.set(coName, hit.match.id);
+          identityDecisions.push({ uploadedName: coName, companyId: hit.match.id, decision: 'confirmed' });
+        } else {
+          companyIdCache.set(coName, -1);
+          // Only remember a "no" the person actually gave. An unanswered guess
+          // shouldn't harden into a permanent rule.
+          if (answer === 'ignore') {
+            identityDecisions.push({ uploadedName: coName, companyId: hit.match.id, decision: 'rejected' });
+          }
+        }
+        return;
       }
+
+      companyIdCache.set(coName, hit.match.id);
     });
 
     // Master account / territory fallback for rep assignment. Runs after
@@ -733,7 +760,26 @@ export async function POST(
     }
 
     // Batch-insert new companies (with auto-detected company type, website, assigned_user, wse, and services)
-    const newCoNames = Array.from(companyEntries.keys()).filter((n) => companyIdCache.get(n) === -1);
+    // Two spellings of the same new company in one file — "Sage", "Sage
+    // Management" and "SAGE Management, Inc." — would each create a row.
+    // Collapse them to one and point the rest at it once it exists. The
+    // longest spelling becomes the company's name: it carries the most
+    // information, where taking whichever appeared first would have named this
+    // one "Sage".
+    const allNew = Array.from(companyEntries.keys()).filter((n) => companyIdCache.get(n) === -1);
+    const canonicalByKey = new Map<string, string>();
+    for (const n of allNew) {
+      const key = deepNormalizeCompanyName(n) || n.toLowerCase().trim();
+      const current = canonicalByKey.get(key);
+      if (!current || n.trim().length > current.trim().length) canonicalByKey.set(key, n);
+    }
+    const newCoNames = Array.from(canonicalByKey.values());
+    const aliasOf = new Map<string, string>();
+    for (const n of allNew) {
+      const key = deepNormalizeCompanyName(n) || n.toLowerCase().trim();
+      const canonical = canonicalByKey.get(key)!;
+      if (canonical !== n) aliasOf.set(n, canonical);
+    }
     if (newCoNames.length > 0) {
       const results = await batchInsert(db, newCoNames, (n) => {
         const entry = companyEntries.get(n)!;
@@ -755,6 +801,16 @@ export async function POST(
         const id = Number(results[i]?.rows[0]?.id ?? 0);
         if (id > 0) companyIdCache.set(newCoNames[i], id);
       }
+      aliasOf.forEach((first, alias) => {
+        const id = companyIdCache.get(first);
+        if (id && id > 0) companyIdCache.set(alias, id);
+      });
+    }
+
+    // Remember the identity answers now that the companies they refer to
+    // exist, so the next upload of the same list doesn't ask again.
+    for (const d of identityDecisions) {
+      await recordCompanyNameDecision(db, d.uploadedName, d.companyId, d.decision, authResult.id);
     }
 
     if (bgJobId) await db.execute({ sql: 'UPDATE upload_jobs SET processed_rows=? WHERE id=?', args: [Math.round(valid.length * 0.2), bgJobId] }).catch(() => {});

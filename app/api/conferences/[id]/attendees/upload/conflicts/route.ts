@@ -12,16 +12,23 @@ import {
   matchCompany,
   matchAttendee,
   confirmAttendeeMatch,
+  deepNormalizeCompanyName,
+  identityConflictField,
 } from '@/lib/matching';
+import { loadCompanyNameDecisions } from '@/lib/companyNameDecisions';
 
 export interface ConflictItem {
-  entityType: 'attendee' | 'company';
+  entityType: 'attendee' | 'company' | 'company_identity';
   entityId: number;
   entityName: string;
   field: string;
   fieldLabel: string;
   currentValue: string;
   proposedValue: string;
+  acceptLabel?: string;
+  ignoreLabel?: string;
+  defaultResolution?: 'accept' | 'ignore';
+  detail?: string;
 }
 
 export async function POST(
@@ -98,6 +105,7 @@ export async function POST(
       wse: r.wse != null ? Number(r.wse) : null,
     }));
     const companyMatcher = buildCompanyMatcher(existingCompanies);
+    const nameDecisions = await loadCompanyNameDecisions(db);
 
     type AtRow = {
       id: number; full_name: string; email: string | null; title: string | null;
@@ -120,12 +128,41 @@ export async function POST(
 
     // ── Company conflicts ──────────────────────────────────────────────────────
     const seenCoIds = new Set<number>();
+    const askedIdentity = new Set<string>();
     for (const p of valid) {
       if (!p.company?.trim()) continue;
       const coName = p.company.trim();
-      const hit = matchCompany(coName, existingCompanies, companyMatcher, p.email?.trim(), p.website?.trim());
+      const hit = matchCompany(coName, existingCompanies, companyMatcher, p.email?.trim(), p.website?.trim(), nameDecisions);
       if (!hit) continue;
       const existing = hit.match;
+
+      // A fuzzy hit is a guess, so it becomes a question rather than a match.
+      // Asked once per uploaded name, with the attendee count attached — one
+      // answer decides where all of them land.
+      if (hit.stage === 'fuzzy') {
+        const normalized = deepNormalizeCompanyName(coName);
+        if (!askedIdentity.has(normalized)) {
+          askedIdentity.add(normalized);
+          const affected = valid.filter(q => q.company?.trim() === coName).length;
+          conflicts.push({
+            entityType: 'company_identity',
+            entityId: existing.id,
+            entityName: coName,
+            field: identityConflictField(normalized),
+            fieldLabel: 'Company',
+            currentValue: existing.name,
+            proposedValue: `Add "${coName}" as a new company`,
+            acceptLabel: 'Same company',
+            ignoreLabel: 'Different',
+            defaultResolution: 'ignore',
+            detail: `${affected} attendee${affected !== 1 ? 's' : ''} in this file · closest existing match`,
+          });
+        }
+        // Its field values belong to a company that may not be this one, so
+        // they aren't compared here.
+        continue;
+      }
+
       if (seenCoIds.has(existing.id)) continue;
       seenCoIds.add(existing.id);
 

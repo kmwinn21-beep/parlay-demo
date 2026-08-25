@@ -2184,4 +2184,22 @@ export const migrations: string[] = [
   // way it already asserts territory and services.
   `ALTER TABLE master_account_list ADD COLUMN company_type TEXT`,
   `ALTER TABLE master_account_list ADD COLUMN profit_type TEXT`,
+  // Answers a person gave when an attendee upload asked whether an uploaded
+  // company name meant an existing company. Without these the same handful of
+  // questions comes back at every conference, which is how a review step turns
+  // into something people click through blindly.
+  //   decision 'confirmed' — this name IS company_id; bind without asking.
+  //   decision 'rejected'  — this name is NOT company_id; drop that candidate.
+  // normalized_name is the deep-normalized upload name, so punctuation and
+  // legal suffixes don't make it a different question next time.
+  `CREATE TABLE IF NOT EXISTS company_name_links (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     normalized_name TEXT NOT NULL,
+     company_id INTEGER NOT NULL,
+     decision TEXT NOT NULL,
+     decided_by_user_id INTEGER,
+     created_at TEXT DEFAULT (datetime('now')),
+     UNIQUE(normalized_name, company_id)
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_company_name_links_name ON company_name_links(normalized_name)`,
 ];
