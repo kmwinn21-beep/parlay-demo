@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { getCurrentRepConfigId } from '@/lib/currentRep';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authResult = await requireAuth(request);
@@ -73,8 +74,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           });
           if (postMtgRes.rows.length > 0) {
             await db.execute({
-              sql: 'INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, completed, meeting_id) VALUES (?, ?, ?, ?, 0, ?)',
-              args: [attendee_id as number, conference_id as number, String(postMtgRes.rows[0].value), `Auto-created from ${heldValue} Meeting`, meetingId],
+              sql: 'INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, completed, meeting_id, assigned_rep) VALUES (?, ?, ?, ?, 0, ?, ?)',
+              args: [attendee_id as number, conference_id as number, String(postMtgRes.rows[0].value), `Auto-created from ${heldValue} Meeting`, meetingId, await getCurrentRepConfigId(db, authResult.id)],
             });
           }
         }

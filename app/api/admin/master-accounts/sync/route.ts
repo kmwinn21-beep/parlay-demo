@@ -17,6 +17,8 @@ interface MasterRow {
   wse: number | null;
   website: string | null;
   crmLink: string | null;
+  companyType: string | null;
+  profitType: string | null;
 }
 
 interface CompanyRow {
@@ -31,6 +33,8 @@ interface CompanyRow {
   territoryId: number | null;
   crmLink: string | null;
   masterAccountKey: string | null;
+  companyType: string | null;
+  profitType: string | null;
 }
 
 // A link a person made by hand wins over any guess — including the ambiguity
@@ -56,10 +60,10 @@ function matchMaster(
 
 async function loadData(db: Awaited<ReturnType<typeof getDb>>) {
   const [companyRows, masterRows, userRows] = await Promise.all([
-    db.execute({ sql: `SELECT id, name, website, assigned_user, hq_state, wse, services, entity_structure, territory_id, crm_link, master_account_key FROM companies`, args: [] }),
+    db.execute({ sql: `SELECT id, name, website, assigned_user, hq_state, wse, services, entity_structure, territory_id, crm_link, master_account_key, company_type, profit_type FROM companies`, args: [] }),
     db.execute({
       sql: `SELECT company_name_normalized, domain, assigned_rep_id, assigned_rep_name, hq_state,
-                   territory_id, territory_name, entity_structure, services, wse, website, crm_link
+                   territory_id, territory_name, entity_structure, services, wse, website, crm_link, company_type, profit_type
             FROM master_account_list
             WHERE upload_id IN (SELECT id FROM master_account_list_uploads WHERE status = 'active')`,
       args: [],
@@ -79,6 +83,8 @@ async function loadData(db: Awaited<ReturnType<typeof getDb>>) {
     territoryId: r.territory_id != null ? Number(r.territory_id) : null,
     crmLink: r.crm_link ? String(r.crm_link) : null,
     masterAccountKey: r.master_account_key ? String(r.master_account_key) : null,
+    companyType: r.company_type ? String(r.company_type) : null,
+    profitType: r.profit_type ? String(r.profit_type) : null,
   }));
 
   const byDomain = new Map<string, MasterRow>();
@@ -100,6 +106,8 @@ async function loadData(db: Awaited<ReturnType<typeof getDb>>) {
       wse: row.wse != null ? Number(row.wse) : null,
       website: row.website != null ? String(row.website) : null,
       crmLink: row.crm_link != null ? String(row.crm_link) : null,
+      companyType: row.company_type != null ? String(row.company_type) : null,
+      profitType: row.profit_type != null ? String(row.profit_type) : null,
     };
     if (entry.domain) byDomain.set(entry.domain.toLowerCase(), entry);
     if (!byKey.has(entry.companyNameNormalized)) byKey.set(entry.companyNameNormalized, entry);
@@ -175,7 +183,9 @@ export async function POST(request: NextRequest) {
           (wants('territory_id') && master.territoryId != null && master.territoryId !== co.territoryId) ||
           (wants('services') && master.services && master.services !== co.services) ||
           (wants('wse') && master.wse != null && master.wse !== co.wse) ||
-          (wants('crm_link') && master.crmLink && master.crmLink !== co.crmLink);
+          (wants('crm_link') && master.crmLink && master.crmLink !== co.crmLink) ||
+          (wants('company_type') && master.companyType && master.companyType !== co.companyType) ||
+          (wants('profit_type') && master.profitType && master.profitType !== co.profitType);
         if (hasFieldChange) directUpdateCount++;
 
         const currentRepId = singleAssignedRepId(co.assignedUser);
@@ -215,6 +225,8 @@ export async function POST(request: NextRequest) {
       if (wants('services') && master.services && master.services !== co.services) { setClauses.push('services = ?'); args.push(master.services); }
       if (wants('wse') && master.wse != null && master.wse !== co.wse) { setClauses.push('wse = ?'); args.push(master.wse); }
       if (wants('crm_link') && master.crmLink && master.crmLink !== co.crmLink) { setClauses.push('crm_link = ?'); args.push(master.crmLink); }
+      if (wants('company_type') && master.companyType && master.companyType !== co.companyType) { setClauses.push('company_type = ?'); args.push(master.companyType); }
+      if (wants('profit_type') && master.profitType && master.profitType !== co.profitType) { setClauses.push('profit_type = ?'); args.push(master.profitType); }
 
       const currentRepId = singleAssignedRepId(co.assignedUser);
       if (wants('assigned_user') && master.assignedRepId != null) {

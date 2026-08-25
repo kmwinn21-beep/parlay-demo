@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/getDb';
+import { getCurrentRepConfigId } from '@/lib/currentRep';
 import { getSessionUser } from '@/lib/auth';
 import { validateConferenceStage } from '@/lib/validate-conference-stage';
 
@@ -90,9 +91,9 @@ export async function PUT(
 
           if (dupeCheck.rows.length === 0) {
             await db.execute({
-              sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, completed)
-                    VALUES (?, ?, ?, 0)`,
-              args: [attendee_id, conferenceId, postEventLabel],
+              sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, completed, assigned_rep)
+                    VALUES (?, ?, ?, 0, ?)`,
+              args: [attendee_id, conferenceId, postEventLabel, await getCurrentRepConfigId(db, user?.id)],
             });
           }
         }

@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 
     const rowsRes = await db.execute({
       sql: `SELECT id, company_name, company_name_normalized, website, domain, assigned_rep_id, assigned_rep_name, hq_state,
-                   territory_id, territory_name, entity_structure, services, wse, crm_link
+                   territory_id, territory_name, entity_structure, services, wse, crm_link, company_type, profit_type
             FROM master_account_list
             WHERE upload_id IN (SELECT id FROM master_account_list_uploads WHERE status = 'active')
               AND company_name_normalized LIKE '%' || ? || '%'
@@ -45,6 +45,8 @@ export async function GET(request: NextRequest) {
       services: r.services ? String(r.services) : null,
       wse: r.wse != null ? Number(r.wse) : null,
       crmLink: r.crm_link ? String(r.crm_link) : null,
+      companyType: r.company_type ? String(r.company_type) : null,
+      profitType: r.profit_type ? String(r.profit_type) : null,
     }));
 
     return NextResponse.json({ records });

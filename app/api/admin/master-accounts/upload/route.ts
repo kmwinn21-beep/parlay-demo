@@ -26,6 +26,8 @@ interface MasterAccountColumnMapping {
   services?: string;
   units?: string;
   crmLink?: string;
+  companyType?: string;
+  profitType?: string;
 }
 
 function r2Client() {
@@ -103,10 +105,12 @@ export async function POST(request: NextRequest) {
     // ─── Build the rep lookup tables — identical construction to
     // resolveUserId in attendees/upload/route.ts, adapted for a single-value
     // (not multi-owner) cell since master account list reps are one-per-row. ───
-    const [userRows, usersWithConfig, servicesOptions, territoryRows] = await Promise.all([
+    const [userRows, usersWithConfig, servicesOptions, companyTypeOptions, profitTypeOptions, territoryRows] = await Promise.all([
       db.execute({ sql: `SELECT id, value FROM config_options WHERE category = ?`, args: ['user'] }),
       db.execute({ sql: `SELECT config_id, display_name, email FROM users WHERE config_id IS NOT NULL`, args: [] }),
       getConfigOptionValues('services', db),
+      getConfigOptionValues('company_type', db),
+      getConfigOptionValues('profit_type', db),
       db.execute({ sql: `SELECT id, name FROM sales_territories`, args: [] }),
     ]);
 
@@ -208,6 +212,8 @@ export async function POST(request: NextRequest) {
       services: string | null;
       wse: number | null;
       crmLink: string | null;
+      companyType: string | null;
+      profitType: string | null;
       rawRow: Record<string, unknown>;
     }
 
@@ -227,6 +233,12 @@ export async function POST(request: NextRequest) {
       const servicesRaw = mapping.services ? String(row[mapping.services] ?? '').trim() || null : null;
       const unitsRaw = mapping.units ? String(row[mapping.units] ?? '').trim() : '';
       const crmLink = mapping.crmLink ? String(row[mapping.crmLink] ?? '').trim() || null : null;
+      // Matched against the account's own option lists the same way services
+      // are, so "for profit" from a sheet lands on the configured "For-Profit".
+      const companyTypeRaw = mapping.companyType ? String(row[mapping.companyType] ?? '').trim() : '';
+      const profitTypeRaw = mapping.profitType ? String(row[mapping.profitType] ?? '').trim() : '';
+      const companyType = companyTypeRaw ? matchConfigOption(companyTypeRaw, companyTypeOptions) ?? companyTypeRaw : null;
+      const profitType = profitTypeRaw ? matchConfigOption(profitTypeRaw, profitTypeOptions) ?? profitTypeRaw : null;
 
       let assignedRepId: number | null = null;
       let assignedRepName: string | null = null;
@@ -274,6 +286,8 @@ export async function POST(request: NextRequest) {
         services,
         wse,
         crmLink,
+        companyType,
+        profitType,
         rawRow: row,
       });
     }
@@ -313,12 +327,12 @@ export async function POST(request: NextRequest) {
       const insertStmts = processedRows.map(r => ({
         sql: `INSERT INTO master_account_list
                 (upload_id, company_name, company_name_normalized, website, domain, assigned_rep_id, assigned_rep_name, hq_state,
-                 territory_id, territory_name, entity_structure, services, wse, crm_link, raw_row)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 territory_id, territory_name, entity_structure, services, wse, crm_link, company_type, profit_type, raw_row)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           uploadId, r.companyName, r.companyNameNormalized, r.website, r.domain,
           r.assignedRepId, r.assignedRepName, r.hqState,
-          r.territoryId, r.territoryName, r.entityStructure, r.services, r.wse, r.crmLink, JSON.stringify(r.rawRow),
+          r.territoryId, r.territoryName, r.entityStructure, r.services, r.wse, r.crmLink, r.companyType, r.profitType, JSON.stringify(r.rawRow),
         ] as (string | number | null)[],
       }));
       await batchExec(db, insertStmts);
@@ -327,7 +341,7 @@ export async function POST(request: NextRequest) {
       // uploads, not just the most recent one) by normalized company name.
       const activeRows = await db.execute({
         sql: `SELECT id, company_name_normalized, website, domain, assigned_rep_id, assigned_rep_name, hq_state,
-                     territory_id, territory_name, entity_structure, services, wse, crm_link
+                     territory_id, territory_name, entity_structure, services, wse, crm_link, company_type, profit_type
               FROM master_account_list
               WHERE upload_id IN (SELECT id FROM master_account_list_uploads WHERE status = 'active' AND id != ?)`,
         args: [uploadId],
@@ -335,7 +349,7 @@ export async function POST(request: NextRequest) {
       const existingByNormalized = new Map<string, {
         id: number; website: string | null; domain: string | null; assignedRepId: number | null; assignedRepName: string | null; hqState: string | null;
         territoryId: number | null; territoryName: string | null; entityStructure: string | null; services: string | null; wse: number | null;
-        crmLink: string | null;
+        crmLink: string | null; companyType: string | null; profitType: string | null;
       }>();
       for (const r of activeRows.rows) {
         existingByNormalized.set(String(r.company_name_normalized), {
@@ -351,6 +365,8 @@ export async function POST(request: NextRequest) {
           services: r.services != null ? String(r.services) : null,
           wse: r.wse != null ? Number(r.wse) : null,
           crmLink: r.crm_link != null ? String(r.crm_link) : null,
+          companyType: r.company_type != null ? String(r.company_type) : null,
+          profitType: r.profit_type != null ? String(r.profit_type) : null,
         });
       }
 
@@ -365,11 +381,11 @@ export async function POST(request: NextRequest) {
           insertStmts.push({
             sql: `INSERT INTO master_account_list
                     (upload_id, company_name, company_name_normalized, website, domain, assigned_rep_id, assigned_rep_name, hq_state,
-                     territory_id, territory_name, entity_structure, services, wse, crm_link, raw_row)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                     territory_id, territory_name, entity_structure, services, wse, crm_link, company_type, profit_type, raw_row)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             args: [
               uploadId, r.companyName, r.companyNameNormalized, r.website, r.domain, r.assignedRepId, r.assignedRepName, r.hqState,
-              r.territoryId, r.territoryName, r.entityStructure, r.services, r.wse, r.crmLink, JSON.stringify(r.rawRow),
+              r.territoryId, r.territoryName, r.entityStructure, r.services, r.wse, r.crmLink, r.companyType, r.profitType, JSON.stringify(r.rawRow),
             ],
           });
           continue;
@@ -385,7 +401,9 @@ export async function POST(request: NextRequest) {
           || existing.entityStructure !== r.entityStructure
           || existing.services !== r.services
           || existing.wse !== r.wse
-          || existing.crmLink !== r.crmLink;
+          || existing.crmLink !== r.crmLink
+          || existing.companyType !== r.companyType
+          || existing.profitType !== r.profitType;
 
         if (!changed) { unchanged++; continue; }
 
@@ -393,11 +411,11 @@ export async function POST(request: NextRequest) {
         updateStmts.push({
           sql: `UPDATE master_account_list
                 SET company_name = ?, website = ?, domain = ?, assigned_rep_id = ?, assigned_rep_name = ?, hq_state = ?,
-                    territory_id = ?, territory_name = ?, entity_structure = ?, services = ?, wse = ?, crm_link = ?, raw_row = ?, updated_at = datetime('now')
+                    territory_id = ?, territory_name = ?, entity_structure = ?, services = ?, wse = ?, crm_link = ?, company_type = ?, profit_type = ?, raw_row = ?, updated_at = datetime('now')
                 WHERE id = ?`,
           args: [
             r.companyName, r.website, r.domain, r.assignedRepId, r.assignedRepName, r.hqState,
-            r.territoryId, r.territoryName, r.entityStructure, r.services, r.wse, r.crmLink, JSON.stringify(r.rawRow), existing.id,
+            r.territoryId, r.territoryName, r.entityStructure, r.services, r.wse, r.crmLink, r.companyType, r.profitType, JSON.stringify(r.rawRow), existing.id,
           ],
         });
       }

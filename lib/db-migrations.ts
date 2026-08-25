@@ -2180,4 +2180,8 @@ export const migrations: string[] = [
   // The name is carried alongside purely so the UI can say what it's linked to.
   `ALTER TABLE companies ADD COLUMN master_account_key TEXT`,
   `ALTER TABLE companies ADD COLUMN master_account_name TEXT`,
+  // Company and profit type on the master list, so a sheet can assert them the
+  // way it already asserts territory and services.
+  `ALTER TABLE master_account_list ADD COLUMN company_type TEXT`,
+  `ALTER TABLE master_account_list ADD COLUMN profit_type TEXT`,
 ];

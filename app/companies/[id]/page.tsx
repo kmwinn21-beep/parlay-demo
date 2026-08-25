@@ -1125,6 +1125,8 @@ export default function CompanyDetailPage() {
                     services: Array.isArray(editData.services) ? editData.services : [],
                     wse: editData.wse,
                     crm_link: editData.crm_link,
+                    company_type: editData.company_type,
+                    profit_type: editData.profit_type,
                     master_account_key: editData.master_account_key,
                     master_account_name: editData.master_account_name,
                   }}

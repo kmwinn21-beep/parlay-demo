@@ -15,6 +15,8 @@ export const SYNC_FIELDS = [
   'services',
   'wse',
   'crm_link',
+  'company_type',
+  'profit_type',
 ] as const;
 
 export type SyncField = typeof SYNC_FIELDS[number];
@@ -29,5 +31,7 @@ export function syncFieldLabel(field: SyncField, unitLabel: string): string {
     case 'services': return 'Services';
     case 'wse': return unitLabel;
     case 'crm_link': return 'CRM Link';
+    case 'company_type': return 'Company Type';
+    case 'profit_type': return 'Profit Type';
   }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { getCurrentRepConfigId } from '@/lib/currentRep';
 import { getConfigIdByEmail, notifyForAttendee } from '@/lib/notifications';
 import { validateConferenceStage } from '@/lib/validate-conference-stage';
 import { trackEvent, trackFeature } from '@/lib/trackEvent';
@@ -312,6 +313,10 @@ export async function PATCH(request: NextRequest) {
       const newActionKey = newKeyRes.rows.length > 0 && newKeyRes.rows[0].action_key
         ? String(newKeyRes.rows[0].action_key) : null;
 
+      // Whoever changed the outcome is the rep these auto-created follow-ups
+      // land on — they're the person who just did the thing that made one.
+      const currentRepId = await getCurrentRepConfigId(db, authResult.id);
+
       if (oldActionKey === 'meeting_scheduled') {
         // Look up the Post-Mtg next_steps option
         const postMtgRes = await db.execute({
@@ -321,13 +326,14 @@ export async function PATCH(request: NextRequest) {
         if (postMtgRes.rows.length > 0) {
           const postMtgValue = String(postMtgRes.rows[0].value);
           await db.execute({
-            sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, completed)
-                  VALUES (?, ?, ?, ?, 0)`,
+            sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, completed, assigned_rep)
+                  VALUES (?, ?, ?, ?, 0, ?)`,
             args: [
               meeting.rows[0].attendee_id as number,
               meeting.rows[0].conference_id as number,
               postMtgValue,
               `Auto-created from ${outcome} Meeting`,
+              currentRepId,
             ],
           });
         }
@@ -335,14 +341,6 @@ export async function PATCH(request: NextRequest) {
 
       // Auto-create a No-Show follow-up with the logged-in user as assigned rep
       if (newActionKey === 'no_show') {
-        const userRow = await db.execute({
-          sql: 'SELECT first_name, last_name FROM users WHERE id = ? LIMIT 1',
-          args: [authResult.id],
-        });
-        const repName = userRow.rows.length > 0
-          ? [userRow.rows[0].first_name, userRow.rows[0].last_name].filter(Boolean).join(' ')
-          : null;
-
         const noShowRes = await db.execute({
           sql: "SELECT value FROM config_options WHERE category = 'next_steps' AND action_key = 'no_show' LIMIT 1",
           args: [],
@@ -359,7 +357,7 @@ export async function PATCH(request: NextRequest) {
             meeting.rows[0].conference_id as number,
             noShowValue,
             'Auto-created from No-Show Meeting',
-            repName,
+            currentRepId,
           ],
         });
       }

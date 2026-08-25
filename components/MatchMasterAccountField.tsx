@@ -18,6 +18,8 @@ interface MasterAccountRecord {
   services: string | null;
   wse: number | null;
   crmLink: string | null;
+  companyType: string | null;
+  profitType: string | null;
 }
 
 export interface MasterAccountApplyPatch {
@@ -29,6 +31,8 @@ export interface MasterAccountApplyPatch {
   services?: string[];
   wse?: number;
   crm_link?: string;
+  company_type?: string;
+  profit_type?: string;
   /** The master row's normalized name — what the sync matches a pinned link on. */
   master_account_key?: string | null;
   master_account_name?: string | null;
@@ -43,6 +47,8 @@ interface CurrentValues {
   services: string[] | undefined;
   wse: number | null | undefined;
   crm_link: string | null | undefined;
+  company_type: string | null | undefined;
+  profit_type: string | null | undefined;
   master_account_key: string | null | undefined;
   master_account_name: string | null | undefined;
 }
@@ -117,6 +123,20 @@ function buildFieldRows(
       masterDisplay: record.crmLink ?? '—',
       currentDisplay: current.crm_link || '—',
       patch: record.crmLink ? { crm_link: record.crmLink } : null,
+    },
+    {
+      key: 'company_type',
+      label: 'Company Type',
+      masterDisplay: record.companyType ?? '—',
+      currentDisplay: current.company_type || '—',
+      patch: record.companyType ? { company_type: record.companyType } : null,
+    },
+    {
+      key: 'profit_type',
+      label: 'Profit Type',
+      masterDisplay: record.profitType ?? '—',
+      currentDisplay: current.profit_type || '—',
+      patch: record.profitType ? { profit_type: record.profitType } : null,
     },
   ];
 }
