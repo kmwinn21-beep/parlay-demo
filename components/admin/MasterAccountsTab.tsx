@@ -124,6 +124,9 @@ export function MasterAccountsTab() {
   // did before it asked.
   const [syncFieldPicker, setSyncFieldPicker] = useState(false);
   const [syncFields, setSyncFields] = useState<Set<SyncField>>(new Set(SYNC_FIELDS));
+  // On by default: a blank cell on the master list leaves the company's value
+  // alone, which is what the sync has always done.
+  const [ignoreBlanks, setIgnoreBlanks] = useState(true);
 
   const hasActiveUpload = uploads.some(u => u.status === 'active');
   const isLargeList = totalActiveRecords >= LARGE_LIST_THRESHOLD;
@@ -297,11 +300,11 @@ export function MasterAccountsTab() {
 
   // ── Sync to master list ──────────────────────────────────────────────────
 
-  const runSync = async (fields: SyncField[]) => {
+  const runSync = async (fields: SyncField[], blanks = ignoreBlanks) => {
     setSyncFieldPicker(false);
     setSyncing(true);
     try {
-      const res = await fetch('/api/admin/master-accounts/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields }) });
+      const res = await fetch('/api/admin/master-accounts/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields, ignoreBlanks: blanks }) });
       if (!res.ok) throw new Error();
       const data = await res.json() as { matchedCount: number; directUpdateCount: number; conflicts: ConflictItem[] };
       if (data.matchedCount === 0) {
@@ -312,7 +315,7 @@ export function MasterAccountsTab() {
       if (data.conflicts.length > 0) {
         setSyncConflicts(data.conflicts);
       } else {
-        await applySync({}, fields);
+        await applySync({}, fields, blanks);
       }
     } catch {
       toast.error('Failed to check companies against the master account list');
@@ -321,13 +324,13 @@ export function MasterAccountsTab() {
     }
   };
 
-  const applySync = async (resolutions: Record<string, 'accept' | 'ignore'>, fields: SyncField[] = Array.from(syncFields)) => {
+  const applySync = async (resolutions: Record<string, 'accept' | 'ignore'>, fields: SyncField[] = Array.from(syncFields), blanks = ignoreBlanks) => {
     setSyncApplying(true);
     try {
       const res = await fetch('/api/admin/master-accounts/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apply: true, resolutions, fields }),
+        body: JSON.stringify({ apply: true, resolutions, fields, ignoreBlanks: blanks }),
       });
       if (!res.ok) throw new Error();
       const data = await res.json() as { updated: number; repUpdated: number; repSkipped: number };
@@ -373,10 +376,27 @@ export function MasterAccountsTab() {
             <div className="px-4 sm:px-6 py-4 border-b border-gray-200 flex-shrink-0">
               <h2 className="text-base font-bold text-brand-primary font-serif">Sync Master List</h2>
               <p className="text-sm text-gray-500 mt-1">
-                Values move from the master list onto your companies. Pick which fields this run is allowed to change — a
-                field is only written when the master has a value for it and that value differs.
+                Values move from the master list onto your companies. Pick which fields this run is allowed to change; a
+                field is only written when the master&apos;s value differs from the company&apos;s.
               </p>
             </div>
+
+            <label className="flex items-start gap-2.5 px-4 sm:px-6 py-3 border-b border-gray-100 bg-blue-50/50 cursor-pointer flex-shrink-0">
+              <input
+                type="checkbox"
+                checked={ignoreBlanks}
+                onChange={e => setIgnoreBlanks(e.target.checked)}
+                className="accent-brand-secondary mt-0.5 flex-shrink-0"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-brand-primary">Ignore Blanks</span>
+                <span className="block text-xs text-gray-500 mt-0.5">
+                  {ignoreBlanks
+                    ? 'A field the master list leaves empty is skipped — the company keeps what it has.'
+                    : 'The master list is authoritative: a field it leaves empty is cleared on the company.'}
+                </span>
+              </span>
+            </label>
 
             <div className="px-4 sm:px-6 py-2 border-b border-gray-100 bg-gray-50 flex items-center justify-between flex-shrink-0">
               <span className="text-xs text-gray-400">{syncFields.size} of {SYNC_FIELDS.length} selected</span>
