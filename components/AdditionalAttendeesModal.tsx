@@ -215,7 +215,8 @@ export function AdditionalAttendeesModal({
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search attendees, companies, or team…"
-            autoFocus
+            /* Deliberately not autoFocused: focusing it opens the phone
+               keyboard over the list people came here to pick from. */
             className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-brand-secondary"
           />
           {chips.length > 0 && (
