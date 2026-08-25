@@ -152,7 +152,13 @@ export async function POST(request: NextRequest) {
       apply?: boolean;
       resolutions?: Record<string, 'accept' | 'ignore'>;
       fields?: string[];
+      ignoreBlanks?: boolean;
     };
+    // On (the default, and what the sync always did): a blank master value is
+    // skipped and the company keeps what it has. Off: the master list is
+    // authoritative for the selected fields, so a blank there clears the
+    // company's value.
+    const ignoreBlanks = body.ignoreBlanks !== false;
     // No list means every field, so an older caller behaves as it always did.
     const selected = new Set<SyncField>(
       Array.isArray(body.fields)
@@ -162,6 +168,44 @@ export async function POST(request: NextRequest) {
     const wants = (f: SyncField) => selected.has(f);
 
     const { companies, byDomain, byNormalizedName, byKey, repNameById } = await loadData(db);
+
+    /**
+     * What this run would write to one company, for every selected field bar
+     * the rep — which has its own conflict handling. One list serves both the
+     * preview's change count and the apply's SET clauses, so the number the
+     * admin is shown can't drift from what actually happens.
+     *
+     * entity_structure is absent on purpose: it's derived from a company's
+     * parent/child links, not something a master sheet can assert.
+     */
+    const fieldWrites = (master: MasterRow, co: CompanyRow): { column: string; value: string | number | null }[] => {
+      const pairs: { field: SyncField; column: string; from: string | number | null; to: string | number | null }[] = [
+        { field: 'website', column: 'website', from: co.website, to: master.website },
+        { field: 'hq_state', column: 'hq_state', from: co.hqState, to: master.hqState },
+        { field: 'territory_id', column: 'territory_id', from: co.territoryId, to: master.territoryId },
+        { field: 'services', column: 'services', from: co.services, to: master.services },
+        { field: 'wse', column: 'wse', from: co.wse, to: master.wse },
+        { field: 'crm_link', column: 'crm_link', from: co.crmLink, to: master.crmLink },
+        { field: 'company_type', column: 'company_type', from: co.companyType, to: master.companyType },
+        { field: 'profit_type', column: 'profit_type', from: co.profitType, to: master.profitType },
+      ];
+
+      const writes: { column: string; value: string | number | null }[] = [];
+      for (const p of pairs) {
+        if (!wants(p.field)) continue;
+        const blank = p.to == null || p.to === '';
+        if (blank) {
+          // Ignore Blanks on: leave the company alone. Off: the master list is
+          // authoritative, so an empty cell there empties the company's field.
+          if (ignoreBlanks) continue;
+          if (p.from == null || p.from === '') continue;
+          writes.push({ column: p.column, value: null });
+          continue;
+        }
+        if (p.to !== p.from) writes.push({ column: p.column, value: p.to });
+      }
+      return writes;
+    };
 
     if (!body.apply) {
       // ── Preview: report match count + rep conflicts only. Non-rep field
@@ -177,16 +221,7 @@ export async function POST(request: NextRequest) {
         if (!master) continue;
         matchedCount++;
 
-        const hasFieldChange =
-          (wants('website') && master.website && master.website !== co.website) ||
-          (wants('hq_state') && master.hqState && master.hqState !== co.hqState) ||
-          (wants('territory_id') && master.territoryId != null && master.territoryId !== co.territoryId) ||
-          (wants('services') && master.services && master.services !== co.services) ||
-          (wants('wse') && master.wse != null && master.wse !== co.wse) ||
-          (wants('crm_link') && master.crmLink && master.crmLink !== co.crmLink) ||
-          (wants('company_type') && master.companyType && master.companyType !== co.companyType) ||
-          (wants('profit_type') && master.profitType && master.profitType !== co.profitType);
-        if (hasFieldChange) directUpdateCount++;
+        if (fieldWrites(master, co).length > 0) directUpdateCount++;
 
         const currentRepId = singleAssignedRepId(co.assignedUser);
         if (wants('assigned_user') && master.assignedRepId != null && currentRepId != null && currentRepId !== master.assignedRepId) {
@@ -217,19 +252,19 @@ export async function POST(request: NextRequest) {
       const setClauses: string[] = [];
       const args: (string | number | null)[] = [];
 
-      if (wants('website') && master.website && master.website !== co.website) { setClauses.push('website = ?'); args.push(master.website); }
-      if (wants('hq_state') && master.hqState && master.hqState !== co.hqState) { setClauses.push('hq_state = ?'); args.push(master.hqState); }
-      if (wants('territory_id') && master.territoryId != null && master.territoryId !== co.territoryId) { setClauses.push('territory_id = ?'); args.push(master.territoryId); }
-      // entity_structure deliberately not synced — it is derived from a
-      // company's parent/child links, not something a master sheet can assert.
-      if (wants('services') && master.services && master.services !== co.services) { setClauses.push('services = ?'); args.push(master.services); }
-      if (wants('wse') && master.wse != null && master.wse !== co.wse) { setClauses.push('wse = ?'); args.push(master.wse); }
-      if (wants('crm_link') && master.crmLink && master.crmLink !== co.crmLink) { setClauses.push('crm_link = ?'); args.push(master.crmLink); }
-      if (wants('company_type') && master.companyType && master.companyType !== co.companyType) { setClauses.push('company_type = ?'); args.push(master.companyType); }
-      if (wants('profit_type') && master.profitType && master.profitType !== co.profitType) { setClauses.push('profit_type = ?'); args.push(master.profitType); }
+      for (const write of fieldWrites(master, co)) {
+        setClauses.push(`${write.column} = ?`);
+        args.push(write.value);
+      }
 
       const currentRepId = singleAssignedRepId(co.assignedUser);
-      if (wants('assigned_user') && master.assignedRepId != null) {
+      if (wants('assigned_user') && master.assignedRepId == null && !ignoreBlanks && co.assignedUser) {
+        // The master list says nobody owns this account, and the admin chose
+        // to let it say that.
+        setClauses.push('assigned_user = ?');
+        args.push(null);
+        repUpdated++;
+      } else if (wants('assigned_user') && master.assignedRepId != null) {
         if (currentRepId == null) {
           // Blank (or ambiguous multi-owner) — only fill in when truly blank.
           if (!co.assignedUser) {
