@@ -8,6 +8,7 @@ import { getRepInitials } from '@/lib/useUserOptions';
 import { getBadgeClass, getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { RelationshipMapDrawer } from './RelationshipMapDrawer';
+import { MobileFormSheet } from '@/components/MobileFormSheet';
 
 interface InternalRelationship {
   id: number;
@@ -502,7 +503,7 @@ export function InternalRelationshipsSection({
         <div className="mt-3">
           {/* Add Form */}
           {showForm && (
-            <div className="mb-4 p-4 border border-blue-200 rounded-lg bg-blue-50/50 space-y-3">
+            <MobileFormSheet title="Add Internal Relationship" onClose={resetForm}>
               {/* Rep multiselect always shown */}
               <div>
                 <label className="label">Rep</label>
@@ -543,7 +544,7 @@ export function InternalRelationshipsSection({
                   {isSaving ? 'Saving...' : 'Save'}
                 </button>
               </div>
-            </div>
+            </MobileFormSheet>
           )}
 
           {/* Relationship Cards */}

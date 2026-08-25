@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { ScrollRow } from '@/components/ScrollRow';
 import { KebabMenu } from '@/components/KebabMenu';
+import { MobileFormSheet } from '@/components/MobileFormSheet';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getBadgeClass, getPreset } from '@/lib/colors';
 import { getRepInitials, type UserOption } from '@/lib/useUserOptions';
@@ -462,7 +463,7 @@ export function VendorRelationshipsSection({ companyId, userOptions, currentUser
       {expanded && (
         <div className="mt-3">
           {showForm && (
-            <div className="mb-4 p-4 border border-blue-200 rounded-lg bg-blue-50/50 space-y-3">
+            <MobileFormSheet title={editingId ? 'Edit Relationship' : 'Add Relationship'} onClose={resetForm}>
               <SingleSelect
                 label="Rep *"
                 value={formRepId}
@@ -484,7 +485,6 @@ export function VendorRelationshipsSection({ companyId, userOptions, currentUser
                   onChange={e => setFormNewCompanyName(e.target.value)}
                   placeholder="New company name *"
                   className="input-field w-full"
-                  autoFocus
                 />
               )}
 
@@ -547,7 +547,7 @@ export function VendorRelationshipsSection({ companyId, userOptions, currentUser
                   {saving ? 'Saving...' : 'Save'}
                 </button>
               </div>
-            </div>
+            </MobileFormSheet>
           )}
 
           {relationships.length === 0 && !showForm ? (

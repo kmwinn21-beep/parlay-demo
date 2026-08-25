@@ -26,6 +26,7 @@ import { NewMeetingModal } from '@/components/NewMeetingModal';
 import { useUser } from '@/components/UserContext';
 import { InternalRelationshipsSection } from '@/components/InternalRelationshipsSection';
 import { VendorRelationshipsSection } from '@/components/VendorRelationshipsSection';
+import { SectionJumpMenu } from '@/components/SectionJumpMenu';
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { ComposeEmailModal } from '@/components/ComposeEmailModal';
 import { CompanyDrawer } from '@/components/CompanyDrawer';
@@ -1262,6 +1263,11 @@ export default function CompanyDetailPage() {
                 </span>
               </div>
             </div>
+            {/* Phone only: the record is long enough that scrolling to a
+                section is a chore, and the header card has the room. */}
+            <div className="sm:hidden flex justify-end -mb-1">
+              <SectionJumpMenu />
+            </div>
           </div>
         )}
       </div>
@@ -1270,7 +1276,7 @@ export default function CompanyDetailPage() {
           <PinnedNotesSection pinnedNotes={pinnedNotes} onUnpin={handleUnpinNote} />
 
       {/* Attendees */}
-      <div className="card">
+      <div data-company-section="attendees" className="card">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-brand-primary font-serif">
             Attendees ({company.attendees.length})
@@ -1562,7 +1568,7 @@ export default function CompanyDetailPage() {
       </div>
 
           {/* Meetings */}
-          <div className="card p-0 overflow-hidden">
+          <div data-company-section="meetings" className="card p-0 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <h2 className="text-base font-semibold text-brand-primary font-serif">
                 Meetings
@@ -1638,7 +1644,7 @@ export default function CompanyDetailPage() {
           </div>
 
           {/* Follow Ups */}
-          <div className="card p-0 overflow-hidden">
+          <div data-company-section="follow-ups" className="card p-0 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <h2 className="text-base font-semibold text-brand-primary font-serif">
                 Follow Ups
@@ -1663,6 +1669,7 @@ export default function CompanyDetailPage() {
           </div>
 
           {/* Notes */}
+          <div data-company-section="notes">
           <NotesSection
             entityType="company"
             entityId={Number(id)}
@@ -1676,6 +1683,7 @@ export default function CompanyDetailPage() {
             pinnedNoteIds={pinnedNoteIds}
             onMeetingNoteClick={(meetingId) => openMeetingNotes(meetingId)}
           />
+          </div>
 
         </div>{/* end left column */}
 
@@ -1912,7 +1920,12 @@ export default function CompanyDetailPage() {
                 );
               })(),
             };
-            return sectionOrder.map(key => isSectionVisible(key) ? sectionMap[key] : null);
+            return sectionOrder.map(key => {
+              if (!isSectionVisible(key) || !sectionMap[key]) return null;
+              // Anchors the phone's section-jump menu, which reads these off
+              // the page so the list can't drift from what actually rendered.
+              return <div key={key} data-company-section={key}>{sectionMap[key]}</div>;
+            });
           })()}
         </div>
 
