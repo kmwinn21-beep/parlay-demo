@@ -211,6 +211,7 @@ export function OutreachCompanyCard({
   targetTier,
   selectedAttendeeId,
   onActivityLogged,
+  selected = false,
   onActivityCreated,
   onNoteCreated,
   onOpenDrawer,
@@ -225,6 +226,8 @@ export function OutreachCompanyCard({
   onActivityLogged: () => void;
   /** Fires with a freshly-logged activity so an open OutreachDrawer for this
    * company can show it immediately instead of waiting on a page refresh. */
+  /** The drawer is open on this company — stand it out from the dimmed rest. */
+  selected?: boolean;
   onActivityCreated?: (companyId: number, activity: TimelineActivity) => void;
   /** Same, for a note posted via the per-activity note popover. */
   onNoteCreated?: (companyId: number, note: ThreadNote) => void;
@@ -550,7 +553,9 @@ export function OutreachCompanyCard({
   );
 
   return (
-    <div className="border border-gray-200 rounded-xl bg-white overflow-hidden hover:border-gray-300 transition-colors">
+    <div className={`border rounded-xl bg-white overflow-hidden transition-colors ${
+      selected ? 'border-gray-400' : 'border-gray-200 hover:border-gray-300'
+    }`}>
       {/* Collapsed row */}
       {isDesktop ? (
         <div className="flex items-start gap-3 px-4 py-3">

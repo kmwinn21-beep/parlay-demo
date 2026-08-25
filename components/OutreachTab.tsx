@@ -220,6 +220,7 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
                   company={company}
                   conferenceId={conferenceId}
                   targetTier={tierByCompany.get(company.companyId)}
+                  selected={drawerState?.companyId === company.companyId}
                   selectedAttendeeId={
                     drawerState?.companyId === company.companyId ? drawerState.attendeeFilter?.id ?? null : null
                   }
