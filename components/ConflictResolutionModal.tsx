@@ -3,16 +3,24 @@
 import React, { useState } from 'react';
 
 export interface ConflictItem {
-  entityType: 'attendee' | 'company';
+  entityType: 'attendee' | 'company' | 'company_identity';
   entityId: number;
   entityName: string;
   field: string;
   fieldLabel: string;
   currentValue: string;
   proposedValue: string;
+  /** Overrides the generic Accept / Ignore wording for this row. */
+  acceptLabel?: string;
+  ignoreLabel?: string;
+  /** Pre-answered on open. Identity rows default to the safe answer. */
+  defaultResolution?: Resolution;
+  /** Extra context under the name — e.g. how many attendees ride on this. */
+  detail?: string;
 }
 
-type Resolution = 'accept' | 'ignore';
+
+export type Resolution = 'accept' | 'ignore';
 
 interface Props {
   conflicts: ConflictItem[];
@@ -25,7 +33,15 @@ function conflictKey(c: ConflictItem) {
 }
 
 export function ConflictResolutionModal({ conflicts, onResolve, onCancel }: Props) {
-  const [resolutions, setResolutions] = useState<Record<string, Resolution>>({});
+  // Rows carrying a default start answered. Identity questions default to
+  // "different company", so clicking straight through creates a new company
+  // rather than merging two that might be unrelated — a duplicate is visible
+  // and mergeable, a wrong merge is silent.
+  const [resolutions, setResolutions] = useState<Record<string, Resolution>>(() => {
+    const seed: Record<string, Resolution> = {};
+    for (const c of conflicts) if (c.defaultResolution) seed[conflictKey(c)] = c.defaultResolution;
+    return seed;
+  });
 
   const resolve = (c: ConflictItem, r: Resolution) =>
     setResolutions(prev => ({ ...prev, [conflictKey(c)]: r }));
@@ -44,6 +60,8 @@ export function ConflictResolutionModal({ conflicts, onResolve, onCancel }: Prop
 
   const resolvedCount = Object.keys(resolutions).length;
   const allResolved = resolvedCount === conflicts.length;
+  const identityCount = conflicts.filter(c => c.entityType === 'company_identity').length;
+  const fieldCount = conflicts.length - identityCount;
 
   return (
     <div
@@ -63,10 +81,18 @@ export function ConflictResolutionModal({ conflicts, onResolve, onCancel }: Prop
         <div className="flex items-start justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 flex-shrink-0">
           <div>
             <h2 className="text-base sm:text-lg font-bold text-brand-primary font-serif">
-              Field Conflicts Detected
+              {identityCount > 0 && fieldCount === 0 ? 'Confirm Companies' : 'Review Before Uploading'}
             </h2>
             <p className="text-sm text-gray-500 mt-0.5">
-              {conflicts.length} field{conflicts.length !== 1 ? 's' : ''} in the uploaded file differ from existing values. Choose which value to keep for each.
+              {identityCount > 0 && (
+                <>
+                  {identityCount} company name{identityCount !== 1 ? 's' : ''} in the file look{identityCount === 1 ? 's' : ''} like {identityCount === 1 ? 'an existing company' : 'existing companies'} but {identityCount === 1 ? 'isn\u2019t' : 'aren\u2019t'} an exact match. They&rsquo;ll be added as new companies unless you say otherwise.
+                  {fieldCount > 0 ? ' ' : ''}
+                </>
+              )}
+              {fieldCount > 0 && (
+                <>{fieldCount} field{fieldCount !== 1 ? 's' : ''} differ from existing values. Choose which value to keep for each.</>
+              )}
             </p>
           </div>
           <button
@@ -102,8 +128,8 @@ export function ConflictResolutionModal({ conflicts, onResolve, onCancel }: Prop
         {/* Desktop column headers */}
         <div className="hidden sm:grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_180px] gap-4 px-6 py-2 border-b border-gray-100 flex-shrink-0">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Name / Field</p>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Current Value</p>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Proposed Value</p>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{identityCount > 0 && fieldCount === 0 ? 'Existing Company' : 'Current Value'}</p>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{identityCount > 0 && fieldCount === 0 ? 'Otherwise' : 'Proposed Value'}</p>
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Action</p>
         </div>
 
@@ -123,7 +149,9 @@ export function ConflictResolutionModal({ conflicts, onResolve, onCancel }: Prop
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{c.entityName}</p>
                     <p className="text-xs text-gray-400">
-                      {c.fieldLabel} · {c.entityType === 'attendee' ? 'Attendee' : 'Company'}
+                      {c.entityType === 'company_identity'
+                        ? (c.detail ?? 'Company match')
+                        : `${c.fieldLabel} · ${c.entityType === 'attendee' ? 'Attendee' : 'Company'}`}
                     </p>
                   </div>
                   {/* Current value */}
@@ -134,7 +162,7 @@ export function ConflictResolutionModal({ conflicts, onResolve, onCancel }: Prop
                     >
                       {c.currentValue}
                     </p>
-                    {res === 'ignore' && <span className="text-xs text-gray-400">← keeping</span>}
+                    {res === 'ignore' && <span className="text-xs text-gray-400">{c.entityType === 'company_identity' ? '' : '← keeping'}</span>}
                   </div>
                   {/* Proposed value */}
                   <div className="min-w-0">
@@ -144,7 +172,7 @@ export function ConflictResolutionModal({ conflicts, onResolve, onCancel }: Prop
                     >
                       {c.proposedValue}
                     </p>
-                    {res === 'accept' && <span className="text-xs text-green-600">← using this</span>}
+                    {res === 'accept' && <span className="text-xs text-green-600">{c.entityType === 'company_identity' ? '' : '← using this'}</span>}
                   </div>
                   {/* Buttons */}
                   <div className="flex items-center gap-2 flex-shrink-0">
@@ -157,7 +185,7 @@ export function ConflictResolutionModal({ conflicts, onResolve, onCancel }: Prop
                           : 'bg-white text-gray-600 border-gray-200 hover:border-green-300 hover:text-green-700 hover:bg-green-50'
                       }`}
                     >
-                      Accept
+                      {c.acceptLabel ?? 'Accept'}
                     </button>
                     <button
                       type="button"
@@ -168,7 +196,7 @@ export function ConflictResolutionModal({ conflicts, onResolve, onCancel }: Prop
                           : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400 hover:bg-gray-100'
                       }`}
                     >
-                      Ignore
+                      {c.ignoreLabel ?? 'Ignore'}
                     </button>
                   </div>
                 </div>
@@ -179,14 +207,16 @@ export function ConflictResolutionModal({ conflicts, onResolve, onCancel }: Prop
                     <div>
                       <p className="text-sm font-medium text-gray-900">{c.entityName}</p>
                       <p className="text-xs text-gray-400">
-                        {c.fieldLabel} · {c.entityType === 'attendee' ? 'Attendee' : 'Company'}
+                        {c.entityType === 'company_identity'
+                          ? (c.detail ?? 'Company match')
+                          : `${c.fieldLabel} · ${c.entityType === 'attendee' ? 'Attendee' : 'Company'}`}
                       </p>
                     </div>
                     {res && (
                       <span className={`text-xs font-medium px-1.5 py-0.5 rounded flex-shrink-0 ${
                         res === 'accept' ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'
                       }`}>
-                        {res === 'accept' ? 'Accept' : 'Ignore'}
+                        {res === 'accept' ? (c.acceptLabel ?? 'Accept') : (c.ignoreLabel ?? 'Ignore')}
                       </span>
                     )}
                   </div>
@@ -214,7 +244,7 @@ export function ConflictResolutionModal({ conflicts, onResolve, onCancel }: Prop
                           : 'bg-white text-gray-600 border-gray-200 hover:border-green-300 hover:text-green-700'
                       }`}
                     >
-                      Accept Change
+                      {c.acceptLabel ?? 'Accept Change'}
                     </button>
                     <button
                       type="button"
@@ -225,7 +255,7 @@ export function ConflictResolutionModal({ conflicts, onResolve, onCancel }: Prop
                           : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400 hover:bg-gray-100'
                       }`}
                     >
-                      Ignore Change
+                      {c.ignoreLabel ?? 'Ignore Change'}
                     </button>
                   </div>
                 </div>
