@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { KebabPopover } from '@/components/KebabMenu';
 import toast from 'react-hot-toast';
 import { useUser } from '@/components/UserContext';
 import { OutreachCompanyCard, type OutreachCompany, type OutreachAttendeeFilter } from './OutreachCompanyCard';
 import { OutreachDrawer, type TimelineActivity, type ThreadNote } from './OutreachDrawer';
+import { useAnchoredDrawer } from '@/lib/useAnchoredDrawer';
 import { OutreachAssignModal } from './OutreachAssignModal';
 
 interface OutreachResponse {
@@ -50,6 +51,15 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
   // (a sibling of the card that logged it) can fold it into its timeline/notes
   // immediately instead of waiting for a page refresh.
   const [pendingActivity, setPendingActivity] = useState<{ companyId: number; activity: TimelineActivity } | null>(null);
+  const listWrapRef = useRef<HTMLDivElement>(null);
+  const drawerPanelRef = useRef<HTMLDivElement>(null);
+  const { offset: drawerOffset, overhang: drawerOverhang } = useAnchoredDrawer({
+    open: drawerState != null,
+    anchorKey: drawerState ? String(drawerState.companyId) : null,
+    wrapRef: listWrapRef,
+    panelRef: drawerPanelRef,
+    findAnchor: (wrap, key) => wrap.querySelector<HTMLElement>(`[data-outreach-company="${CSS.escape(key)}"]`),
+  });
   const [pendingNote, setPendingNote] = useState<{ companyId: number; note: ThreadNote } | null>(null);
 
   const loadOutreach = useCallback(async () => {
@@ -191,16 +201,26 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
           </div>
         ) : (
           <div className="flex gap-3 items-start">
-            <div className="flex-1 min-w-0 space-y-2">
+            <div className="flex-1 min-w-0">
+            <div ref={listWrapRef} className="space-y-2">
               {filteredCompanies.length === 0 && (
                 <p className="text-sm text-gray-400 text-center py-8">No companies match the current filters.</p>
               )}
               {filteredCompanies.map(company => (
-                <OutreachCompanyCard
+                <div
                   key={company.companyId}
+                  data-outreach-company={company.companyId}
+                  // Everything but the open card recedes, so the panel reads as
+                  // belonging to one company.
+                  className={drawerState && drawerState.companyId !== company.companyId
+                    ? 'opacity-40 transition-opacity'
+                    : 'transition-opacity'}
+                >
+                <OutreachCompanyCard
                   company={company}
                   conferenceId={conferenceId}
                   targetTier={tierByCompany.get(company.companyId)}
+                  selected={drawerState?.companyId === company.companyId}
                   selectedAttendeeId={
                     drawerState?.companyId === company.companyId ? drawerState.attendeeFilter?.id ?? null : null
                   }
@@ -219,10 +239,19 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
                     currentAssigneeIds: company.assignees.map(a => a.userId),
                   })}
                 />
+                </div>
               ))}
             </div>
+            {/* Room below the list for a panel anchored to a card near the
+                bottom, so the rest of it can be scrolled to. Deliberately a
+                sibling of the measured wrap, not a child: inside it, growing
+                the spacer would grow the wrap, which shrinks the overhang,
+                which shrinks the spacer — and it never settles. */}
+            {drawerState && <div className="hidden sm:block" style={{ height: drawerOverhang }} aria-hidden />}
+            </div>
             {drawerState && (
-              <div className="sm:w-72 sm:flex-shrink-0">
+              <div className="sm:w-72 sm:flex-shrink-0" style={{ paddingTop: drawerOffset }}>
+                <div ref={drawerPanelRef}>
                 <OutreachDrawer
                   conferenceId={conferenceId}
                   companyId={drawerState.companyId}
@@ -233,6 +262,7 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
                   pendingNote={pendingNote?.companyId === drawerState.companyId ? pendingNote.note : null}
                   onClose={() => setDrawerState(null)}
                 />
+                </div>
               </div>
             )}
           </div>

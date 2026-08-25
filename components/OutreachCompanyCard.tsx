@@ -15,6 +15,7 @@ import { AttendeeQuickViewDrawer } from './AttendeeQuickViewDrawer';
 import { QuickViewIcon } from './QuickViewDrawer';
 import { ScrollRow } from '@/components/ScrollRow';
 import { type TimelineActivity, type ThreadNote } from './OutreachDrawer';
+import { effectiveSeniority } from '@/lib/parsers';
 import { type Meeting } from './MeetingsTable';
 import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
 
@@ -210,6 +211,7 @@ export function OutreachCompanyCard({
   targetTier,
   selectedAttendeeId,
   onActivityLogged,
+  selected = false,
   onActivityCreated,
   onNoteCreated,
   onOpenDrawer,
@@ -224,6 +226,8 @@ export function OutreachCompanyCard({
   onActivityLogged: () => void;
   /** Fires with a freshly-logged activity so an open OutreachDrawer for this
    * company can show it immediately instead of waiting on a page refresh. */
+  /** The drawer is open on this company — stand it out from the dimmed rest. */
+  selected?: boolean;
   onActivityCreated?: (companyId: number, activity: TimelineActivity) => void;
   /** Same, for a note posted via the per-activity note popover. */
   onNoteCreated?: (companyId: number, note: ThreadNote) => void;
@@ -549,7 +553,9 @@ export function OutreachCompanyCard({
   );
 
   return (
-    <div className="border border-gray-200 rounded-xl bg-white overflow-hidden hover:border-gray-300 transition-colors">
+    <div className={`border rounded-xl bg-white overflow-hidden transition-colors ${
+      selected ? 'border-gray-400' : 'border-gray-200 hover:border-gray-300'
+    }`}>
       {/* Collapsed row */}
       {isDesktop ? (
         <div className="flex items-start gap-3 px-4 py-3">
@@ -787,15 +793,22 @@ export function OutreachCompanyCard({
                   </p>
                   <p className="text-xs text-gray-400 truncate">{attendee.title || '—'}</p>
                 </div>
-                {isDesktop && (
-                  <div className="w-24 flex-shrink-0">
-                    {attendee.seniorityLabel && (
-                      <span className={`${getBadgeClass(attendee.seniorityLabel, colorMaps.seniority || {})} text-[11px]`}>
-                        {attendee.seniorityLabel}
-                      </span>
-                    )}
-                  </div>
-                )}
+                {isDesktop && (() => {
+                  // Every other attendee card resolves this the same way: the
+                  // stored value wins, and a blank one falls back to what the
+                  // title classifies to. Reading the column raw left anyone
+                  // whose seniority was never stored with no pill at all.
+                  const seniority = effectiveSeniority(attendee.seniorityLabel ?? undefined, attendee.title ?? undefined);
+                  return (
+                    <div className="w-24 flex-shrink-0">
+                      {seniority && (
+                        <span className={`${getBadgeClass(seniority, colorMaps.seniority || {})} text-[11px]`}>
+                          {seniority}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
                 {isDesktop ? (
                   <>
                     {meetingIconBlock}

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect, useLayoutEffect, Fragment } from 'react';
+import toast from 'react-hot-toast';
+import { useState, useRef, useEffect, Fragment } from 'react';
 import Link from 'next/link';
 import { QuickViewDrawer, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { useFollowUpActions, followUpActionLabel } from '@/lib/useFollowUpActions';
@@ -8,6 +9,7 @@ import { SlideInPanel } from '@/components/SlideInPanel';
 import { FollowUpReassignNotePrompt, type ReassignNoteTarget } from '@/components/FollowUpReassignNotePrompt';
 import { getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
+import { useAnchoredDrawer } from '@/lib/useAnchoredDrawer';
 import { FollowUpNotesPopover } from '@/components/FollowUpNotesPopover';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import {
@@ -31,6 +33,7 @@ export interface FollowUp {
   first_name: string;
   last_name: string;
   title: string | null;
+  email: string | null;
   company_id: number | null;
   company_name: string | null;
   conference_name: string;
@@ -134,6 +137,57 @@ function buildConferenceAttendeeGroups(fus: FollowUp[]): ConferenceAttendeeGroup
 }
 
 /** Render initials pills for a stored assigned_rep value (CSV of IDs or legacy name) */
+
+/**
+ * The attendee's email under the drawer's name, with a mailto link on the
+ * envelope and a copy button. The address truncates so the two controls always
+ * fit; the row spans the full header width, close button included.
+ */
+function DrawerEmailRow({ email }: { email: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(email);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error('Could not copy the address.');
+    }
+  };
+  return (
+    <div className="flex items-center gap-1.5 min-w-0">
+      <a
+        href={`mailto:${email}`}
+        title={`Email ${email}`}
+        aria-label={`Email ${email}`}
+        className="text-gray-400 hover:text-brand-secondary transition-colors flex-shrink-0"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+        </svg>
+      </a>
+      <span className="text-[10px] text-gray-500 truncate min-w-0 flex-1" title={email}>{email}</span>
+      <button
+        type="button"
+        onClick={copy}
+        title={copied ? 'Copied' : 'Copy email address'}
+        aria-label="Copy email address"
+        className={`flex-shrink-0 transition-colors ${copied ? 'text-green-600' : 'text-gray-400 hover:text-brand-secondary'}`}
+      >
+        {copied ? (
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+          </svg>
+        ) : (
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+        )}
+      </button>
+    </div>
+  );
+}
+
 /** Open or done, as one circular pill. */
 function StatusPill({ completed }: { completed: boolean }) {
   return completed ? (
@@ -316,86 +370,16 @@ export function FollowUpsTable({
   const [editingActionKey, setEditingActionKey] = useState<number | null>(null);
   const [drawerGroupKey, setDrawerGroupKey] = useState<string | null>(null);
   // The panel starts level with the row it belongs to rather than at the top of
-  // the table, so the two read as one thing. Measured from the row because the
-  // rows aren't a uniform height.
+  // the table, so the two read as one thing.
   const tableWrapRef = useRef<HTMLDivElement>(null);
   const drawerPanelRef = useRef<HTMLDivElement>(null);
-  const [drawerOffset, setDrawerOffset] = useState(0);
-  // A panel anchored to a row near the bottom would hang off the end of the
-  // table with nothing below to scroll to. The table grows by however much it
-  // overhangs, for as long as the panel is open, so the rest of the card can be
-  // scrolled to without the panel leaving its row.
-  const [drawerOverhang, setDrawerOverhang] = useState(0);
-
-  useLayoutEffect(() => {
-    if (!detailsInDrawer || !drawerGroupKey) {
-      setDrawerOffset(0);
-      setDrawerOverhang(0);
-      return;
-    }
-    const wrap = tableWrapRef.current;
-    const row = wrap?.querySelector<HTMLElement>(`tr[data-group-key="${CSS.escape(drawerGroupKey)}"]`);
-    if (!wrap || !row) { setDrawerOffset(0); setDrawerOverhang(0); return; }
-    const measure = () => {
-      const r = row.getBoundingClientRect();
-      const w = wrap.getBoundingClientRect();
-      const offset = Math.max(0, Math.round(r.top - w.top));
-      setDrawerOffset(offset);
-      const panelH = drawerPanelRef.current?.offsetHeight ?? 0;
-      // The spacer sits outside the table, so growing it can't move the row
-      // this was measured against.
-      // The gutter also covers whatever is pinned to the bottom of the window
-      // over this column, so the scroll below can clear it.
-      setDrawerOverhang(panelH > 0 ? Math.max(0, Math.round(offset + panelH + 96 - wrap.offsetHeight)) : 0);
-    };
-    measure();
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(wrap);
-    if (drawerPanelRef.current) ro.observe(drawerPanelRef.current);
-    return () => ro.disconnect();
-  }, [detailsInDrawer, drawerGroupKey, followUps]);
-
-  // Once the spacer is in place and the panel has finished unfurling, bring it
-  // into view rather than leaving the reader to find it. Only scrolls by the
-  // amount actually needed, so the row it belongs to stays on screen.
-  useEffect(() => {
-    if (!detailsInDrawer || !drawerGroupKey) return;
-    // The panel scales up over ~220ms; measuring mid-animation reads short.
-    const t = setTimeout(() => {
-      const panel = drawerPanelRef.current;
-      if (!panel || panel.offsetHeight === 0) return;
-
-      // The page scrolls inside a container here, not the window.
-      let scroller: HTMLElement | null = panel.parentElement;
-      while (scroller && scroller !== document.body) {
-        const oy = getComputedStyle(scroller).overflowY;
-        if ((oy === 'auto' || oy === 'scroll') && scroller.scrollHeight > scroller.clientHeight) break;
-        scroller = scroller.parentElement;
-      }
-      const usesWindow = !scroller || scroller === document.body;
-
-      const pr = panel.getBoundingClientRect();
-      let bottomLimit = usesWindow ? window.innerHeight : scroller!.getBoundingClientRect().bottom;
-      // Anything pinned to the bottom of the window over the panel's own column
-      // — the messaging bar — would cover the end of the card, so scroll clear
-      // of it rather than to the container's edge.
-      for (const el of Array.from(document.querySelectorAll<HTMLElement>('body *'))) {
-        if (getComputedStyle(el).position !== 'fixed') continue;
-        const r = el.getBoundingClientRect();
-        if (r.height === 0 || r.width === 0) continue;
-        if (r.bottom < window.innerHeight - 4 || r.top > window.innerHeight) continue;
-        if (r.right < pr.left || r.left > pr.right) continue;
-        bottomLimit = Math.min(bottomLimit, r.top);
-      }
-      const delta = Math.round(pr.bottom - (bottomLimit - 12));
-      if (delta <= 0) return;
-
-      if (usesWindow) window.scrollBy({ top: delta, behavior: 'smooth' });
-      else scroller!.scrollBy({ top: delta, behavior: 'smooth' });
-    }, 280);
-    return () => clearTimeout(t);
-  }, [detailsInDrawer, drawerGroupKey, drawerOverhang]);
+  const { offset: drawerOffset, overhang: drawerOverhang } = useAnchoredDrawer({
+    open: detailsInDrawer,
+    anchorKey: drawerGroupKey,
+    wrapRef: tableWrapRef,
+    panelRef: drawerPanelRef,
+    findAnchor: (wrap, key) => wrap.querySelector<HTMLElement>(`tr[data-group-key="${CSS.escape(key)}"]`),
+  });
 
   const [reassignNote, setReassignNote] = useState<ReassignNoteTarget | null>(null);
 
@@ -1341,6 +1325,7 @@ export function FollowUpsTable({
         fitContent
         title={<span className="text-sm">{head.first_name} {head.last_name}</span>}
         subtitle={[head.title, head.company_name].filter(Boolean).join(' · ')}
+        headerBelow={head.email ? <DrawerEmailRow email={head.email} /> : undefined}
         onClose={() => setDrawerGroupKey(null)}
         footer={
           <div className="flex items-center justify-between gap-2">

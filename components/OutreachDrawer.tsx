@@ -314,7 +314,8 @@ export function OutreachDrawer({
           transition: `transform ${ANIMATION_MS}ms ease, opacity ${ANIMATION_MS}ms ease`,
         } : undefined}
         className={isDesktop
-          ? 'border border-gray-200 rounded-xl bg-white overflow-hidden sticky top-4 flex flex-col max-h-[calc(100vh-6rem)]'
+          // Matches the selected card's border, and the follow-ups drawer's.
+          ? 'border border-gray-400 rounded-xl bg-white overflow-hidden sticky top-4 flex flex-col max-h-[calc(100vh-6rem)]'
           : 'drawer-mobile-responsive fixed inset-x-0 bottom-0 z-50 h-[75vh] w-full rounded-t-2xl border border-gray-200 bg-white overflow-hidden flex flex-col'}
       >
       <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-gray-100">
