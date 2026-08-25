@@ -64,6 +64,26 @@ interface UploadResult {
 
 type UploadStep = 'idle' | 'mapping' | 'mode' | 'uploading' | 'complete';
 
+// Serverless request bodies are capped at 4.5 MB. Past that the platform
+// rejects the POST before the route runs, with a plain-text "Request Entity
+// Too Large" body that isn't JSON — which is how this used to surface as an
+// unreadable parse error.
+const MAX_UPLOAD_BYTES = Math.floor(4.5 * 1024 * 1024);
+const TOO_LARGE_MESSAGE = 'That file is too large to upload (the limit is 4.5 MB). Saving it as CSV usually shrinks a spreadsheet a long way, since it drops the formatting; failing that, split it and merge the parts in one at a time.';
+
+/**
+ * What went wrong, for a response whose body isn't the JSON the route would
+ * have sent. The platform's own errors — too large, timed out, signed out —
+ * never reach the route, so they arrive as plain text.
+ */
+function describeUploadFailure(status: number, rawBody: string): string {
+  if (status === 413) return TOO_LARGE_MESSAGE;
+  if (status === 408 || status === 504) return 'The upload timed out. A very large list can take longer than the request is allowed to run — try splitting it into smaller files.';
+  if (status === 401 || status === 403) return 'Your session has expired, or this account is not an administrator. Sign in again and retry.';
+  const snippet = rawBody.trim().slice(0, 120);
+  return snippet ? `Upload failed (HTTP ${status}): ${snippet}` : `Upload failed (HTTP ${status}).`;
+}
+
 const PAGE_SIZE = 50;
 const LARGE_LIST_THRESHOLD = 500;
 
@@ -211,6 +231,12 @@ export function MasterAccountsTab() {
   };
 
   const handleFile = async (file: File) => {
+    // Caught here rather than after column mapping, so nobody maps a dozen
+    // columns before finding out the file was never going to go through.
+    if (file.size > MAX_UPLOAD_BYTES) {
+      toast.error(TOO_LARGE_MESSAGE);
+      return;
+    }
     try {
       const buffer = await file.arrayBuffer();
       const workbook = XLSX.read(buffer, { type: 'array' });
@@ -265,8 +291,14 @@ export function MasterAccountsTab() {
       fd.append('columnMapping', JSON.stringify(columnMapping));
       fd.append('uploadMode', hasActiveUpload ? uploadMode : 'replace');
       const res = await fetch('/api/admin/master-accounts/upload', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Upload failed');
+      // Read as text first: a platform-level rejection never reaches the route
+      // and comes back as plain text, so res.json() would throw over the top of
+      // the real reason.
+      const raw = await res.text();
+      let data: (UploadResult & { error?: string }) | null = null;
+      try { data = raw ? JSON.parse(raw) as UploadResult & { error?: string } : null; } catch { /* not JSON */ }
+      if (!res.ok) throw new Error(data?.error || describeUploadFailure(res.status, raw));
+      if (!data) throw new Error('The server returned an empty response. Try again.');
       setUploadResult(data as UploadResult);
       setUploadStep('complete');
       await fetchUploads();
