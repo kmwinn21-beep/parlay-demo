@@ -190,13 +190,11 @@ function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete 
 
   return (
     <div className="rounded-lg border border-gray-200 overflow-hidden">
+      {/* Chevron on the right, matching the internal-relationship card. */}
       <button type="button" onClick={() => setExpanded(v => !v)} className="w-full text-left px-3 py-2.5 hover:bg-gray-50 transition-colors">
         <div className="flex items-start gap-2">
-          <svg className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 mt-1 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-gray-800 truncate">{rel.related_company_name}</p>
+            <p className="text-sm font-semibold text-gray-800 truncate">{rel.related_company_name}</p>
             {/* Second row: what this relationship is, then what the company is. */}
             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
               {rel.relationship_status.map(s => <StatusPill key={s} value={s} colorMaps={colorMaps} />)}
@@ -207,6 +205,9 @@ function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete 
               )}
             </div>
           </div>
+          <svg className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ml-2 mt-0.5 ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
         </div>
       </button>
 
@@ -571,8 +572,10 @@ export function VendorRelationshipsSection({ companyId, userOptions, currentUser
       {/* Asked on submit rather than while typing: whether a one-off value
           should join the list everyone picks from. */}
       {keepPrompt && (
-        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center sm:p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl">
+        // Centred at every width. As a bottom sheet on a phone it read as part
+        // of the form behind it and went unnoticed.
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-sheet-mobile bg-white w-full max-w-md rounded-2xl shadow-2xl">
             <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
               <h2 className="text-base font-bold text-brand-primary font-serif">Save for next time?</h2>
               <p className="text-sm text-gray-500 mt-1">
