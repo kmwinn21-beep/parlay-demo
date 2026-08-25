@@ -47,6 +47,9 @@ interface AttendeeEventItem {
   rsvp_status: string | null;
 }
 
+/** Sentinel for the company dropdown's escape hatch; no id can collide. */
+const OTHER_COMPANY = '__other__';
+
 interface Attendee {
   id: number; first_name: string; last_name: string; title?: string;
   company_id?: number; company_name?: string; company_type?: string; company_website?: string; company_assigned_user?: string;
@@ -90,6 +93,12 @@ export default function AttendeeDetailPage() {
 
   const [attendee, setAttendee] = useState<Attendee | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
+  // "Other (not in list)" — the company is typed in here and created on save,
+  // the same way the touchpoint and floor-note flows do it.
+  const [companyIsOther, setCompanyIsOther] = useState(false);
+  const [newCompanyName, setNewCompanyName] = useState('');
+  const [newCompanyType, setNewCompanyType] = useState('');
+  const [newCompanyTypeOptions, setNewCompanyTypeOptions] = useState<string[]>([]);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -297,6 +306,15 @@ export default function AttendeeDetailPage() {
 
   useEffect(() => { fetchAttendee(); fetchFollowUps(); fetchNotes(); fetchMeetings(); fetchPinnedNotes(); fetchInternalRelationships(); fetchAttendeeEvents(); }, [fetchAttendee, fetchFollowUps, fetchNotes, fetchMeetings, fetchPinnedNotes, fetchInternalRelationships, fetchAttendeeEvents]);
 
+  // Types offered when adding a company from the Company dropdown's
+  // "Other (not in list)".
+  useEffect(() => {
+    fetch('/api/config?category=company_type')
+      .then(r => (r.ok ? r.json() : []))
+      .then((opts: { value: string }[]) => setNewCompanyTypeOptions(Array.isArray(opts) ? opts.map(o => o.value).filter(Boolean) : []))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     const handler = (e: Event) => {
       const { meetingId: deletedId } = (e as CustomEvent<{ meetingId: number }>).detail;
@@ -503,11 +521,35 @@ export default function AttendeeDetailPage() {
 
   const handleSave = async () => {
     if (!editData.first_name || !editData.last_name) { toast.error('First and last name are required.'); return; }
+    if (companyIsOther && !newCompanyName.trim()) { toast.error('Enter the new company name, or pick one from the list.'); return; }
     setIsSaving(true);
     try {
-      const res = await fetch(`/api/attendees/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...editData, company_id: editData.company_id ? parseInt(editData.company_id) : null, seniority: editData.seniority || null }) });
+      // The company has to exist before the attendee can point at it.
+      let companyId = editData.company_id ? parseInt(editData.company_id) : null;
+      if (companyIsOther) {
+        const createRes = await fetch('/api/companies', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newCompanyName.trim(), company_type: newCompanyType || null }),
+        });
+        if (!createRes.ok) {
+          const err = await createRes.json().catch(() => ({})) as { error?: string };
+          toast.error(err.error || 'Failed to create the company.');
+          setIsSaving(false);
+          return;
+        }
+        const created = await createRes.json() as { id: number; name: string };
+        companyId = Number(created.id);
+        setCompanies(prev => prev.some(c => c.id === companyId)
+          ? prev
+          : [...prev, { id: companyId as number, name: String(created.name ?? newCompanyName.trim()) }]);
+      }
+
+      const res = await fetch(`/api/attendees/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...editData, company_id: companyId, seniority: editData.seniority || null }) });
       if (!res.ok) throw new Error();
-      toast.success('Attendee updated!');
+      toast.success(companyIsOther ? 'Attendee updated, and the company added.' : 'Attendee updated!');
+      setCompanyIsOther(false);
+      setNewCompanyName('');
+      setNewCompanyType('');
       setIsEditing(false);
       fetchAttendee();
     } catch { toast.error('Failed to update attendee'); } finally { setIsSaving(false); }
@@ -1027,10 +1069,46 @@ export default function AttendeeDetailPage() {
                   <div><label className="label">Title</label><input value={editData.title || ''} onChange={e => setEditData(p => ({ ...p, title: e.target.value }))} className="input-field" /></div>
                   <div>
                     <label className="label">Company</label>
-                    <select value={editData.company_id || ''} onChange={e => setEditData(p => ({ ...p, company_id: e.target.value }))} className="input-field">
+                    <select
+                      value={companyIsOther ? OTHER_COMPANY : (editData.company_id || '')}
+                      onChange={e => {
+                        const v = e.target.value;
+                        if (v === OTHER_COMPANY) {
+                          setCompanyIsOther(true);
+                          setEditData(p => ({ ...p, company_id: '' }));
+                        } else {
+                          setCompanyIsOther(false);
+                          setNewCompanyName('');
+                          setNewCompanyType('');
+                          setEditData(p => ({ ...p, company_id: v }));
+                        }
+                      }}
+                      className="input-field"
+                    >
                       <option value="">No company</option>
+                      <option value={OTHER_COMPANY}>Other (not in list)</option>
                       {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
+                    {companyIsOther && (
+                      <div className="mt-2 space-y-2">
+                        <input
+                          value={newCompanyName}
+                          onChange={e => setNewCompanyName(e.target.value)}
+                          placeholder="New company name *"
+                          className="input-field"
+                          autoFocus
+                        />
+                        <select
+                          value={newCompanyType}
+                          onChange={e => setNewCompanyType(e.target.value)}
+                          className="input-field"
+                        >
+                          <option value="">Company type (optional)</option>
+                          {newCompanyTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                        <p className="text-xs text-gray-500">This company is created when you save.</p>
+                      </div>
+                    )}
                   </div>
                   <div><label className="label">Email</label><input type="email" value={editData.email || ''} onChange={e => setEditData(p => ({ ...p, email: e.target.value }))} className="input-field" /></div>
                   <div>
@@ -1062,7 +1140,7 @@ export default function AttendeeDetailPage() {
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <button onClick={handleSave} disabled={isSaving} className="btn-primary">{isSaving ? 'Saving...' : 'Save'}</button>
-                  <button onClick={() => setIsEditing(false)} className="btn-secondary">Cancel</button>
+                  <button onClick={() => { setIsEditing(false); setCompanyIsOther(false); setNewCompanyName(''); setNewCompanyType(''); }} className="btn-secondary">Cancel</button>
                   <button onClick={handleDelete} disabled={isDeleting} className="btn-danger">{isDeleting ? 'Deleting...' : 'Delete'}</button>
                 </div>
               </div>
