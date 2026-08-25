@@ -2202,4 +2202,47 @@ export const migrations: string[] = [
      UNIQUE(normalized_name, company_id)
    )`,
   `CREATE INDEX IF NOT EXISTS idx_company_name_links_name ON company_name_links(normalized_name)`,
+  // ── Vendor / Other Relationships ────────────────────────────────────────
+  // The section used to be a bare company-to-company link with a notes thread.
+  // It now records what the relationship actually is, so the two seeded
+  // vocabularies below are system options: renaming or deleting them would
+  // strand rows that reference them by value. Colour stays editable.
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('other_relationship_status', 'Current Vendor', 1, 1, 'blue')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('other_relationship_status', 'Evaluating', 2, 1, 'orange')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('other_relationship_status', 'Former Vendor', 3, 1, 'gray')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('other_relationship_status', 'Preferred Partner', 4, 1, 'green')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('other_relationship_status', 'Active Pilot', 5, 1, 'purple')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('other_relationship_status', 'Other', 99, 1, 'dark')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('vendor_type', 'SaaS', 1, 1, 'blue')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('vendor_type', 'ERP', 2, 1, 'purple')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('vendor_type', 'Consultant', 3, 1, 'orange')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('vendor_type', 'Service Provider', 4, 1, 'green')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('vendor_type', 'Reseller', 5, 1, 'red')`,
+  `INSERT OR IGNORE INTO config_options (category, value, sort_order, is_system, color) VALUES ('vendor_type', 'Other', 99, 1, 'gray')`,
+  // Statuses and types are stored as comma-separated values rather than ids so
+  // a card keeps reading correctly if an option is later renamed, matching how
+  // services and company_type are stored on companies.
+  `CREATE TABLE IF NOT EXISTS vendor_relationships (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     company_id INTEGER NOT NULL,
+     related_company_id INTEGER NOT NULL,
+     rep_id INTEGER,
+     relationship_status TEXT,
+     strength TEXT,
+     vendor_type TEXT,
+     notes TEXT,
+     created_at TEXT DEFAULT (datetime('now')),
+     updated_at TEXT DEFAULT (datetime('now'))
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_vendor_relationships_company ON vendor_relationships(company_id)`,
+  // Carry the old links over so nothing vanishes from the section. Their notes
+  // were a JSON thread; the newest entry becomes the note, and the fields the
+  // old form never asked for stay blank.
+  `INSERT INTO vendor_relationships (company_id, related_company_id, notes, created_at)
+     SELECT cr.company_id_1, cr.company_id_2, cr.notes, cr.created_at
+     FROM company_relationships cr
+     WHERE NOT EXISTS (
+       SELECT 1 FROM vendor_relationships vr
+       WHERE vr.company_id = cr.company_id_1 AND vr.related_company_id = cr.company_id_2
+     )`,
 ];

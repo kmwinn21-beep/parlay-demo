@@ -87,6 +87,8 @@ const CATEGORIES = [
   { key: 'conference_strategy_type', label: 'Conference Strategy Type' },
   { key: 'sponsorship_level', label: 'Sponsorship Level' },
   { key: 'rep_relationship_type', label: 'Rep Relationship Type/Status' },
+  { key: 'other_relationship_status', label: 'Other Relationship Status' },
+  { key: 'vendor_type', label: 'Vendor Type' },
   { key: 'touchpoints', label: 'Touchpoints' },
   { key: 'attendee_conference_status', label: 'Attendee Conference Status' },
   { key: 'target_recommended_action', label: 'Target Recommended Actions' },
