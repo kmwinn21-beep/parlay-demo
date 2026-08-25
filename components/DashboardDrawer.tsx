@@ -15,7 +15,8 @@ import { createPortal } from 'react-dom';
  * existed on the server cannot be adopted wrongly.
  */
 export function DashboardDrawer({ title, subtitle, onClose, children }: {
-  title: string;
+  /** A node rather than a string, so a drawer can put a mode toggle here. */
+  title: React.ReactNode;
   subtitle?: string | null;
   onClose: () => void;
   children: React.ReactNode;
@@ -34,7 +35,9 @@ export function DashboardDrawer({ title, subtitle, onClose, children }: {
       <div className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[85vh] sm:h-auto w-full sm:w-[560px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none z-[70]">
         <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-gray-200 flex-shrink-0">
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-brand-primary font-serif truncate">{title}</h3>
+            {typeof title === 'string'
+              ? <h3 className="text-sm font-semibold text-brand-primary font-serif truncate">{title}</h3>
+              : title}
             {subtitle && <p className="text-xs text-gray-500 mt-0.5 truncate">{subtitle}</p>}
           </div>
           <button
