@@ -1708,9 +1708,11 @@ export default function AdminPage() {
     saveSectionPage(page, arr);
   };
 
-  const saveSectionLabel = async (page: string, key: string) => {
-    if (!editLabelValue.trim()) { toast.error('Label cannot be empty.'); return; }
-    const arr = (sectionConfig[page] ?? []).map(s => s.key === key ? { ...s, label: editLabelValue.trim() } : s);
+  /** `label` lets Reset write the default without waiting on the input's state. */
+  const saveSectionLabel = async (page: string, key: string, label?: string) => {
+    const next = (label ?? editLabelValue).trim();
+    if (!next) { toast.error('Label cannot be empty.'); return; }
+    const arr = (sectionConfig[page] ?? []).map(s => s.key === key ? { ...s, label: next } : s);
     setSectionConfig(prev => ({ ...prev, [page]: arr }));
     setEditingSectionLabel(null);
     await saveSectionPage(page, arr);
@@ -2544,6 +2546,10 @@ export default function AdminPage() {
                     <div className="divide-y divide-gray-100 border-t border-gray-100 mt-4">
                       {sections.map((section, index) => {
                         const isEditing = editingSectionLabel?.page === page && editingSectionLabel?.key === section.key;
+                        // What this section is called before anyone renames it,
+                        // so a rename can be undone without having to remember
+                        // what it used to say.
+                        const defaultLabel = SECTION_DEFS[page]?.find(d => d.key === section.key)?.label ?? section.label;
                         return (
                           <div key={section.key} className="flex items-center gap-3 py-3">
                             {/* Up/Down */}
@@ -2579,7 +2585,19 @@ export default function AdminPage() {
                                     className="input-field flex-1 text-sm"
                                     autoFocus
                                   />
+                                  <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0" title={defaultLabel}>
+                                    Default Label: {defaultLabel}
+                                  </span>
                                   <button type="button" onClick={() => saveSectionLabel(page, section.key)} className="btn-primary text-xs px-3 py-1.5">Save</button>
+                                  <button
+                                    type="button"
+                                    onClick={() => { setEditLabelValue(defaultLabel); saveSectionLabel(page, section.key, defaultLabel); }}
+                                    disabled={section.label === defaultLabel}
+                                    title={section.label === defaultLabel ? 'Already the default label' : `Reset to "${defaultLabel}"`}
+                                    className="btn-secondary text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                                  >
+                                    Reset
+                                  </button>
                                   <button type="button" onClick={() => setEditingSectionLabel(null)} className="btn-secondary text-xs px-3 py-1.5">Cancel</button>
                                 </div>
                               ) : (
