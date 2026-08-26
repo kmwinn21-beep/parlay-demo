@@ -20,6 +20,8 @@ export interface VendorRelationship {
   strength: string | null;
   vendor_type: string[];
   notes: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface CompanyOption { id: number; name: string }
@@ -166,6 +168,21 @@ function CompanyPicker({ companies, value, onChange, onPickOther, otherName }: {
 
 /* ─── Card ────────────────────────────────────────────────────────────────── */
 
+/**
+ * When the note was last written. Stored as UTC without a zone marker, so the
+ * Z is added before parsing — otherwise it reads as local and the stamp drifts
+ * by the offset.
+ */
+function formatStamp(raw: string): string {
+  if (!raw) return '';
+  const d = new Date(raw.endsWith('Z') ? raw : `${raw.replace(' ', 'T')}Z`);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  });
+}
+
 function StatusPill({ value, colorMaps }: { value: string; colorMaps: Record<string, Record<string, string | null>> }) {
   // Full-strength text and border with a wash of the same colour behind, from
   // whatever hex the option carries in admin settings.
@@ -189,6 +206,9 @@ function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete 
 }) {
   const [expanded, setExpanded] = useState(false);
   const rep = userOptions.find(u => u.id === rel.rep_id);
+  // Last edit rather than creation: the note is what the stamp is heading, and
+  // the note can be rewritten.
+  const stamp = formatStamp(rel.updated_at || rel.created_at);
 
   return (
     <div className="rounded-lg border border-gray-200 overflow-hidden">
@@ -241,7 +261,14 @@ function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete 
             )}
           </div>
 
-          {rel.notes && <p className="text-xs text-gray-600 whitespace-pre-wrap">{rel.notes}</p>}
+          {rel.notes && (
+            <div>
+              {stamp && (
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">{stamp}</p>
+              )}
+              <p className="text-xs text-gray-600 whitespace-pre-wrap">{rel.notes}</p>
+            </div>
+          )}
 
           <div className="flex justify-end">
             <KebabMenu

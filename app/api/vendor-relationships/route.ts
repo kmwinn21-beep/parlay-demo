@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
       vendor_type: parseList(r.vendor_type),
       notes: r.notes ? String(r.notes) : '',
       created_at: String(r.created_at ?? ''),
+      updated_at: String(r.updated_at ?? r.created_at ?? ''),
     })), { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('GET /api/vendor-relationships error:', error);
