@@ -9,6 +9,7 @@ import { SectionAddButton } from '@/components/SectionAddButton';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getBadgeClass, getPreset } from '@/lib/colors';
 import { getRepInitials, type UserOption } from '@/lib/useUserOptions';
+import { useCollapsibleSection } from '@/lib/sectionExpansion';
 
 export interface VendorRelationship {
   id: number;
@@ -299,7 +300,7 @@ export function VendorRelationshipsSection({ companyId, userOptions, currentUser
   label: string;
 }) {
   const colorMaps = useConfigColors();
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useCollapsibleSection(false);
   const [relationships, setRelationships] = useState<VendorRelationship[]>([]);
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [statusOptions, setStatusOptions] = useState<ConfigOption[]>([]);
@@ -487,7 +488,9 @@ export function VendorRelationshipsSection({ companyId, userOptions, currentUser
           <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
-          <h2 className="text-base font-semibold text-brand-primary font-serif truncate">{label}</h2>
+          <h2 className="text-base font-semibold text-brand-primary font-serif truncate">
+            {label} ({relationships.length})
+          </h2>
         </button>
         <SectionAddButton onClick={openAdd} title="Add relationship" />
       </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { SectionAddButton } from '@/components/SectionAddButton';
+import { useCollapsibleSection } from '@/lib/sectionExpansion';
 import { useClosedDealDraft, type ClosedDeal } from '@/lib/ClosedDealDraftContext';
 
 export type { ClosedDeal };
@@ -67,6 +68,7 @@ const DEAL_TYPE_PILL: Record<string, string> = {
 };
 
 export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = true }: ClosedWonDealsSectionProps) {
+  const [expanded, setExpanded] = useCollapsibleSection(false);
   const { openDeal } = useClosedDealDraft();
   const [deals, setDeals] = useState<ClosedDeal[]>(initialDeals);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
@@ -127,12 +129,28 @@ export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = 
 
   return (
     <>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-base font-semibold text-brand-primary font-serif">
-          Closed / Won Deals {deals.length > 0 && `(${deals.length})`}
-        </h2>
-        {canEdit && <SectionAddButton onClick={() => openDeal(companyId)} title="Add deal" />}
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          className="flex items-center gap-2 min-w-0 flex-1 text-left"
+        >
+          <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+          <h2 className="text-base font-semibold text-brand-primary font-serif truncate">
+            Closed / Won Deals {deals.length > 0 && `(${deals.length})`}
+          </h2>
+        </button>
+        {canEdit && (
+          <SectionAddButton
+            onClick={() => { setExpanded(true); openDeal(companyId); }}
+            title="Add deal"
+          />
+        )}
       </div>
+
+      {expanded && (<div className="mt-3">
 
       {/* Summary cards row */}
       {deals.length > 0 && !hasMixedCurrencies && (
@@ -359,6 +377,7 @@ export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = 
           })}
         </div>
       )}
+      </div>)}
     </>
   );
 }

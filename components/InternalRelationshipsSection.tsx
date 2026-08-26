@@ -10,6 +10,7 @@ import { useConfigColors } from '@/lib/useConfigColors';
 import { RelationshipMapDrawer } from './RelationshipMapDrawer';
 import { MobileFormSheet } from '@/components/MobileFormSheet';
 import { SectionAddButton } from '@/components/SectionAddButton';
+import { useCollapsibleSection } from '@/lib/sectionExpansion';
 
 interface InternalRelationship {
   id: number;
@@ -354,7 +355,7 @@ export function InternalRelationshipsSection({
   mapOpen,
   onMapClose,
 }: InternalRelationshipsSectionProps) {
-  const [sectionExpanded, setSectionExpanded] = useState(true);
+  const [sectionExpanded, setSectionExpanded] = useCollapsibleSection(true);
   const [showForm, setShowForm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showMapDrawer, setShowMapDrawer] = useState(false);
