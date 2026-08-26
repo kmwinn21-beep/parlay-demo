@@ -940,7 +940,6 @@ export function ConferenceTargetsTab({
           conferenceId={conferenceId}
           companyId={assigningOutreachEntry.companyId}
           companyName={assigningOutreachEntry.companyName ?? undefined}
-          currentAssigneeIds={[]}
           onClose={() => setAssigningOutreachEntry(null)}
           onAssigned={() => { setAssigningOutreachEntry(null); loadOutreachAssignedCompanies(); }}
         />

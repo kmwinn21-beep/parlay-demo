@@ -778,7 +778,6 @@ export function PreConferenceReviewModal() {
               conferenceId={conferenceId}
               companyId={outreachPromptCompany.id}
               companyName={outreachPromptCompany.name}
-              currentAssigneeIds={[]}
               onClose={() => setOutreachPromptCompany(null)}
               onAssigned={() => setOutreachPromptCompany(null)}
             />

@@ -2249,4 +2249,47 @@ export const migrations: string[] = [
        SELECT 1 FROM vendor_relationships vr
        WHERE vr.company_id = cr.company_id_1 AND vr.related_company_id = cr.company_id_2
      )`,
+
+  // Outreach is assigned per attendee, not per company.
+  //
+  // The old table keyed on (conference, company, rep), so assigning one person
+  // pulled in every colleague at their company. attendee_id joins the key; the
+  // card still groups by company, it just no longer speaks for everyone there.
+  //
+  // company_id stays on the row even though attendee_id implies it: status is
+  // still a company-level idea, and the status route and the activity/notes
+  // tables all address a company directly.
+  `CREATE TABLE IF NOT EXISTS outreach_assignments_pa (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conference_id INTEGER NOT NULL REFERENCES conferences(id) ON DELETE CASCADE,
+      company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      attendee_id INTEGER NOT NULL REFERENCES attendees(id) ON DELETE CASCADE,
+      assigned_user_id INTEGER NOT NULL REFERENCES config_options(id) ON DELETE CASCADE,
+      assigned_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      status TEXT NOT NULL DEFAULT 'not_started'
+        CHECK(status IN ('not_started','in_progress','completed','overdue')),
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(conference_id, attendee_id, assigned_user_id)
+    )`,
+  // Fan each existing company-level row out to that company's attendees at that
+  // conference — which is exactly who it covered before. Anyone already removed
+  // from the list via outreach_excluded_attendees stays removed.
+  `INSERT OR IGNORE INTO outreach_assignments_pa
+     (conference_id, company_id, attendee_id, assigned_user_id, assigned_by_user_id, status, created_at, updated_at)
+   SELECT oa.conference_id, oa.company_id, a.id, oa.assigned_user_id, oa.assigned_by_user_id,
+          oa.status, oa.created_at, oa.updated_at
+   FROM outreach_assignments oa
+   JOIN conference_attendees ca ON ca.conference_id = oa.conference_id
+   JOIN attendees a ON a.id = ca.attendee_id AND a.company_id = oa.company_id
+   WHERE NOT EXISTS (
+     SELECT 1 FROM outreach_excluded_attendees ex
+     WHERE ex.conference_id = oa.conference_id
+       AND ex.company_id = oa.company_id
+       AND ex.attendee_id = a.id
+   )`,
+  `DROP TABLE outreach_assignments`,
+  `ALTER TABLE outreach_assignments_pa RENAME TO outreach_assignments`,
+  `CREATE INDEX IF NOT EXISTS idx_outreach_assignments_conf ON outreach_assignments(conference_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_outreach_assignments_attendee ON outreach_assignments(attendee_id)`,
 ];

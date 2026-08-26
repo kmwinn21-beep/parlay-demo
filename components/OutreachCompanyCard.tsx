@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { getBadgeClass, getHex, getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -40,6 +39,8 @@ export interface OutreachAttendee {
   activityCount: number;
   activityCounts: { phone: number; text: number; email: number; linkedin: number };
   meetingId: number | null;
+  /** The reps assigned outreach to this person specifically. */
+  assignees: OutreachAssignee[];
 }
 
 export interface OutreachAttendeeFilter {
@@ -60,7 +61,8 @@ export interface OutreachCompany {
   icp: string | null;
   wse: number | null;
   status: OutreachStatus;
-  assignees: OutreachAssignee[];
+  /** The company's own assigned rep(s) — not who is doing the outreach. */
+  companyReps: OutreachAssignee[];
   territory: { id: number; name: string; color: string } | null;
   attendees: OutreachAttendee[];
   totalActivityCount: number;
@@ -232,7 +234,8 @@ export function OutreachCompanyCard({
   /** Same, for a note posted via the per-activity note popover. */
   onNoteCreated?: (companyId: number, note: ThreadNote) => void;
   onOpenDrawer: (tab: 'timeline' | 'notes', attendee?: OutreachAttendeeFilter) => void;
-  onOpenAssign: () => void;
+  /** Opens the assign modal — for one attendee when given an id, else the company. */
+  onOpenAssign: (attendeeId?: number) => void;
 }) {
   const { user: currentUser } = useUser();
   const colorMaps = useConfigColors();
@@ -276,27 +279,11 @@ export function OutreachCompanyCard({
     return () => document.removeEventListener('mousedown', h);
   }, [headerMenuOpen]);
 
-  // Portaled to document.body (fixed-positioned from the trigger button's rect,
-  // like ActivityNotePopover above) rather than absolutely positioned within the
-  // row — the card list clips overflow, which was cutting this menu off when the
-  // row was near the bottom of the card.
+  // Which attendee row has its action row open on a phone. One at a time, and
+  // it stays open until it's dismissed or another row is opened — the actions
+  // are meant to be tapped several times in a row (four calls, a note, a
+  // meeting), so closing on any outside click would fight the person using it.
   const [mobileAttendeeMenuKey, setMobileAttendeeMenuKey] = useState<number | null>(null);
-  const [mobileMenuPos, setMobileMenuPos] = useState<{ top: number; left: number } | null>(null);
-  const mobileMenuRef = useRef<HTMLDivElement>(null);
-  const mobileMenuTriggerRefs = useRef<Record<number, HTMLButtonElement | null>>({});
-  useEffect(() => {
-    if (mobileAttendeeMenuKey == null) return;
-    const h = (e: MouseEvent) => {
-      const target = e.target as Node;
-      const trigger = mobileMenuTriggerRefs.current[mobileAttendeeMenuKey];
-      if (mobileMenuRef.current && !mobileMenuRef.current.contains(target) && trigger && !trigger.contains(target)) {
-        setMobileAttendeeMenuKey(null);
-        setMobileMenuPos(null);
-      }
-    };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [mobileAttendeeMenuKey]);
 
   const statusStyle = STATUS_STYLES[localStatus] ?? STATUS_STYLES.not_started;
   const tierStyle = targetTier ? TIER_STYLES[targetTier] : null;
@@ -427,11 +414,14 @@ export function OutreachCompanyCard({
   };
 
   // Same user-icon + initials pill format as the SF Owner column in
-  // components/CompanyTable.tsx — one small pill per assignee, colored via the
+  // components/CompanyTable.tsx — one small pill per rep, colored via the
   // 'user' config category's preset, rather than one pill listing every name.
-  const assigneePill = company.assignees.length > 0 ? (
+  //
+  // This is the company's own rep. Who is doing the outreach is a per-attendee
+  // question now, and gets its own pill down on the attendee row.
+  const assigneePill = company.companyReps.length > 0 ? (
     <span className="inline-flex items-center gap-1 flex-shrink-0">
-      {company.assignees.map(a => (
+      {company.companyReps.map(a => (
         <span
           key={a.userId}
           title={a.displayName}
@@ -448,7 +438,7 @@ export function OutreachCompanyCard({
     <button
       type="button"
       onClick={e => { e.stopPropagation(); onOpenAssign(); }}
-      title="Assign reps"
+      title="No rep assigned to this company"
       className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 bg-gray-100 text-gray-500 border border-gray-200 cursor-pointer hover:bg-gray-200"
     >
       Unassigned
@@ -534,7 +524,7 @@ export function OutreachCompanyCard({
       </div>
       <button
         type="button"
-        onClick={onOpenAssign}
+        onClick={() => onOpenAssign()}
         title="Edit assigned reps"
         className="w-7 h-7 rounded-full bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-brand-secondary flex items-center justify-center transition-colors"
       >
@@ -617,7 +607,7 @@ export function OutreachCompanyCard({
         return (
         <div className="border-t border-gray-100">
           {visibleAttendees.length === 0 && (
-            <p className="text-xs text-gray-400 px-4 py-3">No attendees from this company at this conference.</p>
+            <p className="text-xs text-gray-400 px-4 py-3">No one from this company is assigned outreach.</p>
           )}
           {visibleAttendees.map((attendee, idx) => {
             const counts = countsFor(attendee);
@@ -625,24 +615,24 @@ export function OutreachCompanyCard({
             const meetingId = meetingIdFor(attendee);
             const hasMeeting = meetingId != null;
 
-            const meetingIconBlock = (
+            // `large` is the touch layout: the same controls at a size a thumb
+            // can actually hit, used by the row that expands under the kebab.
+            const meetingIconBlock = (large: boolean) => (
               <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
                 <button
                   type="button"
                   title={hasMeeting ? 'Edit scheduled meeting' : 'Schedule meeting'}
                   onClick={() => {
-                    setMobileAttendeeMenuKey(null);
-                    setMobileMenuPos(null);
                     if (hasMeeting) setEditingMeetingId(meetingId);
                     else setSchedulingAttendee(attendee);
                   }}
-                  className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-colors ${
+                  className={`${large ? 'w-11 h-11' : 'w-7 h-7'} rounded-lg border flex items-center justify-center transition-colors ${
                     hasMeeting
                       ? 'border-green-300 bg-green-50 text-green-600 hover:bg-green-100'
                       : 'border-gray-200 text-gray-400 hover:border-brand-secondary hover:text-brand-secondary hover:bg-brand-secondary/10'
                   }`}
                 >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className={large ? 'w-5 h-5' : 'w-3.5 h-3.5'} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                       d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
@@ -657,12 +647,17 @@ export function OutreachCompanyCard({
               </div>
             );
 
-            const activityIconsBlock = (
-              <div className="flex items-center gap-3 flex-shrink-0" onClick={e => e.stopPropagation()}>
+            const activityIconsBlock = (large: boolean) => (
+              // Wider gap in the large layout: the always-on remove/note
+              // satellites hang off the left of each icon, and at gap-3 they
+              // reach into the button beside them.
+              <div className={`flex items-center ${large ? 'gap-5' : 'gap-3'} flex-shrink-0`} onClick={e => e.stopPropagation()}>
                 {(['phone', 'text', 'email', 'linkedin'] as const).map(type => {
                     const key = `${attendee.attendeeId}-${type}`;
                     const flashed = flashKey === key;
-                    const hovered = hoverKey === key;
+                    // There's no hover on a touch screen, so in the large layout
+                    // the remove/note affordances are simply always there.
+                    const hovered = large || hoverKey === key;
                     const pending = pendingKey === key;
                     const icon = ACTIVITY_ICONS[type];
                     const typeCount = counts[type];
@@ -679,11 +674,11 @@ export function OutreachCompanyCard({
                           onClick={() => logActivity(attendee, type)}
                           disabled={pending}
                           title={icon.title}
-                          className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-colors duration-300 ${
+                          className={`${large ? 'w-11 h-11' : 'w-7 h-7'} rounded-lg border flex items-center justify-center transition-colors duration-300 ${
                             flashed ? 'bg-green-100 border-green-400 text-green-600' : `border-gray-200 text-gray-400 ${icon.hoverClass}`
                           } ${pending ? 'opacity-50 cursor-wait' : ''}`}
                         >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>{icon.path}</svg>
+                          <svg className={large ? 'w-5 h-5' : 'w-3.5 h-3.5'} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>{icon.path}</svg>
                         </button>
                         {typeCount > 0 && (
                           <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-brand-secondary text-white text-[9px] font-bold flex items-center justify-center leading-none z-10">
@@ -694,10 +689,10 @@ export function OutreachCompanyCard({
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); removeActivity(attendee, type); }}
-                            className="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-white border border-gray-300 flex items-center justify-center hover:border-red-400 hover:text-red-500 transition-colors text-gray-400 shadow-sm z-10"
+                            className={`absolute -top-1.5 -left-1.5 ${large ? 'w-6 h-6' : 'w-4 h-4'} rounded-full bg-white border border-gray-300 flex items-center justify-center hover:border-red-400 hover:text-red-500 transition-colors text-gray-400 shadow-sm z-10`}
                             title="Remove last"
                           >
-                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className={large ? 'w-3.5 h-3.5' : 'w-2.5 h-2.5'} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M20 12H4" />
                             </svg>
                           </button>
@@ -706,10 +701,10 @@ export function OutreachCompanyCard({
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); setNotePopoverKey(k => (k === key ? null : key)); }}
-                            className="absolute -bottom-1.5 -left-1.5 w-4 h-4 rounded-full bg-white border border-gray-300 flex items-center justify-center hover:border-brand-secondary hover:text-brand-secondary transition-colors text-gray-400 shadow-sm z-10"
+                            className={`absolute -bottom-1.5 -left-1.5 ${large ? 'w-6 h-6' : 'w-4 h-4'} rounded-full bg-white border border-gray-300 flex items-center justify-center hover:border-brand-secondary hover:text-brand-secondary transition-colors text-gray-400 shadow-sm z-10`}
                             title="Add note about this"
                           >
-                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                            <svg className={large ? 'w-3.5 h-3.5' : 'w-2.5 h-2.5'} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
                           </button>
@@ -728,27 +723,62 @@ export function OutreachCompanyCard({
             );
 
             const removingThis = removingAttendeeId === attendee.attendeeId;
-            const extraIconsBlock = (
+            const extraIconsBlock = (large: boolean) => (
               <div className="flex items-center gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
                 <button
                   type="button"
                   onClick={() => handleRemoveAttendee(attendee)}
                   disabled={removingThis}
                   title="Remove from outreach"
-                  className={`w-7 h-7 text-red-500 hover:text-red-700 flex items-center justify-center transition-colors ${removingThis ? 'opacity-50 cursor-wait' : ''}`}
+                  className={`${large ? 'w-11 h-11 rounded-lg border border-red-200' : 'w-7 h-7'} text-red-500 hover:text-red-700 flex items-center justify-center transition-colors ${removingThis ? 'opacity-50 cursor-wait' : ''}`}
                 >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <svg className={large ? 'w-5 h-5' : 'w-3.5 h-3.5'} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
                 </button>
               </div>
             );
 
-            const mobileMenuOpen = mobileAttendeeMenuKey === attendee.attendeeId;
+            const actionsOpen = mobileAttendeeMenuKey === attendee.attendeeId;
+
+            // Who is doing the outreach on this person. Same pill shape as the
+            // company's rep up in the header, so the two read as the same kind
+            // of fact about different subjects.
+            const outreachRepPill = attendee.assignees.length > 0 ? (
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); onOpenAssign(attendee.attendeeId); }}
+                title={`Outreach: ${attendee.assignees.map(a => a.displayName).join(', ')}`}
+                className="inline-flex items-center gap-1 flex-shrink-0"
+              >
+                {attendee.assignees.map(a => (
+                  <span
+                    key={a.userId}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[a.displayName]).badgeClass}`}
+                  >
+                    <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    {a.initials}
+                  </span>
+                ))}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); onOpenAssign(attendee.attendeeId); }}
+                title="Assign outreach for this attendee"
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium flex-shrink-0 bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 transition-colors"
+              >
+                Unassigned
+              </button>
+            );
 
             return (
+              <div key={attendee.attendeeId} className={
+                attendee.attendeeId === selectedAttendeeId ? 'bg-blue-50' : idx % 2 === 0 ? 'bg-gray-50/60' : 'bg-white'
+              }>
               <div
-                key={attendee.attendeeId}
                 onClick={() => onOpenDrawer('timeline', {
                   id: attendee.attendeeId,
                   name: `${attendee.firstName} ${attendee.lastName}`,
@@ -757,9 +787,7 @@ export function OutreachCompanyCard({
                   linkedinUrl: attendee.linkedinUrl,
                   seniorityLabel: attendee.seniorityLabel,
                 })}
-                className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-blue-50/40 transition-colors ${
-                  attendee.attendeeId === selectedAttendeeId ? 'bg-blue-50' : idx % 2 === 0 ? 'bg-gray-50/60' : 'bg-white'
-                }`}
+                className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-blue-50/40 transition-colors"
               >
                 {isDesktop && (
                   <AttendeeInitialsAvatar
@@ -809,53 +837,28 @@ export function OutreachCompanyCard({
                     </div>
                   );
                 })()}
+                {outreachRepPill}
                 {isDesktop ? (
                   <>
-                    {meetingIconBlock}
-                    {activityIconsBlock}
-                    {extraIconsBlock}
+                    {meetingIconBlock(false)}
+                    {activityIconsBlock(false)}
+                    {extraIconsBlock(false)}
                   </>
                 ) : (
-                  <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      ref={el => { mobileMenuTriggerRefs.current[attendee.attendeeId] = el; }}
-                      onClick={() => {
-                        if (mobileAttendeeMenuKey === attendee.attendeeId) {
-                          setMobileAttendeeMenuKey(null);
-                          setMobileMenuPos(null);
-                          return;
-                        }
-                        const btn = mobileMenuTriggerRefs.current[attendee.attendeeId];
-                        if (btn) {
-                          const rect = btn.getBoundingClientRect();
-                          const width = 220;
-                          setMobileMenuPos({
-                            top: rect.bottom + 4,
-                            left: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)),
-                          });
-                        }
-                        setMobileAttendeeMenuKey(attendee.attendeeId);
-                      }}
-                      title="More options"
-                      className="w-7 h-7 rounded-full bg-gray-50 text-gray-400 hover:bg-gray-100 flex items-center justify-center transition-colors"
-                    >
-                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.75" /><circle cx="12" cy="12" r="1.75" /><circle cx="12" cy="19" r="1.75" /></svg>
-                    </button>
-                    {mobileMenuOpen && mobileMenuPos && createPortal(
-                      <div
-                        ref={mobileMenuRef}
-                        style={{ position: 'fixed', top: mobileMenuPos.top, left: mobileMenuPos.left, width: 220, zIndex: 10000 }}
-                        className="bg-white rounded-lg shadow-lg border border-gray-100 p-2 flex items-center gap-3 flex-wrap"
-                        onClick={e => e.stopPropagation()}
-                      >
-                        {meetingIconBlock}
-                        {activityIconsBlock}
-                        {extraIconsBlock}
-                      </div>,
-                      document.body
-                    )}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={e => {
+                      e.stopPropagation();
+                      setMobileAttendeeMenuKey(k => (k === attendee.attendeeId ? null : attendee.attendeeId));
+                    }}
+                    title={actionsOpen ? 'Hide actions' : 'Show actions'}
+                    aria-expanded={actionsOpen}
+                    className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+                      actionsOpen ? 'bg-brand-secondary/10 text-brand-secondary' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
+                    }`}
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.75" /><circle cx="12" cy="12" r="1.75" /><circle cx="12" cy="19" r="1.75" /></svg>
+                  </button>
                 )}
                 {!isDesktop && (
                   <span
@@ -867,6 +870,31 @@ export function OutreachCompanyCard({
                     {total > 0 ? total : '-'}
                   </span>
                 )}
+              </div>
+
+              {/* The actions open in place, under the person they act on,
+                  rather than in a menu floating over the list. Animating
+                  grid-template-rows from 0fr to 1fr grows the row to whatever
+                  the content measures without hard-coding a height.
+
+                  Wider than the phone at these sizes, so it swipes — no
+                  chevrons, no scrollbar. */}
+              {!isDesktop && (
+                <div className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${
+                  actionsOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                }`}>
+                  <div className="overflow-hidden">
+                    <div
+                      className="flex items-center gap-4 overflow-x-auto hide-scrollbar px-4 pt-2 pb-3"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      {meetingIconBlock(true)}
+                      {activityIconsBlock(true)}
+                      {extraIconsBlock(true)}
+                    </div>
+                  </div>
+                </div>
+              )}
               </div>
             );
           })}
