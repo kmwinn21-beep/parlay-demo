@@ -252,19 +252,23 @@ function RelationshipAttendeeCard({
           style={{ background: timeline ? `${hColor}22` : 'rgba(34,58,94,0.08)' }}
         />
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 min-w-0">
+          {/* Name and title wrap rather than truncate — at this column width a
+              long name or title was being cut off with no way to read it. */}
+          <div className="flex items-start gap-1.5 min-w-0">
             <Link href={`/attendees/${attendee.id}`}
-              className="font-semibold text-brand-primary hover:text-brand-secondary transition-colors leading-tight font-serif truncate">
+              className="font-semibold text-brand-primary hover:text-brand-secondary transition-colors leading-tight font-serif break-words min-w-0">
               {attendee.first_name} {attendee.last_name}
             </Link>
-            <TargetBtn
-              isTarget={isTarget}
-              disabled={readOnly}
-              onClick={onToggleTarget}
-            />
+            <span className="flex-shrink-0 mt-0.5">
+              <TargetBtn
+                isTarget={isTarget}
+                disabled={readOnly}
+                onClick={onToggleTarget}
+              />
+            </span>
           </div>
           {attendee.title && (
-            <div className="text-xs text-gray-500 leading-snug mt-0.5 truncate">{attendee.title}</div>
+            <div className="text-xs text-gray-500 leading-snug mt-0.5 break-words">{attendee.title}</div>
           )}
         </div>
         {timeline ? (
@@ -272,22 +276,17 @@ function RelationshipAttendeeCard({
         ) : (
           <div className="w-14 h-14 rounded-full bg-gray-100 animate-pulse flex-shrink-0" />
         )}
-        <button
-          type="button"
-          onClick={() => setExpanded(v => !v)}
-          title={expanded ? 'Collapse' : 'Expand'}
-          aria-expanded={expanded}
-          className="flex-shrink-0 self-start p-1 -mr-1 text-gray-400 hover:text-brand-secondary transition-colors"
-        >
-          <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
       </div>
 
       {/* Badges — one line that scrolls, so a long set can't push the collapsed
-          card taller than the row it shares with its neighbours. */}
-      <ScrollRow gapClass="gap-2">
+          card taller than the row it shares with its neighbours. The toggle
+          closes out this row, so the collapsed card ends on the control that
+          opens it.
+
+          flex-1 min-w-0 on the ScrollRow: its scroller is w-0 flex-1 inside, so
+          without a width to claim it collapses to just a chevron. */}
+      <div className="flex items-center gap-2">
+      <ScrollRow className="flex-1 min-w-0" gapClass="gap-2">
         {timeline && (
           <span className="text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 whitespace-nowrap"
             style={{ color: hColor, background: `${hColor}18`, border: `1px solid ${hColor}35` }}>
@@ -304,6 +303,18 @@ function RelationshipAttendeeCard({
           <span className="badge-gray text-xs px-2 py-0.5 flex-shrink-0 whitespace-nowrap">{attendee.seniority}</span>
         )}
       </ScrollRow>
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          title={expanded ? 'Collapse' : 'Expand'}
+          aria-expanded={expanded}
+          className="flex-shrink-0 p-1 -mr-1 text-gray-400 hover:text-brand-secondary transition-colors"
+        >
+          <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      </div>
 
       {expanded && (<>
       {/* Stats */}
