@@ -20,8 +20,8 @@ export interface VendorRelationship {
   strength: string | null;
   vendor_type: string[];
   notes: string;
-  created_at: string;
-  updated_at: string;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 interface CompanyOption { id: number; name: string }
@@ -173,10 +173,13 @@ function CompanyPicker({ companies, value, onChange, onPickOther, otherName }: {
  * Z is added before parsing — otherwise it reads as local and the stamp drifts
  * by the offset.
  */
-function formatStamp(raw: string): string {
-  if (!raw) return '';
-  const d = new Date(raw.endsWith('Z') ? raw : `${raw.replace(' ', 'T')}Z`);
-  if (isNaN(d.getTime())) return '';
+function formatStamp(raw: string | null | undefined): string {
+  const value = String(raw ?? '').trim();
+  if (!value) return '';
+  const d = new Date(value.endsWith('Z') ? value : `${value.replace(' ', 'T')}Z`);
+  // A shape this doesn't parse still gets shown rather than silently dropping
+  // the stamp — a raw timestamp reads better than no timestamp at all.
+  if (isNaN(d.getTime())) return value;
   return d.toLocaleString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
     hour: 'numeric', minute: '2-digit', hour12: true,
