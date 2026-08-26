@@ -9,12 +9,14 @@ interface UserOption {
   value: string;
 }
 
-// Bulk-assigns outreach reps to multiple companies at once (from CompanyTable's
-// bulk action bar). Unlike OutreachAssignModal's single-company edit (which
-// replaces that company's assignee list wholesale), this is additive — it reads
-// each selected company's current assignees first and unions in the newly
-// picked reps, so it never silently un-assigns someone already on a company
-// that happens to be in this batch.
+// Bulk-assigns outreach reps across whole companies at once (from CompanyTable's
+// bulk action bar). Outreach is assigned per attendee, so "assign this company"
+// here means every attendee of it at this conference — the coarse-grained
+// entry point; OutreachAssignModal is where individuals get picked out.
+//
+// Additive: each attendee's existing reps are read first and the newly picked
+// ones unioned in, so it never silently un-assigns someone already on an
+// attendee who happens to be in this batch.
 export function BulkAssignOutreachModal({
   conferenceId,
   companyIds,
@@ -58,19 +60,23 @@ export function BulkAssignOutreachModal({
     if (selectedUserIds.size === 0) return;
     setSubmitting(true);
     try {
-      const outreachRes = await fetch(`/api/conferences/${conferenceId}/outreach`);
-      const existing = outreachRes.ok
-        ? (await outreachRes.json() as { companies: { companyId: number; assignees: { userId: number }[] }[] }).companies
-        : [];
-      const existingByCompany = new Map(existing.map(c => [c.companyId, c.assignees.map(a => a.userId)]));
-
       const selectedUserIdsArr = Array.from(selectedUserIds);
-      const results = await Promise.all(companyIds.map(companyId => {
-        const union = new Set([...(existingByCompany.get(companyId) ?? []), ...selectedUserIdsArr]);
+      const results = await Promise.all(companyIds.map(async companyId => {
+        const res = await fetch(`/api/conferences/${conferenceId}/outreach/assign?companyId=${companyId}`);
+        if (!res.ok) throw new Error();
+        const { attendees } = await res.json() as {
+          attendees: { attendeeId: number; assignedUserIds: number[] }[];
+        };
         return fetch(`/api/conferences/${conferenceId}/outreach/assign`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ companyId, userIds: Array.from(union) }),
+          body: JSON.stringify({
+            companyId,
+            assignments: attendees.map(a => ({
+              attendeeId: a.attendeeId,
+              userIds: Array.from(new Set([...a.assignedUserIds, ...selectedUserIdsArr])),
+            })),
+          }),
         });
       }));
 

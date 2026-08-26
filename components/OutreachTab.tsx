@@ -39,7 +39,8 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
   const [assignModalState, setAssignModalState] = useState<{
     companyId?: number;
     companyName?: string;
-    currentAssigneeIds: number[];
+    /** Set to narrow the modal to one person rather than the whole company. */
+    attendeeId?: number;
   } | null>(null);
 
   const [assigneeFilter, setAssigneeFilter] = useState<number | null>(null);
@@ -94,21 +95,29 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
   const assigneeOptions = useMemo(() => {
     const byId = new Map<number, string>();
     for (const c of data?.companies ?? []) {
-      for (const a of c.assignees) byId.set(a.userId, a.displayName);
+      for (const att of c.attendees) {
+        for (const a of att.assignees) byId.set(a.userId, a.displayName);
+      }
     }
     return Array.from(byId.entries())
       .map(([userId, displayName]) => ({ userId, displayName }))
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
   }, [data]);
 
+  // Outreach is assigned per attendee, so the rep filters cut the attendee
+  // rows, not just the cards: a company survives because someone inside it
+  // matched, and it then shows only the people who did.
   const filteredCompanies = useMemo(() => {
     const companies = data?.companies ?? [];
-    return companies.filter(c => {
-      if (statusFilter && c.status !== statusFilter) return false;
-      if (assigneeFilter != null && !c.assignees.some(a => a.userId === assigneeFilter)) return false;
-      if (myOutreachOnly && currentUser?.configId != null && !c.assignees.some(a => a.userId === currentUser.configId)) return false;
-      return true;
-    });
+    const repFilter = myOutreachOnly && currentUser?.configId != null
+      ? currentUser.configId
+      : assigneeFilter;
+    return companies
+      .filter(c => !statusFilter || c.status === statusFilter)
+      .map(c => (repFilter == null
+        ? c
+        : { ...c, attendees: c.attendees.filter(a => a.assignees.some(x => x.userId === repFilter)) }))
+      .filter(c => c.attendees.length > 0);
   }, [data, statusFilter, assigneeFilter, myOutreachOnly, currentUser?.configId]);
 
   const totalCount = data?.companies.length ?? 0;
@@ -174,7 +183,7 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
           <div className="hidden lg:contents">{filterControls}</div>
           <button
             type="button"
-            onClick={() => setAssignModalState({ currentAssigneeIds: [] })}
+            onClick={() => setAssignModalState({})}
             className="btn-primary text-xs px-3 py-1.5 whitespace-nowrap flex-shrink-0"
           >
             Assign company
@@ -193,7 +202,7 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
             <p className="text-xs text-gray-400 mt-1">Assign companies to your team to start tracking outreach activity</p>
             <button
               type="button"
-              onClick={() => setAssignModalState({ currentAssigneeIds: [] })}
+              onClick={() => setAssignModalState({})}
               className="btn-primary text-sm mt-4"
             >
               Assign first company
@@ -233,10 +242,10 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
                     initialTab: tab,
                     attendeeFilter: attendee,
                   })}
-                  onOpenAssign={() => setAssignModalState({
+                  onOpenAssign={attendeeId => setAssignModalState({
                     companyId: company.companyId,
                     companyName: company.companyName,
-                    currentAssigneeIds: company.assignees.map(a => a.userId),
+                    attendeeId,
                   })}
                 />
                 </div>
@@ -274,7 +283,7 @@ export function OutreachTab({ conferenceId, conferenceName }: { conferenceId: nu
           conferenceId={conferenceId}
           companyId={assignModalState.companyId}
           companyName={assignModalState.companyName}
-          currentAssigneeIds={assignModalState.currentAssigneeIds}
+          attendeeId={assignModalState.attendeeId}
           onClose={() => setAssignModalState(null)}
           onAssigned={loadOutreach}
         />

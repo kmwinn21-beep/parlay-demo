@@ -14,18 +14,37 @@ interface CompanyOption {
   name: string;
 }
 
+interface AssignableAttendee {
+  attendeeId: number;
+  name: string;
+  title: string | null;
+  assignedUserIds: number[];
+}
+
+/**
+ * Assigns outreach for a company's attendees at a conference.
+ *
+ * Outreach belongs to a person, not a company, so the modal is a list of that
+ * company's attendees with a rep list applied to whichever of them are ticked.
+ * Untick someone and they come off the outreach list; that's the same
+ * declarative shape the endpoint takes.
+ *
+ * Opened with `attendeeId` it narrows to one person — the path the rep pill on
+ * an attendee card uses — and leaves everyone else at that company alone.
+ */
 export function OutreachAssignModal({
   conferenceId,
   companyId,
   companyName,
-  currentAssigneeIds,
+  attendeeId,
   onClose,
   onAssigned,
 }: {
   conferenceId: number;
   companyId?: number;
   companyName?: string;
-  currentAssigneeIds: number[];
+  /** Scope the modal to a single attendee rather than the whole company. */
+  attendeeId?: number;
   onClose: () => void;
   onAssigned: () => void;
 }) {
@@ -33,7 +52,9 @@ export function OutreachAssignModal({
   const [companies, setCompanies] = useState<CompanyOption[] | null>(companyId ? null : []);
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | undefined>(companyId);
   const [selectedCompanyName, setSelectedCompanyName] = useState<string | undefined>(companyName);
-  const [selectedUserIds, setSelectedUserIds] = useState<Set<number>>(new Set(currentAssigneeIds));
+  const [attendees, setAttendees] = useState<AssignableAttendee[] | null>(null);
+  const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<Set<number>>(new Set());
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<number>>(new Set());
   const [search, setSearch] = useState('');
   const [companySearch, setCompanySearch] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -56,6 +77,28 @@ export function OutreachAssignModal({
       .catch(() => { setCompanies([]); toast.error('Failed to load companies'); });
   }, [conferenceId, companyId]);
 
+  // Once a company is settled, load its attendees and pre-tick whoever is
+  // already assigned, seeding the rep list from what they already have.
+  useEffect(() => {
+    if (!selectedCompanyId) { setAttendees(null); return; }
+    setAttendees(null);
+    fetch(`/api/conferences/${conferenceId}/outreach/assign?companyId=${selectedCompanyId}`)
+      .then(r => (r.ok ? r.json() : Promise.reject()))
+      .then((data: { attendees: AssignableAttendee[] }) => {
+        const list = attendeeId != null
+          ? data.attendees.filter(a => a.attendeeId === attendeeId)
+          : data.attendees;
+        setAttendees(list);
+        setSelectedAttendeeIds(new Set(
+          attendeeId != null ? [attendeeId] : list.filter(a => a.assignedUserIds.length > 0).map(a => a.attendeeId)
+        ));
+        // The union of who's already on these people — the common case is one
+        // shared rep, and starting from blank would silently unassign everyone.
+        setSelectedUserIds(new Set(list.flatMap(a => a.assignedUserIds)));
+      })
+      .catch(() => { setAttendees([]); toast.error('Failed to load attendees'); });
+  }, [conferenceId, selectedCompanyId, attendeeId]);
+
   const filteredUsers = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return users;
@@ -77,16 +120,34 @@ export function OutreachAssignModal({
     });
   };
 
+  const toggleAttendee = (id: number) => {
+    setSelectedAttendeeIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const post = async (assignments: { attendeeId: number; userIds: number[] }[]) => {
+    const res = await fetch(`/api/conferences/${conferenceId}/outreach/assign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ companyId: selectedCompanyId, assignments }),
+    });
+    if (!res.ok) throw new Error();
+  };
+
   const handleSubmit = async () => {
-    if (!selectedCompanyId || selectedUserIds.size === 0) return;
+    if (!selectedCompanyId || selectedUserIds.size === 0 || selectedAttendeeIds.size === 0) return;
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/conferences/${conferenceId}/outreach/assign`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyId: selectedCompanyId, userIds: Array.from(selectedUserIds) }),
-      });
-      if (!res.ok) throw new Error();
+      const reps = Array.from(selectedUserIds);
+      // Every attendee on screen is sent, ticked or not: an unticked one gets an
+      // empty rep list, which is how un-assigning happens.
+      await post((attendees ?? []).map(a => ({
+        attendeeId: a.attendeeId,
+        userIds: selectedAttendeeIds.has(a.attendeeId) ? reps : [],
+      })));
       toast.success('Outreach assigned');
       onAssigned();
       onClose();
@@ -97,21 +158,14 @@ export function OutreachAssignModal({
     }
   };
 
-  // Only offered when editing an existing assignment (opened with reps already
-  // assigned) — clears every rep for this company+conference via the same
-  // assign endpoint (empty userIds), which drops it out of the Outreach list
-  // entirely since GET /outreach only returns companies with an assignment row.
+  // Clears every attendee at this company, which drops it out of the Outreach
+  // list entirely since the tab only returns companies with an assignment.
   const handleRemoveCompany = async () => {
-    if (!selectedCompanyId) return;
+    if (!selectedCompanyId || !attendees) return;
     if (!confirm(`Remove ${selectedCompanyName ?? 'this company'} from Outreach? This clears all assigned reps and outreach tracking for this company at this conference.`)) return;
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/conferences/${conferenceId}/outreach/assign`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyId: selectedCompanyId, userIds: [] }),
-      });
-      if (!res.ok) throw new Error();
+      await post(attendees.map(a => ({ attendeeId: a.attendeeId, userIds: [] })));
       toast.success('Removed from Outreach');
       onAssigned();
       onClose();
@@ -123,14 +177,19 @@ export function OutreachAssignModal({
   };
 
   const needsCompanyPicker = !companyId;
-  const isEditingExisting = currentAssigneeIds.length > 0;
+  const isEditingExisting = attendeeId == null && (attendees ?? []).some(a => a.assignedUserIds.length > 0);
+  const singleAttendeeName = attendeeId != null ? attendees?.[0]?.name : undefined;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 py-6">
       <div className="relative bg-white rounded-xl shadow-2xl border border-gray-200 w-full mx-4 max-w-md max-h-[85vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-gray-200 flex-shrink-0">
           <h2 className="text-sm font-semibold text-brand-primary font-serif truncate">
-            {selectedCompanyName ? `Assign Outreach - ${selectedCompanyName}` : 'Assign Company for Outreach'}
+            {singleAttendeeName
+              ? `Assign Outreach - ${singleAttendeeName}`
+              : selectedCompanyName
+                ? `Assign Outreach - ${selectedCompanyName}`
+                : 'Assign Company for Outreach'}
           </h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -177,9 +236,54 @@ export function OutreachAssignModal({
             </button>
           )}
 
-          {(!needsCompanyPicker || selectedCompanyId) && (
+          {/* Who the outreach is for. Hidden when the modal is already scoped to
+              one person — there'd be exactly one row, always ticked. */}
+          {selectedCompanyId && attendeeId == null && (
             <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1.5">Assign Reps</label>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <label className="block text-xs font-semibold text-gray-500">Attendees</label>
+                {attendees && attendees.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAttendeeIds(
+                      selectedAttendeeIds.size === attendees.length
+                        ? new Set()
+                        : new Set(attendees.map(a => a.attendeeId))
+                    )}
+                    className="text-xs text-brand-secondary hover:underline"
+                  >
+                    {selectedAttendeeIds.size === attendees.length ? 'Clear all' : 'Select all'}
+                  </button>
+                )}
+              </div>
+              <div className="border border-gray-100 rounded-lg max-h-40 overflow-y-auto divide-y divide-gray-50">
+                {attendees === null && <p className="text-xs text-gray-400 px-3 py-2">Loading…</p>}
+                {attendees !== null && attendees.length === 0 && (
+                  <p className="text-xs text-gray-400 px-3 py-2">No attendees from this company at this conference.</p>
+                )}
+                {(attendees ?? []).map(a => (
+                  <label key={a.attendeeId} className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-gray-50 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={selectedAttendeeIds.has(a.attendeeId)}
+                      onChange={() => toggleAttendee(a.attendeeId)}
+                      className="w-4 h-4 rounded"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm text-gray-700 truncate">{a.name}</span>
+                      <span className="block text-xs text-gray-400 truncate">{a.title || '—'}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {selectedCompanyId && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1.5">
+                {attendeeId != null ? 'Assign Reps' : 'Assign Reps to the selected attendees'}
+              </label>
               <input
                 type="text"
                 value={search}
@@ -223,7 +327,7 @@ export function OutreachAssignModal({
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={submitting || !selectedCompanyId || selectedUserIds.size === 0}
+            disabled={submitting || !selectedCompanyId || selectedUserIds.size === 0 || selectedAttendeeIds.size === 0}
             className="btn-primary text-sm flex-1 disabled:opacity-50"
           >
             {submitting ? 'Assigning…' : 'Assign'}

@@ -20,6 +20,8 @@ interface AttendeeEntry {
   activityCount: number;
   activityCounts: { phone: number; email: number; linkedin: number; text: number };
   meetingId: number | null;
+  /** The reps assigned outreach to this person specifically. */
+  assignees: { userId: number; displayName: string; initials: string }[];
 }
 
 interface CompanyAgg {
@@ -29,7 +31,12 @@ interface CompanyAgg {
   icp: string | null;
   wse: number | null;
   status: string;
-  assignees: { userId: number; displayName: string; initials: string }[];
+  /**
+   * The company's own assigned rep(s) — companies.assigned_user, the same field
+   * the SF Owner column reads. Deliberately not the outreach assignees: those
+   * are per attendee now and ride on the attendee rows.
+   */
+  companyReps: { userId: number; displayName: string; initials: string }[];
   territory: { id: number; name: string; color: string } | null;
 }
 
@@ -50,9 +57,12 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     // overdue mid-day.
     const isPastEnd = endDate ? new Date(endDate) < new Date(new Date().toISOString().slice(0, 10)) : false;
 
+    // One row per (attendee, rep). A company appears here because at least one
+    // of its attendees is assigned — not the other way round.
     const assignRows = await db.execute({
-      sql: `SELECT oa.company_id, oa.status, oa.assigned_user_id,
+      sql: `SELECT oa.company_id, oa.attendee_id, oa.status, oa.assigned_user_id,
                    c.name as company_name, c.company_type, c.icp, c.wse, c.territory_id,
+                   c.assigned_user as company_assigned_user,
                    st.name as territory_name, st.color as territory_color,
                    co.value as rep_name
             FROM outreach_assignments oa
@@ -67,8 +77,15 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     if (assignRows.rows.length === 0) return NextResponse.json({ companies: [] });
 
     const companyMap = new Map<number, CompanyAgg>();
+    // attendeeId -> the reps assigned to that attendee.
+    const assigneesByAttendee = new Map<number, { userId: number; displayName: string; initials: string }[]>();
+    // companies.assigned_user is a CSV of config_options ids; collect them so
+    // the names can be resolved in one query below.
+    const companyRepIds = new Map<number, number[]>();
+
     for (const r of assignRows.rows) {
       const companyId = Number(r.company_id);
+      const attendeeId = Number(r.attendee_id);
       const displayName = String(r.rep_name);
       if (!companyMap.has(companyId)) {
         companyMap.set(companyId, {
@@ -78,21 +95,51 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
           icp: r.icp ? String(r.icp) : null,
           wse: r.wse != null ? Number(r.wse) : null,
           status: String(r.status),
-          assignees: [],
+          companyReps: [],
           territory: r.territory_id != null
             ? { id: Number(r.territory_id), name: String(r.territory_name), color: String(r.territory_color) }
             : null,
         });
+        companyRepIds.set(companyId, String(r.company_assigned_user ?? '')
+          .split(',')
+          .map(v => Number(v.trim()))
+          .filter(n => Number.isFinite(n) && n > 0));
       }
-      companyMap.get(companyId)!.assignees.push({
+      if (!assigneesByAttendee.has(attendeeId)) assigneesByAttendee.set(attendeeId, []);
+      assigneesByAttendee.get(attendeeId)!.push({
         userId: Number(r.assigned_user_id),
         displayName,
         initials: getInitials(displayName),
       });
     }
 
+    const allCompanyRepIds = Array.from(new Set(Array.from(companyRepIds.values()).flat()));
+    const repNameById = new Map<number, string>();
+    if (allCompanyRepIds.length > 0) {
+      const repRows = await db.execute({
+        sql: `SELECT id, value FROM config_options
+              WHERE category = 'user' AND id IN (${allCompanyRepIds.map(() => '?').join(',')})`,
+        args: allCompanyRepIds,
+      });
+      for (const r of repRows.rows) repNameById.set(Number(r.id), String(r.value));
+    }
+    companyRepIds.forEach((ids, companyId) => {
+      const agg = companyMap.get(companyId);
+      if (!agg) return;
+      for (const id of ids) {
+        const displayName = repNameById.get(id);
+        if (!displayName) continue;
+        agg.companyReps.push({ userId: id, displayName, initials: getInitials(displayName) });
+      }
+    });
+
     const companyIds = Array.from(companyMap.keys());
     const placeholders = companyIds.map(() => '?').join(',');
+    // Only the assigned attendees are listed — that's the whole point of moving
+    // assignment down to the person. A colleague at the same company who hasn't
+    // been assigned no longer rides along.
+    const assignedAttendeeIds = Array.from(assigneesByAttendee.keys());
+    const attendeePlaceholders = assignedAttendeeIds.map(() => '?').join(',');
 
     const [attendeeRows, activityRows, noteRows, meetingRows, excludedRows] = await Promise.all([
       db.execute({
@@ -100,9 +147,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
                      a.email, a.phone, a.linkedin_url, a.photo_url
               FROM conference_attendees ca
               JOIN attendees a ON a.id = ca.attendee_id
-              WHERE ca.conference_id = ? AND a.company_id IN (${placeholders})
+              WHERE ca.conference_id = ? AND a.id IN (${attendeePlaceholders})
               ORDER BY a.last_name, a.first_name`,
-        args: [conferenceId, ...companyIds],
+        args: [conferenceId, ...assignedAttendeeIds],
       }),
       db.execute({
         sql: `SELECT company_id, attendee_id, activity_type, COUNT(*) as cnt
@@ -190,6 +237,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         activityCount: activityByAttendee.get(attendeeId) || 0,
         activityCounts: activityByAttendeeType.get(attendeeId) || { phone: 0, text: 0, email: 0, linkedin: 0 },
         meetingId: meetingIdByAttendee.get(attendeeId) ?? null,
+        assignees: assigneesByAttendee.get(attendeeId) ?? [],
       });
     }
 
@@ -200,7 +248,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       icp: c.icp,
       wse: c.wse,
       status: c.status === 'not_started' && isPastEnd ? 'overdue' : c.status,
-      assignees: c.assignees,
+      companyReps: c.companyReps,
       territory: c.territory,
       attendees: attendeesByCompany.get(c.companyId) || [],
       totalActivityCount: activityByCompany.get(c.companyId) || 0,

@@ -3,11 +3,14 @@ import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 
 // DELETE /api/conferences/[id]/outreach/[companyId]/attendees/[attendeeId] —
-// removes one attendee from a company's outreach section. The attendee list is
-// otherwise fully derived (every conference attendee at an assigned company),
-// so this just records an exclusion rather than deleting any attendee/activity
-// data — their past logged activity and notes are untouched, they simply stop
-// appearing in this company's outreach attendee list.
+// removes one attendee from a company's outreach section by dropping their
+// outreach assignments: since assignment is per attendee, being unassigned is
+// what "not on the list" means.
+//
+// Their logged activity and notes are deliberately left alone — removing
+// someone from the list shouldn't erase the record of having contacted them.
+// The exclusion row is still written so an attendee can't reappear through any
+// path that predates per-attendee assignment.
 export async function DELETE(request: NextRequest, { params }: { params: { id: string; companyId: string; attendeeId: string } }) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
@@ -19,6 +22,10 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
   if (!conferenceId || !companyId || !attendeeId) return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
 
   try {
+    await db.execute({
+      sql: `DELETE FROM outreach_assignments WHERE conference_id = ? AND attendee_id = ?`,
+      args: [conferenceId, attendeeId],
+    });
     await db.execute({
       sql: `INSERT INTO outreach_excluded_attendees (conference_id, company_id, attendee_id)
             VALUES (?, ?, ?)
