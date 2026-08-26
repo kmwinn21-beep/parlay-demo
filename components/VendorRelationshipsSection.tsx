@@ -64,14 +64,20 @@ function StatusPill({ value, colorMaps }: { value: string; colorMaps: Record<str
   );
 }
 
-function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete }: {
+/**
+ * Exported so the pre-conference review can show the same card rather than
+ * building a second one that drifts. Omitting onEdit/onDelete drops the actions
+ * menu, which is what a read-only surface wants.
+ */
+export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete, defaultExpanded = false }: {
   rel: VendorRelationship;
   userOptions: UserOption[];
   colorMaps: Record<string, Record<string, string | null>>;
-  onEdit: () => void;
-  onDelete: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  defaultExpanded?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const rep = userOptions.find(u => u.id === rel.rep_id);
   // Last edit rather than creation: the note is what the stamp is heading, and
   // the note can be rewritten.
@@ -128,15 +134,17 @@ function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete 
             )}
             {/* Sits at the end of this row so it lands directly under the
                 header's chevron, rather than floating at the foot of the card. */}
-            <div className="flex-shrink-0">
-              <KebabMenu
-                title="Relationship actions"
-                items={[
-                  { label: 'Edit', onClick: onEdit },
-                  { label: 'Delete', onClick: onDelete },
-                ]}
-              />
-            </div>
+            {(onEdit || onDelete) && (
+              <div className="flex-shrink-0">
+                <KebabMenu
+                  title="Relationship actions"
+                  items={[
+                    ...(onEdit ? [{ label: 'Edit', onClick: onEdit }] : []),
+                    ...(onDelete ? [{ label: 'Delete', onClick: onDelete }] : []),
+                  ]}
+                />
+              </div>
+            )}
           </div>
 
           {rel.notes && (

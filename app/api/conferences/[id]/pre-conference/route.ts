@@ -27,6 +27,12 @@ function parseIdList(raw: unknown): number[] {
 
 // territory_ids is stored as a JSON array (see conferences.territory_ids), unlike
 // the comma-separated id lists parseIdList handles elsewhere in this route.
+/** Comma-separated multi-select values, as vendor_relationships stores them. */
+function splitList(raw: unknown): string[] {
+  if (!raw) return [];
+  return String(raw).split(',').map(v => v.trim()).filter(Boolean);
+}
+
 function parseJsonIdList(raw: unknown): number[] {
   try {
     const parsed = JSON.parse(String(raw ?? '[]'));
@@ -152,7 +158,7 @@ export async function GET(
 
   const attendeeIds = attendees.map((a) => a.id);
 
-  const [internalRelsRes, companyNotesRes, attendeeConfsRes, detailsRes, allUserOptsRes, relStatusOptsRes, socialRsvpsRes, xMeetingsRes, xFollowUpsRes, xSocialRes, xNotesRes, xTouchpointsRes, unitTypeRes, clientStatusRes, seniorityOptsRes, competitorColorRes, brandPrimaryRes, openOppStatusRes, brandSecondaryRes, territoriesRes] = await Promise.all([
+  const [internalRelsRes, vendorRelsRes, companyNotesRes, attendeeConfsRes, detailsRes, allUserOptsRes, relStatusOptsRes, socialRsvpsRes, xMeetingsRes, xFollowUpsRes, xSocialRes, xNotesRes, xTouchpointsRes, unitTypeRes, clientStatusRes, seniorityOptsRes, competitorColorRes, brandPrimaryRes, openOppStatusRes, brandSecondaryRes, territoriesRes] = await Promise.all([
     companyIds.length > 0
       ? db.execute({
           sql: `SELECT id, company_id, rep_ids, contact_ids, relationship_status, description
@@ -160,6 +166,30 @@ export async function GET(
                 WHERE company_id IN (${companyIds.map(() => '?').join(',')})`,
           args: companyIds,
         })
+      : Promise.resolve({ rows: [] }),
+    // Vendor / other relationships for the same companies. Same shape and the
+    // same parent/child exclusion as /api/vendor-relationships, so the cards
+    // read identically here and on the company record.
+    companyIds.length > 0
+      ? db.execute({
+          sql: `SELECT vr.id, vr.company_id, vr.related_company_id, vr.rep_id,
+                       vr.relationship_status, vr.strength, vr.vendor_type, vr.notes,
+                       vr.created_at AS vr_created_at, vr.updated_at AS vr_updated_at,
+                       c.name AS related_company_name, c.company_type AS related_company_type
+                FROM vendor_relationships vr
+                LEFT JOIN companies c ON c.id = vr.related_company_id
+                WHERE vr.company_id IN (${companyIds.map(() => '?').join(',')})
+                  AND NOT EXISTS (
+                    SELECT 1 FROM companies me
+                    WHERE me.id = vr.company_id AND me.parent_company_id = vr.related_company_id
+                  )
+                  AND NOT EXISTS (
+                    SELECT 1 FROM companies kid
+                    WHERE kid.id = vr.related_company_id AND kid.parent_company_id = vr.company_id
+                  )
+                ORDER BY c.name`,
+          args: companyIds,
+        }).catch(() => ({ rows: [] }))
       : Promise.resolve({ rows: [] }),
     companyIds.length > 0
       ? db.execute({
@@ -792,6 +822,33 @@ export async function GET(
     };
   });
 
+  // --- Vendor / other relationships ---
+  // Company name comes from the attendee rows, the same way the internal
+  // relationships above resolve it — a company is in this payload because it
+  // has someone at the conference.
+  const companyNameById = new Map<number, string>();
+  for (const a of attendees) {
+    const cid = a.company_id as number | null;
+    if (cid != null && !companyNameById.has(cid) && a.company_name) {
+      companyNameById.set(cid, String(a.company_name));
+    }
+  }
+  const vendorRelationshipsData = vendorRelsRes.rows.map((r) => ({
+    id: Number(r.id),
+    company_id: Number(r.company_id),
+    company_name: companyNameById.get(Number(r.company_id)) ?? '',
+    related_company_id: Number(r.related_company_id),
+    related_company_name: r.related_company_name ? String(r.related_company_name) : '',
+    related_company_type: r.related_company_type ? String(r.related_company_type) : null,
+    rep_id: r.rep_id != null ? Number(r.rep_id) : null,
+    relationship_status: splitList(r.relationship_status),
+    strength: r.strength ? String(r.strength) : null,
+    vendor_type: splitList(r.vendor_type),
+    notes: r.notes ? String(r.notes) : '',
+    created_at: r.vr_created_at != null ? String(r.vr_created_at) : null,
+    updated_at: r.vr_updated_at != null ? String(r.vr_updated_at) : (r.vr_created_at != null ? String(r.vr_created_at) : null),
+  }));
+
   // --- Product ICP: group attendees by product, then by company ---
   const productCompanyMap = new Map<string, Map<number, {
     companyId: number; companyName: string; assignedUserNames: string[];
@@ -964,7 +1021,7 @@ export async function GET(
     icpCompanies: icpCompaniesForScoring,
   });
 
-  const responseData = { summary, landscape, icpCompanies, meetings: meetingsData, socialEvents: socialEventsData, byRep, relationships: relationshipsData, productIcp, strategyAssessment, productCatalog, icpAttendees, industryOptions };
+  const responseData = { summary, landscape, icpCompanies, meetings: meetingsData, socialEvents: socialEventsData, byRep, relationships: relationshipsData, vendorRelationships: vendorRelationshipsData, productIcp, strategyAssessment, productCatalog, icpAttendees, industryOptions };
   PRE_CONF_CACHE.set(cacheKey, { data: responseData, cachedAt: Date.now() });
   return NextResponse.json(responseData);
 }
