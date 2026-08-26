@@ -17,6 +17,27 @@ function parseList(value: unknown): string[] {
   return String(value).split(',').map(v => v.trim()).filter(Boolean);
 }
 
+/**
+ * True when the two companies are already nested one inside the other.
+ *
+ * That link belongs to Related Entities, which speaks for it on both records —
+ * recording it here as well is what put the same company on the page twice.
+ */
+async function isParentOrChild(
+  db: Awaited<ReturnType<typeof getDb>>,
+  companyId: number,
+  relatedId: number,
+): Promise<boolean> {
+  const res = await db.execute({
+    sql: `SELECT 1 FROM companies
+          WHERE (id = ? AND parent_company_id = ?)
+             OR (id = ? AND parent_company_id = ?)
+          LIMIT 1`,
+    args: [companyId, relatedId, relatedId, companyId],
+  }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
+  return res.rows.length > 0;
+}
+
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
@@ -29,6 +50,14 @@ export async function GET(request: NextRequest) {
     // Timestamps aliased rather than left to vr.*: companies carries
     // created_at and updated_at too, and which one a wildcard yields in a join
     // is the driver's business, not something worth depending on.
+    //
+    // A company that is this one's parent or child is excluded: that link is
+    // what Related Entities is for, and listing it here too showed the same
+    // company twice on the page. Legacy company_relationships rows carried
+    // across into this table are the usual way a pair ends up in both.
+    //
+    // Filtered on read rather than deleted — the row may predate the
+    // parent/child link, and un-nesting the companies should bring it back.
     const select = (stamps: string) => `
       SELECT vr.id, vr.company_id, vr.related_company_id, vr.rep_id,
              vr.relationship_status, vr.strength, vr.vendor_type, vr.notes,
@@ -37,6 +66,14 @@ export async function GET(request: NextRequest) {
       FROM vendor_relationships vr
       LEFT JOIN companies c ON c.id = vr.related_company_id
       WHERE vr.company_id = ?
+        AND NOT EXISTS (
+          SELECT 1 FROM companies me
+          WHERE me.id = vr.company_id AND me.parent_company_id = vr.related_company_id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM companies kid
+          WHERE kid.id = vr.related_company_id AND kid.parent_company_id = vr.company_id
+        )
       ORDER BY c.name`;
 
     // A tenant whose table predates one of these columns would otherwise fail
@@ -89,6 +126,12 @@ export async function POST(request: NextRequest) {
     }
     if (Number(company_id) === Number(related_company_id)) {
       return NextResponse.json({ error: 'A company cannot be related to itself.' }, { status: 400 });
+    }
+    if (await isParentOrChild(db, Number(company_id), Number(related_company_id))) {
+      return NextResponse.json(
+        { error: 'These companies are already linked as parent and child, which shows under Related Entities.' },
+        { status: 400 },
+      );
     }
     const statuses = serializeList(relationship_status);
     if (!statuses) return NextResponse.json({ error: 'Relationship Status is required' }, { status: 400 });

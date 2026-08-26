@@ -61,6 +61,7 @@ export async function GET(request: NextRequest) {
           m.meeting_time,
           m.location,
           m.scheduled_by,
+          m.support_rep_ids,
           m.additional_attendees,
           m.additional_attendee_ids,
           m.outcome,
@@ -106,6 +107,7 @@ export async function GET(request: NextRequest) {
         meeting_time: String(r.meeting_time ?? ''),
         location: r.location != null ? String(r.location) : null,
         scheduled_by: r.scheduled_by != null ? String(r.scheduled_by) : null,
+        support_rep_ids: r.support_rep_ids != null ? String(r.support_rep_ids) : null,
         additional_attendees: r.additional_attendees != null ? String(r.additional_attendees) : null,
         outcome: r.outcome != null ? String(r.outcome) : null,
         meeting_type: r.meeting_type != null ? String(r.meeting_type) : null,
@@ -134,7 +136,7 @@ export async function POST(request: NextRequest) {
   const db = await getDb(user?.accountId);
   try {
     const body = await request.json();
-    const { attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, additional_attendees, additional_attendee_ids, meeting_type } = body;
+    const { attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, support_rep_ids, additional_attendees, additional_attendee_ids, meeting_type } = body;
 
     if (!attendee_id || !conference_id || !meeting_date || !meeting_time) {
       return NextResponse.json({ error: 'attendee_id, conference_id, meeting_date, and meeting_time are required' }, { status: 400 });
@@ -155,8 +157,8 @@ export async function POST(request: NextRequest) {
       : 'Scheduled';
 
     const result = await db.execute({
-      sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, additional_attendees, additional_attendee_ids, outcome, meeting_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, support_rep_ids, additional_attendees, additional_attendee_ids, outcome, meeting_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING *`,
       args: [
         attendee_id,
@@ -165,6 +167,7 @@ export async function POST(request: NextRequest) {
         meeting_time,
         location ?? null,
         scheduled_by ?? null,
+        support_rep_ids ?? null,
         additional_attendees ?? null,
         serializeAttendeeIds(additional_attendee_ids),
         meetingScheduledName,
