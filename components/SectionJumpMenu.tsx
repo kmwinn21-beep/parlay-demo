@@ -12,7 +12,11 @@ interface Target { key: string; label: string }
  * isn't in the DOM and so can't be offered. Labels come from each section's own
  * heading, so a renamed section reads the same here as it does on the page.
  */
-export function SectionJumpMenu({ className = '' }: { className?: string }) {
+export function SectionJumpMenu({ className = '', align = 'below' }: {
+  className?: string;
+  /** Where the list unfurls relative to the button. */
+  align?: 'below' | 'above';
+}) {
   const [open, setOpen] = useState(false);
   const [targets, setTargets] = useState<Target[]>([]);
   const ref = useRef<HTMLDivElement>(null);
@@ -52,17 +56,20 @@ export function SectionJumpMenu({ className = '' }: { className?: string }) {
         onClick={() => { if (!open) collect(); setOpen(o => !o); }}
         aria-label="Jump to a section"
         aria-expanded={open}
-        className="p-1.5 rounded-lg text-gray-400 hover:text-brand-secondary hover:bg-gray-100 transition-colors"
+        className="flex items-center gap-1 text-sm text-gray-500 hover:text-brand-primary transition-colors"
       >
-        <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
-          <circle cx="10" cy="4" r="1.5" />
-          <circle cx="10" cy="10" r="1.5" />
-          <circle cx="10" cy="16" r="1.5" />
+        Jump To
+        {/* Up/down rather than a single chevron: the list opens over content
+            either side of the button depending on where the page has scrolled. */}
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4M8 15l4 4 4-4" />
         </svg>
       </button>
 
       {open && (
-        <div className="absolute right-0 bottom-full mb-1 z-40 w-56 max-h-72 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg py-1">
+        <div className={`absolute right-0 z-40 w-56 max-h-72 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg py-1 ${
+          align === 'above' ? 'bottom-full mb-1' : 'top-full mt-1'
+        }`}>
           <p className="px-3 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Jump to</p>
           {targets.length === 0 ? (
             <p className="px-3 py-2 text-sm text-gray-400">No sections on this page.</p>

@@ -868,7 +868,12 @@ export default function CompanyDetailPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <BackButton />
+      {/* Phone only: the record is long enough that scrolling to a section is
+          a chore, and this row already carries the page's other navigation. */}
+      <div className="flex items-center justify-between gap-3">
+        <BackButton />
+        <SectionJumpMenu className="sm:hidden" />
+      </div>
       {/* Two-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column — main content */}
@@ -1262,11 +1267,6 @@ export default function CompanyDetailPage() {
                     <span className="text-sm text-gray-400">—</span>}
                 </span>
               </div>
-            </div>
-            {/* Phone only: the record is long enough that scrolling to a
-                section is a chore, and the header card has the room. */}
-            <div className="sm:hidden flex justify-end -mb-1">
-              <SectionJumpMenu />
             </div>
           </div>
         )}
