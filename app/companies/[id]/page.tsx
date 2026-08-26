@@ -94,7 +94,6 @@ interface Company {
   conferences?: ConferenceItem[];
   parent_company?: { id: number; name: string; company_type?: string | null } | null;
   child_companies?: { id: number; name: string; website: string | null; company_type: string | null; attendee_count: number }[];
-  related_companies?: { id: number; name: string; company_type: string | null; notes: string | null }[];
 }
 
 /** Normalize legacy boolean ICP strings ("true"/"false") to the configured option values. */

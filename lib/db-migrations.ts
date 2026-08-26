@@ -2314,4 +2314,23 @@ export const migrations: string[] = [
     WHERE support_rep_ids IS NULL
       AND scheduled_by IS NOT NULL
       AND instr(scheduled_by, ',') > 0`,
+
+  // Retire company_relationships.
+  //
+  // It backed "Operator / Capital Relationships", built when Parlay served one
+  // company in one industry. vendor_relationships covers the same ground with
+  // the rep, status, strength, vendor type and notes that table never had, so
+  // there is nothing left for it to store that isn't stored better elsewhere.
+  //
+  // Nothing reads it any more: the modal and both endpoints are gone in this
+  // change, the company detail route no longer returns related_companies, and
+  // the merge and delete cascades that named it have been edited — those were
+  // inside write batches, so dropping the table without that would have taken
+  // merging and deleting a company down with it.
+  //
+  // Its rows go with it. The industry-specific pairs they hold are stale, and
+  // the ones worth keeping were already carried into vendor_relationships by an
+  // earlier migration.
+  `DROP INDEX IF EXISTS idx_company_rel_unique`,
+  `DROP TABLE IF EXISTS company_relationships`,
 ];
