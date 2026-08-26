@@ -25,6 +25,8 @@ import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import { useUser } from './UserContext';
 import { CompanyAttendeesDrawer, type CompanyAttendeeLite } from './CompanyAttendeesDrawer';
 import { BulkAssignOutreachModal } from './BulkAssignOutreachModal';
+import { BulkVendorRelationshipModal } from './BulkVendorRelationshipModal';
+import { useSectionConfig } from '@/lib/useSectionConfig';
 
 interface Company {
   id: number;
@@ -304,6 +306,10 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
     });
   };
   const { user: currentUser } = useUser();
+  // The bulk button carries whatever this section is called in Section
+  // Management, so the two never disagree about what's being added.
+  const { getLabel: getCompanySectionLabel } = useSectionConfig('company');
+  const vendorSectionLabel = getCompanySectionLabel('operator_capital');
   const [quickFilterMyAccounts, setQuickFilterMyAccounts] = useState(false);
   const [filterUpdatedWithin, setFilterUpdatedWithin] = useState('');
   // 'parent' = no parent_company_id (standalone or explicit parent)
@@ -317,6 +323,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const [showParentChildModal, setShowParentChildModal] = useState(false);
   const [showOperatorCapitalModal, setShowOperatorCapitalModal] = useState(false);
   const [showRepRelModal, setShowRepRelModal] = useState(false);
+  const [showBulkVendorRel, setShowBulkVendorRel] = useState(false);
   const [relPopupCompany, setRelPopupCompany] = useState<{ id: number; name: string } | null>(null);
   const [showAddToConf, setShowAddToConf] = useState(false);
   const [showBulkAssignOutreach, setShowBulkAssignOutreach] = useState(false);
@@ -816,6 +823,9 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
             )}
             <button onClick={() => setShowAddToConf(true)} className={BULK_BTN}>
               + to Conference
+            </button>
+            <button onClick={() => setShowBulkVendorRel(true)} className={BULK_BTN}>
+              + {vendorSectionLabel}
             </button>
             {onDecoupleSelected && (
               <button
@@ -1457,6 +1467,16 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         onClose={() => setShowOperatorCapitalModal(false)}
         onSubmit={handleOperatorCapital}
         items={selectedCompanies.map(c => ({ id: c.id, label: c.name, sublabel: [c.company_type, c.profit_type ? `(${c.profit_type})` : ''].filter(Boolean).join(' ') }))}
+      />
+
+      <BulkVendorRelationshipModal
+        isOpen={showBulkVendorRel}
+        onClose={() => setShowBulkVendorRel(false)}
+        onSuccess={() => { setSelectedIds(new Set()); onRefresh(); }}
+        companyIds={Array.from(selectedIds)}
+        title={vendorSectionLabel}
+        userOptions={userOptionsFull}
+        currentUserConfigId={currentUser?.configId ?? null}
       />
 
       <InternalRelationshipModal
