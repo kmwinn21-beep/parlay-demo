@@ -9,6 +9,7 @@ import { getBadgeClass, getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { RelationshipMapDrawer } from './RelationshipMapDrawer';
 import { MobileFormSheet } from '@/components/MobileFormSheet';
+import { SectionAddButton } from '@/components/SectionAddButton';
 
 interface InternalRelationship {
   id: number;
@@ -473,14 +474,10 @@ export function InternalRelationshipsSection({
             Internal Relationships ({relationships.length})
           </h2>
         </button>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowForm(true)}
-            className="text-xs text-brand-secondary hover:underline font-medium"
-          >
-            + Add
-          </button>
-        </div>
+        <SectionAddButton
+          onClick={() => { setSectionExpanded(true); setShowForm(true); }}
+          title="Add internal relationship"
+        />
       </div>
 
       {/* In attendee context, show inline text button; in company context the button lives in the page header */}

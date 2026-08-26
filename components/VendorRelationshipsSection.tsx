@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { ScrollRow } from '@/components/ScrollRow';
 import { KebabMenu } from '@/components/KebabMenu';
 import { MobileFormSheet } from '@/components/MobileFormSheet';
+import { SectionAddButton } from '@/components/SectionAddButton';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getBadgeClass, getPreset } from '@/lib/colors';
 import { getRepInitials, type UserOption } from '@/lib/useUserOptions';
@@ -326,6 +327,10 @@ export function VendorRelationshipsSection({ companyId, userOptions, currentUser
   };
 
   const openAdd = () => {
+    // Always expands, never collapses: the form lives inside the expanded
+    // body, so adding from a collapsed section has to open it to show
+    // anything — and the new row lands somewhere the person can see it.
+    setExpanded(true);
     resetForm();
     setFormRepId(currentUserConfigId != null ? String(currentUserConfigId) : '');
     setShowForm(true);
@@ -442,23 +447,18 @@ export function VendorRelationshipsSection({ companyId, userOptions, currentUser
 
   return (
     <div className="card">
-      <button onClick={() => setExpanded(v => !v)} className="flex items-center justify-between w-full text-left">
-        <div className="flex items-center gap-2">
-          <h2 className="text-base font-semibold text-brand-primary font-serif">{label}</h2>
-          {expanded && (
-            <span
-              role="button"
-              onClick={e => { e.stopPropagation(); openAdd(); }}
-              className="text-xs text-brand-secondary hover:underline font-medium"
-            >
-              + Add
-            </span>
-          )}
-        </div>
-        <svg className={`w-5 h-5 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
+      {/* Chevron leads the title and the add button sits opposite it, matching
+          the internal-relationship section. The add button is a sibling of the
+          toggle, not inside it, so tapping it can't collapse the section. */}
+      <div className="flex items-center justify-between gap-3">
+        <button onClick={() => setExpanded(v => !v)} className="flex items-center gap-2 min-w-0 flex-1 text-left">
+          <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+          <h2 className="text-base font-semibold text-brand-primary font-serif truncate">{label}</h2>
+        </button>
+        <SectionAddButton onClick={openAdd} title="Add relationship" />
+      </div>
 
       {expanded && (
         <div className="mt-3">
