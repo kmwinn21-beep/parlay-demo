@@ -496,7 +496,12 @@ export function NewMeetingModal({
       return;
     }
     setSubmitting(true);
+    // scheduled_by stays the full internal roster — My Meetings, the conflict
+    // check and the notetaker's Internal/External split all read it. support_rep_ids
+    // records which of them came from Additional Attendees rather than the Rep
+    // field, which is what keeps the two table columns apart.
     const scheduledByIds = Array.from(new Set([...selectedRepIds, ...additionalInternalUserIds]));
+    const supportIds = additionalInternalUserIds.filter(id => !selectedRepIds.includes(id));
     try {
       const res = await fetch('/api/meetings', {
         method: 'POST',
@@ -509,6 +514,7 @@ export function NewMeetingModal({
           meeting_type: meetingType || null,
           location: location || null,
           scheduled_by: scheduledByIds.length > 0 ? scheduledByIds.join(',') : null,
+          support_rep_ids: supportIds.length > 0 ? supportIds.join(',') : null,
           additional_attendees: additionalAttendees.length > 0 ? additionalAttendees.join(', ') : null,
           additional_attendee_ids: additionalAttendeeIds.length > 0 ? additionalAttendeeIds.join(',') : null,
         }),
@@ -532,6 +538,7 @@ export function NewMeetingModal({
           meeting_type: meetingType || null,
           location: location || null,
           scheduled_by: scheduledByIds.length > 0 ? scheduledByIds.join(',') : null,
+          support_rep_ids: supportIds.length > 0 ? supportIds.join(',') : null,
           additional_attendees: additionalAttendees.length > 0 ? additionalAttendees.join(', ') : null,
           additional_attendee_ids: additionalAttendeeIds.length > 0 ? additionalAttendeeIds.join(',') : null,
           outcome: created.outcome || 'Scheduled',

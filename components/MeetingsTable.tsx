@@ -34,6 +34,8 @@ export interface Meeting {
   meeting_time: string;
   location: string | null;
   scheduled_by: string | null;
+  /** Which of scheduled_by came from Additional Attendees rather than the Rep field. */
+  support_rep_ids?: string | null;
   additional_attendees: string | null;
   /** CSV of attendee ids picked off the conference roster. */
   additional_attendee_ids?: string | null;
@@ -123,10 +125,26 @@ function bookingRepId(scheduledBy: string | null | undefined): number | null {
   return parseRepIds(scheduledBy)[0] ?? null;
 }
 
-/** Internal people on a meeting minus the rep who booked it, who has the Rep column. */
-function supportRepIds(scheduledBy: string | null | undefined): string | null {
-  const ids = parseRepIds(scheduledBy);
-  return ids.length > 1 ? ids.slice(1).join(',') : null;
+/**
+ * The two internal columns, split.
+ *
+ * scheduled_by is the whole internal roster; support_rep_ids marks which of
+ * them were added under Additional Attendees rather than chosen in the Rep
+ * field. Reps are therefore everyone who isn't support — which leaves a
+ * deliberately-picked second rep in the Rep column, where it used to be
+ * demoted to Support for being second in the list.
+ */
+function splitInternalIds(m: { scheduled_by: string | null; support_rep_ids?: string | null }): {
+  repIds: string | null;
+  supportIds: string | null;
+} {
+  const all = parseRepIds(m.scheduled_by);
+  const support = parseRepIds(m.support_rep_ids).filter(id => all.includes(id));
+  const reps = all.filter(id => !support.includes(id));
+  return {
+    repIds: reps.length > 0 ? reps.join(',') : null,
+    supportIds: support.length > 0 ? support.join(',') : null,
+  };
 }
 
 /** "$1.2M" / "$600K" — the card has no room for the full figure. */
@@ -442,6 +460,8 @@ export interface EditFormData {
   meeting_time: string;
   location: string;
   scheduled_by: string;
+  /** Which of scheduled_by are support rather than reps. */
+  support_rep_ids: string;
   additional_attendees: string;
   /** Roster picks, kept by id so the row and their profile can show them. */
   additional_attendee_ids: string;
@@ -471,11 +491,16 @@ function EditMeetingRow({
     meeting_type: meeting.meeting_type || '',
   });
   const [selectedRepIds, setSelectedRepIds] = useState<number[]>(() =>
-    parseRepIds(meeting.scheduled_by)
+    parseRepIds(splitInternalIds(meeting).repIds)
   );
   // Internal people added through the attendees picker. They save into
-  // scheduled_by with the reps, which is where the notetaker reads them from.
-  const [additionalInternalIds, setAdditionalInternalIds] = useState<number[]>([]);
+  // scheduled_by with the reps, which is where the notetaker reads them from,
+  // and are listed again on support_rep_ids so the Rep column doesn't claim
+  // them. Seeded from that split rather than from scheduled_by, or reopening
+  // the form would promote every one of them to a rep.
+  const [additionalInternalIds, setAdditionalInternalIds] = useState<number[]>(() =>
+    parseRepIds(splitInternalIds(meeting).supportIds)
+  );
   const [additionalAttendeeIds, setAdditionalAttendeeIds] = useState<number[]>(
     () => parseRepIds(meeting.additional_attendee_ids)
   );
@@ -486,6 +511,7 @@ function EditMeetingRow({
     onSave(meeting.id, {
       ...form,
       scheduled_by: Array.from(new Set([...selectedRepIds, ...additionalInternalIds])).join(','),
+      support_rep_ids: additionalInternalIds.filter(id => !selectedRepIds.includes(id)).join(','),
       additional_attendee_ids: additionalAttendeeIds.join(','),
     });
   };
@@ -600,11 +626,16 @@ function EditMeetingTableRow({
     meeting_type: meeting.meeting_type || '',
   });
   const [selectedRepIds, setSelectedRepIds] = useState<number[]>(() =>
-    parseRepIds(meeting.scheduled_by)
+    parseRepIds(splitInternalIds(meeting).repIds)
   );
   // Internal people added through the attendees picker. They save into
-  // scheduled_by with the reps, which is where the notetaker reads them from.
-  const [additionalInternalIds, setAdditionalInternalIds] = useState<number[]>([]);
+  // scheduled_by with the reps, which is where the notetaker reads them from,
+  // and are listed again on support_rep_ids so the Rep column doesn't claim
+  // them. Seeded from that split rather than from scheduled_by, or reopening
+  // the form would promote every one of them to a rep.
+  const [additionalInternalIds, setAdditionalInternalIds] = useState<number[]>(() =>
+    parseRepIds(splitInternalIds(meeting).supportIds)
+  );
   const [additionalAttendeeIds, setAdditionalAttendeeIds] = useState<number[]>(
     () => parseRepIds(meeting.additional_attendee_ids)
   );
@@ -615,6 +646,7 @@ function EditMeetingTableRow({
     onSave(meeting.id, {
       ...form,
       scheduled_by: Array.from(new Set([...selectedRepIds, ...additionalInternalIds])).join(','),
+      support_rep_ids: additionalInternalIds.filter(id => !selectedRepIds.includes(id)).join(','),
       additional_attendee_ids: additionalAttendeeIds.join(','),
     });
   };
@@ -1127,7 +1159,7 @@ export function MeetingsTable({
               </span>
             ))}
           </td>;
-          case 'rep': return <td key="rep" className="px-3 py-2 leading-snug"><RepPills scheduledBy={m.scheduled_by} userOptions={userOptions} /></td>;
+          case 'rep': return <td key="rep" className="px-3 py-2 leading-snug"><RepPills scheduledBy={splitInternalIds(m).repIds} userOptions={userOptions} /></td>;
           case 'company': return !hideCompany ? <td key="company" className="px-3 py-2 text-gray-600 leading-snug">
             {m.company_name && m.company_id ? (
               <div className="flex items-center gap-1 group">
@@ -1146,7 +1178,7 @@ export function MeetingsTable({
           // Everyone internal on the meeting bar the rep who booked
           // it — that rep already has the Rep column to themselves.
           case 'support': return <td key="support" className="px-3 py-2">
-            <OverlappingRepPills repIds={supportRepIds(m.scheduled_by)} userOptions={userOptions} size="xs" />
+            <OverlappingRepPills repIds={splitInternalIds(m).supportIds} userOptions={userOptions} size="xs" />
           </td>;
           case 'outcome': return <td key="outcome" className="px-3 py-2">
             <OutcomeButton value={m.outcome} options={actionOptions} colorMap={colorMap} onChange={(val) => onOutcomeChange(m.id, val)} />

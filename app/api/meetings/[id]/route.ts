@@ -14,7 +14,7 @@ export async function GET(
     const { id } = params;
 
     const result = await db.execute({
-      sql: `SELECT m.id, m.attendee_id, m.conference_id, m.scheduled_by,
+      sql: `SELECT m.id, m.attendee_id, m.conference_id, m.scheduled_by, m.support_rep_ids,
                m.additional_attendees, m.additional_attendee_ids,
                m.meeting_date, m.meeting_time, m.location,
                a.first_name, a.last_name, a.title, a.photo_url,
@@ -62,6 +62,7 @@ export async function GET(
       additional_attendee_records: extras.get(Number(r.id)) ?? [],
       conference_id: Number(r.conference_id),
       scheduled_by: r.scheduled_by ? String(r.scheduled_by) : null,
+      support_rep_ids: r.support_rep_ids ? String(r.support_rep_ids) : null,
       scheduled_by_names: scheduledByNames,
       additional_attendees: r.additional_attendees ? String(r.additional_attendees) : null,
       meeting_date: r.meeting_date ? String(r.meeting_date) : null,
@@ -92,7 +93,7 @@ export async function PUT(
     const db = await getDb(user?.accountId);
     const { id } = params;
     const body = await request.json();
-    const { meeting_date, meeting_time, location, scheduled_by, additional_attendees, additional_attendee_ids, meeting_type } = body;
+    const { meeting_date, meeting_time, location, scheduled_by, support_rep_ids, additional_attendees, additional_attendee_ids, meeting_type } = body;
 
     if (!meeting_date || !meeting_time) {
       return NextResponse.json({ error: 'meeting_date and meeting_time are required' }, { status: 400 });
@@ -111,8 +112,8 @@ export async function PUT(
     if (stageBlock) return stageBlock;
 
     await db.execute({
-      sql: `UPDATE meetings SET meeting_date = ?, meeting_time = ?, location = ?, scheduled_by = ?, additional_attendees = ?, additional_attendee_ids = ?, meeting_type = ? WHERE id = ?`,
-      args: [meeting_date, meeting_time, location ?? null, scheduled_by ?? null, additional_attendees ?? null, serializeAttendeeIds(additional_attendee_ids), meeting_type ?? null, id],
+      sql: `UPDATE meetings SET meeting_date = ?, meeting_time = ?, location = ?, scheduled_by = ?, support_rep_ids = ?, additional_attendees = ?, additional_attendee_ids = ?, meeting_type = ? WHERE id = ?`,
+      args: [meeting_date, meeting_time, location ?? null, scheduled_by ?? null, support_rep_ids ?? null, additional_attendees ?? null, serializeAttendeeIds(additional_attendee_ids), meeting_type ?? null, id],
     });
 
     return NextResponse.json({ success: true });

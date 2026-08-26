@@ -5,10 +5,15 @@ import { getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { parseRepIds, getRepInitials, type UserOption } from '@/lib/useUserOptions';
 
+/** How long the expanded names stay up before folding back. */
+const EXPAND_MS = 5000;
+
 /**
  * Internal people on a record as a stack of circular initial pills, each
  * overlapping the one before it. Used where several reps share a row and a
  * wrapping list of pills would cost too much width.
+ *
+ * Clicking the stack spreads it into full-name pills for a few seconds.
  */
 export function OverlappingRepPills({
   repIds, userOptions, size = 'sm', max = 4, emptyLabel = '—',
@@ -22,6 +27,13 @@ export function OverlappingRepPills({
   emptyLabel?: string | null;
 }) {
   const colorMaps = useConfigColors();
+  // Click to read the names, which the initials and a hover title can't give
+  // you on a touch screen. It folds itself back rather than needing a second
+  // tap — the expanded row is wide enough to disturb the column it sits in.
+  const [expanded, setExpanded] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+
   const names = parseRepIds(repIds)
     .map(id => userOptions.find(u => u.id === id)?.value)
     .filter((v): v is string => !!v);
@@ -31,30 +43,50 @@ export function OverlappingRepPills({
   }
 
   const dim = size === 'xs' ? 'w-5 h-5 text-[9px]' : 'w-6 h-6 text-[10px]';
-  const shown = names.slice(0, max);
+  const shown = expanded ? names : names.slice(0, max);
   const extra = names.length - shown.length;
 
+  const toggle = (e: React.MouseEvent) => {
+    // The row underneath usually opens something; reading the names shouldn't.
+    e.stopPropagation();
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (expanded) { setExpanded(false); return; }
+    setExpanded(true);
+    timerRef.current = setTimeout(() => setExpanded(false), EXPAND_MS);
+  };
+
   return (
-    <span className="inline-flex items-center">
+    <button
+      type="button"
+      onClick={toggle}
+      title={expanded ? 'Hide names' : names.join(', ')}
+      aria-expanded={expanded}
+      className="inline-flex items-center text-left align-middle"
+    >
       {shown.map((name, i) => (
         <span
           key={`${name}-${i}`}
-          title={name}
           style={{ zIndex: shown.length - i }}
-          className={`${dim} ${i > 0 ? '-ml-1.5' : ''} relative inline-flex items-center justify-center rounded-full font-semibold ring-2 ring-white flex-shrink-0 ${getPreset(colorMaps.user?.[name]).badgeClass}`}
+          // Same element in both states: the width, padding and overlap
+          // transition, so the stack spreads out and the names appear in place
+          // rather than one row being swapped for another.
+          className={`relative inline-flex items-center justify-center rounded-full font-semibold ring-2 ring-white flex-shrink-0 overflow-hidden whitespace-nowrap transition-all duration-300 ease-out ${
+            expanded
+              ? `h-6 max-w-[9rem] px-2 text-[10px] ${i > 0 ? 'ml-1' : ''}`
+              : `${dim} max-w-[1.5rem] px-0 ${i > 0 ? '-ml-1.5' : ''}`
+          } ${getPreset(colorMaps.user?.[name]).badgeClass}`}
         >
-          {getRepInitials(name)}
+          {expanded ? name : getRepInitials(name)}
         </span>
       ))}
       {extra > 0 && (
         <span
-          title={names.slice(max).join(', ')}
           className={`${dim} -ml-1.5 relative inline-flex items-center justify-center rounded-full font-semibold ring-2 ring-white bg-gray-100 text-gray-500 flex-shrink-0`}
         >
           +{extra}
         </span>
       )}
-    </span>
+    </button>
   );
 }
 

@@ -2292,4 +2292,26 @@ export const migrations: string[] = [
   `ALTER TABLE outreach_assignments_pa RENAME TO outreach_assignments`,
   `CREATE INDEX IF NOT EXISTS idx_outreach_assignments_conf ON outreach_assignments(conference_id)`,
   `CREATE INDEX IF NOT EXISTS idx_outreach_assignments_attendee ON outreach_assignments(attendee_id)`,
+
+  // Which of a meeting's internal people are support rather than reps.
+  //
+  // The meeting form merges the Rep field and the internal names picked under
+  // Additional Attendees into scheduled_by, so the two were indistinguishable
+  // afterwards: the Rep column listed everyone, and Support showed everyone bar
+  // the first — which also mislabelled a genuine second rep as support.
+  //
+  // Deliberately a marker over scheduled_by rather than a move out of it.
+  // scheduled_by stays the full internal roster, so My Meetings, the conflict
+  // check and the notetaker's Internal/External split keep working untouched;
+  // this just says which of those ids belong in which column.
+  `ALTER TABLE meetings ADD COLUMN support_rep_ids TEXT`,
+  // Existing rows can't be told apart retroactively, so they take the reading
+  // already on screen: the first id is the rep, the rest are support. That
+  // leaves the Support column exactly as it was and trims the Rep column to
+  // the one name it should have had.
+  `UPDATE meetings
+      SET support_rep_ids = substr(scheduled_by, instr(scheduled_by, ',') + 1)
+    WHERE support_rep_ids IS NULL
+      AND scheduled_by IS NOT NULL
+      AND instr(scheduled_by, ',') > 0`,
 ];
