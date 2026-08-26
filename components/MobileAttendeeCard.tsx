@@ -29,14 +29,6 @@ export interface AttendeeCardRow {
   created_at?: string | null;
 }
 
-function fmtDate(dateStr?: string | null): string {
-  if (!dateStr) return '—';
-  try {
-    const d = new Date(dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z');
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  } catch { return '—'; }
-}
-
 /**
  * The conference count, with the conference names on tap. Lives here rather
  * than in the conference page so the attendees drawer can show the same thing.
@@ -221,9 +213,6 @@ export function MobileAttendeeCard({
           <span className="flex-shrink-0">
             <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.entity_notes_count)} />
           </span>
-        )}
-        {attendee.created_at && (
-          <span className="text-[11px] text-gray-400 flex-shrink-0 whitespace-nowrap">Added {fmtDate(attendee.created_at)}</span>
         )}
       </ScrollRow>
       {actions && <div className="flex-shrink-0">{actions}</div>}
