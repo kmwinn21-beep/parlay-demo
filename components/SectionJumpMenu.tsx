@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { setAllSections, useAnySectionExpanded } from '@/lib/sectionExpansion';
 
 interface Target { key: string; label: string }
 
@@ -19,6 +20,7 @@ export function SectionJumpMenu({ className = '', align = 'below' }: {
 }) {
   const [open, setOpen] = useState(false);
   const [targets, setTargets] = useState<Target[]>([]);
+  const anyExpanded = useAnySectionExpanded();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,7 +38,8 @@ export function SectionJumpMenu({ className = '', align = 'below' }: {
       const rect = el.getBoundingClientRect();
       if (rect.height === 0) return;
       const heading = el.querySelector('h2, h3');
-      const label = heading?.textContent?.trim();
+      // The count belongs on the section, not in a list of destinations.
+      const label = heading?.textContent?.trim().replace(/\s*\((?:\d[^)]*|[^)]*pending)\)\s*$/i, '').trim();
       if (!label) return;
       found.push({ key, label });
     });
@@ -78,11 +81,22 @@ export function SectionJumpMenu({ className = '', align = 'below' }: {
               key={t.key}
               type="button"
               onClick={() => jump(t.key)}
-              className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 truncate"
+              className="w-full text-left px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 truncate"
             >
               {t.label}
             </button>
           ))}
+          {/* Same control the desktop header carries, since a phone has no
+              room for it beside Back. */}
+          <div className="border-t border-gray-100 mt-1 pt-1">
+            <button
+              type="button"
+              onClick={() => { setAllSections(!anyExpanded); setOpen(false); }}
+              className="w-full text-left px-3 py-2 text-sm font-semibold text-brand-secondary hover:bg-gray-50"
+            >
+              {anyExpanded ? 'Collapse All' : 'Expand All'}
+            </button>
+          </div>
         </div>
       )}
     </div>

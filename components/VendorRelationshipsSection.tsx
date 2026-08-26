@@ -9,6 +9,7 @@ import { SectionAddButton } from '@/components/SectionAddButton';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getBadgeClass, getPreset } from '@/lib/colors';
 import { getRepInitials, type UserOption } from '@/lib/useUserOptions';
+import { useCollapsibleSection } from '@/lib/sectionExpansion';
 
 export interface VendorRelationship {
   id: number;
@@ -20,6 +21,8 @@ export interface VendorRelationship {
   strength: string | null;
   vendor_type: string[];
   notes: string;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 interface CompanyOption { id: number; name: string }
@@ -166,6 +169,24 @@ function CompanyPicker({ companies, value, onChange, onPickOther, otherName }: {
 
 /* ─── Card ────────────────────────────────────────────────────────────────── */
 
+/**
+ * When the note was last written. Stored as UTC without a zone marker, so the
+ * Z is added before parsing — otherwise it reads as local and the stamp drifts
+ * by the offset.
+ */
+function formatStamp(raw: string | null | undefined): string {
+  const value = String(raw ?? '').trim();
+  if (!value) return '';
+  const d = new Date(value.endsWith('Z') ? value : `${value.replace(' ', 'T')}Z`);
+  // A shape this doesn't parse still gets shown rather than silently dropping
+  // the stamp — a raw timestamp reads better than no timestamp at all.
+  if (isNaN(d.getTime())) return value;
+  return d.toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  });
+}
+
 function StatusPill({ value, colorMaps }: { value: string; colorMaps: Record<string, Record<string, string | null>> }) {
   // Full-strength text and border with a wash of the same colour behind, from
   // whatever hex the option carries in admin settings.
@@ -189,6 +210,9 @@ function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete 
 }) {
   const [expanded, setExpanded] = useState(false);
   const rep = userOptions.find(u => u.id === rel.rep_id);
+  // Last edit rather than creation: the note is what the stamp is heading, and
+  // the note can be rewritten.
+  const stamp = formatStamp(rel.updated_at || rel.created_at);
 
   return (
     <div className="rounded-lg border border-gray-200 overflow-hidden">
@@ -239,19 +263,28 @@ function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete 
                 {getRepInitials(rep.value)}
               </span>
             )}
+            {/* Sits at the end of this row so it lands directly under the
+                header's chevron, rather than floating at the foot of the card. */}
+            <div className="flex-shrink-0">
+              <KebabMenu
+                title="Relationship actions"
+                items={[
+                  { label: 'Edit', onClick: onEdit },
+                  { label: 'Delete', onClick: onDelete },
+                ]}
+              />
+            </div>
           </div>
 
-          {rel.notes && <p className="text-xs text-gray-600 whitespace-pre-wrap">{rel.notes}</p>}
+          {rel.notes && (
+            <div>
+              {stamp && (
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">{stamp}</p>
+              )}
+              <p className="text-xs text-gray-600 whitespace-pre-wrap">{rel.notes}</p>
+            </div>
+          )}
 
-          <div className="flex justify-end">
-            <KebabMenu
-              title="Relationship actions"
-              items={[
-                { label: 'Edit', onClick: onEdit },
-                { label: 'Delete', onClick: onDelete },
-              ]}
-            />
-          </div>
         </div>
       )}
     </div>
@@ -267,7 +300,7 @@ export function VendorRelationshipsSection({ companyId, userOptions, currentUser
   label: string;
 }) {
   const colorMaps = useConfigColors();
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useCollapsibleSection(false);
   const [relationships, setRelationships] = useState<VendorRelationship[]>([]);
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [statusOptions, setStatusOptions] = useState<ConfigOption[]>([]);
@@ -455,7 +488,9 @@ export function VendorRelationshipsSection({ companyId, userOptions, currentUser
           <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
-          <h2 className="text-base font-semibold text-brand-primary font-serif truncate">{label}</h2>
+          <h2 className="text-base font-semibold text-brand-primary font-serif truncate">
+            {label} ({relationships.length})
+          </h2>
         </button>
         <SectionAddButton onClick={openAdd} title="Add relationship" />
       </div>

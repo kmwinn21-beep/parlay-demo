@@ -2238,6 +2238,10 @@ export const migrations: string[] = [
   // Carry the old links over so nothing vanishes from the section. Their notes
   // were a JSON thread; the newest entry becomes the note, and the fields the
   // old form never asked for stay blank.
+  // Belt and braces for a tenant whose table somehow predates these: both are
+  // in the CREATE above, so on any tenant that ran it these are no-ops.
+  `ALTER TABLE vendor_relationships ADD COLUMN created_at TEXT`,
+  `ALTER TABLE vendor_relationships ADD COLUMN updated_at TEXT`,
   `INSERT INTO vendor_relationships (company_id, related_company_id, notes, created_at)
      SELECT cr.company_id_1, cr.company_id_2, cr.notes, cr.created_at
      FROM company_relationships cr

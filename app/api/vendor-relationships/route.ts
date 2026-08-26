@@ -26,14 +26,34 @@ export async function GET(request: NextRequest) {
   if (!companyId) return NextResponse.json({ error: 'company_id is required' }, { status: 400 });
 
   try {
+    // Timestamps aliased rather than left to vr.*: companies carries
+    // created_at and updated_at too, and which one a wildcard yields in a join
+    // is the driver's business, not something worth depending on.
+    const select = (stamps: string) => `
+      SELECT vr.id, vr.company_id, vr.related_company_id, vr.rep_id,
+             vr.relationship_status, vr.strength, vr.vendor_type, vr.notes,
+             ${stamps},
+             c.name AS related_company_name, c.company_type AS related_company_type
+      FROM vendor_relationships vr
+      LEFT JOIN companies c ON c.id = vr.related_company_id
+      WHERE vr.company_id = ?
+      ORDER BY c.name`;
+
+    // A tenant whose table predates one of these columns would otherwise fail
+    // the whole query and show no relationships at all — losing the stamp is
+    // the acceptable half of that trade.
     const res = await db.execute({
-      sql: `SELECT vr.*, c.name AS related_company_name, c.company_type AS related_company_type
-            FROM vendor_relationships vr
-            LEFT JOIN companies c ON c.id = vr.related_company_id
-            WHERE vr.company_id = ?
-            ORDER BY c.name`,
+      sql: select('vr.created_at AS vr_created_at, vr.updated_at AS vr_updated_at'),
       args: [companyId],
-    });
+    }).catch(() => db.execute({
+      // Only updated_at is the newer of the two, so try created_at alone
+      // before giving up on a stamp entirely.
+      sql: select('vr.created_at AS vr_created_at, vr.created_at AS vr_updated_at'),
+      args: [companyId],
+    })).catch(() => db.execute({
+      sql: select(`'' AS vr_created_at, '' AS vr_updated_at`),
+      args: [companyId],
+    }));
 
     return NextResponse.json(res.rows.map(r => ({
       id: Number(r.id),
@@ -46,7 +66,8 @@ export async function GET(request: NextRequest) {
       strength: r.strength ? String(r.strength) : null,
       vendor_type: parseList(r.vendor_type),
       notes: r.notes ? String(r.notes) : '',
-      created_at: String(r.created_at ?? ''),
+      created_at: String(r.vr_created_at ?? ''),
+      updated_at: String(r.vr_updated_at ?? r.vr_created_at ?? ''),
     })), { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('GET /api/vendor-relationships error:', error);

@@ -27,6 +27,7 @@ import { useUser } from '@/components/UserContext';
 import { InternalRelationshipsSection } from '@/components/InternalRelationshipsSection';
 import { VendorRelationshipsSection } from '@/components/VendorRelationshipsSection';
 import { SectionJumpMenu } from '@/components/SectionJumpMenu';
+import { useCollapsibleSection, setAllSections, useAnySectionExpanded } from '@/lib/sectionExpansion';
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { ComposeEmailModal } from '@/components/ComposeEmailModal';
 import { CompanyDrawer } from '@/components/CompanyDrawer';
@@ -193,7 +194,7 @@ export default function CompanyDetailPage() {
   const [editingCompanyAttendeeId, setEditingCompanyAttendeeId] = useState<number | null>(null);
   const [savingCompanyAttendeeId, setSavingCompanyAttendeeId] = useState<number | null>(null);
   const [attendeesExpanded, setAttendeesExpanded] = useState(false);
-  const [productsExpanded, setProductsExpanded] = useState(false);
+  const [productsExpanded, setProductsExpanded] = useCollapsibleSection(false);
   const ATTENDEE_COLLAPSED_COUNT = 4;
 
   // Dynamic config options
@@ -214,7 +215,9 @@ export default function CompanyDetailPage() {
   // Operator / Capital relationship state
   const [relatedDrawerCompanyId, setRelatedDrawerCompanyId] = useState<number | null>(null);
   const [relatedDrawerCompanyName, setRelatedDrawerCompanyName] = useState<string | undefined>();
-  const [conferencesExpanded, setConferencesExpanded] = useState(false);
+  const [conferencesExpanded, setConferencesExpanded] = useCollapsibleSection(false);
+  const [statusExpanded, setStatusExpanded] = useCollapsibleSection(false);
+  const anySectionExpanded = useAnySectionExpanded();
   const [configuredProductNames, setConfiguredProductNames] = useState<Set<string>>(new Set());
   const [showAssignFollowUp, setShowAssignFollowUp] = useState(false);
   const [composeTarget, setComposeTarget] = useState<{ email: string; name: string } | null>(null);
@@ -872,7 +875,16 @@ export default function CompanyDetailPage() {
           a chore, and this row already carries the page's other navigation. */}
       <div className="flex items-center justify-between gap-3">
         <BackButton />
+        {/* Phone gets both controls inside the Jump To menu; there's no room
+            for a second button beside Back. */}
         <SectionJumpMenu className="sm:hidden" />
+        <button
+          type="button"
+          onClick={() => setAllSections(!anySectionExpanded)}
+          className="hidden sm:inline-flex items-center text-sm text-gray-500 hover:text-brand-primary transition-colors"
+        >
+          {anySectionExpanded ? 'Collapse All' : 'Expand All'}
+        </button>
       </div>
       {/* Two-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1693,8 +1705,18 @@ export default function CompanyDetailPage() {
             const sectionMap: Record<string, React.ReactNode> = {
               status: (
                 <div key="status" className="card">
-                  <h2 className="text-base font-semibold text-brand-primary font-serif mb-1">{getSectionLabel('status')}</h2>
-                  <p className="text-xs text-gray-500 mb-3">Setting a company status will update all associated attendees.</p>
+                  <button
+                    type="button"
+                    onClick={() => setStatusExpanded(v => !v)}
+                    className="w-full flex items-center gap-2 text-left"
+                  >
+                    <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${statusExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                    <h2 className="text-base font-semibold text-brand-primary font-serif">{getSectionLabel('status')}</h2>
+                  </button>
+                  {statusExpanded && (<>
+                  <p className="text-xs text-gray-500 mt-1 mb-3">Setting a company status will update all associated attendees.</p>
                   <div className="flex flex-wrap gap-2">
                     {statusOptionObjects.map(opt => {
                       const isUserScoped = opt.scope === 'user';
@@ -1705,7 +1727,7 @@ export default function CompanyDetailPage() {
                         <button
                           key={opt.id}
                           onClick={() => handleStatus(opt.value)}
-                          className={`px-4 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all ${
                             isActive ? `${getPillClass(opt.value, colorMaps.status || {})} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
                           }`}
                         >
@@ -1714,6 +1736,7 @@ export default function CompanyDetailPage() {
                       );
                     })}
                   </div>
+                  </>)}
                 </div>
               ),
               closed_deals: (
