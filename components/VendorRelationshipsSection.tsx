@@ -262,6 +262,17 @@ function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete 
                 {getRepInitials(rep.value)}
               </span>
             )}
+            {/* Sits at the end of this row so it lands directly under the
+                header's chevron, rather than floating at the foot of the card. */}
+            <div className="flex-shrink-0">
+              <KebabMenu
+                title="Relationship actions"
+                items={[
+                  { label: 'Edit', onClick: onEdit },
+                  { label: 'Delete', onClick: onDelete },
+                ]}
+              />
+            </div>
           </div>
 
           {rel.notes && (
@@ -273,15 +284,6 @@ function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete 
             </div>
           )}
 
-          <div className="flex justify-end">
-            <KebabMenu
-              title="Relationship actions"
-              items={[
-                { label: 'Edit', onClick: onEdit },
-                { label: 'Delete', onClick: onDelete },
-              ]}
-            />
-          </div>
         </div>
       )}
     </div>
