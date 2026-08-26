@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { SectionAddButton } from '@/components/SectionAddButton';
 import { useClosedDealDraft, type ClosedDeal } from '@/lib/ClosedDealDraftContext';
 
 export type { ClosedDeal };
@@ -130,14 +131,7 @@ export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = 
         <h2 className="text-base font-semibold text-brand-primary font-serif">
           Closed / Won Deals {deals.length > 0 && `(${deals.length})`}
         </h2>
-        {canEdit && (
-          <button type="button" onClick={() => openDeal(companyId)} className="flex items-center gap-1 text-xs font-medium text-brand-primary hover:opacity-75 transition-opacity">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add Deal
-          </button>
-        )}
+        {canEdit && <SectionAddButton onClick={() => openDeal(companyId)} title="Add deal" />}
       </div>
 
       {/* Summary cards row */}

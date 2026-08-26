@@ -868,7 +868,12 @@ export default function CompanyDetailPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <BackButton />
+      {/* Phone only: the record is long enough that scrolling to a section is
+          a chore, and this row already carries the page's other navigation. */}
+      <div className="flex items-center justify-between gap-3">
+        <BackButton />
+        <SectionJumpMenu className="sm:hidden" />
+      </div>
       {/* Two-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column — main content */}
@@ -1262,11 +1267,6 @@ export default function CompanyDetailPage() {
                     <span className="text-sm text-gray-400">—</span>}
                 </span>
               </div>
-            </div>
-            {/* Phone only: the record is long enough that scrolling to a
-                section is a chore, and the header card has the room. */}
-            <div className="sm:hidden flex justify-end -mb-1">
-              <SectionJumpMenu />
             </div>
           </div>
         )}
@@ -1735,12 +1735,12 @@ export default function CompanyDetailPage() {
                       <>
                         <button
                           onClick={() => setConferencesExpanded(prev => !prev)}
-                          className="flex items-center justify-between w-full text-left"
+                          className="flex items-center gap-2 w-full text-left"
                         >
+                          <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${conferencesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                           <h2 className="text-base font-semibold text-brand-primary font-serif">
                             {getSectionLabel('conferences')} ({confs.length})
                           </h2>
-                          <svg className={`w-5 h-5 text-gray-400 transition-transform ${conferencesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                         </button>
                         {!conferencesExpanded && inProgressConfs.length > 0 && (
                           <div className="space-y-2 mt-3">
@@ -1885,15 +1885,15 @@ export default function CompanyDetailPage() {
                   <div key="products" className="card">
                     <button
                       type="button"
-                      className="w-full flex items-center justify-between"
+                      className="w-full flex items-center gap-2 text-left"
                       onClick={() => setProductsExpanded(prev => !prev)}
                     >
+                      <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${productsExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
                       <h2 className="text-base font-semibold text-brand-primary font-serif">
                         {getSectionLabel('products')} <span className="text-gray-400 font-normal text-sm">({entries.length})</span>
                       </h2>
-                      <svg className={`w-5 h-5 text-gray-400 transition-transform ${productsExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
                     </button>
                     {productsExpanded && (
                       <div className="space-y-3 mt-3">
