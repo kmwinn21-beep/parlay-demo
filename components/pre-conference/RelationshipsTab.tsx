@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
 import { TargetBtn } from './TargetBtn';
@@ -8,7 +8,6 @@ import { useRecordDrawer } from './RecordDrawerContext';
 import { getBadgeClass, getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getRepInitials } from '@/lib/useUserOptions';
-import { TouchpointMap } from '@/components/TouchpointMap';
 import { ScrollRow } from '@/components/ScrollRow';
 import { VendorRelationshipCard } from '@/components/VendorRelationshipsSection';
 import { useUserOptions } from '@/lib/useUserOptions';
@@ -210,9 +209,7 @@ function RelationshipAttendeeCard({
   const [expanded, setExpanded] = useState(false);
   const [timeline, setTimeline] = useState<TimelineData | null>(null);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
-  const [showTpMap, setShowTpMap] = useState(false);
   const [repsOpen, setRepsOpen] = useState(false);
-  const tpBtnRef = useRef<HTMLDivElement>(null);
   const colorMaps = useConfigColors();
 
   useEffect(() => {
@@ -228,9 +225,6 @@ function RelationshipAttendeeCard({
   const healthScore = timeline?.healthScore ?? 0;
   const hColor = scoreColor(healthScore);
   const touchpoints = timeline?.touchpoints ?? [];
-  const totalTouchpoints = timeline?.totalTouchpoints ?? 0;
-  const loggedTouchpoints = timeline?.loggedTouchpoints ?? 0;
-  const followUpRate = timeline?.followUpCompletionRate ?? null;
   const icp = timeline?.attendee.icp;
   const attendeeStatus = timeline?.attendee.status;
   const selectedTp = selectedIdx !== null ? touchpoints[selectedIdx] ?? null : null;
@@ -317,38 +311,6 @@ function RelationshipAttendeeCard({
       </div>
 
       {expanded && (<>
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-2">
-        <div className="rounded-lg p-2 text-center" style={{ background: '#F1F5F9', border: '1px solid rgba(34,58,94,0.07)' }}>
-          <div className="text-[9px] uppercase tracking-wide text-gray-400 font-medium">Conferences</div>
-          <div className="text-base font-bold font-serif leading-none mt-0.5" style={{ color: '#223A5E' }}>
-            {timeline ? totalTouchpoints : '—'}
-          </div>
-        </div>
-        <div ref={tpBtnRef} className="relative">
-          <button type="button" onClick={() => setShowTpMap(prev => !prev)}
-            className="w-full rounded-lg p-2 text-center hover:bg-blue-50 transition-colors cursor-pointer"
-            style={{ background: '#F1F5F9', border: '1px solid rgba(34,58,94,0.07)' }}>
-            <div className="text-[9px] uppercase tracking-wide text-gray-400 font-medium">Touchpoints</div>
-            <div className="text-base font-bold font-serif leading-none mt-0.5" style={{ color: '#223A5E' }}>
-              {timeline ? loggedTouchpoints : '—'}
-            </div>
-          </button>
-          <TouchpointMap
-            attendeeId={attendee.id}
-            open={showTpMap}
-            onClose={() => setShowTpMap(false)}
-            anchorRef={tpBtnRef as React.RefObject<HTMLElement>}
-          />
-        </div>
-        <div className="rounded-lg p-2 text-center" style={{ background: '#F1F5F9', border: '1px solid rgba(34,58,94,0.07)' }}>
-          <div className="text-[9px] uppercase tracking-wide text-gray-400 font-medium">Follow-ups</div>
-          <div className="text-base font-bold font-serif leading-none mt-0.5" style={{ color: '#223A5E' }}>
-            {timeline ? (followUpRate !== null ? `${followUpRate}%` : '—') : '—'}
-          </div>
-        </div>
-      </div>
-
       {/* Conference history */}
       {timeline && touchpoints.length > 0 ? (
         <div>
