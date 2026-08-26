@@ -109,7 +109,6 @@ export async function GET(
       confsResult,
       childCompaniesResult,
       parentResult,
-      relatedResult,
       statusMarkersResult,
       myStatusIdsResult,
     ] = await Promise.all([
@@ -149,15 +148,6 @@ export async function GET(
             args: [company.parent_company_id],
           })
         : Promise.resolve({ rows: [] }),
-      db.execute({
-        sql: `SELECT c.id, c.name, c.company_type, cr.notes
-              FROM companies c
-              INNER JOIN company_relationships cr
-                ON (cr.company_id_1 = c.id AND cr.company_id_2 = ?)
-                OR (cr.company_id_2 = c.id AND cr.company_id_1 = ?)
-              ORDER BY c.name`,
-        args: [params.id, params.id],
-      }),
       // Who has marked each user-scoped status for this company (for global display)
       db.execute({
         sql: `SELECT cus.status_option_id,
@@ -219,13 +209,6 @@ export async function GET(
         ? 'Parent'
         : null;
 
-    const related_companies = relatedResult.rows.map((r) => ({
-      id: Number(r.id),
-      name: String(r.name),
-      company_type: r.company_type ? String(r.company_type) : null,
-      notes: r.notes ? String(r.notes) : null,
-    }));
-
     // Strip all user-scoped status values from the global status string
     const rawStatus = String(company.status || '');
     const cleanStatus = rawStatus.split(',').map(s => s.trim()).filter(s => s && !userScopedValues.has(s)).join(',');
@@ -251,7 +234,6 @@ export async function GET(
       conferences,
       child_companies,
       parent_company,
-      related_companies,
     });
   } catch (error) {
     console.error('GET /api/companies/[id] error:', error);
@@ -463,7 +445,6 @@ export async function DELETE(
         // Clear the stale label along with the link, or the orphans keep
         // rendering as children of a company that no longer exists.
         { sql: "UPDATE companies SET parent_company_id = NULL, entity_structure = NULL WHERE parent_company_id = ?", args: [params.id] },
-        { sql: 'DELETE FROM company_relationships WHERE company_id_1 = ? OR company_id_2 = ?', args: [params.id, params.id] },
         { sql: 'DELETE FROM companies WHERE id = ?', args: [params.id] },
       ],
       'write'

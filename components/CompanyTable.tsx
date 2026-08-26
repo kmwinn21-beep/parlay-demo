@@ -5,7 +5,6 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { MergeModal } from './MergeModal';
 import { ParentChildModal } from './ParentChildModal';
-import { OperatorCapitalModal } from './OperatorCapitalModal';
 import { InternalRelationshipModal } from './InternalRelationshipsSection';
 import { CompanyRelationshipsPopup } from './CompanyRelationshipsPopup';
 import { useDrawerResize } from '@/lib/useDrawerResize';
@@ -328,7 +327,6 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [quickViewId, setQuickViewId] = useState<number | null>(null);
   const [showParentChildModal, setShowParentChildModal] = useState(false);
-  const [showOperatorCapitalModal, setShowOperatorCapitalModal] = useState(false);
   const [showRepRelModal, setShowRepRelModal] = useState(false);
   const [showBulkVendorRel, setShowBulkVendorRel] = useState(false);
   // The company row whose actions menu is open — the others recede so it's
@@ -586,23 +584,6 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
     toast.success('Parent/Child relationship created!'); setSelectedIds(new Set()); onRefresh();
   };
 
-  const handleOperatorCapital = async (companyIds: number[]) => {
-    const idsSet = new Set(companyIds);
-    const increment = companyIds.length - 1;
-    const snapshot = localCompanies;
-    setLocalCompanies((cs) => cs.map((c) =>
-      idsSet.has(c.id) ? { ...c, relationship_count: (c.relationship_count ?? 0) + increment } : c
-    ));
-    try {
-      const res = await fetch('/api/companies/relationships/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company_ids: companyIds }) });
-      if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Failed to create relationships'); }
-      toast.success('Operator/Capital relationships created!'); setSelectedIds(new Set()); onRefresh();
-    } catch (e) {
-      setLocalCompanies(snapshot);
-      throw e;
-    }
-  };
-
   const handleMassEdit = async () => {
     const fields: Record<string, string | null> = {};
     if (massEditFields.status) fields.status = massEditFields.status;
@@ -832,9 +813,6 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
             )}
             <button onClick={() => setShowRepRelModal(true)} className={BULK_BTN}>
               + Rep Relationship
-            </button>
-            <button onClick={() => setShowOperatorCapitalModal(true)} className={BULK_BTN}>
-              + Other Relationship
             </button>
             {selectedIds.size >= 2 && (
               <button onClick={() => setShowParentChildModal(true)} className={BULK_BTN}>
@@ -1524,13 +1502,6 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         onClose={() => setShowParentChildModal(false)}
         onSubmit={handleParentChild}
         items={mergePickerItems}
-      />
-
-      <OperatorCapitalModal
-        isOpen={showOperatorCapitalModal}
-        onClose={() => setShowOperatorCapitalModal(false)}
-        onSubmit={handleOperatorCapital}
-        items={selectedCompanies.map(c => ({ id: c.id, label: c.name, sublabel: [c.company_type, c.profit_type ? `(${c.profit_type})` : ''].filter(Boolean).join(' ') }))}
       />
 
       <BulkVendorRelationshipModal
