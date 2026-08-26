@@ -26,6 +26,7 @@ import { useUser } from './UserContext';
 import { CompanyAttendeesDrawer, type CompanyAttendeeLite } from './CompanyAttendeesDrawer';
 import { BulkAssignOutreachModal } from './BulkAssignOutreachModal';
 import { BulkVendorRelationshipModal } from './BulkVendorRelationshipModal';
+import { RowActionsKebab } from './RowActionsKebab';
 import { useSectionConfig } from '@/lib/useSectionConfig';
 
 interface Company {
@@ -310,6 +311,12 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   // Management, so the two never disagree about what's being added.
   const { getLabel: getCompanySectionLabel } = useSectionConfig('company');
   const vendorSectionLabel = getCompanySectionLabel('operator_capital');
+  /**
+   * Where the frozen Company Name column starts: the checkbox column plus any
+   * visible columns ordered ahead of it. Columns are reorderable, so this is
+   * derived rather than assumed — one with no configured width contributes its
+   * rendered default.
+   */
   const [quickFilterMyAccounts, setQuickFilterMyAccounts] = useState(false);
   const [filterUpdatedWithin, setFilterUpdatedWithin] = useState('');
   // 'parent' = no parent_company_id (standalone or explicit parent)
@@ -324,12 +331,25 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const [showOperatorCapitalModal, setShowOperatorCapitalModal] = useState(false);
   const [showRepRelModal, setShowRepRelModal] = useState(false);
   const [showBulkVendorRel, setShowBulkVendorRel] = useState(false);
+  // The company row whose actions menu is open — the others recede so it's
+  // obvious which record the menu is about.
+  const [actionsCompanyId, setActionsCompanyId] = useState<number | null>(null);
   const [relPopupCompany, setRelPopupCompany] = useState<{ id: number; name: string } | null>(null);
   const [showAddToConf, setShowAddToConf] = useState(false);
   const [showBulkAssignOutreach, setShowBulkAssignOutreach] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS);
+  const COL_DEFAULT_WIDTH = 120;
+  const companyNameStickyLeft = (() => {
+    let left = 40;
+    for (const col of orderedColumns) {
+      if (col.key === 'name') break;
+      if (!isVisible(col.key)) continue;
+      left += colWidths[col.key] ?? COL_DEFAULT_WIDTH;
+    }
+    return left;
+  })();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [showMassEdit, setShowMassEdit] = useState(false);
   const [massEditFields, setMassEditFields] = useState<{ status?: string; company_type?: string; assigned_user?: string; services?: string[] }>({});
@@ -1053,7 +1073,12 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
           {filtered.length === 0 ? (
             <div className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</div>
           ) : paginated.map(company => (
-            <div key={company.id} className={`px-4 py-4 ${selectedIds.has(company.id) ? 'bg-blue-50' : 'bg-white'}`}>
+            <div
+              key={company.id}
+              className={`px-4 py-4 transition-opacity ${selectedIds.has(company.id) ? 'bg-blue-50' : 'bg-white'} ${
+                actionsCompanyId != null && actionsCompanyId !== company.id ? 'opacity-40' : ''
+              }`}
+            >
               {/* Row 1: name (left) | rep pills (upper-right) */}
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -1104,8 +1129,11 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                   )}
                 </button>
               </div>
-              {/* Rows 2-4 ride one scrolling line, company type first */}
-              <ScrollRow className="mt-2 ml-6" gapClass="gap-2">
+              {/* Rows 2-4 ride one scrolling line, company type first. The
+                  actions menu sits at the end of that line and stays put — the
+                  pills pass behind it rather than pushing it off the edge. */}
+              <div className="mt-2 ml-6 flex items-center gap-2">
+              <ScrollRow className="flex-1 min-w-0" gapClass="gap-2">
                 {company.company_type && (
                   <span className="flex-shrink-0 whitespace-nowrap">
                     {company.company_type === 'Competitor'
@@ -1154,6 +1182,19 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                   ) : null;
                 })()}
               </ScrollRow>
+              {conferenceId != null && (
+                <div className="flex-shrink-0">
+                  <RowActionsKebab
+                    entityType="company"
+                    conferenceId={conferenceId}
+                    companyId={company.id}
+                    companyName={company.name}
+                    onDone={onRefresh}
+                    onOpenChange={open => setActionsCompanyId(open ? company.id : null)}
+                  />
+                </div>
+              )}
+              </div>
             </div>
           ))}
         </div>
@@ -1225,13 +1266,13 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
           <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
             <thead className="sticky top-0 z-10">
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-3 py-3 text-left w-10">
+                <th className="px-3 py-3 text-left w-10 sticky left-0 z-30 bg-gray-50">
                   <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(filtered.map(c => c.id))); else setSelectedIds(new Set()); }} className="accent-brand-secondary" />
                 </th>
                 {orderedColumns.map(col => {
                   if (!isVisible(col.key)) return null;
                   switch (col.key) {
-                    case 'name': return <th key="name" className={thCls} style={{ width: colWidths.name }} onClick={() => handleSort('name')}>Company Name <SortIcon col="name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="name" /></th>;
+                    case 'name': return <th key="name" className={`${thCls} sticky z-30 bg-gray-50`} style={{ width: colWidths.name, left: companyNameStickyLeft }} onClick={() => handleSort('name')}>Company Name <SortIcon col="name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="name" /></th>;
                     case 'type': return <th key="type" className={thCls} style={{ width: colWidths.type }} onClick={() => handleSort('company_type')}>Type <SortIcon col="company_type" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="type" /></th>;
                     case 'sfowner': return <th key="sfowner" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none relative" style={{ width: colWidths.sfowner }}>SF Owner<ResizeHandle col="sfowner" /></th>;
                     case 'status': return <th key="status" className={thCls} style={{ width: colWidths.status }} onClick={() => handleSort('status')}>Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="status" /></th>;
@@ -1250,18 +1291,28 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                   </th>
                 ))}
                 {rowAction && <th className="px-3 py-3 w-20" />}
+                {/* Actions pin to the right edge: the menu is reachable at any
+                    scroll position, and the columns pass under it. */}
+                {conferenceId != null && <th className="px-2 py-3 sticky right-0 z-30 bg-gray-50" style={{ width: 48 }} aria-label="Actions" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
-                <tr><td colSpan={1 + (['name','type','sfowner','status','attendees','conferences','wse','updated_on','relationships'] as const).filter(k => isVisible(k)).length + customColumns.filter(c => c.visible).length + (rowAction ? 1 : 0)} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
-              ) : paginated.map(company => (
-                <tr key={company.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(company.id) ? 'bg-blue-50' : ''}`}>
-                  <td className="px-3 py-3"><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-brand-secondary" /></td>
+                <tr><td colSpan={1 + (['name','type','sfowner','status','attendees','conferences','wse','updated_on','relationships'] as const).filter(k => isVisible(k)).length + customColumns.filter(c => c.visible).length + (rowAction ? 1 : 0) + (conferenceId != null ? 1 : 0)} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
+              ) : paginated.map(company => {
+                const rowSelected = selectedIds.has(company.id);
+                // Frozen cells need a background of their own — the row's
+                // paints behind them, not through them — so the selected and
+                // hover treatments are repeated here.
+                const frozenBg = rowSelected ? 'bg-blue-50' : 'bg-white group-hover:bg-gray-50';
+                const dimmed = actionsCompanyId != null && actionsCompanyId !== company.id;
+                return (
+                <tr key={company.id} className={`group hover:bg-gray-50 transition-all ${rowSelected ? 'bg-blue-50' : ''} ${dimmed ? 'opacity-40' : ''}`}>
+                  <td className={`px-3 py-3 sticky left-0 z-10 ${frozenBg}`}><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-brand-secondary" /></td>
                   {orderedColumns.map(col => {
                     if (!isVisible(col.key)) return null;
                     switch (col.key) {
-                      case 'name': return <td key="name" className="px-3 py-3" style={{ maxWidth: colWidths.name }}>
+                      case 'name': return <td key="name" className={`px-3 py-3 sticky z-10 ${frozenBg}`} style={{ maxWidth: colWidths.name, left: companyNameStickyLeft }}>
                         {/* The name opens the details drawer, the way the
                             phone's card already does — which leaves the eye
                             icon that used to do it saying the same thing. */}
@@ -1431,8 +1482,21 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                     </td>
                   ))}
                   {rowAction && <td className="px-3 py-3">{rowAction(company)}</td>}
+                  {conferenceId != null && (
+                    <td className={`px-2 py-3 sticky right-0 z-10 ${frozenBg}`} style={{ width: 48 }}>
+                      <RowActionsKebab
+                        entityType="company"
+                        conferenceId={conferenceId}
+                        companyId={company.id}
+                        companyName={company.name}
+                        onDone={onRefresh}
+                        onOpenChange={open => setActionsCompanyId(open ? company.id : null)}
+                      />
+                    </td>
+                  )}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

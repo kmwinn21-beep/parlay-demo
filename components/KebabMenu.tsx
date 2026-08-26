@@ -22,12 +22,20 @@ const MENU_WIDTH = 176;
  * scrolling container can't clip it. Positions against the button and flips
  * above when the space below is tight.
  */
-export function KebabMenu({ items, title = 'Actions', className = '' }: {
+export function KebabMenu({ items, title = 'Actions', className = '', onOpenChange }: {
   items: KebabMenuItem[];
   title?: string;
   className?: string;
+  /** Fires on open and on close, for callers that dim what's around the menu. */
+  onOpenChange?: (open: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // Held in a ref and fired only on an actual transition: callers pass an
+  // inline arrow, so depending on the callback itself would re-fire it every
+  // render — and it typically sets state, which would never settle.
+  const onOpenChangeRef = useRef(onOpenChange);
+  onOpenChangeRef.current = onOpenChange;
+  useEffect(() => { onOpenChangeRef.current?.(open); }, [open]);
   const wrapRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -98,7 +106,7 @@ export function KebabMenu({ items, title = 'Actions', className = '' }: {
               disabled={item.disabled}
               title={item.title}
               onClick={() => { setOpen(false); item.onClick(); }}
-              className={`w-full text-left px-3 py-2 text-sm font-medium flex items-center gap-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+              className={`w-full text-left px-3 py-2 text-sm font-semibold flex items-center gap-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                 item.active ? 'text-brand-secondary bg-blue-50' : 'text-gray-700 hover:bg-gray-50'
               }`}
             >
