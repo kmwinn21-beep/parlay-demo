@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { KebabMenu } from '@/components/KebabMenu';
 import { NewNoteModal } from '@/components/NewNoteModal';
 import { NewMeetingModal } from '@/components/NewMeetingModal';
@@ -63,6 +64,14 @@ export function RowActionsKebab({
   const close = () => setAction(null);
   const finish = () => { close(); onDone?.(); };
 
+  // The menu button lives in a table cell that is `position: sticky` with a
+  // z-index, which makes that cell a stacking context — a fixed overlay
+  // rendered inside it is trapped there, and the next row's sticky cell paints
+  // straight over the top of it. These are full-screen dialogs and have no
+  // business being scoped to one cell, so they go to the body instead.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
   const items = [
     {
       label: '+ Outreach',
@@ -96,6 +105,8 @@ export function RowActionsKebab({
         onOpenChange={onOpenChange}
       />
 
+      {mounted && createPortal(
+        <>
       {action === 'outreach' && companyId != null && (
         <OutreachAssignModal
           conferenceId={conferenceId}
@@ -197,6 +208,9 @@ export function RowActionsKebab({
             </div>
           </div>
         </div>
+      )}
+        </>,
+        document.body
       )}
     </>
   );
