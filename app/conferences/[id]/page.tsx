@@ -12,6 +12,7 @@ import { MeetingsTable, type Meeting, type EditFormData } from '@/components/Mee
 import { MeetingDateFilterBar } from '@/components/MeetingDateFilterBar';
 import { isBoothHours } from '@/lib/meetingTime';
 import { KebabMenu } from '@/components/KebabMenu';
+import { RowActionsKebab } from '@/components/RowActionsKebab';
 import { ScrollRow } from '@/components/ScrollRow';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { PinnedNotesSection, type PinnedNote } from '@/components/PinnedNotesSection';
@@ -446,6 +447,26 @@ export default function ConferenceDetailPage() {
 
   // Resizable column widths
   const [colWidths, setColWidths] = useState<Record<string, number>>({ name: 220, title: 160, company: 160, type: 120, seniority: 120, conferences: 80 });
+  // The attendee row whose actions menu is open — the others recede so it's
+  // obvious which record the menu is about.
+  const [actionsAttendeeId, setActionsAttendeeId] = useState<number | null>(null);
+
+  /**
+   * Where the frozen Name column starts: the checkbox column plus any visible
+   * columns ordered ahead of it. Columns are reorderable, so this is derived
+   * rather than assumed — a column with no configured width (Notes, Date Added,
+   * custom ones) contributes its rendered default.
+   */
+  const CONF_COL_DEFAULT_WIDTH = 140;
+  const attendeeNameStickyLeft = (() => {
+    let left = 40;
+    for (const col of confAttendeeColumns) {
+      if (col.key === 'name') break;
+      if (!isConfAttendeeColVisible(col.key)) continue;
+      left += colWidths[col.key] ?? CONF_COL_DEFAULT_WIDTH;
+    }
+    return left;
+  })();
   const resizeRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
   const startResize = useCallback((e: React.MouseEvent, col: string) => {
     e.preventDefault();
@@ -3294,6 +3315,19 @@ export default function ConferenceDetailPage() {
                     titleWarning={!titleMetaLoading && shouldWarnForTitleMetadata(titleMetaMap[attendee.id])}
                     userOptions={userOptions}
                     colorMaps={colorMaps}
+                    dimmed={actionsAttendeeId != null && actionsAttendeeId !== attendee.id}
+                    actions={
+                      <RowActionsKebab
+                        entityType="attendee"
+                        conferenceId={Number(id)}
+                        attendeeId={attendee.id}
+                        attendeeName={`${attendee.first_name} ${attendee.last_name}`.trim()}
+                        companyId={attendee.company_id ?? null}
+                        companyName={attendee.company_name ?? null}
+                        onDone={fetchConference}
+                        onOpenChange={open => setActionsAttendeeId(open ? attendee.id : null)}
+                      />
+                    }
                   />
                 ))}
               </div>
@@ -3303,7 +3337,7 @@ export default function ConferenceDetailPage() {
               <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left" style={{ width: 40 }}>
+                    <th className="px-4 py-3 text-left sticky left-0 z-30 bg-gray-50" style={{ width: 40 }}>
                       <input
                         type="checkbox"
                         checked={selectedAttendeeIds.size === filteredAttendees.length && filteredAttendees.length > 0}
@@ -3320,7 +3354,7 @@ export default function ConferenceDetailPage() {
                       const sortThCls = "px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative cursor-pointer hover:text-brand-secondary";
                       const plainThCls = "px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative";
                       switch (col.key) {
-                        case 'name': return <th key="name" onClick={() => handleSort('name')} className={sortThCls} style={{ width: colWidths.name }}>Name{sortKey === 'name' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}{rh('name')}</th>;
+                        case 'name': return <th key="name" onClick={() => handleSort('name')} className={`${sortThCls} sticky z-30 bg-gray-50`} style={{ width: colWidths.name, left: attendeeNameStickyLeft }}>Name{sortKey === 'name' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}{rh('name')}</th>;
                         case 'title': return <th key="title" onClick={() => handleSort('title')} className={sortThCls} style={{ width: colWidths.title }}>Title{sortKey === 'title' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}{rh('title')}</th>;
                         case 'company': return <th key="company" onClick={() => handleSort('company')} className={sortThCls} style={{ width: colWidths.company }}>Company{sortKey === 'company' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}{rh('company')}</th>;
                         case 'type': return <th key="type" className={plainThCls} style={{ width: colWidths.type }}>Type{rh('type')}</th>;
@@ -3336,12 +3370,22 @@ export default function ConferenceDetailPage() {
                         {col.label}
                       </th>
                     ))}
+                    {/* Actions pin to the right edge: the menu is reachable at
+                        any scroll position, and the columns pass under it. */}
+                    <th className="px-2 py-3 sticky right-0 z-30 bg-gray-50" style={{ width: 48 }} aria-label="Actions" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {paginatedAttendees.map((attendee) => (
-                    <tr key={attendee.id} className={`hover:bg-gray-50 transition-colors ${selectedAttendeeIds.has(attendee.id) ? 'bg-blue-50' : ''}`}>
-                      <td className="px-4 py-3">
+                  {paginatedAttendees.map((attendee) => {
+                    const rowSelected = selectedAttendeeIds.has(attendee.id);
+                    // Frozen cells need a background of their own — the row's
+                    // paints behind them, not through them — so the selected
+                    // and hover treatments are repeated here.
+                    const frozenBg = rowSelected ? 'bg-blue-50' : 'bg-white group-hover:bg-gray-50';
+                    const dimmed = actionsAttendeeId != null && actionsAttendeeId !== attendee.id;
+                    return (
+                    <tr key={attendee.id} className={`group hover:bg-gray-50 transition-all ${rowSelected ? 'bg-blue-50' : ''} ${dimmed ? 'opacity-40' : ''}`}>
+                      <td className={`px-4 py-3 sticky left-0 z-10 ${frozenBg}`}>
                         <input
                           type="checkbox"
                           checked={selectedAttendeeIds.has(attendee.id)}
@@ -3353,7 +3397,7 @@ export default function ConferenceDetailPage() {
                         if (!isConfAttendeeColVisible(col.key)) return null;
                         switch (col.key) {
                           case 'name': return (
-                            <td key="name" className="px-4 py-3 font-medium overflow-visible">
+                            <td key="name" className={`px-4 py-3 font-medium sticky z-10 ${frozenBg}`} style={{ left: attendeeNameStickyLeft }}>
                               {/* The name opens the drawer, so the icon that
                                   used to do that is gone. */}
                               <div className="flex items-center gap-1 text-left">
@@ -3464,8 +3508,21 @@ export default function ConferenceDetailPage() {
                           <CustomColumnCell column={col} value={(attendee as unknown as Record<string, unknown>)[col.data_key]} />
                         </td>
                       ))}
+                      <td className={`px-2 py-3 sticky right-0 z-10 ${frozenBg}`} style={{ width: 48 }}>
+                        <RowActionsKebab
+                          entityType="attendee"
+                          conferenceId={Number(id)}
+                          attendeeId={attendee.id}
+                          attendeeName={`${attendee.first_name} ${attendee.last_name}`.trim()}
+                          companyId={attendee.company_id ?? null}
+                          companyName={attendee.company_name ?? null}
+                          onDone={fetchConference}
+                          onOpenChange={open => setActionsAttendeeId(open ? attendee.id : null)}
+                        />
+                      </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

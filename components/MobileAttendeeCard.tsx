@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ScrollRow } from '@/components/ScrollRow';
 import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
@@ -85,7 +85,7 @@ export function ConferenceCountTooltip({ count, names }: { count: number; names?
  */
 export function MobileAttendeeCard({
   attendee, showPhotos, selected, onToggleSelect, onOpenAttendee, onOpenCompany,
-  onClassifyTitle, titleWarning = false, userOptions, colorMaps,
+  onClassifyTitle, titleWarning = false, userOptions, colorMaps, actions, dimmed = false,
 }: {
   attendee: AttendeeCardRow;
   showPhotos: boolean;
@@ -98,12 +98,16 @@ export function MobileAttendeeCard({
   titleWarning?: boolean;
   userOptions: UserOption[];
   colorMaps: Record<string, Record<string, string | null>>;
+  /** Row actions menu, pinned to the end of the pill row. */
+  actions?: ReactNode;
+  /** Another card's actions menu is open — recede so that one stands out. */
+  dimmed?: boolean;
 }) {
   const seniority = effectiveSeniority(attendee.seniority ?? undefined, attendee.title ?? undefined);
   const statuses = (attendee.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown');
 
   return (
-    <div className={`px-4 py-4 ${selected ? 'bg-blue-50' : 'bg-white'}`}>
+    <div className={`px-4 py-4 transition-opacity ${selected ? 'bg-blue-50' : 'bg-white'} ${dimmed ? 'opacity-40' : ''}`}>
       {/* Name / title / company share a column so the photo can sit alongside
           all three rather than only the name. */}
       <div className="flex items-center gap-3">
@@ -194,8 +198,11 @@ export function MobileAttendeeCard({
         )}
       </div>
 
-      {/* Everything else rides one scrolling line, company type first */}
-      <ScrollRow className={`mt-2 ${onToggleSelect ? 'ml-6' : ''}`} gapClass="gap-2">
+      {/* Everything else rides one scrolling line, company type first. The
+          actions menu sits at the end of that line and stays put — the pills
+          pass behind it rather than pushing it off the edge. */}
+      <div className={`mt-2 flex items-center gap-2 ${onToggleSelect ? 'ml-6' : ''}`}>
+      <ScrollRow className="flex-1 min-w-0" gapClass="gap-2">
         {attendee.company_type && (
           <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs flex-shrink-0 whitespace-nowrap`}>{attendee.company_type}</span>
         )}
@@ -219,6 +226,8 @@ export function MobileAttendeeCard({
           <span className="text-[11px] text-gray-400 flex-shrink-0 whitespace-nowrap">Added {fmtDate(attendee.created_at)}</span>
         )}
       </ScrollRow>
+      {actions && <div className="flex-shrink-0">{actions}</div>}
+      </div>
     </div>
   );
 }
