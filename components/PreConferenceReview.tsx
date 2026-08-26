@@ -172,6 +172,23 @@ export interface RelationshipRow {
   recentNotes: { id: number; content: string; created_at: string | null; rep: string | null }[];
 }
 
+/** A vendor / other relationship on a company attending this conference. */
+export interface VendorRelationshipRow {
+  id: number;
+  company_id: number;
+  company_name: string;
+  related_company_id: number;
+  related_company_name: string;
+  related_company_type: string | null;
+  rep_id: number | null;
+  relationship_status: string[];
+  strength: string | null;
+  vendor_type: string[];
+  notes: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
 export interface TargetEntry {
   attendeeId: number;
   firstName: string;
@@ -245,6 +262,7 @@ export interface PreConferenceData {
   socialEvents: SocialEventRow[];
   byRep: ByRepEntry[];
   relationships: RelationshipRow[];
+  vendorRelationships: VendorRelationshipRow[];
   productIcp: ProductIcpEntry[];
   strategyAssessment: import('@/lib/strategyAssessment').StrategyAssessment | null;
   productCatalog: ProductIcpV2Product[];
@@ -708,7 +726,7 @@ export function PreConferenceReviewModal() {
                 <ByRepTab entries={data.byRep} conferenceId={conferenceId} conferenceName={conferenceName} targetMap={targetMap} onToggleTarget={toggleTarget} readOnly={targetsReadOnly} />
               )}
               {activeTab === 'relationships' && (
-                <RelationshipsTab relationships={data.relationships} targetMap={targetMap} onToggleTarget={toggleTarget} readOnly={targetsReadOnly} />
+                <RelationshipsTab relationships={data.relationships} vendorRelationships={data.vendorRelationships ?? []} targetMap={targetMap} onToggleTarget={toggleTarget} readOnly={targetsReadOnly} />
               )}
               {activeTab === 'product_icp' && (
                 <ProductIcpTab

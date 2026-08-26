@@ -9,7 +9,23 @@ import { getBadgeClass, getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getRepInitials } from '@/lib/useUserOptions';
 import { TouchpointMap } from '@/components/TouchpointMap';
-import type { RelationshipRow, TargetEntry } from '../PreConferenceReview';
+import { ScrollRow } from '@/components/ScrollRow';
+import { VendorRelationshipCard } from '@/components/VendorRelationshipsSection';
+import { useUserOptions } from '@/lib/useUserOptions';
+import { useSectionConfig } from '@/lib/useSectionConfig';
+import type { RelationshipRow, VendorRelationshipRow, TargetEntry } from '../PreConferenceReview';
+
+/**
+ * The two card widths this tab holds fixed.
+ *
+ * INTERNAL_CARD_W is what the internal card measured in the old three-across
+ * grid on a 1512-wide screen; VENDOR_CARD_W is what a vendor card measures on
+ * the company record. Both are pinned so the cards read the same in both
+ * places, and the company list takes whatever width is left over.
+ */
+const INTERNAL_CARD_W = 300;
+const VENDOR_CARD_W = 318;
+const VENDOR_AREA_W = VENDOR_CARD_W * 2 + 16;
 
 // ── Helpers (mirrors RelationshipMapDrawer) ────────────────────────────────────
 
@@ -189,6 +205,9 @@ function RelationshipAttendeeCard({
   onToggleTarget: () => void;
   readOnly: boolean;
 }) {
+  // Collapsed by default: several of these now stack in one column, and the
+  // full body is tall enough that three of them would bury the rest.
+  const [expanded, setExpanded] = useState(false);
   const [timeline, setTimeline] = useState<TimelineData | null>(null);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [showTpMap, setShowTpMap] = useState(false);
@@ -253,27 +272,40 @@ function RelationshipAttendeeCard({
         ) : (
           <div className="w-14 h-14 rounded-full bg-gray-100 animate-pulse flex-shrink-0" />
         )}
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          title={expanded ? 'Collapse' : 'Expand'}
+          aria-expanded={expanded}
+          className="flex-shrink-0 self-start p-1 -mr-1 text-gray-400 hover:text-brand-secondary transition-colors"
+        >
+          <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
       </div>
 
-      {/* Badges */}
-      <div className="flex items-center gap-2 flex-wrap">
+      {/* Badges — one line that scrolls, so a long set can't push the collapsed
+          card taller than the row it shares with its neighbours. */}
+      <ScrollRow gapClass="gap-2">
         {timeline && (
-          <span className="text-xs font-medium px-2 py-0.5 rounded-full"
+          <span className="text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 whitespace-nowrap"
             style={{ color: hColor, background: `${hColor}18`, border: `1px solid ${hColor}35` }}>
             {scoreTier(healthScore)}
           </span>
         )}
-        {icp === 'Yes' && <span className="badge-green text-xs px-2 py-0.5">ICP</span>}
+        {icp === 'Yes' && <span className="badge-green text-xs px-2 py-0.5 flex-shrink-0 whitespace-nowrap">ICP</span>}
         {attendeeStatus && (
-          <span className="badge-gray text-xs px-2 py-0.5">
+          <span className="badge-gray text-xs px-2 py-0.5 flex-shrink-0 whitespace-nowrap">
             {attendeeStatus.split(',').map((s: string) => s.trim()).join(', ')}
           </span>
         )}
         {attendee.seniority && (
-          <span className="badge-gray text-xs px-2 py-0.5">{attendee.seniority}</span>
+          <span className="badge-gray text-xs px-2 py-0.5 flex-shrink-0 whitespace-nowrap">{attendee.seniority}</span>
         )}
-      </div>
+      </ScrollRow>
 
+      {expanded && (<>
       {/* Stats */}
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-lg p-2 text-center" style={{ background: '#F1F5F9', border: '1px solid rgba(34,58,94,0.07)' }}>
@@ -391,6 +423,7 @@ function RelationshipAttendeeCard({
           )}
         </div>
       )}
+      </>)}
     </div>
   );
 }
@@ -405,9 +438,20 @@ interface CompanyGroup {
   status: string;
   description: string;
   totalRelationships: number;
+  vendorRels: VendorRelationshipRow[];
 }
 
-function groupRelationshipsByCompany(relationships: RelationshipRow[]): CompanyGroup[] {
+/**
+ * One entry per company that has a relationship of either kind.
+ *
+ * A company earns a place here through its internal relationships or its
+ * vendor / other ones — listing only the former would hide most of the vendor
+ * side, since plenty of companies have a vendor link and no internal one.
+ */
+function groupRelationshipsByCompany(
+  relationships: RelationshipRow[],
+  vendorRelationships: VendorRelationshipRow[],
+): CompanyGroup[] {
   const map = new Map<number, CompanyGroup>();
   for (const rel of relationships) {
     if (!map.has(rel.company_id)) {
@@ -419,6 +463,7 @@ function groupRelationshipsByCompany(relationships: RelationshipRow[]): CompanyG
         status: rel.relationship_status,
         description: rel.description,
         totalRelationships: 0,
+        vendorRels: [],
       });
     }
     const group = map.get(rel.company_id)!;
@@ -440,24 +485,49 @@ function groupRelationshipsByCompany(relationships: RelationshipRow[]): CompanyG
       }
     }
   }
-  return Array.from(map.values()).sort((a, b) => b.attendees.length - a.attendees.length || a.name.localeCompare(b.name));
+  for (const vr of vendorRelationships) {
+    if (!map.has(vr.company_id)) {
+      map.set(vr.company_id, {
+        id: vr.company_id,
+        name: vr.company_name,
+        attendees: [],
+        repNames: [],
+        status: '',
+        description: '',
+        totalRelationships: 0,
+        vendorRels: [],
+      });
+    }
+    map.get(vr.company_id)!.vendorRels.push(vr);
+  }
+  return Array.from(map.values()).sort(
+    (a, b) =>
+      (b.attendees.length + b.vendorRels.length) - (a.attendees.length + a.vendorRels.length) ||
+      a.name.localeCompare(b.name)
+  );
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export function RelationshipsTab({
   relationships,
+  vendorRelationships = [],
   targetMap,
   onToggleTarget,
   readOnly = false,
 }: {
   relationships: RelationshipRow[];
+  vendorRelationships?: VendorRelationshipRow[];
   targetMap: Map<number, TargetEntry>;
   onToggleTarget: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
   readOnly?: boolean;
 }) {
   const openRecord = useRecordDrawer();
-  const companies = groupRelationshipsByCompany(relationships);
+  const colorMaps = useConfigColors();
+  const userOptions = useUserOptions();
+  const { getLabel: getCompanySectionLabel } = useSectionConfig('company');
+  const vendorLabel = getCompanySectionLabel('operator_capital');
+  const companies = groupRelationshipsByCompany(relationships, vendorRelationships);
   const [selectedId, setSelectedId] = useState<number | null>(companies[0]?.id ?? null);
   // Mobile: 'companies' | 'relationships'
   const [mobileTab, setMobileTab] = useState<'companies' | 'relationships'>('companies');
@@ -466,10 +536,10 @@ export function RelationshipsTab({
     if (selectedId === null && companies.length > 0) setSelectedId(companies[0].id);
   }, [companies, selectedId]);
 
-  if (relationships.length === 0) {
+  if (relationships.length === 0 && vendorRelationships.length === 0) {
     return (
       <div className="text-center py-16">
-        <p className="text-gray-400 text-sm">No internal relationships found for companies attending this conference.</p>
+        <p className="text-gray-400 text-sm">No relationships found for companies attending this conference.</p>
       </div>
     );
   }
@@ -486,11 +556,16 @@ export function RelationshipsTab({
         {companies.map(co => {
           const isSelected = co.id === selectedId;
           return (
-            <button
+            // A div rather than a button: it holds the company-name button,
+            // and a button inside a button is invalid markup that React was
+            // logging a hydration error over.
+            <div
               key={co.id}
-              type="button"
+              role="button"
+              tabIndex={0}
               onClick={() => { setSelectedId(co.id); onSelect?.(); }}
-              className={`w-full text-left rounded-xl border p-3 transition-all ${
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedId(co.id); onSelect?.(); } }}
+              className={`w-full text-left rounded-xl border p-3 transition-all cursor-pointer ${
                 isSelected
                   ? 'border-brand-primary bg-brand-primary/5 shadow-sm'
                   : 'border-gray-200 bg-white hover:border-brand-primary/40 hover:shadow-sm'
@@ -517,32 +592,38 @@ export function RelationshipsTab({
                     {co.repNames.length} rep{co.repNames.length !== 1 ? 's' : ''}
                   </span>
                 )}
+                {co.vendorRels.length > 0 && (
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700">
+                    {co.vendorRels.length} vendor
+                  </span>
+                )}
               </div>
-            </button>
+            </div>
           );
         })}
       </>
     );
   }
 
-  // Shared attendee cards renderer
-  function AttendeeCards({ stackedMobile = false }: { stackedMobile?: boolean }) {
-    if (!selectedCompany) {
-      return (
-        <div className="flex flex-col items-center justify-center h-48 text-center">
-          <p className="text-gray-400 text-sm">Select a company to view relationship contacts.</p>
-        </div>
-      );
-    }
+  /** Eyebrow header with the count of what follows. */
+  function SectionHead({ label, count }: { label: string; count: number }) {
+    return (
+      <div className="flex items-center gap-2 mb-3">
+        <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">{label}</p>
+        <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-bold">
+          {count}
+        </span>
+      </div>
+    );
+  }
+
+  function InternalCards() {
+    if (!selectedCompany) return null;
     if (selectedCompany.attendees.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center h-48 text-center">
-          <p className="text-gray-400 text-sm">No contacts from {selectedCompany.name} are attending this conference.</p>
-        </div>
-      );
+      return <p className="text-xs text-gray-400 py-2">No tagged contacts from this company at this conference.</p>;
     }
     return (
-      <div className={stackedMobile ? 'space-y-4 pb-4' : 'grid sm:grid-cols-2 xl:grid-cols-3 gap-4 content-start pb-4'}>
+      <div className="space-y-4">
         {selectedCompany.attendees.map(a => (
           <RelationshipAttendeeCard
             key={a.id}
@@ -562,6 +643,32 @@ export function RelationshipsTab({
               assignedUserNames: a.rep_names,
             })}
             readOnly={readOnly}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  function VendorCards({ stacked = false }: { stacked?: boolean }) {
+    if (!selectedCompany) return null;
+    if (selectedCompany.vendorRels.length === 0) {
+      return <p className="text-xs text-gray-400 py-2">No vendor or other relationships recorded.</p>;
+    }
+    return (
+      <div
+        className={stacked ? 'space-y-3' : 'grid gap-4 content-start'}
+        // Fixed tracks rather than fractions: a row holding one card leaves it
+        // the same width as a card in a full row, and auto-fill drops to a
+        // single column when there isn't room for two.
+        style={stacked ? undefined : { gridTemplateColumns: `repeat(auto-fill, ${VENDOR_CARD_W}px)` }}
+      >
+        {selectedCompany.vendorRels.map(vr => (
+          <VendorRelationshipCard
+            key={vr.id}
+            rel={vr}
+            userOptions={userOptions}
+            colorMaps={colorMaps}
+            defaultExpanded
           />
         ))}
       </div>
@@ -607,23 +714,57 @@ export function RelationshipsTab({
 
         {/* Relationships panel */}
         {mobileTab === 'relationships' && (
-          <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
-            <AttendeeCards stackedMobile />
+          <div className="flex-1 overflow-y-auto pb-4 space-y-6" style={{ scrollbarWidth: 'none' }}>
+            {!selectedCompany ? (
+              <p className="text-gray-400 text-sm text-center py-12">Select a company to view its relationships.</p>
+            ) : (
+              <>
+                <div>
+                  <SectionHead label="Internal" count={selectedCompany.attendees.length} />
+                  <InternalCards />
+                </div>
+                <div>
+                  <SectionHead label={vendorLabel} count={selectedCompany.vendorRels.length} />
+                  <VendorCards stacked />
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
 
-      {/* ── Desktop layout ── */}
+      {/* ── Desktop layout ──
+          Both card columns hold the widths they have elsewhere in the app, so
+          the company list is the one that flexes: it takes whatever is left
+          over, which is generous on a wide screen and tight on a narrow one. */}
       <div className="hidden sm:flex gap-4 h-full min-h-0">
         {/* Left: company list */}
-        <div className="w-56 flex-shrink-0 overflow-y-auto space-y-2 pr-1">
+        <div className="flex-1 min-w-[180px] overflow-y-auto space-y-2 pr-1">
           <CompanyList />
         </div>
 
-        {/* Right: attendee cards */}
-        <div className="flex-1 overflow-y-auto min-w-0">
-          <AttendeeCards />
-        </div>
+        {!selectedCompany ? (
+          <div className="flex-1 flex items-center justify-center">
+            <p className="text-gray-400 text-sm">Select a company to view its relationships.</p>
+          </div>
+        ) : (
+          <>
+            {/* Middle: internal relationships, stacked */}
+            <div className="flex-shrink-0 overflow-y-auto pb-4" style={{ width: INTERNAL_CARD_W }}>
+              <SectionHead label="Internal" count={selectedCompany.attendees.length} />
+              <InternalCards />
+            </div>
+
+            {/* Right: vendor / other, two across */}
+            <div
+              className="overflow-y-auto pb-4"
+              style={{ width: VENDOR_AREA_W, minWidth: VENDOR_CARD_W }}
+            >
+              <SectionHead label={vendorLabel} count={selectedCompany.vendorRels.length} />
+              <VendorCards />
+            </div>
+          </>
+        )}
       </div>
     </>
   );
