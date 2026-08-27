@@ -850,6 +850,24 @@ export function MeetingsTable({
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkRepIds, setBulkRepIds] = useState<number[]>([]);
   const tableColorMaps = useConfigColors();
+  const kanbanScrollRef = useRef<HTMLDivElement>(null);
+  // The board's height is measured rather than guessed: cap it at whatever is
+  // left below its own top edge, so its horizontal scrollbar always lands on
+  // screen instead of hundreds of pixels down the page.
+  const [kanbanMaxH, setKanbanMaxH] = useState<number | null>(null);
+  useEffect(() => {
+    if (viewMode !== 'kanban') { setKanbanMaxH(null); return; }
+    const measure = () => {
+      const el = kanbanScrollRef.current;
+      if (!el) return;
+      // Viewport-relative, and taken once rather than on every scroll — a board
+      // that resized as you scrolled would be worse than one that doesn't.
+      setKanbanMaxH(Math.max(280, window.innerHeight - el.getBoundingClientRect().top - 24));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [viewMode, groupMode, groupByDate]);
   // Keyed by mode + group key: a rep name and a date could collide, and
   // switching modes shouldn't inherit what was collapsed in the other one.
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -1375,10 +1393,39 @@ export function MeetingsTable({
 
       {/* Kanban — the phone's cards, one column per group. Columns scroll
           sideways rather than shrinking, so a card reads the same however many
-          groups there are. */}
+          groups there are.
+
+          The board is capped and scrolls inside itself. Left to grow, a tall
+          column pushed the horizontal scrollbar hundreds of pixels below the
+          fold, where it couldn't be reached without scrolling the whole page. */}
       {viewMode === 'kanban' && !cardsOnly && (
-        <div className="hidden lg:block overflow-x-auto p-3">
-          <div className="flex gap-3 items-start">
+        <div className="hidden lg:block relative p-3">
+          <button
+            type="button"
+            onClick={() => kanbanScrollRef.current?.scrollBy({ left: -320, behavior: 'smooth' })}
+            title="Scroll left"
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-white border border-gray-200 shadow-sm text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => kanbanScrollRef.current?.scrollBy({ left: 320, behavior: 'smooth' })}
+            title="Scroll right"
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-white border border-gray-200 shadow-sm text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+          <div
+            ref={kanbanScrollRef}
+            className="overflow-auto scroll-smooth pb-2 mx-5"
+            style={{ maxHeight: kanbanMaxH ?? undefined }}
+          >
+          <div className="flex gap-3 items-start min-w-max">
             {(groupedMeetings ?? [['', { label: 'All meetings', rows: sorted }]] as [string, { label: string; rows: Meeting[] }][])
               .map(([key, group]) => {
                 const color = groupColor(key);
@@ -1405,14 +1452,22 @@ export function MeetingsTable({
                         {group.rows.length}
                       </span>
                     </div>
-                    <div className="bg-gray-50/50 divide-y divide-gray-100 min-h-[80px]">
+                    {/* space-y rather than divide-y: the cards sit apart with
+                        the column's own background between them, matching the
+                        planner's board. */}
+                    <div className="bg-gray-50/50 p-2 space-y-2 min-h-[80px]">
                       {group.rows.length === 0
                         ? <p className="px-3 py-6 text-center text-[11px] text-gray-400">No meetings</p>
-                        : group.rows.map(renderMobileCard)}
+                        : group.rows.map(m => (
+                            <div key={m.id} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                              {renderMobileCard(m)}
+                            </div>
+                          ))}
                     </div>
                   </div>
                 );
               })}
+          </div>
           </div>
         </div>
       )}
