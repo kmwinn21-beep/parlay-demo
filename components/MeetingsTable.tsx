@@ -430,11 +430,18 @@ function OutcomeButton({
 
   return (
     <div ref={ref} className="relative inline-block">
-      <button ref={btnRef} type="button" className={btnClass} onClick={handleToggle}>
+      {/* No chevron — the pill is the control, and the caret only crowded a
+          badge that's already read as a value rather than as a menu. */}
+      <button
+        ref={btnRef}
+        type="button"
+        className={btnClass}
+        onClick={handleToggle}
+        title="Change outcome"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
         {value || '— Select —'}
-        <svg className="w-3 h-3 ml-1 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
       </button>
       {open && dropdownPos && (
         <div
