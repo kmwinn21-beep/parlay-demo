@@ -816,6 +816,7 @@ export async function GET(
       relationship_status: resolveIdList(rel.relationship_status, relStatusMap) ?? String(rel.relationship_status ?? ''),
       description: String(rel.description ?? ''),
       rep_names: resolveUserIds(rel.rep_ids),
+      assigned_user_names: resolveUserIds(compAttendees[0]?.company_assigned_user),
       contact_names: contactNames,
       attendees: taggedAttendees.map((a) => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title, seniority: resolveSeniority(a.seniority, a.title), health: attendeeHealthMap.get(a.id as number) ?? 0 })),
       recentNotes: notes.slice(0, 3).map((n) => ({ id: n.id, content: n.content, created_at: n.created_at, rep: n.rep })),
@@ -827,16 +828,18 @@ export async function GET(
   // relationships above resolve it — a company is in this payload because it
   // has someone at the conference.
   const companyNameById = new Map<number, string>();
+  const companyAssignedById = new Map<number, string[]>();
   for (const a of attendees) {
     const cid = a.company_id as number | null;
-    if (cid != null && !companyNameById.has(cid) && a.company_name) {
-      companyNameById.set(cid, String(a.company_name));
-    }
+    if (cid == null) continue;
+    if (!companyNameById.has(cid) && a.company_name) companyNameById.set(cid, String(a.company_name));
+    if (!companyAssignedById.has(cid)) companyAssignedById.set(cid, resolveUserIds(a.company_assigned_user));
   }
   const vendorRelationshipsData = vendorRelsRes.rows.map((r) => ({
     id: Number(r.id),
     company_id: Number(r.company_id),
     company_name: companyNameById.get(Number(r.company_id)) ?? '',
+    company_assigned_user_names: companyAssignedById.get(Number(r.company_id)) ?? [],
     related_company_id: Number(r.related_company_id),
     related_company_name: r.related_company_name ? String(r.related_company_name) : '',
     related_company_type: r.related_company_type ? String(r.related_company_type) : null,

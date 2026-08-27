@@ -167,6 +167,8 @@ export interface RelationshipRow {
   relationship_status: string;
   description: string;
   rep_names: string[];
+  /** The company's own assigned rep(s), for the sidebar card's pill row. */
+  assigned_user_names: string[];
   contact_names: string[];
   attendees: { id: number; first_name: string; last_name: string; title: string | null; seniority: string | null; health: number }[];
   recentNotes: { id: number; content: string; created_at: string | null; rep: string | null }[];
@@ -177,6 +179,7 @@ export interface VendorRelationshipRow {
   id: number;
   company_id: number;
   company_name: string;
+  company_assigned_user_names: string[];
   related_company_id: number;
   related_company_name: string;
   related_company_type: string | null;
