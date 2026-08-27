@@ -1151,8 +1151,22 @@ export function MeetingsTable({
                 colorMap={colorMap}
                 onChange={(val) => onOutcomeChange(m.id, val)}
               />
-              <RepPills scheduledBy={m.scheduled_by} userOptions={userOptions} size="xs" withIcon />
+              <RepPills scheduledBy={splitInternalIds(m).repIds} userOptions={userOptions} size="xs" withIcon />
             </div>
+            {/* Support — the same overlapping stack the table's Support column
+                uses, rather than a pill each. Four names wrapped onto two rows
+                and cost the card more height than they were worth. */}
+            {splitInternalIds(m).supportIds && (
+              <div className="mt-2 min-w-0">
+                <p className="text-[9px] uppercase tracking-wide text-gray-400 font-medium mb-1">Support</p>
+                <OverlappingRepPills
+                  repIds={splitInternalIds(m).supportIds}
+                  userOptions={userOptions}
+                  size="xs"
+                  emptyLabel={null}
+                />
+              </div>
+            )}
           </>
         )}
       </div>

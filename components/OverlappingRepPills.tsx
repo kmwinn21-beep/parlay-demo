@@ -34,9 +34,30 @@ export function OverlappingRepPills({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
+  // Expanded, the names can outrun the space they're in — so the row scrolls
+  // rather than wrapping, and grows chevrons once there's somewhere to go.
+  const rowRef = useRef<HTMLDivElement>(null);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(false);
+  const updateArrows = useCallback(() => {
+    const el = rowRef.current;
+    if (!el) { setCanLeft(false); setCanRight(false); return; }
+    setCanLeft(el.scrollLeft > 1);
+    setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+
   const names = parseRepIds(repIds)
     .map(id => userOptions.find(u => u.id === id)?.value)
     .filter((v): v is string => !!v);
+
+  useEffect(() => {
+    updateArrows();
+    const el = rowRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(updateArrows);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [updateArrows, expanded, names.length]);
 
   if (names.length === 0) {
     return emptyLabel ? <span className="text-gray-300">{emptyLabel}</span> : null;
@@ -55,38 +76,65 @@ export function OverlappingRepPills({
     timerRef.current = setTimeout(() => setExpanded(false), EXPAND_MS);
   };
 
+  // Scrolling shouldn't count as reading the names, so the timer restarts.
+  const nudge = (dir: -1 | 1) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    rowRef.current?.scrollBy({ left: dir * 110, behavior: 'smooth' });
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setExpanded(false), EXPAND_MS);
+  };
+  const arrowCls = 'flex-shrink-0 w-4 h-4 rounded-full bg-white border border-gray-200 text-gray-400 hover:text-brand-secondary hover:border-gray-300 flex items-center justify-center transition-colors';
+
   return (
-    <button
-      type="button"
-      onClick={toggle}
-      title={expanded ? 'Hide names' : names.join(', ')}
-      aria-expanded={expanded}
-      className="inline-flex items-center text-left align-middle"
-    >
-      {shown.map((name, i) => (
-        <span
-          key={`${name}-${i}`}
-          style={{ zIndex: shown.length - i }}
-          // Same element in both states: the width, padding and overlap
-          // transition, so the stack spreads out and the names appear in place
-          // rather than one row being swapped for another.
-          className={`relative inline-flex items-center justify-center rounded-full font-semibold ring-2 ring-white flex-shrink-0 overflow-hidden whitespace-nowrap transition-all duration-300 ease-out ${
-            expanded
-              ? `h-6 max-w-[9rem] px-2 text-[10px] ${i > 0 ? 'ml-1' : ''}`
-              : `${dim} max-w-[1.5rem] px-0 ${i > 0 ? '-ml-1.5' : ''}`
-          } ${getPreset(colorMaps.user?.[name]).badgeClass}`}
-        >
-          {expanded ? name : getRepInitials(name)}
-        </span>
-      ))}
-      {extra > 0 && (
-        <span
-          className={`${dim} -ml-1.5 relative inline-flex items-center justify-center rounded-full font-semibold ring-2 ring-white bg-gray-100 text-gray-500 flex-shrink-0`}
-        >
-          +{extra}
-        </span>
+    <span className="inline-flex items-center gap-1 align-middle min-w-0 max-w-full">
+      {expanded && canLeft && (
+        <button type="button" onClick={nudge(-1)} title="Scroll left" className={arrowCls}>
+          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" /></svg>
+        </button>
       )}
-    </button>
+      {/* A div rather than a button: the chevrons beside it are buttons, and a
+          button inside a button is invalid markup. */}
+      <span
+        ref={rowRef}
+        role="button"
+        tabIndex={0}
+        onClick={toggle}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(e as unknown as React.MouseEvent); } }}
+        onScroll={updateArrows}
+        title={expanded ? 'Hide names' : names.join(', ')}
+        aria-expanded={expanded}
+        className="inline-flex items-center text-left align-middle cursor-pointer min-w-0 overflow-x-auto scrollbar-hide"
+      >
+        {shown.map((name, i) => (
+          <span
+            key={`${name}-${i}`}
+            style={{ zIndex: shown.length - i }}
+            // Same element in both states: the width, padding and overlap
+            // transition, so the stack spreads out and the names appear in place
+            // rather than one row being swapped for another.
+            className={`relative inline-flex items-center justify-center rounded-full font-semibold ring-2 ring-white flex-shrink-0 overflow-hidden whitespace-nowrap transition-all duration-300 ease-out ${
+              expanded
+                ? `h-6 max-w-[9rem] px-2 text-[10px] ${i > 0 ? 'ml-1' : ''}`
+                : `${dim} max-w-[1.5rem] px-0 ${i > 0 ? '-ml-1.5' : ''}`
+            } ${getPreset(colorMaps.user?.[name]).badgeClass}`}
+          >
+            {expanded ? name : getRepInitials(name)}
+          </span>
+        ))}
+        {extra > 0 && (
+          <span
+            className={`${dim} -ml-1.5 relative inline-flex items-center justify-center rounded-full font-semibold ring-2 ring-white bg-gray-100 text-gray-500 flex-shrink-0`}
+          >
+            +{extra}
+          </span>
+        )}
+      </span>
+      {expanded && canRight && (
+        <button type="button" onClick={nudge(1)} title="Scroll right" className={arrowCls}>
+          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" /></svg>
+        </button>
+      )}
+    </span>
   );
 }
 
