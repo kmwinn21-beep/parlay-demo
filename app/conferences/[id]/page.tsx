@@ -35,6 +35,7 @@ import { ColumnMappingModal } from '@/components/ColumnMappingModal';
 import { type ColumnMapping } from '@/lib/columnMapping';
 import { ConflictResolutionModal, type ConflictItem } from '@/components/ConflictResolutionModal';
 import { NewMeetingModal } from '@/components/NewMeetingModal';
+import { NewNoteModal } from '@/components/NewNoteModal';
 import { ConferenceFormsTab } from '@/components/ConferenceFormsTab';
 import { OutreachTab } from '@/components/OutreachTab';
 import { useUser } from '@/components/UserContext';
@@ -453,6 +454,9 @@ export default function ConferenceDetailPage() {
   // How the meetings table sections its rows. Same segmented control the
   // program planner's plan tab uses for its groupings.
   const [meetingGroupMode, setMeetingGroupMode] = useState<'date' | 'rep' | 'outcome'>('date');
+  // Token-driven so choosing the same option twice still lands.
+  const [meetingCollapseAll, setMeetingCollapseAll] = useState({ token: 0, collapse: false });
+  const [quickNoteMeeting, setQuickNoteMeeting] = useState<Meeting | null>(null);
 
   /**
    * Where the frozen Name column starts: the checkbox column plus any visible
@@ -3686,23 +3690,6 @@ export default function ConferenceDetailPage() {
                   />
                 </div>
                 <div className="ml-auto flex-shrink-0 flex items-center gap-2">
-                  {myMeetingsAvailable && (
-                    <button
-                      type="button"
-                      onClick={() => setMyMeetingsOnly(v => !v)}
-                      aria-pressed={myMeetingsOnly}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
-                        myMeetingsOnly
-                          ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
-                          : 'border-gray-200 text-gray-600 hover:border-gray-400'
-                      }`}
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                      My Meetings
-                    </button>
-                  )}
                   {/* Grouping toggle, then the actions. Filters and + Meeting
                       live in the kebab at every width now, which keeps this row
                       short enough for the toggle to sit beside them. */}
@@ -3729,6 +3716,25 @@ export default function ConferenceDetailPage() {
                           {opt.label}
                         </button>
                       ))}
+                      {/* My Mtgs shares the bar but isn't one of the groupings —
+                          it's a filter, so it toggles on and off and leaves
+                          whichever grouping is selected in place. */}
+                      {myMeetingsAvailable && (
+                        <button
+                          type="button"
+                          onClick={() => setMyMeetingsOnly(v => !v)}
+                          title="Only meetings I'm on"
+                          aria-pressed={myMeetingsOnly}
+                          className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+                            myMeetingsOnly ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                          }`}
+                        >
+                          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          My Mtgs
+                        </button>
+                      )}
                     </div>
                   </div>
                   <KebabMenu
@@ -3742,6 +3748,16 @@ export default function ConferenceDetailPage() {
                         icon: (
                           <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                        ),
+                      },
+                      {
+                        label: meetingCollapseAll.collapse ? 'Expand all' : 'Collapse all',
+                        onClick: () => setMeetingCollapseAll(prev => ({ token: prev.token + 1, collapse: !prev.collapse })),
+                        icon: (
+                          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d={meetingCollapseAll.collapse ? 'M19 9l-7 7-7-7' : 'M5 15l7-7 7 7'} />
                           </svg>
                         ),
                       },
@@ -3842,6 +3858,8 @@ export default function ConferenceDetailPage() {
             <MeetingsTable
               tableName="conference_meetings"
               groupMode={meetingGroupMode}
+              collapseAll={meetingCollapseAll}
+              onQuickNote={m => setQuickNoteMeeting(m)}
               showAttendeeAvatar
               meetings={filteredMeetings}
               actionOptions={actionOptions}
@@ -3946,6 +3964,22 @@ export default function ConferenceDetailPage() {
         defaultConferenceId={conference?.id}
         onSuccess={addMeetingOptimistically}
       />
+
+      {/* Quick note from a meeting row. Everything it needs is already on the
+          row, so nothing has to be re-entered; note_type gives it the Meeting
+          pill and links it back to the meeting it came from. */}
+      {quickNoteMeeting && (
+        <NewNoteModal
+          isOpen
+          onClose={() => { setQuickNoteMeeting(null); fetchConference(); }}
+          defaultConferenceId={quickNoteMeeting.conference_id}
+          defaultCompanyId={quickNoteMeeting.company_id ?? null}
+          defaultAttendeeId={quickNoteMeeting.attendee_id}
+          defaultTaggedUserIds={parseRepIds(quickNoteMeeting.scheduled_by)}
+          noteType="meeting_note"
+          meetingId={quickNoteMeeting.id}
+        />
+      )}
 
       {activeTab === 'follow-ups' && (
         <div className="card p-0 overflow-hidden">

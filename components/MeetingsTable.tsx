@@ -221,9 +221,10 @@ function MeetingDetailPills({ meeting, avgCostPerUnit, showConference = false }:
 const ACTIONS_MENU_WIDTH = 160;
 
 /** Row actions — the notetaker and edit entries the icons used to carry. */
-function MeetingActionsMenu({ hasNotes, onNotes, onEdit }: {
+function MeetingActionsMenu({ hasNotes, onNotes, onQuickNote, onEdit }: {
   hasNotes: boolean;
   onNotes?: () => void;
+  onQuickNote?: () => void;
   onEdit: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -242,13 +243,13 @@ function MeetingActionsMenu({ hasNotes, onNotes, onEdit }: {
     if (!el) return;
     const r = el.getBoundingClientRect();
     // Roughly two 33px items plus borders; enough to decide on flipping.
-    const height = onNotes ? 74 : 41;
+    const height = 41 + (onNotes ? 33 : 0) + (onQuickNote ? 33 : 0);
     const flip = window.innerHeight - r.bottom - 8 < height && r.top - 8 > height;
     setPos({
       top: flip ? r.top - 4 - height : r.bottom + 4,
       left: Math.max(8, Math.min(r.right - ACTIONS_MENU_WIDTH, window.innerWidth - ACTIONS_MENU_WIDTH - 8)),
     });
-  }, [onNotes]);
+  }, [onNotes, onQuickNote]);
 
   useEffect(() => {
     if (!open) { setPos(null); return; }
@@ -295,6 +296,14 @@ function MeetingActionsMenu({ hasNotes, onNotes, onEdit }: {
           style={{ position: 'fixed', top: pos.top, left: pos.left, width: ACTIONS_MENU_WIDTH }}
           className="z-[10000] bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
         >
+          {onQuickNote && (
+            <button type="button" role="menuitem" onClick={() => { setOpen(false); onQuickNote(); }} className={itemCls}>
+              <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              + Quick Notes
+            </button>
+          )}
           {onNotes && (
             <button type="button" role="menuitem" onClick={() => { setOpen(false); onNotes(); }} className={itemCls}>
               <span className="relative inline-flex flex-shrink-0">
@@ -783,6 +792,8 @@ export function MeetingsTable({
   tableName = 'meetings',
   groupByDate = false,
   groupMode,
+  onQuickNote,
+  collapseAll,
   cardsOnly = false,
   showConferencePill = false,
   showAttendeeAvatar = false,
@@ -803,6 +814,10 @@ export function MeetingsTable({
   groupByDate?: boolean;
   /** What the sections group on. Defaults to date when groupByDate is set. */
   groupMode?: 'date' | 'rep' | 'outcome';
+  /** Opens a quick note pre-filled from the meeting. */
+  onQuickNote?: (meeting: Meeting) => void;
+  /** Bump the token to collapse (or expand) every section at once. */
+  collapseAll?: { token: number; collapse: boolean };
   /** Keep the mobile card layout at every width — for narrow containers. */
   cardsOnly?: boolean;
   /** Adds the conference name to the card's pill row. */
@@ -962,6 +977,17 @@ export function MeetingsTable({
     : null;
 
   const groupKey = (key: string) => `${mode ?? 'none'}:${key}`;
+  // Collapse/expand every section at once. Driven by a token rather than a
+  // boolean so pressing the same option twice still takes effect, and read off
+  // the groups actually on screen — the caller has no idea what they are.
+  const groupKeysRef = useRef<string[]>([]);
+  groupKeysRef.current = (groupedMeetings ?? []).map(([k]) => groupKey(k));
+  const collapseToken = collapseAll?.token ?? 0;
+  const collapseTarget = collapseAll?.collapse ?? false;
+  useEffect(() => {
+    if (!collapseToken) return;
+    setCollapsedGroups(collapseTarget ? new Set(groupKeysRef.current) : new Set());
+  }, [collapseToken, collapseTarget]);
   const isCollapsed = (key: string) => collapsedGroups.has(groupKey(key));
   const toggleGroup = (key: string) => setCollapsedGroups(prev => {
     const next = new Set(prev);
@@ -1061,6 +1087,7 @@ export function MeetingsTable({
                 <MeetingActionsMenu
                   hasNotes={!!m.has_notes}
                   onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
+                  onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
                   onEdit={() => setEditingId(m.id)}
                 />
               )}
@@ -1231,6 +1258,7 @@ export function MeetingsTable({
           <MeetingActionsMenu
             hasNotes={!!m.has_notes}
             onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
+            onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
             onEdit={() => setEditingId(m.id)}
           />
         </td>
