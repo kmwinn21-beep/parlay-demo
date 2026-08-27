@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { QuickViewDrawer, type QuickViewTarget } from '@/components/QuickViewDrawer';
-import { getPreset, type ColorMap } from '@/lib/colors';
+import { getPreset, getHex, type ColorMap } from '@/lib/colors';
 import { MEETING_TIME_OPTIONS, formatMeetingTime } from '@/lib/meetingTime';
 import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -750,29 +750,41 @@ function EditMeetingTableRow({
 }
 
 /** Section header for one day's meetings — click to collapse the group. */
-function GroupHeader({ label, count, collapsed, onToggle, bare = false }: {
+function GroupHeader({ label, count, collapsed, onToggle, bare = false, color }: {
   label: string;
   count: number;
   collapsed: boolean;
   onToggle: () => void;
   /** Table variant: no background of its own, the row supplies it. */
   bare?: boolean;
+  /** Hex of the pill this group is named after — the heading picks it up so a
+   *  section reads as the same thing as the pills in its rows. */
+  color?: string | null;
 }) {
   return (
     <button
       type="button"
       onClick={onToggle}
       aria-expanded={!collapsed}
-      className={`w-full flex items-center gap-2 text-left ${bare ? '' : 'px-4 py-2 bg-gray-50 border-b border-gray-200'}`}
+      className={`w-full flex items-center gap-2 text-left ${bare ? '' : `px-4 py-2 border-b border-gray-200 ${color ? '' : 'bg-gray-50'}`}`}
+      style={!bare && color ? { backgroundColor: `${color}26` } : undefined}
     >
       <svg
-        className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${collapsed ? '-rotate-90' : ''}`}
+        className={`w-3.5 h-3.5 flex-shrink-0 transition-transform ${collapsed ? '-rotate-90' : ''} ${color ? '' : 'text-gray-400'}`}
+        style={color ? { color } : undefined}
         fill="none" stroke="currentColor" viewBox="0 0 24 24"
       >
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
       </svg>
-      <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">{label}</span>
-      <span className="text-xs text-gray-400">({count})</span>
+      <span
+        className={`text-xs font-semibold uppercase tracking-wider ${color ? '' : 'text-gray-600'}`}
+        style={color ? { color } : undefined}
+      >
+        {label}
+      </span>
+      <span className={`text-xs ${color ? 'opacity-70' : 'text-gray-400'}`} style={color ? { color } : undefined}>
+        ({count})
+      </span>
     </button>
   );
 }
@@ -794,6 +806,7 @@ export function MeetingsTable({
   groupMode,
   onQuickNote,
   collapseAll,
+  viewMode = 'table',
   cardsOnly = false,
   showConferencePill = false,
   showAttendeeAvatar = false,
@@ -818,6 +831,8 @@ export function MeetingsTable({
   onQuickNote?: (meeting: Meeting) => void;
   /** Bump the token to collapse (or expand) every section at once. */
   collapseAll?: { token: number; collapse: boolean };
+  /** 'kanban' lays the mobile cards out in a column per group. */
+  viewMode?: 'table' | 'kanban';
   /** Keep the mobile card layout at every width — for narrow containers. */
   cardsOnly?: boolean;
   /** Adds the conference name to the card's pill row. */
@@ -834,6 +849,7 @@ export function MeetingsTable({
   const [meetingTypeOptions, setMeetingTypeOptions] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkRepIds, setBulkRepIds] = useState<number[]>([]);
+  const tableColorMaps = useConfigColors();
   // Keyed by mode + group key: a rep name and a date could collide, and
   // switching modes shouldn't inherit what was collapsed in the other one.
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -976,6 +992,14 @@ export function MeetingsTable({
       })()
     : null;
 
+  // Rep groups take the rep pill's colour, outcome groups the outcome pill's —
+  // read from the same config maps the cells use, so they can't disagree.
+  const groupColor = (key: string): string | null => {
+    if (!key) return null;
+    if (mode === 'rep') return getHex(key, tableColorMaps.user || {});
+    if (mode === 'outcome') return getHex(key, colorMap);
+    return null;
+  };
   const groupKey = (key: string) => `${mode ?? 'none'}:${key}`;
   // Collapse/expand every section at once. Driven by a token rather than a
   // boolean so pressing the same option twice still takes effect, and read off
@@ -1349,8 +1373,52 @@ export function MeetingsTable({
         </div>
       )}
 
-      {/* Mobile card layout */}
-      <div className={`${cardsOnly ? 'block' : 'block lg:hidden'} divide-y divide-gray-100`}>
+      {/* Kanban — the phone's cards, one column per group. Columns scroll
+          sideways rather than shrinking, so a card reads the same however many
+          groups there are. */}
+      {viewMode === 'kanban' && !cardsOnly && (
+        <div className="hidden lg:block overflow-x-auto p-3">
+          <div className="flex gap-3 items-start">
+            {(groupedMeetings ?? [['', { label: 'All meetings', rows: sorted }]] as [string, { label: string; rows: Meeting[] }][])
+              .map(([key, group]) => {
+                const color = groupColor(key);
+                return (
+                  <div
+                    key={`kanban-${mode}-${key || 'none'}`}
+                    className="w-72 flex-shrink-0 rounded-xl border border-gray-200 overflow-hidden"
+                    style={{ animation: 'meetingGroupIn 200ms ease-out' }}
+                  >
+                    <div
+                      className={`flex items-center gap-2 px-3 py-2.5 ${color ? '' : 'bg-gray-50'}`}
+                      style={color ? { backgroundColor: `${color}26` } : undefined}
+                    >
+                      <span
+                        className={`text-xs font-semibold flex-1 truncate ${color ? '' : 'text-gray-600'}`}
+                        style={color ? { color } : undefined}
+                      >
+                        {group.label}
+                      </span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold flex-shrink-0 ${color ? '' : 'bg-gray-200 text-gray-600'}`}
+                        style={color ? { backgroundColor: `${color}2E`, color } : undefined}
+                      >
+                        {group.rows.length}
+                      </span>
+                    </div>
+                    <div className="bg-gray-50/50 divide-y divide-gray-100 min-h-[80px]">
+                      {group.rows.length === 0
+                        ? <p className="px-3 py-6 text-center text-[11px] text-gray-400">No meetings</p>
+                        : group.rows.map(renderMobileCard)}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      {/* Mobile card layout — also the desktop list when the view is a table. */}
+      <div className={`${cardsOnly ? 'block' : `block ${viewMode === 'kanban' ? 'lg:hidden' : 'lg:hidden'}`} divide-y divide-gray-100`}>
         {groupedMeetings
           ? groupedMeetings.map(([key, group]) => (
             <div key={`${mode}-${key || 'none'}`} style={{ animation: 'meetingGroupIn 200ms ease-out' }}>
@@ -1359,6 +1427,7 @@ export function MeetingsTable({
                 count={group.rows.length}
                 collapsed={isCollapsed(key)}
                 onToggle={() => toggleGroup(key)}
+                color={groupColor(key)}
               />
               {!isCollapsed(key) && group.rows.map(renderMobileCard)}
             </div>
@@ -1367,7 +1436,7 @@ export function MeetingsTable({
       </div>
 
       {/* Desktop table layout */}
-      {!cardsOnly && (
+      {!cardsOnly && viewMode === 'table' && (
       <div className="hidden lg:block overflow-x-auto">
         <table className="w-full" style={{ fontSize: '0.7rem' }}>
           <thead>
@@ -1410,13 +1479,20 @@ export function MeetingsTable({
             {groupedMeetings
               ? groupedMeetings.map(([key, group]) => (
                   <Fragment key={`${mode}-${key || 'none'}`}>
-                    <tr className="bg-gray-50/70" style={{ animation: 'meetingGroupIn 200ms ease-out' }}>
+                    <tr
+                      className={groupColor(key) ? '' : 'bg-gray-50/70'}
+                      style={{
+                        animation: 'meetingGroupIn 200ms ease-out',
+                        backgroundColor: groupColor(key) ? `${groupColor(key)}26` : undefined,
+                      }}
+                    >
                       <td colSpan={tableColSpan} className="px-3 py-1.5">
                         <GroupHeader
                           label={group.label}
                           count={group.rows.length}
                           collapsed={isCollapsed(key)}
                           onToggle={() => toggleGroup(key)}
+                          color={groupColor(key)}
                           bare
                         />
                       </td>
