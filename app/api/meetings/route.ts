@@ -75,7 +75,14 @@ export async function GET(request: NextRequest) {
           co.name AS company_name,
           co.wse AS company_wse,
           c.name AS conference_name,
-          CASE WHEN mn.id IS NOT NULL THEN 1 ELSE 0 END as has_notes
+          CASE WHEN mn.id IS NOT NULL THEN 1 ELSE 0 END as has_notes,
+          -- Notes logged against this attendee for this meeting's conference:
+          -- what the row's View Notes card shows, so the row can flag that
+          -- there is something in there to read.
+          (SELECT COUNT(*) FROM entity_notes en
+            WHERE en.entity_type = 'attendee'
+              AND en.entity_id = m.attendee_id
+              AND en.conference_name = c.name) as conference_note_count
         FROM meetings m
         JOIN attendees a ON m.attendee_id = a.id
         LEFT JOIN companies co ON a.company_id = co.id
@@ -120,6 +127,7 @@ export async function GET(request: NextRequest) {
         company_wse: r.company_wse != null ? Number(r.company_wse) : null,
         conference_name: String(r.conference_name ?? ''),
         has_notes: Number(r.has_notes) === 1,
+        conference_note_count: Number(r.conference_note_count ?? 0),
       })),
       { headers: { 'Cache-Control': 'private, max-age=15, stale-while-revalidate=30' } }
     );

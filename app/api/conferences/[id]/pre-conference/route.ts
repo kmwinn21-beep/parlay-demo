@@ -87,7 +87,13 @@ export async function GET(
                    m.additional_attendees, m.created_at,
                    a.first_name, a.last_name, a.title,
                    c.name as company_name, c.id as company_id, c.wse as company_wse,
-                   CASE WHEN mn.id IS NOT NULL THEN 1 ELSE 0 END as has_notes
+                   CASE WHEN mn.id IS NOT NULL THEN 1 ELSE 0 END as has_notes,
+                   -- What the row's View Notes card will show: this attendee's
+                   -- notes for this conference.
+                   (SELECT COUNT(*) FROM entity_notes en
+                     WHERE en.entity_type = 'attendee'
+                       AND en.entity_id = m.attendee_id
+                       AND en.conference_name = (SELECT name FROM conferences WHERE id = m.conference_id)) as conference_note_count
             FROM meetings m
             JOIN attendees a ON m.attendee_id = a.id
             LEFT JOIN companies c ON a.company_id = c.id
@@ -681,6 +687,7 @@ export async function GET(
     conference_id: Number(m.conference_id),
     conference_name: String(conference.name ?? ''),
     has_notes: Number(m.has_notes) === 1,
+    conference_note_count: Number(m.conference_note_count ?? 0),
   }));
 
   // --- Social Events ---

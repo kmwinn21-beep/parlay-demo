@@ -12,6 +12,7 @@ import { useConfigColors } from '@/lib/useConfigColors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { useUser } from '@/components/UserContext';
 import { OverlappingRepPills } from '@/components/OverlappingRepPills';
+import { NotesPopoverCard } from '@/components/NotesPopoverCard';
 import { AdditionalAttendeesModal, AdditionalAttendeesButton } from '@/components/AdditionalAttendeesModal';
 import {
   type UserOption,
@@ -55,6 +56,8 @@ export interface Meeting {
   company_wse: number | null;
   conference_name: string;
   has_notes?: boolean;
+  /** Notes logged against this attendee for this meeting's conference. */
+  conference_note_count?: number;
 }
 
 /** Circular marker for a row the viewer only attends as a guest. */
@@ -231,10 +234,15 @@ const BOOTH_HOURS_COLOR = '#7c3aed';
 const ACTIONS_MENU_WIDTH = 160;
 
 /** Row actions — the notetaker and edit entries the icons used to carry. */
-function MeetingActionsMenu({ hasNotes, onNotes, onQuickNote, onEdit }: {
+function MeetingActionsMenu({ hasNotes, hasConferenceNotes, onNotes, onQuickNote, onViewNotes, onEdit }: {
   hasNotes: boolean;
+  /** Notes already logged against this attendee for this conference — the
+   *  button flags them so the menu is worth opening. */
+  hasConferenceNotes?: boolean;
   onNotes?: () => void;
   onQuickNote?: () => void;
+  /** Passed the button's viewport rect so the notes card can hang off it. */
+  onViewNotes?: (anchor: DOMRect) => void;
   onEdit: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -253,13 +261,13 @@ function MeetingActionsMenu({ hasNotes, onNotes, onQuickNote, onEdit }: {
     if (!el) return;
     const r = el.getBoundingClientRect();
     // Roughly two 33px items plus borders; enough to decide on flipping.
-    const height = 41 + (onNotes ? 33 : 0) + (onQuickNote ? 33 : 0);
+    const height = 41 + (onNotes ? 33 : 0) + (onQuickNote ? 33 : 0) + (onViewNotes ? 33 : 0);
     const flip = window.innerHeight - r.bottom - 8 < height && r.top - 8 > height;
     setPos({
       top: flip ? r.top - 4 - height : r.bottom + 4,
       left: Math.max(8, Math.min(r.right - ACTIONS_MENU_WIDTH, window.innerWidth - ACTIONS_MENU_WIDTH - 8)),
     });
-  }, [onNotes, onQuickNote]);
+  }, [onNotes, onQuickNote, onViewNotes]);
 
   useEffect(() => {
     if (!open) { setPos(null); return; }
@@ -293,11 +301,19 @@ function MeetingActionsMenu({ hasNotes, onNotes, onQuickNote, onEdit }: {
         title="Actions"
         aria-haspopup="menu"
         aria-expanded={open}
-        className={`p-1 rounded transition-colors ${open ? 'bg-gray-100 text-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
+        className={`relative p-1 rounded transition-colors ${
+          open ? 'bg-gray-100 text-gray-700'
+            : hasConferenceNotes ? 'bg-green-50 text-green-700 hover:bg-green-100'
+            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+        }`}
       >
         <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
           <path d="M10 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
         </svg>
+        {/* There's something to read in here — no count, just a nudge. */}
+        {hasConferenceNotes && (
+          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-green-600 ring-2 ring-white" />
+        )}
       </button>
       {open && mounted && pos && createPortal(
         <div
@@ -306,12 +322,34 @@ function MeetingActionsMenu({ hasNotes, onNotes, onQuickNote, onEdit }: {
           style={{ position: 'fixed', top: pos.top, left: pos.left, width: ACTIONS_MENU_WIDTH }}
           className="z-[10000] bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
         >
+          {onViewNotes && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                // The card hangs off the kebab, not off the menu item, which
+                // is about to be unmounted.
+                const anchor = wrapRef.current?.getBoundingClientRect();
+                setOpen(false);
+                if (anchor) onViewNotes(anchor);
+              }}
+              className={itemCls}
+            >
+              <span className="relative inline-flex flex-shrink-0">
+                <svg className={`w-3.5 h-3.5 ${hasConferenceNotes ? 'text-green-600' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h6m-6 4h10M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                {hasConferenceNotes && <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-green-600" />}
+              </span>
+              View Notes
+            </button>
+          )}
           {onQuickNote && (
             <button type="button" role="menuitem" onClick={() => { setOpen(false); onQuickNote(); }} className={itemCls}>
               <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              + Quick Notes
+              Add Note
             </button>
           )}
           {onNotes && (
@@ -430,11 +468,18 @@ function OutcomeButton({
 
   return (
     <div ref={ref} className="relative inline-block">
-      <button ref={btnRef} type="button" className={btnClass} onClick={handleToggle}>
+      {/* No chevron — the pill is the control, and the caret only crowded a
+          badge that's already read as a value rather than as a menu. */}
+      <button
+        ref={btnRef}
+        type="button"
+        className={btnClass}
+        onClick={handleToggle}
+        title="Change outcome"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
         {value || '— Select —'}
-        <svg className="w-3 h-3 ml-1 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
       </button>
       {open && dropdownPos && (
         <div
@@ -957,6 +1002,15 @@ export function MeetingsTable({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
+  // The notes card opened from a row's kebab, and where it hangs from.
+  const [notesView, setNotesView] = useState<{ meeting: Meeting; anchor: DOMRect } | null>(null);
+  // What the card actually found, so adding a note lights the row's badge
+  // without waiting for the list to be fetched again.
+  const [noteCounts, setNoteCounts] = useState<Record<number, number>>({});
+  const noteCount = useCallback(
+    (m: Meeting) => noteCounts[m.attendee_id] ?? m.conference_note_count ?? 0,
+    [noteCounts],
+  );
   const [meetingTypeOptions, setMeetingTypeOptions] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkRepIds, setBulkRepIds] = useState<number[]>([]);
@@ -1226,20 +1280,22 @@ export function MeetingsTable({
                   <button
                     type="button"
                     onClick={() => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! })}
-                    className="block text-sm font-bold text-brand-secondary hover:underline text-left whitespace-nowrap"
+                    className="block text-sm font-semibold text-brand-secondary hover:underline text-left whitespace-nowrap"
                   >
                     {m.company_name}
                   </button>
                 ) : m.company_name ? (
-                  <p className="text-sm font-bold text-gray-500 whitespace-nowrap">{m.company_name}</p>
+                  <p className="text-sm font-semibold text-gray-500 whitespace-nowrap">{m.company_name}</p>
                 ) : null)}
               </div>
               {(onEdit || onNotesClick) && (
                 <div className="absolute right-0 top-0 pl-1.5 bg-white">
                   <MeetingActionsMenu
                     hasNotes={!!m.has_notes}
+                    hasConferenceNotes={noteCount(m) > 0}
                     onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
                     onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
+                    onViewNotes={anchor => setNotesView({ meeting: m, anchor })}
                     onEdit={() => setEditingId(m.id)}
                   />
                 </div>
@@ -1261,13 +1317,13 @@ export function MeetingsTable({
                   <button
                     type="button"
                     onClick={() => setQuickView({ type: 'attendee', id: m.attendee_id, name: `${m.first_name} ${m.last_name}` })}
-                    className="text-xs font-bold text-brand-secondary hover:underline text-left truncate"
+                    className="text-xs font-semibold text-brand-secondary hover:underline text-left truncate"
                   >
                     {m.first_name} {m.last_name}
                   </button>
                   {m.as_additional_attendee && <AdditionalAttendeeBadge />}
                 </span>
-                {m.title && <p className="text-xs font-bold text-gray-500 mt-0.5">{m.title}</p>}
+                {m.title && <p className="text-xs font-semibold text-gray-500 mt-0.5">{m.title}</p>}
               </div>
             </div>
             {/* Guests and the company sit outside the name column, so their
@@ -1417,7 +1473,7 @@ export function MeetingsTable({
                   className="w-7 h-7 text-[10px]"
                 />
               )}
-              {attendeeNameNode(m, 'text-xs font-bold text-brand-secondary hover:underline leading-snug block truncate')}
+              {attendeeNameNode(m, 'text-xs font-semibold text-brand-secondary hover:underline leading-snug block truncate')}
               {m.as_additional_attendee && <AdditionalAttendeeBadge />}
             </div>
             {/* Guests on the meeting, stacked under its subject and lined up
@@ -1440,7 +1496,7 @@ export function MeetingsTable({
           case 'title': return <td key="title" className="px-3 py-2 text-gray-600 leading-snug align-top">
             {/* With guests below, each title line takes the height of the
                 matching name line's avatar so the two columns stay in step. */}
-            <span className={`block text-xs font-bold leading-snug break-words whitespace-normal ${
+            <span className={`block text-xs font-semibold leading-snug break-words whitespace-normal ${
               (m.additional_attendee_records?.length ?? 0) > 0
                 ? `flex items-center ${showAttendeeAvatar ? 'min-h-[28px]' : 'min-h-[20px]'}`
                 : ''
@@ -1455,7 +1511,7 @@ export function MeetingsTable({
           case 'company': return !hideCompany ? <td key="company" className="px-3 py-2 text-gray-600 leading-snug">
             {m.company_name && m.company_id ? (
               <div className="flex items-center gap-1 group">
-                {companyNameNode(m, 'text-xs font-bold text-brand-secondary hover:underline break-words whitespace-normal leading-snug')}
+                {companyNameNode(m, 'text-xs font-semibold text-brand-secondary hover:underline break-words whitespace-normal leading-snug')}
               </div>
             ) : (<span className="text-gray-300">—</span>)}
           </td> : null;
@@ -1487,8 +1543,10 @@ export function MeetingsTable({
         <td className="px-3 py-2">
           <MeetingActionsMenu
             hasNotes={!!m.has_notes}
+            hasConferenceNotes={noteCount(m) > 0}
             onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
             onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
+            onViewNotes={anchor => setNotesView({ meeting: m, anchor })}
             onEdit={() => setEditingId(m.id)}
           />
         </td>
@@ -1741,6 +1799,15 @@ export function MeetingsTable({
       )}
       {quickView && (
         <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
+      )}
+      {notesView && (
+        <NotesPopoverCard
+          attendeeId={notesView.meeting.attendee_id}
+          conferenceName={notesView.meeting.conference_name}
+          anchor={notesView.anchor}
+          onClose={() => setNotesView(null)}
+          onCountChange={count => setNoteCounts(prev => ({ ...prev, [notesView.meeting.attendee_id]: count }))}
+        />
       )}
     </>
   );

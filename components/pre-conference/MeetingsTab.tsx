@@ -34,6 +34,7 @@ function toMeeting(m: MeetingRow, outcomeOverride?: string): Meeting {
     company_wse: m.company_wse ?? null,
     conference_name: m.conference_name ?? '',
     has_notes: m.has_notes,
+    conference_note_count: m.conference_note_count,
   };
 }
 
