@@ -73,11 +73,6 @@ import { DownloadModal, type DownloadColumn } from '@/components/DownloadModal';
 import ConferenceNotesModal from '@/components/ConferenceNotesModal';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 
-/** The reports at the top of the header's kebab — Field Report, Activity map,
- *  Executive brief, Export CRM Files — share a colour that sets them apart
- *  from the plain actions below the divider. */
-const REPORT_MENU_COLOR = '#EA506B';
-
 interface Attendee {
   id: number;
   first_name: string;
@@ -2444,8 +2439,7 @@ export default function ConferenceDetailPage() {
                         <button
                           type="button"
                           onClick={() => { setShowDebrief(true); setReportMenuOpen(false); }}
-                          className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium hover:bg-gray-50 transition-colors"
-                          style={{ color: REPORT_MENU_COLOR }}
+                          className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
                         >
                           <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v4a1 1 0 0 0 1 1h4" />
@@ -2461,8 +2455,7 @@ export default function ConferenceDetailPage() {
                         <button
                           type="button"
                           onClick={() => { setActivityMapOpen(true); setReportMenuOpen(false); }}
-                          className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium hover:bg-gray-50 transition-colors"
-                          style={{ color: REPORT_MENU_COLOR }}
+                          className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
                         >
                           <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M3 12h4l2 -6l4 12l2 -6h6" />
@@ -2474,8 +2467,7 @@ export default function ConferenceDetailPage() {
                           <button
                             type="button"
                             onClick={() => { setExecutiveBriefOpen(true); setReportMenuOpen(false); }}
-                            className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium hover:bg-gray-50 transition-colors"
-                          style={{ color: REPORT_MENU_COLOR }}
+                            className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
                           >
                             <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18" />
@@ -2493,8 +2485,7 @@ export default function ConferenceDetailPage() {
                           <button
                             type="button"
                             onClick={() => { setShowCrmExport(true); setReportMenuOpen(false); }}
-                            className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium hover:bg-gray-50 transition-colors"
-                          style={{ color: REPORT_MENU_COLOR }}
+                            className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
                           >
                             <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -3625,9 +3616,13 @@ export default function ConferenceDetailPage() {
         const myConfigId = currentUser?.configId ?? null;
         const myMeetingsAvailable = myConfigId != null;
         const filteredMeetings = confMeetings.filter(m => {
-          // "My Meetings" covers both the booking rep and anyone on support.
+          // "My Meetings" covers both the booking rep (the Rep column) and
+          // anyone on support (the Support column). support_rep_ids is normally
+          // a subset of scheduled_by, but a bulk rep reassignment rewrites
+          // scheduled_by alone — so both are read rather than trusting that.
           if (myMeetingsOnly && myConfigId != null) {
-            const ids = (m.scheduled_by || '').split(',').map(x => parseInt(x.trim())).filter(n => !isNaN(n));
+            const ids = `${m.scheduled_by || ''},${m.support_rep_ids || ''}`
+              .split(',').map(x => parseInt(x.trim())).filter(n => !isNaN(n));
             if (!ids.includes(myConfigId)) return false;
           }
           if (meetingFilterReps.length > 0) {
