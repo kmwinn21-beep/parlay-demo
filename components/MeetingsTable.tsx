@@ -826,6 +826,18 @@ function GroupHeader({ label, count, collapsed, onToggle, bare = false, color }:
  * a long column doesn't drag the whole board down with it — and every column
  * stands the same height whatever it holds.
  */
+/**
+ * The border a single meeting sits in — shared by the kanban columns and the
+ * phone's list so a card looks the same wherever it's read.
+ */
+function MeetingCardShell({ children, ...rest }: { children: React.ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div {...rest} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+      {children}
+    </div>
+  );
+}
+
 function KanbanColumn({ label, count, color, height, children }: {
   label: string;
   count: number;
@@ -1205,27 +1217,32 @@ export function MeetingsTable({
             {/* Eyebrow: whose company this meeting is with, and the actions
                 for it. The attendees below then read as people at that
                 company rather than the company trailing them. */}
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <div className="min-w-0 flex-1">
+            {/* A long company name scrolls sideways under the kebab rather
+                than being cut off by it — the kebab sits on the card's own
+                background, so the name slides out of sight behind it. */}
+            <div className="relative flex items-start mb-2 min-h-[1.25rem]">
+              <div className="min-w-0 flex-1 overflow-x-auto scrollbar-hide pr-9">
                 {!hideCompany && (m.company_name && m.company_id ? (
                   <button
                     type="button"
                     onClick={() => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! })}
-                    className="block text-sm font-bold text-brand-secondary hover:underline text-left truncate"
+                    className="block text-sm font-bold text-brand-secondary hover:underline text-left whitespace-nowrap"
                   >
                     {m.company_name}
                   </button>
                 ) : m.company_name ? (
-                  <p className="text-sm font-bold text-gray-500 truncate">{m.company_name}</p>
+                  <p className="text-sm font-bold text-gray-500 whitespace-nowrap">{m.company_name}</p>
                 ) : null)}
               </div>
               {(onEdit || onNotesClick) && (
-                <MeetingActionsMenu
-                  hasNotes={!!m.has_notes}
-                  onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
-                  onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
-                  onEdit={() => setEditingId(m.id)}
-                />
+                <div className="absolute right-0 top-0 pl-1.5 bg-white">
+                  <MeetingActionsMenu
+                    hasNotes={!!m.has_notes}
+                    onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
+                    onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
+                    onEdit={() => setEditingId(m.id)}
+                  />
+                </div>
               )}
             </div>
             <div className="flex items-start justify-between gap-3">
@@ -1609,9 +1626,9 @@ export function MeetingsTable({
                   {group.rows.length === 0
                     ? <p className="px-3 py-6 text-center text-[11px] text-gray-400">No meetings</p>
                     : group.rows.map(m => (
-                        <div key={m.id} data-kanban-card className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                        <MeetingCardShell key={m.id} data-kanban-card>
                           {renderMobileCard(m)}
-                        </div>
+                        </MeetingCardShell>
                       ))}
                 </KanbanColumn>
               ))}
@@ -1620,8 +1637,11 @@ export function MeetingsTable({
         </div>
       )}
 
-      {/* Mobile card layout — also the desktop list when the view is a table. */}
-      <div className={`${cardsOnly ? 'block' : `block ${viewMode === 'kanban' ? 'lg:hidden' : 'lg:hidden'}`} divide-y divide-gray-100`}>
+      {/* Mobile card layout — also the desktop list when the view is a table.
+          Each meeting sits in the same bordered card the kanban columns use,
+          on the same tinted backing: run flush against each other they read as
+          one long list rather than as separate meetings. */}
+      <div className={`${cardsOnly ? 'block' : `block ${viewMode === 'kanban' ? 'lg:hidden' : 'lg:hidden'}`}`}>
         {groupedMeetings
           ? groupedMeetings.map(([key, group]) => (
             <div key={`${mode}-${key || 'none'}`} style={{ animation: 'meetingGroupIn 200ms ease-out' }}>
@@ -1632,10 +1652,18 @@ export function MeetingsTable({
                 onToggle={() => toggleGroup(key)}
                 color={groupColor(key)}
               />
-              {!isCollapsed(key) && group.rows.map(renderMobileCard)}
+              {!isCollapsed(key) && (
+                <div className="bg-gray-50/50 p-2 space-y-2">
+                  {group.rows.map(m => <MeetingCardShell key={m.id}>{renderMobileCard(m)}</MeetingCardShell>)}
+                </div>
+              )}
             </div>
           ))
-          : sorted.map(renderMobileCard)}
+          : (
+            <div className="bg-gray-50/50 p-2 space-y-2">
+              {sorted.map(m => <MeetingCardShell key={m.id}>{renderMobileCard(m)}</MeetingCardShell>)}
+            </div>
+          )}
       </div>
 
       {/* Desktop table layout */}
