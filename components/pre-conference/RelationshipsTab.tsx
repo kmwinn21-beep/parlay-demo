@@ -194,12 +194,15 @@ function CardDetail({ tp }: { tp: Touchpoint }) {
 function RelationshipAttendeeCard({
   attendee,
   repNames,
+  descriptions,
   isTarget,
   onToggleTarget,
   readOnly,
 }: {
   attendee: RelationshipRow['attendees'][0] & { company_name: string; company_id: number };
   repNames: string[];
+  /** What the reps wrote about the relationship — one per tagged relationship. */
+  descriptions: string[];
   isTarget: boolean;
   onToggleTarget: () => void;
   readOnly: boolean;
@@ -209,16 +212,14 @@ function RelationshipAttendeeCard({
   const [expanded, setExpanded] = useState(false);
   const [timeline, setTimeline] = useState<TimelineData | null>(null);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
-  const [repsOpen, setRepsOpen] = useState(false);
   const colorMaps = useConfigColors();
 
   useEffect(() => {
     fetch(`/api/attendees/${attendee.id}/timeline`)
       .then(r => r.ok ? r.json() : null)
-      .then((d: TimelineData | null) => {
-        setTimeline(d);
-        if (d && d.touchpoints.length > 0) setSelectedIdx(d.touchpoints.length - 1);
-      })
+      // No conference picked on open: pre-selecting the latest one expanded the
+      // detail panel underneath it before anyone asked for it.
+      .then((d: TimelineData | null) => setTimeline(d))
       .catch(() => {});
   }, [attendee.id]);
 
@@ -297,20 +298,17 @@ function RelationshipAttendeeCard({
           <span className="badge-gray text-xs px-2 py-0.5 flex-shrink-0 whitespace-nowrap">{attendee.seniority}</span>
         )}
       </ScrollRow>
-        <button
-          type="button"
-          onClick={() => setExpanded(v => !v)}
-          title={expanded ? 'Collapse' : 'Expand'}
-          aria-expanded={expanded}
-          className="flex-shrink-0 p-1 -mr-1 text-gray-400 hover:text-brand-secondary transition-colors"
-        >
-          <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
       </div>
 
-      {expanded && (<>
+      {/* The conference timeline is what expands. Animating grid-template-rows
+          from 0fr to 1fr grows it to whatever it measures, so it unfolds in
+          place and pushes Internal Relationships down rather than appearing
+          all at once. */}
+      <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
+        expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+      }`}>
+        <div className="overflow-hidden">
+        <div className="flex flex-col gap-3">
       {/* Conference history */}
       {timeline && touchpoints.length > 0 ? (
         <div>
@@ -364,39 +362,53 @@ function RelationshipAttendeeCard({
 
       {/* Selected conference detail */}
       {selectedTp && <CardDetail tp={selectedTp} />}
+        </div>
+        </div>
+      </div>
 
-      {/* Reps (expandable) */}
-      {repNames.length > 0 && (
-        <div className="border-t border-gray-100 -mx-4 px-4 pt-0">
-          <button type="button" onClick={() => setRepsOpen(v => !v)}
-            className="w-full flex items-center justify-between py-2 hover:opacity-70 transition-opacity text-left">
-            <span className="text-[11px] text-gray-400 font-medium">
-              {repNames.length} {repNames.length === 1 ? 'rep' : 'reps'} with relationship
-            </span>
-            <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${repsOpen ? 'rotate-180' : ''}`}
+      {/* Internal Relationships — always visible, collapsed or not. The toggle
+          for the timeline above lives on this row, so it sits directly under
+          whatever it reveals. */}
+      <div className="border-t border-gray-100 -mx-4 px-4 pt-0">
+        <div className="flex items-center justify-between gap-2 py-2">
+          <span className="text-[11px] text-gray-400 font-medium uppercase tracking-wide">Internal Relationships</span>
+          <button
+            type="button"
+            onClick={() => setExpanded(v => !v)}
+            title={expanded ? 'Hide conference history' : 'Show conference history'}
+            aria-expanded={expanded}
+            className="flex-shrink-0 p-1 -mr-1 text-gray-400 hover:text-brand-secondary transition-colors"
+          >
+            <svg className={`w-4 h-4 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`}
               fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
-          {repsOpen && (
-            <div className="pb-1 divide-y divide-gray-50">
-              {repNames.map(name => {
-                const ini = getRepInitials(name);
-                const colorClass = getPreset(colorMaps.user?.[name]).badgeClass;
-                return (
-                  <div key={name} className="flex items-center gap-2 py-2">
-                    <span className={`inline-flex items-center justify-center w-[22px] h-[22px] rounded-full text-[9px] font-bold flex-shrink-0 ${colorClass}`}>
-                      {ini}
-                    </span>
-                    <p className="text-xs font-medium text-gray-700 leading-tight">{name}</p>
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </div>
-      )}
-      </>)}
+        {repNames.length > 0 && (
+          <div className="flex items-center gap-1 flex-wrap pb-1">
+            {repNames.map(name => (
+              <span
+                key={name}
+                title={name}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${getPreset(colorMaps.user?.[name]).badgeClass}`}
+              >
+                <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0">
+                  <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
+                </svg>
+                {getRepInitials(name)}
+              </span>
+            ))}
+          </div>
+        )}
+        {descriptions.length > 0 && (
+          <div className="pb-1 space-y-1">
+            {descriptions.map((d, i) => (
+              <p key={i} className="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap">{d}</p>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -406,8 +418,12 @@ function RelationshipAttendeeCard({
 interface CompanyGroup {
   id: number;
   name: string;
-  attendees: (RelationshipRow['attendees'][0] & { company_name: string; company_id: number; rep_names: string[] })[];
+  attendees: (RelationshipRow['attendees'][0] & {
+    company_name: string; company_id: number; rep_names: string[]; descriptions: string[];
+  })[];
   repNames: string[];
+  /** The company's own assigned rep(s) — leads the sidebar card's pill row. */
+  assignedUserNames: string[];
   status: string;
   description: string;
   totalRelationships: number;
@@ -433,6 +449,7 @@ function groupRelationshipsByCompany(
         name: rel.company_name,
         attendees: [],
         repNames: [],
+        assignedUserNames: rel.assigned_user_names ?? [],
         status: rel.relationship_status,
         description: rel.description,
         totalRelationships: 0,
@@ -448,12 +465,22 @@ function groupRelationshipsByCompany(
     // Merge attendees (deduplicate by id)
     for (const a of rel.attendees) {
       if (!group.attendees.find(x => x.id === a.id)) {
-        group.attendees.push({ ...a, company_name: rel.company_name, company_id: rel.company_id, rep_names: [...rel.rep_names] });
+        group.attendees.push({
+          ...a,
+          company_name: rel.company_name,
+          company_id: rel.company_id,
+          rep_names: [...rel.rep_names],
+          descriptions: rel.description ? [rel.description] : [],
+        });
       } else {
-        // Attendee appears in multiple relationship rows — merge rep names
+        // Attendee appears in multiple relationship rows — merge rep names and
+        // keep every description, since each is a different rep's account of it.
         const existing = group.attendees.find(x => x.id === a.id)!;
         for (const r of rel.rep_names) {
           if (!existing.rep_names.includes(r)) existing.rep_names.push(r);
+        }
+        if (rel.description && !existing.descriptions.includes(rel.description)) {
+          existing.descriptions.push(rel.description);
         }
       }
     }
@@ -465,6 +492,7 @@ function groupRelationshipsByCompany(
         name: vr.company_name,
         attendees: [],
         repNames: [],
+        assignedUserNames: vr.company_assigned_user_names ?? [],
         status: '',
         description: '',
         totalRelationships: 0,
@@ -555,6 +583,20 @@ export function RelationshipsTab({
                 <p className="text-xs text-gray-400 mt-0.5 truncate">{co.status}</p>
               )}
               <div className="flex items-center gap-2 mt-2 flex-wrap">
+                {/* Who owns the account leads the row, in the same initialled
+                    pill the rest of the app uses for a rep. */}
+                {co.assignedUserNames.map(name => (
+                  <span
+                    key={name}
+                    title={name}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium flex-shrink-0 ${getPreset(colorMaps.user?.[name]).badgeClass}`}
+                  >
+                    <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0">
+                      <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
+                    </svg>
+                    {getRepInitials(name)}
+                  </span>
+                ))}
                 {co.attendees.length > 0 && (
                   <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary">
                     {co.attendees.length} at conf
@@ -602,6 +644,7 @@ export function RelationshipsTab({
             key={a.id}
             attendee={a}
             repNames={a.rep_names}
+            descriptions={a.descriptions}
             isTarget={targetMap.has(a.id)}
             onToggleTarget={() => onToggleTarget({
               attendeeId: a.id,
