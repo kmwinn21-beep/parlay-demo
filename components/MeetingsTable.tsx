@@ -169,11 +169,10 @@ function MeetingDetailPills({ meeting, avgCostPerUnit, showConference = false }:
   /** For lists that span conferences, or sit outside a conference page. */
   showConference?: boolean;
 }) {
-  // Roster picks and typed-in names read the same on the pill.
-  const extras = [
-    ...(meeting.additional_attendee_records ?? []).map(a => `${a.first_name} ${a.last_name}`.trim()),
-    ...(meeting.additional_attendees || '').split(',').map(n => n.trim()).filter(Boolean),
-  ];
+  // Only the typed-in names. Guests picked off the conference roster get their
+  // own name-and-title row on the card, so a pill for them repeated what was
+  // already sitting a line above it.
+  const extras = (meeting.additional_attendees || '').split(',').map(n => n.trim()).filter(Boolean);
   const value = meeting.company_wse != null && avgCostPerUnit > 0
     ? abbreviateValue(Math.round(meeting.company_wse * avgCostPerUnit))
     : null;
@@ -1203,6 +1202,32 @@ export function MeetingsTable({
           />
         ) : (
           <>
+            {/* Eyebrow: whose company this meeting is with, and the actions
+                for it. The attendees below then read as people at that
+                company rather than the company trailing them. */}
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <div className="min-w-0 flex-1">
+                {!hideCompany && (m.company_name && m.company_id ? (
+                  <button
+                    type="button"
+                    onClick={() => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! })}
+                    className="block text-sm font-bold text-brand-secondary hover:underline text-left truncate"
+                  >
+                    {m.company_name}
+                  </button>
+                ) : m.company_name ? (
+                  <p className="text-sm font-bold text-gray-500 truncate">{m.company_name}</p>
+                ) : null)}
+              </div>
+              {(onEdit || onNotesClick) && (
+                <MeetingActionsMenu
+                  hasNotes={!!m.has_notes}
+                  onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
+                  onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
+                  onEdit={() => setEditingId(m.id)}
+                />
+              )}
+            </div>
             <div className="flex items-start justify-between gap-3">
               {/* The primary attendee gets a face too — only their guests had
                   one, which read as though the guest were the subject. */}
@@ -1227,14 +1252,6 @@ export function MeetingsTable({
                 </span>
                 {m.title && <p className="text-xs font-bold text-gray-500 mt-0.5">{m.title}</p>}
               </div>
-              {(onEdit || onNotesClick) && (
-                <MeetingActionsMenu
-                  hasNotes={!!m.has_notes}
-                  onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
-                  onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
-                  onEdit={() => setEditingId(m.id)}
-                />
-              )}
             </div>
             {/* Guests and the company sit outside the name column, so their
                 avatars start where the primary attendee's does and the company
@@ -1254,20 +1271,7 @@ export function MeetingsTable({
                 </div>
               </div>
             ))}
-            {/* ml-9 is the avatar plus its gap, so the company joins the one
-                text column the names and titles share rather than starting a
-                third alignment at the card's edge. */}
-            {!hideCompany && (m.company_name && m.company_id ? (
-              <button
-                type="button"
-                onClick={() => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! })}
-                className="block text-xs font-bold text-brand-secondary hover:underline mt-1 ml-9 text-left"
-              >
-                {m.company_name}
-              </button>
-            ) : m.company_name ? (
-              <p className="text-xs font-bold text-gray-400 mt-1 ml-9">{m.company_name}</p>
-            ) : null)}
+
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {m.meeting_type && (
                 <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{m.meeting_type}</span>

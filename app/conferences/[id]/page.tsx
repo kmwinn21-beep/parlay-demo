@@ -3663,6 +3663,54 @@ export default function ConferenceDetailPage() {
             ))}
           </div>
         );
+        // How the rows are grouped, plus the My Mtgs filter riding along at the
+        // end of the same bar. Rendered twice — beside the actions on desktop,
+        // and on its own scrolling row under the day filters on mobile, where
+        // the labels drop the "By" to fit.
+        const GroupToggle = ({ short }: { short?: boolean }) => (
+          <div className="inline-flex flex-shrink-0 rounded-lg border border-gray-200 overflow-hidden">
+            {([
+              { key: 'date' as const, label: 'Date', path: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+              { key: 'rep' as const, label: 'Rep', path: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
+              { key: 'outcome' as const, label: 'Outcome', path: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
+            ]).map((opt, i) => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => setMeetingGroupMode(opt.key)}
+                title={`Group by ${opt.label.toLowerCase()}`}
+                aria-pressed={meetingGroupMode === opt.key}
+                className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
+                  meetingGroupMode === opt.key ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={opt.path} />
+                </svg>
+                {short ? opt.label : `By ${opt.label}`}
+              </button>
+            ))}
+            {/* My Mtgs shares the bar but isn't one of the groupings —
+                it's a filter, so it toggles on and off and leaves
+                whichever grouping is selected in place. */}
+            {myMeetingsAvailable && (
+              <button
+                type="button"
+                onClick={() => setMyMeetingsOnly(v => !v)}
+                title="Only meetings I'm on"
+                aria-pressed={myMeetingsOnly}
+                className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap border-l border-gray-200 transition-colors ${
+                  myMeetingsOnly ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                My Mtgs
+              </button>
+            )}
+          </div>
+        );
         return (
           <div className="card p-0 overflow-hidden">
             {/* Header */}
@@ -3693,55 +3741,16 @@ export default function ConferenceDetailPage() {
                 <div className="ml-auto flex-shrink-0 flex items-center gap-2">
                   {/* Grouping toggle, then the actions. Filters and + Meeting
                       live in the kebab at every width now, which keeps this row
-                      short enough for the toggle to sit beside them. */}
-                  <div className="overflow-x-auto scrollbar-hide">
-                    <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
-                      {([
-                        { key: 'date' as const, label: 'By Date', path: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
-                        { key: 'rep' as const, label: 'By Rep', path: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
-                        { key: 'outcome' as const, label: 'By Outcome', path: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
-                      ]).map((opt, i) => (
-                        <button
-                          key={opt.key}
-                          type="button"
-                          onClick={() => setMeetingGroupMode(opt.key)}
-                          title={`Group ${opt.label.toLowerCase()}`}
-                          aria-pressed={meetingGroupMode === opt.key}
-                          className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
-                            meetingGroupMode === opt.key ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-                          }`}
-                        >
-                          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={opt.path} />
-                          </svg>
-                          {opt.label}
-                        </button>
-                      ))}
-                      {/* My Mtgs shares the bar but isn't one of the groupings —
-                          it's a filter, so it toggles on and off and leaves
-                          whichever grouping is selected in place. */}
-                      {myMeetingsAvailable && (
-                        <button
-                          type="button"
-                          onClick={() => setMyMeetingsOnly(v => !v)}
-                          title="Only meetings I'm on"
-                          aria-pressed={myMeetingsOnly}
-                          className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
-                            myMeetingsOnly ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-                          }`}
-                        >
-                          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                          My Mtgs
-                        </button>
-                      )}
-                    </div>
+                      short enough for the toggle to sit beside them. On mobile
+                      the toggle moves to its own row below the day filters. */}
+                  <div className="hidden lg:block overflow-x-auto scrollbar-hide">
+                    <GroupToggle />
                   </div>
 
                   {/* Table / Kanban, its own control so it reads as a separate
-                      decision from how the rows are grouped. */}
-                  <div className="overflow-x-auto scrollbar-hide">
+                      decision from how the rows are grouped. Mobile only ever
+                      shows the cards, so it has no choice to make here. */}
+                  <div className="hidden lg:block overflow-x-auto scrollbar-hide">
                     <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
                       {([
                         { key: 'table' as const, label: 'Table', path: 'M3 10h18M3 14h18M4 6h16a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V7a1 1 0 011-1z' },
@@ -3817,6 +3826,11 @@ export default function ConferenceDetailPage() {
                   onBoothHoursChange={setBoothHoursOnly}
                 />
               </div>
+
+              {/* Mobile row 3 — the grouping toggle, on its own scrolling line */}
+              <ScrollRow className="lg:hidden mt-2" gapClass="gap-0" step={120}>
+                <GroupToggle short />
+              </ScrollRow>
 
               {/* Active filter pills — full rep names on desktop, initials on mobile */}
               {anyFilters && (
