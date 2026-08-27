@@ -169,11 +169,10 @@ function MeetingDetailPills({ meeting, avgCostPerUnit, showConference = false }:
   /** For lists that span conferences, or sit outside a conference page. */
   showConference?: boolean;
 }) {
-  // Roster picks and typed-in names read the same on the pill.
-  const extras = [
-    ...(meeting.additional_attendee_records ?? []).map(a => `${a.first_name} ${a.last_name}`.trim()),
-    ...(meeting.additional_attendees || '').split(',').map(n => n.trim()).filter(Boolean),
-  ];
+  // Only the typed-in names. Guests picked off the conference roster get their
+  // own name-and-title row on the card, so a pill for them repeated what was
+  // already sitting a line above it.
+  const extras = (meeting.additional_attendees || '').split(',').map(n => n.trim()).filter(Boolean);
   const value = meeting.company_wse != null && avgCostPerUnit > 0
     ? abbreviateValue(Math.round(meeting.company_wse * avgCostPerUnit))
     : null;
@@ -218,6 +217,17 @@ function MeetingDetailPills({ meeting, avgCostPerUnit, showConference = false }:
   );
 }
 
+/**
+ * Conference days, in order, plus booth hours.
+ *
+ * Not taken from the config presets: those are picked to read as pill fills,
+ * and several (yellow especially) are too light to serve as text on their own
+ * wash, which is what a group heading needs.
+ */
+const DAY_COLORS = ['#d97706', '#16a34a', '#1B76BC', '#ea580c', '#dc2626'];
+const BOOTH_HOURS_COLOR = '#7c3aed';
+
+/** How long the expanded names stay up before folding back. */
 const ACTIONS_MENU_WIDTH = 160;
 
 /** Row actions — the notetaker and edit entries the icons used to carry. */
@@ -756,6 +766,20 @@ function EditMeetingTableRow({
 }
 
 /** Section header for one day's meetings — click to collapse the group. */
+/** The count beside a group's name — a ring in the heading's own colour. */
+function GroupCount({ count, color }: { count: number; color: string | null }) {
+  return (
+    <span
+      className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full border text-[10px] font-bold leading-none flex-shrink-0 ${
+        color ? '' : 'border-gray-300 text-gray-500'
+      }`}
+      style={color ? { borderColor: color, color } : undefined}
+    >
+      {count}
+    </span>
+  );
+}
+
 function GroupHeader({ label, count, collapsed, onToggle, bare = false, color }: {
   label: string;
   count: number;
@@ -772,7 +796,11 @@ function GroupHeader({ label, count, collapsed, onToggle, bare = false, color }:
       type="button"
       onClick={onToggle}
       aria-expanded={!collapsed}
-      className={`w-full flex items-center gap-2 text-left ${bare ? '' : `px-4 py-2 border-b border-gray-200 ${color ? '' : 'bg-gray-50'}`}`}
+      // py-2.5 in both variants so a table heading stands the same height as a
+      // kanban column's.
+      className={`w-full flex items-center gap-2 text-left px-3 py-2.5 ${
+        bare ? '' : `border-b border-gray-200 ${color ? '' : 'bg-gray-50'}`
+      }`}
       style={!bare && color ? { backgroundColor: `${color}26` } : undefined}
     >
       <svg
@@ -788,9 +816,7 @@ function GroupHeader({ label, count, collapsed, onToggle, bare = false, color }:
       >
         {label}
       </span>
-      <span className={`text-xs ${color ? 'opacity-70' : 'text-gray-400'}`} style={color ? { color } : undefined}>
-        ({count})
-      </span>
+      <GroupCount count={count} color={color ?? null} />
     </button>
   );
 }
@@ -841,12 +867,7 @@ function KanbanColumn({ label, count, color, height, children }: {
         <span className={`text-xs font-semibold flex-1 truncate ${color ? '' : 'text-gray-600'}`} style={color ? { color } : undefined}>
           {label}
         </span>
-        <span
-          className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold flex-shrink-0 ${color ? '' : 'bg-gray-200 text-gray-600'}`}
-          style={color ? { backgroundColor: `${color}2E`, color } : undefined}
-        >
-          {count}
-        </span>
+        <GroupCount count={count} color={color} />
       </div>
       <div className="relative flex-1 min-h-0">
         {canUp && (
@@ -1102,7 +1123,22 @@ export function MeetingsTable({
 
   // Rep groups take the rep pill's colour, outcome groups the outcome pill's —
   // read from the same config maps the cells use, so they can't disagree.
+  // Date groups run through the conference's days in order — first day amber,
+  // then green, blue, orange, red — with booth hours purple wherever it lands.
+  const dayColorByKey = new Map<string, string>();
+  if (mode === 'date') {
+    let day = 0;
+    for (const [key, group] of groupedMeetings ?? []) {
+      if (/booth\s*hours/i.test(group.label)) {
+        dayColorByKey.set(key, BOOTH_HOURS_COLOR);
+      } else if (key) {
+        dayColorByKey.set(key, DAY_COLORS[day % DAY_COLORS.length]);
+        day += 1;
+      }
+    }
+  }
   const groupColor = (key: string): string | null => {
+    if (mode === 'date') return dayColorByKey.get(key) ?? null;
     if (!key) return null;
     if (mode === 'rep') return getHex(key, tableColorMaps.user || {});
     if (mode === 'outcome') return getHex(key, colorMap);
@@ -1166,6 +1202,32 @@ export function MeetingsTable({
           />
         ) : (
           <>
+            {/* Eyebrow: whose company this meeting is with, and the actions
+                for it. The attendees below then read as people at that
+                company rather than the company trailing them. */}
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <div className="min-w-0 flex-1">
+                {!hideCompany && (m.company_name && m.company_id ? (
+                  <button
+                    type="button"
+                    onClick={() => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! })}
+                    className="block text-sm font-bold text-brand-secondary hover:underline text-left truncate"
+                  >
+                    {m.company_name}
+                  </button>
+                ) : m.company_name ? (
+                  <p className="text-sm font-bold text-gray-500 truncate">{m.company_name}</p>
+                ) : null)}
+              </div>
+              {(onEdit || onNotesClick) && (
+                <MeetingActionsMenu
+                  hasNotes={!!m.has_notes}
+                  onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
+                  onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
+                  onEdit={() => setEditingId(m.id)}
+                />
+              )}
+            </div>
             <div className="flex items-start justify-between gap-3">
               {/* The primary attendee gets a face too — only their guests had
                   one, which read as though the guest were the subject. */}
@@ -1189,42 +1251,27 @@ export function MeetingsTable({
                   {m.as_additional_attendee && <AdditionalAttendeeBadge />}
                 </span>
                 {m.title && <p className="text-xs font-bold text-gray-500 mt-0.5">{m.title}</p>}
-                {(m.additional_attendee_records ?? []).map(extra => (
-                  <div key={extra.id} className="flex items-center gap-1.5 mt-1.5">
-                    <AttendeeInitialsAvatar
-                      name={`${extra.first_name} ${extra.last_name}`}
-                      photoUrl={extra.photo_url}
-                      title={extra.title}
-                      companyName={extra.company_name}
-                      className="w-6 h-6 text-[9px]"
-                    />
-                    <div className="min-w-0">
-                      <p className="text-xs font-normal text-gray-600 truncate">{extra.first_name} {extra.last_name}</p>
-                      {extra.title && <p className="text-xs font-normal text-gray-400 truncate">{extra.title}</p>}
-                    </div>
-                  </div>
-                ))}
-                {!hideCompany && (m.company_name && m.company_id ? (
-                  <button
-                    type="button"
-                    onClick={() => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! })}
-                    className="block text-xs font-bold text-brand-secondary hover:underline mt-0.5 text-left"
-                  >
-                    {m.company_name}
-                  </button>
-                ) : m.company_name ? (
-                  <p className="text-xs font-bold text-gray-400 mt-0.5">{m.company_name}</p>
-                ) : null)}
               </div>
-              {(onEdit || onNotesClick) && (
-                <MeetingActionsMenu
-                  hasNotes={!!m.has_notes}
-                  onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
-                  onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
-                  onEdit={() => setEditingId(m.id)}
-                />
-              )}
             </div>
+            {/* Guests and the company sit outside the name column, so their
+                avatars start where the primary attendee's does and the company
+                name lines up with both rather than being pushed in by it. */}
+            {(m.additional_attendee_records ?? []).map(extra => (
+              <div key={extra.id} className="flex items-center gap-3 mt-1.5 min-w-0">
+                <AttendeeInitialsAvatar
+                  name={`${extra.first_name} ${extra.last_name}`}
+                  photoUrl={extra.photo_url}
+                  title={extra.title}
+                  companyName={extra.company_name}
+                  className="w-6 h-6 text-[9px] flex-shrink-0"
+                />
+                <div className="min-w-0">
+                  <p className="text-xs font-normal text-gray-600 truncate">{extra.first_name} {extra.last_name}</p>
+                  {extra.title && <p className="text-xs font-normal text-gray-400 truncate">{extra.title}</p>}
+                </div>
+              </div>
+            ))}
+
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {m.meeting_type && (
                 <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{m.meeting_type}</span>
@@ -1633,24 +1680,27 @@ export function MeetingsTable({
           </thead>
           <tbody className="divide-y divide-gray-100">
             {groupedMeetings
-              ? groupedMeetings.map(([key, group]) => (
+              ? groupedMeetings.map(([key, group], gi) => (
                   <Fragment key={`${mode}-${key || 'none'}`}>
-                    <tr
-                      className={groupColor(key) ? '' : 'bg-gray-50/70'}
-                      style={{
-                        animation: 'meetingGroupIn 200ms ease-out',
-                        backgroundColor: groupColor(key) ? `${groupColor(key)}26` : undefined,
-                      }}
-                    >
-                      <td colSpan={tableColSpan} className="px-3 py-1.5">
-                        <GroupHeader
-                          label={group.label}
-                          count={group.rows.length}
-                          collapsed={isCollapsed(key)}
-                          onToggle={() => toggleGroup(key)}
-                          color={groupColor(key)}
-                          bare
-                        />
+                    <tr style={{ animation: 'meetingGroupIn 200ms ease-out' }}>
+                      {/* The cell carries no padding: the spacer above sets a
+                          group apart from the rows of the one before it, and
+                          the heading keeps its own height. */}
+                      <td colSpan={tableColSpan} className="p-0">
+                        {gi > 0 && <div className="h-2 bg-white" aria-hidden />}
+                        <div
+                          className={groupColor(key) ? '' : 'bg-gray-50/70'}
+                          style={groupColor(key) ? { backgroundColor: `${groupColor(key)}26` } : undefined}
+                        >
+                          <GroupHeader
+                            label={group.label}
+                            count={group.rows.length}
+                            collapsed={isCollapsed(key)}
+                            onToggle={() => toggleGroup(key)}
+                            color={groupColor(key)}
+                            bare
+                          />
+                        </div>
                       </td>
                     </tr>
                     {!isCollapsed(key) && group.rows.map(renderTableRow)}
