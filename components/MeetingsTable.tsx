@@ -851,9 +851,16 @@ export function MeetingsTable({
   const [bulkRepIds, setBulkRepIds] = useState<number[]>([]);
   const tableColorMaps = useConfigColors();
   const kanbanScrollRef = useRef<HTMLDivElement>(null);
-  // The board's height is measured rather than guessed: cap it at whatever is
-  // left below its own top edge, so its horizontal scrollbar always lands on
-  // screen instead of hundreds of pixels down the page.
+  /**
+   * How tall the board stands.
+   *
+   * Two pulls: it should show a useful stack of cards, and its horizontal
+   * scrollbar shouldn't end up far below the fold the way it did when the
+   * board grew to its tallest column. So it takes the larger of what's left of
+   * the viewport and room for five cards, measured off a real card rather than
+   * guessed — card height moves with what's on them.
+   */
+  const KANBAN_TARGET_CARDS = 5;
   const [kanbanMaxH, setKanbanMaxH] = useState<number | null>(null);
   useEffect(() => {
     if (viewMode !== 'kanban') { setKanbanMaxH(null); return; }
@@ -862,12 +869,22 @@ export function MeetingsTable({
       if (!el) return;
       // Viewport-relative, and taken once rather than on every scroll — a board
       // that resized as you scrolled would be worse than one that doesn't.
-      setKanbanMaxH(Math.max(280, window.innerHeight - el.getBoundingClientRect().top - 24));
+      const viewportRoom = window.innerHeight - el.getBoundingClientRect().top - 24;
+      const card = el.querySelector<HTMLElement>('[data-kanban-card]');
+      const header = el.querySelector<HTMLElement>('[data-kanban-head]');
+      const cardH = card?.getBoundingClientRect().height ?? 0;
+      const fiveCards = cardH > 0
+        ? KANBAN_TARGET_CARDS * cardH + (KANBAN_TARGET_CARDS - 1) * 8
+          + (header?.getBoundingClientRect().height ?? 0) + 24
+        : 0;
+      setKanbanMaxH(Math.max(280, viewportRoom, Math.min(fiveCards, 1100)));
     };
-    measure();
+    // Two frames: the first render has the columns but not yet their final
+    // card heights, so measuring immediately reads zero.
+    const id = requestAnimationFrame(() => requestAnimationFrame(measure));
     window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [viewMode, groupMode, groupByDate]);
+    return () => { cancelAnimationFrame(id); window.removeEventListener('resize', measure); };
+  }, [viewMode, groupMode, groupByDate, meetings.length]);
   // Keyed by mode + group key: a rep name and a date could collide, and
   // switching modes shouldn't inherit what was collapsed in the other one.
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -1450,6 +1467,7 @@ export function MeetingsTable({
                     style={{ animation: 'meetingGroupIn 200ms ease-out' }}
                   >
                     <div
+                      data-kanban-head
                       className={`flex items-center gap-2 px-3 py-2.5 ${color ? '' : 'bg-gray-50'}`}
                       style={color ? { backgroundColor: `${color}26` } : undefined}
                     >
@@ -1473,7 +1491,7 @@ export function MeetingsTable({
                       {group.rows.length === 0
                         ? <p className="px-3 py-6 text-center text-[11px] text-gray-400">No meetings</p>
                         : group.rows.map(m => (
-                            <div key={m.id} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                            <div key={m.id} data-kanban-card className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
                               {renderMobileCard(m)}
                             </div>
                           ))}
