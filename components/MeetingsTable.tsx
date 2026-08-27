@@ -1189,32 +1189,6 @@ export function MeetingsTable({
                   {m.as_additional_attendee && <AdditionalAttendeeBadge />}
                 </span>
                 {m.title && <p className="text-xs font-bold text-gray-500 mt-0.5">{m.title}</p>}
-                {(m.additional_attendee_records ?? []).map(extra => (
-                  <div key={extra.id} className="flex items-center gap-1.5 mt-1.5">
-                    <AttendeeInitialsAvatar
-                      name={`${extra.first_name} ${extra.last_name}`}
-                      photoUrl={extra.photo_url}
-                      title={extra.title}
-                      companyName={extra.company_name}
-                      className="w-6 h-6 text-[9px]"
-                    />
-                    <div className="min-w-0">
-                      <p className="text-xs font-normal text-gray-600 truncate">{extra.first_name} {extra.last_name}</p>
-                      {extra.title && <p className="text-xs font-normal text-gray-400 truncate">{extra.title}</p>}
-                    </div>
-                  </div>
-                ))}
-                {!hideCompany && (m.company_name && m.company_id ? (
-                  <button
-                    type="button"
-                    onClick={() => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! })}
-                    className="block text-xs font-bold text-brand-secondary hover:underline mt-0.5 text-left"
-                  >
-                    {m.company_name}
-                  </button>
-                ) : m.company_name ? (
-                  <p className="text-xs font-bold text-gray-400 mt-0.5">{m.company_name}</p>
-                ) : null)}
               </div>
               {(onEdit || onNotesClick) && (
                 <MeetingActionsMenu
@@ -1225,6 +1199,38 @@ export function MeetingsTable({
                 />
               )}
             </div>
+            {/* Guests and the company sit outside the name column, so their
+                avatars start where the primary attendee's does and the company
+                name lines up with both rather than being pushed in by it. */}
+            {(m.additional_attendee_records ?? []).map(extra => (
+              <div key={extra.id} className="flex items-center gap-3 mt-1.5 min-w-0">
+                <AttendeeInitialsAvatar
+                  name={`${extra.first_name} ${extra.last_name}`}
+                  photoUrl={extra.photo_url}
+                  title={extra.title}
+                  companyName={extra.company_name}
+                  className="w-6 h-6 text-[9px] flex-shrink-0"
+                />
+                <div className="min-w-0">
+                  <p className="text-xs font-normal text-gray-600 truncate">{extra.first_name} {extra.last_name}</p>
+                  {extra.title && <p className="text-xs font-normal text-gray-400 truncate">{extra.title}</p>}
+                </div>
+              </div>
+            ))}
+            {/* ml-9 is the avatar plus its gap, so the company joins the one
+                text column the names and titles share rather than starting a
+                third alignment at the card's edge. */}
+            {!hideCompany && (m.company_name && m.company_id ? (
+              <button
+                type="button"
+                onClick={() => setQuickView({ type: 'company', id: m.company_id!, name: m.company_name! })}
+                className="block text-xs font-bold text-brand-secondary hover:underline mt-1 ml-9 text-left"
+              >
+                {m.company_name}
+              </button>
+            ) : m.company_name ? (
+              <p className="text-xs font-bold text-gray-400 mt-1 ml-9">{m.company_name}</p>
+            ) : null)}
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {m.meeting_type && (
                 <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{m.meeting_type}</span>
