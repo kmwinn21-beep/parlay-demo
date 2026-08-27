@@ -97,6 +97,8 @@ export interface MeetingRow {
   conference_id?: number;
   conference_name?: string;
   has_notes?: boolean;
+  /** Notes on this attendee for this conference — flags the row's kebab. */
+  conference_note_count?: number;
 }
 
 export interface SocialEventGuest {
