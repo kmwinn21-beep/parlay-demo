@@ -532,7 +532,9 @@ function EditMeetingRow({
           Editing meeting with {meeting.first_name} {meeting.last_name}
         </span>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* One column: this form also renders inside a 288px kanban card, where
+          two columns squeezed every control down to nothing. */}
+      <div className="grid grid-cols-1 gap-3">
         <div>
           <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Date *</label>
           <input type="date" className={inputClass} value={form.meeting_date} onChange={e => setForm(f => ({ ...f, meeting_date: e.target.value }))} required />
@@ -599,10 +601,14 @@ function EditMeetingRow({
         {onDelete && (
           <button
             type="button"
-            className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-semibold rounded border border-red-200 hover:bg-red-100 transition-colors"
+            title="Delete meeting"
+            aria-label="Delete meeting"
+            className="p-1.5 rounded border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
             onClick={() => onDelete(meeting.id)}
           >
-            Delete Meeting
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
           </button>
         )}
       </div>
@@ -789,6 +795,78 @@ function GroupHeader({ label, count, collapsed, onToggle, bare = false, color }:
   );
 }
 
+/**
+ * One kanban column. Its header stays put and the cards scroll beneath it, so
+ * a long column doesn't drag the whole board down with it — and every column
+ * stands the same height whatever it holds.
+ */
+function KanbanColumn({ label, count, color, height, children }: {
+  label: string;
+  count: number;
+  color: string | null;
+  height: number | null;
+  children: React.ReactNode;
+}) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const [canUp, setCanUp] = useState(false);
+  const [canDown, setCanDown] = useState(false);
+  const update = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    setCanUp(el.scrollTop > 1);
+    setCanDown(el.scrollTop + el.clientHeight < el.scrollHeight - 1);
+  }, []);
+  useEffect(() => {
+    update();
+    const el = listRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [update, height, children]);
+
+  const nudge = (dir: -1 | 1) => listRef.current?.scrollBy({ top: dir * 180, behavior: 'smooth' });
+  const arrow = 'absolute left-1/2 -translate-x-1/2 z-10 w-6 h-6 rounded-full bg-white border border-gray-200 shadow-sm text-gray-500 hover:text-gray-700 flex items-center justify-center transition-colors';
+
+  return (
+    <div
+      className="w-72 flex-shrink-0 rounded-xl border border-gray-200 overflow-hidden flex flex-col"
+      style={{ animation: 'meetingGroupIn 200ms ease-out', height: height ?? undefined }}
+    >
+      <div
+        data-kanban-head
+        className={`flex items-center gap-2 px-3 py-2.5 flex-shrink-0 ${color ? '' : 'bg-gray-50'}`}
+        style={color ? { backgroundColor: `${color}26` } : undefined}
+      >
+        <span className={`text-xs font-semibold flex-1 truncate ${color ? '' : 'text-gray-600'}`} style={color ? { color } : undefined}>
+          {label}
+        </span>
+        <span
+          className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold flex-shrink-0 ${color ? '' : 'bg-gray-200 text-gray-600'}`}
+          style={color ? { backgroundColor: `${color}2E`, color } : undefined}
+        >
+          {count}
+        </span>
+      </div>
+      <div className="relative flex-1 min-h-0">
+        {canUp && (
+          <button type="button" onClick={() => nudge(-1)} title="Scroll up" className={`${arrow} top-1`}>
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" /></svg>
+          </button>
+        )}
+        <div ref={listRef} onScroll={update} className="h-full overflow-y-auto scrollbar-hide bg-gray-50/50 p-2 space-y-2">
+          {children}
+        </div>
+        {canDown && (
+          <button type="button" onClick={() => nudge(1)} title="Scroll down" className={`${arrow} bottom-1`}>
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function MeetingsTable({
   meetings,
   actionOptions,
@@ -852,32 +930,27 @@ export function MeetingsTable({
   const tableColorMaps = useConfigColors();
   const kanbanScrollRef = useRef<HTMLDivElement>(null);
   /**
-   * How tall the board stands.
-   *
-   * Two pulls: it should show a useful stack of cards, and its horizontal
-   * scrollbar shouldn't end up far below the fold the way it did when the
-   * board grew to its tallest column. So it takes the larger of what's left of
-   * the viewport and room for five cards, measured off a real card rather than
-   * guessed — card height moves with what's on them.
+   * How tall a kanban column stands: room for five cards, measured off a real
+   * card rather than guessed, since card height moves with what's on them.
+   * Every column takes the same height, so the board reads as a board rather
+   * than a row of ragged strips.
    */
   const KANBAN_TARGET_CARDS = 5;
-  const [kanbanMaxH, setKanbanMaxH] = useState<number | null>(null);
+  const [kanbanColumnH, setKanbanColumnH] = useState<number | null>(null);
   useEffect(() => {
-    if (viewMode !== 'kanban') { setKanbanMaxH(null); return; }
+    if (viewMode !== 'kanban') { setKanbanColumnH(null); return; }
     const measure = () => {
       const el = kanbanScrollRef.current;
       if (!el) return;
-      // Viewport-relative, and taken once rather than on every scroll — a board
-      // that resized as you scrolled would be worse than one that doesn't.
-      const viewportRoom = window.innerHeight - el.getBoundingClientRect().top - 24;
       const card = el.querySelector<HTMLElement>('[data-kanban-card]');
       const header = el.querySelector<HTMLElement>('[data-kanban-head]');
       const cardH = card?.getBoundingClientRect().height ?? 0;
-      const fiveCards = cardH > 0
-        ? KANBAN_TARGET_CARDS * cardH + (KANBAN_TARGET_CARDS - 1) * 8
-          + (header?.getBoundingClientRect().height ?? 0) + 24
-        : 0;
-      setKanbanMaxH(Math.max(280, viewportRoom, Math.min(fiveCards, 1100)));
+      if (cardH <= 0) return;
+      const headerH = header?.getBoundingClientRect().height ?? 0;
+      // Clamped only against a pathologically tall card, not against the
+      // five-card target itself — a lower cap quietly cost a card.
+      const body = KANBAN_TARGET_CARDS * cardH + (KANBAN_TARGET_CARDS - 1) * 8 + 16;
+      setKanbanColumnH(Math.round(headerH + Math.min(body, 1400)));
     };
     // Two frames: the first render has the columns but not yet their final
     // card heights, so measuring immediately reads zero.
@@ -1094,14 +1167,15 @@ export function MeetingsTable({
         ) : (
           <>
             <div className="flex items-start justify-between gap-3">
-              {hasSelection && (
-                <input
-                  type="checkbox"
-                  checked={selectedIds.has(m.id)}
-                  onChange={() => toggleSelect(m.id)}
-                  className="mt-0.5 flex-shrink-0 h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
-                />
-              )}
+              {/* The primary attendee gets a face too — only their guests had
+                  one, which read as though the guest were the subject. */}
+              <AttendeeInitialsAvatar
+                name={`${m.first_name} ${m.last_name}`.trim()}
+                photoUrl={m.photo_url}
+                title={m.title}
+                companyName={m.company_name}
+                className="w-6 h-6 text-[9px] mt-0.5 flex-shrink-0"
+              />
               <div className="flex-1 min-w-0">
                 {/* Names open the quick-view drawer rather than the full profile */}
                 <span className="flex items-center gap-1.5 min-w-0">
@@ -1172,16 +1246,35 @@ export function MeetingsTable({
             </div>
             {/* Support — the same overlapping stack the table's Support column
                 uses, rather than a pill each. Four names wrapped onto two rows
-                and cost the card more height than they were worth. */}
-            {splitInternalIds(m).supportIds && (
-              <div className="mt-2 min-w-0">
-                <p className="text-[9px] uppercase tracking-wide text-gray-400 font-medium mb-1">Support</p>
-                <OverlappingRepPills
-                  repIds={splitInternalIds(m).supportIds}
-                  userOptions={userOptions}
-                  size="xs"
-                  emptyLabel={null}
-                />
+                and cost the card more height than they were worth.
+
+                The select checkbox rides this row rather than the header, which
+                lets the name, title and company start at the card's left edge
+                like every other line on it. */}
+            {(hasSelection || splitInternalIds(m).supportIds) && (
+              <div className="mt-2 flex items-end justify-between gap-2 min-w-0">
+                <div className="min-w-0">
+                  {splitInternalIds(m).supportIds && (
+                    <>
+                      <p className="text-[9px] uppercase tracking-wide text-gray-400 font-medium mb-1">Support</p>
+                      <OverlappingRepPills
+                        repIds={splitInternalIds(m).supportIds}
+                        userOptions={userOptions}
+                        size="xs"
+                        emptyLabel={null}
+                      />
+                    </>
+                  )}
+                </div>
+                {hasSelection && (
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(m.id)}
+                    onChange={() => toggleSelect(m.id)}
+                    onClick={e => e.stopPropagation()}
+                    className="flex-shrink-0 h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
+                  />
+                )}
               </div>
             )}
           </>
@@ -1426,9 +1519,9 @@ export function MeetingsTable({
           sideways rather than shrinking, so a card reads the same however many
           groups there are.
 
-          The board is capped and scrolls inside itself. Left to grow, a tall
-          column pushed the horizontal scrollbar hundreds of pixels below the
-          fold, where it couldn't be reached without scrolling the whole page. */}
+          Every column stands the same height and scrolls on its own beneath a
+          pinned header, so a long column doesn't drag the board down with it
+          and leave the horizontal scrollbar far below the fold. */}
       {viewMode === 'kanban' && !cardsOnly && (
         <div className="hidden lg:block relative p-3">
           <button
@@ -1453,52 +1546,28 @@ export function MeetingsTable({
           </button>
           <div
             ref={kanbanScrollRef}
-            className="overflow-auto scroll-smooth pb-2 mx-5"
-            style={{ maxHeight: kanbanMaxH ?? undefined }}
+            className="overflow-x-auto scroll-smooth pb-2 mx-5"
+            style={{ overflowY: 'visible' }}
           >
           <div className="flex gap-3 items-start min-w-max">
             {(groupedMeetings ?? [['', { label: 'All meetings', rows: sorted }]] as [string, { label: string; rows: Meeting[] }][])
-              .map(([key, group]) => {
-                const color = groupColor(key);
-                return (
-                  <div
-                    key={`kanban-${mode}-${key || 'none'}`}
-                    className="w-72 flex-shrink-0 rounded-xl border border-gray-200 overflow-hidden"
-                    style={{ animation: 'meetingGroupIn 200ms ease-out' }}
-                  >
-                    <div
-                      data-kanban-head
-                      className={`flex items-center gap-2 px-3 py-2.5 ${color ? '' : 'bg-gray-50'}`}
-                      style={color ? { backgroundColor: `${color}26` } : undefined}
-                    >
-                      <span
-                        className={`text-xs font-semibold flex-1 truncate ${color ? '' : 'text-gray-600'}`}
-                        style={color ? { color } : undefined}
-                      >
-                        {group.label}
-                      </span>
-                      <span
-                        className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold flex-shrink-0 ${color ? '' : 'bg-gray-200 text-gray-600'}`}
-                        style={color ? { backgroundColor: `${color}2E`, color } : undefined}
-                      >
-                        {group.rows.length}
-                      </span>
-                    </div>
-                    {/* space-y rather than divide-y: the cards sit apart with
-                        the column's own background between them, matching the
-                        planner's board. */}
-                    <div className="bg-gray-50/50 p-2 space-y-2 min-h-[80px]">
-                      {group.rows.length === 0
-                        ? <p className="px-3 py-6 text-center text-[11px] text-gray-400">No meetings</p>
-                        : group.rows.map(m => (
-                            <div key={m.id} data-kanban-card className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                              {renderMobileCard(m)}
-                            </div>
-                          ))}
-                    </div>
-                  </div>
-                );
-              })}
+              .map(([key, group]) => (
+                <KanbanColumn
+                  key={`kanban-${mode}-${key || 'none'}`}
+                  label={group.label}
+                  count={group.rows.length}
+                  color={groupColor(key)}
+                  height={kanbanColumnH}
+                >
+                  {group.rows.length === 0
+                    ? <p className="px-3 py-6 text-center text-[11px] text-gray-400">No meetings</p>
+                    : group.rows.map(m => (
+                        <div key={m.id} data-kanban-card className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                          {renderMobileCard(m)}
+                        </div>
+                      ))}
+                </KanbanColumn>
+              ))}
           </div>
           </div>
         </div>
