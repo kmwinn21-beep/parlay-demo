@@ -761,7 +761,15 @@ export function FollowUpsTable({
    * The group's single Done control. It fires one PATCH per underlying row
    * through the same onBulkToggle path a "Mark all done" click uses.
    */
-  function renderGroupDoneButton(groupKey: string, rows: FollowUp[]) {
+  function renderGroupDoneButton(
+    groupKey: string,
+    rows: FollowUp[],
+    // The drawer says "Completed" in smaller type: sitting where a dialog's
+    // dismiss button usually does, "Done" was being read as "close this", and
+    // follow-ups were getting marked off by accident.
+    opts?: { label?: string; small?: boolean },
+  ) {
+    const label = opts?.label ?? 'Done';
     const incompleteIds = rows.filter(t => !t.completed).map(t => t.id);
     const allDone = incompleteIds.length === 0;
     const isLoading = bulkLoadingKeys.has(groupKey);
@@ -772,14 +780,14 @@ export function FollowUpsTable({
           type="button"
           disabled={allDone || isLoading || !onBulkToggle}
           onClick={() => handleMarkAllDone(groupKey, incompleteIds)}
-          title={allDone ? 'All follow-ups complete' : `Mark ${incompleteIds.length} follow-up${incompleteIds.length === 1 ? '' : 's'} done`}
-          className={`flex items-center gap-1 px-2 py-1 rounded-lg font-medium border-2 transition-all whitespace-nowrap ${
+          title={allDone ? 'All follow-ups complete' : `Mark ${incompleteIds.length} follow-up${incompleteIds.length === 1 ? '' : 's'} ${label.toLowerCase()}`}
+          className={`flex items-center gap-1 px-2 py-1 rounded-lg font-medium border-2 transition-all whitespace-nowrap ${opts?.small ? 'text-[10px]' : ''} ${
             allDone
               ? 'bg-green-500 text-white border-green-600 cursor-default'
               : 'bg-white text-gray-500 border-gray-300 hover:border-green-400 hover:text-green-600 disabled:opacity-50'
           }`}
         >
-          {allDone ? (<><CheckIcon className="w-3 h-3 flex-shrink-0" />Done</>) : isLoading ? 'Saving…' : 'Done'}
+          {allDone ? (<><CheckIcon className="w-3 h-3 flex-shrink-0" />{label}</>) : isLoading ? 'Saving…' : label}
         </button>
         {hasError && <span className="text-[10px] text-red-500">Failed</span>}
       </div>
@@ -1287,18 +1295,12 @@ export function FollowUpsTable({
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide leading-snug mb-1">Action</p>
             {actionPill(fu)}
           </div>
-          {/* Where the entry stands, so a finished one reads at a glance. */}
-          <div className="flex-shrink-0 pt-[18px]">
-            {fu.completed ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
-                <CheckIcon className="w-3 h-3 flex-shrink-0" />
-                Done
-              </span>
-            ) : (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-300 whitespace-nowrap">
-                Pending
-              </span>
-            )}
+          {/* Where the entry stands — headed like the columns beside it, and
+              carrying the same badge the table's Status column does rather
+              than a second vocabulary for the same two states. */}
+          <div className="flex-shrink-0">
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide leading-snug mb-1">Status</p>
+            <StatusPill completed={fu.completed} />
           </div>
         </div>
         {isExpanded && renderNextStepNotes(fu, 'text-xs text-gray-500')}
@@ -1334,13 +1336,13 @@ export function FollowUpsTable({
               notesCount={Number(head.entity_notes_count)}
               conferenceName={head.conference_name}
             />
-            {renderGroupDoneButton(groupKey, rows)}
+            {renderGroupDoneButton(groupKey, rows, { label: 'Completed', small: true })}
           </div>
         }
         // On a phone the same two controls sit under the attendee's name —
         // Done first, notes to its right — rather than at the foot of a sheet
         // that can be most of a screen away from the follow-ups they act on.
-        mobileHeaderActions={renderGroupDoneButton(groupKey, rows)}
+        mobileHeaderActions={renderGroupDoneButton(groupKey, rows, { label: 'Completed', small: true })}
       >
         <div className="p-3 space-y-3">
           {/* Conference and rep share a line — both are context for the list. */}
