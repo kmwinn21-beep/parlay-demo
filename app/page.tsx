@@ -117,13 +117,26 @@ async function getBannerData(tenantDb: Client, userId: number): Promise<BannerDa
     }
 
     // No active conference — find next upcoming where user is internal attendee
-    const upcomingRes = await tenantDb.execute({
-      sql: `SELECT id, name, start_date, end_date, location, location_city, location_state, pre_conference_review_marked_at FROM conferences
+    const upcomingCols = `id, name, start_date, end_date, location, location_city, location_state, pre_conference_review_marked_at`;
+    let upcomingRes = await tenantDb.execute({
+      sql: `SELECT ${upcomingCols} FROM conferences
             WHERE start_date > ?
               AND LOWER(',' || COALESCE(internal_attendees,'') || ',') LIKE ?
             ORDER BY start_date ASC LIMIT 1`,
       args: [today, `%,${displayNameLower},%`],
     });
+
+    // Not down for any of them? Still show what's next. The banner is a prep
+    // checklist for the conference, not a personal itinerary, and someone who
+    // isn't on the attendee list is often the person doing the prep.
+    if (!upcomingRes.rows[0]) {
+      upcomingRes = await tenantDb.execute({
+        sql: `SELECT ${upcomingCols} FROM conferences
+              WHERE start_date > ?
+              ORDER BY start_date ASC LIMIT 1`,
+        args: [today],
+      });
+    }
 
     if (upcomingRes.rows[0]) {
       const conf = upcomingRes.rows[0];
