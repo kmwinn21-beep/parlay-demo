@@ -221,9 +221,10 @@ function MeetingDetailPills({ meeting, avgCostPerUnit, showConference = false }:
 const ACTIONS_MENU_WIDTH = 160;
 
 /** Row actions — the notetaker and edit entries the icons used to carry. */
-function MeetingActionsMenu({ hasNotes, onNotes, onEdit }: {
+function MeetingActionsMenu({ hasNotes, onNotes, onQuickNote, onEdit }: {
   hasNotes: boolean;
   onNotes?: () => void;
+  onQuickNote?: () => void;
   onEdit: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -242,13 +243,13 @@ function MeetingActionsMenu({ hasNotes, onNotes, onEdit }: {
     if (!el) return;
     const r = el.getBoundingClientRect();
     // Roughly two 33px items plus borders; enough to decide on flipping.
-    const height = onNotes ? 74 : 41;
+    const height = 41 + (onNotes ? 33 : 0) + (onQuickNote ? 33 : 0);
     const flip = window.innerHeight - r.bottom - 8 < height && r.top - 8 > height;
     setPos({
       top: flip ? r.top - 4 - height : r.bottom + 4,
       left: Math.max(8, Math.min(r.right - ACTIONS_MENU_WIDTH, window.innerWidth - ACTIONS_MENU_WIDTH - 8)),
     });
-  }, [onNotes]);
+  }, [onNotes, onQuickNote]);
 
   useEffect(() => {
     if (!open) { setPos(null); return; }
@@ -295,6 +296,14 @@ function MeetingActionsMenu({ hasNotes, onNotes, onEdit }: {
           style={{ position: 'fixed', top: pos.top, left: pos.left, width: ACTIONS_MENU_WIDTH }}
           className="z-[10000] bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
         >
+          {onQuickNote && (
+            <button type="button" role="menuitem" onClick={() => { setOpen(false); onQuickNote(); }} className={itemCls}>
+              <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              + Quick Notes
+            </button>
+          )}
           {onNotes && (
             <button type="button" role="menuitem" onClick={() => { setOpen(false); onNotes(); }} className={itemCls}>
               <span className="relative inline-flex flex-shrink-0">
@@ -741,8 +750,8 @@ function EditMeetingTableRow({
 }
 
 /** Section header for one day's meetings — click to collapse the group. */
-function DateGroupHeader({ date, count, collapsed, onToggle, bare = false }: {
-  date: string;
+function GroupHeader({ label, count, collapsed, onToggle, bare = false }: {
+  label: string;
   count: number;
   collapsed: boolean;
   onToggle: () => void;
@@ -762,9 +771,7 @@ function DateGroupHeader({ date, count, collapsed, onToggle, bare = false }: {
       >
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
       </svg>
-      <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
-        {date ? formatGroupDate(date) : 'No date'}
-      </span>
+      <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">{label}</span>
       <span className="text-xs text-gray-400">({count})</span>
     </button>
   );
@@ -784,6 +791,9 @@ export function MeetingsTable({
   hideCompany = false,
   tableName = 'meetings',
   groupByDate = false,
+  groupMode,
+  onQuickNote,
+  collapseAll,
   cardsOnly = false,
   showConferencePill = false,
   showAttendeeAvatar = false,
@@ -802,6 +812,12 @@ export function MeetingsTable({
   tableName?: string;
   /** Break the list into collapsible sections, one per meeting date. */
   groupByDate?: boolean;
+  /** What the sections group on. Defaults to date when groupByDate is set. */
+  groupMode?: 'date' | 'rep' | 'outcome';
+  /** Opens a quick note pre-filled from the meeting. */
+  onQuickNote?: (meeting: Meeting) => void;
+  /** Bump the token to collapse (or expand) every section at once. */
+  collapseAll?: { token: number; collapse: boolean };
   /** Keep the mobile card layout at every width — for narrow containers. */
   cardsOnly?: boolean;
   /** Adds the conference name to the card's pill row. */
@@ -818,7 +834,9 @@ export function MeetingsTable({
   const [meetingTypeOptions, setMeetingTypeOptions] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkRepIds, setBulkRepIds] = useState<number[]>([]);
-  const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set());
+  // Keyed by mode + group key: a rep name and a date could collide, and
+  // switching modes shouldn't inherit what was collapsed in the other one.
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const hasActions = !!onEdit;
   const hasSelection = !!(onBulkDelete || onBulkUpdate);
   const { user } = useUser();
@@ -915,23 +933,66 @@ export function MeetingsTable({
   });
 
   // Sections run oldest day first regardless of the column sort; the rows
-  // inside each keep whatever order the sort asked for.
-  const groupedMeetings = groupByDate
+  // inside each keep whatever order the sort asked for. Grouping by rep or
+  // outcome keeps that shape and only changes what a section stands for.
+  const mode = groupMode ?? (groupByDate ? 'date' : null);
+  const groupedMeetings = mode
     ? (() => {
-        const map = new Map<string, Meeting[]>();
+        const map = new Map<string, { label: string; rows: Meeting[] }>();
+        const push = (key: string, label: string, m: Meeting) => {
+          const entry = map.get(key);
+          if (entry) entry.rows.push(m); else map.set(key, { label, rows: [m] });
+        };
         for (const m of sorted) {
-          const key = m.meeting_date ?? '';
-          const list = map.get(key);
-          if (list) list.push(m); else map.set(key, [m]);
+          if (mode === 'date') {
+            const key = m.meeting_date ?? '';
+            push(key, key ? formatGroupDate(key) : 'No date', m);
+          } else if (mode === 'outcome') {
+            const key = (m.outcome ?? '').trim();
+            push(key, key || 'No outcome', m);
+          } else {
+            // A meeting with several reps belongs under each of them, so a rep
+            // looking for their own meetings finds all of them in one section.
+            const reps = parseRepIds(splitInternalIds(m).repIds)
+              .map(id => userOptions.find(u => u.id === id)?.value)
+              .filter((v): v is string => !!v);
+            if (reps.length === 0) push('', 'Unassigned', m);
+            else for (const name of reps) push(name, name, m);
+          }
         }
-        return Array.from(map.entries())
-          .sort((a, b) => (a[0] || '9999-12-31').localeCompare(b[0] || '9999-12-31'));
+        const entries = Array.from(map.entries());
+        if (mode === 'date') {
+          entries.sort((a, b) => (a[0] || '9999-12-31').localeCompare(b[0] || '9999-12-31'));
+        } else if (mode === 'outcome') {
+          // Configured order first, so outcomes read in the order the admin set
+          // them; anything off the list (or blank) trails behind.
+          const rank = (k: string) => { const i = actionOptions.indexOf(k); return i === -1 ? actionOptions.length + (k ? 0 : 1) : i; };
+          entries.sort((a, b) => rank(a[0]) - rank(b[0]) || a[1].label.localeCompare(b[1].label));
+        } else {
+          // Unassigned last, everyone else alphabetical.
+          entries.sort((a, b) => (a[0] ? 0 : 1) - (b[0] ? 0 : 1) || a[1].label.localeCompare(b[1].label));
+        }
+        return entries;
       })()
     : null;
 
-  const toggleDateGroup = (date: string) => setCollapsedDates(prev => {
+  const groupKey = (key: string) => `${mode ?? 'none'}:${key}`;
+  // Collapse/expand every section at once. Driven by a token rather than a
+  // boolean so pressing the same option twice still takes effect, and read off
+  // the groups actually on screen — the caller has no idea what they are.
+  const groupKeysRef = useRef<string[]>([]);
+  groupKeysRef.current = (groupedMeetings ?? []).map(([k]) => groupKey(k));
+  const collapseToken = collapseAll?.token ?? 0;
+  const collapseTarget = collapseAll?.collapse ?? false;
+  useEffect(() => {
+    if (!collapseToken) return;
+    setCollapsedGroups(collapseTarget ? new Set(groupKeysRef.current) : new Set());
+  }, [collapseToken, collapseTarget]);
+  const isCollapsed = (key: string) => collapsedGroups.has(groupKey(key));
+  const toggleGroup = (key: string) => setCollapsedGroups(prev => {
     const next = new Set(prev);
-    if (next.has(date)) next.delete(date); else next.add(date);
+    const gk = groupKey(key);
+    if (next.has(gk)) next.delete(gk); else next.add(gk);
     return next;
   });
 
@@ -1026,6 +1087,7 @@ export function MeetingsTable({
                 <MeetingActionsMenu
                   hasNotes={!!m.has_notes}
                   onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
+                  onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
                   onEdit={() => setEditingId(m.id)}
                 />
               )}
@@ -1196,6 +1258,7 @@ export function MeetingsTable({
           <MeetingActionsMenu
             hasNotes={!!m.has_notes}
             onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
+            onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
             onEdit={() => setEditingId(m.id)}
           />
         </td>
@@ -1289,15 +1352,15 @@ export function MeetingsTable({
       {/* Mobile card layout */}
       <div className={`${cardsOnly ? 'block' : 'block lg:hidden'} divide-y divide-gray-100`}>
         {groupedMeetings
-          ? groupedMeetings.map(([date, list]) => (
-            <div key={date || "no-date"}>
-              <DateGroupHeader
-                date={date}
-                count={list.length}
-                collapsed={collapsedDates.has(date)}
-                onToggle={() => toggleDateGroup(date)}
+          ? groupedMeetings.map(([key, group]) => (
+            <div key={`${mode}-${key || 'none'}`} style={{ animation: 'meetingGroupIn 200ms ease-out' }}>
+              <GroupHeader
+                label={group.label}
+                count={group.rows.length}
+                collapsed={isCollapsed(key)}
+                onToggle={() => toggleGroup(key)}
               />
-              {!collapsedDates.has(date) && list.map(renderMobileCard)}
+              {!isCollapsed(key) && group.rows.map(renderMobileCard)}
             </div>
           ))
           : sorted.map(renderMobileCard)}
@@ -1345,20 +1408,20 @@ export function MeetingsTable({
           </thead>
           <tbody className="divide-y divide-gray-100">
             {groupedMeetings
-              ? groupedMeetings.map(([date, list]) => (
-                  <Fragment key={date || "no-date"}>
-                    <tr className="bg-gray-50/70">
+              ? groupedMeetings.map(([key, group]) => (
+                  <Fragment key={`${mode}-${key || 'none'}`}>
+                    <tr className="bg-gray-50/70" style={{ animation: 'meetingGroupIn 200ms ease-out' }}>
                       <td colSpan={tableColSpan} className="px-3 py-1.5">
-                        <DateGroupHeader
-                          date={date}
-                          count={list.length}
-                          collapsed={collapsedDates.has(date)}
-                          onToggle={() => toggleDateGroup(date)}
+                        <GroupHeader
+                          label={group.label}
+                          count={group.rows.length}
+                          collapsed={isCollapsed(key)}
+                          onToggle={() => toggleGroup(key)}
                           bare
                         />
                       </td>
                     </tr>
-                    {!collapsedDates.has(date) && list.map(renderTableRow)}
+                    {!isCollapsed(key) && group.rows.map(renderTableRow)}
                   </Fragment>
                 ))
               : sorted.map(renderTableRow)}

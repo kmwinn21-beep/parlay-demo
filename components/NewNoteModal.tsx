@@ -37,9 +37,17 @@ interface NewNoteModalProps {
   defaultConferenceId?: number | null;
   defaultCompanyId?: number | null;
   defaultAttendeeId?: number | null;
+  /** Config-option ids to pre-tag, e.g. the reps on the meeting this came from. */
+  defaultTaggedUserIds?: number[];
+  /** 'meeting_note' gives the note the Meeting pill and links it to meetingId. */
+  noteType?: string;
+  meetingId?: number | null;
 }
 
-export function NewNoteModal({ isOpen, onClose, defaultConferenceId, defaultCompanyId, defaultAttendeeId }: NewNoteModalProps) {
+export function NewNoteModal({
+  isOpen, onClose, defaultConferenceId, defaultCompanyId, defaultAttendeeId,
+  defaultTaggedUserIds, noteType, meetingId,
+}: NewNoteModalProps) {
   useHideBottomNav(isOpen);
   const userOptionsWithIds = useUserOptions();
   const [conferences, setConferences] = useState<ConferenceOption[]>([]);
@@ -89,6 +97,14 @@ export function NewNoteModal({ isOpen, onClose, defaultConferenceId, defaultComp
     if (!isOpen || defaultCompanyId == null) return;
     setSelectedCompanyId(String(defaultCompanyId));
   }, [isOpen, defaultCompanyId]);
+
+  // Joined rather than compared as an array so a fresh array literal from the
+  // caller doesn't re-seed the field on every render and undo an edit.
+  const defaultTaggedKey = (defaultTaggedUserIds ?? []).join(',');
+  useEffect(() => {
+    if (!isOpen || !defaultTaggedKey) return;
+    setTaggedUserIds(defaultTaggedKey.split(',').map(Number).filter(Boolean));
+  }, [isOpen, defaultTaggedKey]);
 
   useEffect(() => {
     if (!isOpen || defaultAttendeeId == null) return;
@@ -201,6 +217,8 @@ export function NewNoteModal({ isOpen, onClose, defaultConferenceId, defaultComp
               company_name: companyLabel || null,
               skip_notification: notifyFor !== 'conference',
               tagged_users: taggedUsersStr,
+              note_type: noteType ?? 'note',
+              meeting_id: meetingId ?? null,
             }),
           })
         );
@@ -221,6 +239,8 @@ export function NewNoteModal({ isOpen, onClose, defaultConferenceId, defaultComp
               company_name: companyLabel || null,
               skip_notification: notifyFor !== 'company',
               tagged_users: notifyFor === 'company' ? taggedUsersStr : null,
+              note_type: noteType ?? 'note',
+              meeting_id: meetingId ?? null,
             }),
           })
         );
@@ -241,6 +261,8 @@ export function NewNoteModal({ isOpen, onClose, defaultConferenceId, defaultComp
               company_name: companyLabel || null,
               skip_notification: notifyFor !== 'attendee',
               tagged_users: notifyFor === 'attendee' ? taggedUsersStr : null,
+              note_type: noteType ?? 'note',
+              meeting_id: meetingId ?? null,
             }),
           })
         );

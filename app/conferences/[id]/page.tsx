@@ -35,6 +35,7 @@ import { ColumnMappingModal } from '@/components/ColumnMappingModal';
 import { type ColumnMapping } from '@/lib/columnMapping';
 import { ConflictResolutionModal, type ConflictItem } from '@/components/ConflictResolutionModal';
 import { NewMeetingModal } from '@/components/NewMeetingModal';
+import { NewNoteModal } from '@/components/NewNoteModal';
 import { ConferenceFormsTab } from '@/components/ConferenceFormsTab';
 import { OutreachTab } from '@/components/OutreachTab';
 import { useUser } from '@/components/UserContext';
@@ -450,6 +451,12 @@ export default function ConferenceDetailPage() {
   // The attendee row whose actions menu is open — the others recede so it's
   // obvious which record the menu is about.
   const [actionsAttendeeId, setActionsAttendeeId] = useState<number | null>(null);
+  // How the meetings table sections its rows. Same segmented control the
+  // program planner's plan tab uses for its groupings.
+  const [meetingGroupMode, setMeetingGroupMode] = useState<'date' | 'rep' | 'outcome'>('date');
+  // Token-driven so choosing the same option twice still lands.
+  const [meetingCollapseAll, setMeetingCollapseAll] = useState({ token: 0, collapse: false });
+  const [quickNoteMeeting, setQuickNoteMeeting] = useState<Meeting | null>(null);
 
   /**
    * Where the frozen Name column starts: the checkbox column plus any visible
@@ -3641,42 +3648,6 @@ export default function ConferenceDetailPage() {
           ...(boothHoursOnly ? [{ label: 'Booth Hours', shortLabel: 'Booth', onRemove: () => setBoothHoursOnly(false) }] : []),
         ];
         const newMeetingBlocked = stagePermissions != null && !stagePermissions.canLogMeeting;
-        const newMeetingButton = (
-          <button
-            type="button"
-            onClick={() => setNewMeetingOpen(true)}
-            disabled={newMeetingBlocked}
-            title={newMeetingBlocked ? 'Activity logging is closed for this conference.' : undefined}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-brand-secondary text-sm font-medium hover:bg-blue-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Meeting
-          </button>
-        );
-        const filtersButton = (
-          <button
-            type="button"
-            onClick={() => setMeetingFiltersOpen(o => !o)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              anyFilters ? 'text-brand-secondary bg-blue-50' : 'text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-            </svg>
-            Filters
-            {anyFilters && (
-              <span className="bg-brand-secondary text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
-                {activeFilterCount}
-              </span>
-            )}
-            <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${meetingFiltersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-        );
         const PillList = ({ useShortLabel, className }: { useShortLabel?: boolean; className?: string }) => (
           <div className={`flex flex-wrap gap-1.5 ${className ?? ''}`}>
             {activePills.map((pill, i) => (
@@ -3719,30 +3690,54 @@ export default function ConferenceDetailPage() {
                   />
                 </div>
                 <div className="ml-auto flex-shrink-0 flex items-center gap-2">
-                  {myMeetingsAvailable && (
-                    <button
-                      type="button"
-                      onClick={() => setMyMeetingsOnly(v => !v)}
-                      aria-pressed={myMeetingsOnly}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
-                        myMeetingsOnly
-                          ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
-                          : 'border-gray-200 text-gray-600 hover:border-gray-400'
-                      }`}
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                      My Meetings
-                    </button>
-                  )}
-                  <div className="hidden lg:contents">
-                    {filtersButton}
-                    {newMeetingButton}
+                  {/* Grouping toggle, then the actions. Filters and + Meeting
+                      live in the kebab at every width now, which keeps this row
+                      short enough for the toggle to sit beside them. */}
+                  <div className="overflow-x-auto scrollbar-hide">
+                    <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
+                      {([
+                        { key: 'date' as const, label: 'By Date', path: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+                        { key: 'rep' as const, label: 'By Rep', path: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
+                        { key: 'outcome' as const, label: 'By Outcome', path: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
+                      ]).map((opt, i) => (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          onClick={() => setMeetingGroupMode(opt.key)}
+                          title={`Group ${opt.label.toLowerCase()}`}
+                          aria-pressed={meetingGroupMode === opt.key}
+                          className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
+                            meetingGroupMode === opt.key ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                          }`}
+                        >
+                          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={opt.path} />
+                          </svg>
+                          {opt.label}
+                        </button>
+                      ))}
+                      {/* My Mtgs shares the bar but isn't one of the groupings —
+                          it's a filter, so it toggles on and off and leaves
+                          whichever grouping is selected in place. */}
+                      {myMeetingsAvailable && (
+                        <button
+                          type="button"
+                          onClick={() => setMyMeetingsOnly(v => !v)}
+                          title="Only meetings I'm on"
+                          aria-pressed={myMeetingsOnly}
+                          className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 transition-colors ${
+                            myMeetingsOnly ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                          }`}
+                        >
+                          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          My Mtgs
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  {/* Mobile: both actions live in the kebab menu */}
                   <KebabMenu
-                    className="lg:hidden"
                     title="Meeting actions"
                     items={[
                       {
@@ -3753,6 +3748,16 @@ export default function ConferenceDetailPage() {
                         icon: (
                           <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                        ),
+                      },
+                      {
+                        label: meetingCollapseAll.collapse ? 'Expand all' : 'Collapse all',
+                        onClick: () => setMeetingCollapseAll(prev => ({ token: prev.token + 1, collapse: !prev.collapse })),
+                        icon: (
+                          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d={meetingCollapseAll.collapse ? 'M19 9l-7 7-7-7' : 'M5 15l7-7 7 7'} />
                           </svg>
                         ),
                       },
@@ -3852,8 +3857,9 @@ export default function ConferenceDetailPage() {
 
             <MeetingsTable
               tableName="conference_meetings"
-              groupByDate
-             
+              groupMode={meetingGroupMode}
+              collapseAll={meetingCollapseAll}
+              onQuickNote={m => setQuickNoteMeeting(m)}
               showAttendeeAvatar
               meetings={filteredMeetings}
               actionOptions={actionOptions}
@@ -3958,6 +3964,22 @@ export default function ConferenceDetailPage() {
         defaultConferenceId={conference?.id}
         onSuccess={addMeetingOptimistically}
       />
+
+      {/* Quick note from a meeting row. Everything it needs is already on the
+          row, so nothing has to be re-entered; note_type gives it the Meeting
+          pill and links it back to the meeting it came from. */}
+      {quickNoteMeeting && (
+        <NewNoteModal
+          isOpen
+          onClose={() => { setQuickNoteMeeting(null); fetchConference(); }}
+          defaultConferenceId={quickNoteMeeting.conference_id}
+          defaultCompanyId={quickNoteMeeting.company_id ?? null}
+          defaultAttendeeId={quickNoteMeeting.attendee_id}
+          defaultTaggedUserIds={parseRepIds(quickNoteMeeting.scheduled_by)}
+          noteType="meeting_note"
+          meetingId={quickNoteMeeting.id}
+        />
+      )}
 
       {activeTab === 'follow-ups' && (
         <div className="card p-0 overflow-hidden">

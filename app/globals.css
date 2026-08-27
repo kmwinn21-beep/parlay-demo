@@ -159,6 +159,13 @@ h1, h2, h3 {
   to   { transform: scale(1); opacity: 1; }
 }
 
+/* Grouped table sections fade in when the grouping changes, so switching
+   By Date / By Rep / By Outcome reads as a regroup rather than a redraw. */
+@keyframes meetingGroupIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* Hide scrollbar utility */
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
