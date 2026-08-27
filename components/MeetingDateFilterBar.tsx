@@ -7,11 +7,11 @@ function longLabel(d: string) {
   return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
-/** "Mon, 8.17" */
+/** "Mon, 8/17" */
 function shortLabel(d: string) {
   const dt = new Date(d + 'T00:00:00');
   const day = dt.toLocaleDateString('en-US', { weekday: 'short' });
-  return `${day}, ${dt.getMonth() + 1}.${dt.getDate()}`;
+  return `${day}, ${dt.getMonth() + 1}/${dt.getDate()}`;
 }
 
 /**

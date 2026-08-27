@@ -457,6 +457,7 @@ export default function ConferenceDetailPage() {
   // Token-driven so choosing the same option twice still lands.
   const [meetingCollapseAll, setMeetingCollapseAll] = useState({ token: 0, collapse: false });
   const [quickNoteMeeting, setQuickNoteMeeting] = useState<Meeting | null>(null);
+  const [meetingViewMode, setMeetingViewMode] = useState<'table' | 'kanban'>('table');
 
   /**
    * Where the frozen Name column starts: the checkbox column plus any visible
@@ -3683,7 +3684,7 @@ export default function ConferenceDetailPage() {
                     dates={conferenceDates}
                     selected={meetingFilterDates}
                     onChange={setMeetingFilterDates}
-                    variant="long"
+                    variant="short"
                     showBoothHours={hasBoothHoursMeetings}
                     boothHoursOnly={boothHoursOnly}
                     onBoothHoursChange={setBoothHoursOnly}
@@ -3735,6 +3736,33 @@ export default function ConferenceDetailPage() {
                           My Mtgs
                         </button>
                       )}
+                    </div>
+                  </div>
+
+                  {/* Table / Kanban, its own control so it reads as a separate
+                      decision from how the rows are grouped. */}
+                  <div className="overflow-x-auto scrollbar-hide">
+                    <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
+                      {([
+                        { key: 'table' as const, label: 'Table', path: 'M3 10h18M3 14h18M4 6h16a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V7a1 1 0 011-1z' },
+                        { key: 'kanban' as const, label: 'Kanban', path: 'M4 5h4v14H4zM10 5h4v9h-4zM16 5h4v11h-4z' },
+                      ]).map((opt, i) => (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          onClick={() => setMeetingViewMode(opt.key)}
+                          title={`${opt.label} view`}
+                          aria-pressed={meetingViewMode === opt.key}
+                          className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
+                            meetingViewMode === opt.key ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                          }`}
+                        >
+                          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={opt.path} />
+                          </svg>
+                          {opt.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
                   <KebabMenu
@@ -3859,6 +3887,7 @@ export default function ConferenceDetailPage() {
               tableName="conference_meetings"
               groupMode={meetingGroupMode}
               collapseAll={meetingCollapseAll}
+              viewMode={meetingViewMode}
               onQuickNote={m => setQuickNoteMeeting(m)}
               showAttendeeAvatar
               meetings={filteredMeetings}
