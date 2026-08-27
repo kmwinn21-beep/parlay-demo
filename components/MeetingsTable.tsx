@@ -218,6 +218,17 @@ function MeetingDetailPills({ meeting, avgCostPerUnit, showConference = false }:
   );
 }
 
+/**
+ * Conference days, in order, plus booth hours.
+ *
+ * Not taken from the config presets: those are picked to read as pill fills,
+ * and several (yellow especially) are too light to serve as text on their own
+ * wash, which is what a group heading needs.
+ */
+const DAY_COLORS = ['#d97706', '#16a34a', '#1B76BC', '#ea580c', '#dc2626'];
+const BOOTH_HOURS_COLOR = '#7c3aed';
+
+/** How long the expanded names stay up before folding back. */
 const ACTIONS_MENU_WIDTH = 160;
 
 /** Row actions — the notetaker and edit entries the icons used to carry. */
@@ -756,6 +767,20 @@ function EditMeetingTableRow({
 }
 
 /** Section header for one day's meetings — click to collapse the group. */
+/** The count beside a group's name — a ring in the heading's own colour. */
+function GroupCount({ count, color }: { count: number; color: string | null }) {
+  return (
+    <span
+      className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full border text-[10px] font-bold leading-none flex-shrink-0 ${
+        color ? '' : 'border-gray-300 text-gray-500'
+      }`}
+      style={color ? { borderColor: color, color } : undefined}
+    >
+      {count}
+    </span>
+  );
+}
+
 function GroupHeader({ label, count, collapsed, onToggle, bare = false, color }: {
   label: string;
   count: number;
@@ -772,7 +797,11 @@ function GroupHeader({ label, count, collapsed, onToggle, bare = false, color }:
       type="button"
       onClick={onToggle}
       aria-expanded={!collapsed}
-      className={`w-full flex items-center gap-2 text-left ${bare ? '' : `px-4 py-2 border-b border-gray-200 ${color ? '' : 'bg-gray-50'}`}`}
+      // py-2.5 in both variants so a table heading stands the same height as a
+      // kanban column's.
+      className={`w-full flex items-center gap-2 text-left px-3 py-2.5 ${
+        bare ? '' : `border-b border-gray-200 ${color ? '' : 'bg-gray-50'}`
+      }`}
       style={!bare && color ? { backgroundColor: `${color}26` } : undefined}
     >
       <svg
@@ -788,9 +817,7 @@ function GroupHeader({ label, count, collapsed, onToggle, bare = false, color }:
       >
         {label}
       </span>
-      <span className={`text-xs ${color ? 'opacity-70' : 'text-gray-400'}`} style={color ? { color } : undefined}>
-        ({count})
-      </span>
+      <GroupCount count={count} color={color ?? null} />
     </button>
   );
 }
@@ -841,12 +868,7 @@ function KanbanColumn({ label, count, color, height, children }: {
         <span className={`text-xs font-semibold flex-1 truncate ${color ? '' : 'text-gray-600'}`} style={color ? { color } : undefined}>
           {label}
         </span>
-        <span
-          className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold flex-shrink-0 ${color ? '' : 'bg-gray-200 text-gray-600'}`}
-          style={color ? { backgroundColor: `${color}2E`, color } : undefined}
-        >
-          {count}
-        </span>
+        <GroupCount count={count} color={color} />
       </div>
       <div className="relative flex-1 min-h-0">
         {canUp && (
@@ -1102,7 +1124,22 @@ export function MeetingsTable({
 
   // Rep groups take the rep pill's colour, outcome groups the outcome pill's —
   // read from the same config maps the cells use, so they can't disagree.
+  // Date groups run through the conference's days in order — first day amber,
+  // then green, blue, orange, red — with booth hours purple wherever it lands.
+  const dayColorByKey = new Map<string, string>();
+  if (mode === 'date') {
+    let day = 0;
+    for (const [key, group] of groupedMeetings ?? []) {
+      if (/booth\s*hours/i.test(group.label)) {
+        dayColorByKey.set(key, BOOTH_HOURS_COLOR);
+      } else if (key) {
+        dayColorByKey.set(key, DAY_COLORS[day % DAY_COLORS.length]);
+        day += 1;
+      }
+    }
+  }
   const groupColor = (key: string): string | null => {
+    if (mode === 'date') return dayColorByKey.get(key) ?? null;
     if (!key) return null;
     if (mode === 'rep') return getHex(key, tableColorMaps.user || {});
     if (mode === 'outcome') return getHex(key, colorMap);
@@ -1639,24 +1676,27 @@ export function MeetingsTable({
           </thead>
           <tbody className="divide-y divide-gray-100">
             {groupedMeetings
-              ? groupedMeetings.map(([key, group]) => (
+              ? groupedMeetings.map(([key, group], gi) => (
                   <Fragment key={`${mode}-${key || 'none'}`}>
-                    <tr
-                      className={groupColor(key) ? '' : 'bg-gray-50/70'}
-                      style={{
-                        animation: 'meetingGroupIn 200ms ease-out',
-                        backgroundColor: groupColor(key) ? `${groupColor(key)}26` : undefined,
-                      }}
-                    >
-                      <td colSpan={tableColSpan} className="px-3 py-1.5">
-                        <GroupHeader
-                          label={group.label}
-                          count={group.rows.length}
-                          collapsed={isCollapsed(key)}
-                          onToggle={() => toggleGroup(key)}
-                          color={groupColor(key)}
-                          bare
-                        />
+                    <tr style={{ animation: 'meetingGroupIn 200ms ease-out' }}>
+                      {/* The cell carries no padding: the spacer above sets a
+                          group apart from the rows of the one before it, and
+                          the heading keeps its own height. */}
+                      <td colSpan={tableColSpan} className="p-0">
+                        {gi > 0 && <div className="h-2 bg-white" aria-hidden />}
+                        <div
+                          className={groupColor(key) ? '' : 'bg-gray-50/70'}
+                          style={groupColor(key) ? { backgroundColor: `${groupColor(key)}26` } : undefined}
+                        >
+                          <GroupHeader
+                            label={group.label}
+                            count={group.rows.length}
+                            collapsed={isCollapsed(key)}
+                            onToggle={() => toggleGroup(key)}
+                            color={groupColor(key)}
+                            bare
+                          />
+                        </div>
                       </td>
                     </tr>
                     {!isCollapsed(key) && group.rows.map(renderTableRow)}
