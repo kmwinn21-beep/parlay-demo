@@ -1048,7 +1048,9 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
 
       <div className="lg:rounded-xl lg:border lg:border-gray-200 lg:overflow-hidden">
         {/* Mobile card layout */}
-        <div className="block lg:hidden">
+        {/* Bled to the card's edge so the margin either side of a card is the
+            same 8px that sits between them. */}
+        <div className="block lg:hidden -mx-6">
           {filtered.length === 0 ? (
             <div className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</div>
           ) : <MobileCardList>{paginated.map(company => (

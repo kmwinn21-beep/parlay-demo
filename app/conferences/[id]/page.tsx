@@ -18,6 +18,7 @@ import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { PinnedNotesSection, type PinnedNote } from '@/components/PinnedNotesSection';
 import { NotesPopover } from '@/components/NotesPopover';
 import { MobileAttendeeCard, ConferenceCountTooltip, type AttendeeCardRow } from '@/components/MobileAttendeeCard';
+import { MobileCard, MobileCardList } from '@/components/MobileCardList';
 import { INLINE_EDIT_FIELD_CLASS, InlineEditRow, InlineEditPlaceholder } from '@/components/InlineEditField';
 import { CompanyTable } from '@/components/CompanyTable';
 import { SocialEventsTable, type SocialEvent } from '@/components/SocialEventsTable';
@@ -3309,10 +3310,10 @@ export default function ConferenceDetailPage() {
           ) : (
             <>
               {/* Mobile card list */}
-              <div className="block lg:hidden divide-y divide-gray-100 -mx-6">
+              <MobileCardList className="block lg:hidden -mx-6">
                 {paginatedAttendees.map((attendee) => (
+                  <MobileCard key={attendee.id}>
                   <MobileAttendeeCard
-                    key={attendee.id}
                     attendee={attendee as unknown as AttendeeCardRow}
                     showPhotos={showAttendeePhotos}
                     selected={selectedAttendeeIds.has(attendee.id)}
@@ -3337,8 +3338,9 @@ export default function ConferenceDetailPage() {
                       />
                     }
                   />
+                  </MobileCard>
                 ))}
-              </div>
+              </MobileCardList>
 
               {/* Desktop table */}
             <div className="hidden lg:block overflow-x-auto">
