@@ -184,3 +184,10 @@ h1, h2, h3 {
 .effectiveness-drawer-narrow [class*="lg:[grid-template-columns"] {
   grid-template-columns: 1fr !important;
 }
+
+/* The Log side of the meeting modal: its follow-up panel arrives from the
+   right rather than replacing the meetings list in place. */
+@keyframes assignPanelIn {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
