@@ -21,13 +21,14 @@ export function AssignFollowUpDialog({
   /** Named so it's clear which follow-up is being handed over. */
   attendeeName?: string;
   outcome?: string;
-  onAssignToMe: (followUpAction: string) => void;
-  onAssignToSelected: (repIds: number[], followUpAction: string) => void;
+  onAssignToMe: (followUpAction: string, note: string) => void;
+  onAssignToSelected: (repIds: number[], followUpAction: string, note: string) => void;
   onCancel: () => void;
   submitting?: boolean;
 }) {
   const [selected, setSelected] = useState<number[]>([]);
   const [action, setAction] = useState('');
+  const [note, setNote] = useState('');
   const [actionOptions, setActionOptions] = useState<string[]>([]);
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
@@ -78,15 +79,30 @@ export function AssignFollowUpDialog({
               <option value="">No action yet</option>
               {actionOptions.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
+
+            {/* Whatever came out of the meeting, captured while it's fresh. It
+                is filed against the attendee, their company and the conference
+                so it turns up wherever the reader happens to be looking. */}
+            <label className="label text-xs mt-3">Notes</label>
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              rows={3}
+              placeholder="What came out of the meeting?"
+              className="input-field resize-none"
+            />
+            <p className="text-[11px] text-gray-400 mt-1">
+              Saved to the attendee, their company and the conference, tagged as a Meeting Note.
+            </p>
           </div>
 
           <div className="flex flex-wrap gap-2 px-4 py-3 border-t border-gray-100">
-            <button type="button" onClick={() => onAssignToMe(action)} disabled={submitting} className="btn-secondary text-sm disabled:opacity-50">
+            <button type="button" onClick={() => onAssignToMe(action, note)} disabled={submitting} className="btn-secondary text-sm disabled:opacity-50">
               Assign to Myself
             </button>
             <button
               type="button"
-              onClick={() => onAssignToSelected(selected, action)}
+              onClick={() => onAssignToSelected(selected, action, note)}
               disabled={submitting || selected.length === 0}
               className="btn-primary text-sm disabled:opacity-50"
             >

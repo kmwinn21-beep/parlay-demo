@@ -1008,21 +1008,56 @@ export function MeetingsTable({
   };
 
   /** repIds null means "leave it with me" — the API already put it there. */
-  const saveFollowUpAssignment = async (repIds: number[] | null, followUpAction: string) => {
+  const saveFollowUpAssignment = async (repIds: number[] | null, followUpAction: string, note: string) => {
     if (!assignFollowUp) return;
+    const { meeting } = assignFollowUp;
     const patch: Record<string, unknown> = {};
     if (repIds !== null) patch.assigned_rep = repIds.join(',');
     if (followUpAction) patch.follow_up_action = followUpAction;
-    // Assigning to myself with no action chosen leaves nothing to write.
-    if (Object.keys(patch).length === 0) { setAssignFollowUp(null); return; }
+    const body = note.trim();
+    // Assigning to myself with nothing else filled in leaves nothing to write.
+    if (Object.keys(patch).length === 0 && !body) { setAssignFollowUp(null); return; }
     setAssigningFollowUp(true);
     try {
-      await Promise.all(assignFollowUp.ids.map(id => fetch('/api/follow-ups', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, ...patch }),
-      })));
-      toast.success('Follow-up assigned.');
+      const work: Promise<unknown>[] = [];
+      if (Object.keys(patch).length > 0) {
+        work.push(...assignFollowUp.ids.map(id => fetch('/api/follow-ups', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, ...patch }),
+        })));
+      }
+      if (body) {
+        // Filed in all three places the same way the quick-note modal does it,
+        // so it turns up wherever the reader happens to be looking. Whoever is
+        // taking the follow-up is tagged; the attendee's copy carries the
+        // notification, so the other two don't repeat it.
+        const tagged = (repIds !== null && repIds.length > 0
+          ? repIds
+          : user?.configId != null ? [user.configId] : []).join(',') || null;
+        const shared = {
+          content: body,
+          conference_name: meeting.conference_name || 'General Note',
+          attendee_name: `${meeting.first_name} ${meeting.last_name}`.trim() || null,
+          company_name: meeting.company_name ?? null,
+          note_type: 'meeting_note',
+          meeting_id: meeting.id,
+        };
+        const post = (extra: Record<string, unknown>) => fetch('/api/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...shared, ...extra }),
+        });
+        work.push(post({ entity_type: 'attendee', entity_id: meeting.attendee_id, tagged_users: tagged, skip_notification: false }));
+        if (meeting.company_id) {
+          work.push(post({ entity_type: 'company', entity_id: meeting.company_id, tagged_users: null, skip_notification: true }));
+        }
+        if (meeting.conference_id) {
+          work.push(post({ entity_type: 'conference', entity_id: meeting.conference_id, tagged_users: null, skip_notification: true }));
+        }
+      }
+      await Promise.all(work);
+      toast.success(body ? 'Follow-up assigned and note saved.' : 'Follow-up assigned.');
       setAssignFollowUp(null);
     } catch {
       toast.error('Failed to assign the follow-up.');
@@ -1834,8 +1869,8 @@ export function MeetingsTable({
           userOptions={userOptions}
           attendeeName={`${assignFollowUp.meeting.first_name} ${assignFollowUp.meeting.last_name}`.trim()}
           outcome={assignFollowUp.outcome}
-          onAssignToMe={action => saveFollowUpAssignment(null, action)}
-          onAssignToSelected={(ids, action) => saveFollowUpAssignment(ids, action)}
+          onAssignToMe={(action, note) => saveFollowUpAssignment(null, action, note)}
+          onAssignToSelected={(ids, action, note) => saveFollowUpAssignment(ids, action, note)}
           onCancel={() => setAssignFollowUp(null)}
           submitting={assigningFollowUp}
         />
