@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { DashboardDrawer } from '@/components/DashboardDrawer';
 import { MobileAttendeeCard, type AttendeeCardRow } from '@/components/MobileAttendeeCard';
+import { MobileCard, MobileCardList } from '@/components/MobileCardList';
 import { ScrollRow } from '@/components/ScrollRow';
 import { KebabMenu } from '@/components/KebabMenu';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
@@ -413,10 +414,10 @@ export function AttendeesDrawer({ onClose }: { onClose: () => void }) {
             {attendees.length === 0 ? 'No attendees on this conference yet.' : 'No attendees match those filters.'}
           </p>
         ) : (
-          <div className="divide-y divide-gray-100">
+          <MobileCardList>
             {filtered.map(a => (
+              <MobileCard key={a.id}>
               <MobileAttendeeCard
-                key={a.id}
                 attendee={a}
                 showPhotos={showPhotos}
                 selected={false}
@@ -425,8 +426,9 @@ export function AttendeesDrawer({ onClose }: { onClose: () => void }) {
                 userOptions={userOptions}
                 colorMaps={colorMaps}
               />
+              </MobileCard>
             ))}
-          </div>
+          </MobileCardList>
         )}
       </DashboardDrawer>
 

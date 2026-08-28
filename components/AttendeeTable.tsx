@@ -20,6 +20,7 @@ import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConf
 import { CustomColumnCell } from './CustomColumnCell';
 import { getCached } from '@/lib/configCache';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
+import { MobileCard, MobileCardList } from '@/components/MobileCardList';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import { shouldWarnForTitleMetadata, type TitleMatchMetadata } from '@/lib/titleNormalization';
 import { ClassifyTitleModal } from './ClassifyTitleModal';
@@ -833,13 +834,16 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
 
       <div className="lg:rounded-xl lg:border lg:border-gray-200 lg:overflow-hidden">
         {/* Mobile card layout */}
-        <div className="block lg:hidden divide-y divide-gray-100 -mx-0">
+        {/* Bled to the card's edge so the margin either side of a card is the
+            same 8px that sits between them. */}
+        <div className="block lg:hidden -mx-6">
           {filtered.length === 0 ? (
             <div className="px-4 py-8 text-center text-gray-400 text-sm">No attendees found.</div>
-          ) : paginated.map(attendee => {
+          ) : <MobileCardList>{paginated.map(attendee => {
             const seniority = effectiveSeniority(attendee.seniority, attendee.title);
             return (
-              <div key={attendee.id} className={`p-4 ${selectedIds.has(attendee.id) ? 'bg-blue-50' : 'bg-white'}`}>
+              <MobileCard key={attendee.id}>
+              <div className={`p-4 ${selectedIds.has(attendee.id) ? 'bg-blue-50' : 'bg-white'}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0 flex-1">
                     <input type="checkbox" checked={selectedIds.has(attendee.id)} onChange={() => toggleSelect(attendee.id)} className="accent-brand-secondary flex-shrink-0" />
@@ -926,8 +930,9 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                   <p className="text-[11px] text-gray-400 mt-1 ml-6">Added {fmtDate(attendee.created_at)}</p>
                 )}
               </div>
+              </MobileCard>
             );
-          })}
+          })}</MobileCardList>}
         </div>
 
         {/* Desktop table layout */}
