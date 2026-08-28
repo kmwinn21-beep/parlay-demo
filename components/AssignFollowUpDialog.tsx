@@ -15,7 +15,7 @@ import type { UserOption } from '@/lib/useUserOptions';
  * meeting out — so there is no way to end up with an unowned follow-up.
  */
 export function AssignFollowUpDialog({
-  userOptions, attendeeName, outcome, onAssignToMe, onAssignToSelected, onCancel, submitting,
+  userOptions, attendeeName, outcome, onAssignToMe, onAssignToSelected, onCancel, submitting, pending,
 }: {
   userOptions: UserOption[];
   /** Named so it's clear which follow-up is being handed over. */
@@ -25,6 +25,9 @@ export function AssignFollowUpDialog({
   onAssignToSelected: (repIds: number[], followUpAction: string, note: string) => void;
   onCancel: () => void;
   submitting?: boolean;
+  /** The follow-up doesn't exist yet — this answer is what creates it, so the
+   *  prose asks in the future tense rather than reporting a fact. */
+  pending?: boolean;
 }) {
   const [draft, setDraft] = useState<FollowUpDraft>(EMPTY_FOLLOW_UP_DRAFT);
   const [mounted, setMounted] = useState(false);
@@ -46,7 +49,9 @@ export function AssignFollowUpDialog({
           <div className="px-4 py-3 border-b border-gray-100">
             <h3 className="text-sm font-semibold text-brand-primary">Assign the follow-up</h3>
             <p className="text-xs text-gray-500 mt-0.5">
-              {outcome ? `Marking this meeting ${outcome} created a follow-up` : 'A follow-up was created'}
+              {pending
+                ? `Logging this meeting${outcome ? ` ${outcome}` : ''} will create a follow-up`
+                : outcome ? `Marking this meeting ${outcome} created a follow-up` : 'A follow-up was created'}
               {attendeeName ? ` for ${attendeeName}` : ''}. Who should own it?
             </p>
           </div>

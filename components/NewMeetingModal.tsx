@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { AssignFollowUpFields, EMPTY_FOLLOW_UP_DRAFT, type FollowUpDraft } from '@/components/AssignFollowUpFields';
+import { AssignFollowUpDialog } from '@/components/AssignFollowUpDialog';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
 import { parseRepIds, type UserOption } from '@/lib/useUserOptions';
 import { useHideBottomNav } from './BottomNavContext';
@@ -299,6 +300,19 @@ export function NewMeetingModal({
   const [outcomeOptions, setOutcomeOptions] = useState<string[]>([]);
   const [followUpDraft, setFollowUpDraft] = useState<FollowUpDraft>(EMPTY_FOLLOW_UP_DRAFT);
   const isLog = mode === 'log';
+  // The follow-up panel is a sidebar the phone has no room for, so below md
+  // the same fields are asked for in a dialog after Log Meeting instead.
+  // Measured after mount rather than during render — the server can't see a
+  // viewport, and guessing here is what causes hydration mismatches.
+  const [hasFollowUpPanel, setHasFollowUpPanel] = useState(true);
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 768px)');
+    const update = () => setHasFollowUpPanel(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  const [showFollowUpDialog, setShowFollowUpDialog] = useState(false);
 
   const isPrefilling = useRef(false);
 
@@ -502,7 +516,7 @@ export function NewMeetingModal({
 
   function handleClose() { resetForm(); onClose(); }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent, draftOverride?: FollowUpDraft) {
     e.preventDefault();
     if (!selectedAttendeeId || !selectedConferenceId || !meetingDate || !meetingTime) {
       toast.error('Please fill in all required fields.');
@@ -512,6 +526,13 @@ export function NewMeetingModal({
       toast.error('Pick a meeting outcome.');
       return;
     }
+    // No sidebar to have filled in, so ask for the follow-up now and come
+    // back through here once it's answered.
+    if (isLog && !hasFollowUpPanel && !draftOverride) {
+      setShowFollowUpDialog(true);
+      return;
+    }
+    const draft = draftOverride ?? followUpDraft;
     setSubmitting(true);
     // scheduled_by stays the full internal roster — My Meetings, the conflict
     // check and the notetaker's Internal/External split all read it. support_rep_ids
@@ -557,10 +578,10 @@ export function NewMeetingModal({
 
         // Nobody named means the person doing the logging keeps it, which is
         // where the API already put it.
-        const assignIds = followUpDraft.repIds.length > 0 ? followUpDraft.repIds : [];
+        const assignIds = draft.repIds.length > 0 ? draft.repIds : [];
         const fuPatch: Record<string, unknown> = {};
         if (assignIds.length > 0) fuPatch.assigned_rep = assignIds.join(',');
-        if (followUpDraft.action) fuPatch.follow_up_action = followUpDraft.action;
+        if (draft.action) fuPatch.follow_up_action = draft.action;
         if (Object.keys(fuPatch).length > 0) {
           await Promise.all(followUpIds.map(fid => fetch('/api/follow-ups', {
             method: 'PATCH',
@@ -569,7 +590,7 @@ export function NewMeetingModal({
           })));
         }
 
-        const body = followUpDraft.note.trim();
+        const body = draft.note.trim();
         if (body) {
           const contact = contacts.find(a => a.id === Number(selectedAttendeeId));
           const conf = conferences.find(c => c.id === Number(selectedConferenceId));
@@ -775,15 +796,28 @@ export function NewMeetingModal({
           <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-4 space-y-4 min-w-0 min-h-0">
             {/* Rep + Conference */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className={labelClass}>Rep</label>
-                <RepMultiSelect
-                  options={userOptions}
-                  selectedIds={selectedRepIds}
-                  onChange={setSelectedRepIds}
-                  triggerClass={`${inputClass} flex items-center justify-between gap-2`}
-                  placeholder="Select reps..."
-                />
+              {/* On a phone in Log mode the outcome rides beside Rep — the
+                  sidebar that carries it on desktop has nowhere to go here. */}
+              <div className={isLog ? 'grid grid-cols-2 gap-3 md:block' : undefined}>
+                <div>
+                  <label className={labelClass}>Rep</label>
+                  <RepMultiSelect
+                    options={userOptions}
+                    selectedIds={selectedRepIds}
+                    onChange={setSelectedRepIds}
+                    triggerClass={`${inputClass} flex items-center justify-between gap-2`}
+                    placeholder="Select reps..."
+                  />
+                </div>
+                {isLog && (
+                  <div className="md:hidden">
+                    <label className={labelClass}>Mtg Outcome *</label>
+                    <select className={inputClass} value={logOutcome} onChange={e => setLogOutcome(e.target.value)} required>
+                      <option value="">Select…</option>
+                      {outcomeOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
               <div>
                 <label className={labelClass}>Conference *</label>
@@ -1019,6 +1053,29 @@ export function NewMeetingModal({
           </div>
         )}
       </div>
+
+      {/* Phone-only: the follow-up the sidebar would have collected. */}
+      {showFollowUpDialog && (
+        <AssignFollowUpDialog
+          userOptions={userOptions}
+          attendeeName={(() => {
+            const contact = contacts.find(a => a.id === Number(selectedAttendeeId));
+            return contact ? `${contact.first_name} ${contact.last_name}`.trim() : undefined;
+          })()}
+          outcome={logOutcome}
+          pending
+          submitting={submitting}
+          onCancel={() => setShowFollowUpDialog(false)}
+          onAssignToMe={(action, note) => {
+            setShowFollowUpDialog(false);
+            handleSubmit({ preventDefault: () => {} } as React.FormEvent, { repIds: [], action, note });
+          }}
+          onAssignToSelected={(repIds, action, note) => {
+            setShowFollowUpDialog(false);
+            handleSubmit({ preventDefault: () => {} } as React.FormEvent, { repIds, action, note });
+          }}
+        />
+      )}
 
       {showAttendeePicker && (
         <AdditionalAttendeesModal
