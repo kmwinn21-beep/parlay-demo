@@ -162,23 +162,6 @@ export function MobileAttendeeCard({
               ) : (
                 <span className="text-xs text-gray-700">{attendee.company_name}</span>
               )}
-              {/* Whoever owns the company, in the initialled pill used for reps
-                  everywhere else. */}
-              {(hideAssignedRep ? [] : parseRepIds(attendee.company_assigned_user ?? ''))
-                .map(rid => userOptions.find(u => u.id === rid))
-                .filter((u): u is UserOption => Boolean(u))
-                .map(user => (
-                  <span
-                    key={user.id}
-                    title={user.value}
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap flex-shrink-0 ${getPreset(colorMaps.user?.[user.value]).badgeClass}`}
-                  >
-                    <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                    {getRepInitials(user.value)}
-                  </span>
-                ))}
             </div>
           )}
         </div>
@@ -194,11 +177,29 @@ export function MobileAttendeeCard({
         )}
       </div>
 
-      {/* Everything else rides one scrolling line, company type first. The
-          actions menu sits at the end of that line and stays put — the pills
-          pass behind it rather than pushing it off the edge. */}
+      {/* Everything else rides one scrolling line, the company's assigned rep
+          first. The actions menu sits at the end of that line and stays put —
+          the pills pass behind it rather than pushing it off the edge. */}
       <div className={`mt-2 flex items-center gap-2 ${onToggleSelect ? 'ml-6' : ''}`}>
       <ScrollRow className="flex-1 min-w-0" gapClass="gap-2">
+        {/* Whoever owns the company, in the initialled pill used for reps
+            everywhere else. It leads the row: it's who to ask about this
+            person, which is read more often than what kind of company it is. */}
+        {(hideAssignedRep ? [] : parseRepIds(attendee.company_assigned_user ?? ''))
+          .map(rid => userOptions.find(u => u.id === rid))
+          .filter((u): u is UserOption => Boolean(u))
+          .map(user => (
+            <span
+              key={user.id}
+              title={user.value}
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap flex-shrink-0 ${getPreset(colorMaps.user?.[user.value]).badgeClass}`}
+            >
+              <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              {getRepInitials(user.value)}
+            </span>
+          ))}
         {attendee.company_type && (
           <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs flex-shrink-0 whitespace-nowrap`}>{attendee.company_type}</span>
         )}
