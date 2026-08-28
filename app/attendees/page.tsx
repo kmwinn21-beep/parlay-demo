@@ -6,6 +6,11 @@ import toast from 'react-hot-toast';
 import { AttendeeTable } from '@/components/AttendeeTable';
 import { BackButton } from '@/components/BackButton';
 import { useForm } from 'react-hook-form';
+import { AttendeeSearchSelect, type AttendeeSearchRow } from '@/components/AttendeeSearchSelect';
+import { ConfirmAddAttendeeDialog } from '@/components/ConfirmAddAttendeeDialog';
+import { SearchableSelect } from '@/components/SearchableSelect';
+import { useUserOptions } from '@/lib/useUserOptions';
+import { useConfigColors } from '@/lib/useConfigColors';
 
 interface Attendee {
   id: number;
@@ -50,6 +55,19 @@ export default function AttendeesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // The form opens on a search of everyone on file; the fields below only
+  // appear once "Other (not in list)" says this one is new.
+  const [addIsNewPerson, setAddIsNewPerson] = useState(false);
+  const [addPicked, setAddPicked] = useState<AttendeeSearchRow | null>(null);
+  const [pickedConferenceId, setPickedConferenceId] = useState<number | null>(null);
+  // Company: picked from the list, or typed in with a type alongside it.
+  const [companyIsOther, setCompanyIsOther] = useState(false);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
+  const [newCompanyName, setNewCompanyName] = useState('');
+  const [newCompanyType, setNewCompanyType] = useState('');
+  const [companyTypeOptions, setCompanyTypeOptions] = useState<string[]>([]);
+  const userOptions = useUserOptions();
+  const colorMaps = useConfigColors();
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<AddAttendeeForm>();
 
@@ -79,6 +97,52 @@ export default function AttendeesPage() {
     }
   }, [showAddForm, companies.length]);
 
+  // Only needed by the "Other" branch, but cheap and it has to be there the
+  // moment that branch opens.
+  useEffect(() => {
+    if (!showAddForm || companyTypeOptions.length > 0) return;
+    fetch('/api/config?category=company_type')
+      .then(r => (r.ok ? r.json() : []))
+      .then((data: { value: string }[]) => setCompanyTypeOptions(Array.isArray(data) ? data.map(d => d.value) : []))
+      .catch(() => {});
+  }, [showAddForm, companyTypeOptions.length]);
+
+  const resetAddForm = useCallback(() => {
+    reset();
+    setAddIsNewPerson(false);
+    setAddPicked(null);
+    setPickedConferenceId(null);
+    setCompanyIsOther(false);
+    setSelectedCompanyId(null);
+    setNewCompanyName('');
+    setNewCompanyType('');
+  }, [reset]);
+
+  /** Confirmed off the search — the person exists, so this only links them. */
+  const handleConfirmExistingAttendee = async () => {
+    if (!addPicked || !pickedConferenceId) return;
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`/api/conferences/${pickedConferenceId}/attendees/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_id: addPicked.id }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to add attendee');
+      }
+      toast.success(`${addPicked.first_name} ${addPicked.last_name} added.`);
+      resetAddForm();
+      setShowAddForm(false);
+      fetchData();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add attendee');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
@@ -91,8 +155,27 @@ export default function AttendeesPage() {
   }, [fetchData]);
 
   const onSubmit = async (data: AddAttendeeForm) => {
+    if (companyIsOther && !newCompanyName.trim()) {
+      toast.error('Enter the company name.');
+      return;
+    }
     setIsSubmitting(true);
     try {
+      // A typed-in company has to exist before the attendee can point at it.
+      let companyId = selectedCompanyId;
+      if (companyIsOther) {
+        const coRes = await fetch('/api/companies', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newCompanyName.trim(), company_type: newCompanyType || null }),
+        });
+        if (!coRes.ok) {
+          const err = await coRes.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to create the company');
+        }
+        const co = await coRes.json();
+        companyId = Number(co.id ?? co.company?.id) || null;
+      }
       const res = await fetch('/api/attendees', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -101,7 +184,7 @@ export default function AttendeesPage() {
           last_name: data.last_name,
           title: data.title,
           email: data.email,
-          company_id: data.company_id ? parseInt(data.company_id) : null,
+          company_id: companyId,
         }),
       });
       if (!res.ok) {
@@ -124,7 +207,7 @@ export default function AttendeesPage() {
         });
       }
       toast.success('Attendee added!');
-      reset();
+      resetAddForm();
       setShowAddForm(false);
       fetchData();
     } catch (err) {
@@ -192,7 +275,18 @@ export default function AttendeesPage() {
       {showAddForm && (
         <div className="card border-2 border-brand-secondary">
           <h2 className="text-lg font-semibold text-brand-primary mb-4 font-serif">Add Attendee</h2>
+          {/* Most people being added are already on file, so the form opens on
+              a search of all of them. The fields only appear once "Other" says
+              this one is new. */}
+          <div className="mb-4">
+            <AttendeeSearchSelect
+              onPick={setAddPicked}
+              onSelectOther={() => setAddIsNewPerson(true)}
+              placeholder="Search all attendees…"
+            />
+          </div>
           <form onSubmit={handleSubmit(onSubmit)}>
+            {addIsNewPerson && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="label">First Name *</label>
@@ -218,12 +312,40 @@ export default function AttendeesPage() {
               </div>
               <div>
                 <label className="label">Company</label>
-                <select {...register('company_id')} className="input-field">
-                  <option value="">No company</option>
-                  {companies.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                {/* Searchable, with the same "Other" escape hatch the
+                    touchpoint modal uses — a plain select was unusable once
+                    the list ran to hundreds. */}
+                {companyIsOther ? (
+                  <div className="space-y-2">
+                    <input
+                      autoFocus
+                      value={newCompanyName}
+                      onChange={e => setNewCompanyName(e.target.value)}
+                      className="input-field"
+                      placeholder="New company name *"
+                    />
+                    <select value={newCompanyType} onChange={e => setNewCompanyType(e.target.value)} className="input-field">
+                      <option value="">Company type…</option>
+                      {companyTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => { setCompanyIsOther(false); setNewCompanyName(''); setNewCompanyType(''); }}
+                      className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      ← Pick an existing company
+                    </button>
+                  </div>
+                ) : (
+                  <SearchableSelect
+                    options={companies}
+                    value={companies.find(c => c.id === selectedCompanyId) ?? null}
+                    onChange={c => setSelectedCompanyId(c?.id ?? null)}
+                    getLabel={c => c.name}
+                    placeholder="No company"
+                    onSelectOther={() => { setSelectedCompanyId(null); setCompanyIsOther(true); }}
+                  />
+                )}
               </div>
               <div>
                 <label className="label">Email</label>
@@ -245,13 +367,16 @@ export default function AttendeesPage() {
                 {errors.conference_id && <p className="text-red-500 text-xs mt-1">{errors.conference_id.message}</p>}
               </div>
             </div>
+            )}
             <div className="flex gap-3 mt-4">
-              <button type="submit" disabled={isSubmitting} className="btn-primary">
-                {isSubmitting ? 'Adding...' : 'Add Attendee'}
-              </button>
+              {addIsNewPerson && (
+                <button type="submit" disabled={isSubmitting} className="btn-primary">
+                  {isSubmitting ? 'Adding...' : 'Add Attendee'}
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => { setShowAddForm(false); reset(); }}
+                onClick={() => { setShowAddForm(false); resetAddForm(); }}
                 className="btn-secondary"
               >
                 Cancel
@@ -259,6 +384,20 @@ export default function AttendeesPage() {
             </div>
           </form>
         </div>
+      )}
+
+      {addPicked && (
+        <ConfirmAddAttendeeDialog
+          attendee={addPicked}
+          conferences={conferences}
+          conferenceId={pickedConferenceId}
+          onConferenceChange={setPickedConferenceId}
+          onConfirm={handleConfirmExistingAttendee}
+          onCancel={() => { setAddPicked(null); setPickedConferenceId(null); }}
+          submitting={isSubmitting}
+          userOptions={userOptions}
+          colorMaps={colorMaps}
+        />
       )}
 
       {/* Attendees Table */}

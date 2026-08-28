@@ -78,6 +78,7 @@ export function ConferenceCountTooltip({ count, names }: { count: number; names?
 export function MobileAttendeeCard({
   attendee, showPhotos, selected, onToggleSelect, onOpenAttendee, onOpenCompany,
   onClassifyTitle, titleWarning = false, userOptions, colorMaps, actions, dimmed = false,
+  hideAssignedRep = false,
 }: {
   attendee: AttendeeCardRow;
   showPhotos: boolean;
@@ -94,6 +95,9 @@ export function MobileAttendeeCard({
   actions?: ReactNode;
   /** Another card's actions menu is open — recede so that one stands out. */
   dimmed?: boolean;
+  /** Drops the company's assigned-rep pill — for the confirm prompt, where
+   *  who owns the account isn't what's being decided. */
+  hideAssignedRep?: boolean;
 }) {
   const seniority = effectiveSeniority(attendee.seniority ?? undefined, attendee.title ?? undefined);
   const statuses = (attendee.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown');
@@ -160,7 +164,7 @@ export function MobileAttendeeCard({
               )}
               {/* Whoever owns the company, in the initialled pill used for reps
                   everywhere else. */}
-              {parseRepIds(attendee.company_assigned_user ?? '')
+              {(hideAssignedRep ? [] : parseRepIds(attendee.company_assigned_user ?? ''))
                 .map(rid => userOptions.find(u => u.id === rid))
                 .filter((u): u is UserOption => Boolean(u))
                 .map(user => (

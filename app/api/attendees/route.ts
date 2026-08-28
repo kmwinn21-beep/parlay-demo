@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
 
     const result = await db.execute({
       sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.company_id, a.email,
+                   a.photo_url,
                    a.notes, a.action, a.next_steps, a.next_steps_notes,
                    a.status,
                    a.seniority,
