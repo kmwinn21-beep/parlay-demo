@@ -14,6 +14,7 @@ import { useUser } from '@/components/UserContext';
 import { OverlappingRepPills } from '@/components/OverlappingRepPills';
 import { NotesPopoverCard } from '@/components/NotesPopoverCard';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
+import { AssignFollowUpDialog } from '@/components/AssignFollowUpDialog';
 import { AdditionalAttendeesModal, AdditionalAttendeesButton } from '@/components/AdditionalAttendeesModal';
 import {
   type UserOption,
@@ -959,7 +960,10 @@ export function MeetingsTable({
   meetings: Meeting[];
   actionOptions: string[];
   colorMap: ColorMap;
-  onOutcomeChange: (meetingId: number, outcome: string) => void;
+  /** May resolve with the PATCH's response — when it names follow-ups the
+   *  change created, the table offers to assign them. Callers that return
+   *  nothing keep the old behaviour: the follow-up stays with whoever clicked. */
+  onOutcomeChange: (meetingId: number, outcome: string) => void | Promise<{ auto_follow_up_ids?: number[] } | void>;
   onDelete?: (meetingId: number) => void;
   onEdit?: (meetingId: number, data: EditFormData) => void;
   onNotesClick?: (meetingId: number) => void;
@@ -991,6 +995,38 @@ export function MeetingsTable({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
+  // A follow-up the outcome change just created, waiting to be assigned.
+  const [assignFollowUp, setAssignFollowUp] = useState<{ ids: number[]; meeting: Meeting; outcome: string } | null>(null);
+  const [assigningFollowUp, setAssigningFollowUp] = useState(false);
+
+  /** Runs the caller's handler, then offers to assign whatever it created. */
+  const changeOutcome = async (m: Meeting, val: string) => {
+    const res = await onOutcomeChange(m.id, val);
+    const ids = res && 'auto_follow_up_ids' in res ? res.auto_follow_up_ids : undefined;
+    // val, not m.outcome: the row still holds the outcome it had a moment ago.
+    if (ids && ids.length > 0) setAssignFollowUp({ ids, meeting: m, outcome: val });
+  };
+
+  const saveFollowUpAssignment = async (repIds: number[] | null) => {
+    if (!assignFollowUp) return;
+    // Nothing to send for "myself": the API already put it there.
+    if (repIds === null) { setAssignFollowUp(null); return; }
+    setAssigningFollowUp(true);
+    try {
+      await Promise.all(assignFollowUp.ids.map(id => fetch('/api/follow-ups', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, assigned_rep: repIds.join(',') }),
+      })));
+      toast.success('Follow-up assigned.');
+      setAssignFollowUp(null);
+    } catch {
+      toast.error('Failed to assign the follow-up.');
+    } finally {
+      setAssigningFollowUp(false);
+    }
+  };
+
   // The notes card opened from a row's kebab, and where it hangs from.
   const [notesView, setNotesView] = useState<{ meeting: Meeting; anchor: DOMRect } | null>(null);
   // What the card actually found, so adding a note lights the row's badge
@@ -1349,7 +1385,7 @@ export function MeetingsTable({
                 value={m.outcome}
                 options={actionOptions}
                 colorMap={colorMap}
-                onChange={(val) => onOutcomeChange(m.id, val)}
+                onChange={(val) => changeOutcome(m, val)}
               />
               <RepPills scheduledBy={splitInternalIds(m).repIds} userOptions={userOptions} size="xs" withIcon />
             </div>
@@ -1518,7 +1554,7 @@ export function MeetingsTable({
             <OverlappingRepPills repIds={splitInternalIds(m).supportIds} userOptions={userOptions} size="xs" />
           </td>;
           case 'outcome': return <td key="outcome" className="px-3 py-2">
-            <OutcomeButton value={m.outcome} options={actionOptions} colorMap={colorMap} onChange={(val) => onOutcomeChange(m.id, val)} />
+            <OutcomeButton value={m.outcome} options={actionOptions} colorMap={colorMap} onChange={(val) => changeOutcome(m, val)} />
           </td>;
           default: return null;
         }
@@ -1789,6 +1825,18 @@ export function MeetingsTable({
       {quickView && (
         <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
       )}
+      {assignFollowUp && (
+        <AssignFollowUpDialog
+          userOptions={userOptions}
+          attendeeName={`${assignFollowUp.meeting.first_name} ${assignFollowUp.meeting.last_name}`.trim()}
+          outcome={assignFollowUp.outcome}
+          onAssignToMe={() => saveFollowUpAssignment(null)}
+          onAssignToSelected={ids => saveFollowUpAssignment(ids)}
+          onCancel={() => setAssignFollowUp(null)}
+          submitting={assigningFollowUp}
+        />
+      )}
+
       {notesView && (
         <NotesPopoverCard
           attendeeId={notesView.meeting.attendee_id}

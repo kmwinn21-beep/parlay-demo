@@ -3975,6 +3975,9 @@ export default function ConferenceDetailPage() {
                   });
                   if (!res.ok) throw new Error();
                   toast.success('Outcome updated.');
+                  // Handed back so the table can offer to assign any follow-up
+                  // this change created.
+                  return await res.json();
                 } catch {
                   fetchConference();
                   toast.error('Failed to update outcome.');

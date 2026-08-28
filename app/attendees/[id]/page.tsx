@@ -893,6 +893,7 @@ export default function AttendeeDetailPage() {
         body: JSON.stringify({ id: meetingId, outcome }),
       });
       if (!res.ok) throw new Error();
+      const payload = await res.json();
       toast.success('Outcome updated.');
       fetchFollowUps();
       // Refresh conference details to reflect action update
@@ -903,6 +904,7 @@ export default function AttendeeDetailPage() {
           setConferenceDetail(data);
         }
       }
+      return payload;
     } catch {
       fetchMeetings();
       toast.error('Failed to update outcome.');

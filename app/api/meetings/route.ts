@@ -301,6 +301,10 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    // Follow-ups this call created on its own, so the client can offer to
+    // assign them rather than silently leaving them on whoever clicked.
+    const autoFollowUpIds: number[] = [];
+
     // Auto-create follow-ups when outcome changes
     if (
       oldOutcome && outcome && oldOutcome !== outcome &&
@@ -325,7 +329,9 @@ export async function PATCH(request: NextRequest) {
         ? String(newKeyRes.rows[0].action_key) : null;
 
       // Whoever changed the outcome is the rep these auto-created follow-ups
-      // land on — they're the person who just did the thing that made one.
+      // land on to begin with — they're the person who just did the thing that
+      // made one. The client then offers to hand them to someone else, so the
+      // ids come back with the response.
       const currentRepId = await getCurrentRepConfigId(db, authResult.id);
 
       if (oldActionKey === 'meeting_scheduled') {
@@ -336,9 +342,9 @@ export async function PATCH(request: NextRequest) {
         });
         if (postMtgRes.rows.length > 0) {
           const postMtgValue = String(postMtgRes.rows[0].value);
-          await db.execute({
+          const created = await db.execute({
             sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, completed, assigned_rep)
-                  VALUES (?, ?, ?, ?, 0, ?)`,
+                  VALUES (?, ?, ?, ?, 0, ?) RETURNING id`,
             args: [
               meeting.rows[0].attendee_id as number,
               meeting.rows[0].conference_id as number,
@@ -347,6 +353,7 @@ export async function PATCH(request: NextRequest) {
               currentRepId,
             ],
           });
+          if (created.rows.length > 0) autoFollowUpIds.push(Number(created.rows[0].id));
         }
       }
 
@@ -360,9 +367,9 @@ export async function PATCH(request: NextRequest) {
           ? String(noShowRes.rows[0].value)
           : 'Meeting No-Show';
 
-        await db.execute({
+        const created = await db.execute({
           sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, completed, assigned_rep)
-                VALUES (?, ?, ?, ?, 0, ?)`,
+                VALUES (?, ?, ?, ?, 0, ?) RETURNING id`,
           args: [
             meeting.rows[0].attendee_id as number,
             meeting.rows[0].conference_id as number,
@@ -371,10 +378,11 @@ export async function PATCH(request: NextRequest) {
             currentRepId,
           ],
         });
+        if (created.rows.length > 0) autoFollowUpIds.push(Number(created.rows[0].id));
       }
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, auto_follow_up_ids: autoFollowUpIds });
   } catch (error) {
     console.error('PATCH /api/meetings error:', error);
     return NextResponse.json({ error: 'Failed to update meeting' }, { status: 500 });

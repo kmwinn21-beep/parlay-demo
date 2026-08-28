@@ -1620,6 +1620,7 @@ export default function CompanyDetailPage() {
                   });
                   if (!res.ok) throw new Error();
                   toast.success('Outcome updated.');
+                  return await res.json();
                 } catch {
                   fetchCompany();
                   toast.error('Failed to update outcome.');
