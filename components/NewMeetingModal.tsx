@@ -722,6 +722,35 @@ export function NewMeetingModal({
     );
   }
 
+  /**
+   * Booking something ahead and writing up something that already happened are
+   * the same form with a different ending, so they share one modal rather than
+   * two that drift apart.
+   */
+  const ModeToggle = ({ className = '', full = false }: { className?: string; full?: boolean }) => (
+    <div className={`flex-shrink-0 rounded-lg border border-gray-200 overflow-hidden ${full ? 'flex' : 'inline-flex'} ${className}`}>
+      {([
+        { key: 'schedule' as const, label: 'Schedule', path: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+        { key: 'log' as const, label: 'Log', path: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+      ]).map((opt, i) => (
+        <button
+          key={opt.key}
+          type="button"
+          onClick={() => setMode(opt.key)}
+          aria-pressed={mode === opt.key}
+          className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${full ? 'flex-1' : ''} ${i > 0 ? 'border-l border-gray-200' : ''} ${
+            mode === opt.key ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+          }`}
+        >
+          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={opt.path} />
+          </svg>
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+
   const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary focus:border-brand-secondary bg-white';
   const labelClass = 'block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1';
   // Log mode always has a sidebar — it's where the follow-up is set up, not a
@@ -741,30 +770,10 @@ export function NewMeetingModal({
               <h2 className="text-lg font-semibold text-brand-primary font-serif min-w-0 truncate">
                 {isLog ? 'Log Meeting' : 'Schedule New Meeting'}
               </h2>
-              {/* Booking something ahead and writing up something that already
-                  happened are the same form with a different ending, so they
-                  share one modal rather than two that drift apart. */}
-              <div className="inline-flex flex-shrink-0 rounded-lg border border-gray-200 overflow-hidden">
-                {([
-                  { key: 'schedule' as const, label: 'Schedule', path: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
-                  { key: 'log' as const, label: 'Log', path: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
-                ]).map((opt, i) => (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    onClick={() => setMode(opt.key)}
-                    aria-pressed={mode === opt.key}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
-                      mode === opt.key ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-                    }`}
-                  >
-                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={opt.path} />
-                    </svg>
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
+              {/* Desktop keeps it beside the title; a phone gives it a row of
+                  its own below, where it isn't competing with the title for
+                  width. */}
+              <ModeToggle className="hidden sm:inline-flex" />
             </div>
             <button type="button" onClick={handleClose} className="sm:hidden text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0" aria-label="Close">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -772,6 +781,7 @@ export function NewMeetingModal({
               </svg>
             </button>
           </div>
+          <ModeToggle className="sm:hidden w-full" full />
           <div className="flex items-center gap-3 sm:gap-2 sm:flex-shrink-0">
             <button type="button" onClick={handleClose}
               className="flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 text-sm sm:text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
