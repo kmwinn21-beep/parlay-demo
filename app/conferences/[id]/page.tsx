@@ -19,6 +19,8 @@ import { PinnedNotesSection, type PinnedNote } from '@/components/PinnedNotesSec
 import { NotesPopover } from '@/components/NotesPopover';
 import { MobileAttendeeCard, ConferenceCountTooltip, type AttendeeCardRow } from '@/components/MobileAttendeeCard';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
+import { AttendeeSearchSelect, type AttendeeSearchRow } from '@/components/AttendeeSearchSelect';
+import { ConfirmAddAttendeeDialog } from '@/components/ConfirmAddAttendeeDialog';
 import { INLINE_EDIT_FIELD_CLASS, InlineEditRow, InlineEditPlaceholder } from '@/components/InlineEditField';
 import { CompanyTable } from '@/components/CompanyTable';
 import { SocialEventsTable, type SocialEvent } from '@/components/SocialEventsTable';
@@ -516,6 +518,10 @@ export default function ConferenceDetailPage() {
   const [boothHoursOnly, setBoothHoursOnly] = useState(false);
   // "Other (not in list)" on the add-attendee company picker
   const [addCompanyOther, setAddCompanyOther] = useState(false);
+  // The add form opens on a search of everyone on file. The fields below it
+  // only appear once "Other (not in list)" says this is somebody new.
+  const [addIsNewPerson, setAddIsNewPerson] = useState(false);
+  const [addPicked, setAddPicked] = useState<AttendeeSearchRow | null>(null);
   const unitTypeLabel = useUnitTypeLabel();
   const [executiveBriefOpen, setExecutiveBriefOpen] = useState(false);
   const [executiveBriefSnapshot, setExecutiveBriefSnapshot] = useState<ConferenceSnapshot | null>(null);
@@ -1325,6 +1331,31 @@ export default function ConferenceDetailPage() {
     }
   };
 
+  /** Confirmed off the search — link the person we were handed, by id. */
+  const handleConfirmExistingAttendee = async () => {
+    if (!addPicked) return;
+    setIsAddingAttendee(true);
+    try {
+      const res = await fetch(`/api/conferences/${id}/attendees/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_id: addPicked.id }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to add attendee');
+      }
+      toast.success(`${addPicked.first_name} ${addPicked.last_name} added.`);
+      setAddPicked(null);
+      setShowAddForm(false);
+      fetchConference();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add attendee');
+    } finally {
+      setIsAddingAttendee(false);
+    }
+  };
+
   const handleAddAttendee = async () => {
     if (!addFormData.first_name || !addFormData.last_name) {
       toast.error('First and last name are required.');
@@ -1344,6 +1375,7 @@ export default function ConferenceDetailPage() {
       toast.success('Attendee added!');
       setAddFormData({ first_name: '', last_name: '', title: '', company: '', email: '', phone: '', linkedin_url: '' });
       setAddCompanyOther(false);
+      setAddIsNewPerson(false);
       setShowAddForm(false);
       fetchConference();
     } catch (err) {
@@ -3185,6 +3217,19 @@ export default function ConferenceDetailPage() {
           {showAddForm && (
             <div className="mb-4 p-4 bg-blue-50 border border-brand-secondary rounded-xl">
               <h3 className="text-sm font-semibold text-brand-primary mb-3">Add Attendee to Conference</h3>
+              {/* Most people being added are already on file from another
+                  conference, so the form opens on a search of all of them.
+                  The fields only appear once "Other" says this one is new. */}
+              <div className="mb-3">
+                <AttendeeSearchSelect
+                  onPick={setAddPicked}
+                  onSelectOther={() => setAddIsNewPerson(true)}
+                  excludeIds={new Set((conference?.attendees ?? []).map(a => a.id))}
+                  excludeLabel="Already on this conference"
+                  placeholder="Search all attendees…"
+                />
+              </div>
+              {addIsNewPerson && (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                 <div>
                   <label className="label text-xs">First Name *</label>
@@ -3280,7 +3325,9 @@ export default function ConferenceDetailPage() {
                   />
                 </div>
               </div>
+              )}
               <div className="flex gap-2 mt-3">
+                {addIsNewPerson && (
                 <button
                   onClick={handleAddAttendee}
                   disabled={isAddingAttendee}
@@ -3288,9 +3335,12 @@ export default function ConferenceDetailPage() {
                 >
                   {isAddingAttendee ? 'Adding...' : 'Add'}
                 </button>
+                )}
                 <button
                   onClick={() => {
                     setShowAddForm(false);
+                    setAddIsNewPerson(false);
+                    setAddCompanyOther(false);
                     setAddFormData({ first_name: '', last_name: '', title: '', company: '', email: '', phone: '', linkedin_url: '' });
                   }}
                   className="btn-secondary text-sm"
@@ -4315,6 +4365,18 @@ export default function ConferenceDetailPage() {
           startDate={conference.start_date}
           endDate={conference.end_date}
           onClose={() => setShowCrmExport(false)}
+        />
+      )}
+
+      {addPicked && (
+        <ConfirmAddAttendeeDialog
+          attendee={addPicked}
+          conferenceName={conference?.name}
+          onConfirm={handleConfirmExistingAttendee}
+          onCancel={() => setAddPicked(null)}
+          submitting={isAddingAttendee}
+          userOptions={userOptions}
+          colorMaps={colorMaps}
         />
       )}
 

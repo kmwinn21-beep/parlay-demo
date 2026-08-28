@@ -15,7 +15,10 @@ export async function POST(
   const db = await getDb(user?.accountId);
   try {
     const body = await request.json();
-    const { first_name, last_name, title, company, email, phone, linkedin_url, website, company_type } = body as {
+    const { attendee_id, first_name, last_name, title, company, email, phone, linkedin_url, website, company_type } = body as {
+      /** Set when the caller picked a specific person off the search rather
+       *  than typing a new one — then there is nothing to match or create. */
+      attendee_id?: number;
       first_name: string;
       last_name: string;
       title?: string;
@@ -28,7 +31,7 @@ export async function POST(
       company_type?: string;
     };
 
-    if (!first_name || !last_name) {
+    if (!attendee_id && (!first_name || !last_name)) {
       return NextResponse.json({ error: 'first_name and last_name are required' }, { status: 400 });
     }
 
@@ -42,6 +45,45 @@ export async function POST(
     });
     if (confResult.rows.length === 0) {
       return NextResponse.json({ error: 'Conference not found' }, { status: 404 });
+    }
+
+    // An explicit pick: link that person and nothing else. The name matching
+    // below is for typed-in names, where the caller can't know whether the
+    // person is already on file; it would be the wrong question to ask here.
+    if (attendee_id) {
+      const picked = await db.execute({
+        sql: `SELECT a.*, c.name as company_name, c.company_type
+              FROM attendees a
+              LEFT JOIN companies c ON a.company_id = c.id
+              WHERE a.id = ?`,
+        args: [attendee_id],
+      });
+      if (picked.rows.length === 0) {
+        return NextResponse.json({ error: 'Attendee not found' }, { status: 404 });
+      }
+      const row = { ...picked.rows[0] };
+      await db.execute({
+        sql: 'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)',
+        args: [params.id, attendee_id],
+      });
+      const coId = row.company_id as number | null;
+      const coName = row.company_name as string | null;
+      if (coId && coName) {
+        const confRow = await db.execute({ sql: 'SELECT name FROM conferences WHERE id = ?', args: [params.id] });
+        const confName = confRow.rows.length > 0 ? String(confRow.rows[0].name) : `Conference #${params.id}`;
+        const changedByConfigId = await getConfigIdByEmail(user.email);
+        notifyCompanyAssignees({
+          companyId: coId,
+          companyName: coName,
+          message: `${`${row.first_name ?? ''} ${row.last_name ?? ''}`.trim()} added to ${confName}`,
+          changedByEmail: user.email,
+          changedByConfigId,
+          type: 'attendee',
+          entityType: 'attendee',
+          entityId: attendee_id,
+        });
+      }
+      return NextResponse.json(row, { status: 201 });
     }
 
     // Name match — requires secondary confirmation (email, domain, or company) per matching rules.
