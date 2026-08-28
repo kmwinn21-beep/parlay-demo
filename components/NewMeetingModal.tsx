@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
+import { ScrollRow } from '@/components/ScrollRow';
 import { AssignFollowUpFields, EMPTY_FOLLOW_UP_DRAFT, type FollowUpDraft } from '@/components/AssignFollowUpFields';
 import { AssignFollowUpDialog } from '@/components/AssignFollowUpDialog';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
@@ -869,31 +870,37 @@ export function NewMeetingModal({
             <div>
               <label className={labelClass}>Date *</label>
               {conferenceDates.length > 0 && !showFullCalendar ? (
-                <div>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {conferenceDates.map(ymd => {
-                      const { short, full } = formatChipDate(ymd);
-                      const selected = meetingDate === ymd;
-                      return (
-                        <button key={ymd} type="button" title={full}
-                          onClick={() => setMeetingDate(ymd)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap ${
-                            selected
-                              ? 'bg-brand-primary text-white border-brand-primary'
-                              : 'bg-white text-gray-700 border-gray-300 hover:border-brand-primary hover:text-brand-primary'
-                          }`}
-                        >{short}</button>
-                      );
-                    })}
-                  </div>
-                  <button type="button" onClick={() => { setShowFullCalendar(true); setMeetingDate(''); }}
-                    className="text-xs text-brand-secondary hover:text-brand-primary transition-colors flex items-center gap-1">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                // One line rather than a wrapping block: a week of dates plus
+                // Custom took three rows on a phone and pushed the rest of the
+                // form off the screen. Chevrons appear only when it overflows.
+                <ScrollRow gapClass="gap-2" step={140}>
+                  {conferenceDates.map(ymd => {
+                    const { short, full } = formatChipDate(ymd);
+                    const selected = meetingDate === ymd;
+                    return (
+                      <button key={ymd} type="button" title={full}
+                        onClick={() => setMeetingDate(ymd)}
+                        className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap ${
+                          selected
+                            ? 'bg-brand-primary text-white border-brand-primary'
+                            : 'bg-white text-gray-700 border-gray-300 hover:border-brand-primary hover:text-brand-primary'
+                        }`}
+                      >{short}</button>
+                    );
+                  })}
+                  {/* Any other date, as one more chip on the same line — it was
+                      a text link below, which read as a footnote rather than
+                      as the fifth option it is. */}
+                  <button type="button" title="Pick another date"
+                    onClick={() => { setShowFullCalendar(true); setMeetingDate(''); }}
+                    className="flex-shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 bg-white text-gray-700 hover:border-brand-primary hover:text-brand-primary transition-colors whitespace-nowrap"
+                  >
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
-                    Pick another date
+                    Custom
                   </button>
-                </div>
+                </ScrollRow>
               ) : (
                 <div>
                   <input type="date" className={inputClass} value={meetingDate}
