@@ -869,7 +869,7 @@ export default function FollowUpsPage() {
     }
   };
 
-  const handleOutcomeChange = useCallback(async (meetingId: number, outcome: string): Promise<void> => {
+  const handleOutcomeChange = useCallback(async (meetingId: number, outcome: string) => {
     setMeetings((prev) => prev.map((m) => m.id === meetingId ? { ...m, outcome } : m));
     try {
       const res = await fetch('/api/meetings', {
@@ -879,6 +879,8 @@ export default function FollowUpsPage() {
       });
       if (!res.ok) throw new Error();
       toast.success('Outcome updated.');
+      // Handed back so the table can offer to assign any follow-up this made.
+      return await res.json();
     } catch {
       toast.error('Failed to update outcome.');
       fetchData();

@@ -4,6 +4,9 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
+import { ScrollRow } from '@/components/ScrollRow';
+import { AssignFollowUpFields, EMPTY_FOLLOW_UP_DRAFT, type FollowUpDraft } from '@/components/AssignFollowUpFields';
+import { AssignFollowUpDialog } from '@/components/AssignFollowUpDialog';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
 import { parseRepIds, type UserOption } from '@/lib/useUserOptions';
 import { useHideBottomNav } from './BottomNavContext';
@@ -291,12 +294,37 @@ export function NewMeetingModal({
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
 
+  // Schedule books a meeting that hasn't happened; Log records one that has,
+  // which means an outcome and the follow-up that comes out of it.
+  const [mode, setMode] = useState<'schedule' | 'log'>('schedule');
+  const [logOutcome, setLogOutcome] = useState('');
+  const [outcomeOptions, setOutcomeOptions] = useState<string[]>([]);
+  const [followUpDraft, setFollowUpDraft] = useState<FollowUpDraft>(EMPTY_FOLLOW_UP_DRAFT);
+  const isLog = mode === 'log';
+  // The follow-up panel is a sidebar the phone has no room for, so below md
+  // the same fields are asked for in a dialog after Log Meeting instead.
+  // Measured after mount rather than during render — the server can't see a
+  // viewport, and guessing here is what causes hydration mismatches.
+  const [hasFollowUpPanel, setHasFollowUpPanel] = useState(true);
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 768px)');
+    const update = () => setHasFollowUpPanel(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  const [showFollowUpDialog, setShowFollowUpDialog] = useState(false);
+
   const isPrefilling = useRef(false);
 
   // Fetch users and conferences on open
   useEffect(() => {
     if (!isOpen) return;
     if (user?.configId) setSelectedRepIds([user.configId]);
+    fetch('/api/config?category=action')
+      .then(r => (r.ok ? r.json() : []))
+      .then((data: { value: string }[]) => setOutcomeOptions(Array.isArray(data) ? data.map(d => d.value) : []))
+      .catch(() => {});
     fetch('/api/config?category=user&form=conference_detail')
       .then(r => r.json())
       .then((data: { id: number; value: string }[]) =>
@@ -489,12 +517,23 @@ export function NewMeetingModal({
 
   function handleClose() { resetForm(); onClose(); }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent, draftOverride?: FollowUpDraft) {
     e.preventDefault();
     if (!selectedAttendeeId || !selectedConferenceId || !meetingDate || !meetingTime) {
       toast.error('Please fill in all required fields.');
       return;
     }
+    if (isLog && !logOutcome) {
+      toast.error('Pick a meeting outcome.');
+      return;
+    }
+    // No sidebar to have filled in, so ask for the follow-up now and come
+    // back through here once it's answered.
+    if (isLog && !hasFollowUpPanel && !draftOverride) {
+      setShowFollowUpDialog(true);
+      return;
+    }
+    const draft = draftOverride ?? followUpDraft;
     setSubmitting(true);
     // scheduled_by stays the full internal roster — My Meetings, the conflict
     // check and the notetaker's Internal/External split all read it. support_rep_ids
@@ -524,7 +563,65 @@ export function NewMeetingModal({
         throw new Error(err.error || 'Failed to schedule meeting');
       }
       const created = await res.json();
-      toast.success('Meeting scheduled successfully!');
+
+      // Logging: the meeting is created Scheduled like any other, then moved to
+      // its real outcome through the same PATCH the outcome pill uses — which
+      // is what creates the follow-up. Reusing that path rather than inserting
+      // one here keeps the two ways of closing a meeting out identical.
+      if (isLog) {
+        const patchRes = await fetch('/api/meetings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: Number(created.id), outcome: logOutcome }),
+        });
+        const patched = patchRes.ok ? await patchRes.json() : {};
+        const followUpIds: number[] = Array.isArray(patched.auto_follow_up_ids) ? patched.auto_follow_up_ids : [];
+
+        // Nobody named means the person doing the logging keeps it, which is
+        // where the API already put it.
+        const assignIds = draft.repIds.length > 0 ? draft.repIds : [];
+        const fuPatch: Record<string, unknown> = {};
+        if (assignIds.length > 0) fuPatch.assigned_rep = assignIds.join(',');
+        if (draft.action) fuPatch.follow_up_action = draft.action;
+        if (Object.keys(fuPatch).length > 0) {
+          await Promise.all(followUpIds.map(fid => fetch('/api/follow-ups', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: fid, ...fuPatch }),
+          })));
+        }
+
+        const body = draft.note.trim();
+        if (body) {
+          const contact = contacts.find(a => a.id === Number(selectedAttendeeId));
+          const conf = conferences.find(c => c.id === Number(selectedConferenceId));
+          const company = companies.find(c => c.id === Number(selectedCompanyId));
+          const companyId = company?.id ?? contact?.company_id ?? null;
+          const tagged = (assignIds.length > 0
+            ? assignIds
+            : user?.configId != null ? [user.configId] : []).join(',') || null;
+          const shared = {
+            content: body,
+            conference_name: conf?.name || 'General Note',
+            attendee_name: contact ? `${contact.first_name} ${contact.last_name}`.trim() : null,
+            company_name: company?.name ?? contact?.company_name ?? null,
+            rep: null,
+            note_type: 'meeting_note',
+            meeting_id: Number(created.id),
+          };
+          const post = (extra: Record<string, unknown>) => fetch('/api/notes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...shared, ...extra }),
+          });
+          const noteWork = [post({ entity_type: 'attendee', entity_id: Number(selectedAttendeeId), tagged_users: tagged, skip_notification: false })];
+          if (companyId) noteWork.push(post({ entity_type: 'company', entity_id: companyId, tagged_users: null, skip_notification: true }));
+          noteWork.push(post({ entity_type: 'conference', entity_id: Number(selectedConferenceId), tagged_users: null, skip_notification: true }));
+          await Promise.all(noteWork);
+        }
+      }
+
+      toast.success(isLog ? 'Meeting logged.' : 'Meeting scheduled successfully!');
       {
         const contact = contacts.find(a => a.id === Number(selectedAttendeeId));
         const conf = conferences.find(c => c.id === Number(selectedConferenceId));
@@ -541,7 +638,7 @@ export function NewMeetingModal({
           support_rep_ids: supportIds.length > 0 ? supportIds.join(',') : null,
           additional_attendees: additionalAttendees.length > 0 ? additionalAttendees.join(', ') : null,
           additional_attendee_ids: additionalAttendeeIds.length > 0 ? additionalAttendeeIds.join(',') : null,
-          outcome: created.outcome || 'Scheduled',
+          outcome: isLog ? logOutcome : (created.outcome || 'Scheduled'),
           created_at: created.created_at || new Date().toISOString(),
           first_name: contact?.first_name || '',
           last_name: contact?.last_name || '',
@@ -560,7 +657,8 @@ export function NewMeetingModal({
         // Offer to draft a calendar invite instead of closing immediately — the modal stays
         // mounted (isOpen is still true) and swaps to the SendCalendarInvitePrompt below.
         // Booth-hours bookings have no start time, so there is no invite to build.
-        if (contact && !isBoothHours(meetingTime)) {
+        // Nothing to invite anyone to when the meeting has already happened.
+        if (!isLog && contact && !isBoothHours(meetingTime)) {
           const attendeeFirst = contact.first_name || 'Attendee';
           const repFirst = user?.firstName || 'Rep';
           setInviteContext({
@@ -578,7 +676,7 @@ export function NewMeetingModal({
         }
       }
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Failed to schedule meeting');
+      toast.error(err instanceof Error ? err.message : (isLog ? 'Failed to log meeting' : 'Failed to schedule meeting'));
     } finally {
       setSubmitting(false);
     }
@@ -625,9 +723,40 @@ export function NewMeetingModal({
     );
   }
 
+  /**
+   * Booking something ahead and writing up something that already happened are
+   * the same form with a different ending, so they share one modal rather than
+   * two that drift apart.
+   */
+  const ModeToggle = ({ className = '', full = false }: { className?: string; full?: boolean }) => (
+    <div className={`flex-shrink-0 rounded-lg border border-gray-200 overflow-hidden ${full ? 'flex' : 'inline-flex'} ${className}`}>
+      {([
+        { key: 'schedule' as const, label: 'Schedule', path: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+        { key: 'log' as const, label: 'Log', path: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+      ]).map((opt, i) => (
+        <button
+          key={opt.key}
+          type="button"
+          onClick={() => setMode(opt.key)}
+          aria-pressed={mode === opt.key}
+          className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${full ? 'flex-1' : ''} ${i > 0 ? 'border-l border-gray-200' : ''} ${
+            mode === opt.key ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+          }`}
+        >
+          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={opt.path} />
+          </svg>
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+
   const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary focus:border-brand-secondary bg-white';
   const labelClass = 'block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1';
-  const hasSidebar = selectedConferenceId !== '' && (conferenceMeetings.length > 0 || loadingMeetings);
+  // Log mode always has a sidebar — it's where the follow-up is set up, not a
+  // list that might be empty.
+  const hasSidebar = isLog || (selectedConferenceId !== '' && (conferenceMeetings.length > 0 || loadingMeetings));
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 sm:py-6">
@@ -638,22 +767,31 @@ export function NewMeetingModal({
             buttons; sm+ keeps the original single-row layout. */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-3 px-4 sm:px-6 py-3 border-b border-gray-200 shrink-0">
           <div className="flex items-center justify-between gap-3 sm:flex-1 sm:min-w-0">
-            <h2 className="text-lg font-semibold text-brand-primary font-serif min-w-0 truncate">Schedule New Meeting</h2>
+            <div className="flex items-center gap-3 min-w-0">
+              <h2 className="text-lg font-semibold text-brand-primary font-serif min-w-0 truncate">
+                {isLog ? 'Log Meeting' : 'Schedule New Meeting'}
+              </h2>
+              {/* Desktop keeps it beside the title; a phone gives it a row of
+                  its own below, where it isn't competing with the title for
+                  width. */}
+              <ModeToggle className="hidden sm:inline-flex" />
+            </div>
             <button type="button" onClick={handleClose} className="sm:hidden text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0" aria-label="Close">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
+          <ModeToggle className="sm:hidden w-full" full />
           <div className="flex items-center gap-3 sm:gap-2 sm:flex-shrink-0">
             <button type="button" onClick={handleClose}
               className="flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 text-sm sm:text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
               Cancel
             </button>
             <button type="submit" onClick={handleSubmit}
-              disabled={submitting || !selectedAttendeeId || !selectedConferenceId || !meetingDate || !meetingTime || !!user?.demoVisitor}
+              disabled={submitting || !selectedAttendeeId || !selectedConferenceId || !meetingDate || !meetingTime || (isLog && !logOutcome) || !!user?.demoVisitor}
               className="flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 text-sm sm:text-xs font-semibold text-white bg-brand-secondary rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-              {submitting ? 'Scheduling...' : 'Schedule Meeting'}
+              {submitting ? (isLog ? 'Logging...' : 'Scheduling...') : (isLog ? 'Log Meeting' : 'Schedule Meeting')}
             </button>
             <button type="button" onClick={handleClose} className="hidden sm:inline-flex text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0" aria-label="Close">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -669,15 +807,28 @@ export function NewMeetingModal({
           <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-4 space-y-4 min-w-0 min-h-0">
             {/* Rep + Conference */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className={labelClass}>Rep</label>
-                <RepMultiSelect
-                  options={userOptions}
-                  selectedIds={selectedRepIds}
-                  onChange={setSelectedRepIds}
-                  triggerClass={`${inputClass} flex items-center justify-between gap-2`}
-                  placeholder="Select reps..."
-                />
+              {/* On a phone in Log mode the outcome rides beside Rep — the
+                  sidebar that carries it on desktop has nowhere to go here. */}
+              <div className={isLog ? 'grid grid-cols-2 gap-3 md:block' : undefined}>
+                <div>
+                  <label className={labelClass}>Rep</label>
+                  <RepMultiSelect
+                    options={userOptions}
+                    selectedIds={selectedRepIds}
+                    onChange={setSelectedRepIds}
+                    triggerClass={`${inputClass} flex items-center justify-between gap-2`}
+                    placeholder="Select reps..."
+                  />
+                </div>
+                {isLog && (
+                  <div className="md:hidden">
+                    <label className={labelClass}>Mtg Outcome *</label>
+                    <select className={inputClass} value={logOutcome} onChange={e => setLogOutcome(e.target.value)} required>
+                      <option value="">Select…</option>
+                      {outcomeOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
               <div>
                 <label className={labelClass}>Conference *</label>
@@ -719,31 +870,37 @@ export function NewMeetingModal({
             <div>
               <label className={labelClass}>Date *</label>
               {conferenceDates.length > 0 && !showFullCalendar ? (
-                <div>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {conferenceDates.map(ymd => {
-                      const { short, full } = formatChipDate(ymd);
-                      const selected = meetingDate === ymd;
-                      return (
-                        <button key={ymd} type="button" title={full}
-                          onClick={() => setMeetingDate(ymd)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap ${
-                            selected
-                              ? 'bg-brand-primary text-white border-brand-primary'
-                              : 'bg-white text-gray-700 border-gray-300 hover:border-brand-primary hover:text-brand-primary'
-                          }`}
-                        >{short}</button>
-                      );
-                    })}
-                  </div>
-                  <button type="button" onClick={() => { setShowFullCalendar(true); setMeetingDate(''); }}
-                    className="text-xs text-brand-secondary hover:text-brand-primary transition-colors flex items-center gap-1">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                // One line rather than a wrapping block: a week of dates plus
+                // Custom took three rows on a phone and pushed the rest of the
+                // form off the screen. Chevrons appear only when it overflows.
+                <ScrollRow gapClass="gap-2" step={140}>
+                  {conferenceDates.map(ymd => {
+                    const { short, full } = formatChipDate(ymd);
+                    const selected = meetingDate === ymd;
+                    return (
+                      <button key={ymd} type="button" title={full}
+                        onClick={() => setMeetingDate(ymd)}
+                        className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap ${
+                          selected
+                            ? 'bg-brand-primary text-white border-brand-primary'
+                            : 'bg-white text-gray-700 border-gray-300 hover:border-brand-primary hover:text-brand-primary'
+                        }`}
+                      >{short}</button>
+                    );
+                  })}
+                  {/* Any other date, as one more chip on the same line — it was
+                      a text link below, which read as a footnote rather than
+                      as the fifth option it is. */}
+                  <button type="button" title="Pick another date"
+                    onClick={() => { setShowFullCalendar(true); setMeetingDate(''); }}
+                    className="flex-shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 bg-white text-gray-700 hover:border-brand-primary hover:text-brand-primary transition-colors whitespace-nowrap"
+                  >
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
-                    Pick another date
+                    Custom
                   </button>
-                </div>
+                </ScrollRow>
               ) : (
                 <div>
                   <input type="date" className={inputClass} value={meetingDate}
@@ -841,7 +998,29 @@ export function NewMeetingModal({
 
           {/* Sidebar — conference meetings (desktop: always visible, mobile: hidden — use sheet) */}
           {hasSidebar && (
-            <div className="hidden md:flex w-72 flex-shrink-0 border-l border-gray-200 flex-col overflow-hidden bg-gray-50 min-h-0">
+            // Keyed on the mode so switching to Log remounts it and the slide
+            // plays; the panel arrives from the right like a drawer.
+            <div
+              key={mode}
+              className="hidden md:flex w-72 flex-shrink-0 border-l border-gray-200 flex-col overflow-hidden bg-gray-50 min-h-0"
+              style={{ animation: 'assignPanelIn 240ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+            >
+              {isLog ? (
+              <div className="flex flex-col min-h-0 overflow-y-auto px-4 py-4">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assign Follow Up</p>
+                <p className="text-[11px] text-gray-400 mt-0.5 mb-3">{selectedConference?.name}</p>
+                {/* Required: logging a meeting means saying how it went, and
+                    the outcome is what creates the follow-up below. */}
+                <label className="label text-xs">Mtg Outcome *</label>
+                <select value={logOutcome} onChange={e => setLogOutcome(e.target.value)} className="input-field" required>
+                  <option value="">Select outcome…</option>
+                  {outcomeOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <div className="mt-3">
+                  <AssignFollowUpFields userOptions={userOptions} value={followUpDraft} onChange={setFollowUpDraft} />
+                </div>
+              </div>
+              ) : (
               <SidebarContent
                 selectedConference={selectedConference}
                 loadingMeetings={loadingMeetings}
@@ -855,6 +1034,7 @@ export function NewMeetingModal({
                 setSearch={setMeetingSearch}
                 userOptions={userOptions}
               />
+              )}
             </div>
           )}
         </div>
@@ -890,6 +1070,29 @@ export function NewMeetingModal({
           </div>
         )}
       </div>
+
+      {/* Phone-only: the follow-up the sidebar would have collected. */}
+      {showFollowUpDialog && (
+        <AssignFollowUpDialog
+          userOptions={userOptions}
+          attendeeName={(() => {
+            const contact = contacts.find(a => a.id === Number(selectedAttendeeId));
+            return contact ? `${contact.first_name} ${contact.last_name}`.trim() : undefined;
+          })()}
+          outcome={logOutcome}
+          pending
+          submitting={submitting}
+          onCancel={() => setShowFollowUpDialog(false)}
+          onAssignToMe={(action, note) => {
+            setShowFollowUpDialog(false);
+            handleSubmit({ preventDefault: () => {} } as React.FormEvent, { repIds: [], action, note });
+          }}
+          onAssignToSelected={(repIds, action, note) => {
+            setShowFollowUpDialog(false);
+            handleSubmit({ preventDefault: () => {} } as React.FormEvent, { repIds, action, note });
+          }}
+        />
+      )}
 
       {showAttendeePicker && (
         <AdditionalAttendeesModal

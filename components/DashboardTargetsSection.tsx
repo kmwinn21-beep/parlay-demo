@@ -12,6 +12,7 @@ import { NewNoteModal } from '@/components/NewNoteModal';
 import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
 import { TouchpointQuickModal } from '@/components/DashboardActionCard';
 import { useMobileCollapse } from '@/lib/useMobileCollapse';
+import { DashboardAddTargetsDrawer } from '@/components/DashboardAddTargetsDrawer';
 
 /** Steps the target grid one row at a time. */
 function PagerButton({ dir, disabled, onClick }: {
@@ -308,6 +309,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
   // Which activity modal a card's kebab opened, and for whom.
   const [cardAction, setCardAction] = useState<{ action: TargetAction; entry: TargetEntry } | null>(null);
   const { isMobile, expanded, toggle, showBody } = useMobileCollapse();
+  const [showAddTargets, setShowAddTargets] = useState(false);
 
 
   function toggleTier(key: string) {
@@ -390,7 +392,7 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
     <div className="flex flex-col gap-4">
       {/* Header row — the picker and My Targets ride alongside the header on
           desktop, and drop onto their own line on a phone. */}
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+      <div className="relative flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
         <button
           type="button"
           onClick={toggle}
@@ -420,6 +422,21 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </button>
+        {/* Phone only, and outside the collapse toggle so it's reachable
+            whether the card is open or shut — the same control Floor Notes
+            puts in its header. */}
+        {selectedConfId != null && (
+          <button
+            type="button"
+            onClick={() => setShowAddTargets(true)}
+            title="Add targets"
+            className="lg:hidden absolute right-0 top-0 border border-brand-secondary/30 hover:border-brand-secondary hover:bg-blue-50 p-1.5 rounded-lg text-brand-secondary transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+        )}
         {showBody && sortedConferences.length > 0 && (
           <div className="flex items-center gap-2 lg:justify-end lg:min-w-0">
           <select
@@ -685,6 +702,16 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
             />
           </div>
         </>
+      )}
+
+      {showAddTargets && selectedConfId != null && (
+        <DashboardAddTargetsDrawer
+          conferenceId={selectedConfId}
+          conferenceName={sortedConferences.find(c => c.id === selectedConfId)?.name ?? ''}
+          existingTargetIds={new Set(targets.map(t => t.attendeeId))}
+          onClose={() => setShowAddTargets(false)}
+          onAdded={() => fetchTargets(selectedConfId)}
+        />
       )}
     </div>
   );

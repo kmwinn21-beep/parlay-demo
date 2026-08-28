@@ -14,6 +14,7 @@ import { useUser } from '@/components/UserContext';
 import { OverlappingRepPills } from '@/components/OverlappingRepPills';
 import { NotesPopoverCard } from '@/components/NotesPopoverCard';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
+import { AssignFollowUpDialog } from '@/components/AssignFollowUpDialog';
 import { AdditionalAttendeesModal, AdditionalAttendeesButton } from '@/components/AdditionalAttendeesModal';
 import {
   type UserOption,
@@ -469,18 +470,30 @@ function OutcomeButton({
 
   return (
     <div ref={ref} className="relative inline-block">
-      {/* No chevron — the pill is the control, and the caret only crowded a
-          badge that's already read as a value rather than as a menu. */}
+      {/* The chevron only appears under the pointer: at rest the pill reads as
+          a value, and a caret on every row was noise. Hovering it says the
+          value is a control. It grows from zero width rather than appearing,
+          so the pill widens smoothly instead of the text jumping. */}
       <button
         ref={btnRef}
         type="button"
-        className={btnClass}
+        className={`group ${btnClass}`}
         onClick={handleToggle}
         title="Change outcome"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
         {value || '— Select —'}
+        <span
+          aria-hidden
+          className={`inline-flex items-center overflow-hidden align-middle transition-all duration-200 ease-out ${
+            open ? 'max-w-4 opacity-100 ml-1' : 'max-w-0 opacity-0 ml-0 group-hover:max-w-4 group-hover:opacity-100 group-hover:ml-1'
+          }`}
+        >
+          <svg className={`w-3 h-3 flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+          </svg>
+        </span>
       </button>
       {open && dropdownPos && (
         <div
@@ -959,7 +972,10 @@ export function MeetingsTable({
   meetings: Meeting[];
   actionOptions: string[];
   colorMap: ColorMap;
-  onOutcomeChange: (meetingId: number, outcome: string) => void;
+  /** May resolve with the PATCH's response — when it names follow-ups the
+   *  change created, the table offers to assign them. Callers that return
+   *  nothing keep the old behaviour: the follow-up stays with whoever clicked. */
+  onOutcomeChange: (meetingId: number, outcome: string) => void | Promise<{ auto_follow_up_ids?: number[] } | void>;
   onDelete?: (meetingId: number) => void;
   onEdit?: (meetingId: number, data: EditFormData) => void;
   onNotesClick?: (meetingId: number) => void;
@@ -991,6 +1007,77 @@ export function MeetingsTable({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
+  // A follow-up the outcome change just created, waiting to be assigned.
+  const [assignFollowUp, setAssignFollowUp] = useState<{ ids: number[]; meeting: Meeting; outcome: string } | null>(null);
+  const [assigningFollowUp, setAssigningFollowUp] = useState(false);
+
+  /** Runs the caller's handler, then offers to assign whatever it created. */
+  const changeOutcome = async (m: Meeting, val: string) => {
+    const res = await onOutcomeChange(m.id, val);
+    const ids = res && 'auto_follow_up_ids' in res ? res.auto_follow_up_ids : undefined;
+    // val, not m.outcome: the row still holds the outcome it had a moment ago.
+    if (ids && ids.length > 0) setAssignFollowUp({ ids, meeting: m, outcome: val });
+  };
+
+  /** repIds null means "leave it with me" — the API already put it there. */
+  const saveFollowUpAssignment = async (repIds: number[] | null, followUpAction: string, note: string) => {
+    if (!assignFollowUp) return;
+    const { meeting } = assignFollowUp;
+    const patch: Record<string, unknown> = {};
+    if (repIds !== null) patch.assigned_rep = repIds.join(',');
+    if (followUpAction) patch.follow_up_action = followUpAction;
+    const body = note.trim();
+    // Assigning to myself with nothing else filled in leaves nothing to write.
+    if (Object.keys(patch).length === 0 && !body) { setAssignFollowUp(null); return; }
+    setAssigningFollowUp(true);
+    try {
+      const work: Promise<unknown>[] = [];
+      if (Object.keys(patch).length > 0) {
+        work.push(...assignFollowUp.ids.map(id => fetch('/api/follow-ups', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, ...patch }),
+        })));
+      }
+      if (body) {
+        // Filed in all three places the same way the quick-note modal does it,
+        // so it turns up wherever the reader happens to be looking. Whoever is
+        // taking the follow-up is tagged; the attendee's copy carries the
+        // notification, so the other two don't repeat it.
+        const tagged = (repIds !== null && repIds.length > 0
+          ? repIds
+          : user?.configId != null ? [user.configId] : []).join(',') || null;
+        const shared = {
+          content: body,
+          conference_name: meeting.conference_name || 'General Note',
+          attendee_name: `${meeting.first_name} ${meeting.last_name}`.trim() || null,
+          company_name: meeting.company_name ?? null,
+          note_type: 'meeting_note',
+          meeting_id: meeting.id,
+        };
+        const post = (extra: Record<string, unknown>) => fetch('/api/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...shared, ...extra }),
+        });
+        work.push(post({ entity_type: 'attendee', entity_id: meeting.attendee_id, tagged_users: tagged, skip_notification: false }));
+        if (meeting.company_id) {
+          work.push(post({ entity_type: 'company', entity_id: meeting.company_id, tagged_users: null, skip_notification: true }));
+        }
+        if (meeting.conference_id) {
+          work.push(post({ entity_type: 'conference', entity_id: meeting.conference_id, tagged_users: null, skip_notification: true }));
+        }
+      }
+      await Promise.all(work);
+      toast.success(body ? 'Follow-up assigned and note saved.' : 'Follow-up assigned.');
+      setAssignFollowUp(null);
+    } catch {
+      toast.error('Failed to assign the follow-up.');
+    } finally {
+      setAssigningFollowUp(false);
+    }
+  };
+
   // The notes card opened from a row's kebab, and where it hangs from.
   const [notesView, setNotesView] = useState<{ meeting: Meeting; anchor: DOMRect } | null>(null);
   // What the card actually found, so adding a note lights the row's badge
@@ -1349,7 +1436,7 @@ export function MeetingsTable({
                 value={m.outcome}
                 options={actionOptions}
                 colorMap={colorMap}
-                onChange={(val) => onOutcomeChange(m.id, val)}
+                onChange={(val) => changeOutcome(m, val)}
               />
               <RepPills scheduledBy={splitInternalIds(m).repIds} userOptions={userOptions} size="xs" withIcon />
             </div>
@@ -1518,7 +1605,7 @@ export function MeetingsTable({
             <OverlappingRepPills repIds={splitInternalIds(m).supportIds} userOptions={userOptions} size="xs" />
           </td>;
           case 'outcome': return <td key="outcome" className="px-3 py-2">
-            <OutcomeButton value={m.outcome} options={actionOptions} colorMap={colorMap} onChange={(val) => onOutcomeChange(m.id, val)} />
+            <OutcomeButton value={m.outcome} options={actionOptions} colorMap={colorMap} onChange={(val) => changeOutcome(m, val)} />
           </td>;
           default: return null;
         }
@@ -1789,6 +1876,18 @@ export function MeetingsTable({
       {quickView && (
         <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
       )}
+      {assignFollowUp && (
+        <AssignFollowUpDialog
+          userOptions={userOptions}
+          attendeeName={`${assignFollowUp.meeting.first_name} ${assignFollowUp.meeting.last_name}`.trim()}
+          outcome={assignFollowUp.outcome}
+          onAssignToMe={(action, note) => saveFollowUpAssignment(null, action, note)}
+          onAssignToSelected={(ids, action, note) => saveFollowUpAssignment(ids, action, note)}
+          onCancel={() => setAssignFollowUp(null)}
+          submitting={assigningFollowUp}
+        />
+      )}
+
       {notesView && (
         <NotesPopoverCard
           attendeeId={notesView.meeting.attendee_id}
