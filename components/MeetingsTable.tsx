@@ -13,6 +13,7 @@ import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { useUser } from '@/components/UserContext';
 import { OverlappingRepPills } from '@/components/OverlappingRepPills';
 import { NotesPopoverCard } from '@/components/NotesPopoverCard';
+import { MobileCard, MobileCardList } from '@/components/MobileCardList';
 import { AdditionalAttendeesModal, AdditionalAttendeesButton } from '@/components/AdditionalAttendeesModal';
 import {
   type UserOption,
@@ -871,18 +872,6 @@ function GroupHeader({ label, count, collapsed, onToggle, bare = false, color }:
  * a long column doesn't drag the whole board down with it — and every column
  * stands the same height whatever it holds.
  */
-/**
- * The border a single meeting sits in — shared by the kanban columns and the
- * phone's list so a card looks the same wherever it's read.
- */
-function MeetingCardShell({ children, ...rest }: { children: React.ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div {...rest} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-      {children}
-    </div>
-  );
-}
-
 function KanbanColumn({ label, count, color, height, children }: {
   label: string;
   count: number;
@@ -1684,9 +1673,9 @@ export function MeetingsTable({
                   {group.rows.length === 0
                     ? <p className="px-3 py-6 text-center text-[11px] text-gray-400">No meetings</p>
                     : group.rows.map(m => (
-                        <MeetingCardShell key={m.id} data-kanban-card>
+                        <MobileCard key={m.id} data-kanban-card>
                           {renderMobileCard(m)}
-                        </MeetingCardShell>
+                        </MobileCard>
                       ))}
                 </KanbanColumn>
               ))}
@@ -1711,16 +1700,16 @@ export function MeetingsTable({
                 color={groupColor(key)}
               />
               {!isCollapsed(key) && (
-                <div className="bg-gray-50/50 p-2 space-y-2">
-                  {group.rows.map(m => <MeetingCardShell key={m.id}>{renderMobileCard(m)}</MeetingCardShell>)}
-                </div>
+                <MobileCardList>
+                  {group.rows.map(m => <MobileCard key={m.id}>{renderMobileCard(m)}</MobileCard>)}
+                </MobileCardList>
               )}
             </div>
           ))
           : (
-            <div className="bg-gray-50/50 p-2 space-y-2">
-              {sorted.map(m => <MeetingCardShell key={m.id}>{renderMobileCard(m)}</MeetingCardShell>)}
-            </div>
+            <MobileCardList>
+              {sorted.map(m => <MobileCard key={m.id}>{renderMobileCard(m)}</MobileCard>)}
+            </MobileCardList>
           )}
       </div>
 

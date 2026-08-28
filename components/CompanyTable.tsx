@@ -20,6 +20,7 @@ import { MultiSelectDropdown } from './MultiSelectDropdown';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
 import { CustomColumnCell } from './CustomColumnCell';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
+import { MobileCard, MobileCardList } from '@/components/MobileCardList';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import { useUser } from './UserContext';
 import { CompanyAttendeesDrawer, type CompanyAttendeeLite } from './CompanyAttendeesDrawer';
@@ -1047,12 +1048,12 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
 
       <div className="lg:rounded-xl lg:border lg:border-gray-200 lg:overflow-hidden">
         {/* Mobile card layout */}
-        <div className="block lg:hidden divide-y divide-gray-100 -mx-0">
+        <div className="block lg:hidden">
           {filtered.length === 0 ? (
             <div className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</div>
-          ) : paginated.map(company => (
+          ) : <MobileCardList>{paginated.map(company => (
+            <MobileCard key={company.id}>
             <div
-              key={company.id}
               className={`px-4 py-4 transition-opacity ${selectedIds.has(company.id) ? 'bg-blue-50' : 'bg-white'} ${
                 actionsCompanyId != null && actionsCompanyId !== company.id ? 'opacity-40' : ''
               }`}
@@ -1174,7 +1175,8 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
               )}
               </div>
             </div>
-          ))}
+            </MobileCard>
+          ))}</MobileCardList>}
         </div>
 
         {/* Mobile rep selection bottom sheet */}
