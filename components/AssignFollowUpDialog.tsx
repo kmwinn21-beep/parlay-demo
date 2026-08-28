@@ -21,14 +21,23 @@ export function AssignFollowUpDialog({
   /** Named so it's clear which follow-up is being handed over. */
   attendeeName?: string;
   outcome?: string;
-  onAssignToMe: () => void;
-  onAssignToSelected: (repIds: number[]) => void;
+  onAssignToMe: (followUpAction: string) => void;
+  onAssignToSelected: (repIds: number[], followUpAction: string) => void;
   onCancel: () => void;
   submitting?: boolean;
 }) {
   const [selected, setSelected] = useState<number[]>([]);
+  const [action, setAction] = useState('');
+  const [actionOptions, setActionOptions] = useState<string[]>([]);
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+
+  useEffect(() => {
+    fetch('/api/config?category=follow_up_actions')
+      .then(r => (r.ok ? r.json() : []))
+      .then((data: { value: string }[]) => setActionOptions(Array.isArray(data) ? data.map(d => d.value) : []))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
@@ -60,15 +69,24 @@ export function AssignFollowUpDialog({
               triggerClass="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white text-left flex items-center justify-between gap-1"
               placeholder="Select one or more users…"
             />
+
+            {/* What the follow-up is for. Set here so the task arrives with its
+                action already filled in rather than as a bare row someone has
+                to come back and describe. */}
+            <label className="label text-xs mt-3">Follow up action</label>
+            <select value={action} onChange={e => setAction(e.target.value)} className="input-field">
+              <option value="">No action yet</option>
+              {actionOptions.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
           </div>
 
           <div className="flex flex-wrap gap-2 px-4 py-3 border-t border-gray-100">
-            <button type="button" onClick={onAssignToMe} disabled={submitting} className="btn-secondary text-sm disabled:opacity-50">
+            <button type="button" onClick={() => onAssignToMe(action)} disabled={submitting} className="btn-secondary text-sm disabled:opacity-50">
               Assign to Myself
             </button>
             <button
               type="button"
-              onClick={() => onAssignToSelected(selected)}
+              onClick={() => onAssignToSelected(selected, action)}
               disabled={submitting || selected.length === 0}
               className="btn-primary text-sm disabled:opacity-50"
             >

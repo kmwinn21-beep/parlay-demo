@@ -1007,16 +1007,20 @@ export function MeetingsTable({
     if (ids && ids.length > 0) setAssignFollowUp({ ids, meeting: m, outcome: val });
   };
 
-  const saveFollowUpAssignment = async (repIds: number[] | null) => {
+  /** repIds null means "leave it with me" — the API already put it there. */
+  const saveFollowUpAssignment = async (repIds: number[] | null, followUpAction: string) => {
     if (!assignFollowUp) return;
-    // Nothing to send for "myself": the API already put it there.
-    if (repIds === null) { setAssignFollowUp(null); return; }
+    const patch: Record<string, unknown> = {};
+    if (repIds !== null) patch.assigned_rep = repIds.join(',');
+    if (followUpAction) patch.follow_up_action = followUpAction;
+    // Assigning to myself with no action chosen leaves nothing to write.
+    if (Object.keys(patch).length === 0) { setAssignFollowUp(null); return; }
     setAssigningFollowUp(true);
     try {
       await Promise.all(assignFollowUp.ids.map(id => fetch('/api/follow-ups', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, assigned_rep: repIds.join(',') }),
+        body: JSON.stringify({ id, ...patch }),
       })));
       toast.success('Follow-up assigned.');
       setAssignFollowUp(null);
@@ -1830,8 +1834,8 @@ export function MeetingsTable({
           userOptions={userOptions}
           attendeeName={`${assignFollowUp.meeting.first_name} ${assignFollowUp.meeting.last_name}`.trim()}
           outcome={assignFollowUp.outcome}
-          onAssignToMe={() => saveFollowUpAssignment(null)}
-          onAssignToSelected={ids => saveFollowUpAssignment(ids)}
+          onAssignToMe={action => saveFollowUpAssignment(null, action)}
+          onAssignToSelected={(ids, action) => saveFollowUpAssignment(ids, action)}
           onCancel={() => setAssignFollowUp(null)}
           submitting={assigningFollowUp}
         />
