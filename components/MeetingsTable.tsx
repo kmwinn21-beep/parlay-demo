@@ -470,18 +470,30 @@ function OutcomeButton({
 
   return (
     <div ref={ref} className="relative inline-block">
-      {/* No chevron — the pill is the control, and the caret only crowded a
-          badge that's already read as a value rather than as a menu. */}
+      {/* The chevron only appears under the pointer: at rest the pill reads as
+          a value, and a caret on every row was noise. Hovering it says the
+          value is a control. It grows from zero width rather than appearing,
+          so the pill widens smoothly instead of the text jumping. */}
       <button
         ref={btnRef}
         type="button"
-        className={btnClass}
+        className={`group ${btnClass}`}
         onClick={handleToggle}
         title="Change outcome"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
         {value || '— Select —'}
+        <span
+          aria-hidden
+          className={`inline-flex items-center overflow-hidden align-middle transition-all duration-200 ease-out ${
+            open ? 'max-w-4 opacity-100 ml-1' : 'max-w-0 opacity-0 ml-0 group-hover:max-w-4 group-hover:opacity-100 group-hover:ml-1'
+          }`}
+        >
+          <svg className={`w-3 h-3 flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+          </svg>
+        </span>
       </button>
       {open && dropdownPos && (
         <div
