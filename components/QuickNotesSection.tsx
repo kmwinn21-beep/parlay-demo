@@ -1,7 +1,7 @@
 'use client';
 
 import { useMobileCollapse } from '@/lib/useMobileCollapse';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { BatchCardScanModal, makeCard, type ScannedCard, type CardDraft } from './BatchCardScanModal';
@@ -157,9 +157,14 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
   const [companyTypeOptions, setCompanyTypeOptions] = useState<string[]>([]);
   const [attendeeIsOther, setAttendeeIsOther] = useState(false);
 
-  // Which fields the note was read into, so the pill only sits over a value
-  // nobody has touched. Cleared field-by-field the moment one is changed.
-  const [suggested, setSuggested] = useState<{ company: boolean; attendee: boolean; action: boolean }>(
+  // What the note was read as. Held rather than fired straight into the form:
+  // the conference load runs asynchronously and rewrites the filtered lists
+  // and the selected attendee when it lands, so a one-shot write races it and
+  // loses. Keeping the result lets it be re-asserted once things settle.
+  const [scan, setScan] = useState<{ company: Company | null; attendee: Attendee | null; action: string | null } | null>(null);
+  // Fields the person has decided for themselves. Nothing is ever re-applied
+  // over one of these, and the pill comes off.
+  const [touched, setTouched] = useState<{ company: boolean; attendee: boolean; action: boolean }>(
     { company: false, attendee: false, action: false },
   );
   const scanned = useRef(false);
@@ -168,7 +173,10 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
   // created one, so it only happens when somebody says yes here.
   const userOptions = useUserOptions();
   const followUpActions = useFollowUpActions();
-  const [createFollowUp, setCreateFollowUp] = useState(false);
+  // Yes by default: a floor note is a conversation someone had, and the
+  // common case is that it wants following up. No is one click away, and
+  // nothing is created without an attendee to hang it off regardless.
+  const [createFollowUp, setCreateFollowUp] = useState(true);
   const [followUpAction, setFollowUpAction] = useState('');
   const [followUpRepIds, setFollowUpRepIds] = useState<number[]>([]);
 
@@ -262,7 +270,7 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
   }, [selCompany, allAttendees, allCompanies]);
 
   const handleCompanyChange = useCallback((comp: Company | null) => {
-    setSuggested(p => ({ ...p, company: false }));
+    setTouched(p => ({ ...p, company: true }));
     setCompanyIsOther(false);
     setSelCompany(comp); setSelAttendee(null);
     const sourceAtts = selConference ? conferenceAttendees : allAttendees;
@@ -286,7 +294,7 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
   }, [selConference, conferenceAttendees, allAttendees, allCompanies]);
 
   const handleAttendeeChange = useCallback((att: Attendee | null) => {
-    setSuggested(p => ({ ...p, attendee: false }));
+    setTouched(p => ({ ...p, attendee: true }));
     setAttendeeIsOther(false);
     setSelAttendee(att);
     if (!att) return;
@@ -301,37 +309,64 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
    *
    * Skipped for badge and business-card scans: those already carry a parsed
    * name and company, and guessing over the top of a scan would be worse than
-   * leaving it alone. Runs against the conference-narrowed lists when there is
-   * a conference, which is both more accurate and much smaller.
+   * leaving it alone.
    *
-   * Only ever fills a field nobody has touched, and every value it sets stays
-   * fully editable.
+   * Matched against the full lists rather than the conference-narrowed ones —
+   * an attendee recorded but not yet linked to this conference is still the
+   * person the note means, and the dropdowns below merge whatever is found
+   * back in so it stays selectable either way.
    */
   useEffect(() => {
-    if (scanned.current || loading || loadingConf) return;
+    if (scanned.current || loading) return;
     if (note.tag === 'card-badge') return;
     if (allCompanies.length === 0 && allAttendees.length === 0) return;
     scanned.current = true;
 
     const text = note.content ?? '';
-    const attendeePool = conferenceAttendees.length > 0 ? conferenceAttendees : allAttendees;
-    const att = selAttendee ? null : scanForAttendee(text, attendeePool);
+    // Someone at this conference is the better answer when there is one.
+    const att = scanForAttendee(text, conferenceAttendees) ?? scanForAttendee(text, allAttendees);
     // An attendee names their own employer, so it beats reading the text again.
-    const comp = selCompany
-      ? null
-      : (att?.company_id != null ? allCompanies.find(c => c.id === att.company_id) ?? null : null)
-        ?? scanForCompany(text, allCompanies);
+    const comp = (att?.company_id != null ? allCompanies.find(c => c.id === att.company_id) ?? null : null)
+      ?? scanForCompany(text, allCompanies);
     const act = scanForAction(text, followUpActions);
+    setScan({ company: comp, attendee: att, action: act?.value ?? null });
+  }, [loading, note.tag, note.content, allCompanies, allAttendees, conferenceAttendees, followUpActions]);
 
-    if (comp) { setSelCompany(comp); setFilteredCompanies(prev => (prev.some(c => c.id === comp.id) ? prev : [comp, ...prev])); }
-    if (att) { setSelAttendee(att); setFilteredAttendees(prev => (prev.some(a => a.id === att.id) ? prev : [att, ...prev])); }
-    if (act) setFollowUpAction(act.value);
-    // An action described in the note is the reason to offer a follow-up at
-    // all, so that is the only case where Yes starts selected. Silence about
-    // an action leaves the existing behaviour — no follow-up — untouched.
-    if (act && att) setCreateFollowUp(true);
-    setSuggested({ company: !!comp, attendee: !!att, action: !!act });
-  }, [loading, loadingConf, note.tag, note.content, allCompanies, allAttendees, conferenceAttendees, followUpActions, selAttendee, selCompany]);
+  /**
+   * Put the reading into the form, and keep it there.
+   *
+   * Re-asserted rather than applied once, because loading a conference clears
+   * the selected attendee and rewrites both filtered lists — a single write
+   * racing that simply disappears. A field the person has touched is never
+   * written over.
+   */
+  useEffect(() => {
+    if (!scan || loadingConf) return;
+    if (scan.company && !touched.company && !selCompany && !companyIsOther) setSelCompany(scan.company);
+    if (scan.attendee && !touched.attendee && !selAttendee && !attendeeIsOther) setSelAttendee(scan.attendee);
+    if (scan.action && !touched.action && !followUpAction) setFollowUpAction(scan.action);
+  }, [scan, loadingConf, touched, selCompany, selAttendee, followUpAction, companyIsOther, attendeeIsOther]);
+
+  // A suggested record has to be in its own dropdown to be shown as chosen —
+  // narrowing to a conference would otherwise hide the very record the note
+  // named, leaving the field looking empty while a value was set.
+  const companyOptions = useMemo(() => (
+    scan?.company && !filteredCompanies.some(c => c.id === scan.company!.id)
+      ? [scan.company, ...filteredCompanies]
+      : filteredCompanies
+  ), [scan, filteredCompanies]);
+  const attendeeOptions = useMemo(() => (
+    scan?.attendee && !filteredAttendees.some(a => a.id === scan.attendee!.id)
+      ? [scan.attendee, ...filteredAttendees]
+      : filteredAttendees
+  ), [scan, filteredAttendees]);
+
+  // The pill only sits over a value that is still the one suggested.
+  const suggested = {
+    company: !touched.company && !!scan?.company && selCompany?.id === scan.company.id,
+    attendee: !touched.attendee && !!scan?.attendee && selAttendee?.id === scan.attendee.id,
+    action: !touched.action && !!scan?.action && followUpAction === scan.action,
+  };
 
   // The person logging the note owns the follow-up unless they say otherwise.
   useEffect(() => {
@@ -482,10 +517,10 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
                   </div>
                 ) : (
                   <GroupedCompanyDropdown
-                    companies={filteredCompanies}
+                    companies={companyOptions}
                     value={selCompany?.id ?? null}
                     onChange={(id, _name) => {
-                      const comp = filteredCompanies.find(c => c.id === id) ?? allCompanies.find(c => c.id === id) ?? null;
+                      const comp = companyOptions.find(c => c.id === id) ?? allCompanies.find(c => c.id === id) ?? null;
                       handleCompanyChange(comp);
                     }}
                     onClear={() => handleCompanyChange(null)}
@@ -526,7 +561,7 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
                   </div>
                 ) : (
                   <SearchableSelect
-                    options={filteredAttendees}
+                    options={attendeeOptions}
                     value={selAttendee}
                     onChange={handleAttendeeChange}
                     getLabel={a => `${a.first_name} ${a.last_name}`}
@@ -578,7 +613,7 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
                         </label>
                         <select
                           value={followUpAction}
-                          onChange={e => { setFollowUpAction(e.target.value); setSuggested(p => ({ ...p, action: false })); }}
+                          onChange={e => { setFollowUpAction(e.target.value); setTouched(p => ({ ...p, action: true })); }}
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white"
                         >
                           <option value="">No action</option>
