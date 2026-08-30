@@ -37,6 +37,20 @@ matches are offered as one click, since a duplicate company is harder to undo
 than a missed suggestion. Offered, never applied: only a person knows whether
 those two are the same company.
 
+**Floor notes.** Assigning a floor note wrote `entity_notes` directly rather
+than through `/api/notes`, so none of this ever ran on them; the same hook now
+runs there too, after the assignment lands. The Assign Note modal also reads
+the note locally — no model call, because floor notes are triaged in bulk on a
+phone and a modal that stalls on an API is worse than one that fills in
+nothing — matching the text against the account's own companies, attendees and
+follow-up actions, each marked with a **Suggested** pill until touched.
+Ambiguity yields nothing: two Tinas, or two companies scoring alike, and it
+stays quiet rather than presenting a coin toss as a suggestion. The conference
+comes from the note's own tag, falling back to the one being viewed. A
+follow-up is offered rather than assumed — assigning a floor note has never
+created one — with Yes preselected only when the note actually described an
+action.
+
 **On the spot.** When a note is saved, whatever was read out of it is offered
 immediately, with the fields pre-filled and editable, and three answers:
 **Confirm** writes it, **Review later** leaves it pending so it waits in
