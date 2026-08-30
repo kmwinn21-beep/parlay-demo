@@ -1,6 +1,24 @@
 # Note extraction — suggesting record updates from note text
 
-Status: **planned, not built.** Written down so the reasoning survives.
+Status: **Stage 1 built** (store, registry, API). Extractor and review UI to
+come. Written down so the reasoning survives.
+
+## Decisions
+
+- **Which notes** — any note that resolves to a company. Floor notes only once
+  assigned; before that there is nothing to attach to.
+- **No length gate.** "Met at booth, currently using SafelyYou but is
+  interested" is 57 characters and carries a real vendor relationship. Short
+  notes are the norm here, not the exception.
+- **v1 targets** — vendor relationships, and the company's Sub Type(s).
+  Nothing else until the accept rate on those is known.
+- **Review lives on the record**, company and attendee, not in a global inbox.
+- **Automatic** on every qualifying note, not a button.
+- **Anyone who can edit the record** can accept.
+- **Dismissals are per note, not permanent.** Sentiment changes quickly, so a
+  later note is free to raise the same fact again. Only re-extraction of the
+  same note is suppressed, which is what `dedupe_key` is for.
+- **No backfill.** New notes only.
 
 ## The idea
 
