@@ -26,6 +26,7 @@ import { NewMeetingModal } from '@/components/NewMeetingModal';
 import { useUser } from '@/components/UserContext';
 import { InternalRelationshipsSection } from '@/components/InternalRelationshipsSection';
 import { VendorRelationshipsSection } from '@/components/VendorRelationshipsSection';
+import { SuggestedUpdatesSection } from '@/components/SuggestedUpdatesSection';
 import { SectionJumpMenu } from '@/components/SectionJumpMenu';
 import { useCollapsibleSection, setAllSections, useAnySectionExpanded } from '@/lib/sectionExpansion';
 import { useSectionConfig } from '@/lib/useSectionConfig';
@@ -80,6 +81,7 @@ interface Company {
   parent_company_id?: number;
   entity_structure?: string;
   services?: string[];
+  sub_types?: string[];
   icp?: string;
   crm_link?: string;
   master_account_key?: string | null;
@@ -205,6 +207,8 @@ export default function CompanyDetailPage() {
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [territoryOptions, setTerritoryOptions] = useState<{ id: number; name: string; color: string }[]>([]);
   const [servicesOptions, setServicesOptions] = useState<string[]>([]);
+  // The Vendor Type list, reused as the company's own Sub Type(s).
+  const [subTypeOptions, setSubTypeOptions] = useState<string[]>([]);
   const [industryOptions, setIndustryOptions] = useState<string[]>([]);
   const [icpOptions, setIcpOptions] = useState<string[]>([]);
   const [icpConfig, setIcpConfig] = useState<IcpConfig>({ rules: [], unitTypeReq: { operator: null, value1: null, value2: null } });
@@ -291,7 +295,7 @@ export default function CompanyDetailPage() {
 
   const fetchCompany = useCallback(async () => {
     try {
-      const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, servicesRes, icpRes, allCompaniesRes, relTypeRes, icpConfigRes, industryRes, productsRes, territoriesRes] = await Promise.all([
+      const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, servicesRes, subTypeRes, icpRes, allCompaniesRes, relTypeRes, icpConfigRes, industryRes, productsRes, territoriesRes] = await Promise.all([
         fetch(`/api/companies/${id}`),
         fetch('/api/config?category=status&form=company_detail'),
         fetch('/api/config?category=company_type&form=company_detail'),
@@ -299,6 +303,7 @@ export default function CompanyDetailPage() {
         fetch('/api/config?category=action&form=company_detail'),
         fetch('/api/config?category=user&form=company_detail'),
         fetch('/api/config?category=services&form=company_detail'),
+        fetch('/api/config?category=vendor_type&form=company_detail'),
         fetch('/api/config?category=icp&form=company_detail'),
         fetch('/api/companies'),
         fetch('/api/config?category=rep_relationship_type&form=company_detail'),
@@ -321,6 +326,7 @@ export default function CompanyDetailPage() {
         assigned_user: data.assigned_user || '',
         entity_structure: data.entity_structure || '',
         services: Array.isArray(data.services) ? data.services : [],
+        sub_types: Array.isArray(data.sub_types) ? data.sub_types : [],
         icp: data.icp || null,
         industry: data.industry || '',
         territory_id: data.territory_id ?? null,
@@ -342,6 +348,7 @@ export default function CompanyDetailPage() {
       if (actionRes.ok) setActionOptions((await actionRes.json()).map((o: { value: string }) => o.value));
       if (userRes.ok) setUserOptions((await userRes.json()).map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
       if (servicesRes.ok) setServicesOptions((await servicesRes.json()).map((o: { value: string }) => o.value));
+      if (subTypeRes.ok) setSubTypeOptions((await subTypeRes.json()).map((o: { value: string }) => o.value));
       if (industryRes.ok) setIndustryOptions((await industryRes.json()).map((o: { value: string }) => o.value));
       if (territoriesRes.ok) {
         const territoriesData = await territoriesRes.json() as { territories: { id: number; name: string; color: string }[] };
@@ -1016,6 +1023,18 @@ export default function CompanyDetailPage() {
                   onChange={(values) => setEditData((p) => ({ ...p, services: values }))}
                   placeholder="Select services..."
                   emptyMessage="No services configured. Add options in the Admin panel."
+                />
+              </div>
+              <div>
+                {/* What kind of vendor this company is — the relationship form
+                    reads it as its Vendor Type. */}
+                <MultiSelectDropdown
+                  label="Sub Type(s)"
+                  options={subTypeOptions}
+                  values={Array.isArray(editData.sub_types) ? editData.sub_types : []}
+                  onChange={(values) => setEditData((p) => ({ ...p, sub_types: values }))}
+                  placeholder="Select sub type(s)..."
+                  emptyMessage="No vendor types configured. Add options in the Admin panel."
                 />
               </div>
               <div>
@@ -1701,6 +1720,10 @@ export default function CompanyDetailPage() {
 
         {/* Right column */}
         <div className="space-y-6">
+          {/* Above the configured sections rather than inside them: this is
+              work waiting to be done, not a permanent part of the record, and
+              it disappears once there is nothing pending. */}
+          <SuggestedUpdatesSection entityType="company" entityId={Number(id)} />
           {(() => {
             const sectionMap: Record<string, React.ReactNode> = {
               status: (

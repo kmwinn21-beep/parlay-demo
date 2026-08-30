@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { TargetBtn } from './TargetBtn';
 import { useRecordDrawer } from './RecordDrawerContext';
 import type { ByRepEntry, ByRepCompany, TargetEntry } from '../PreConferenceReview';
+import { announceNoteSaved } from '@/lib/suggestions/announce';
 
 interface CompanyNote {
   id: number;
@@ -40,6 +41,7 @@ function CompanyNotesPanel({ companyId, companyName, conferenceName }: { company
         const note: CompanyNote = await res.json();
         setNotes((prev) => [note, ...prev]);
         setContent('');
+        announceNoteSaved('company', companyId);
       }
     } finally { setSaving(false); }
   }

@@ -28,6 +28,7 @@ interface AddCompanyForm {
   profit_type: string;
   company_type: string;
   services: string[];
+  sub_types: string[];
   icp: string | null;
   notes: string;
   assigned_user: string;
@@ -40,19 +41,23 @@ export default function CompaniesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<AddCompanyForm>({
-    defaultValues: { services: [], icp: null },
+    defaultValues: { services: [], sub_types: [], icp: null },
   });
   const configOptions = useConfigOptions('company_table');
   const companyTypeOptions = configOptions.company_type ?? [];
   const profitTypeOptions = configOptions.profit_type ?? [];
   const servicesOptions = configOptions.services ?? [];
+  // Same list the Vendor / Other Relationship form draws its Vendor Type from.
+  const subTypeOptions = configOptions.vendor_type ?? [];
   const icpOptions = (configOptions.icp ?? []).filter(v => v !== 'True' && v !== 'False');
   const userOptionsFull = useUserOptions();
   const selectedServices = watch('services') ?? [];
+  const selectedSubTypes = watch('sub_types') ?? [];
   const icp = watch('icp');
 
   useEffect(() => {
     register('services');
+    register('sub_types');
   }, [register]);
 
   const fetchCompanies = useCallback(async () => {
@@ -84,7 +89,7 @@ export default function CompaniesPage() {
         throw new Error(err.error || 'Failed to create');
       }
       toast.success('Company added!');
-      reset({ services: [], icp: null });
+      reset({ services: [], sub_types: [], icp: null });
       setShowAddForm(false);
       fetchCompanies();
     } catch (err) {
@@ -197,6 +202,19 @@ export default function CompaniesPage() {
                   onChange={(values) => setValue('services', values)}
                   placeholder="Select services..."
                   emptyMessage="No services configured. Add options in the Admin panel."
+                />
+              </div>
+              <div>
+                {/* What kind of vendor this company is. The relationship form
+                    reads it as its Vendor Type, so the fact lives on the
+                    company rather than on each relationship pointing at it. */}
+                <MultiSelectDropdown
+                  label="Sub Type(s)"
+                  options={subTypeOptions}
+                  values={selectedSubTypes}
+                  onChange={(values) => setValue('sub_types', values)}
+                  placeholder="Select sub type(s)..."
+                  emptyMessage="No vendor types configured. Add options in the Admin panel."
                 />
               </div>
               <div>

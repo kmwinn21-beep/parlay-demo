@@ -9,6 +9,9 @@ import {
   notifyMentionedUsers,
 } from '@/lib/notifications';
 import { trackEvent, trackFeature } from '@/lib/trackEvent';
+import { waitUntil } from '@vercel/functions';
+import { extractFromNote, storeSuggestions, noteProvenance } from '@/lib/suggestions/extract';
+import { resolveNoteCompany } from '@/lib/suggestions/noteContext';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -85,6 +88,18 @@ export async function GET(request: NextRequest) {
     console.error('GET /api/notes error:', error);
     return NextResponse.json({ error: 'Failed to fetch notes' }, { status: 500 });
   }
+}
+
+/**
+ * The same note is saved against the attendee, the company and the conference.
+ * Reading only one copy keeps a single note from producing three identical
+ * sets of suggestions.
+ */
+function skipExtraction(entityType: string, attendeeName: unknown): boolean {
+  if (entityType === 'attendee') return false;
+  // A company note with no attendee named is the only copy there is.
+  if (entityType === 'company') return !!String(attendeeName ?? '').trim();
+  return true;
 }
 
 export async function POST(request: NextRequest) {
@@ -172,6 +187,57 @@ export async function POST(request: NextRequest) {
       insight_counts: row.insight_counts != null ? String(row.insight_counts) : null,
       touchpoint_type: row.touchpoint_type != null ? String(row.touchpoint_type) : null,
     };
+
+    // Read the note for facts worth recording elsewhere, and offer them.
+    //
+    // After the response, never blocking it: the note is the thing that must
+    // not be lost, and suggestions are upside. Off unless the account has
+    // opted in, so it can't quietly start costing anything.
+    //
+    // One note is written three times — against the attendee, the company and
+    // the conference — so only the attendee copy is read, and the company copy
+    // when there is no attendee. Otherwise the same sentence would be
+    // extracted three times and proposed three times over.
+    if (process.env.NOTE_EXTRACTION_ENABLED === '1' && !skipExtraction(entity_type, attendee_name)) {
+      const noteId = Number(row.id);
+      const noteText = String(row.content ?? '');
+      const noteConference = row.conference_name != null ? String(row.conference_name) : null;
+      const noteLoggedAt = row.created_at != null ? String(row.created_at) : null;
+      waitUntil((async () => {
+        try {
+          const ctx = await resolveNoteCompany(db, String(row.entity_type), Number(row.entity_id));
+          if (!ctx.companyId) return;
+          // The author, not the note's `rep` — some flows put the person the
+          // follow-up was assigned to in that column, which is someone else.
+          let author: string = user.email;
+          try {
+            const configId = await getConfigIdByEmail(user.email, db);
+            if (configId) {
+              const nameRow = await db.execute({
+                sql: 'SELECT value FROM config_options WHERE id = ?',
+                args: [configId],
+              });
+              if (nameRow.rows.length > 0 && nameRow.rows[0].value) author = String(nameRow.rows[0].value);
+            }
+          } catch { /* the email still names them */ }
+          const result = await extractFromNote(db, {
+            noteId,
+            content: noteText,
+            companyId: ctx.companyId,
+            companyName: ctx.companyName,
+            attendeeId: ctx.attendeeId,
+            provenance: noteProvenance({
+              author,
+              conferenceName: noteConference,
+              loggedAt: noteLoggedAt,
+            }),
+          });
+          if (result.accepted.length > 0) await storeSuggestions(db, noteId, result.accepted);
+        } catch (err) {
+          console.error('[suggestions] extraction after note save failed:', err);
+        }
+      })());
+    }
 
     // Fire standard notifications (best-effort) — skipped on cross-posts to avoid duplicates
     if (!skip_notification) {

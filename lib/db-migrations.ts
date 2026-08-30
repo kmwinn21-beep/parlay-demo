@@ -2333,4 +2333,44 @@ export const migrations: string[] = [
   // earlier migration.
   `DROP INDEX IF EXISTS idx_company_rel_unique`,
   `DROP TABLE IF EXISTS company_relationships`,
+
+  // What kind of vendor a company is, drawn from the same Vendor Type list the
+  // relationship form uses. It lived only on the relationship before, so the
+  // same fact was re-stated on every relationship pointing at that company and
+  // was invisible on the company itself.
+  `ALTER TABLE companies ADD COLUMN sub_types TEXT`,
+
+  // Facts an extractor read out of a note, offered for a person to confirm.
+  //
+  // Nothing here is applied on its own: a row is a proposal, and accepting it
+  // is what writes to the record it names. The quote is the words in the note
+  // that justify it — shown in the UI so the judgment is checkable, and
+  // checked in code before storing, since a quote that isn't in the note means
+  // the extraction was invented.
+  //
+  // dedupe_key identifies the same proposal from the same note, so
+  // re-extracting a note that was edited and saved again doesn't stack up
+  // duplicates of what was already answered.
+  `CREATE TABLE IF NOT EXISTS record_suggestions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_note_id INTEGER,
+      target_key TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id INTEGER NOT NULL,
+      payload TEXT NOT NULL,
+      quote TEXT,
+      confidence TEXT DEFAULT 'medium',
+      status TEXT NOT NULL DEFAULT 'pending',
+      dedupe_key TEXT NOT NULL,
+      reviewed_by TEXT,
+      reviewed_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (source_note_id) REFERENCES entity_notes(id) ON DELETE CASCADE
+    )`,
+  `CREATE INDEX IF NOT EXISTS idx_record_suggestions_entity
+      ON record_suggestions (entity_type, entity_id, status)`,
+  // COALESCE, not the bare column: SQLite treats NULLs as distinct in a unique
+  // index, so a suggestion with no source note would never collide with itself.
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_record_suggestions_dedupe
+      ON record_suggestions (COALESCE(source_note_id, 0), dedupe_key)`,
 ];

@@ -227,6 +227,7 @@ export async function GET(
       entity_structure,
       status: cleanStatus,
       services: parseServices(company.services),
+      sub_types: parseServices(company.sub_types),
       icp: company.icp ? String(company.icp) : null,
       my_user_status_ids: myUserStatusIds,
       status_markers: statusMarkers,
@@ -253,7 +254,7 @@ export async function PUT(
     const body = await request.json();
     // entity_structure is derived from parent_company_id / children on read,
     // so nothing writes it here — the parent/child action owns the links.
-    const { name, website, profit_type, company_type, notes, assigned_user, wse, services, icp, industry, territory_id, hq_state, crm_link, master_account_key, master_account_name } = body;
+    const { name, website, profit_type, company_type, notes, assigned_user, wse, services, icp, industry, territory_id, hq_state, crm_link, master_account_key, master_account_name, sub_types } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Company name is required' }, { status: 400 });
@@ -269,8 +270,8 @@ export async function PUT(
     const prevAssignedUser = existingResult.rows[0].assigned_user as string | null;
 
     const updatedResult = await db.execute({
-      sql: 'UPDATE companies SET name = ?, website = ?, profit_type = ?, company_type = ?, notes = ?, assigned_user = ?, wse = ?, services = ?, icp = ?, industry = ?, territory_id = ?, hq_state = ?, crm_link = ?, master_account_key = ?, master_account_name = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
-      args: [name, website || null, profit_type || null, company_type || null, notes || null, assigned_user || null, wse != null && wse !== '' ? Number(wse) : null, serializeServices(services), icp || null, industry || null, territory_id != null && territory_id !== '' ? Number(territory_id) : null, hq_state || null, crm_link || null, master_account_key || null, master_account_name || null, params.id],
+      sql: 'UPDATE companies SET name = ?, website = ?, profit_type = ?, company_type = ?, notes = ?, assigned_user = ?, wse = ?, services = ?, icp = ?, industry = ?, territory_id = ?, hq_state = ?, crm_link = ?, master_account_key = ?, master_account_name = ?, sub_types = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
+      args: [name, website || null, profit_type || null, company_type || null, notes || null, assigned_user || null, wse != null && wse !== '' ? Number(wse) : null, serializeServices(services), icp || null, industry || null, territory_id != null && territory_id !== '' ? Number(territory_id) : null, hq_state || null, crm_link || null, master_account_key || null, master_account_name || null, serializeServices(sub_types), params.id],
     });
 
     // Cascade assigned_user to all child companies
@@ -306,6 +307,7 @@ export async function PUT(
     return NextResponse.json({
       ...updatedResult.rows[0],
       services: parseServices(updatedResult.rows[0].services),
+      sub_types: parseServices(updatedResult.rows[0].sub_types),
       icp: updatedResult.rows[0].icp ? String(updatedResult.rows[0].icp) : null,
     });
   } catch (error) {
@@ -357,6 +359,13 @@ export async function PATCH(
     if ('company_type' in body) {
       setClauses.push('company_type = ?');
       args.push(body.company_type || null);
+    }
+    // The vendor relationship form writes this back when the vendor's type is
+    // set or changed there, so the company carries what it is rather than the
+    // fact living only on whichever relationship happened to record it.
+    if ('sub_types' in body) {
+      setClauses.push('sub_types = ?');
+      args.push(serializeServices(body.sub_types));
     }
     if ('status' in body) {
       // Write the user-scoped-stripped status globally

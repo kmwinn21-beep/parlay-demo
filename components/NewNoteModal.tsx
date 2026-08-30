@@ -9,6 +9,7 @@ import { MentionTextarea } from '@/components/MentionTextarea';
 import { useUserOptions } from '@/lib/useUserOptions';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
+import { announceNoteSaved } from '@/lib/suggestions/announce';
 
 interface ConferenceOption {
   id: number;
@@ -298,6 +299,7 @@ export function NewNoteModal({
       }
 
       toast.success('Note saved.');
+      announceNoteSaved(selAttendee ? 'attendee' : 'company', selAttendee?.id ?? selCompany?.id);
       handleClose();
     } catch {
       toast.error('Failed to save note.');

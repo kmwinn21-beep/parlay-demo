@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
     const userConfigId = userConfigResult.rows[0] ? Number(userConfigResult.rows[0].id) : null;
 
     const result = await db.execute({
-      sql: `SELECT co.id, co.name, co.website, co.profit_type, co.company_type, co.notes, co.wse, co.services,
+      sql: `SELECT co.id, co.name, co.website, co.profit_type, co.company_type, co.notes, co.wse, co.services, co.sub_types,
               co.status, co.icp, co.assigned_user, co.parent_company_id, co.created_at, co.updated_at,
               -- Derived, not read from the stored column: a company is a Child
               -- when it has a parent and a Parent when it has children. The
@@ -133,6 +133,7 @@ export async function GET(request: NextRequest) {
         ...r,
         status: cleanStatus,
         services: parseServices(r.services),
+        sub_types: parseServices(r.sub_types),
         icp: r.icp ? String(r.icp) : null,
         my_user_status_ids: myUserStatusIds,
       };
@@ -152,7 +153,7 @@ export async function POST(request: NextRequest) {
   const db = await getDb(authResult?.accountId);
   try {
     const body = await request.json();
-    const { name, website, profit_type, company_type, notes, assigned_user, entity_structure, wse, services, icp } = body;
+    const { name, website, profit_type, company_type, notes, assigned_user, entity_structure, wse, services, icp, sub_types } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Company name is required' }, { status: 400 });
@@ -163,13 +164,14 @@ export async function POST(request: NextRequest) {
     const resolvedType = company_type || classifyCompanyType(name, companyTypeOptions) || null;
 
     const result = await db.execute({
-      sql: 'INSERT INTO companies (name, website, profit_type, company_type, notes, assigned_user, entity_structure, wse, services, icp, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL) RETURNING *',
-      args: [name, website || null, profit_type || null, resolvedType, notes || null, assigned_user || null, entity_structure || null, wse != null && wse !== '' ? Number(wse) : null, serializeServices(services), icp || null],
+      sql: 'INSERT INTO companies (name, website, profit_type, company_type, notes, assigned_user, entity_structure, wse, services, icp, sub_types, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL) RETURNING *',
+      args: [name, website || null, profit_type || null, resolvedType, notes || null, assigned_user || null, entity_structure || null, wse != null && wse !== '' ? Number(wse) : null, serializeServices(services), icp || null, serializeServices(sub_types)],
     });
 
     return NextResponse.json({
       ...result.rows[0],
       services: parseServices(result.rows[0].services),
+      sub_types: parseServices(result.rows[0].sub_types),
       icp: result.rows[0].icp ? String(result.rows[0].icp) : null,
     }, { status: 201 });
   } catch (error) {

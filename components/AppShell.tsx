@@ -20,6 +20,7 @@ import { PlanSelectionModal } from './PlanSelectionModal';
 import { useUpgradeModal } from '@/lib/UpgradeModalContext';
 import { UpgradeQueryTrigger } from './UpgradeQueryTrigger';
 import { ActiveConferenceProvider } from '@/components/ActiveConferenceContext';
+import { SuggestionPrompt } from '@/components/SuggestionPrompt';
 import { MeetingNotesDrawerProvider, useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 import { MeetingNotesDrawer } from '@/components/MeetingNotesDrawer';
 import { ClosedDealDraftProvider, useClosedDealDraft } from '@/lib/ClosedDealDraftContext';
@@ -254,6 +255,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Suspense fallback={<AppShellInner>{children}</AppShellInner>}>
           <EmbedChecker>{children}</EmbedChecker>
         </Suspense>
+        {/* Mounted once for the whole app: every note-writing flow announces
+            itself with an event, so none of them has to know this exists. */}
+        <SuggestionPrompt />
       </SidebarCollapseProvider>
       </ConferenceReviewModalsProvider>
       </ClosedDealDraftProvider>
