@@ -129,6 +129,7 @@ RULES
 - Only use values from the lists given. If nothing in the list fits, use null.
 - Leave a field null when the note does not state it. Never guess a value to fill a field.
 - Do not propose a relationship just because a company is named. The note must say it is used, being evaluated, or has been dropped.
+- When you propose both a relationship and a sub type for the same company, say what kind of vendor it is once, in the relationship's "vendor_type". Leave the separate sub type suggestion for a company you are not proposing a relationship for.
 - Return {"suggestions": []} if the note states nothing worth recording. That is a normal answer, not a failure.`;
 }
 

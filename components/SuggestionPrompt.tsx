@@ -1,11 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
-import { type CompanyOption, type ConfigOption } from '@/components/VendorRelationshipFields';
-import { SUGGESTION_TARGETS, getTarget } from '@/lib/suggestions/registry';
-import { SuggestionFieldInput } from '@/components/SuggestionFieldInput';
+import { SuggestionGroupCard } from '@/components/SuggestionGroupCard';
+import { groupSuggestions, payloadFor, type SuggestionGroup } from '@/lib/suggestions/group';
+import { useSuggestionCatalog } from '@/lib/suggestions/useSuggestionCatalog';
 import { NOTE_SAVED_EVENT, type NoteSavedDetail } from '@/lib/suggestions/announce';
 
 interface Suggestion {
@@ -33,32 +33,16 @@ const POLL_ATTEMPTS = 10;
  */
 export function SuggestionPrompt() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [drafts, setDrafts] = useState<Record<number, Record<string, unknown>>>({});
-  const [options, setOptions] = useState<Record<string, ConfigOption[]>>({});
-  const [companies, setCompanies] = useState<CompanyOption[]>([]);
-  const [busyId, setBusyId] = useState<number | null>(null);
+  const [edits, setEdits] = useState<Record<string, Record<string, unknown>>>({});
+  const [busyKey, setBusyKey] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   // Ids already put in front of this user, so a second note on the same record
   // doesn't re-offer what is still sitting on screen or was just answered.
   const seen = useRef<Set<number>>(new Set());
   const polling = useRef(false);
+  const { options, companies, load: loadCatalog } = useSuggestionCatalog(false);
 
   useEffect(() => { setMounted(true); }, []);
-
-  const loadOptions = useCallback(() => {
-    const cats = new Set<string>();
-    for (const t of SUGGESTION_TARGETS) for (const f of t.fields) if (f.optionCategory) cats.add(f.optionCategory);
-    Array.from(cats).forEach(cat => {
-      fetch(`/api/config?category=${cat}`)
-        .then(r => (r.ok ? r.json() : []))
-        .then((d: ConfigOption[]) => setOptions(prev => ({ ...prev, [cat]: Array.isArray(d) ? d : [] })))
-        .catch(() => {});
-    });
-    fetch('/api/companies?limit=2000')
-      .then(r => (r.ok ? r.json() : []))
-      .then((d: CompanyOption[]) => setCompanies(Array.isArray(d) ? d.map(c => ({ id: c.id, name: c.name })) : []))
-      .catch(() => {});
-  }, []);
 
   useEffect(() => {
     const onSaved = async (e: Event) => {
@@ -68,7 +52,7 @@ export function SuggestionPrompt() {
       if (detail.entityType !== 'attendee' && detail.entityType !== 'company') return;
 
       polling.current = true;
-      loadOptions();
+      loadCatalog();
       try {
         for (let i = 0; i < POLL_ATTEMPTS; i++) {
           await new Promise(r => setTimeout(r, POLL_MS));
@@ -82,7 +66,6 @@ export function SuggestionPrompt() {
           if (fresh.length > 0) {
             fresh.forEach(r => seen.current.add(r.id));
             setSuggestions(fresh);
-            setDrafts(Object.fromEntries(fresh.map(r => [r.id, { ...r.payload }])));
             return;
           }
         }
@@ -92,35 +75,45 @@ export function SuggestionPrompt() {
     };
     window.addEventListener(NOTE_SAVED_EVENT, onSaved);
     return () => window.removeEventListener(NOTE_SAVED_EVENT, onSaved);
-  }, [loadOptions]);
+  }, [loadCatalog]);
 
-  const review = async (id: number, action: 'accept' | 'dismiss') => {
-    setBusyId(id);
+  const groups = useMemo(() => groupSuggestions(suggestions), [suggestions]);
+
+  const drop = (group: SuggestionGroup) => {
+    const done = new Set(group.members.map(m => m.id));
+    setSuggestions(prev => prev.filter(s => !done.has(s.id)));
+  };
+
+  const review = async (group: SuggestionGroup, action: 'accept' | 'dismiss') => {
+    setBusyKey(group.key);
+    const draft = { ...group.draft, ...(edits[group.key] ?? {}) };
     try {
-      const res = await fetch('/api/suggestions', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, action, payload: drafts[id] }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({})) as { error?: string };
-        toast.error(err.error || 'Could not save that.');
-        return;
+      // One company is one decision, so every member of the group is answered
+      // together — a half-applied group would leave the record inconsistent
+      // with what the reviewer saw.
+      for (const member of group.members) {
+        const res = await fetch('/api/suggestions', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: member.id, action, payload: payloadFor(member, draft) }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({})) as { error?: string };
+          toast.error(err.error || 'Could not save that.');
+          return;
+        }
       }
       toast.success(action === 'accept' ? 'Added to the record.' : 'Ignored.');
-      setSuggestions(prev => prev.filter(s => s.id !== id));
+      drop(group);
     } finally {
-      setBusyId(null);
+      setBusyKey(null);
     }
   };
 
-  /** Left pending, so it waits in Suggested Updates on the record. */
-  const later = (id: number) => setSuggestions(prev => prev.filter(s => s.id !== id));
+  const setField = (key: string, field: string, value: unknown) =>
+    setEdits(prev => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
 
-  const setField = (id: number, key: string, value: unknown) =>
-    setDrafts(prev => ({ ...prev, [id]: { ...prev[id], [key]: value } }));
-
-  if (!mounted || suggestions.length === 0) return null;
+  if (!mounted || groups.length === 0) return null;
 
   return createPortal(
     <>
@@ -132,7 +125,7 @@ export function SuggestionPrompt() {
         <div className="pointer-events-auto w-full max-w-lg max-h-[85vh] bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col">
           <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0">
             <h3 className="text-sm font-semibold text-brand-primary">
-              {suggestions.length === 1 ? 'One thing from that note' : `${suggestions.length} things from that note`}
+              {groups.length === 1 ? 'One thing from that note' : `${groups.length} things from that note`}
             </h3>
             <p className="text-xs text-gray-500 mt-0.5">
               Nothing is saved until you confirm it. Change anything that isn&apos;t right first.
@@ -140,69 +133,41 @@ export function SuggestionPrompt() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
-            {suggestions.map(s => {
-              const target = getTarget(s.target_key);
-              if (!target) return null;
-              const draft = drafts[s.id] ?? {};
-              return (
-                <div key={s.id} className="rounded-lg border border-amber-200 bg-amber-50/40 p-3">
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{target.label}</p>
-                    {s.confidence !== 'high' && (
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-white text-gray-500 border border-gray-200">
-                        {s.confidence} confidence
-                      </span>
-                    )}
-                  </div>
-
-                  {s.quote && (
-                    <p className="text-xs text-gray-600 italic border-l-2 border-amber-300 pl-2 mb-3">
-                      “{s.quote}”
-                    </p>
-                  )}
-
-                  <div className="space-y-2">
-                    {target.fields.map(f => (
-                      <SuggestionFieldInput
-                        key={f.key}
-                        field={f}
-                        value={draft[f.key]}
-                        options={f.optionCategory ? options[f.optionCategory] ?? [] : []}
-                        companies={companies}
-                        onChange={v => setField(s.id, f.key, v)}
-                      />
-                    ))}
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 mt-3">
-                    <button
-                      type="button"
-                      onClick={() => review(s.id, 'accept')}
-                      disabled={busyId === s.id}
-                      className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
-                    >
-                      {busyId === s.id ? 'Saving…' : 'Confirm'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => later(s.id)}
-                      disabled={busyId === s.id}
-                      className="btn-secondary text-xs px-3 py-1.5 disabled:opacity-50"
-                    >
-                      Review later
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => review(s.id, 'dismiss')}
-                      disabled={busyId === s.id}
-                      className="text-xs text-gray-500 hover:text-gray-700 px-2"
-                    >
-                      Ignore
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+            {groups.map(group => (
+              <SuggestionGroupCard
+                key={group.key}
+                group={{ ...group, draft: { ...group.draft, ...(edits[group.key] ?? {}) } }}
+                options={options}
+                companies={companies}
+                onChange={(field, value) => setField(group.key, field, value)}
+              >
+                <button
+                  type="button"
+                  onClick={() => review(group, 'accept')}
+                  disabled={busyKey === group.key}
+                  className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
+                >
+                  {busyKey === group.key ? 'Saving…' : 'Confirm'}
+                </button>
+                {/* Left pending, so it waits in Suggested Updates on the record. */}
+                <button
+                  type="button"
+                  onClick={() => drop(group)}
+                  disabled={busyKey === group.key}
+                  className="btn-secondary text-xs px-3 py-1.5 disabled:opacity-50"
+                >
+                  Review later
+                </button>
+                <button
+                  type="button"
+                  onClick={() => review(group, 'dismiss')}
+                  disabled={busyKey === group.key}
+                  className="text-xs text-gray-500 hover:text-gray-700 px-2"
+                >
+                  Ignore
+                </button>
+              </SuggestionGroupCard>
+            ))}
           </div>
 
           <div className="px-4 py-2.5 border-t border-gray-100 flex-shrink-0">

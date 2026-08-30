@@ -4,6 +4,16 @@ Status: **Stages 1–3.5 built** — store, registry, API, extractor, the review
 section on the record, and the on-the-spot prompt after a note is saved.
 Measurement (stage 4) still to do. Written down so the reasoning survives.
 
+**One company, one card.** The extractor proposes per target, so a note that
+names a vendor *and* says what kind of vendor it is produces two suggestions —
+which reads as duplication even though the two write to different places. The
+review UI groups suggestions by the company they name and shows one card with
+every field, and one button that performs both writes. Where the relationship's
+`vendor_type` is blank and the sub type says the same thing, it is filled from
+it: both draw on the same option list and answer the same question, so leaving
+one empty was an artefact of how the proposal was split, not something the note
+failed to say.
+
 **On the spot.** When a note is saved, whatever was read out of it is offered
 immediately, with the fields pre-filled and editable, and three answers:
 **Confirm** writes it, **Review later** leaves it pending so it waits in
