@@ -573,6 +573,7 @@ export function InternalRelationshipsSection({
           userOptions={userOptions}
           relTypeOptions={relTypeOptions}
           companyName={companyName}
+          companyId={companyId}
           onClose={() => { setShowMapDrawer(false); onMapClose?.(); }}
         />
       )}

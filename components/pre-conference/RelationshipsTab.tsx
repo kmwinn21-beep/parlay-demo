@@ -22,9 +22,9 @@ import type { RelationshipRow, VendorRelationshipRow, TargetEntry } from '../Pre
  * the company record. Both are pinned so the cards read the same in both
  * places, and the company list takes whatever width is left over.
  */
-const INTERNAL_CARD_W = 300;
-const VENDOR_CARD_W = 318;
-const VENDOR_AREA_W = VENDOR_CARD_W * 2 + 16;
+export const INTERNAL_CARD_W = 300;
+export const VENDOR_CARD_W = 318;
+export const VENDOR_AREA_W = VENDOR_CARD_W * 2 + 16;
 
 // ── Helpers (mirrors RelationshipMapDrawer) ────────────────────────────────────
 
@@ -415,7 +415,7 @@ function RelationshipAttendeeCard({
 
 // ── Company grouping ───────────────────────────────────────────────────────────
 
-interface CompanyGroup {
+export interface CompanyGroup {
   id: number;
   name: string;
   attendees: (RelationshipRow['attendees'][0] & {
@@ -437,7 +437,7 @@ interface CompanyGroup {
  * vendor / other ones — listing only the former would hide most of the vendor
  * side, since plenty of companies have a vendor link and no internal one.
  */
-function groupRelationshipsByCompany(
+export function groupRelationshipsByCompany(
   relationships: RelationshipRow[],
   vendorRelationships: VendorRelationshipRow[],
 ): CompanyGroup[] {
@@ -509,6 +509,104 @@ function groupRelationshipsByCompany(
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
+
+
+/**
+ * The two relationship columns for one company — Internal on the left, Vendor /
+ * Other two-across on the right.
+ *
+ * Lifted out of the tab so the company record's Relationship map drawer shows
+ * the same cards rather than a second rendering of the same data that drifts
+ * from this one. The tab keeps the company list; the drawer has one company by
+ * definition and doesn't need it.
+ */
+export function CompanyRelationshipColumns({
+  company, vendorLabel, targetMap, onToggleTarget, readOnly = false, stacked = false,
+}: {
+  company: CompanyGroup;
+  vendorLabel: string;
+  /** Omitted on the company record, where there's no conference to target for. */
+  targetMap?: Map<number, TargetEntry>;
+  onToggleTarget?: (entry: Omit<TargetEntry, 'tier'>) => Promise<void>;
+  readOnly?: boolean;
+  /** Narrow layouts stack the two columns and the vendor cards within them. */
+  stacked?: boolean;
+}) {
+  const colorMaps = useConfigColors();
+  const userOptions = useUserOptions();
+
+  const head = (label: string, count: number) => (
+    <div className="flex items-center gap-2 mb-3">
+      <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">{label}</p>
+      <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-bold">
+        {count}
+      </span>
+    </div>
+  );
+
+  const internal = company.attendees.length === 0
+    ? <p className="text-xs text-gray-400 py-2">No tagged contacts from this company at this conference.</p>
+    : (
+      <div className="space-y-4">
+        {company.attendees.map(a => (
+          <RelationshipAttendeeCard
+            key={a.id}
+            attendee={a}
+            repNames={a.rep_names}
+            descriptions={a.descriptions}
+            isTarget={targetMap?.has(a.id) ?? false}
+            onToggleTarget={() => onToggleTarget?.({
+              attendeeId: a.id,
+              firstName: a.first_name,
+              lastName: a.last_name,
+              title: a.title,
+              seniority: a.seniority ?? null,
+              companyName: a.company_name,
+              companyId: a.company_id,
+              companyWse: null,
+              assignedUserNames: a.rep_names,
+            })}
+            readOnly={readOnly || !onToggleTarget}
+          />
+        ))}
+      </div>
+    );
+
+  const vendor = company.vendorRels.length === 0
+    ? <p className="text-xs text-gray-400 py-2">No vendor or other relationships recorded.</p>
+    : (
+      <div
+        className={stacked ? 'space-y-3' : 'grid gap-4 content-start'}
+        style={stacked ? undefined : { gridTemplateColumns: `repeat(auto-fill, ${VENDOR_CARD_W}px)` }}
+      >
+        {company.vendorRels.map(vr => (
+          <VendorRelationshipCard key={vr.id} rel={vr} userOptions={userOptions} colorMaps={colorMaps} defaultExpanded />
+        ))}
+      </div>
+    );
+
+  if (stacked) {
+    return (
+      <div className="space-y-6">
+        <div>{head('Internal', company.attendees.length)}{internal}</div>
+        <div>{head(vendorLabel, company.vendorRels.length)}{vendor}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex gap-4 min-h-0">
+      <div className="flex-shrink-0 overflow-y-auto pb-4" style={{ width: INTERNAL_CARD_W }}>
+        {head('Internal', company.attendees.length)}
+        {internal}
+      </div>
+      <div className="overflow-y-auto pb-4" style={{ width: VENDOR_AREA_W, minWidth: VENDOR_CARD_W }}>
+        {head(vendorLabel, company.vendorRels.length)}
+        {vendor}
+      </div>
+    </div>
+  );
+}
 
 export function RelationshipsTab({
   relationships,
@@ -765,20 +863,13 @@ export function RelationshipsTab({
           </div>
         ) : (
           <>
-            {/* Middle: internal relationships, stacked */}
-            <div className="flex-shrink-0 overflow-y-auto pb-4" style={{ width: INTERNAL_CARD_W }}>
-              <SectionHead label="Internal" count={selectedCompany.attendees.length} />
-              <InternalCards />
-            </div>
-
-            {/* Right: vendor / other, two across */}
-            <div
-              className="overflow-y-auto pb-4"
-              style={{ width: VENDOR_AREA_W, minWidth: VENDOR_CARD_W }}
-            >
-              <SectionHead label={vendorLabel} count={selectedCompany.vendorRels.length} />
-              <VendorCards />
-            </div>
+            <CompanyRelationshipColumns
+              company={selectedCompany}
+              vendorLabel={vendorLabel}
+              targetMap={targetMap}
+              onToggleTarget={onToggleTarget}
+              readOnly={readOnly}
+            />
           </>
         )}
       </div>

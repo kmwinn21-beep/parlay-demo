@@ -8,6 +8,12 @@ import { getBadgeClass, getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getRepInitials } from '@/lib/useUserOptions';
 import { TouchpointMap } from './TouchpointMap';
+import {
+  CompanyRelationshipColumns, groupRelationshipsByCompany,
+  INTERNAL_CARD_W, VENDOR_AREA_W,
+} from './pre-conference/RelationshipsTab';
+import { useSectionConfig } from '@/lib/useSectionConfig';
+import type { RelationshipRow, VendorRelationshipRow } from './PreConferenceReview';
 import type { UserOption } from '@/lib/useUserOptions';
 
 interface InternalRelationship {
@@ -487,12 +493,16 @@ const CLOSE_BTN = (
   </svg>
 );
 
+/** Internal column + two vendor cards + the gap between them + p-4 either side. */
+const DEFAULT_MAP_W = INTERNAL_CARD_W + 16 + VENDOR_AREA_W + 32;
+
 export function RelationshipMapDrawer({
   relationships,
   contacts,
   userOptions,
   relTypeOptions,
   companyName,
+  companyId,
   onClose,
 }: {
   relationships: InternalRelationship[];
@@ -500,10 +510,25 @@ export function RelationshipMapDrawer({
   userOptions: UserOption[];
   relTypeOptions: RelTypeOption[];
   companyName?: string;
+  /** Needed to load the company's vendor / other relationships. */
+  companyId?: number;
   onClose: () => void;
 }) {
-  const [timelineMap, setTimelineMap] = useState<Map<number, TimelineData>>(new Map());
-  const { panelStyle, handleResizeStart } = useDrawerResize(520);
+  const [vendorRels, setVendorRels] = useState<VendorRelationshipRow[]>([]);
+  const { getLabel: getCompanySectionLabel } = useSectionConfig('company');
+  const vendorLabel = getCompanySectionLabel('operator_capital');
+  // Wide enough for the internal column and two vendor cards side by side, so
+  // the default view needs no horizontal scrolling. Still draggable down to
+  // 520, which is where this drawer used to sit.
+  const { panelStyle, handleResizeStart } = useDrawerResize(DEFAULT_MAP_W, 520, 1400);
+
+  useEffect(() => {
+    if (!companyId) return;
+    fetch(`/api/vendor-relationships?company_id=${companyId}`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : []))
+      .then((d: VendorRelationshipRow[]) => setVendorRels(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, [companyId]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -515,26 +540,46 @@ export function RelationshipMapDrawer({
   const relTypeMap = new Map(relTypeOptions.map(r => [r.id, r.value]));
   const groups = buildGroups(relationships, contacts, userMap, relTypeMap);
 
-  // Fetch timeline data for each contact
-  useEffect(() => {
-    const ids = groups.map(g => g.contact.id);
-    if (ids.length === 0) return;
-
-    Promise.all(
-      ids.map(id =>
-        fetch(`/api/attendees/${id}/timeline`)
-          .then(r => r.ok ? r.json() as Promise<TimelineData> : null)
-          .catch(() => null)
-      )
-    ).then(results => {
-      const map = new Map<number, TimelineData>();
-      results.forEach((data, i) => {
-        if (data) map.set(ids[i], data);
-      });
-      setTimelineMap(map);
+  // The shared columns take the pre-conference row shape, so the drawer's own
+  // relationships are mapped into it — one row per relationship, exactly as
+  // that payload carries them. One company, so one group comes back.
+  const companyGroup = (() => {
+    const rows: RelationshipRow[] = relationships.map(rel => {
+      const contactIds = (rel.contact_ids ?? '').split(',').map(x => Number(x.trim())).filter(Boolean);
+      const repIds = (rel.rep_ids ?? '').split(',').map(x => Number(x.trim())).filter(Boolean);
+      const tagIds = (rel.relationship_status ?? '').split(',').map(x => Number(x.trim())).filter(Boolean);
+      const attendees = contactIds
+        .map(cid => contacts.get(cid))
+        .filter((c): c is AttendeeOption => !!c)
+        .map(c => ({
+          id: c.id,
+          first_name: c.first_name,
+          last_name: c.last_name,
+          title: c.title ?? null,
+          seniority: null,
+          health: 0,
+        }));
+      return {
+        id: rel.id,
+        company_id: companyId ?? rel.company_id,
+        company_name: companyName ?? '',
+        relationship_status: tagIds.map(t => relTypeMap.get(t)).filter(Boolean).join(', '),
+        description: rel.description ?? '',
+        rep_names: repIds.map(r => userMap.get(r)).filter((v): v is string => !!v),
+        assigned_user_names: [],
+        contact_names: attendees.map(a => `${a.first_name} ${a.last_name}`.trim()),
+        attendees,
+        recentNotes: [],
+      };
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [relationships.length]);
+    const built = groupRelationshipsByCompany(rows, vendorRels.map(v => ({
+      ...v,
+      company_id: companyId ?? 0,
+      company_name: companyName ?? '',
+      company_assigned_user_names: [],
+    })));
+    return built[0] ?? null;
+  })();
 
   const totalReps = new Set(
     relationships.flatMap(r =>
@@ -569,25 +614,24 @@ export function RelationshipMapDrawer({
           </div>
 
           {/* Content */}
-          {groups.length === 0 ? (
+          {groups.length === 0 && vendorRels.length === 0 ? (
             <div className="flex-1 flex items-center justify-center text-center px-8">
               <div>
                 <svg className="w-8 h-8 text-gray-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
-                <p className="text-sm text-gray-500">No internal relationships recorded for this company.</p>
+                <p className="text-sm text-gray-500">No relationships recorded for this company.</p>
               </div>
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {groups.map((group, i) => (
-                <ContactCard
-                  key={group.contact.id}
-                  group={group}
-                  timeline={timelineMap.get(group.contact.id) ?? null}
-                  defaultExpanded={i === 0}
+            <div className="flex-1 overflow-auto p-4">
+              {companyGroup && (
+                <CompanyRelationshipColumns
+                  company={companyGroup}
+                  vendorLabel={vendorLabel}
+                  readOnly
                 />
-              ))}
+              )}
             </div>
           )}
         </div>
