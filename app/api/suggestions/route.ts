@@ -28,6 +28,8 @@ interface SuggestionRow {
   confidence: string;
   status: string;
   created_at: string | null;
+  /** The note this was read from, so a reviewer can check the quote in context. */
+  source_note_content: string | null;
 }
 
 /** Pending suggestions for one record. */
@@ -55,11 +57,13 @@ export async function GET(request: NextRequest) {
     }
 
     const result = await db.execute({
-      sql: `SELECT id, source_note_id, target_key, entity_type, entity_id, payload,
-                   quote, confidence, status, created_at
-            FROM record_suggestions
-            WHERE entity_type = ? AND entity_id = ? AND status = ?
-            ORDER BY created_at DESC, id DESC`,
+      sql: `SELECT rs.id, rs.source_note_id, rs.target_key, rs.entity_type, rs.entity_id,
+                   rs.payload, rs.quote, rs.confidence, rs.status, rs.created_at,
+                   en.content AS source_note_content
+            FROM record_suggestions rs
+            LEFT JOIN entity_notes en ON en.id = rs.source_note_id
+            WHERE rs.entity_type = ? AND rs.entity_id = ? AND rs.status = ?
+            ORDER BY rs.created_at DESC, rs.id DESC`,
       args: [lookupType, lookupId, status],
     });
 
@@ -74,6 +78,7 @@ export async function GET(request: NextRequest) {
       confidence: String(r.confidence ?? 'medium'),
       status: String(r.status),
       created_at: r.created_at != null ? String(r.created_at) : null,
+      source_note_content: r.source_note_content != null ? String(r.source_note_content) : null,
     }));
     return NextResponse.json(rows);
   } catch (error) {
