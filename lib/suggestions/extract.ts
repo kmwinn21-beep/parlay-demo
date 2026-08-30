@@ -94,10 +94,20 @@ export function buildPrompt(
     // for them would only invite a paraphrase of what we already have.
     const fields = t.fields.filter(f => !f.provenance).map(f => {
       const bits = [`"${f.key}"`];
+      const hintLines: string[] = [];
       if (f.optionCategory) {
         const list = options.get(f.optionCategory) ?? [];
         bits.push(`— one of: ${list.map(v => JSON.stringify(v)).join(', ') || '(none configured)'}`);
         if (f.multi) bits.push('(an array; several allowed)');
+        // Only hints for values this account actually has, so a hint can never
+        // name a value the model is then forbidden from using.
+        if (f.optionHints) {
+          const present = new Set(list.map(v => v.toLowerCase()));
+          const mapped = Object.entries(f.optionHints)
+            .filter(([value]) => present.has(value.toLowerCase()))
+            .map(([value, phrases]) => `${phrases.map(p => `"${p}"`).join(', ')} → ${JSON.stringify(value)}`);
+          if (mapped.length > 0) hintLines.push(`      how notes say it: ${mapped.join('; ')}`);
+        }
       } else if (f.companyRef) {
         bits.push('— the other company\'s name, exactly as the note writes it');
       } else if (f.freeText) {
@@ -105,7 +115,7 @@ export function buildPrompt(
       }
       if (f.required) bits.push('(required)');
       else bits.push('(null when the note does not say)');
-      return `    - ${bits.join(' ')}`;
+      return [`    - ${bits.join(' ')}`, ...hintLines].join('\n');
     }).join('\n');
     return `  "${t.key}" — ${t.prompt}\n${fields}`;
   }).join('\n\n');
@@ -226,7 +236,7 @@ export function validateProposals(
       }
       const value = proposed[field.key];
       if (value == null || value === '' || (Array.isArray(value) && value.length === 0)) {
-        if (field.required) { bad = `missing required field ${field.key}`; break; }
+        if (field.required && !field.reviewerCanFill) { bad = `missing required field ${field.key}`; break; }
         payload[field.key] = field.multi ? [] : null;
         continue;
       }
@@ -238,7 +248,9 @@ export function validateProposals(
         // option rather than merely resembling it.
         const resolved = wanted.map(v => lower.get(v.toLowerCase())).filter((v): v is string => !!v);
         if (resolved.length === 0) {
-          if (field.required) { bad = `no valid ${field.key}`; break; }
+          // An unmapped word is a gap for the reviewer to close, not a reason
+          // to throw away a company and a quote that were both correct.
+          if (field.required && !field.reviewerCanFill) { bad = `no valid ${field.key}`; break; }
           payload[field.key] = field.multi ? [] : null;
           continue;
         }

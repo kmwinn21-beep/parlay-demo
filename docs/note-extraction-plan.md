@@ -14,12 +14,28 @@ it: both draw on the same option list and answer the same question, so leaving
 one empty was an artefact of how the proposal was split, not something the note
 failed to say.
 
+**One unmapped word must not lose a whole suggestion.** A note saying
+"considering new lesley" comes back with a status of "Considering", which is
+not in the list — and because `relationship_status` is required, the entire
+proposal used to be discarded, company and quote included, silently. Fields
+marked `reviewerCanFill` are now left blank instead: the reviewer has the
+dropdown open in front of them, and a card with a gap beats no card. Fields
+that are what the suggestion is *about* — the company it names, a sub type
+suggestion's sub types — stay fatal, because there is nothing to review
+without them. The prompt also carries the phrasing notes are actually written
+in (considering, looking at, up for renewal, ripping out), mapped onto the
+account's own option values and filtered to the ones it has.
+
 **Correctable, and filed on arrival.** The company on a suggestion is a
 searchable dropdown over what the account already holds, because the extracted
 name can be the wrong company or the right one under a name already on file.
 When the name matches nothing, accepting will create it — so the card asks for
 a Company Type there and then, rather than leaving a record with nothing but a
-name for someone to find later.
+name for someone to find later. Where the name is close to a company already
+on file — "Advent Health" against "AdventHealth Castle Rock" — the near
+matches are offered as one click, since a duplicate company is harder to undo
+than a missed suggestion. Offered, never applied: only a person knows whether
+those two are the same company.
 
 **On the spot.** When a note is saved, whatever was read out of it is offered
 immediately, with the fields pre-filled and editable, and three answers:
