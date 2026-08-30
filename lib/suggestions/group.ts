@@ -38,6 +38,23 @@ export interface SuggestionGroup {
 
 const RANK: Record<string, number> = { low: 0, medium: 1, high: 2 };
 
+/**
+ * What to file a company as, asked only when accepting would create one.
+ *
+ * Not a registry field: it belongs to the company being created rather than to
+ * any one target, so a group made only of sub types asks for it too. Carried
+ * on the payload of every member, and read by whichever write creates the
+ * company first.
+ */
+export const NEW_COMPANY_TYPE_KEY = 'new_company_type';
+export const NEW_COMPANY_TYPE_CATEGORY = 'company_type';
+
+export const NEW_COMPANY_TYPE_FIELD: SuggestionField = {
+  key: NEW_COMPANY_TYPE_KEY,
+  label: 'Company Type',
+  optionCategory: NEW_COMPANY_TYPE_CATEGORY,
+};
+
 function companyOf(s: GroupableSuggestion): string | null {
   const target = getTarget(s.target_key);
   const field = target?.fields.find(f => f.companyRef);
@@ -117,5 +134,8 @@ export function payloadFor(member: GroupableSuggestion, draft: Record<string, un
   if (!target) return {};
   const out: Record<string, unknown> = {};
   for (const f of target.fields) out[f.key] = draft[f.key];
+  // Not a field of any target, but it decides how a company gets created, so
+  // it rides along with every write that might create one.
+  if (draft[NEW_COMPANY_TYPE_KEY]) out[NEW_COMPANY_TYPE_KEY] = draft[NEW_COMPANY_TYPE_KEY];
   return out;
 }

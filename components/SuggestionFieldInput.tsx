@@ -1,8 +1,95 @@
 'use client';
 
-import { useState } from 'react';
-import { MultiSelect, CompanyPicker, type CompanyOption, type ConfigOption } from '@/components/VendorRelationshipFields';
+import { useEffect, useRef, useState } from 'react';
+import { MultiSelect, type CompanyOption, type ConfigOption } from '@/components/VendorRelationshipFields';
 import type { SuggestionField } from '@/lib/suggestions/registry';
+
+/**
+ * The company a suggestion names — searchable, and correctable.
+ *
+ * The extracted name is a starting point, not an answer: it can be the wrong
+ * company, or the right one under a name the account already holds. So this
+ * searches what exists while leaving whatever is typed intact — an unmatched
+ * name is the normal case for a vendor nobody has recorded yet, and becomes a
+ * new company on accept.
+ */
+function CompanyField({ label, name, companies, onChange }: {
+  label: string;
+  name: string;
+  companies: CompanyOption[];
+  onChange: (name: string) => void;
+}) {
+  const [query, setQuery] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setQuery(null); }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
+  const match = companies.find(c => c.name.trim().toLowerCase() === name.trim().toLowerCase());
+  // While searching, the box shows the search; otherwise it shows the value.
+  const shown = query ?? name;
+  const q = shown.trim().toLowerCase();
+  // Filtering starts when the person types, not from the name already there —
+  // opening the list to browse would otherwise show only the one company the
+  // extractor guessed, which is the case where they most want to see others.
+  const typed = (query ?? '').trim().toLowerCase();
+  const results = (typed ? companies.filter(c => c.name.toLowerCase().includes(typed)) : companies).slice(0, 50);
+  const exact = companies.some(c => c.name.trim().toLowerCase() === q);
+
+  const pick = (value: string) => { onChange(value); setQuery(null); setOpen(false); };
+
+  return (
+    <div ref={ref}>
+      <label className="label text-xs">{label}</label>
+      <div className="relative">
+        <input
+          value={shown}
+          // Typing is itself the answer when nothing is picked, so it edits the
+          // value as well as the search — leaving the box is never a way to
+          // lose what was typed.
+          onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          placeholder="Search or type a company name"
+          className="input-field"
+        />
+        {open && (
+          <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+            {shown.trim() && !exact && (
+              <button
+                type="button"
+                onClick={() => pick(shown.trim())}
+                className="w-full text-left px-3 py-2 text-sm font-medium text-brand-secondary hover:bg-gray-50 border-b border-gray-100"
+              >
+                Create “{shown.trim()}”
+              </button>
+            )}
+            {results.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-gray-400">No companies match.</div>
+            ) : results.map(c => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => pick(c.name)}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 truncate"
+              >
+                {c.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <p className="text-[11px] text-gray-400 mt-1">
+        {match ? 'Matches an existing company.' : 'No company by this name yet — accepting will create it.'}
+      </p>
+    </div>
+  );
+}
 
 /** One field, rendered as whatever the registry says it is. */
 export function SuggestionFieldInput({ field, value, options, companies, onChange }: {
@@ -12,39 +99,14 @@ export function SuggestionFieldInput({ field, value, options, companies, onChang
   companies: CompanyOption[];
   onChange: (v: unknown) => void;
 }) {
-  const [other, setOther] = useState(false);
-
   if (field.companyRef) {
-    const name = String(value ?? '');
-    const match = companies.find(c => c.name.trim().toLowerCase() === name.trim().toLowerCase());
-    // An unmatched name is the normal case for a vendor nobody has recorded
-    // yet — it becomes a new company on accept, which is why it stays visible
-    // as typed rather than being silently blanked.
     return (
-      <div>
-        {other || !match ? (
-          <div>
-            <label className="label text-xs">{field.label}</label>
-            <input
-              value={name}
-              onChange={e => onChange(e.target.value)}
-              className="input-field"
-              placeholder="Company name"
-            />
-            <p className="text-[11px] text-gray-400 mt-1">
-              {match ? 'Matches an existing company.' : 'No company by this name yet — accepting will create it.'}
-            </p>
-          </div>
-        ) : (
-          <CompanyPicker
-            companies={companies}
-            value={match.id}
-            onChange={id => onChange(companies.find(c => c.id === id)?.name ?? name)}
-            onPickOther={() => setOther(true)}
-            otherName={name}
-          />
-        )}
-      </div>
+      <CompanyField
+        label={field.label}
+        name={String(value ?? '')}
+        companies={companies}
+        onChange={onChange}
+      />
     );
   }
 

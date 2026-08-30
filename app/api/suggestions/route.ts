@@ -4,6 +4,7 @@ import { getDb } from '@/lib/getDb';
 import { getTarget, dedupeKey, type SuggestionTarget } from '@/lib/suggestions/registry';
 import { getConfigIdByEmail } from '@/lib/notifications';
 import { resolveNoteCompany } from '@/lib/suggestions/noteContext';
+import { NEW_COMPANY_TYPE_KEY } from '@/lib/suggestions/group';
 
 export const dynamic = 'force-dynamic';
 
@@ -241,9 +242,16 @@ async function resolveCompany(db: Db, payload: Record<string, unknown>): Promise
     args: [name],
   });
   if (existing.rows.length > 0) return Number(existing.rows[0].id);
+  // A company created from a note starts with nothing but a name, which is a
+  // record somebody has to come back and finish. The reviewer is asked for its
+  // type at the moment of accepting, so it arrives filed.
+  const rawType = payload[NEW_COMPANY_TYPE_KEY];
+  const companyType = Array.isArray(rawType)
+    ? rawType.map(v => String(v).trim()).filter(Boolean).join(', ')
+    : String(rawType ?? '').trim();
   const created = await db.execute({
-    sql: 'INSERT INTO companies (name) VALUES (?) RETURNING id',
-    args: [name],
+    sql: 'INSERT INTO companies (name, company_type) VALUES (?, ?) RETURNING id',
+    args: [name, companyType || null],
   });
   return Number(created.rows[0].id);
 }

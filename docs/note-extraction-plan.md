@@ -14,6 +14,13 @@ it: both draw on the same option list and answer the same question, so leaving
 one empty was an artefact of how the proposal was split, not something the note
 failed to say.
 
+**Correctable, and filed on arrival.** The company on a suggestion is a
+searchable dropdown over what the account already holds, because the extracted
+name can be the wrong company or the right one under a name already on file.
+When the name matches nothing, accepting will create it — so the card asks for
+a Company Type there and then, rather than leaving a record with nothing but a
+name for someone to find later.
+
 **On the spot.** When a note is saved, whatever was read out of it is offered
 immediately, with the fields pre-filled and editable, and three answers:
 **Confirm** writes it, **Review later** leaves it pending so it waits in

@@ -110,9 +110,10 @@ export function SuggestedUpdatesSection({ entityType, entityId }: {
             any value first.
           </p>
 
-          {groups.map(group => (
+          {groups.map((group, i) => (
             <SuggestionGroupCard
               key={group.key}
+              index={i + 1}
               group={{ ...group, draft: { ...group.draft, ...(edits[group.key] ?? {}) } }}
               options={options}
               companies={companies}

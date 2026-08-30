@@ -133,9 +133,10 @@ export function SuggestionPrompt() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
-            {groups.map(group => (
+            {groups.map((group, i) => (
               <SuggestionGroupCard
                 key={group.key}
+                index={i + 1}
                 group={{ ...group, draft: { ...group.draft, ...(edits[group.key] ?? {}) } }}
                 options={options}
                 companies={companies}
