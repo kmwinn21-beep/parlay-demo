@@ -80,6 +80,10 @@ export const SUGGESTION_TARGETS: SuggestionTarget[] = [
     write: 'set_field',
     column: 'sub_types',
     fields: [
+      // Which company this describes. Without it the write would fall back to
+      // the record being read, and set the operator's sub types to its
+      // vendor's — the wrong company entirely.
+      { key: 'related_company_name', label: 'Company', companyRef: true, required: true },
       { key: 'sub_types', label: 'Sub Type(s)', optionCategory: 'vendor_type', multi: true, required: true },
     ],
     prompt:
