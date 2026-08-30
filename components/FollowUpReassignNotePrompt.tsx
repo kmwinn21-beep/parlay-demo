@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { getRepInitials, type UserOption } from '@/lib/useUserOptions';
+import { announceNoteSaved } from '@/lib/suggestions/announce';
 
 export interface ReassignNoteTarget {
   attendeeId: number;
@@ -81,6 +82,7 @@ export function FollowUpReassignNotePrompt({
       const results = await Promise.allSettled(posts);
       const ok = results.some(r => r.status === 'fulfilled' && r.value.ok);
       if (!ok) throw new Error('note failed');
+      announceNoteSaved('attendee', target.attendeeId);
       toast.success('Note added.');
       onClose();
     } catch {

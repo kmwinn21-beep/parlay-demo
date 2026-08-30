@@ -28,6 +28,7 @@ import { CustomColumnCell } from './CustomColumnCell';
 import { ScrollRow } from '@/components/ScrollRow';
 import { useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
 import type { AdditionalAttendeeRecord } from '@/lib/additionalAttendees';
+import { announceNoteSaved } from '@/lib/suggestions/announce';
 
 export interface Meeting {
   id: number;
@@ -1069,6 +1070,7 @@ export function MeetingsTable({
         }
       }
       await Promise.all(work);
+      if (body) announceNoteSaved('attendee', meeting.attendee_id);
       toast.success(body ? 'Follow-up assigned and note saved.' : 'Follow-up assigned.');
       setAssignFollowUp(null);
     } catch {

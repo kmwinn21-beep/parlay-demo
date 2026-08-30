@@ -1,8 +1,18 @@
 # Note extraction — suggesting record updates from note text
 
-Status: **Stages 1–3 built** — store, registry, API, extractor, and the
-review section on the company record. Measurement (stage 4) still to do.
-Written down so the reasoning survives.
+Status: **Stages 1–3.5 built** — store, registry, API, extractor, the review
+section on the record, and the on-the-spot prompt after a note is saved.
+Measurement (stage 4) still to do. Written down so the reasoning survives.
+
+**On the spot.** When a note is saved, whatever was read out of it is offered
+immediately, with the fields pre-filled and editable, and three answers:
+**Confirm** writes it, **Review later** leaves it pending so it waits in
+Suggested Updates on the record, **Ignore** dismisses it for good. The prompt
+is mounted once app-wide and driven by a `parlay:note-saved` event, so every
+note-writing flow gets it — and a flow added later gets it by dispatching one
+line. Suggested Updates is collapsed by default with a count pill, because it
+is now the queue for what was deferred rather than the first place anyone sees
+a suggestion.
 
 Extraction is **off unless `NOTE_EXTRACTION_ENABLED=1`**, so it cannot quietly
 start costing anything. `POST /api/suggestions/extract` runs it on demand and

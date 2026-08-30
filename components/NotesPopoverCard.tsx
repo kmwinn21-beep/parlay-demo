@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { useUser } from '@/components/UserContext';
+import { announceNoteSaved } from '@/lib/suggestions/announce';
 
 function formatNoteDate(dt: string) {
   const d = new Date(dt.endsWith('Z') || dt.includes('+') ? dt : dt + 'Z');
@@ -199,6 +200,7 @@ export function NotesPopoverCard({
       setPinOnSubmit(false);
       setIsAdding(false);
       toast.success('Note saved.');
+      announceNoteSaved('attendee', attendeeId);
     } catch {
       toast.error('Failed to save note.');
     } finally {

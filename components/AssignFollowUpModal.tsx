@@ -13,6 +13,7 @@ import { useFollowUpActions } from '@/lib/useFollowUpActions';
 import { useHideBottomNav } from './BottomNavContext';
 import { useUser } from '@/components/UserContext';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
+import { announceNoteSaved } from '@/lib/suggestions/announce';
 
 interface ConferenceOption {
   id: number;
@@ -370,6 +371,7 @@ export function AssignFollowUpModal({
             }),
           }),
         ]);
+        announceNoteSaved('attendee', Number(attendeeId));
       }
 
       toast.success('Follow-up assigned!');

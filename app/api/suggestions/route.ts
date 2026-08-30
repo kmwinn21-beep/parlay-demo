@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { getTarget, dedupeKey, type SuggestionTarget } from '@/lib/suggestions/registry';
 import { getConfigIdByEmail } from '@/lib/notifications';
+import { resolveNoteCompany } from '@/lib/suggestions/noteContext';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,13 +43,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'entity_type and entity_id are required' }, { status: 400 });
     }
 
+    // Both current targets attach to a company, but a caller usually only
+    // knows the attendee whose note it just saved — so an attendee lookup
+    // falls through to that attendee's employer rather than coming back empty.
+    let lookupType = entityType;
+    let lookupId: number = Number(entityId);
+    if (entityType === 'attendee') {
+      const resolved = await resolveNoteCompany(db, 'attendee', Number(entityId));
+      if (resolved.companyId) { lookupType = 'company'; lookupId = resolved.companyId; }
+    }
+
     const result = await db.execute({
       sql: `SELECT id, source_note_id, target_key, entity_type, entity_id, payload,
                    quote, confidence, status, created_at
             FROM record_suggestions
             WHERE entity_type = ? AND entity_id = ? AND status = ?
             ORDER BY created_at DESC, id DESC`,
-      args: [entityType, entityId, status],
+      args: [lookupType, lookupId, status],
     });
 
     const rows: SuggestionRow[] = result.rows.map(r => ({

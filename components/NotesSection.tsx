@@ -7,6 +7,7 @@ import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { MentionTextarea } from '@/components/MentionTextarea';
 import { useUserOptions } from '@/lib/useUserOptions';
 import { NoteCard } from '@/components/NoteCard';
+import { announceNoteSaved } from '@/lib/suggestions/announce';
 
 export interface EntityNote {
   id: number;
@@ -297,6 +298,7 @@ export function NotesSection({
       setPinOnSubmit(false);
       setIsAdding(false);
       toast.success('Note saved.');
+      announceNoteSaved(entityType, entityId);
     } catch {
       toast.error('Failed to save note.');
     } finally {

@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { MultiSelect, CompanyPicker, OTHER_COMPANY, type CompanyOption, type ConfigOption } from '@/components/VendorRelationshipFields';
-import { SUGGESTION_TARGETS, getTarget, type SuggestionField } from '@/lib/suggestions/registry';
+import { type CompanyOption, type ConfigOption } from '@/components/VendorRelationshipFields';
+import { SUGGESTION_TARGETS, getTarget } from '@/lib/suggestions/registry';
+import { SuggestionFieldInput } from '@/components/SuggestionFieldInput';
 import { useCollapsibleSection } from '@/lib/sectionExpansion';
 
 interface Suggestion {
@@ -39,7 +40,9 @@ export function SuggestedUpdatesSection({ entityType, entityId }: {
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [expanded, setExpanded] = useCollapsibleSection(true);
+  // Collapsed by default: these are optional, and the count pill says how many
+  // are waiting without the block pushing the record's own fields down.
+  const [expanded, setExpanded] = useCollapsibleSection(false);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/suggestions?entity_type=${entityType}&entity_id=${entityId}`, { cache: 'no-store' });
@@ -99,8 +102,13 @@ export function SuggestedUpdatesSection({ entityType, entityId }: {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
         <h2 className="text-base font-semibold text-brand-primary font-serif truncate">
-          Suggested Updates ({suggestions.length})
+          Suggested Updates
         </h2>
+        {/* Amber, matching the cards inside, so the count reads as the same
+            thing whether the section is open or shut. */}
+        <span className="flex-shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+          {suggestions.length}
+        </span>
       </button>
 
       {expanded && (
@@ -173,76 +181,3 @@ export function SuggestedUpdatesSection({ entityType, entityId }: {
   );
 }
 
-/** One field, rendered as whatever the registry says it is. */
-function SuggestionFieldInput({ field, value, options, companies, onChange }: {
-  field: SuggestionField;
-  value: unknown;
-  options: ConfigOption[];
-  companies: CompanyOption[];
-  onChange: (v: unknown) => void;
-}) {
-  const [other, setOther] = useState(false);
-
-  if (field.companyRef) {
-    const name = String(value ?? '');
-    const match = companies.find(c => c.name.trim().toLowerCase() === name.trim().toLowerCase());
-    // An unmatched name is the normal case for a vendor nobody has recorded
-    // yet — it becomes a new company on accept, which is why it stays visible
-    // as typed rather than being silently blanked.
-    return (
-      <div>
-        {other || !match ? (
-          <div>
-            <label className="label text-xs">{field.label}</label>
-            <input
-              value={name}
-              onChange={e => onChange(e.target.value)}
-              className="input-field"
-              placeholder="Company name"
-            />
-            <p className="text-[11px] text-gray-400 mt-1">
-              {match ? 'Matches an existing company.' : 'No company by this name yet — accepting will create it.'}
-            </p>
-          </div>
-        ) : (
-          <CompanyPicker
-            companies={companies}
-            value={match.id}
-            onChange={id => onChange(companies.find(c => c.id === id)?.name ?? name)}
-            onPickOther={() => setOther(true)}
-            otherName={name}
-          />
-        )}
-      </div>
-    );
-  }
-
-  if (field.optionCategory) {
-    const values = Array.isArray(value) ? (value as string[]) : value ? [String(value)] : [];
-    return (
-      <MultiSelect
-        label={field.label}
-        options={options}
-        values={values}
-        onChange={v => onChange(field.multi ? v : (v[0] ?? null))}
-        placeholder={`Select ${field.label.toLowerCase()}…`}
-      />
-    );
-  }
-
-  return (
-    <div>
-      <label className="label text-xs">{field.label}</label>
-      <textarea
-        value={String(value ?? '')}
-        onChange={e => onChange(e.target.value)}
-        rows={2}
-        className="input-field resize-none"
-        placeholder={field.required ? '' : 'Optional'}
-      />
-    </div>
-  );
-}
-
-/** Re-exported so callers don't need the sentinel from two places. */
-export { OTHER_COMPANY };

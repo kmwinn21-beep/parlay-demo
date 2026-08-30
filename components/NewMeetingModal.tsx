@@ -18,6 +18,7 @@ import { AdditionalAttendeesModal, AdditionalAttendeesButton } from '@/component
 import { SendCalendarInvitePrompt } from '@/components/SendCalendarInvitePrompt';
 import { ScrollingRepPills } from '@/components/OverlappingRepPills';
 import { buildGoogleCalendarUrl, buildOutlookCalendarUrl } from '@/lib/calendarInvite';
+import { announceNoteSaved } from '@/lib/suggestions/announce';
 
 interface ConferenceOption {
   id: number;
@@ -675,6 +676,7 @@ export function NewMeetingModal({
           if (companyId) noteWork.push(post({ entity_type: 'company', entity_id: companyId, tagged_users: null, skip_notification: true }));
           noteWork.push(post({ entity_type: 'conference', entity_id: Number(selectedConferenceId), tagged_users: null, skip_notification: true }));
           await Promise.all(noteWork);
+          announceNoteSaved('attendee', Number(selectedAttendeeId));
         }
       }
 
