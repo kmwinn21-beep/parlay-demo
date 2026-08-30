@@ -11,7 +11,12 @@ import { useEffect, useRef, useState } from 'react';
  * fiddly would drift.
  */
 
-export interface CompanyOption { id: number; name: string }
+export interface CompanyOption {
+  id: number;
+  name: string;
+  /** What kind of vendor the company is — prefills the relationship's Vendor Type. */
+  sub_types?: string[];
+}
 export interface ConfigOption { id: number; value: string }
 
 /** The escape hatch's sentinel — no company id can collide with it. */

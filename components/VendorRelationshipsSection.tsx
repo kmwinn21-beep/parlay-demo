@@ -205,7 +205,7 @@ export function VendorRelationshipsSection({ companyId, userOptions, currentUser
   useEffect(() => {
     fetch('/api/companies?limit=2000').then(r => r.ok ? r.json() : []).then((d: CompanyOption[]) => {
       const list = Array.isArray(d) ? d : [];
-      setCompanies(list.filter(c => c.id !== companyId).map(c => ({ id: c.id, name: c.name })));
+      setCompanies(list.filter(c => c.id !== companyId).map(c => ({ id: c.id, name: c.name, sub_types: Array.isArray(c.sub_types) ? c.sub_types : [] })));
     }).catch(() => {});
     const loadCat = (cat: string, set: (v: ConfigOption[]) => void) =>
       fetch(`/api/config?category=${cat}`).then(r => r.ok ? r.json() : []).then((d: ConfigOption[]) =>
@@ -329,6 +329,24 @@ export function VendorRelationshipsSection({ companyId, userOptions, currentUser
         toast.error(err.error || 'Failed to save the relationship.');
         return;
       }
+      // The vendor's own Sub Type(s) follow what was chosen here, so the fact
+      // lives on the company rather than only on this relationship. Written
+      // after the relationship saves, and only when it actually differs.
+      const chosenTypes = resolveOther(formVendorType, otherVendorType);
+      if (relatedId && chosenTypes.length > 0) {
+        const existing = companies.find(c => c.id === relatedId)?.sub_types ?? [];
+        const same = existing.length === chosenTypes.length
+          && existing.every(t => chosenTypes.includes(t));
+        if (!same) {
+          await fetch(`/api/companies/${relatedId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sub_types: chosenTypes }),
+          }).catch(() => {});
+          setCompanies(prev => prev.map(c => (c.id === relatedId ? { ...c, sub_types: chosenTypes } : c)));
+        }
+      }
+
       toast.success(editingId ? 'Relationship updated.' : 'Relationship added.');
       resetForm();
       await load();
@@ -377,7 +395,18 @@ export function VendorRelationshipsSection({ companyId, userOptions, currentUser
               <CompanyPicker
                 companies={companies}
                 value={formCompanyId}
-                onChange={id => { setFormCompanyId(id); setFormNewCompanyName(''); }}
+                onChange={id => {
+                  setFormCompanyId(id);
+                  setFormNewCompanyName('');
+                  // The company already says what kind of vendor it is, so
+                  // start from that rather than making it be re-picked. Only
+                  // when nothing has been chosen here yet — this shouldn't
+                  // overwrite a deliberate choice.
+                  const picked = companies.find(c => c.id === id);
+                  if (picked?.sub_types?.length && formVendorType.length === 0) {
+                    setFormVendorType(picked.sub_types);
+                  }
+                }}
                 onPickOther={() => setFormCompanyId(OTHER_COMPANY)}
                 otherName={formNewCompanyName}
               />

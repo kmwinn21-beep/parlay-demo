@@ -2333,4 +2333,10 @@ export const migrations: string[] = [
   // earlier migration.
   `DROP INDEX IF EXISTS idx_company_rel_unique`,
   `DROP TABLE IF EXISTS company_relationships`,
+
+  // What kind of vendor a company is, drawn from the same Vendor Type list the
+  // relationship form uses. It lived only on the relationship before, so the
+  // same fact was re-stated on every relationship pointing at that company and
+  // was invisible on the company itself.
+  `ALTER TABLE companies ADD COLUMN sub_types TEXT`,
 ];
