@@ -12,6 +12,35 @@ export interface ExtractionContext {
   companyId: number;
   companyName?: string | null;
   attendeeId?: number | null;
+  /**
+   * One line saying where this came from, pre-filled into the notes field
+   * alongside the quote. Built by the caller, which is what knows who logged
+   * the note and when.
+   */
+  provenance?: string | null;
+}
+
+/**
+ * "(Extracted from note logged by Kevin Winn at NextGen Summit on Aug 24, 2026)"
+ *
+ * The conference is dropped when there isn't one rather than left as an empty
+ * gap, and the date falls back to today only if the note has no timestamp —
+ * which shouldn't happen, but a wrong-looking date is better than "Invalid
+ * Date" sitting in a field someone is about to save.
+ */
+export function noteProvenance(opts: {
+  author?: string | null;
+  conferenceName?: string | null;
+  loggedAt?: string | null;
+}): string {
+  const who = String(opts.author ?? '').trim() || 'an unknown user';
+  const where = String(opts.conferenceName ?? '').trim();
+  // SQLite stores 'YYYY-MM-DD HH:MM:SS' in UTC; make that explicit before parsing.
+  const rawDate = String(opts.loggedAt ?? '').trim();
+  const parsed = rawDate ? new Date(rawDate.includes('T') ? rawDate : `${rawDate.replace(' ', 'T')}Z`) : new Date();
+  const when = isNaN(parsed.getTime()) ? new Date() : parsed;
+  const date = when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return `(Extracted from note logged by ${who}${where ? ` at ${where}` : ''} on ${date})`;
 }
 
 export interface ProposedSuggestion {
@@ -61,7 +90,9 @@ export function buildPrompt(
   options: Map<string, string[]>,
 ): string {
   const targetSpecs = targets.map(t => {
-    const fields = t.fields.map(f => {
+    // Provenance fields are filled from the quote, not by the model — asking
+    // for them would only invite a paraphrase of what we already have.
+    const fields = t.fields.filter(f => !f.provenance).map(f => {
       const bits = [`"${f.key}"`];
       if (f.optionCategory) {
         const list = options.get(f.optionCategory) ?? [];
@@ -186,6 +217,12 @@ export function validateProposals(
     let bad: string | null = null;
 
     for (const field of target.fields) {
+      // The words this was read from, and where they came from. Written here
+      // rather than left to the model so it says what the note said.
+      if (field.provenance) {
+        payload[field.key] = ctx.provenance ? `“${quote}”\n${ctx.provenance}` : `“${quote}”`;
+        continue;
+      }
       const value = proposed[field.key];
       if (value == null || value === '' || (Array.isArray(value) && value.length === 0)) {
         if (field.required) { bad = `missing required field ${field.key}`; break; }

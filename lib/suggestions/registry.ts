@@ -33,6 +33,13 @@ export interface SuggestionField {
   multi?: boolean;
   /** Free text — never enum-checked, always shown for editing. */
   freeText?: boolean;
+  /**
+   * Pre-filled with the words this was read from and where they came from,
+   * rather than with anything the model wrote. A relationship recorded from a
+   * note should carry the sentence that justified it, so a reader a year later
+   * can weigh it without hunting for the note.
+   */
+  provenance?: boolean;
   /** Names a company by name, resolved to an id (or created) on accept. */
   companyRef?: boolean;
   /** Left null when the note doesn't say. Extractors must not guess these. */
@@ -65,7 +72,7 @@ export const SUGGESTION_TARGETS: SuggestionTarget[] = [
       { key: 'related_company_name', label: 'Company', companyRef: true, required: true },
       { key: 'relationship_status', label: 'Relationship Status', optionCategory: 'other_relationship_status', multi: true, required: true },
       { key: 'vendor_type', label: 'Vendor Type', optionCategory: 'vendor_type', multi: true },
-      { key: 'notes', label: 'Notes / Context', freeText: true },
+      { key: 'notes', label: 'Notes / Context', freeText: true, provenance: true },
     ],
     prompt:
       'Another company named as a vendor, partner, or system this company uses, '

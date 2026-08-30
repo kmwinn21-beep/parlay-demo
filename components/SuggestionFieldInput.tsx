@@ -67,7 +67,9 @@ export function SuggestionFieldInput({ field, value, options, companies, onChang
       <textarea
         value={String(value ?? '')}
         onChange={e => onChange(e.target.value)}
-        rows={2}
+        // A provenance field arrives with the quote and its source on separate
+        // lines; two rows would hide half of it behind a scroll.
+        rows={field.provenance ? 4 : 2}
         className="input-field resize-none"
         placeholder={field.required ? '' : 'Optional'}
       />

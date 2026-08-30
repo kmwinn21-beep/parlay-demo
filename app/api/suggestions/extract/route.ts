@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
-import { extractFromNote, storeSuggestions } from '@/lib/suggestions/extract';
+import { extractFromNote, storeSuggestions, noteProvenance } from '@/lib/suggestions/extract';
 import { resolveNoteCompany } from '@/lib/suggestions/noteContext';
 
 export const dynamic = 'force-dynamic';
@@ -34,10 +34,11 @@ export async function POST(request: NextRequest) {
     let companyId = body?.company_id != null ? Number(body.company_id) : 0;
     let companyName: string | null = null;
     let attendeeId: number | null = body?.attendee_id != null ? Number(body.attendee_id) : null;
+    let provenance: string | null = null;
 
     if (noteId) {
       const res = await db.execute({
-        sql: 'SELECT id, content, entity_type, entity_id FROM entity_notes WHERE id = ?',
+        sql: 'SELECT id, content, entity_type, entity_id, rep, conference_name, created_at FROM entity_notes WHERE id = ?',
         args: [noteId],
       });
       if (res.rows.length === 0) return NextResponse.json({ error: 'Note not found' }, { status: 404 });
@@ -47,6 +48,11 @@ export async function POST(request: NextRequest) {
       companyId = resolved.companyId ?? 0;
       companyName = resolved.companyName;
       attendeeId = resolved.attendeeId;
+      provenance = noteProvenance({
+        author: note.rep != null ? String(note.rep) : null,
+        conferenceName: note.conference_name != null ? String(note.conference_name) : null,
+        loggedAt: note.created_at != null ? String(note.created_at) : null,
+      });
     } else if (companyId) {
       const res = await db.execute({ sql: 'SELECT name FROM companies WHERE id = ?', args: [companyId] });
       companyName = res.rows.length > 0 ? String(res.rows[0].name) : null;
@@ -57,7 +63,7 @@ export async function POST(request: NextRequest) {
     }
     if (!content.trim()) return NextResponse.json({ error: 'No content to read' }, { status: 400 });
 
-    const result = await extractFromNote(db, { noteId, content, companyId, companyName, attendeeId });
+    const result = await extractFromNote(db, { noteId, content, companyId, companyName, attendeeId, provenance });
     const stored = dryRun ? 0 : await storeSuggestions(db, noteId, result.accepted);
 
     return NextResponse.json({

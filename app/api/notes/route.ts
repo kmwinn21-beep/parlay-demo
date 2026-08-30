@@ -10,7 +10,7 @@ import {
 } from '@/lib/notifications';
 import { trackEvent, trackFeature } from '@/lib/trackEvent';
 import { waitUntil } from '@vercel/functions';
-import { extractFromNote, storeSuggestions } from '@/lib/suggestions/extract';
+import { extractFromNote, storeSuggestions, noteProvenance } from '@/lib/suggestions/extract';
 import { resolveNoteCompany } from '@/lib/suggestions/noteContext';
 
 export async function GET(request: NextRequest) {
@@ -201,16 +201,36 @@ export async function POST(request: NextRequest) {
     if (process.env.NOTE_EXTRACTION_ENABLED === '1' && !skipExtraction(entity_type, attendee_name)) {
       const noteId = Number(row.id);
       const noteText = String(row.content ?? '');
+      const noteConference = row.conference_name != null ? String(row.conference_name) : null;
+      const noteLoggedAt = row.created_at != null ? String(row.created_at) : null;
       waitUntil((async () => {
         try {
           const ctx = await resolveNoteCompany(db, String(row.entity_type), Number(row.entity_id));
           if (!ctx.companyId) return;
+          // The author, not the note's `rep` — some flows put the person the
+          // follow-up was assigned to in that column, which is someone else.
+          let author: string = user.email;
+          try {
+            const configId = await getConfigIdByEmail(user.email, db);
+            if (configId) {
+              const nameRow = await db.execute({
+                sql: 'SELECT value FROM config_options WHERE id = ?',
+                args: [configId],
+              });
+              if (nameRow.rows.length > 0 && nameRow.rows[0].value) author = String(nameRow.rows[0].value);
+            }
+          } catch { /* the email still names them */ }
           const result = await extractFromNote(db, {
             noteId,
             content: noteText,
             companyId: ctx.companyId,
             companyName: ctx.companyName,
             attendeeId: ctx.attendeeId,
+            provenance: noteProvenance({
+              author,
+              conferenceName: noteConference,
+              loggedAt: noteLoggedAt,
+            }),
           });
           if (result.accepted.length > 0) await storeSuggestions(db, noteId, result.accepted);
         } catch (err) {
