@@ -1,7 +1,8 @@
 # Note extraction — suggesting record updates from note text
 
-Status: **Stages 1–2 built** (store, registry, API, extractor). Review UI to
-come. Written down so the reasoning survives.
+Status: **Stages 1–3 built** — store, registry, API, extractor, and the
+review section on the company record. Measurement (stage 4) still to do.
+Written down so the reasoning survives.
 
 Extraction is **off unless `NOTE_EXTRACTION_ENABLED=1`**, so it cannot quietly
 start costing anything. `POST /api/suggestions/extract` runs it on demand and

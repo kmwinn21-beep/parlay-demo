@@ -26,6 +26,7 @@ import { NewMeetingModal } from '@/components/NewMeetingModal';
 import { useUser } from '@/components/UserContext';
 import { InternalRelationshipsSection } from '@/components/InternalRelationshipsSection';
 import { VendorRelationshipsSection } from '@/components/VendorRelationshipsSection';
+import { SuggestedUpdatesSection } from '@/components/SuggestedUpdatesSection';
 import { SectionJumpMenu } from '@/components/SectionJumpMenu';
 import { useCollapsibleSection, setAllSections, useAnySectionExpanded } from '@/lib/sectionExpansion';
 import { useSectionConfig } from '@/lib/useSectionConfig';
@@ -1719,6 +1720,10 @@ export default function CompanyDetailPage() {
 
         {/* Right column */}
         <div className="space-y-6">
+          {/* Above the configured sections rather than inside them: this is
+              work waiting to be done, not a permanent part of the record, and
+              it disappears once there is nothing pending. */}
+          <SuggestedUpdatesSection entityType="company" entityId={Number(id)} />
           {(() => {
             const sectionMap: Record<string, React.ReactNode> = {
               status: (
