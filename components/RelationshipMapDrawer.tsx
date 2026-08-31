@@ -630,6 +630,10 @@ export function RelationshipMapDrawer({
                   company={companyGroup}
                   vendorLabel={vendorLabel}
                   readOnly
+                  // Stacked here whatever the width: a drawer is a column, and
+                  // side-by-side pushed the vendor cards off the right edge
+                  // behind a horizontal scrollbar.
+                  stacked
                 />
               )}
             </div>

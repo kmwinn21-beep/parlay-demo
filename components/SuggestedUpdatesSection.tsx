@@ -114,6 +114,7 @@ export function SuggestedUpdatesSection({ entityType, entityId }: {
             <SuggestionGroupCard
               key={group.key}
               index={i + 1}
+              collapsible
               group={{ ...group, draft: { ...group.draft, ...(edits[group.key] ?? {}) } }}
               options={options}
               companies={companies}
