@@ -495,6 +495,8 @@ const CLOSE_BTN = (
 
 /** Internal column + two vendor cards + the gap between them + p-4 either side. */
 const DEFAULT_MAP_W = INTERNAL_CARD_W + 16 + VENDOR_AREA_W + 32;
+/** Below this the two columns no longer fit, so the sections stack instead. */
+const COLUMNS_MIN_W = INTERNAL_CARD_W + 16 + VENDOR_AREA_W;
 
 export function RelationshipMapDrawer({
   relationships,
@@ -521,6 +523,35 @@ export function RelationshipMapDrawer({
   // the default view needs no horizontal scrolling. Still draggable down to
   // 520, which is where this drawer used to sit.
   const { panelStyle, handleResizeStart } = useDrawerResize(DEFAULT_MAP_W, 520, 1400);
+
+  /**
+   * Two columns or one, decided by the room actually available.
+   *
+   * The side-by-side layout needs the internal column plus the vendor area;
+   * below that the vendor cards run off the right edge behind a horizontal
+   * scrollbar, which is what a phone and a narrowed drawer both hit. Measured
+   * rather than assumed, so resizing the drawer re-decides it.
+   */
+  // A callback ref, not a plain one: this element only exists once the
+  // relationships have loaded, so an effect keyed on mount finds nothing there
+  // and never looks again.
+  const [bodyEl, setBodyEl] = useState<HTMLDivElement | null>(null);
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const el = bodyEl;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    // The panel keeps its own width even when that is wider than the screen,
+    // so the room actually available is whichever of the two is smaller.
+    const check = () => {
+      const room = Math.min(el.clientWidth || Number.POSITIVE_INFINITY, window.innerWidth);
+      setNarrow(room < COLUMNS_MIN_W);
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    window.addEventListener('resize', check);
+    return () => { ro.disconnect(); window.removeEventListener('resize', check); };
+  }, [bodyEl]);
 
   useEffect(() => {
     if (!companyId) return;
@@ -624,16 +655,13 @@ export function RelationshipMapDrawer({
               </div>
             </div>
           ) : (
-            <div className="flex-1 overflow-auto p-4">
+            <div ref={setBodyEl} className="flex-1 overflow-auto p-4">
               {companyGroup && (
                 <CompanyRelationshipColumns
                   company={companyGroup}
                   vendorLabel={vendorLabel}
                   readOnly
-                  // Stacked here whatever the width: a drawer is a column, and
-                  // side-by-side pushed the vendor cards off the right edge
-                  // behind a horizontal scrollbar.
-                  stacked
+                  stacked={narrow}
                 />
               )}
             </div>

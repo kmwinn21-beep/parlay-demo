@@ -181,7 +181,7 @@ export function scanForCompany<T extends ScannableCompany>(text: string, compani
 export function scanForAttendee<T extends ScannableAttendee>(
   text: string,
   attendees: T[],
-  companyHint?: { id: number } | null,
+  companyHint?: { id: number; name?: string } | null,
 ): T | null {
   const haystack = ` ${text.toLowerCase()} `;
   const has = (w: string) => !!w && (haystack.includes(` ${w.toLowerCase()} `) || haystack.includes(` ${w.toLowerCase()}'`) || haystack.includes(` ${w.toLowerCase()},`) || haystack.includes(` ${w.toLowerCase()}.`));
@@ -195,7 +195,13 @@ export function scanForAttendee<T extends ScannableAttendee>(
   const narrow = (list: T[]): T | null => {
     if (list.length === 1) return list[0];
     if (list.length > 1 && companyHint) {
-      const atCompany = list.filter(a => a.company_id === companyHint.id);
+      // By name as well as id: the same company is often on file twice after
+      // imports and badge scans, and the row a note resolves to need not be
+      // the row an attendee hangs off.
+      const hintName = companyHint.name?.trim().toLowerCase();
+      const atCompany = list.filter(a =>
+        a.company_id === companyHint.id
+        || (!!hintName && a.company_name?.trim().toLowerCase() === hintName));
       if (atCompany.length === 1) return atCompany[0];
       // Two badge scans of the same person leave two identical records. The
       // oldest is the one other things are most likely already hanging off.

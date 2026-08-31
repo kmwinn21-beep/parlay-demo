@@ -123,6 +123,20 @@ function AddNoteModal({ onClose, onSave }: { onClose: () => void; onSave: (conte
  * the field is changed — a pill still claiming a suggestion over a value
  * somebody typed themselves would be a lie.
  */
+/**
+ * Whether an attendee belongs to this company.
+ *
+ * By name as well as by id, because the same company is often on file twice
+ * after imports and badge scans — and then the row a note resolves to is not
+ * the row the attendee happens to hang off, so matching on id alone quietly
+ * finds nobody.
+ */
+function sameCompany(a: Attendee, comp: Company): boolean {
+  if (a.company_id != null && a.company_id === comp.id) return true;
+  const an = a.company_name?.trim().toLowerCase();
+  return !!an && an === comp.name.trim().toLowerCase();
+}
+
 function SuggestedPill() {
   return (
     <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 normal-case tracking-normal">
@@ -148,6 +162,12 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingConf, setLoadingConf] = useState(false);
+  /**
+   * Where the conference pre-fill has got to. The reading of the note waits on
+   * this, because the conference is what supplies the attendee list it is
+   * matched against.
+   */
+  const [confStage, setConfStage] = useState<'pending' | 'loading' | 'ready' | 'none'>('pending');
 
   // "Other (not in list)" — create the company and/or attendee on assign, the
   // same way a public conference form does when someone isn't on the list.
@@ -233,11 +253,13 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
       : undefined;
     const match = tagged ?? (activeConference ? filteredConferences.find(c => c.id === activeConference.id) : undefined);
     if (match) void handleConferenceChange(match);
+    else setConfStage('none');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConference, filteredConferences.length, selConference, note.conference_id]);
 
   const handleConferenceChange = useCallback(async (conf: Conference | null) => {
     setSelConference(conf); setSelAttendee(null);
+    setConfStage(conf ? 'loading' : 'none');
     if (!conf) {
       setConferenceAttendees([]);
       if (selCompany) {
@@ -267,10 +289,18 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
       }
     } catch { toast.error('Failed to load conference attendees.'); }
     setLoadingConf(false);
+    setConfStage('ready');
   }, [selCompany, allAttendees, allCompanies]);
 
-  const handleCompanyChange = useCallback((comp: Company | null) => {
-    setTouched(p => ({ ...p, company: true }));
+  /**
+   * Select a company and narrow the attendee list to it.
+   *
+   * Split out from the change handler because a suggested company has to go
+   * through exactly this — the narrowing is what makes the attendee dropdown
+   * show the two people at that company rather than the whole conference —
+   * while not being recorded as a choice the person made themselves.
+   */
+  const selectCompany = useCallback((comp: Company | null) => {
     setCompanyIsOther(false);
     setSelCompany(comp); setSelAttendee(null);
     const sourceAtts = selConference ? conferenceAttendees : allAttendees;
@@ -283,7 +313,7 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
       }
       return;
     }
-    setFilteredAttendees(sourceAtts.filter(a => a.company_id === comp.id));
+    setFilteredAttendees(sourceAtts.filter(a => sameCompany(a, comp)));
     if (!selConference) {
       // Narrow conferences to those that have any of this company's attendees
       const compAttIds = new Set(allAttendees.filter(a => a.company_id === comp.id).map(a => a.id));
@@ -292,6 +322,11 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
       }
     }
   }, [selConference, conferenceAttendees, allAttendees, allCompanies]);
+
+  const handleCompanyChange = useCallback((comp: Company | null) => {
+    setTouched(p => ({ ...p, company: true }));
+    selectCompany(comp);
+  }, [selectCompany]);
 
   const handleAttendeeChange = useCallback((att: Attendee | null) => {
     setTouched(p => ({ ...p, attendee: true }));
@@ -311,14 +346,16 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
    * name and company, and guessing over the top of a scan would be worse than
    * leaving it alone.
    *
-   * Matched against the full lists rather than the conference-narrowed ones —
-   * an attendee recorded but not yet linked to this conference is still the
-   * person the note means, and the dropdowns below merge whatever is found
-   * back in so it stays selectable either way.
+   * Waits for the conference to settle first. The conference load is what
+   * fills `conferenceAttendees`, and running before it means matching a first
+   * name against every attendee in the account rather than the handful at this
+   * event — far more ways to be ambiguous, and ambiguity here means no
+   * suggestion at all.
    */
   useEffect(() => {
     if (scanned.current || loading) return;
     if (note.tag === 'card-badge') return;
+    if (confStage === 'pending' || confStage === 'loading') return;
     if (allCompanies.length === 0 && allAttendees.length === 0) return;
     scanned.current = true;
 
@@ -327,16 +364,26 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
     // apart — "Tina from Mission" is the Tina at Mission Health, and duplicate
     // attendee records are ordinary after a couple of badge scans.
     const named = scanForCompany(text, allCompanies);
-    // Someone at this conference is the better answer when there is one.
-    const att = scanForAttendee(text, conferenceAttendees, named)
+
+    // Widening pools, narrowest first. Picking the company and watching the
+    // attendee list shrink to the two people who work there is exactly how
+    // somebody does this by hand, and it resolves names that are ambiguous
+    // across the whole account.
+    const atNamedCompany = named
+      ? conferenceAttendees.filter(a => sameCompany(a, named))
+      : [];
+    const att = scanForAttendee(text, atNamedCompany, named)
+      ?? scanForAttendee(text, conferenceAttendees, named)
+      ?? scanForAttendee(text, allAttendees.filter(a => !named || sameCompany(a, named)), named)
       ?? scanForAttendee(text, allAttendees, named);
+
     // A named company is the note's own evidence and wins; an attendee's
     // employer fills in when the note named nobody's company outright.
     const comp = named
       ?? (att?.company_id != null ? allCompanies.find(c => c.id === att.company_id) ?? null : null);
     const act = scanForAction(text, followUpActions);
     setScan({ company: comp, attendee: att, action: act?.value ?? null });
-  }, [loading, note.tag, note.content, allCompanies, allAttendees, conferenceAttendees, followUpActions]);
+  }, [loading, confStage, note.tag, note.content, allCompanies, allAttendees, conferenceAttendees, followUpActions]);
 
   /**
    * Put the reading into the form, and keep it there.
@@ -348,10 +395,10 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
    */
   useEffect(() => {
     if (!scan || loadingConf) return;
-    if (scan.company && !touched.company && !selCompany && !companyIsOther) setSelCompany(scan.company);
+    if (scan.company && !touched.company && !selCompany && !companyIsOther) selectCompany(scan.company);
     if (scan.attendee && !touched.attendee && !selAttendee && !attendeeIsOther) setSelAttendee(scan.attendee);
     if (scan.action && !touched.action && !followUpAction) setFollowUpAction(scan.action);
-  }, [scan, loadingConf, touched, selCompany, selAttendee, followUpAction, companyIsOther, attendeeIsOther]);
+  }, [scan, loadingConf, touched, selCompany, selAttendee, followUpAction, companyIsOther, attendeeIsOther, selectCompany]);
 
   // A suggested record has to be in its own dropdown to be shown as chosen —
   // narrowing to a conference would otherwise hide the very record the note
@@ -361,11 +408,21 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
       ? [scan.company, ...filteredCompanies]
       : filteredCompanies
   ), [scan, filteredCompanies]);
-  const attendeeOptions = useMemo(() => (
-    scan?.attendee && !filteredAttendees.some(a => a.id === scan.attendee!.id)
-      ? [scan.attendee, ...filteredAttendees]
-      : filteredAttendees
-  ), [scan, filteredAttendees]);
+  /**
+   * Who the attendee dropdown offers.
+   *
+   * Derived rather than stored. The narrowing to a selected company used to be
+   * written into state, and anything that finished loading afterwards — the
+   * conference fetch, a second pass of the initial load — wrote the full list
+   * straight back over it, leaving a company selected beside every attendee in
+   * the account. Computing it here means nothing can widen it again.
+   */
+  const attendeeOptions = useMemo(() => {
+    const scoped = selCompany ? filteredAttendees.filter(a => sameCompany(a, selCompany)) : filteredAttendees;
+    return scan?.attendee && !scoped.some(a => a.id === scan.attendee!.id)
+      ? [scan.attendee, ...scoped]
+      : scoped;
+  }, [scan, filteredAttendees, selCompany]);
 
   // The pill only sits over a value that is still the one suggested.
   const suggested = {
