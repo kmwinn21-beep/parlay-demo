@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { MultiSelect, type CompanyOption, type ConfigOption } from '@/components/VendorRelationshipFields';
 import type { SuggestionField } from '@/lib/suggestions/registry';
+import { findExact, findNearMatches } from '@/lib/suggestions/companyMatch';
 
 /**
  * The company a suggestion names — searchable, and correctable.
@@ -31,7 +32,8 @@ function CompanyField({ label, name, companies, onChange }: {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
-  const match = companies.find(c => c.name.trim().toLowerCase() === name.trim().toLowerCase());
+  const match = findExact(name, companies);
+  const nearMatches = match ? [] : findNearMatches(name, companies);
   // While searching, the box shows the search; otherwise it shows the value.
   const shown = query ?? name;
   const q = shown.trim().toLowerCase();
@@ -84,6 +86,23 @@ function CompanyField({ label, name, companies, onChange }: {
           </div>
         )}
       </div>
+      {/* Offered, not applied: "Advent Health" may or may not be the same
+          company as "AdventHealth Castle Rock", and only a person knows. */}
+      {nearMatches.length > 0 && (
+        <div className="mt-1 flex flex-wrap items-center gap-1">
+          <span className="text-[11px] text-gray-500">Did you mean</span>
+          {nearMatches.map(c => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => pick(c.name)}
+              className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-white text-brand-secondary border border-gray-200 hover:bg-gray-50"
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
       <p className="text-[11px] text-gray-400 mt-1">
         {match ? 'Matches an existing company.' : 'No company by this name yet — accepting will create it.'}
       </p>

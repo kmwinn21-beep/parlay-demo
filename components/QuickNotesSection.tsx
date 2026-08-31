@@ -1,7 +1,7 @@
 'use client';
 
 import { useMobileCollapse } from '@/lib/useMobileCollapse';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { BatchCardScanModal, makeCard, type ScannedCard, type CardDraft } from './BatchCardScanModal';
@@ -12,6 +12,11 @@ import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
 import { resolveProductRelevance, type ProductRelevanceResult } from '@/lib/productRelevance';
 import { ProductRelevanceSection } from './ProductRelevanceSection';
+import { RepMultiSelect } from '@/components/RepMultiSelect';
+import { useUserOptions } from '@/lib/useUserOptions';
+import { useFollowUpActions } from '@/lib/useFollowUpActions';
+import { scanForAttendee, scanForCompany, scanForAction } from '@/lib/suggestions/noteScan';
+import { announceNoteSaved } from '@/lib/suggestions/announce';
 
 interface QuickNote {
   id: number;
@@ -110,6 +115,36 @@ function AddNoteModal({ onClose, onSave }: { onClose: () => void; onSave: (conte
   );
 }
 
+/**
+ * Marks a value the system proposed rather than the person chose.
+ *
+ * Amber, matching every other suggestion surface in the app, so "the computer
+ * guessed this" reads the same wherever it appears. It disappears the moment
+ * the field is changed — a pill still claiming a suggestion over a value
+ * somebody typed themselves would be a lie.
+ */
+/**
+ * Whether an attendee belongs to this company.
+ *
+ * By name as well as by id, because the same company is often on file twice
+ * after imports and badge scans — and then the row a note resolves to is not
+ * the row the attendee happens to hang off, so matching on id alone quietly
+ * finds nobody.
+ */
+function sameCompany(a: Attendee, comp: Company): boolean {
+  if (a.company_id != null && a.company_id === comp.id) return true;
+  const an = a.company_name?.trim().toLowerCase();
+  return !!an && an === comp.name.trim().toLowerCase();
+}
+
+function SuggestedPill() {
+  return (
+    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 normal-case tracking-normal">
+      Suggested
+    </span>
+  );
+}
+
 // ── Assign Note Modal ─────────────────────────────────────────────────────────
 function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClose: () => void; onAssigned: (id: number) => void }) {
   const { user } = useUser();
@@ -127,6 +162,12 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingConf, setLoadingConf] = useState(false);
+  /**
+   * Where the conference pre-fill has got to. The reading of the note waits on
+   * this, because the conference is what supplies the attendee list it is
+   * matched against.
+   */
+  const [confStage, setConfStage] = useState<'pending' | 'loading' | 'ready' | 'none'>('pending');
 
   // "Other (not in list)" — create the company and/or attendee on assign, the
   // same way a public conference form does when someone isn't on the list.
@@ -135,6 +176,30 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
   const [newCompanyType, setNewCompanyType] = useState('');
   const [companyTypeOptions, setCompanyTypeOptions] = useState<string[]>([]);
   const [attendeeIsOther, setAttendeeIsOther] = useState(false);
+
+  // What the note was read as. Held rather than fired straight into the form:
+  // the conference load runs asynchronously and rewrites the filtered lists
+  // and the selected attendee when it lands, so a one-shot write races it and
+  // loses. Keeping the result lets it be re-asserted once things settle.
+  const [scan, setScan] = useState<{ company: Company | null; attendee: Attendee | null; action: string | null } | null>(null);
+  // Fields the person has decided for themselves. Nothing is ever re-applied
+  // over one of these, and the pill comes off.
+  const [touched, setTouched] = useState<{ company: boolean; attendee: boolean; action: boolean }>(
+    { company: false, attendee: false, action: false },
+  );
+  const scanned = useRef(false);
+
+  // Follow-up, asked rather than assumed: assigning a floor note has never
+  // created one, so it only happens when somebody says yes here.
+  const userOptions = useUserOptions();
+  const followUpActions = useFollowUpActions();
+  // Yes by default: a floor note is a conversation someone had, and the
+  // common case is that it wants following up. No is one click away, and
+  // nothing is created without an attendee to hang it off regardless.
+  const [createFollowUp, setCreateFollowUp] = useState(true);
+  const [followUpAction, setFollowUpAction] = useState('');
+  const [followUpRepIds, setFollowUpRepIds] = useState<number[]>([]);
+
   const [manualFirst, setManualFirst] = useState('');
   const [manualLast, setManualLast] = useState('');
   const [manualTitle, setManualTitle] = useState('');
@@ -178,16 +243,23 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
     load();
   }, []);
 
-  // Pre-populate conference from active context once data loads
+  // Pre-populate the conference: the one this note is tagged with, and only
+  // then the one being viewed. A note carrying its own tag was attributed
+  // deliberately, so the tag outranks whatever is open on screen.
   useEffect(() => {
-    if (selConference || !activeConference || filteredConferences.length === 0) return;
-    const match = filteredConferences.find(c => c.id === activeConference.id);
+    if (selConference || filteredConferences.length === 0) return;
+    const tagged = note.conference_id != null
+      ? filteredConferences.find(c => c.id === note.conference_id)
+      : undefined;
+    const match = tagged ?? (activeConference ? filteredConferences.find(c => c.id === activeConference.id) : undefined);
     if (match) void handleConferenceChange(match);
+    else setConfStage('none');
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeConference, filteredConferences.length, selConference]);
+  }, [activeConference, filteredConferences.length, selConference, note.conference_id]);
 
   const handleConferenceChange = useCallback(async (conf: Conference | null) => {
     setSelConference(conf); setSelAttendee(null);
+    setConfStage(conf ? 'loading' : 'none');
     if (!conf) {
       setConferenceAttendees([]);
       if (selCompany) {
@@ -217,9 +289,18 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
       }
     } catch { toast.error('Failed to load conference attendees.'); }
     setLoadingConf(false);
+    setConfStage('ready');
   }, [selCompany, allAttendees, allCompanies]);
 
-  const handleCompanyChange = useCallback((comp: Company | null) => {
+  /**
+   * Select a company and narrow the attendee list to it.
+   *
+   * Split out from the change handler because a suggested company has to go
+   * through exactly this — the narrowing is what makes the attendee dropdown
+   * show the two people at that company rather than the whole conference —
+   * while not being recorded as a choice the person made themselves.
+   */
+  const selectCompany = useCallback((comp: Company | null) => {
     setCompanyIsOther(false);
     setSelCompany(comp); setSelAttendee(null);
     const sourceAtts = selConference ? conferenceAttendees : allAttendees;
@@ -232,7 +313,7 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
       }
       return;
     }
-    setFilteredAttendees(sourceAtts.filter(a => a.company_id === comp.id));
+    setFilteredAttendees(sourceAtts.filter(a => sameCompany(a, comp)));
     if (!selConference) {
       // Narrow conferences to those that have any of this company's attendees
       const compAttIds = new Set(allAttendees.filter(a => a.company_id === comp.id).map(a => a.id));
@@ -242,7 +323,13 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
     }
   }, [selConference, conferenceAttendees, allAttendees, allCompanies]);
 
+  const handleCompanyChange = useCallback((comp: Company | null) => {
+    setTouched(p => ({ ...p, company: true }));
+    selectCompany(comp);
+  }, [selectCompany]);
+
   const handleAttendeeChange = useCallback((att: Attendee | null) => {
+    setTouched(p => ({ ...p, attendee: true }));
     setAttendeeIsOther(false);
     setSelAttendee(att);
     if (!att) return;
@@ -251,6 +338,103 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
       if (comp) { setSelCompany(comp); setFilteredCompanies([comp]); }
     }
   }, [selCompany, allCompanies]);
+
+  /**
+   * Read the note against what the account already holds, once.
+   *
+   * Skipped for badge and business-card scans: those already carry a parsed
+   * name and company, and guessing over the top of a scan would be worse than
+   * leaving it alone.
+   *
+   * Waits for the conference to settle first. The conference load is what
+   * fills `conferenceAttendees`, and running before it means matching a first
+   * name against every attendee in the account rather than the handful at this
+   * event — far more ways to be ambiguous, and ambiguity here means no
+   * suggestion at all.
+   */
+  useEffect(() => {
+    if (scanned.current || loading) return;
+    if (note.tag === 'card-badge') return;
+    if (confStage === 'pending' || confStage === 'loading') return;
+    if (allCompanies.length === 0 && allAttendees.length === 0) return;
+    scanned.current = true;
+
+    const text = note.content ?? '';
+    // The company first, because it is what tells two people of the same name
+    // apart — "Tina from Mission" is the Tina at Mission Health, and duplicate
+    // attendee records are ordinary after a couple of badge scans.
+    const named = scanForCompany(text, allCompanies);
+
+    // Widening pools, narrowest first. Picking the company and watching the
+    // attendee list shrink to the two people who work there is exactly how
+    // somebody does this by hand, and it resolves names that are ambiguous
+    // across the whole account.
+    const atNamedCompany = named
+      ? conferenceAttendees.filter(a => sameCompany(a, named))
+      : [];
+    const att = scanForAttendee(text, atNamedCompany, named)
+      ?? scanForAttendee(text, conferenceAttendees, named)
+      ?? scanForAttendee(text, allAttendees.filter(a => !named || sameCompany(a, named)), named)
+      ?? scanForAttendee(text, allAttendees, named);
+
+    // A named company is the note's own evidence and wins; an attendee's
+    // employer fills in when the note named nobody's company outright.
+    const comp = named
+      ?? (att?.company_id != null ? allCompanies.find(c => c.id === att.company_id) ?? null : null);
+    const act = scanForAction(text, followUpActions);
+    setScan({ company: comp, attendee: att, action: act?.value ?? null });
+  }, [loading, confStage, note.tag, note.content, allCompanies, allAttendees, conferenceAttendees, followUpActions]);
+
+  /**
+   * Put the reading into the form, and keep it there.
+   *
+   * Re-asserted rather than applied once, because loading a conference clears
+   * the selected attendee and rewrites both filtered lists — a single write
+   * racing that simply disappears. A field the person has touched is never
+   * written over.
+   */
+  useEffect(() => {
+    if (!scan || loadingConf) return;
+    if (scan.company && !touched.company && !selCompany && !companyIsOther) selectCompany(scan.company);
+    if (scan.attendee && !touched.attendee && !selAttendee && !attendeeIsOther) setSelAttendee(scan.attendee);
+    if (scan.action && !touched.action && !followUpAction) setFollowUpAction(scan.action);
+  }, [scan, loadingConf, touched, selCompany, selAttendee, followUpAction, companyIsOther, attendeeIsOther, selectCompany]);
+
+  // A suggested record has to be in its own dropdown to be shown as chosen —
+  // narrowing to a conference would otherwise hide the very record the note
+  // named, leaving the field looking empty while a value was set.
+  const companyOptions = useMemo(() => (
+    scan?.company && !filteredCompanies.some(c => c.id === scan.company!.id)
+      ? [scan.company, ...filteredCompanies]
+      : filteredCompanies
+  ), [scan, filteredCompanies]);
+  /**
+   * Who the attendee dropdown offers.
+   *
+   * Derived rather than stored. The narrowing to a selected company used to be
+   * written into state, and anything that finished loading afterwards — the
+   * conference fetch, a second pass of the initial load — wrote the full list
+   * straight back over it, leaving a company selected beside every attendee in
+   * the account. Computing it here means nothing can widen it again.
+   */
+  const attendeeOptions = useMemo(() => {
+    const scoped = selCompany ? filteredAttendees.filter(a => sameCompany(a, selCompany)) : filteredAttendees;
+    return scan?.attendee && !scoped.some(a => a.id === scan.attendee!.id)
+      ? [scan.attendee, ...scoped]
+      : scoped;
+  }, [scan, filteredAttendees, selCompany]);
+
+  // The pill only sits over a value that is still the one suggested.
+  const suggested = {
+    company: !touched.company && !!scan?.company && selCompany?.id === scan.company.id,
+    attendee: !touched.attendee && !!scan?.attendee && selAttendee?.id === scan.attendee.id,
+    action: !touched.action && !!scan?.action && followUpAction === scan.action,
+  };
+
+  // The person logging the note owns the follow-up unless they say otherwise.
+  useEffect(() => {
+    if (createFollowUp && followUpRepIds.length === 0 && user?.configId) setFollowUpRepIds([user.configId]);
+  }, [createFollowUp, followUpRepIds.length, user?.configId]);
 
   const newCompanyReady = companyIsOther && newCompanyName.trim().length > 0;
   const newAttendeeReady = attendeeIsOther && manualFirst.trim().length > 0 && manualLast.trim().length > 0;
@@ -304,6 +488,10 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
         if (created.company_name) companyName = String(created.company_name);
       }
 
+      // A follow-up needs both an attendee and a conference to hang off, so
+      // it is only asked for when both are set.
+      const wantsFollowUp = createFollowUp && !!attendeeId && !!selConference;
+
       const res = await fetch(`/api/quick-notes/${note.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -311,10 +499,19 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
           attendee_id: attendeeId, conference_name: selConference?.name ?? null,
           company_name: companyName,
           attendee_name: attendeeName,
+          create_follow_up: wantsFollowUp,
+          // Blank is a real answer here — a follow-up with no action, exactly
+          // as one created by hand with the field left alone.
+          follow_up_action: wantsFollowUp ? (followUpAction || null) : null,
+          follow_up_rep_ids: wantsFollowUp ? followUpRepIds : [],
         }),
       });
       if (!res.ok) throw new Error();
-      toast.success('Note assigned successfully.');
+      toast.success(wantsFollowUp ? 'Note assigned and follow-up created.' : 'Note assigned successfully.');
+      // Whatever else the note said is read after this, never before: the note
+      // is the thing that must land, and suggestions are upside.
+      announceNoteSaved('attendee', attendeeId);
+      if (!attendeeId) announceNoteSaved('company', companyId);
       onAssigned(note.id);
     } catch (err) {
       const which = err instanceof Error ? err.message : '';
@@ -349,7 +546,9 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
                 <SearchableSelect options={filteredConferences} value={selConference} onChange={handleConferenceChange} getLabel={c => c.name} placeholder="Select a conference…" />
               </div>
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Company</label>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                  Company{suggested.company && <SuggestedPill />}
+                </label>
                 {companyIsOther ? (
                   <div className="space-y-2">
                     <input
@@ -381,10 +580,10 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
                   </div>
                 ) : (
                   <GroupedCompanyDropdown
-                    companies={filteredCompanies}
+                    companies={companyOptions}
                     value={selCompany?.id ?? null}
                     onChange={(id, _name) => {
-                      const comp = filteredCompanies.find(c => c.id === id) ?? allCompanies.find(c => c.id === id) ?? null;
+                      const comp = companyOptions.find(c => c.id === id) ?? allCompanies.find(c => c.id === id) ?? null;
                       handleCompanyChange(comp);
                     }}
                     onClear={() => handleCompanyChange(null)}
@@ -395,7 +594,9 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
                 )}
               </div>
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Attendee</label>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                  Attendee{suggested.attendee && <SuggestedPill />}
+                </label>
                 {loadingConf ? (
                   <div className="flex items-center gap-2 py-2 px-3 text-xs text-gray-400">
                     <div className="animate-spin w-3.5 h-3.5 border-2 border-brand-secondary border-t-transparent rounded-full" />
@@ -423,7 +624,7 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
                   </div>
                 ) : (
                   <SearchableSelect
-                    options={filteredAttendees}
+                    options={attendeeOptions}
                     value={selAttendee}
                     onChange={handleAttendeeChange}
                     getLabel={a => `${a.first_name} ${a.last_name}`}
@@ -432,6 +633,73 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
                   />
                 )}
               </div>
+              {/* Asked, never assumed — assigning a floor note has never created
+                  a follow-up, so nothing here happens without a yes. Only
+                  offered once there is an attendee to hang one off. */}
+              {(selAttendee || newAttendeeReady) && (
+                <div className="border-t border-gray-100 pt-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      Create Follow Up for {selAttendee ? `${selAttendee.first_name} ${selAttendee.last_name}` : `${manualFirst.trim()} ${manualLast.trim()}`.trim()}?
+                    </span>
+                    <div className="flex gap-1.5 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setCreateFollowUp(true)}
+                        className={`text-xs font-medium px-3 py-1 rounded-lg border transition-colors ${
+                          createFollowUp
+                            ? 'bg-brand-primary text-white border-brand-primary'
+                            : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        Yes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCreateFollowUp(false)}
+                        className={`text-xs font-medium px-3 py-1 rounded-lg border transition-colors ${
+                          !createFollowUp
+                            ? 'bg-brand-primary text-white border-brand-primary'
+                            : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        No
+                      </button>
+                    </div>
+                  </div>
+
+                  {createFollowUp && (
+                    <div className="mt-3 space-y-3">
+                      <div>
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                          Follow Up Action{suggested.action && !!followUpAction && <SuggestedPill />}
+                        </label>
+                        <select
+                          value={followUpAction}
+                          onChange={e => { setFollowUpAction(e.target.value); setTouched(p => ({ ...p, action: true })); }}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white"
+                        >
+                          <option value="">No action</option>
+                          {followUpActions.map(a => <option key={a.id} value={a.value}>{a.value}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Assign To</label>
+                        <RepMultiSelect
+                          options={userOptions}
+                          selectedIds={followUpRepIds}
+                          onChange={setFollowUpRepIds}
+                          triggerClass="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white text-left flex items-center justify-between gap-1"
+                        />
+                      </div>
+                      {!selConference && (
+                        <p className="text-xs text-amber-600">Pick a conference — a follow-up is created against one.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {newAttendeeBlocked
                 ? <p className="text-xs text-amber-600">Pick a conference first — new attendees are added to one.</p>
                 : canSave

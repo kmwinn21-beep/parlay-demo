@@ -44,6 +44,28 @@ export interface SuggestionField {
   companyRef?: boolean;
   /** Left null when the note doesn't say. Extractors must not guess these. */
   required?: boolean;
+  /**
+   * Required, but a reviewer can supply it — so failing to resolve it does not
+   * throw the suggestion away.
+   *
+   * Without this, one unmapped word destroys an otherwise correct extraction:
+   * a note saying "considering New Lesley" that comes back with a status of
+   * "Considering" fails the enum check, and because the field is required the
+   * whole proposal is dropped — company, quote and all — with nothing shown to
+   * anyone. The reviewer has the dropdown open in front of them; a card with a
+   * blank status is worth far more than silence.
+   *
+   * Only for fields that are not what the suggestion is *about*. A sub type
+   * suggestion with no sub type has nothing to say, so that one stays fatal.
+   */
+  reviewerCanFill?: boolean;
+  /**
+   * How the language of a note maps onto this field's options, as
+   * `{ option: [phrases] }`. Only entries whose option exists in the account's
+   * live list are sent, so a hint can never name a value the model isn't
+   * allowed to use.
+   */
+  optionHints?: Record<string, string[]>;
 }
 
 export interface SuggestionTarget {
@@ -70,15 +92,34 @@ export const SUGGESTION_TARGETS: SuggestionTarget[] = [
     table: 'vendor_relationships',
     fields: [
       { key: 'related_company_name', label: 'Company', companyRef: true, required: true },
-      { key: 'relationship_status', label: 'Relationship Status', optionCategory: 'other_relationship_status', multi: true, required: true },
+      {
+        key: 'relationship_status',
+        label: 'Relationship Status',
+        optionCategory: 'other_relationship_status',
+        multi: true,
+        required: true,
+        reviewerCanFill: true,
+        // Conference shorthand, not the option names. Nobody writes
+        // "Evaluating" in a note; they write "considering" or "looking at".
+        optionHints: {
+          Evaluating: ['considering', 'looking at', 'evaluating', 'demoing', 'in conversations with', 'exploring'],
+          'Current Vendor': ['uses', 'using', 'on', 'live on', 'renewing', 'up for renewal', 'across portfolio'],
+          'Active Pilot': ['piloting', 'trialling', 'trialing', 'running a POC', 'testing'],
+          'Former Vendor': ['left', 'leaving', 'ripping out', 'sunsetting', 'transitioning off', 'replaced', 'dropped'],
+        },
+      },
       { key: 'vendor_type', label: 'Vendor Type', optionCategory: 'vendor_type', multi: true },
       { key: 'notes', label: 'Notes / Context', freeText: true, provenance: true },
     ],
     prompt:
       'Another company named as a vendor, partner, or system this company uses, '
       + 'is evaluating, or has stopped using. Name the other company exactly as the '
-      + 'note writes it. Do not infer a relationship from a company merely being '
-      + 'mentioned — the note must say they use it, are evaluating it, or left it.',
+      + 'note writes it. Notes are written in shorthand, so the phrasing to look for '
+      + 'includes: considering, looking at, evaluating, demoing, in conversations with, '
+      + 'piloting, using, on, live on, renewing, up for renewal, switching to, going with, '
+      + 'leaving, ripping out, sunsetting, transitioning off, replaced. Do not infer a '
+      + 'relationship from a company merely being mentioned in passing — but any of the '
+      + 'above counts as the note saying so.',
   },
   {
     key: 'company_sub_types',

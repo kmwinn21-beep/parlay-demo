@@ -232,6 +232,13 @@ export async function POST(request: NextRequest) {
               loggedAt: noteLoggedAt,
             }),
           });
+          // Rejections are the only record of an extraction that was read and
+          // then thrown away — without this a suggestion that never appears
+          // leaves no trace anywhere to explain why.
+          if (result.rejected.length > 0) {
+            console.warn('[suggestions] note %d: rejected %d proposal(s):', noteId,
+              result.rejected.length, result.rejected.map(r => `${r.target_key}: ${r.reason}`));
+          }
           if (result.accepted.length > 0) await storeSuggestions(db, noteId, result.accepted);
         } catch (err) {
           console.error('[suggestions] extraction after note save failed:', err);
