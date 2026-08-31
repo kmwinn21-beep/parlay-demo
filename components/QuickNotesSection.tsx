@@ -323,11 +323,17 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
     scanned.current = true;
 
     const text = note.content ?? '';
+    // The company first, because it is what tells two people of the same name
+    // apart — "Tina from Mission" is the Tina at Mission Health, and duplicate
+    // attendee records are ordinary after a couple of badge scans.
+    const named = scanForCompany(text, allCompanies);
     // Someone at this conference is the better answer when there is one.
-    const att = scanForAttendee(text, conferenceAttendees) ?? scanForAttendee(text, allAttendees);
-    // An attendee names their own employer, so it beats reading the text again.
-    const comp = (att?.company_id != null ? allCompanies.find(c => c.id === att.company_id) ?? null : null)
-      ?? scanForCompany(text, allCompanies);
+    const att = scanForAttendee(text, conferenceAttendees, named)
+      ?? scanForAttendee(text, allAttendees, named);
+    // A named company is the note's own evidence and wins; an attendee's
+    // employer fills in when the note named nobody's company outright.
+    const comp = named
+      ?? (att?.company_id != null ? allCompanies.find(c => c.id === att.company_id) ?? null : null);
     const act = scanForAction(text, followUpActions);
     setScan({ company: comp, attendee: att, action: act?.value ?? null });
   }, [loading, note.tag, note.content, allCompanies, allAttendees, conferenceAttendees, followUpActions]);
