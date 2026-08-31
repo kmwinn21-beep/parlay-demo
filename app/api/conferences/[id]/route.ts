@@ -34,21 +34,31 @@ export async function GET(
             FROM attendees a
             JOIN conference_attendees ca ON a.id = ca.attendee_id
             LEFT JOIN companies c ON a.company_id = c.id
+            -- Both aggregates are scoped to this conference's attendees.
+            -- Without that they are built over every row in the account and
+            -- only filtered afterwards, so the cost of opening one conference
+            -- grew with the size of the whole account.
             LEFT JOIN (
               SELECT ca2.attendee_id,
                      COUNT(DISTINCT ca2.conference_id) as conference_count,
                      GROUP_CONCAT(DISTINCT c2.name) as conference_names
               FROM conference_attendees ca2
               JOIN conferences c2 ON ca2.conference_id = c2.id
+              WHERE ca2.attendee_id IN (
+                SELECT attendee_id FROM conference_attendees WHERE conference_id = ?1
+              )
               GROUP BY ca2.attendee_id
             ) conf_agg ON a.id = conf_agg.attendee_id
             LEFT JOIN (
               SELECT entity_id, COUNT(*) as notes_count
               FROM entity_notes
               WHERE entity_type = 'attendee'
+                AND entity_id IN (
+                  SELECT attendee_id FROM conference_attendees WHERE conference_id = ?1
+                )
               GROUP BY entity_id
             ) notes_agg ON a.id = notes_agg.entity_id
-            WHERE ca.conference_id = ?
+            WHERE ca.conference_id = ?1
             ORDER BY a.last_name, a.first_name`,
       args: [params.id],
     });

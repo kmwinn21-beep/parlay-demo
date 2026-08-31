@@ -508,7 +508,10 @@ export function TouchpointForm({
         const today = new Date().toISOString().slice(0, 10);
         const [confRes, compRes, optRes] = await Promise.all([
           fetch('/api/conferences?nav=1').then(r => r.ok ? r.json() : []),
-          fetch('/api/companies?limit=2000').then(r => r.ok ? r.json() : []),
+          // minimal=1 — this form needs id, name and company_type and nothing
+          // else; the full listing runs five queries and returns every column
+          // of every company, which is a slow way to fill a dropdown.
+          fetch('/api/companies?minimal=1').then(r => r.ok ? r.json() : []),
           fetch('/api/config?category=touchpoints').then(r => r.ok ? r.json() : []),
         ]);
         const confs: Conference[] = (Array.isArray(confRes) ? confRes : []).map((c: Conference) => ({
@@ -528,7 +531,12 @@ export function TouchpointForm({
           ?? null;
         if (active) {
           setSelectedConference(active);
-          await loadConferenceCascade(active.id, Array.isArray(compRes) ? compRes : [], {
+          // Deliberately not awaited. The conference's attendees are needed by
+          // two fields, both of which have their own loading state — waiting
+          // for them here put the entire form behind a second round trip, so
+          // the modal sat blank long after everything it needed to draw had
+          // arrived.
+          void loadConferenceCascade(active.id, Array.isArray(compRes) ? compRes : [], {
             companyId: defaultCompanyId ?? null,
             attendeeId: defaultAttendeeId ?? null,
           });
