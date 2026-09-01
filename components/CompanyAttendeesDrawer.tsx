@@ -40,6 +40,8 @@ interface Props {
    *  Absent on the companies page, where there is no conference to target for. */
   conferenceId?: number;
   attendees: CompanyAttendeeLite[];
+  /** Raised where this opens on top of another drawer, which sits at z-70. */
+  zClass?: string;
   onClose: () => void;
 }
 
@@ -142,7 +144,7 @@ function TimelineIcon({ className }: { className: string }) {
   );
 }
 
-export function CompanyAttendeesDrawer({ companyId, companyName, conferenceLabel, conferenceId, attendees, onClose }: Props) {
+export function CompanyAttendeesDrawer({ companyId, companyName, conferenceLabel, conferenceId, attendees, zClass = 'z-50', onClose }: Props) {
   const { planCapabilities } = useCapabilities();
   const { targetIds, busyId: targetBusyId, toggleTarget } = useConferenceTargets(conferenceId ?? null);
   const { types: icpCompanyTypes } = useIcpCompanyTypes();
@@ -171,7 +173,7 @@ export function CompanyAttendeesDrawer({ companyId, companyName, conferenceLabel
   const capabilityEnabled = Boolean(planCapabilities?.intelligence_core?.activity_timeline);
 
   const content = (
-    <div className="fixed inset-0 z-50">
+    <div className={`fixed inset-0 ${zClass}`}>
       {/* Backdrop — shared by both the attendees drawer and the docked timeline; closes both */}
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
 
