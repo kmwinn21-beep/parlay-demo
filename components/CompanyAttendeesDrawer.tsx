@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -11,6 +11,9 @@ import { useUserOptions, parseRepIds, getRepInitials } from '@/lib/useUserOption
 import { useCapabilities } from '@/lib/useCapabilities';
 import { ActivityTimelineModal } from './ActivityTimelineModal';
 import { AttendeeInitialsAvatar } from './AttendeePhoto';
+import { TargetToggleButton } from './TargetToggleButton';
+import { useConferenceTargets } from '@/lib/useConferenceTargets';
+import { useIcpCompanyTypes, matchesIcpCompanyType } from '@/lib/useIcpCompanyTypes';
 
 export interface CompanyAttendeeLite {
   id: number;
@@ -33,6 +36,9 @@ interface Props {
   companyName: string;
   // e.g. "ModExpo 2026" — when provided, the header reads "[Company] - [Conference] Attendees"
   conferenceLabel?: string;
+  /** Opened from a conference: each attendee can be targeted for it from here.
+   *  Absent on the companies page, where there is no conference to target for. */
+  conferenceId?: number;
   attendees: CompanyAttendeeLite[];
   onClose: () => void;
 }
@@ -45,7 +51,7 @@ interface TimelineActivity {
   firstContacts: unknown[];
 }
 
-function AttendeeMiniCard({ attendee }: { attendee: CompanyAttendeeLite }) {
+function AttendeeMiniCard({ attendee, target }: { attendee: CompanyAttendeeLite; target?: ReactNode }) {
   const colorMaps = useConfigColors();
   const userOptionsFull = useUserOptions();
   const seniority = effectiveSeniority(attendee.seniority, attendee.title);
@@ -69,6 +75,7 @@ function AttendeeMiniCard({ attendee }: { attendee: CompanyAttendeeLite }) {
           </Link>
           {attendee.title && <p className="text-xs text-gray-600 mt-0.5 truncate">{attendee.title}</p>}
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+            {target}
             {attendee.title && <span className={`badge ${getPillClass(seniority, colorMaps.seniority || {})}`}>{seniority}</span>}
             {attendee.function && <span className={`badge ${getPillClass(attendee.function, colorMaps.function || {})}`}>{attendee.function}</span>}
             {attendee.company_type && <span className={getBadgeClass(attendee.company_type, colorMaps.company_type || {})}>{attendee.company_type}</span>}
@@ -135,8 +142,10 @@ function TimelineIcon({ className }: { className: string }) {
   );
 }
 
-export function CompanyAttendeesDrawer({ companyId, companyName, conferenceLabel, attendees, onClose }: Props) {
+export function CompanyAttendeesDrawer({ companyId, companyName, conferenceLabel, conferenceId, attendees, onClose }: Props) {
   const { planCapabilities } = useCapabilities();
+  const { targetIds, busyId: targetBusyId, toggleTarget } = useConferenceTargets(conferenceId ?? null);
+  const { types: icpCompanyTypes } = useIcpCompanyTypes();
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [activityLoading, setActivityLoading] = useState(true);
   const [hasActivity, setHasActivity] = useState(false);
@@ -220,7 +229,20 @@ export function CompanyAttendeesDrawer({ companyId, companyName, conferenceLabel
           )}
           {attendees.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-8">No attendees at this conference.</p>
-          ) : attendees.map(a => <AttendeeMiniCard key={a.id} attendee={a} />)}
+          ) : attendees.map(a => (
+            <AttendeeMiniCard
+              key={a.id}
+              attendee={a}
+              target={conferenceId != null && matchesIcpCompanyType(a.company_type, icpCompanyTypes) ? (
+                <TargetToggleButton
+                  active={targetIds.has(a.id)}
+                  busy={targetBusyId === a.id}
+                  onToggle={() => toggleTarget(a.id)}
+                  name={`${a.first_name} ${a.last_name}`.trim()}
+                />
+              ) : undefined}
+            />
+          ))}
         </div>
       </div>
 
