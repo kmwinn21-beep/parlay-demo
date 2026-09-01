@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import {
   PieChart,
@@ -18,6 +18,8 @@ import {
 import { effectiveSeniority } from '@/lib/parsers';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getHex, getBadgeClass, type ColorMap } from '@/lib/colors';
+import { parseRepIds } from '@/lib/useUserOptions';
+import { useUser } from '@/components/UserContext';
 import { NotesPopover } from './NotesPopover';
 
 interface Attendee {
@@ -28,6 +30,8 @@ interface Attendee {
   company_id?: number;
   company_type?: string;
   company_name?: string;
+  company_icp?: string | null;
+  company_assigned_user?: string | null;
   seniority?: string;
   function?: string;
   entity_notes_count?: number;
@@ -126,7 +130,7 @@ function renderCustomLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent
 }
 
 interface Slice { name: string; value: number }
-interface ExpandedChart { title: string; data: Slice[]; colorMap: ColorMap }
+interface ExpandedChart { title: string; data: Slice[]; colorMap: ColorMap; filters: string[] }
 
 const LEGEND_STYLE = {
   fontSize: 'clamp(12px, 1vw, 14px)',
@@ -222,9 +226,20 @@ function DonutModal({ chart, onClose }: { chart: ExpandedChart; onClose: () => v
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-gray-100">
-          <div>
+          <div className="min-w-0">
             <h3 className="text-base font-semibold text-brand-primary font-serif">{chart.title}</h3>
             <p className="text-xs text-gray-500 mt-0.5">{total} attendees</p>
+            {/* What the numbers are counting. Without this the expanded chart
+                looks like the whole conference when it is a slice of it. */}
+            {chart.filters.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {chart.filters.map(f => (
+                  <span key={f} className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-brand-accent/20 text-brand-primary border border-brand-accent">
+                    {f}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded" aria-label="Close">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -250,9 +265,69 @@ function DonutModal({ chart, onClose }: { chart: ExpandedChart; onClose: () => v
 
 export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, actionConfigs }: AnalyticsChartsProps) {
   const colorMaps = useConfigColors();
-  const seniorityAll = buildSeniorityData(attendees);
-  const companyTypeData = buildCompanyTypeData(attendees);
-  const functionAll = buildFunctionData(attendees);
+  const { user: currentUser } = useUser();
+
+  // Quick filters over the whole tab. Same meanings as the attendee table's
+  // chips, so a filter reads the same wherever it is applied: ICP is the
+  // company's ICP flag, My Accounts is the signed-in rep on the company, and
+  // the type buttons match the company's type.
+  const [quickIcp, setQuickIcp] = useState(false);
+  const [quickMyAccounts, setQuickMyAccounts] = useState(false);
+  const [quickTypes, setQuickTypes] = useState<Set<string>>(new Set());
+  const [icpTypeOptions, setIcpTypeOptions] = useState<string[]>([]);
+  const defaultsApplied = useRef(false);
+
+  useEffect(() => {
+    fetch('/api/admin/icp-rules', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then((data: { rules?: { category: string; conditions: { option_value: string }[] }[] } | null) => {
+        const rule = data?.rules?.find(r => r.category === 'company_type');
+        setIcpTypeOptions(rule ? rule.conditions.map(c => c.option_value).filter(Boolean) : []);
+      })
+      .catch(() => {});
+  }, []);
+
+  // The account's own target audience is the view worth opening on, so the ICP
+  // company types start selected. Applied once: re-applying would undo the
+  // reader's own choices every time this list resolved again.
+  useEffect(() => {
+    if (defaultsApplied.current || icpTypeOptions.length === 0) return;
+    defaultsApplied.current = true;
+    setQuickTypes(new Set(icpTypeOptions));
+  }, [icpTypeOptions]);
+
+  const typeButtons = useMemo(() => {
+    const dynamic = icpTypeOptions.filter(t => t !== 'Customer');
+    return [...dynamic, 'Customer'];
+  }, [icpTypeOptions]);
+
+  const filteredAttendees = useMemo(() => attendees.filter(a => {
+    if (quickIcp && a.company_icp !== 'Yes') return false;
+    if (quickMyAccounts && !(currentUser?.configId != null && parseRepIds(a.company_assigned_user).includes(currentUser.configId))) return false;
+    if (quickTypes.size > 0 && !quickTypes.has(a.company_type || '')) return false;
+    return true;
+  }), [attendees, quickIcp, quickMyAccounts, quickTypes, currentUser]);
+
+  /** What is being counted, for the pill on an expanded chart. */
+  const activeFilters = useMemo(() => {
+    const out: string[] = [];
+    if (quickMyAccounts) out.push('My Accounts');
+    if (quickIcp) out.push('ICP');
+    for (const t of typeButtons) if (quickTypes.has(t)) out.push(t === 'Customer' ? 'Customers' : t);
+    return out;
+  }, [quickMyAccounts, quickIcp, quickTypes, typeButtons]);
+
+  const showingAll = !quickIcp && !quickMyAccounts && quickTypes.size === 0;
+  const toggleType = (type: string) => setQuickTypes(prev => {
+    const next = new Set(prev);
+    if (next.has(type)) next.delete(type); else next.add(type);
+    return next;
+  });
+  const clearFilters = () => { setQuickIcp(false); setQuickMyAccounts(false); setQuickTypes(new Set()); };
+
+  const seniorityAll = buildSeniorityData(filteredAttendees);
+  const companyTypeData = buildCompanyTypeData(filteredAttendees);
+  const functionAll = buildFunctionData(filteredAttendees);
 
   // Visibility toggles for company type and seniority charts
   const [visibleCompanyTypes, setVisibleCompanyTypes] = useState<Set<string> | null>(null);
@@ -425,6 +500,58 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
   return (
     <div className="space-y-8">
       {/* Charts */}
+      {/* One row of filters over all three charts, so they always describe the
+          same population — reading a seniority split against one audience and a
+          function split against another would be worse than no filter at all. */}
+      <div className="flex flex-wrap items-center gap-2">
+        {currentUser && (
+          <button
+            type="button"
+            onClick={() => setQuickMyAccounts(v => !v)}
+            aria-pressed={quickMyAccounts}
+            className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors border-brand-secondary bg-brand-secondary/10 text-brand-secondary${!showingAll && !quickMyAccounts ? ' opacity-40 grayscale' : ''}`}
+          >
+            My Accounts
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setQuickIcp(v => !v)}
+          aria-pressed={quickIcp}
+          className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+            quickIcp ? 'border-brand-accent bg-brand-accent/20 text-brand-primary' : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+          }${!showingAll && !quickIcp ? ' opacity-40 grayscale' : ''}`}
+        >
+          ICP
+        </button>
+        {typeButtons.map(type => (
+          <button
+            key={type}
+            type="button"
+            onClick={() => toggleType(type)}
+            aria-pressed={quickTypes.has(type)}
+            className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+              quickTypes.has(type) ? 'border-brand-accent bg-brand-accent/20 text-brand-primary' : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+            }${!showingAll && !quickTypes.has(type) ? ' opacity-40 grayscale' : ''}`}
+          >
+            {type === 'Customer' ? 'Customers' : type}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={clearFilters}
+          aria-pressed={showingAll}
+          className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+            showingAll ? 'border-brand-secondary bg-brand-secondary text-white' : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+          }`}
+        >
+          All
+        </button>
+        <span className="text-xs text-gray-400 ml-1">
+          {filteredAttendees.length} of {attendees.length} attendees
+        </span>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <DonutCard
           title="Company Type Breakdown"
@@ -436,7 +563,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
           showFilter={showCompanyTypeFilter}
           onToggleFilter={() => setShowCompanyTypeFilter(!showCompanyTypeFilter)}
           colorMap={colorMaps.company_type || {}}
-          onExpand={() => setExpandedChart({ title: 'Company Type Breakdown', data: filteredCompanyTypeData, colorMap: colorMaps.company_type || {} })}
+          onExpand={() => setExpandedChart({ title: 'Company Type Breakdown', data: filteredCompanyTypeData, colorMap: colorMaps.company_type || {}, filters: activeFilters })}
         />
         <DonutCard
           title="Attendee Seniority"
@@ -448,7 +575,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
           showFilter={showSeniorityFilter}
           onToggleFilter={() => setShowSeniorityFilter(!showSeniorityFilter)}
           colorMap={colorMaps.seniority || {}}
-          onExpand={() => setExpandedChart({ title: 'Attendee Seniority', data: filteredSeniorityData, colorMap: colorMaps.seniority || {} })}
+          onExpand={() => setExpandedChart({ title: 'Attendee Seniority', data: filteredSeniorityData, colorMap: colorMaps.seniority || {}, filters: activeFilters })}
         />
         <DonutCard
           title="Attendee Function"
@@ -460,7 +587,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
           showFilter={showFunctionFilter}
           onToggleFilter={() => setShowFunctionFilter(!showFunctionFilter)}
           colorMap={colorMaps.function || {}}
-          onExpand={() => setExpandedChart({ title: 'Attendee Function', data: filteredFunctionData, colorMap: colorMaps.function || {} })}
+          onExpand={() => setExpandedChart({ title: 'Attendee Function', data: filteredFunctionData, colorMap: colorMaps.function || {}, filters: activeFilters })}
         />
       </div>
 
