@@ -251,7 +251,14 @@ export function AttendeesDrawer({ onClose }: { onClose: () => void }) {
       <DashboardDrawer
         title={
           // Replaces the title outright, so the drawer's two lists read as one
-          // thing you switch between rather than two drawers.
+          // thing you switch between rather than two drawers. The conference
+          // leads, as the heading it is — which list you are looking at is the
+          // second question, and it was previously answered above the thing it
+          // qualified.
+          <div className="min-w-0">
+          <h3 className="text-base font-semibold text-brand-primary font-serif truncate mb-2">
+            {activeConference?.name ?? 'No conference set'}
+          </h3>
           <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5" role="tablist">
             {(['attendees', 'companies'] as const).map(m => (
               <button
@@ -268,8 +275,8 @@ export function AttendeesDrawer({ onClose }: { onClose: () => void }) {
               </button>
             ))}
           </div>
+          </div>
         }
-        subtitle={activeConference?.name ?? null}
         onClose={onClose}
       >
         <div className="px-4 pt-3 pb-2 flex flex-col gap-2 border-b border-gray-100">
