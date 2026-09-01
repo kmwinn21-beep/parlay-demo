@@ -201,6 +201,12 @@ function DonutCard({ title, filterTitle, data, allNames, visible, onToggle, show
                   <Cell key={entry.name} fill={getHex(entry.name, colorMap)} />
                 ))}
               </Pie>
+              {/* Without the key on the card, this is the only way to read a
+                  slice without opening it. */}
+              <Tooltip
+                formatter={(value: number, name: string) => [value, name]}
+                contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
+              />
             </PieChart>
           </ResponsiveContainer>
         </button>
