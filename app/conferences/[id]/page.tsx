@@ -2842,11 +2842,10 @@ export default function ConferenceDetailPage() {
       </div>
 
       {/* Tabs
-          Stuck to the top of the scrolling column on narrow screens, where the
+          Stuck to the top of the scrolling column at every width. The
           conference card above them is tall enough that scrolling into a tab's
           contents would otherwise carry the tabs away — and switching tab then
-          means scrolling all the way back up. Static again from lg, where the
-          card costs proportionally less of the screen.
+          means scrolling all the way back up.
 
           The background is opaque and matches the page so the content passes
           behind rather than through, and z-20 keeps it under the drawers and
@@ -2854,8 +2853,10 @@ export default function ConferenceDetailPage() {
           own padding, which would leave a strip of content sliding past above
           the tabs — the solid shadow paints that strip in the page colour, and
           unlike a pseudo-element it isn't clipped by this element's own
-          horizontal overflow. */}
-      <div ref={tabBarRef} className="border-b border-gray-200 overflow-x-auto sticky top-0 z-20 bg-gray-50 shadow-[0_-1rem_0_0_rgb(249,250,251)] lg:static lg:z-auto lg:bg-transparent lg:shadow-none">
+          horizontal overflow. Its size follows that padding, 16px and then
+          24px from lg, so it covers the strip exactly without reaching past
+          the gap above the row when it is sitting at rest. */}
+      <div ref={tabBarRef} className="border-b border-gray-200 overflow-x-auto sticky top-0 z-20 bg-gray-50 shadow-[0_-1rem_0_0_rgb(249,250,251)] lg:shadow-[0_-1.5rem_0_0_rgb(249,250,251)]">
         <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
           {visibleConferenceTabs.map((tabKey) => {
             const baseLabel = conferenceTabConfig.getLabel(tabKey);
@@ -3666,7 +3667,7 @@ export default function ConferenceDetailPage() {
             // Holds a screen's worth of height while loading. A short spinner
             // collapses the page, the browser clamps the scroll to the top,
             // and the sticky tabs are carried away with it.
-            <div className="flex justify-center py-12 lg:py-12 min-h-[70vh] lg:min-h-0 items-start">
+            <div className="flex justify-center py-12 min-h-[70vh] items-start">
               <div className="animate-spin w-6 h-6 border-4 border-brand-secondary border-t-transparent rounded-full" />
             </div>
           ) : (
