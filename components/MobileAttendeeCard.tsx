@@ -78,7 +78,7 @@ export function ConferenceCountTooltip({ count, names }: { count: number; names?
 export function MobileAttendeeCard({
   attendee, showPhotos, selected, onToggleSelect, onOpenAttendee, onOpenCompany,
   onClassifyTitle, titleWarning = false, userOptions, colorMaps, actions, dimmed = false,
-  hideAssignedRep = false,
+  hideAssignedRep = false, leadingPill,
 }: {
   attendee: AttendeeCardRow;
   showPhotos: boolean;
@@ -95,6 +95,8 @@ export function MobileAttendeeCard({
   actions?: ReactNode;
   /** Another card's actions menu is open — recede so that one stands out. */
   dimmed?: boolean;
+  /** Leads the pill row — the target toggle, where the caller offers one. */
+  leadingPill?: ReactNode;
   /** Drops the company's assigned-rep pill — for the confirm prompt, where
    *  who owns the account isn't what's being decided. */
   hideAssignedRep?: boolean;
@@ -182,6 +184,7 @@ export function MobileAttendeeCard({
           the pills pass behind it rather than pushing it off the edge. */}
       <div className={`mt-2 flex items-center gap-2 ${onToggleSelect ? 'ml-6' : ''}`}>
       <ScrollRow className="flex-1 min-w-0" gapClass="gap-2">
+        {leadingPill}
         {/* Whoever owns the company, in the initialled pill used for reps
             everywhere else. It leads the row: it's who to ask about this
             person, which is read more often than what kind of company it is. */}

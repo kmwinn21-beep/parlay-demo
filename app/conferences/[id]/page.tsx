@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { Fragment, useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -26,6 +26,9 @@ import { INLINE_EDIT_FIELD_CLASS, InlineEditRow, InlineEditPlaceholder } from '@
 import { CompanyTable } from '@/components/CompanyTable';
 import { SocialEventsTable, type SocialEvent } from '@/components/SocialEventsTable';
 import { BackButton } from '@/components/BackButton';
+import { TargetToggleButton } from '@/components/TargetToggleButton';
+import { useConferenceTargets } from '@/lib/useConferenceTargets';
+import { useIcpCompanyTypes, matchesIcpCompanyType } from '@/lib/useIcpCompanyTypes';
 import { effectiveSeniority } from '@/lib/parsers';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
@@ -306,6 +309,11 @@ export default function ConferenceDetailPage() {
   const logoConfig = useLogoConfig();
   const { onboardingTrack, onboardingProgress, markStepComplete } = useOnboarding();
   const isAdminUser = currentUser?.role === 'administrator';
+  // Targeting from the attendees table. The set is shared with the companies
+  // tab's attendee drawer through a window event, so the same person reads the
+  // same way in both without either owning the state.
+  const { targetIds, busyId: targetBusyId, toggleTarget, reload: reloadTargets } = useConferenceTargets(Number(id));
+  const { types: icpCompanyTypes } = useIcpCompanyTypes();
 
   const [conference, setConference] = useState<Conference | null>(null);
   const [conferenceDetails, setConferenceDetails] = useState<ConferenceDetail[]>([]);
@@ -319,6 +327,12 @@ export default function ConferenceDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState<ConferenceTabKey>('attendees');
+  // The targets tab writes targets through its own kanban, which knows nothing
+  // about these buttons. Re-reading on the way back into a tab that shows them
+  // is cheaper than making that tab report every change.
+  useEffect(() => {
+    if (activeTab === 'attendees' || activeTab === 'companies') reloadTargets();
+  }, [activeTab, reloadTargets]);
   const [conferenceCompanies, setConferenceCompanies] = useState<{ id: number; name: string; website?: string; profit_type?: string; company_type?: string; status?: string; icp?: string; assigned_user?: string; attendee_count: number; conference_count: number; conference_names?: string }[]>([]);
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [companiesLoaded, setCompaniesLoaded] = useState(false);
@@ -3441,6 +3455,15 @@ export default function ConferenceDetailPage() {
                     userOptions={userOptions}
                     colorMaps={colorMaps}
                     dimmed={actionsAttendeeId != null && actionsAttendeeId !== attendee.id}
+                    leadingPill={matchesIcpCompanyType(attendee.company_type, icpCompanyTypes) ? (
+                      <TargetToggleButton
+                        active={targetIds.has(attendee.id)}
+                        busy={targetBusyId === attendee.id}
+                        onToggle={() => toggleTarget(attendee.id)}
+                        name={`${attendee.first_name} ${attendee.last_name}`.trim()}
+                        size="sm"
+                      />
+                    ) : undefined}
                     actions={
                       <RowActionsKebab
                         entityType="attendee"
@@ -3480,7 +3503,16 @@ export default function ConferenceDetailPage() {
                       const sortThCls = "px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none transition-colors whitespace-nowrap relative cursor-pointer hover:text-brand-secondary";
                       const plainThCls = "px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap relative";
                       switch (col.key) {
-                        case 'name': return <th key="name" onClick={() => handleSort('name')} className={`${sortThCls} sticky z-30 bg-gray-50`} style={{ width: colWidths.name, left: attendeeNameStickyLeft }}>Name{sortKey === 'name' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}{rh('name')}</th>;
+                        // Target rides immediately after the name rather than
+                        // as a configurable column: it is an action on the
+                        // person, not a field of theirs, and it only means
+                        // anything next to who it applies to.
+                        case 'name': return (
+                          <Fragment key="name">
+                            <th onClick={() => handleSort('name')} className={`${sortThCls} sticky z-30 bg-gray-50`} style={{ width: colWidths.name, left: attendeeNameStickyLeft }}>Name{sortKey === 'name' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}{rh('name')}</th>
+                            <th className={plainThCls} style={{ width: 64 }} aria-label="Target" />
+                          </Fragment>
+                        );
                         case 'title': return <th key="title" onClick={() => handleSort('title')} className={sortThCls} style={{ width: colWidths.title }}>Title{sortKey === 'title' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}{rh('title')}</th>;
                         case 'company': return <th key="company" onClick={() => handleSort('company')} className={sortThCls} style={{ width: colWidths.company }}>Company{sortKey === 'company' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}{rh('company')}</th>;
                         case 'type': return <th key="type" className={plainThCls} style={{ width: colWidths.type }}>Type{rh('type')}</th>;
@@ -3523,7 +3555,8 @@ export default function ConferenceDetailPage() {
                         if (!isConfAttendeeColVisible(col.key)) return null;
                         switch (col.key) {
                           case 'name': return (
-                            <td key="name" className={`px-4 py-3 font-medium sticky z-10 ${frozenBg}`} style={{ left: attendeeNameStickyLeft }}>
+                            <Fragment key="name">
+                            <td className={`px-4 py-3 font-medium sticky z-10 ${frozenBg}`} style={{ left: attendeeNameStickyLeft }}>
                               {/* The name opens the drawer, so the icon that
                                   used to do that is gone. */}
                               <div className="flex items-center gap-1 text-left">
@@ -3537,6 +3570,20 @@ export default function ConferenceDetailPage() {
                                 </button>
                               </div>
                             </td>
+                            {/* Only where the company is one the account
+                                actually targets — offering it on every row
+                                would say nothing about who is worth the walk. */}
+                            <td className="px-4 py-3">
+                              {matchesIcpCompanyType(attendee.company_type, icpCompanyTypes) && (
+                                <TargetToggleButton
+                                  active={targetIds.has(attendee.id)}
+                                  busy={targetBusyId === attendee.id}
+                                  onToggle={() => toggleTarget(attendee.id)}
+                                  name={`${attendee.first_name} ${attendee.last_name}`.trim()}
+                                />
+                              )}
+                            </td>
+                            </Fragment>
                           );
                           case 'title': return (
                             <td key="title" className="px-4 py-3 text-gray-600 overflow-visible relative" style={{ maxWidth: colWidths.title }}>
