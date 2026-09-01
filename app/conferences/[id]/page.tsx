@@ -2853,8 +2853,10 @@ export default function ConferenceDetailPage() {
           own padding, which would leave a strip of content sliding past above
           the tabs — the solid shadow paints that strip in the page colour, and
           unlike a pseudo-element it isn't clipped by this element's own
-          horizontal overflow. */}
-      <div ref={tabBarRef} className="border-b border-gray-200 overflow-x-auto sticky top-0 z-20 bg-gray-50 shadow-[0_-1rem_0_0_rgb(249,250,251)]">
+          horizontal overflow. Its size follows that padding, 16px and then
+          24px from lg, so it covers the strip exactly without reaching past
+          the gap above the row when it is sitting at rest. */}
+      <div ref={tabBarRef} className="border-b border-gray-200 overflow-x-auto sticky top-0 z-20 bg-gray-50 shadow-[0_-1rem_0_0_rgb(249,250,251)] lg:shadow-[0_-1.5rem_0_0_rgb(249,250,251)]">
         <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
           {visibleConferenceTabs.map((tabKey) => {
             const baseLabel = conferenceTabConfig.getLabel(tabKey);
