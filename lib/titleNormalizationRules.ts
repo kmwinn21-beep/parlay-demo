@@ -449,6 +449,44 @@ export async function resolveAttendeeTitleMetadataBatch(
   return results;
 }
 
+/**
+ * Apply a classification to one attendee.
+ *
+ * The counterpart to applying it across every matching title: unticking that
+ * box means "just this person", not "nobody". Before this existed, saving with
+ * it unticked recorded the rule and left the attendee it was opened from
+ * exactly as it was.
+ */
+export async function applyRuleToAttendee(
+  tenantDb: Client,
+  rule: TitleNormalizationRuleLike,
+  attendeeId: number,
+): Promise<{ attendeeCount: number; companyCount: number }> {
+  const [functions, seniorities] = await Promise.all([
+    getConfigLookup(tenantDb, 'function'),
+    getConfigLookup(tenantDb, 'seniority'),
+  ]);
+  const functionValue = rule.function_id ? functions.byId.get(rule.function_id) ?? null : null;
+  const seniorityValue = rule.seniority_id ? seniorities.byId.get(rule.seniority_id) ?? null : null;
+
+  const found = await tenantDb.execute({
+    sql: 'SELECT id, company_id FROM attendees WHERE id = ?',
+    args: [attendeeId],
+  });
+  if (found.rows.length === 0) return { attendeeCount: 0, companyCount: 0 };
+
+  await tenantDb.execute({
+    sql: 'UPDATE attendees SET seniority = COALESCE(?, seniority), "function" = COALESCE(?, "function"), updated_at = datetime(\'now\') WHERE id = ?',
+    args: [seniorityValue, functionValue, attendeeId],
+  });
+
+  const companyId = found.rows[0].company_id == null ? null : Number(found.rows[0].company_id);
+  if (companyId != null) {
+    await tenantDb.execute({ sql: 'UPDATE companies SET updated_at = datetime(\'now\') WHERE id = ?', args: [companyId] }).catch(() => {});
+  }
+  return { attendeeCount: 1, companyCount: companyId != null ? 1 : 0 };
+}
+
 export async function applyRuleToExactTitle(tenantDb: Client, rule: TitleNormalizationRuleLike): Promise<{ attendeeCount: number; companyCount: number }> {
   const [functions, seniorities] = await Promise.all([getConfigLookup(tenantDb, 'function'), getConfigLookup(tenantDb, 'seniority')]);
   const functionValue = rule.function_id ? functions.byId.get(rule.function_id) ?? null : null;

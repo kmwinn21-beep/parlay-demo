@@ -1,13 +1,16 @@
 'use client';
 
 import toast from 'react-hot-toast';
-import { useState, useRef, useEffect, Fragment } from 'react';
+import { useState, useRef, useEffect, Fragment, Children, cloneElement, isValidElement, type ReactElement } from 'react';
 import Link from 'next/link';
 import { QuickViewDrawer, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { useFollowUpActions, followUpActionLabel } from '@/lib/useFollowUpActions';
 import { SlideInPanel } from '@/components/SlideInPanel';
 import { FollowUpReassignNotePrompt, type ReassignNoteTarget } from '@/components/FollowUpReassignNotePrompt';
 import { getPreset } from '@/lib/colors';
+import { MobileCard, MobileCardList } from './MobileCardList';
+import { AttendeeAvatar } from './AttendeePhoto';
+import { OverlappingRepPills } from './OverlappingRepPills';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useAnchoredDrawer } from '@/lib/useAnchoredDrawer';
 import { FollowUpNotesPopover } from '@/components/FollowUpNotesPopover';
@@ -34,6 +37,7 @@ export interface FollowUp {
   last_name: string;
   title: string | null;
   email: string | null;
+  photo_url?: string | null;
   company_id: number | null;
   company_name: string | null;
   conference_name: string;
@@ -499,7 +503,7 @@ export function FollowUpsTable({
   function renderMobileCard(fu: FollowUp) {
     const isEditingRep = editingRepKey === fu.id;
     return (
-      <div key={fu.id} className={`p-4 ${fu.completed ? 'bg-green-50' : 'bg-white'}`}>
+      <MobileCard key={fu.id} className={`p-4 ${fu.completed ? 'bg-green-50' : ''}`}>
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -572,14 +576,27 @@ export function FollowUpsTable({
           <span className="text-xs text-gray-400">· {formatDate(fu.start_date)}</span>
           <FollowUpNotesPopover attendeeId={fu.attendee_id} notesCount={Number(fu.entity_notes_count)} conferenceName={fu.conference_name} />
         </div>
-      </div>
+      </MobileCard>
     );
   }
 
   function renderDesktopRow(fu: FollowUp) {
     const isEditingRep = editingRepKey === fu.id;
-    return (
-      <tr key={fu.id} className={`transition-colors align-top ${fu.completed ? 'bg-green-50 hover:bg-green-50' : 'hover:bg-gray-50'}`}>
+    /**
+     * Each row is a card: the fill, border and rounded ends live on the cells
+     * rather than the row, because a <tr> cannot be rounded. The first and last
+     * visible cell close the card off, so the columns stay exactly where the
+     * header puts them while the row reads as one object.
+     */
+    const cardCell = (first: boolean, last: boolean) => [
+      fu.completed ? 'bg-green-50' : 'bg-white group-hover:bg-gray-50',
+      'border-y border-gray-200 transition-colors',
+      first ? 'border-l rounded-l-lg' : '',
+      last ? 'border-r rounded-r-lg' : '',
+    ].filter(Boolean).join(' ');
+
+    const cells = (
+      <>
         {orderedColumns.map(col => {
           if (!isVisible(col.key)) return null;
           switch (col.key) {
@@ -635,6 +652,18 @@ export function FollowUpsTable({
             <CustomColumnCell column={col} value={(fu as unknown as Record<string, unknown>)[col.data_key]} />
           </td>
         ))}
+      </>
+    );
+
+    // Children.toArray flattens the two groups above and drops the nulls that
+    // hidden columns return, so "first" and "last" mean the ends of what is
+    // actually on screen rather than of the full column list.
+    const cellList = Children.toArray(cells.props.children).filter(isValidElement) as ReactElement<{ className?: string }>[];
+    return (
+      <tr key={fu.id} className="group align-top">
+        {cellList.map((cell, i) => cloneElement(cell, {
+          className: `${cell.props.className ?? ''} ${cardCell(i === 0, i === cellList.length - 1)}`,
+        }))}
       </tr>
     );
   }
@@ -739,6 +768,13 @@ export function FollowUpsTable({
           />
         </div>
       );
+    }
+    // More than one rep reads as overlapping badges that open into full names
+    // on click, the way the meetings table's Support column does. A single rep
+    // stays the plain pill it already was — there is nothing to unstack.
+    const repCount = parseRepIds(unionRep).length;
+    if (repCount > 1) {
+      return <OverlappingRepPills repIds={unionRep} userOptions={userOptions} size={size} />;
     }
     if (canEditRep) {
       return (
@@ -857,6 +893,11 @@ export function FollowUpsTable({
     const visibleCustom = customColumns.filter(c => c.visible);
     // The chevron rides the final column, whichever that turns out to be.
     const lastKey = visibleCustom.length > 0 ? null : visibleKeys[visibleKeys.length - 1];
+    // The card's own ends, which differ from lastKey: the chevron rides the
+    // final standard column, but the rounding belongs to whatever cell is
+    // actually last, custom columns included.
+    const firstKey = visibleKeys[0];
+    const lastCardKey = visibleCustom.length > 0 ? null : visibleKeys[visibleKeys.length - 1];
 
     const chevron = (
       <svg
@@ -866,8 +907,19 @@ export function FollowUpsTable({
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
       </svg>
     );
+    // Each bar is a card. The fill, border and rounded ends sit on the cells
+    // because a <tr> cannot be rounded; the first and last visible cell close
+    // the card, leaving the columns exactly where the header puts them.
+    const cardFill = () => {
+      if (dimmed) return 'bg-gray-50/60 group-hover:bg-gray-100';
+      return 'bg-white group-hover:bg-gray-50';
+    };
+    // The selected row is outlined by colouring its own border rather than by a
+    // ring: a ring is inset on all four sides of every cell, so the sides
+    // between columns drew as grid lines across the card.
+    const cardEdge = expanded ? 'border-brand-secondary/40' : 'border-gray-200';
     const cell = (key: string, body: React.ReactNode, extra = '') => (
-      <td key={key} className={`px-3 py-2 align-middle ${extra}`}>
+      <td key={key} className={`px-3 py-2 align-middle transition-colors border-y ${cardEdge} ${cardFill()} ${key === firstKey ? 'border-l rounded-l-lg' : ''} ${key === lastCardKey ? 'border-r rounded-r-lg' : ''} ${extra}`}>
         {key === lastKey
           ? <div className="flex items-center justify-between gap-2">{body}{chevron}</div>
           : body}
@@ -887,19 +939,25 @@ export function FollowUpsTable({
         onClick={() => toggleGroupKey(groupKey)}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroupKey(groupKey); } }}
         aria-expanded={expanded}
-        className={`border-y border-gray-200 cursor-pointer transition-all ${
-          dimmed
-            ? 'bg-gray-50/60 opacity-[0.22] hover:opacity-100 hover:bg-gray-100'
-            : expanded
-              ? 'bg-white ring-1 ring-inset ring-brand-secondary/40 hover:bg-white'
-              : 'bg-gray-50 hover:bg-gray-100'
-        }`}
+        className={`group cursor-pointer transition-all ${dimmed ? 'opacity-[0.22] hover:opacity-100' : ''}`}
       >
         {orderedColumns.map(col => {
           if (!isVisible(col.key)) return null;
           switch (col.key) {
             case 'name': return cell('name',
-              <span className="flex items-center gap-1.5 min-w-0">
+              <span className="flex items-center gap-2 min-w-0">
+                {/* Sits flush with the heading above it, and opens the full
+                    picture on click exactly as it does elsewhere. */}
+                <span onClick={e => e.stopPropagation()} className="flex-shrink-0">
+                  <AttendeeAvatar
+                    firstName={head.first_name}
+                    lastName={head.last_name}
+                    title={head.title}
+                    companyName={head.company_name}
+                    photoUrl={head.photo_url}
+                    className="w-7 h-7 text-[10px]"
+                  />
+                </span>
                 {attendeeNameNode(head, 'text-xs font-semibold text-brand-secondary hover:underline truncate')}
               </span>, 'overflow-hidden');
             case 'title': return cell('title',
@@ -928,7 +986,7 @@ export function FollowUpsTable({
           }
         })}
         {visibleCustom.map((col, i) => (
-          <td key={`custom_${col.id}`} className="px-3 py-2 align-middle">
+          <td key={`custom_${col.id}`} className={`px-3 py-2 align-middle transition-colors border-y ${cardEdge} ${cardFill()} ${i === visibleCustom.length - 1 ? 'border-r rounded-r-lg' : ''}`}>
             {i === visibleCustom.length - 1 ? <div className="flex items-center justify-end">{chevron}</div> : null}
           </td>
         ))}
@@ -1076,13 +1134,13 @@ export function FollowUpsTable({
     return (
       <>
         {/* Mobile card layout */}
-        <div className="block lg:hidden divide-y divide-gray-100">
+        <MobileCardList className="block lg:hidden">
           {followUps.map(fu => renderMobileCard(fu))}
-        </div>
+        </MobileCardList>
 
         {/* Desktop table layout */}
-        <div className="hidden lg:block overflow-x-auto">
-          <table className="w-full" style={{ fontSize: '0.7rem' }}>
+        <div className="hidden lg:block overflow-x-auto bg-gray-50/50 px-2">
+          <table className="w-full border-separate [border-spacing:0_0.5rem]" style={{ fontSize: '0.7rem' }}>
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 {orderedColumns.map(col => {
@@ -1107,7 +1165,7 @@ export function FollowUpsTable({
                 ))}
                 </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {followUps.map(fu => renderDesktopRow(fu))}
             </tbody>
           </table>
@@ -1148,17 +1206,17 @@ export function FollowUpsTable({
                   </div>
                   {renderMarkAllDoneButton(groupKey, incompleteIds)}
                 </div>
-                <div className="divide-y divide-gray-100">
+                <MobileCardList>
                   {group.tasks.map(fu => renderMobileCard(fu))}
-                </div>
+                </MobileCardList>
               </div>
             );
           })}
         </div>
 
         {/* Desktop */}
-        <div className="hidden lg:block overflow-x-auto">
-          <table className="w-full" style={{ fontSize: '0.7rem' }}>
+        <div className="hidden lg:block overflow-x-auto bg-gray-50/50 px-2">
+          <table className="w-full border-separate [border-spacing:0_0.5rem]" style={{ fontSize: '0.7rem' }}>
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 {orderedColumns.map(col => {
@@ -1400,24 +1458,24 @@ export function FollowUpsTable({
                 <span className="text-xs text-gray-400 ml-2">{formatDate(cg.start_date)}</span>
               </div>
             )}
-            <div className="divide-y divide-gray-100">
+            <MobileCardList>
               {cg.attendees.map(ag => {
                 const rows = sortByCreatedAt(ag.tasks);
                 const subKey = `${cg.conference_id}-${ag.attendee_id}`;
                 const expanded = expandedGroupKeys.has(subKey);
                 return (
-                  <div key={subKey}>
-                    <div className="px-4 py-2 bg-gray-50">
+                  <MobileCard key={subKey}>
+                    <div className="px-4 py-2">
                       {renderAttendeeBar(rows, subKey)}
                     </div>
                     {/* A single follow-up renders exactly as it always has. */}
                     {!detailsInDrawer && expanded && (rows.length === 1
                       ? renderMobileCard(rows[0])
                       : renderAttendeeGroupCard(rows, subKey))}
-                  </div>
+                  </MobileCard>
                 );
               })}
-            </div>
+            </MobileCardList>
           </div>
         ))}
       </div>
@@ -1425,9 +1483,9 @@ export function FollowUpsTable({
       {/* Desktop — the panel takes a column beside the table when open. The
           row itself is always mounted so the panel renders once and handles
           its own phone form (a bottom sheet) from inside. */}
-      <div className="lg:relative">
+      <div className="lg:relative bg-gray-50/50 px-2">
       <div ref={tableWrapRef} className="hidden lg:block min-w-0 overflow-x-auto">
-        <table className="w-full" style={{ fontSize: '0.7rem' }}>
+        <table className="w-full border-separate [border-spacing:0_0.5rem]" style={{ fontSize: '0.7rem' }}>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               {orderedColumns.map(col => {
@@ -1454,7 +1512,7 @@ export function FollowUpsTable({
               ))}
             </tr>
           </thead>
-          <tbody className={showConferenceHeader ? '' : 'divide-y divide-gray-100'}>
+          <tbody>
             {confAttGroups.map((cg, cgi) => (
               <Fragment key={cg.conference_id}>
                 {showConferenceHeader && cgi > 0 && (

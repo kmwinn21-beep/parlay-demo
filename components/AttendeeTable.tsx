@@ -1219,6 +1219,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
       {classifyingAttendee && (
         <ClassifyTitleModal
           rawTitle={classifyingAttendee.title}
+          attendeeId={classifyingAttendee.id}
           meta={titleMetaMap[classifyingAttendee.id]}
           functionOptions={functionOptionRecords}
           seniorityOptions={seniorityOptionRecords}

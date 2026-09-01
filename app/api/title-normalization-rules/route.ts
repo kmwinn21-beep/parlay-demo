@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { BUYER_ROLE_OPTIONS, type BuyerRoleKey, type TitleMatchConfidence } from '@/lib/titleNormalization';
-import { applyRuleToExactTitle, ensureTitleNormalizationSchema, getRuleForTitle, resolveAttendeeTitleMetadata, upsertTitleNormalizationRule } from '@/lib/titleNormalizationRules';
+import { applyRuleToExactTitle, applyRuleToAttendee, ensureTitleNormalizationSchema, getRuleForTitle, resolveAttendeeTitleMetadata, upsertTitleNormalizationRule } from '@/lib/titleNormalizationRules';
 import type { Client } from '@libsql/client';
 
 function isBuyerRole(value: unknown): value is BuyerRoleKey {
@@ -79,7 +79,14 @@ export async function POST(request: NextRequest) {
       user_id: authResult.id,
     });
 
-    const affected = body.apply_all_exact === false ? { attendeeCount: 0, companyCount: 0 } : await applyRuleToExactTitle(db, rule);
+    // Unticked means this attendee only. It used to mean nobody, which left
+    // the person the modal was opened from unchanged.
+    const attendeeId = body.attendee_id == null ? null : Number(body.attendee_id);
+    const affected = body.apply_all_exact === false
+      ? (attendeeId && Number.isFinite(attendeeId)
+          ? await applyRuleToAttendee(db, rule, attendeeId)
+          : { attendeeCount: 0, companyCount: 0 })
+      : await applyRuleToExactTitle(db, rule);
     const metadata = await resolveAttendeeTitleMetadata(db, rawTitle, organizationId);
     // Invalidate cache entry for this title so next resolve picks up the saved rule
     return NextResponse.json({ rule, metadata, affected });
