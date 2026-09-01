@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRevealOnExpand } from './revealOnExpand';
 
 /**
  * Shared open/shut state for the collapsible sections down a detail page's
@@ -30,6 +31,8 @@ export function useCollapsibleSection(initial = false): [boolean, React.Dispatch
   const [expanded, setExpanded] = useState(initial);
   const idRef = useRef(0);
   if (idRef.current === 0) idRef.current = ++nextId;
+  // Opening one is a request to read it, so make sure it can be read.
+  useRevealOnExpand(expanded);
 
   useEffect(() => {
     const id = idRef.current;

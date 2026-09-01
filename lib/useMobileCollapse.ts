@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRevealOnExpand } from './revealOnExpand';
 
 /**
  * Dashboard sections that fold away on a phone and stay open on desktop.
@@ -36,6 +37,9 @@ export function useMobileCollapse(query = '(max-width: 1023px)') {
     media.addEventListener('change', update);
     return () => media.removeEventListener('change', update);
   }, [query]);
+
+  // Opening one is a request to read it, so make sure it can be read.
+  useRevealOnExpand(expanded);
 
   /** Only does anything on a phone; desktop sections don't collapse. */
   const toggle = useCallback(() => { setExpanded(v => (isMobile ? !v : v)); }, [isMobile]);
