@@ -487,6 +487,20 @@ export function FollowUpsTable({
     }
   }
 
+  /** Put a completed group back to open, through the same path as Done. */
+  async function handleReopenAll(groupKey: string, ids: number[]) {
+    if (ids.length === 0) return;
+    setBulkLoadingKeys(prev => new Set(prev).add(groupKey));
+    setBulkErrorKeys(prev => { const n = new Set(prev); n.delete(groupKey); return n; });
+    try {
+      for (const id of ids) await onToggle(id, false);
+    } catch {
+      setBulkErrorKeys(prev => new Set(prev).add(groupKey));
+    } finally {
+      setBulkLoadingKeys(prev => { const n = new Set(prev); n.delete(groupKey); return n; });
+    }
+  }
+
   if (followUps.length === 0) {
     return (
       <div className="text-center py-8">
@@ -812,6 +826,19 @@ export function FollowUpsTable({
     const hasError = bulkErrorKeys.has(groupKey);
     return (
       <div className="flex items-center gap-1.5">
+        {/* Marking something off by accident should not be a one-way door, and
+            the row's own Done control is out of reach while the panel is open. */}
+        {allDone && (
+          <button
+            type="button"
+            disabled={isLoading}
+            onClick={() => handleReopenAll(groupKey, rows.map(r => r.id))}
+            title={`Re-open ${rows.length === 1 ? 'this follow-up' : `these ${rows.length} follow-ups`}`}
+            className={`flex items-center gap-1 px-2 py-1 rounded-lg font-medium border-2 border-gray-300 bg-white text-gray-500 hover:border-brand-secondary hover:text-brand-secondary transition-all whitespace-nowrap disabled:opacity-50 ${opts?.small ? 'text-[10px]' : ''}`}
+          >
+            {isLoading ? 'Saving…' : 'Re-Open'}
+          </button>
+        )}
         <button
           type="button"
           disabled={allDone || isLoading || !onBulkToggle}
@@ -1556,7 +1583,7 @@ export function FollowUpsTable({
             {/* Room below the table for a panel anchored near the bottom */}
             <div className="hidden lg:block" style={{ height: drawerOverhang }} aria-hidden />
             <div
-              className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-96 lg:pr-3 lg:z-20 lg:pointer-events-none"
+              className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-96 lg:pr-2 lg:z-20 lg:pointer-events-none"
               style={{ paddingTop: drawerOffset }}
             >
               <div ref={drawerPanelRef} className="lg:pointer-events-auto">{drawer}</div>

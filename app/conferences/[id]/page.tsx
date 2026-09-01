@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import { AnalyticsCharts } from '@/components/AnalyticsCharts';
 import { invalidateConfsCache } from '@/components/Header';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
+import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
 import { MeetingDateFilterBar } from '@/components/MeetingDateFilterBar';
 import { isBoothHours } from '@/lib/meetingTime';
@@ -370,6 +371,7 @@ export default function ConferenceDetailPage() {
   const [meetingFiltersOpen, setMeetingFiltersOpen] = useState(false);
   const [myMeetingsOnly, setMyMeetingsOnly] = useState(false);
   const [myFollowUpsOnly, setMyFollowUpsOnly] = useState(false);
+  const [showAssignFollowUp, setShowAssignFollowUp] = useState(false);
   const [meetingFilterReps, setMeetingFilterReps] = useState<number[]>([]);
   const [meetingFilterDates, setMeetingFilterDates] = useState<string[]>([]);
   const [meetingFilterCompanyTypes, setMeetingFilterCompanyTypes] = useState<string[]>([]);
@@ -2130,7 +2132,7 @@ export default function ConferenceDetailPage() {
                     </button>
                   )}
                   {editIndustryDropdownOpen && (
-                    <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                    <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
                       {industryOptions
                         .filter((o) => !editIndustrySearch || o.value.toLowerCase().includes(editIndustrySearch.toLowerCase()))
                         .map((opt) => (
@@ -2377,7 +2379,7 @@ export default function ConferenceDetailPage() {
                     </svg>
                   </button>
                   {internalDropdownOpen && (
-                    <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                       {userOptions.length === 0 ? (
                         <div className="px-3 py-2 text-sm text-gray-500">No users configured. Add users in the Admin panel.</div>
                       ) : (
@@ -2511,8 +2513,13 @@ export default function ConferenceDetailPage() {
                   </button>
                   {reportMenuOpen && (
                     <>
-                      <div className="fixed inset-0 z-10" onClick={() => setReportMenuOpen(false)} />
-                      <div className="absolute top-full right-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-100 py-1.5 z-20">
+                      {/* Above the sticky tab row, which is z-20 and later in
+                          the document — at equal z it painted over this menu.
+                          The backdrop clears the tabs too, so a click on them
+                          shuts the menu rather than switching tab underneath
+                          it. Both stay below the drawers and modals at z-50. */}
+                      <div className="fixed inset-0 z-30" onClick={() => setReportMenuOpen(false)} />
+                      <div className="absolute top-full right-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-100 py-1.5 z-40">
                         {isInternalAttendee && (
                         <button
                           type="button"
@@ -4145,6 +4152,17 @@ export default function ConferenceDetailPage() {
         />
       )}
 
+      {showAssignFollowUp && (
+        <AssignFollowUpModal
+          isOpen
+          onClose={() => setShowAssignFollowUp(false)}
+          // The tab is already scoped to one conference, so it is the answer to
+          // that field rather than something to be picked again.
+          defaultConferenceId={Number(id)}
+          onSuccess={() => { setShowAssignFollowUp(false); void fetchConference(); }}
+        />
+      )}
+
       {activeTab === 'follow-ups' && (
         <div className="card p-0 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
@@ -4190,6 +4208,17 @@ export default function ConferenceDetailPage() {
                 My Follow Ups
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => setShowAssignFollowUp(true)}
+              title="Assign a follow-up at this conference"
+              aria-label="Assign a follow-up"
+              className="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 bg-white text-gray-500 hover:border-brand-secondary hover:text-brand-secondary transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
             </div>
           </div>
           {(() => {
