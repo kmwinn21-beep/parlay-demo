@@ -57,7 +57,7 @@ function DrawerCompanyCard({ company, userOptions, colorMaps, onOpen }: {
   const statuses = String(company.status ?? '').split(',').map(v => v.trim()).filter(v => v && v !== 'Unknown');
 
   return (
-    <div className="px-4 py-3">
+    <div className="px-4 py-4 bg-white">
       <div className="flex items-start justify-between gap-3">
         <button type="button" onClick={onOpen} className="min-w-0 text-left">
           <span className="block text-sm font-semibold text-brand-secondary hover:underline leading-snug">{company.name}</span>
@@ -407,17 +407,18 @@ export function AttendeesDrawer({ onClose }: { onClose: () => void }) {
               {companies.length === 0 ? 'No companies on this conference yet.' : 'No companies match those filters.'}
             </p>
           ) : (
-            <div className="divide-y divide-gray-100">
+            <MobileCardList>
               {filteredCompanies.map(c => (
-                <DrawerCompanyCard
-                  key={c.id}
-                  company={c}
-                  userOptions={userOptions}
-                  colorMaps={colorMaps}
-                  onOpen={() => setQuickView({ type: 'company', id: c.id })}
-                />
+                <MobileCard key={c.id}>
+                  <DrawerCompanyCard
+                    company={c}
+                    userOptions={userOptions}
+                    colorMaps={colorMaps}
+                    onOpen={() => setQuickView({ type: 'company', id: c.id })}
+                  />
+                </MobileCard>
               ))}
-            </div>
+            </MobileCardList>
           )
         ) : loading ? (
           <div className="flex items-center justify-center py-10 text-gray-400">
