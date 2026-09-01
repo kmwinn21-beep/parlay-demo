@@ -6,6 +6,8 @@ import { BUYER_ROLE_OPTIONS, type BuyerRoleKey, type TitleMatchConfidence, type 
 
 interface ClassifyTitleModalProps {
   rawTitle: string;
+  /** Who the modal was opened from — the one updated when the box is unticked. */
+  attendeeId?: number;
   meta: TitleMatchMetadata | null | undefined;
   functionOptions: Array<{ id: number; value: string }>;
   seniorityOptions: Array<{ id: number; value: string }>;
@@ -13,7 +15,7 @@ interface ClassifyTitleModalProps {
   onSaved: (meta: TitleMatchMetadata) => void;
 }
 
-export function ClassifyTitleModal({ rawTitle, meta, functionOptions, seniorityOptions, onClose, onSaved }: ClassifyTitleModalProps) {
+export function ClassifyTitleModal({ rawTitle, attendeeId, meta, functionOptions, seniorityOptions, onClose, onSaved }: ClassifyTitleModalProps) {
   const [form, setForm] = useState({
     normalized_title: meta?.normalized_title || meta?.suggested_match || '',
     function_id: meta?.function_id ? String(meta.function_id) : '',
@@ -41,6 +43,7 @@ export function ClassifyTitleModal({ rawTitle, meta, functionOptions, seniorityO
           confidence: form.confidence,
           notes: form.notes,
           apply_all_exact: form.apply_all_exact,
+          attendee_id: attendeeId ?? null,
         }),
       });
       if (!res.ok) throw new Error();
@@ -117,6 +120,11 @@ export function ClassifyTitleModal({ rawTitle, meta, functionOptions, seniorityO
             <input type="checkbox" checked={form.apply_all_exact} onChange={e => setForm(p => ({ ...p, apply_all_exact: e.target.checked }))} />
             Apply to all attendees with this exact title
           </label>
+          <p className="text-xs text-gray-400 -mt-1">
+            {form.apply_all_exact
+              ? 'Everyone whose title matches will be updated.'
+              : 'Only this attendee will be updated. The classification is still saved for future titles.'}
+          </p>
         </div>
         <div className="flex justify-end gap-2 border-t border-gray-100 px-5 py-4 flex-shrink-0">
           <button onClick={onClose} className="btn-secondary">Cancel</button>

@@ -4447,6 +4447,7 @@ export default function ConferenceDetailPage() {
       {classifyingAttendee && (
         <ClassifyTitleModal
           rawTitle={classifyingAttendee.title}
+          attendeeId={classifyingAttendee.id}
           meta={titleMetaMap[classifyingAttendee.id]}
           functionOptions={classifyFunctionOptions}
           seniorityOptions={classifySeniorityOptions}
