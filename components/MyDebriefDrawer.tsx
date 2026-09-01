@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo, useRef, ReactNode } from 'react';
+import { AttendeeAvatar } from '@/components/AttendeePhoto';
 import { createPortal } from 'react-dom';
 import { useDrawerResize } from '@/lib/useDrawerResize';
 import { useSidebarCollapse, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_EXPANDED_WIDTH } from './SidebarCollapseContext';
@@ -26,6 +27,9 @@ interface DebriefAttendee {
   id: number;
   name: string;
   title: string | null;
+  firstName?: string;
+  lastName?: string;
+  photoUrl?: string | null;
   meetingCount: number;
   touchpointCount: number;
   followUpCount: number;
@@ -996,15 +1000,17 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
   // Same grouping the follow-up tables use: one card per attendee, their
   // follow-ups stacked inside it.
   const followUpGroups = useMemo(() => {
-    const titles = new Map<number, string | null>((selectedCompany?.attendees ?? []).map(a => [a.id, a.title]));
-    const map = new Map<string, { key: string; attendeeName: string | null; title: string | null; rows: DebriefFollowUp[] }>();
+    const byId = new Map<number, DebriefAttendee>((selectedCompany?.attendees ?? []).map(a => [a.id, a]));
+    const map = new Map<string, { key: string; attendeeName: string | null; title: string | null; attendee: DebriefAttendee | null; rows: DebriefFollowUp[] }>();
     for (const fu of companyFollowUps) {
       const key = fu.attendeeId != null ? `a${fu.attendeeId}` : `n${fu.attendeeName ?? 'unassigned'}`;
       if (!map.has(key)) {
+        const att = fu.attendeeId != null ? byId.get(fu.attendeeId) ?? null : null;
         map.set(key, {
           key,
           attendeeName: fu.attendeeName,
-          title: fu.attendeeId != null ? titles.get(fu.attendeeId) ?? null : null,
+          title: att?.title ?? null,
+          attendee: att,
           rows: [],
         });
       }
@@ -1642,12 +1648,26 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                             aria-expanded={groupExpanded}
                             className="w-full flex items-center gap-2 cursor-pointer"
                           >
-                            {group.attendeeName ? (
-                              <span className="inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 flex-shrink-0">
-                                {group.attendeeName}
-                              </span>
-                            ) : <span className="text-xs text-gray-400 flex-shrink-0">Unassigned</span>}
-                            {group.title && <span className="text-xs text-gray-500 truncate min-w-0">{group.title}</span>}
+                            {/* Picture, then the name with the title stacked
+                                under it and aligned to the name rather than to
+                                the picture — the same shape the follow-ups
+                                table uses. */}
+                            <span onClick={e => e.stopPropagation()} className="flex-shrink-0">
+                              <AttendeeAvatar
+                                firstName={group.attendee?.firstName ?? (group.attendeeName ?? '').split(' ')[0] ?? ''}
+                                lastName={group.attendee?.lastName ?? (group.attendeeName ?? '').split(' ').slice(1).join(' ')}
+                                title={group.title}
+                                companyName={selectedCompany?.name}
+                                photoUrl={group.attendee?.photoUrl}
+                                className="w-7 h-7 text-[10px]"
+                              />
+                            </span>
+                            <span className="flex flex-col min-w-0 items-start">
+                              {group.attendeeName
+                                ? <span className="text-xs font-medium text-gray-800 truncate max-w-full">{group.attendeeName}</span>
+                                : <span className="text-xs text-gray-400">Unassigned</span>}
+                              {group.title && <span className="text-xs text-gray-500 truncate max-w-full">{group.title}</span>}
+                            </span>
                             {/* Done rides the bar, but only once it's open */}
                             <span className="ml-auto flex items-center gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
                               {groupExpanded && (

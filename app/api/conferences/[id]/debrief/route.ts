@@ -68,7 +68,7 @@ export async function GET(
     const [meetingResult, followUpResult, touchpointResult, tierResult] = await Promise.all([
       db.execute({
         sql: `SELECT m.id, m.attendee_id, m.meeting_date, m.meeting_time, m.meeting_type, m.outcome,
-                     a.first_name, a.last_name, a.title, a.company_id, c.name as company_name,
+                     a.first_name, a.last_name, a.title, a.photo_url, a.company_id, c.name as company_name,
                      cop.action_key as outcome_key
               FROM meetings m
               JOIN attendees a ON m.attendee_id = a.id
@@ -81,7 +81,7 @@ export async function GET(
       db.execute({
         sql: `SELECT fu.id, fu.attendee_id, fu.next_steps, fu.next_steps_notes, fu.completed,
                      fu.assigned_rep, fu.meeting_id, fu.created_at, fu.follow_up_action,
-                     a.first_name, a.last_name, a.company_id, c.name as company_name,
+                     a.first_name, a.last_name, a.photo_url, a.company_id, c.name as company_name,
                      COALESCE(ns_opt.value, fu.next_steps) AS next_steps_display
               FROM follow_ups fu
               JOIN attendees a ON fu.attendee_id = a.id
@@ -97,7 +97,7 @@ export async function GET(
       // even when the follow-up it spawned is later handed to someone else.
       db.execute({
         sql: `SELECT at.attendee_id, at.logged_by, COUNT(*) as cnt,
-                     a.company_id, a.first_name, a.last_name, a.title,
+                     a.company_id, a.first_name, a.last_name, a.title, a.photo_url,
                      c.name as company_name
               FROM attendee_touchpoints at
               JOIN attendees a ON at.attendee_id = a.id
@@ -174,7 +174,7 @@ export async function GET(
       id: number; name: string; tier: string | null;
       status: string | null; icp: string | null; wse: number | null;
       attendeeIds: Set<number>;
-      attendeeInfo: Map<number, { name: string; title: string | null }>;
+      attendeeInfo: Map<number, { name: string; title: string | null; firstName: string; lastName: string; photoUrl: string | null }>;
       meetingRows: Record<string, unknown>[];
       followUps: Record<string, unknown>[];
     };
@@ -202,7 +202,12 @@ export async function GET(
       const aid = Number(m.attendee_id);
       co.attendeeIds.add(aid);
       if (!co.attendeeInfo.has(aid)) {
-        co.attendeeInfo.set(aid, { name: `${m.first_name} ${m.last_name}`, title: m.title ? String(m.title) : null });
+        co.attendeeInfo.set(aid, {
+          name: `${m.first_name} ${m.last_name}`,
+          title: m.title ? String(m.title) : null,
+          firstName: String(m.first_name ?? ''), lastName: String(m.last_name ?? ''),
+          photoUrl: m.photo_url != null ? String(m.photo_url) : null,
+        });
       }
       co.meetingRows.push(m);
     }
@@ -215,7 +220,11 @@ export async function GET(
       const aid = Number(fu.attendee_id);
       co.attendeeIds.add(aid);
       if (!co.attendeeInfo.has(aid)) {
-        co.attendeeInfo.set(aid, { name: `${fu.first_name} ${fu.last_name}`, title: null });
+        co.attendeeInfo.set(aid, {
+          name: `${fu.first_name} ${fu.last_name}`, title: null,
+          firstName: String(fu.first_name ?? ''), lastName: String(fu.last_name ?? ''),
+          photoUrl: fu.photo_url != null ? String(fu.photo_url) : null,
+        });
       }
       co.followUps.push(fu);
     }
@@ -234,6 +243,8 @@ export async function GET(
         co.attendeeInfo.set(aid, {
           name: `${t.first_name ?? ''} ${t.last_name ?? ''}`.trim(),
           title: t.title ? String(t.title) : null,
+          firstName: String(t.first_name ?? ''), lastName: String(t.last_name ?? ''),
+          photoUrl: t.photo_url != null ? String(t.photo_url) : null,
         });
       }
     }
@@ -270,6 +281,8 @@ export async function GET(
           co.attendeeInfo.set(aid, {
             name: `${row.first_name} ${row.last_name}`,
             title: row.title ? String(row.title) : null,
+            firstName: String(row.first_name ?? ''), lastName: String(row.last_name ?? ''),
+            photoUrl: row.photo_url != null ? String(row.photo_url) : null,
           });
         }
       }
@@ -368,6 +381,7 @@ export async function GET(
         completedFollowUpCount: completedFollowUps.length,
         attendees: Array.from(co.attendeeInfo.entries()).map(([id, info]) => ({
           id, name: info.name, title: info.title,
+          firstName: info.firstName, lastName: info.lastName, photoUrl: info.photoUrl,
           email: contactById.get(id)?.email ?? null,
           phone: contactById.get(id)?.phone ?? null,
           linkedinUrl: contactById.get(id)?.linkedinUrl ?? null,

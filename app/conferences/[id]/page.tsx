@@ -2132,7 +2132,7 @@ export default function ConferenceDetailPage() {
                     </button>
                   )}
                   {editIndustryDropdownOpen && (
-                    <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                    <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
                       {industryOptions
                         .filter((o) => !editIndustrySearch || o.value.toLowerCase().includes(editIndustrySearch.toLowerCase()))
                         .map((opt) => (
@@ -2379,7 +2379,7 @@ export default function ConferenceDetailPage() {
                     </svg>
                   </button>
                   {internalDropdownOpen && (
-                    <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                       {userOptions.length === 0 ? (
                         <div className="px-3 py-2 text-sm text-gray-500">No users configured. Add users in the Admin panel.</div>
                       ) : (
@@ -2513,8 +2513,13 @@ export default function ConferenceDetailPage() {
                   </button>
                   {reportMenuOpen && (
                     <>
-                      <div className="fixed inset-0 z-10" onClick={() => setReportMenuOpen(false)} />
-                      <div className="absolute top-full right-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-100 py-1.5 z-20">
+                      {/* Above the sticky tab row, which is z-20 and later in
+                          the document — at equal z it painted over this menu.
+                          The backdrop clears the tabs too, so a click on them
+                          shuts the menu rather than switching tab underneath
+                          it. Both stay below the drawers and modals at z-50. */}
+                      <div className="fixed inset-0 z-30" onClick={() => setReportMenuOpen(false)} />
+                      <div className="absolute top-full right-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-100 py-1.5 z-40">
                         {isInternalAttendee && (
                         <button
                           type="button"
