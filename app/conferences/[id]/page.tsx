@@ -2797,8 +2797,21 @@ export default function ConferenceDetailPage() {
         )}
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200 overflow-x-auto">
+      {/* Tabs
+          Stuck to the top of the scrolling column on narrow screens, where the
+          conference card above them is tall enough that scrolling into a tab's
+          contents would otherwise carry the tabs away — and switching tab then
+          means scrolling all the way back up. Static again from lg, where the
+          card costs proportionally less of the screen.
+
+          The background is opaque and matches the page so the content passes
+          behind rather than through, and z-20 keeps it under the drawers and
+          modals, which start at z-50. Sticky is inset by the scroll column's
+          own padding, which would leave a strip of content sliding past above
+          the tabs — the solid shadow paints that strip in the page colour, and
+          unlike a pseudo-element it isn't clipped by this element's own
+          horizontal overflow. */}
+      <div className="border-b border-gray-200 overflow-x-auto sticky top-0 z-20 bg-gray-50 shadow-[0_-1rem_0_0_rgb(249,250,251)] lg:static lg:z-auto lg:bg-transparent lg:shadow-none">
         <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
           {visibleConferenceTabs.map((tabKey) => {
             const baseLabel = conferenceTabConfig.getLabel(tabKey);
