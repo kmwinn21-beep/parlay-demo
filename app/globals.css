@@ -25,6 +25,20 @@ body {
   color: #1a1a2e;
 }
 
+/*
+ * The app shell is exactly one viewport tall and scrolls inside itself, so the
+ * document must never scroll as well. On iOS with viewport-fit=cover, 100vh is
+ * the viewport as it would be with the browser toolbars hidden — taller than
+ * what is on screen — which left the whole shell draggable and took the header
+ * up behind Safari's URL pill. The shell now measures itself in dvh; this stops
+ * anything above it from scrolling regardless.
+ */
+html,
+body {
+  overflow: hidden;
+  overscroll-behavior-y: none;
+}
+
 h1, h2, h3 {
   font-family: var(--font-heading), serif;
 }

@@ -321,6 +321,8 @@ export default function ConferenceDetailPage() {
   const [conferenceCompanies, setConferenceCompanies] = useState<{ id: number; name: string; website?: string; profit_type?: string; company_type?: string; status?: string; icp?: string; assigned_user?: string; attendee_count: number; conference_count: number; conference_names?: string }[]>([]);
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [companiesLoaded, setCompaniesLoaded] = useState(false);
+  /** Set when a tab was switched while pinned, so the arriving content re-pins. */
+  const [pinTabsAfterLoad, setPinTabsAfterLoad] = useState(false);
   const [confFollowUps, setConfFollowUps] = useState<FollowUp[]>([]);
   const [followUpFilter, setFollowUpFilter] = useState<'all' | 'open' | 'completed'>(() => {
     // Read filter param from URL for iframe embedding
@@ -720,12 +722,54 @@ export default function ConferenceDetailPage() {
     }
   }, [activeTab, visibleConferenceTabs]);
 
+  const tabBarRef = useRef<HTMLDivElement>(null);
+
+  /** True while the tab row is pinned to the top of the scrolling column. */
+  const tabsArePinned = () => {
+    const bar = tabBarRef.current;
+    const main = bar?.closest('main');
+    if (!bar || !main) return false;
+    const stuckAt = main.getBoundingClientRect().top + parseFloat(getComputedStyle(main).paddingTop || '0');
+    return bar.getBoundingClientRect().top <= stuckAt + 1;
+  };
+
+  /**
+   * Put the tab row back at the top of the column.
+   *
+   * scrollIntoView targets its static position, which is exactly where sticky
+   * pins it — and the browser clamps if the new tab isn't tall enough to allow
+   * it, which is the honest outcome in that case.
+   */
+  const repinTabs = () => {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      tabBarRef.current?.scrollIntoView({ block: 'start' });
+    }));
+  };
+
   const handleTabChange = (tabKey: ConferenceTabKey) => {
+    // Switching tab from a pinned row should leave the row pinned, with the
+    // new tab starting underneath it. Without this the incoming tab renders
+    // short, the scroll collapses to the top, and the conference card comes
+    // back — so the tabs have to be scrolled to all over again.
+    const pinned = tabsArePinned();
     setActiveTab(tabKey);
     if (tabKey === 'companies' || tabKey === 'social' || tabKey === 'notes') {
       loadCompanies();
     }
+    if (pinned) {
+      setPinTabsAfterLoad(true);
+      repinTabs();
+    }
   };
+
+  // The height changes again when the real content replaces the placeholder,
+  // so the row is put back once more after that.
+  useEffect(() => {
+    if (!pinTabsAfterLoad || isLoadingCompanies) return;
+    setPinTabsAfterLoad(false);
+    repinTabs();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pinTabsAfterLoad, isLoadingCompanies]);
 
   const fetchConference = useCallback(async () => {
     try {
@@ -2797,8 +2841,21 @@ export default function ConferenceDetailPage() {
         )}
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200 overflow-x-auto">
+      {/* Tabs
+          Stuck to the top of the scrolling column on narrow screens, where the
+          conference card above them is tall enough that scrolling into a tab's
+          contents would otherwise carry the tabs away — and switching tab then
+          means scrolling all the way back up. Static again from lg, where the
+          card costs proportionally less of the screen.
+
+          The background is opaque and matches the page so the content passes
+          behind rather than through, and z-20 keeps it under the drawers and
+          modals, which start at z-50. Sticky is inset by the scroll column's
+          own padding, which would leave a strip of content sliding past above
+          the tabs — the solid shadow paints that strip in the page colour, and
+          unlike a pseudo-element it isn't clipped by this element's own
+          horizontal overflow. */}
+      <div ref={tabBarRef} className="border-b border-gray-200 overflow-x-auto sticky top-0 z-20 bg-gray-50 shadow-[0_-1rem_0_0_rgb(249,250,251)] lg:static lg:z-auto lg:bg-transparent lg:shadow-none">
         <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
           {visibleConferenceTabs.map((tabKey) => {
             const baseLabel = conferenceTabConfig.getLabel(tabKey);
@@ -3606,7 +3663,10 @@ export default function ConferenceDetailPage() {
       {activeTab === 'companies' && (
         <div className="card">
           {isLoadingCompanies ? (
-            <div className="flex justify-center py-12">
+            // Holds a screen's worth of height while loading. A short spinner
+            // collapses the page, the browser clamps the scroll to the top,
+            // and the sticky tabs are carried away with it.
+            <div className="flex justify-center py-12 lg:py-12 min-h-[70vh] lg:min-h-0 items-start">
               <div className="animate-spin w-6 h-6 border-4 border-brand-secondary border-t-transparent rounded-full" />
             </div>
           ) : (
