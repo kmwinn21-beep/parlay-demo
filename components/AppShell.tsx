@@ -159,7 +159,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       <ChatPanelProvider>
       <FloatingNavHiddenProvider>
       <BottomNavProvider>
-        <div className="flex h-screen overflow-hidden bg-gray-50">
+        <div className="flex h-screen supports-[height:100dvh]:h-dvh overflow-hidden bg-gray-50">
           {/* Sidebar — desktop only */}
           <div className="hidden lg:flex">
             <Sidebar />
@@ -224,7 +224,7 @@ function EmbedChecker({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
   if (searchParams.get('embed') === 'true') {
     // Render only the page content with no chrome (sidebar, header, nav, footer)
-    return <main className="h-screen overflow-y-auto p-4 lg:p-6 bg-gray-50">{children}</main>;
+    return <main className="h-screen supports-[height:100dvh]:h-dvh overflow-y-auto overscroll-y-contain p-4 lg:p-6 bg-gray-50">{children}</main>;
   }
   return <AppShellInner>{children}</AppShellInner>;
 }
