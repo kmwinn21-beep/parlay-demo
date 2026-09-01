@@ -11,6 +11,9 @@ import { useActiveConference } from '@/components/ActiveConferenceContext';
 import { useUser } from '@/components/UserContext';
 import { useUserOptions, parseRepIds, getRepInitials } from '@/lib/useUserOptions';
 import { useConfigColors } from '@/lib/useConfigColors';
+import { TargetToggleButton } from '@/components/TargetToggleButton';
+import { useConferenceTargets } from '@/lib/useConferenceTargets';
+import { useIcpCompanyTypes, matchesIcpCompanyType } from '@/lib/useIcpCompanyTypes';
 import { getBadgeClass, getPreset, formatStatusLabel, type ColorMap } from '@/lib/colors';
 
 interface DrawerAttendee extends AttendeeCardRow {
@@ -92,6 +95,11 @@ function DrawerCompanyCard({ company, userOptions, colorMaps, onOpen }: {
 
 export function AttendeesDrawer({ onClose }: { onClose: () => void }) {
   const { activeConference } = useActiveConference();
+  // Same toggle as the conference attendees table, on the same shared state —
+  // this drawer lists the set conference's attendees, so it is targeting for
+  // that conference too.
+  const { targetIds, busyId: targetBusyId, toggleTarget } = useConferenceTargets(activeConference?.id ?? null);
+  const { types: icpCompanyTypes } = useIcpCompanyTypes();
   const { user: currentUser } = useUser();
   const userOptions = useUserOptions();
   const colorMaps = useConfigColors();
@@ -425,6 +433,15 @@ export function AttendeesDrawer({ onClose }: { onClose: () => void }) {
                 onOpenCompany={id => setQuickView({ type: 'company', id })}
                 userOptions={userOptions}
                 colorMaps={colorMaps}
+                leadingPill={matchesIcpCompanyType(a.company_type, icpCompanyTypes) ? (
+                  <TargetToggleButton
+                    active={targetIds.has(a.id)}
+                    busy={targetBusyId === a.id}
+                    onToggle={() => toggleTarget(a.id)}
+                    name={`${a.first_name} ${a.last_name}`.trim()}
+                    size="sm"
+                  />
+                ) : undefined}
               />
               </MobileCard>
             ))}
