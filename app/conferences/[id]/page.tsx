@@ -369,6 +369,7 @@ export default function ConferenceDetailPage() {
   // Meeting filter state
   const [meetingFiltersOpen, setMeetingFiltersOpen] = useState(false);
   const [myMeetingsOnly, setMyMeetingsOnly] = useState(false);
+  const [myFollowUpsOnly, setMyFollowUpsOnly] = useState(false);
   const [meetingFilterReps, setMeetingFilterReps] = useState<number[]>([]);
   const [meetingFilterDates, setMeetingFilterDates] = useState<string[]>([]);
   const [meetingFilterCompanyTypes, setMeetingFilterCompanyTypes] = useState<string[]>([]);
@@ -4168,13 +4169,41 @@ export default function ConferenceDetailPage() {
                 </button>
               ))}
             </div>
+            {/* Not one of the three states — a filter that narrows whichever of
+                them is showing, so it sits outside the segmented control. */}
+            {currentUser?.configId != null && (
+              <button
+                type="button"
+                onClick={() => setMyFollowUpsOnly(v => !v)}
+                title="Only follow-ups assigned to me"
+                aria-pressed={myFollowUpsOnly}
+                className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium whitespace-nowrap transition-colors ${
+                  myFollowUpsOnly
+                    ? 'bg-brand-secondary text-white border-brand-secondary'
+                    : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                My Follow Ups
+              </button>
+            )}
           </div>
           {(() => {
-            const filteredFollowUps = followUpFilter === 'open'
+            const byState = followUpFilter === 'open'
               ? confFollowUps.filter(f => !f.completed)
               : followUpFilter === 'completed'
                 ? confFollowUps.filter(f => f.completed)
                 : confFollowUps;
+            // assigned_rep holds config ids, comma-separated when a follow-up
+            // is shared, so this is a membership test rather than an equality
+            // one — otherwise a follow-up assigned to two people would only
+            // count for whoever happened to be listed first.
+            const myConfigId = currentUser?.configId ?? null;
+            const filteredFollowUps = myFollowUpsOnly && myConfigId != null
+              ? byState.filter(f => parseRepIds(f.assigned_rep).includes(myConfigId))
+              : byState;
             return (
           <FollowUpsTable
             detailsInDrawer
