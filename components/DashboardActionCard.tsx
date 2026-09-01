@@ -1071,6 +1071,36 @@ export function TouchpointQuickModal({ onClose, ...defaults }: {
 
 // ── DashboardActionCard ───────────────────────────────────────────────────────
 
+/**
+ * Upcoming or the whole conference, for the meetings drawer.
+ *
+ * At module scope, not inside the card: a component declared during a render
+ * is a new type every render, which remounts it and stops the fill from ever
+ * animating.
+ */
+function ScopeToggle({ scope, onChange }: {
+  scope: 'upcoming' | 'all';
+  onChange: (scope: 'upcoming' | 'all') => void;
+}) {
+  return (
+    <div className="inline-flex flex-shrink-0 rounded-lg border border-gray-200 overflow-hidden">
+      {([['upcoming', 'Upcoming'], ['all', 'All']] as const).map(([key, label], i) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(key)}
+          aria-pressed={scope === key}
+          className={`px-3 py-1 text-xs font-medium transition-colors duration-200 ease-out ${
+            i > 0 ? 'border-l border-gray-200' : ''
+          } ${scope === key ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 'upcoming' | 'none' }) {
   const { user } = useUser();
   const { activeConference } = useActiveConference();
@@ -1092,6 +1122,8 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
   const [attendeesOpen, setAttendeesOpen] = useState(false);
   const [drawerDateFilter, setDrawerDateFilter] = useState<string[]>([]);
   const [drawerBoothOnly, setDrawerBoothOnly] = useState(false);
+  /** Upcoming by default: at a live conference, what is next is the question. */
+  const [drawerScope, setDrawerScope] = useState<'upcoming' | 'all'>('upcoming');
   // Whoever is signed in, by first name where we have one.
   const meetingsOwner = (user?.firstName || user?.displayName || user?.repName || 'My').split(' ')[0];
   const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -1120,35 +1152,38 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
     return () => { cancelled = true; };
   }, [meetingsOpen, activeConference?.id]);
 
-  // Mine — booked by me or on support — and still to come, soonest first.
-  const myUpcomingMeetings = useMemo(() => {
+  // Mine — booked by me or on support — in time order. Upcoming drops what has
+  // already happened; All keeps the whole conference, which is what you want
+  // once it is under way and you are looking back at what was said.
+  const myMeetings = useMemo(() => {
     const myConfigId = user?.configId ?? null;
     const today = new Date().toISOString().slice(0, 10);
     return meetings
       .filter(m => {
-        if (!m.meeting_date || m.meeting_date < today) return false;
+        if (!m.meeting_date) return false;
+        if (drawerScope === 'upcoming' && m.meeting_date < today) return false;
         if (myConfigId == null) return false;
         const ids = (m.scheduled_by || '').split(',').map(x => parseInt(x.trim(), 10)).filter(n => !isNaN(n));
         return ids.includes(myConfigId);
       })
       .sort((a, b) => `${a.meeting_date} ${a.meeting_time}`.localeCompare(`${b.meeting_date} ${b.meeting_time}`));
-  }, [meetings, user?.configId]);
+  }, [meetings, user?.configId, drawerScope]);
 
   // Day buttons come from the meetings actually in the drawer rather than every
   // day of the conference, so a button can never filter down to nothing.
   const drawerDates = useMemo(
-    () => Array.from(new Set(myUpcomingMeetings.map(m => m.meeting_date).filter(Boolean) as string[])).sort(),
-    [myUpcomingMeetings],
+    () => Array.from(new Set(myMeetings.map(m => m.meeting_date).filter(Boolean) as string[])).sort(),
+    [myMeetings],
   );
   const drawerHasBoothHours = useMemo(
-    () => myUpcomingMeetings.some(m => isBoothHours(m.meeting_time)),
-    [myUpcomingMeetings],
+    () => myMeetings.some(m => isBoothHours(m.meeting_time)),
+    [myMeetings],
   );
-  const filteredDrawerMeetings = useMemo(() => myUpcomingMeetings.filter(m => {
+  const filteredDrawerMeetings = useMemo(() => myMeetings.filter(m => {
     if (drawerDateFilter.length > 0 && !drawerDateFilter.includes(m.meeting_date)) return false;
     if (drawerBoothOnly && !isBoothHours(m.meeting_time)) return false;
     return true;
-  }), [myUpcomingMeetings, drawerDateFilter, drawerBoothOnly]);
+  }), [myMeetings, drawerDateFilter, drawerBoothOnly]);
 
   const handleOutcomeChange = useCallback(async (meetingId: number, outcome: string) => {
     setMeetings(prev => prev.map(m => (m.id === meetingId ? { ...m, outcome } : m)));
@@ -1389,7 +1424,7 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
         {/* Right — Meetings, which opens the drawer */}
         <button
           type="button"
-          onClick={() => { setMeetingsOpen(true); setAgendaOpen(false); setDrawerDateFilter([]); setDrawerBoothOnly(false); }}
+          onClick={() => { setMeetingsOpen(true); setAgendaOpen(false); setDrawerDateFilter([]); setDrawerBoothOnly(false); setDrawerScope('upcoming'); }}
           aria-expanded={meetingsOpen}
           className="flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-yellow-50 transition-colors group"
         >
@@ -1411,13 +1446,18 @@ export function DashboardActionCard({ bannerState }: { bannerState?: 'active' | 
           title={`${activeConference?.name ?? 'Conference'} - ${meetingsOwner}'s Meetings`}
           onClose={() => setMeetingsOpen(false)}
         >
+          {activeConference && !loadingMeetings && (
+            <div className="px-4 pt-3 flex justify-end">
+              <ScopeToggle scope={drawerScope} onChange={setDrawerScope} />
+            </div>
+          )}
           {!activeConference ? (
             <p className="text-xs text-gray-400 text-center py-8">Set an active conference to see your meetings.</p>
           ) : loadingMeetings ? (
             <p className="text-xs text-gray-400 text-center py-8">Loading meetings…</p>
-          ) : myUpcomingMeetings.length === 0 ? (
+          ) : myMeetings.length === 0 ? (
             <p className="text-xs text-gray-400 text-center py-8">
-              No upcoming meetings for you at {activeConference.name}.
+              {drawerScope === 'upcoming' ? 'No upcoming meetings' : 'No meetings'} for you at {activeConference.name}.
             </p>
           ) : (
             <>
