@@ -9,6 +9,8 @@ import { SlideInPanel } from '@/components/SlideInPanel';
 import { FollowUpReassignNotePrompt, type ReassignNoteTarget } from '@/components/FollowUpReassignNotePrompt';
 import { getPreset } from '@/lib/colors';
 import { MobileCard, MobileCardList } from './MobileCardList';
+import { AttendeeAvatar } from './AttendeePhoto';
+import { OverlappingRepPills } from './OverlappingRepPills';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useAnchoredDrawer } from '@/lib/useAnchoredDrawer';
 import { FollowUpNotesPopover } from '@/components/FollowUpNotesPopover';
@@ -35,6 +37,7 @@ export interface FollowUp {
   last_name: string;
   title: string | null;
   email: string | null;
+  photo_url?: string | null;
   company_id: number | null;
   company_name: string | null;
   conference_name: string;
@@ -766,6 +769,13 @@ export function FollowUpsTable({
         </div>
       );
     }
+    // More than one rep reads as overlapping badges that open into full names
+    // on click, the way the meetings table's Support column does. A single rep
+    // stays the plain pill it already was — there is nothing to unstack.
+    const repCount = parseRepIds(unionRep).length;
+    if (repCount > 1) {
+      return <OverlappingRepPills repIds={unionRep} userOptions={userOptions} size={size} />;
+    }
     if (canEditRep) {
       return (
         <button
@@ -902,11 +912,14 @@ export function FollowUpsTable({
     // the card, leaving the columns exactly where the header puts them.
     const cardFill = () => {
       if (dimmed) return 'bg-gray-50/60 group-hover:bg-gray-100';
-      if (expanded) return 'bg-white ring-1 ring-inset ring-brand-secondary/40';
       return 'bg-white group-hover:bg-gray-50';
     };
+    // The selected row is outlined by colouring its own border rather than by a
+    // ring: a ring is inset on all four sides of every cell, so the sides
+    // between columns drew as grid lines across the card.
+    const cardEdge = expanded ? 'border-brand-secondary/40' : 'border-gray-200';
     const cell = (key: string, body: React.ReactNode, extra = '') => (
-      <td key={key} className={`px-3 py-2 align-middle transition-colors border-y border-gray-200 ${cardFill()} ${key === firstKey ? 'border-l rounded-l-lg' : ''} ${key === lastCardKey ? 'border-r rounded-r-lg' : ''} ${extra}`}>
+      <td key={key} className={`px-3 py-2 align-middle transition-colors border-y ${cardEdge} ${cardFill()} ${key === firstKey ? 'border-l rounded-l-lg' : ''} ${key === lastCardKey ? 'border-r rounded-r-lg' : ''} ${extra}`}>
         {key === lastKey
           ? <div className="flex items-center justify-between gap-2">{body}{chevron}</div>
           : body}
@@ -932,7 +945,19 @@ export function FollowUpsTable({
           if (!isVisible(col.key)) return null;
           switch (col.key) {
             case 'name': return cell('name',
-              <span className="flex items-center gap-1.5 min-w-0">
+              <span className="flex items-center gap-2 min-w-0">
+                {/* Sits flush with the heading above it, and opens the full
+                    picture on click exactly as it does elsewhere. */}
+                <span onClick={e => e.stopPropagation()} className="flex-shrink-0">
+                  <AttendeeAvatar
+                    firstName={head.first_name}
+                    lastName={head.last_name}
+                    title={head.title}
+                    companyName={head.company_name}
+                    photoUrl={head.photo_url}
+                    className="w-7 h-7 text-[10px]"
+                  />
+                </span>
                 {attendeeNameNode(head, 'text-xs font-semibold text-brand-secondary hover:underline truncate')}
               </span>, 'overflow-hidden');
             case 'title': return cell('title',
@@ -961,7 +986,7 @@ export function FollowUpsTable({
           }
         })}
         {visibleCustom.map((col, i) => (
-          <td key={`custom_${col.id}`} className={`px-3 py-2 align-middle transition-colors border-y border-gray-200 ${cardFill()} ${i === visibleCustom.length - 1 ? 'border-r rounded-r-lg' : ''}`}>
+          <td key={`custom_${col.id}`} className={`px-3 py-2 align-middle transition-colors border-y ${cardEdge} ${cardFill()} ${i === visibleCustom.length - 1 ? 'border-r rounded-r-lg' : ''}`}>
             {i === visibleCustom.length - 1 ? <div className="flex items-center justify-end">{chevron}</div> : null}
           </td>
         ))}

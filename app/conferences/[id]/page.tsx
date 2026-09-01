@@ -4156,6 +4156,7 @@ export default function ConferenceDetailPage() {
                 </p>
               )}
             </div>
+            <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
               {(['all', 'open', 'completed'] as const).map(opt => (
                 <button
@@ -4189,6 +4190,7 @@ export default function ConferenceDetailPage() {
                 My Follow Ups
               </button>
             )}
+            </div>
           </div>
           {(() => {
             const byState = followUpFilter === 'open'
