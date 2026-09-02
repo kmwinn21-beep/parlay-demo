@@ -8,6 +8,7 @@ import { MentionTextarea } from '@/components/MentionTextarea';
 import { useUserOptions } from '@/lib/useUserOptions';
 import { NoteCard } from '@/components/NoteCard';
 import { announceNoteSaved } from '@/lib/suggestions/announce';
+import { FadeCollapse } from '@/components/CollapseAnimation';
 
 export interface EntityNote {
   id: number;
@@ -52,6 +53,7 @@ export function NotesSection({
   pinnedNoteIds = new Set(),
   showPinnedIndicator = false,
   onMeetingNoteClick,
+  fadeCollapse = false,
 }: {
   entityType: 'attendee' | 'company' | 'conference' | 'social_event';
   entityId: number;
@@ -66,6 +68,11 @@ export function NotesSection({
   currentAttendeeId?: number;
   currentConferenceName?: string;
   onPin?: (noteId: number, conferenceName: string | null, attendeeName: string | null, attendeeId: number | null) => void;
+  /**
+   * Show the first couple of notes and fade the rest behind a chevron. Opt-in,
+   * because the pages that give notes a column of their own want the whole list.
+   */
+  fadeCollapse?: boolean;
   pinnedNoteIds?: Set<number>;
   showPinnedIndicator?: boolean;
   onMeetingNoteClick?: (meetingId: number) => void;
@@ -506,23 +513,27 @@ export function NotesSection({
 
       {notes.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-6">No notes yet. Click &quot;Add Note&quot; to get started.</p>
-      ) : (
-        <div className="space-y-3">
-          {notes.map(note => (
-            <NoteCard
-              key={note.id}
-              note={note}
-              entityType={entityType}
-              conferences={conferences}
-              onDelete={handleDelete}
-              onPin={onPin ? handlePinClick : undefined}
-              pinnedNoteIds={pinnedNoteIds}
-              showPinnedIndicator={showPinnedIndicator}
-              onMeetingNoteClick={onMeetingNoteClick}
-            />
-          ))}
-        </div>
-      )}
+      ) : (() => {
+        const list = (
+          <div className="space-y-3">
+            {notes.map(note => (
+              <div key={note.id} data-collapse-row>
+                <NoteCard
+                  note={note}
+                  entityType={entityType}
+                  conferences={conferences}
+                  onDelete={handleDelete}
+                  onPin={onPin ? handlePinClick : undefined}
+                  pinnedNoteIds={pinnedNoteIds}
+                  showPinnedIndicator={showPinnedIndicator}
+                  onMeetingNoteClick={onMeetingNoteClick}
+                />
+              </div>
+            ))}
+          </div>
+        );
+        return fadeCollapse ? <FadeCollapse rows={2}>{list}</FadeCollapse> : list;
+      })()}
 
       {/* Pin modal */}
       {pinModalNoteId !== null && (

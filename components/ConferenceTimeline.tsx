@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { FadeCollapse } from '@/components/CollapseAnimation';
 
 /**
  * Every conference a record has been to, most recent first, with what happened
@@ -139,13 +140,7 @@ export function ConferenceTimeline({ entityType, entityId, title = 'Conference T
   const [loaded, setLoaded] = useState(false);
   const [sort, setSort] = useState<'recent' | 'earliest'>('recent');
   const [sortOpen, setSortOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [collapsedHeight, setCollapsedHeight] = useState<number | null>(null);
-  // The open height is measured too, because `max-height: none` cannot be
-  // animated from — a transition needs two numbers.
-  const [fullHeight, setFullHeight] = useState<number | null>(null);
 
-  const listRef = useRef<HTMLDivElement>(null);
   const sortRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -181,47 +176,11 @@ export function ConferenceTimeline({ entityType, entityId, title = 'Conference T
     return rows;
   }, [conferences, sort]);
 
-  /**
-   * Collapsed, the section stops part-way through the first conference's second
-   * item — enough to show the list continues. Measured rather than a fixed
-   * height, because a row with a wrapped subtext is taller than one without and
-   * a hardcoded value would cut a different place on every record.
-   */
-  const measureCollapsed = useCallback(() => {
-    const list = listRef.current;
-    if (!list) return;
-    const items = list.querySelectorAll('[data-timeline-item]');
-    if (items.length === 0) {
-      setCollapsedHeight(null);
-      return;
-    }
-    const listTop = list.getBoundingClientRect().top;
-    const second = items[1] as HTMLElement | undefined;
-    const first = items[0] as HTMLElement;
-    const cut = second
-      ? second.getBoundingClientRect().top - listTop + 20
-      : first.getBoundingClientRect().bottom - listTop;
-    setCollapsedHeight(Math.round(cut));
-    // Re-measured alongside the cut, so opening a subtext while the section is
-    // open grows the section with it rather than clipping it.
-    setFullHeight(Math.ceil(list.scrollHeight));
-  }, []);
-
-  useLayoutEffect(() => {
-    if (!loaded) return;
-    measureCollapsed();
-    const ro = new ResizeObserver(measureCollapsed);
-    if (listRef.current) ro.observe(listRef.current);
-    return () => ro.disconnect();
-  }, [loaded, ordered, measureCollapsed]);
-
   if (!loaded) return null;
 
   const countText = entityType === 'company'
     ? `${conferences.length} ${conferences.length === 1 ? 'conference' : 'conferences'} · ${attendeeCount} ${attendeeCount === 1 ? 'attendee' : 'attendees'}`
     : `${conferences.length} ${conferences.length === 1 ? 'conference' : 'conferences'}`;
-
-  const canCollapse = collapsedHeight != null && ordered.length > 0;
 
   return (
     <div className="card">
@@ -267,16 +226,8 @@ export function ConferenceTimeline({ entityType, entityId, title = 'Conference T
       {ordered.length === 0 ? (
         <p className="text-sm text-gray-400">No conferences yet.</p>
       ) : (
-        <>
-          <div
-            className="relative overflow-hidden transition-[max-height] duration-300 ease-out"
-            style={{
-              maxHeight: canCollapse
-                ? (expanded ? (fullHeight ?? undefined) : collapsedHeight!)
-                : undefined,
-            }}
-          >
-            <div ref={listRef} className="space-y-5">
+        <FadeCollapse rows={1} label="conference timeline">
+          <div className="space-y-5">
               {ordered.map(conf => {
                 // A conference that has been and gone with nothing recorded
                 // recedes — it is context, not activity.
@@ -319,7 +270,7 @@ export function ConferenceTimeline({ entityType, entityId, title = 'Conference T
                       {conf.items.length > 0 && (
                         <div className="mt-2 space-y-2.5 border-l border-gray-200 pl-3 ml-1">
                           {conf.items.map(item => (
-                            <div key={item.key} data-timeline-item className="relative">
+                            <div key={item.key} data-collapse-row className="relative">
                               <span className={`absolute -left-[17px] top-1.5 w-2 h-2 rounded-full ${DOT[item.key]}`} />
                               <p className="text-xs font-semibold text-gray-800">
                                 {item.count} {item.title}
@@ -333,36 +284,8 @@ export function ConferenceTimeline({ entityType, entityId, title = 'Conference T
                   </div>
                 );
               })}
-            </div>
-
-            {/* Fades rather than cuts, so the list visibly continues. Faded out
-                rather than unmounted, so it doesn't vanish a frame before the
-                section has finished opening. */}
-            {canCollapse && (
-              <div
-                className={`absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white to-transparent pointer-events-none transition-opacity duration-300 ${
-                  expanded ? 'opacity-0' : 'opacity-100'
-                }`}
-              />
-            )}
           </div>
-
-          {canCollapse && (
-            <div className="flex justify-center pt-2">
-              <button
-                type="button"
-                onClick={() => setExpanded(v => !v)}
-                aria-expanded={expanded}
-                aria-label={expanded ? 'Collapse conference timeline' : 'Expand conference timeline'}
-                className="flex items-center justify-center w-8 h-8 rounded-full text-gray-400 hover:text-brand-secondary hover:bg-gray-50 transition-colors"
-              >
-                <svg className={`w-5 h-5 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-            </div>
-          )}
-        </>
+        </FadeCollapse>
       )}
     </div>
   );
