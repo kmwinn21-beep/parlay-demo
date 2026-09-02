@@ -49,6 +49,37 @@ function ymd(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * City and state only.
+ *
+ * The structured columns are used where the location came from the autocomplete
+ * and are authoritative. Where it was typed by hand, the free-text field can be
+ * anything from "Atlanta, GA" to a full street address, so the last two
+ * comma-separated parts are taken and a trailing postcode dropped — that lands
+ * on city and state for the address shapes this field actually holds, and a
+ * value already in the short form passes through unchanged.
+ */
+function cityState(location: string | null, city: string | null, state: string | null): string | null {
+  if (city && state) return `${city}, ${state}`;
+  if (city) return city;
+  const raw = String(location ?? '').trim();
+  if (!raw) return state || null;
+
+  const parts = raw.split(',').map(p => p.trim()).filter(Boolean);
+  if (parts.length === 0) return null;
+  if (parts.length === 1) return parts[0];
+
+  let last = parts[parts.length - 1];
+  // "GA 30301" or "GA 30301-1234", and a trailing country the picker appends.
+  if (/^(usa|united states|us)$/i.test(last) && parts.length >= 3) {
+    parts.pop();
+    last = parts[parts.length - 1];
+  }
+  last = last.replace(/\s+\d{5}(-\d{4})?$/, '').trim();
+  const secondLast = parts[parts.length - 2];
+  return last ? `${secondLast}, ${last}` : secondLast;
+}
+
 /** Ordered by count, then alphabetically, so the subtext reads the same twice. */
 function toBreakdown(counts: Map<string, number>): TimelineBreakdown[] {
   return Array.from(counts.entries())
@@ -83,7 +114,7 @@ export async function GET(request: NextRequest) {
 
     const confRes = await db.execute({
       sql: `SELECT DISTINCT c.id, c.name, c.start_date, c.end_date, c.location, c.logo_url,
-                   c.internal_attendees
+                   c.location_city, c.location_state, c.internal_attendees
             FROM conferences c
             JOIN conference_attendees ca ON ca.conference_id = c.id
             WHERE ca.attendee_id IN (${inAttendees})
@@ -246,7 +277,11 @@ export async function GET(request: NextRequest) {
         name: String(row.name ?? ''),
         start_date: start,
         end_date: end,
-        location: row.location ? String(row.location) : null,
+        location: cityState(
+          row.location ? String(row.location) : null,
+          row.location_city ? String(row.location_city) : null,
+          row.location_state ? String(row.location_state) : null,
+        ),
         logo_url: row.logo_url ? String(row.logo_url) : null,
         // Still running counts as upcoming: nothing about it is final yet.
         upcoming: (end ?? start ?? '') >= today,
