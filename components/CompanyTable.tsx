@@ -22,7 +22,7 @@ import { CustomColumnCell } from './CustomColumnCell';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
 import { AttendeeTooltip, ConferenceTooltip } from '@/components/CountPills';
-import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_STICKY_HEAD, CARD_TABLE_WRAP, cardRowClass, selectionColumnWidth } from '@/components/tableCards';
+import { CARD_TABLE, CARD_TABLE_HEAD, CARD_TABLE_SCROLL_X, CARD_TABLE_WRAP, cardRowClass, selectionColumnWidth } from '@/components/tableCards';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import { useUser } from './UserContext';
 import { CompanyAttendeesDrawer, type CompanyAttendeeLite } from './CompanyAttendeesDrawer';
@@ -1178,9 +1178,14 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
 
         {/* Desktop table layout */}
         <div className={`hidden lg:block ${CARD_TABLE_WRAP}`}>
-        <div className={CARD_TABLE_SCROLL} style={{ maxHeight: 'calc(100vh - 18rem)' }}>
+        {/* Grows with the page instead of scrolling inside a capped height, so
+            there is no scrollbar down the side of the table. The header row
+            goes with it: there is no longer an inner viewport for it to stick
+            within, and sticking it to the page would collide with the tab bar
+            that is already pinned there. */}
+        <div className={CARD_TABLE_SCROLL_X}>
           <table className={`w-full text-sm ${CARD_TABLE}`} style={{ tableLayout: 'fixed' }}>
-            <thead className={CARD_TABLE_STICKY_HEAD}>
+            <thead className={CARD_TABLE_HEAD}>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="py-3 text-left sticky left-0 z-30 bg-gray-50" style={{ width: selWidth }}>
                   <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(filtered.map(c => c.id))); else setSelectedIds(new Set()); }} className="accent-brand-secondary ml-3" />

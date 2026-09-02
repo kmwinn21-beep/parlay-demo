@@ -26,6 +26,12 @@ export const CARD_TABLE_WRAP = 'bg-gray-50 rounded-lg px-2';
 export const CARD_TABLE_SCROLL = 'overflow-auto';
 
 /**
+ * The same, for a table that grows with the page rather than scrolling inside
+ * a capped height — only sideways, so there is no scrollbar down its side.
+ */
+export const CARD_TABLE_SCROLL_X = 'overflow-x-auto';
+
+/**
  * A sticky header row over card rows.
  *
  * Each cell carries the grey itself — with border-separate a row's background
@@ -35,6 +41,13 @@ export const CARD_TABLE_SCROLL = 'overflow-auto';
  * body cells, which have one of their own.
  */
 export const CARD_TABLE_STICKY_HEAD = 'sticky top-0 z-40 [&>tr>th]:bg-gray-50 [&>tr>th]:shadow-[0_8px_0_0_rgb(249,250,251)]';
+
+/**
+ * A header row that scrolls with the table. Still needs the grey on the cells
+ * themselves: with border-separate a row's background does not reliably cover
+ * them.
+ */
+export const CARD_TABLE_HEAD = '[&>tr>th]:bg-gray-50';
 
 /** border-spacing is the only place a table has to put a gap between rows. */
 export const CARD_TABLE = 'border-separate [border-spacing:0_0.5rem]';
