@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
 /**
  * The two ways a section on a record page opens and closes.
@@ -28,25 +28,32 @@ export function AnimatedCollapse({ open, children, className = '' }: {
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [height, setHeight] = useState(0);
+  // `null` means no cap at all. A measured height is only needed for the
+  // duration of the animation: `scrollHeight` does not include the last child's
+  // bottom margin, so holding the measurement afterwards clips the bottom of
+  // whatever is in there. Once open, the cap is released.
+  const [maxHeight, setMaxHeight] = useState<number | null>(open ? null : 0);
 
-  const measure = useCallback(() => {
-    if (ref.current) setHeight(Math.ceil(ref.current.scrollHeight));
-  }, []);
-
-  useLayoutEffect(() => {
-    measure();
+  useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [measure, children]);
+    const height = Math.ceil(el.scrollHeight);
+    if (open) {
+      setMaxHeight(height);
+      const t = setTimeout(() => setMaxHeight(null), DURATION_MS);
+      return () => clearTimeout(t);
+    }
+    // Closing from an uncapped height needs a number to animate from, so the
+    // measurement is applied first and zero only on the following frame.
+    setMaxHeight(height);
+    const raf = requestAnimationFrame(() => requestAnimationFrame(() => setMaxHeight(0)));
+    return () => cancelAnimationFrame(raf);
+  }, [open, children]);
 
   return (
     <div
       className={`overflow-hidden transition-[max-height,opacity] ease-out ${open ? 'opacity-100' : 'opacity-0'} ${className}`}
-      style={{ maxHeight: open ? height : 0, transitionDuration: `${DURATION_MS}ms` }}
+      style={{ maxHeight: maxHeight ?? undefined, transitionDuration: `${DURATION_MS}ms` }}
       aria-hidden={!open}
       // Closed, the body has no height but its children are still in the DOM;
       // without this, tabbing lands on controls nobody can see.
@@ -77,8 +84,12 @@ export function FadeCollapse({ children, rows = 2, peek = 20, className = '', la
   label?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
+  // Held only while the open animation runs — see AnimatedCollapse.
+  const [openCapped, setOpenCapped] = useState(true);
   const [collapsedHeight, setCollapsedHeight] = useState<number | null>(null);
   const [fullHeight, setFullHeight] = useState<number | null>(null);
+  // The fade covers the part-row at the cut and nothing above it — see below.
+  const [fadeHeight, setFadeHeight] = useState(peek);
   const listRef = useRef<HTMLDivElement>(null);
 
   const measure = useCallback(() => {
@@ -97,7 +108,14 @@ export function FadeCollapse({ children, rows = 2, peek = 20, className = '', la
     }
     const listTop = list.getBoundingClientRect().top;
     const cutRow = items[rows];
-    setCollapsedHeight(Math.round(cutRow.getBoundingClientRect().top - listTop + peek));
+    const cut = Math.round(cutRow.getBoundingClientRect().top - listTop + peek);
+    setCollapsedHeight(cut);
+    // The fade starts where the part-row does, rather than running a fixed
+    // distance up from the bottom. A fixed fade is fine over the short text
+    // lines of a timeline — the space above the cut is empty — but over a list
+    // of cards it washes out the bottom of the card above, which reads as that
+    // card being disabled rather than as the list continuing.
+    setFadeHeight(Math.max(16, cut - Math.round(cutRow.getBoundingClientRect().top - listTop)));
   }, [rows, peek]);
 
   useLayoutEffect(() => {
@@ -109,6 +127,12 @@ export function FadeCollapse({ children, rows = 2, peek = 20, className = '', la
     return () => ro.disconnect();
   }, [measure, children]);
 
+  useEffect(() => {
+    if (!expanded) { setOpenCapped(true); return; }
+    const t = setTimeout(() => setOpenCapped(false), DURATION_MS);
+    return () => clearTimeout(t);
+  }, [expanded]);
+
   const canCollapse = collapsedHeight != null;
 
   return (
@@ -116,7 +140,9 @@ export function FadeCollapse({ children, rows = 2, peek = 20, className = '', la
       <div
         className="relative overflow-hidden transition-[max-height] ease-out"
         style={{
-          maxHeight: canCollapse ? (expanded ? (fullHeight ?? undefined) : collapsedHeight) : undefined,
+          maxHeight: canCollapse
+            ? (expanded ? (openCapped ? (fullHeight ?? undefined) : undefined) : collapsedHeight)
+            : undefined,
           transitionDuration: `${DURATION_MS}ms`,
         }}
       >
@@ -126,10 +152,10 @@ export function FadeCollapse({ children, rows = 2, peek = 20, className = '', la
             section has finished opening. */}
         {canCollapse && (
           <div
-            className={`absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white to-transparent pointer-events-none transition-opacity ${
+            className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-white to-transparent pointer-events-none transition-opacity ${
               expanded ? 'opacity-0' : 'opacity-100'
             }`}
-            style={{ transitionDuration: `${DURATION_MS}ms` }}
+            style={{ height: fadeHeight, transitionDuration: `${DURATION_MS}ms` }}
           />
         )}
       </div>
