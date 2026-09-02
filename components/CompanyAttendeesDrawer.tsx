@@ -11,6 +11,7 @@ import { useUserOptions, parseRepIds, getRepInitials } from '@/lib/useUserOption
 import { useCapabilities } from '@/lib/useCapabilities';
 import { ActivityTimelineModal } from './ActivityTimelineModal';
 import { AttendeeInitialsAvatar } from './AttendeePhoto';
+import { useSidebarCollapse, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_EXPANDED_WIDTH } from './SidebarCollapseContext';
 import { TargetToggleButton } from './TargetToggleButton';
 import { useConferenceTargets } from '@/lib/useConferenceTargets';
 import { useIcpCompanyTypes, matchesIcpCompanyType } from '@/lib/useIcpCompanyTypes';
@@ -171,18 +172,24 @@ export function CompanyAttendeesDrawer({ companyId, companyName, conferenceLabel
   }, [companyId]);
 
   const capabilityEnabled = Boolean(planCapabilities?.intelligence_core?.activity_timeline);
+  // The sidebar is collapsible, so the edge this drawer parks against moves.
+  // It was pinned at the expanded width, which left a gap the width of the
+  // collapse whenever the sidebar was collapsed.
+  const { collapsed: sidebarCollapsed } = useSidebarCollapse();
+  const sidebarWidth = sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH;
 
   const content = (
-    <div className={`fixed inset-0 ${zClass}`}>
+    <div className={`fixed inset-0 ${zClass}`} style={{ '--sidebar-w': `${sidebarWidth}px` } as React.CSSProperties}>
       {/* Backdrop — shared by both the attendees drawer and the docked timeline; closes both */}
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
 
       {/* Attendee drawer — slides up from the bottom on mobile, in from the right on desktop.
           When the timeline is open on desktop, it moves to anchor against the left sidebar
-          instead of sitting flush against the timeline drawer. Hidden on mobile while the
+          — at whatever width the sidebar currently is — instead of sitting flush
+          against the timeline drawer. Hidden on mobile while the
           timeline is open (no room for both side by side). */}
       <div
-        className={`drawer-mobile-responsive fixed inset-x-0 bottom-0 sm:inset-y-0 sm:inset-x-auto ${timelineOpen ? 'sm:left-64' : 'sm:right-0'} h-[85vh] sm:h-auto w-full sm:w-[480px] bg-white shadow-2xl overflow-hidden rounded-t-2xl sm:rounded-t-none ${timelineOpen ? 'hidden sm:flex sm:rounded-tr-2xl' : 'flex sm:rounded-tl-2xl'} flex-col`}
+        className={`drawer-mobile-responsive fixed inset-x-0 bottom-0 sm:inset-y-0 sm:inset-x-auto ${timelineOpen ? 'sm:left-[var(--sidebar-w)]' : 'sm:right-0'} h-[85vh] sm:h-auto w-full sm:w-[480px] bg-white shadow-2xl overflow-hidden rounded-t-2xl sm:rounded-t-none ${timelineOpen ? 'hidden sm:flex sm:rounded-tr-2xl' : 'flex sm:rounded-tl-2xl'} flex-col`}
       >
         <div
           className="flex-shrink-0 px-5 py-4 flex items-center justify-between gap-3"
