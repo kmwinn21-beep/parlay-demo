@@ -21,6 +21,7 @@ import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConf
 import { CustomColumnCell } from './CustomColumnCell';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
+import { AttendeeTooltip, ConferenceTooltip } from '@/components/CountPills';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import { useUser } from './UserContext';
 import { CompanyAttendeesDrawer, type CompanyAttendeeLite } from './CompanyAttendeesDrawer';
@@ -98,72 +99,6 @@ function calcTooltipPos(el: HTMLElement, maxW = 260): TooltipPos {
   return { top: above ? rect.top - 8 : rect.bottom + 8, left, width: w, above };
 }
 
-/** `disableTooltip` is for the mobile card, where a tap fires mouseenter and
- *  the hover panel gets in the way of the drawer the tap opens. */
-function AttendeeTooltip({ count, summary, onClick, disableTooltip = false }: {
-  count: number; summary?: string; onClick?: () => void; disableTooltip?: boolean;
-}) {
-  const [pos, setPos] = useState<TooltipPos | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-  const attendees = (summary || '').split('~~~').map(s => s.trim()).filter(Boolean).map(s => {
-    const [name, title] = s.split('|');
-    return { name: name?.trim() || '', title: title?.trim() || '' };
-  });
-  if (count === 0) return <span className="badge-gray">{count}</span>;
-  return (
-    <div ref={ref} className="relative inline-block"
-      onMouseEnter={() => { if (!disableTooltip && ref.current) setPos(calcTooltipPos(ref.current)); }}
-      onMouseLeave={() => setPos(null)}>
-      {onClick ? (
-        <button type="button" onClick={onClick} className="badge-gray hover:ring-2 hover:ring-brand-secondary/40 transition-shadow" title="View attendees">{count}</button>
-      ) : (
-        <span className="badge-gray cursor-default">{count}</span>
-      )}
-      {pos && attendees.length > 0 && (
-        <div style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999, transform: pos.above ? 'translateY(-100%)' : 'translateY(0)' }}>
-          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2.5">
-            <p className="font-semibold mb-1.5 text-gray-300 uppercase tracking-wide text-[10px]">Attendees</p>
-            <ul className="space-y-1">
-              {attendees.map((a, i) => (
-                <li key={i} className="flex items-start gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0 mt-1" />
-                  <span><span className="font-medium">{a.name}</span>{a.title && <span className="text-gray-300"> · {a.title}</span>}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ConferenceTooltip({ count, names }: { count: number; names?: string }) {
-  const [pos, setPos] = useState<TooltipPos | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-  const confList = (names || '').split(',').map(s => s.trim()).filter(Boolean);
-  if (count === 0) return <span className={conferenceBadgeClass(0)}>{count}</span>;
-  return (
-    <div ref={ref} className="relative inline-block"
-      onMouseEnter={() => ref.current && setPos(calcTooltipPos(ref.current))}
-      onMouseLeave={() => setPos(null)}>
-      <span className={`${conferenceBadgeClass(count)} cursor-default`}>{count}</span>
-      {pos && confList.length > 0 && (
-        <div style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999, transform: pos.above ? 'translateY(-100%)' : 'translateY(0)' }}>
-          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2.5">
-            <p className="font-semibold mb-1.5 text-gray-300 uppercase tracking-wide text-[10px]">Conferences Attended</p>
-            <ul className="space-y-1">
-              {confList.map((name, i) => (
-                <li key={i} className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />{name}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 interface CompanyTableProps {
   companies: Company[];
   onRefresh: () => void;
@@ -208,13 +143,6 @@ type SortDir = 'asc' | 'desc';
 
 const CONF_COUNT_OPTIONS = ['1', '2', '3', '4+'];
 const PAGE_SIZE = 100;
-
-function conferenceBadgeClass(count: number) {
-  if (count >= 4) return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700';
-  if (count === 3) return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700';
-  if (count === 2) return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700';
-  return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600';
-}
 
 function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
   if (col !== sortKey) return <svg className="w-3 h-3 ml-1 text-gray-300 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" /></svg>;

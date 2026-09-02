@@ -11,6 +11,11 @@ import { useActiveConference } from '@/components/ActiveConferenceContext';
 import { useUser } from '@/components/UserContext';
 import { useUserOptions, parseRepIds, getRepInitials } from '@/lib/useUserOptions';
 import { useConfigColors } from '@/lib/useConfigColors';
+import { AttendeeTooltip, ConferenceTooltip } from '@/components/CountPills';
+import { CompanyAttendeesDrawer, type CompanyAttendeeLite } from '@/components/CompanyAttendeesDrawer';
+import { TargetToggleButton } from '@/components/TargetToggleButton';
+import { useConferenceTargets } from '@/lib/useConferenceTargets';
+import { useIcpCompanyTypes, matchesIcpCompanyType } from '@/lib/useIcpCompanyTypes';
 import { getBadgeClass, getPreset, formatStatusLabel, type ColorMap } from '@/lib/colors';
 
 interface DrawerAttendee extends AttendeeCardRow {
@@ -25,8 +30,12 @@ interface DrawerCompany {
   icp?: string | null;
   assigned_user?: string | null;
   conference_count?: number;
+  conference_names?: string | null;
   /** Attendees from THIS conference, not the company's lifetime total. */
   attendee_count: number;
+  /** `Name|Title` joined by `~~~`, built from this conference's attendees so
+   *  the tooltip lists the same people the count counts. */
+  attendee_summary?: string;
 }
 
 /**
@@ -42,11 +51,14 @@ interface DrawerCompany {
  * conference Companies tab: name, assigned reps to the right, then type,
  * statuses and the two counts on one scrolling line.
  */
-function DrawerCompanyCard({ company, userOptions, colorMaps, onOpen }: {
+function DrawerCompanyCard({ company, userOptions, colorMaps, onOpen, onOpenAttendees }: {
   company: DrawerCompany;
   userOptions: ReturnType<typeof useUserOptions>;
   colorMaps: Record<string, ColorMap>;
   onOpen: () => void;
+  /** The attendee pill opens that company's attendees at this conference —
+   *  the same drawer the conference Companies tab opens from its own pill. */
+  onOpenAttendees: () => void;
 }) {
   const reps = parseRepIds(company.assigned_user ?? '')
     .map(id => userOptions.find(u => u.id === id))
@@ -54,7 +66,7 @@ function DrawerCompanyCard({ company, userOptions, colorMaps, onOpen }: {
   const statuses = String(company.status ?? '').split(',').map(v => v.trim()).filter(v => v && v !== 'Unknown');
 
   return (
-    <div className="px-4 py-3">
+    <div className="px-4 py-4 bg-white">
       <div className="flex items-start justify-between gap-3">
         <button type="button" onClick={onOpen} className="min-w-0 text-left">
           <span className="block text-sm font-semibold text-brand-secondary hover:underline leading-snug">{company.name}</span>
@@ -79,11 +91,11 @@ function DrawerCompanyCard({ company, userOptions, colorMaps, onOpen }: {
         ))}
         <span className="inline-flex items-center gap-1 text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">
           <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-          {company.attendee_count}
+          <AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} onClick={onOpenAttendees} />
         </span>
         <span className="inline-flex items-center gap-1 text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">
           <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-          {company.conference_count ?? 0}
+          <ConferenceTooltip count={Number(company.conference_count ?? 0)} names={company.conference_names ?? undefined} />
         </span>
       </ScrollRow>
     </div>
@@ -92,6 +104,11 @@ function DrawerCompanyCard({ company, userOptions, colorMaps, onOpen }: {
 
 export function AttendeesDrawer({ onClose }: { onClose: () => void }) {
   const { activeConference } = useActiveConference();
+  // Same toggle as the conference attendees table, on the same shared state —
+  // this drawer lists the set conference's attendees, so it is targeting for
+  // that conference too.
+  const { targetIds, busyId: targetBusyId, toggleTarget } = useConferenceTargets(activeConference?.id ?? null);
+  const { types: icpCompanyTypes } = useIcpCompanyTypes();
   const { user: currentUser } = useUser();
   const userOptions = useUserOptions();
   const colorMaps = useConfigColors();
@@ -107,6 +124,7 @@ export function AttendeesDrawer({ onClose }: { onClose: () => void }) {
   const [quickMine, setQuickMine] = useState(false);
   const [quickTypes, setQuickTypes] = useState<Set<string>>(new Set());
   const [quickView, setQuickView] = useState<{ type: 'attendee' | 'company'; id: number } | null>(null);
+  const [companyAttendees, setCompanyAttendees] = useState<{ id: number; name: string } | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [adding, setAdding] = useState(false);
   const EMPTY_ADD = { first_name: '', last_name: '', title: '', company: '', email: '', phone: '', linkedin_url: '' };
@@ -146,9 +164,23 @@ export function AttendeesDrawer({ onClose }: { onClose: () => void }) {
         if (wanted.size === 0) { if (!cancelled) setCompanies([]); return; }
         const res = await fetch('/api/companies');
         const all = res.ok ? await res.json() : [];
+        // The summary is built from this conference's attendees rather than
+        // taken from the companies query, which counts the company's lifetime
+        // roster — a tooltip listing people who aren't here would disagree
+        // with the count beside it.
+        const summaries = new Map<number, string[]>();
+        for (const a of attendees) {
+          if (!a.company_id) continue;
+          const entry = `${a.first_name} ${a.last_name}|${a.title ?? ''}`;
+          summaries.set(a.company_id, [...(summaries.get(a.company_id) ?? []), entry]);
+        }
         const list: DrawerCompany[] = (Array.isArray(all) ? all : [])
           .filter((c: DrawerCompany) => wanted.has(c.id))
-          .map((c: DrawerCompany) => ({ ...c, attendee_count: wanted.get(c.id) ?? 0 }));
+          .map((c: DrawerCompany) => ({
+            ...c,
+            attendee_count: wanted.get(c.id) ?? 0,
+            attendee_summary: (summaries.get(c.id) ?? []).join('~~~'),
+          }));
         if (!cancelled) setCompanies(list);
       } catch {
         if (!cancelled) setCompanies([]);
@@ -243,7 +275,14 @@ export function AttendeesDrawer({ onClose }: { onClose: () => void }) {
       <DashboardDrawer
         title={
           // Replaces the title outright, so the drawer's two lists read as one
-          // thing you switch between rather than two drawers.
+          // thing you switch between rather than two drawers. The conference
+          // leads, as the heading it is — which list you are looking at is the
+          // second question, and it was previously answered above the thing it
+          // qualified.
+          <div className="min-w-0">
+          <h3 className="text-base font-semibold text-brand-primary font-serif truncate mb-2">
+            {activeConference?.name ?? 'No conference set'}
+          </h3>
           <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5" role="tablist">
             {(['attendees', 'companies'] as const).map(m => (
               <button
@@ -260,8 +299,8 @@ export function AttendeesDrawer({ onClose }: { onClose: () => void }) {
               </button>
             ))}
           </div>
+          </div>
         }
-        subtitle={activeConference?.name ?? null}
         onClose={onClose}
       >
         <div className="px-4 pt-3 pb-2 flex flex-col gap-2 border-b border-gray-100">
@@ -392,17 +431,19 @@ export function AttendeesDrawer({ onClose }: { onClose: () => void }) {
               {companies.length === 0 ? 'No companies on this conference yet.' : 'No companies match those filters.'}
             </p>
           ) : (
-            <div className="divide-y divide-gray-100">
+            <MobileCardList>
               {filteredCompanies.map(c => (
-                <DrawerCompanyCard
-                  key={c.id}
-                  company={c}
-                  userOptions={userOptions}
-                  colorMaps={colorMaps}
-                  onOpen={() => setQuickView({ type: 'company', id: c.id })}
-                />
+                <MobileCard key={c.id}>
+                  <DrawerCompanyCard
+                    company={c}
+                    userOptions={userOptions}
+                    colorMaps={colorMaps}
+                    onOpen={() => setQuickView({ type: 'company', id: c.id })}
+                    onOpenAttendees={() => setCompanyAttendees({ id: c.id, name: c.name })}
+                  />
+                </MobileCard>
               ))}
-            </div>
+            </MobileCardList>
           )
         ) : loading ? (
           <div className="flex items-center justify-center py-10 text-gray-400">
@@ -425,6 +466,15 @@ export function AttendeesDrawer({ onClose }: { onClose: () => void }) {
                 onOpenCompany={id => setQuickView({ type: 'company', id })}
                 userOptions={userOptions}
                 colorMaps={colorMaps}
+                leadingPill={matchesIcpCompanyType(a.company_type, icpCompanyTypes) ? (
+                  <TargetToggleButton
+                    active={targetIds.has(a.id)}
+                    busy={targetBusyId === a.id}
+                    onToggle={() => toggleTarget(a.id)}
+                    name={`${a.first_name} ${a.last_name}`.trim()}
+                    size="sm"
+                  />
+                ) : undefined}
               />
               </MobileCard>
             ))}
@@ -458,6 +508,20 @@ export function AttendeesDrawer({ onClose }: { onClose: () => void }) {
             />
           </div>
         </>
+      )}
+
+      {/* That company's attendees at this conference, in the same drawer the
+          conference Companies tab opens from its own count pill. */}
+      {companyAttendees && (
+        <CompanyAttendeesDrawer
+          companyId={companyAttendees.id}
+          companyName={companyAttendees.name}
+          conferenceLabel={activeConference?.name}
+          conferenceId={activeConference?.id}
+          zClass="z-[73]"
+          attendees={attendees.filter(a => a.company_id === companyAttendees.id) as unknown as CompanyAttendeeLite[]}
+          onClose={() => setCompanyAttendees(null)}
+        />
       )}
     </>
   );

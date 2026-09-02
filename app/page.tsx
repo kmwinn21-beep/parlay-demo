@@ -288,7 +288,7 @@ async function StatsSection() {
         <DashboardConferenceBanner bannerData={bannerData} />
       </div>
       <div className="h-full">
-        <DashboardActionCard bannerState={bannerData.state} />
+        <DashboardActionCard />
       </div>
     </div>
   );
