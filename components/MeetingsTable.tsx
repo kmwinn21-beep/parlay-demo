@@ -64,6 +64,29 @@ export interface Meeting {
 }
 
 /** Circular marker for a row the viewer only attends as a guest. */
+/**
+ * The selection column, which is only there when it is wanted.
+ *
+ * Collapsed it keeps 8px — the card's left padding — so the row still has a
+ * proper rounded corner to sit behind; revealed it widens to hold the checkbox,
+ * which pushes the row's contents right.
+ *
+ * A table's columns share one width, so this reveals for the whole table rather
+ * than for the single hovered row: a cell cannot be wider than its column in
+ * one row and narrower in the next.
+ */
+function SelectionCell({ revealed, children }: { revealed: boolean; children: React.ReactNode }) {
+  return (
+    <div
+      className={`overflow-hidden transition-[width,opacity] duration-200 ease-out flex items-center justify-end ${
+        revealed ? 'w-7 opacity-100' : 'w-2 opacity-0'
+      }`}
+    >
+      {children}
+    </div>
+  );
+}
+
 function AdditionalAttendeeBadge() {
   return (
     <span
@@ -1091,6 +1114,10 @@ export function MeetingsTable({
   );
   const [meetingTypeOptions, setMeetingTypeOptions] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  // Checkboxes stay out of the way until the table is being used: hovering it
+  // offers them, and any selection keeps them out.
+  const [checksHovered, setChecksHovered] = useState(false);
+  const checksRevealed = checksHovered || selectedIds.size > 0;
   const [bulkRepIds, setBulkRepIds] = useState<number[]>([]);
   const tableColorMaps = useConfigColors();
   const kanbanScrollRef = useRef<HTMLDivElement>(null);
@@ -1536,13 +1563,15 @@ export function MeetingsTable({
       }`}
     >
       {hasSelection && (
-        <td className="pl-3 pr-1 py-2 w-8">
-          <input
-            type="checkbox"
-            checked={selectedIds.has(m.id)}
-            onChange={() => toggleSelect(m.id)}
-            className="h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
-          />
+        <td className="p-0 py-2 w-0">
+          <SelectionCell revealed={checksRevealed}>
+            <input
+              type="checkbox"
+              checked={selectedIds.has(m.id)}
+              onChange={() => toggleSelect(m.id)}
+              className="h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
+            />
+          </SelectionCell>
         </td>
       )}
       {orderedColumns.map(col => {
@@ -1811,22 +1840,30 @@ export function MeetingsTable({
       </div>
 
       {/* Desktop table layout */}
+      {/* The cards sit on the same grey the header row uses, inset from the
+          container so the gap around them matches the gap between them. */}
       {!cardsOnly && viewMode === 'table' && (
-      <div className="hidden lg:block overflow-x-auto">
+      <div
+        className="hidden lg:block overflow-x-auto bg-gray-50 rounded-lg px-2 pb-2"
+        onMouseEnter={() => setChecksHovered(true)}
+        onMouseLeave={() => setChecksHovered(false)}
+      >
         {/* border-spacing gives the cards the gap between them that a plain
             table has nowhere to put. */}
         <table className="w-full border-separate [border-spacing:0_0.5rem]" style={{ fontSize: '0.7rem' }}>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               {hasSelection && (
-                <th className="pl-3 pr-1 py-2 w-8">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    ref={el => { if (el) el.indeterminate = someSelected; }}
-                    onChange={toggleAll}
-                    className="h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
-                  />
+                <th className="p-0 py-2 w-0">
+                  <SelectionCell revealed={checksRevealed}>
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      ref={el => { if (el) el.indeterminate = someSelected; }}
+                      onChange={toggleAll}
+                      className="h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
+                    />
+                  </SelectionCell>
                 </th>
               )}
               {orderedColumns.map(col => {
