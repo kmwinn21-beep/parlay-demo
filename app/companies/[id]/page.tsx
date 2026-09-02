@@ -29,6 +29,7 @@ import { VendorRelationshipsSection } from '@/components/VendorRelationshipsSect
 import { SuggestedUpdatesSection } from '@/components/SuggestedUpdatesSection';
 import { SectionJumpMenu } from '@/components/SectionJumpMenu';
 import { useCollapsibleSection, setAllSections, useAnySectionExpanded } from '@/lib/sectionExpansion';
+import { ConferenceTimeline } from '@/components/ConferenceTimeline';
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { ComposeEmailModal } from '@/components/ComposeEmailModal';
 import { CompanyDrawer } from '@/components/CompanyDrawer';
@@ -218,7 +219,6 @@ export default function CompanyDetailPage() {
   // Operator / Capital relationship state
   const [relatedDrawerCompanyId, setRelatedDrawerCompanyId] = useState<number | null>(null);
   const [relatedDrawerCompanyName, setRelatedDrawerCompanyName] = useState<string | undefined>();
-  const [conferencesExpanded, setConferencesExpanded] = useCollapsibleSection(false);
   const [statusExpanded, setStatusExpanded] = useCollapsibleSection(false);
   const anySectionExpanded = useAnySectionExpanded();
   const [configuredProductNames, setConfiguredProductNames] = useState<Set<string>>(new Set());
@@ -1772,76 +1772,8 @@ export default function CompanyDetailPage() {
                 </div>
               ),
               conferences: (
-                <div key="conferences" className="card">
-                  {(() => {
-                    const today = new Date().toISOString().slice(0, 10);
-                    const confs = company.conferences || [];
-                    const inProgressConfs = confs.filter(conf => conf.start_date <= today && conf.end_date >= today);
-                    return (
-                      <>
-                        <button
-                          onClick={() => setConferencesExpanded(prev => !prev)}
-                          className="flex items-center gap-2 w-full text-left"
-                        >
-                          <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${conferencesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                          <h2 className="text-base font-semibold text-brand-primary font-serif">
-                            {getSectionLabel('conferences')} ({confs.length})
-                          </h2>
-                        </button>
-                        {!conferencesExpanded && inProgressConfs.length > 0 && (
-                          <div className="space-y-2 mt-3">
-                            {inProgressConfs.map(conf => (
-                              <Link key={conf.id} href={`/conferences/${conf.id}`} className="flex items-center justify-between p-3 rounded-lg border border-brand-secondary hover:bg-blue-50 transition-all">
-                                <div className="min-w-0">
-                                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-secondary mb-1">
-                                    <span className="w-2 h-2 rounded-full bg-brand-secondary animate-pulse" />
-                                    In Progress
-                                  </span>
-                                  <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
-                                  <p className="text-xs text-gray-500 mt-0.5">
-                                    {new Date(conf.start_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                    {conf.end_date && conf.end_date !== conf.start_date ? ` – ${new Date(conf.end_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
-                                  </p>
-                                </div>
-                                <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                              </Link>
-                            ))}
-                          </div>
-                        )}
-                        {conferencesExpanded && (
-                          <>
-                            {confs.length === 0 ? (
-                              <p className="text-sm text-gray-400 text-center py-3 mt-3">No conferences attended yet.</p>
-                            ) : (
-                              <div className="space-y-2 mt-3">
-                                {confs.map(conf => {
-                                  const isActive = conf.start_date <= today && conf.end_date >= today;
-                                  return (
-                                    <Link key={conf.id} href={`/conferences/${conf.id}`} className={`flex items-center justify-between p-3 rounded-lg border transition-all hover:bg-blue-50 ${isActive ? 'border-brand-secondary' : 'border-gray-100 hover:border-brand-secondary'}`}>
-                                      <div className="min-w-0">
-                                        {isActive && (
-                                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-secondary mb-1">
-                                            <span className="w-2 h-2 rounded-full bg-brand-secondary animate-pulse" />
-                                            In Progress
-                                          </span>
-                                        )}
-                                        <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
-                                        <p className="text-xs text-gray-500 mt-0.5">
-                                          {new Date(conf.start_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                          {conf.end_date && conf.end_date !== conf.start_date ? ` – ${new Date(conf.end_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
-                                        </p>
-                                      </div>
-                                      <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                                    </Link>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </>
-                    );
-                  })()}
+                <div key="conferences">
+                  <ConferenceTimeline entityType="company" entityId={Number(id)} title={getSectionLabel('conferences')} />
                 </div>
               ),
               communities: (() => {

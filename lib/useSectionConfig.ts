@@ -10,7 +10,7 @@ export const SECTION_DEFS: Record<string, SectionDef[]> = {
   attendee: [
     { key: 'status', label: 'Status' },
     { key: 'products', label: 'Products' },
-    { key: 'conferences', label: 'Conferences' },
+    { key: 'conferences', label: 'Conference Timeline' },
     { key: 'relationships', label: 'Internal Relationships' },
     { key: 'events', label: 'Events / Social' },
     { key: 'conference_activity', label: 'Conference Activity' },
@@ -19,7 +19,7 @@ export const SECTION_DEFS: Record<string, SectionDef[]> = {
   company: [
     { key: 'status', label: 'Status' },
     { key: 'closed_deals', label: 'Closed / Won Deals' },
-    { key: 'conferences', label: 'Conferences' },
+    { key: 'conferences', label: 'Conference Timeline' },
     { key: 'communities', label: 'Related Entities' },
     { key: 'relationships', label: 'Internal Relationships' },
     { key: 'operator_capital', label: 'Vendor / Other Relationships' },

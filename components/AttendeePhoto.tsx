@@ -17,10 +17,19 @@ const OUTPUT_SIZE = 512; // square px written back — keeps stored images small
  * the slider zooms, and the visible circle is what gets written out. That is
  * the whole interaction, so it needs no cropping library.
  */
-export function ImageCropModal({ file, onCancel, onConfirm }: {
+export function ImageCropModal({ file, onCancel, onConfirm, shape = 'circle', title = 'Crop photo', confirmLabel = 'Save photo' }: {
   file: File;
   onCancel: () => void;
   onConfirm: (blob: Blob) => void;
+  /**
+   * A headshot is cropped to a circle and starts filling it. A logo is cropped
+   * to a square and starts *fitting* inside it — a wide wordmark at cover scale
+   * would open with its ends already cut off, which is the wrong default for an
+   * image whose whole point is being read.
+   */
+  shape?: 'circle' | 'square';
+  title?: string;
+  confirmLabel?: string;
 }) {
   const [src, setSrc] = useState<string | null>(null);
   const [img, setImg] = useState<HTMLImageElement | null>(null);
@@ -45,8 +54,12 @@ export function ImageCropModal({ file, onCancel, onConfirm }: {
     image.src = src;
   }, [src]);
 
-  // Scale that makes the image just cover the circle at zoom 1.
-  const baseScale = img ? Math.max(FRAME / img.width, FRAME / img.height) : 1;
+  // Cover the frame at zoom 1 for a circle, fit inside it for a square.
+  const baseScale = img
+    ? (shape === 'square'
+      ? Math.min(FRAME / img.width, FRAME / img.height)
+      : Math.max(FRAME / img.width, FRAME / img.height))
+    : 1;
   const scale = baseScale * zoom;
 
   const clampOffset = useCallback((next: { x: number; y: number }, s: number) => {
@@ -110,7 +123,7 @@ export function ImageCropModal({ file, onCancel, onConfirm }: {
   return createPortal(
     <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/60 p-4" onClick={onCancel}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
-        <h3 className="text-base font-semibold text-brand-primary font-serif mb-1">Crop photo</h3>
+        <h3 className="text-base font-semibold text-brand-primary font-serif mb-1">{title}</h3>
         <p className="text-xs text-gray-400 mb-4">Drag to reposition, and use the slider to zoom.</p>
 
         <div
@@ -120,7 +133,7 @@ export function ImageCropModal({ file, onCancel, onConfirm }: {
           onTouchMove={e => moveDrag(e.touches[0].clientX, e.touches[0].clientY)}
           onTouchEnd={endDrag}
           style={{ width: FRAME, height: FRAME }}
-          className="relative mx-auto rounded-full overflow-hidden bg-gray-100 cursor-move touch-none select-none"
+          className={`relative mx-auto overflow-hidden bg-gray-100 cursor-move touch-none select-none ${shape === 'square' ? 'rounded-lg' : 'rounded-full'}`}
         >
           {img && (
             /* eslint-disable-next-line @next/next/no-img-element */
@@ -139,13 +152,13 @@ export function ImageCropModal({ file, onCancel, onConfirm }: {
               }}
             />
           )}
-          <div className="absolute inset-0 rounded-full ring-2 ring-white/70 pointer-events-none" />
+          <div className={`absolute inset-0 ring-2 ring-white/70 pointer-events-none ${shape === 'square' ? 'rounded-lg' : 'rounded-full'}`} />
         </div>
 
         <div className="flex items-center gap-2 mt-4">
           <span className="text-xs text-gray-400">Zoom</span>
           <input
-            type="range" min={1} max={3} step={0.01}
+            type="range" min={shape === 'square' ? 0.5 : 1} max={3} step={0.01}
             value={zoom}
             onChange={e => setZoom(Number(e.target.value))}
             className="flex-1 accent-brand-secondary"
@@ -155,7 +168,7 @@ export function ImageCropModal({ file, onCancel, onConfirm }: {
         <div className="flex justify-end gap-2 mt-5">
           <button type="button" onClick={onCancel} className="btn-secondary text-sm">Cancel</button>
           <button type="button" onClick={handleConfirm} disabled={!img || saving} className="btn-primary text-sm">
-            {saving ? 'Saving…' : 'Save photo'}
+            {saving ? 'Saving…' : confirmLabel}
           </button>
         </div>
       </div>

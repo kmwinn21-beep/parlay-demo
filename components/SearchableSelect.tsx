@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useMobileDock, useDockRect } from '@/lib/mobileSearchDock';
 
 /**
  * Type-to-filter picker with an optional "Other (not in list)" escape hatch —
@@ -23,8 +24,10 @@ export function SearchableSelect<T extends { id: number }>({
   // Portalled so the Assign Note modal's scrolling body can't clip the list.
   const [pos, setPos] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const [mounted, setMounted] = useState(false);
-
-  useEffect(() => { setMounted(true); }, []);
+  // On a phone the menu docks under the header instead of anchoring to the
+  // field — see lib/mobileSearchDock.
+  const dock = useMobileDock();
+  const dockRect = useDockRect(open && dock);
 
   useEffect(() => {
     if (!open) return;
@@ -47,8 +50,10 @@ export function SearchableSelect<T extends { id: number }>({
     setPos({ top: flip ? r.top - 4 - maxHeight : r.bottom + 4, left: r.left, width: r.width, maxHeight });
   }, []);
 
+  useEffect(() => { setMounted(true); }, []);
+
   useEffect(() => {
-    if (!open) { setPos(null); return; }
+    if (!open || dock) { setPos(null); return; }
     position();
     const onScroll = () => position();
     window.addEventListener('scroll', onScroll, true);
@@ -57,7 +62,9 @@ export function SearchableSelect<T extends { id: number }>({
       window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', onScroll);
     };
-  }, [open, position]);
+  }, [open, dock, position]);
+
+  const box = dock ? dockRect : pos;
 
   const filtered = options.filter(o => getLabel(o).toLowerCase().includes(search.toLowerCase()));
 
@@ -78,10 +85,15 @@ export function SearchableSelect<T extends { id: number }>({
           <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
         </div>
       </button>
-      {open && mounted && pos && createPortal(
+      {open && mounted && box && createPortal(
+        <>
+        {/* Docked, the menu is no longer visually attached to its field, so a
+            scrim says what it belongs to and gives a tap target for dismissing
+            it without picking anything. */}
+        {dock && <div className="fixed inset-0 z-[99] bg-black/20" onClick={() => setOpen(false)} />}
         <div
           ref={menuRef}
-          style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, maxHeight: pos.maxHeight }}
+          style={{ position: 'fixed', top: box.top, left: box.left, width: box.width, maxHeight: box.maxHeight }}
           className="z-[100] bg-white border border-gray-200 rounded-lg shadow-xl flex flex-col"
         >
           <div className="p-2 border-b border-gray-100">
@@ -107,7 +119,8 @@ export function SearchableSelect<T extends { id: number }>({
               </button>
             ))}
           </div>
-        </div>,
+        </div>
+        </>,
         document.body,
       )}
     </div>

@@ -2373,4 +2373,8 @@ export const migrations: string[] = [
   // index, so a suggestion with no source note would never collide with itself.
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_record_suggestions_dedupe
       ON record_suggestions (COALESCE(source_note_id, 0), dedupe_key)`,
+  // Conference logo. Appended, not inserted: the schema version is this array's
+  // length, so a mid-array entry leaves the count unchanged against an
+  // already-stamped database and never runs.
+  `ALTER TABLE conferences ADD COLUMN logo_url TEXT`,
 ];

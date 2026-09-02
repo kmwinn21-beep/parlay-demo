@@ -27,6 +27,7 @@ import { CompanyTable } from '@/components/CompanyTable';
 import { SocialEventsTable, type SocialEvent } from '@/components/SocialEventsTable';
 import { BackButton } from '@/components/BackButton';
 import { TargetToggleButton } from '@/components/TargetToggleButton';
+import { ConferenceLogoField } from '@/components/ConferenceLogoField';
 import { useConferenceTargets } from '@/lib/useConferenceTargets';
 import { useIcpCompanyTypes, matchesIcpCompanyType } from '@/lib/useIcpCompanyTypes';
 import { effectiveSeniority } from '@/lib/parsers';
@@ -125,6 +126,8 @@ function conferenceBadgeClass(count: number) {
 interface Conference {
   id: number;
   name: string;
+  /** Only surfaced in the edit form for now. */
+  logo_url?: string | null;
   start_date: string;
   end_date: string;
   location: string;
@@ -1990,6 +1993,16 @@ export default function ConferenceDetailPage() {
                   value={editData.name || ''}
                   onChange={(e) => setEditData((p) => ({ ...p, name: e.target.value }))}
                   className="input-field"
+                />
+              </div>
+              {/* Saves on its own the moment the crop is confirmed, the way the
+                  attendee photo does — it is not part of editData, so the PUT,
+                  which overwrites every column it names, can't null it. */}
+              <div>
+                <ConferenceLogoField
+                  conferenceId={Number(id)}
+                  logoUrl={conference?.logo_url ?? null}
+                  onSaved={url => setConference(c => (c ? { ...c, logo_url: url } : c))}
                 />
               </div>
               <div>

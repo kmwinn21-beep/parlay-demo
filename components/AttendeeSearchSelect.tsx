@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { AttendeeCardRow } from '@/components/MobileAttendeeCard';
+import { useMobileDock, useDockRect } from '@/lib/mobileSearchDock';
 
 /** Rows come back from /api/attendees, which carries more than the card needs. */
 export interface AttendeeSearchRow extends AttendeeCardRow {
@@ -42,8 +43,14 @@ export function AttendeeSearchSelect({
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
   const [mounted, setMounted] = useState(false);
+  // On a phone the menu docks under the header instead of anchoring to the
+  // field — see lib/mobileSearchDock. The field here is the search box itself,
+  // so a docked panel carries its own copy of it and the original is hidden
+  // behind the scrim.
+  const dock = useMobileDock();
+  const dockRect = useDockRect(open && dock);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -52,24 +59,50 @@ export function AttendeeSearchSelect({
     const el = wrapRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    const below = window.innerHeight - r.bottom - 8;
-    const above = r.top - 8;
-    const flip = below < 200 && above > below;
-    const maxHeight = Math.max(160, Math.min(320, flip ? above : below));
-    setPos({ top: flip ? r.top - 4 - maxHeight : r.bottom + 4, left: r.left, width: r.width, maxHeight });
+    // An open phone keyboard shrinks the visual viewport without changing
+    // innerHeight, so measuring against innerHeight offers space the person
+    // cannot see and puts the menu behind the keyboard.
+    const vv = window.visualViewport;
+    const vTop = vv ? vv.offsetTop : 0;
+    const vBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+    const below = vBottom - r.bottom - 8;
+    const above = r.top - vTop - 8;
+    const flip = below < 160 && above > below;
+    const maxHeight = Math.max(120, Math.min(320, flip ? above : below));
+    // Flipped, the menu hangs from the input's top edge rather than sitting at
+    // the top of the space above it. Anchoring by `top` left a menu shorter
+    // than the space available floating well clear of the box it belongs to.
+    // `bottom` is measured from the layout viewport, which the keyboard does
+    // not shrink — so it uses innerHeight even though the space available above
+    // was measured against the visual viewport.
+    setPos(flip
+      ? { bottom: window.innerHeight - r.top + 4, left: r.left, width: r.width, maxHeight }
+      : { top: r.bottom + 4, left: r.left, width: r.width, maxHeight });
   }, []);
 
   useEffect(() => {
-    if (!open) { setPos(null); return; }
+    if (!open || dock) { setPos(null); return; }
     position();
     const onScroll = () => position();
     window.addEventListener('scroll', onScroll, true);
     window.addEventListener('resize', onScroll);
+    // iOS reports the keyboard opening and closing here and nowhere else —
+    // no window resize, no scroll — so without these the menu keeps the
+    // position it had when the keyboard appeared.
+    const vv = window.visualViewport;
+    vv?.addEventListener('resize', onScroll);
+    vv?.addEventListener('scroll', onScroll);
     return () => {
       window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', onScroll);
+      vv?.removeEventListener('resize', onScroll);
+      vv?.removeEventListener('scroll', onScroll);
     };
-  }, [open, position]);
+  }, [open, dock, position]);
+
+  // The menu's height changes as results arrive, and a flipped menu is
+  // measured from its bottom edge — so re-place it when the contents change.
+  useEffect(() => { if (open && !dock) position(); }, [open, dock, rows, loading, position]);
 
   useEffect(() => {
     if (!open) return;
@@ -98,11 +131,29 @@ export function AttendeeSearchSelect({
   }, [search]);
 
   const menu = (
+    <>
+    {dock && <div className="fixed inset-0 z-[99] bg-black/20" onClick={() => setOpen(false)} />}
     <div
       ref={menuRef}
-      style={{ position: 'fixed', top: pos?.top, left: pos?.left, width: pos?.width, maxHeight: pos?.maxHeight }}
+      style={dock && dockRect
+        ? { position: 'fixed', top: dockRect.top, left: dockRect.left, width: dockRect.width, maxHeight: dockRect.maxHeight }
+        : { position: 'fixed', top: pos?.top, bottom: pos?.bottom, left: pos?.left, width: pos?.width, maxHeight: pos?.maxHeight }}
       className="z-[100] bg-white border border-gray-200 rounded-lg shadow-xl flex flex-col overflow-hidden"
     >
+      {/* The field this opened from is somewhere down the form and behind the
+          scrim, so the docked panel leads with its own search box — otherwise
+          there is nowhere on screen to see what is being typed. */}
+      {dock && (
+        <div className="p-2 border-b border-gray-100 flex-shrink-0">
+          <input
+            autoFocus
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder={placeholder}
+            className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-brand-secondary"
+          />
+        </div>
+      )}
       <div className="overflow-y-auto">
         {onSelectOther && (
           <button
@@ -147,6 +198,7 @@ export function AttendeeSearchSelect({
         })}
       </div>
     </div>
+    </>
   );
 
   return (
@@ -164,7 +216,7 @@ export function AttendeeSearchSelect({
           className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-secondary"
         />
       </div>
-      {open && mounted && pos && createPortal(menu, document.body)}
+      {open && mounted && (dock ? dockRect : pos) && createPortal(menu, document.body)}
     </div>
   );
 }
