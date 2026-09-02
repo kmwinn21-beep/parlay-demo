@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { AttendeeCardRow } from '@/components/MobileAttendeeCard';
+import { useMobileDock, useDockRect } from '@/lib/mobileSearchDock';
 
 /** Rows come back from /api/attendees, which carries more than the card needs. */
 export interface AttendeeSearchRow extends AttendeeCardRow {
@@ -44,6 +45,12 @@ export function AttendeeSearchSelect({
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
   const [mounted, setMounted] = useState(false);
+  // On a phone the menu docks under the header instead of anchoring to the
+  // field — see lib/mobileSearchDock. The field here is the search box itself,
+  // so a docked panel carries its own copy of it and the original is hidden
+  // behind the scrim.
+  const dock = useMobileDock();
+  const dockRect = useDockRect(open && dock);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -74,7 +81,7 @@ export function AttendeeSearchSelect({
   }, []);
 
   useEffect(() => {
-    if (!open) { setPos(null); return; }
+    if (!open || dock) { setPos(null); return; }
     position();
     const onScroll = () => position();
     window.addEventListener('scroll', onScroll, true);
@@ -91,11 +98,11 @@ export function AttendeeSearchSelect({
       vv?.removeEventListener('resize', onScroll);
       vv?.removeEventListener('scroll', onScroll);
     };
-  }, [open, position]);
+  }, [open, dock, position]);
 
   // The menu's height changes as results arrive, and a flipped menu is
   // measured from its bottom edge — so re-place it when the contents change.
-  useEffect(() => { if (open) position(); }, [open, rows, loading, position]);
+  useEffect(() => { if (open && !dock) position(); }, [open, dock, rows, loading, position]);
 
   useEffect(() => {
     if (!open) return;
@@ -124,11 +131,29 @@ export function AttendeeSearchSelect({
   }, [search]);
 
   const menu = (
+    <>
+    {dock && <div className="fixed inset-0 z-[99] bg-black/20" onClick={() => setOpen(false)} />}
     <div
       ref={menuRef}
-      style={{ position: 'fixed', top: pos?.top, bottom: pos?.bottom, left: pos?.left, width: pos?.width, maxHeight: pos?.maxHeight }}
+      style={dock && dockRect
+        ? { position: 'fixed', top: dockRect.top, left: dockRect.left, width: dockRect.width, maxHeight: dockRect.maxHeight }
+        : { position: 'fixed', top: pos?.top, bottom: pos?.bottom, left: pos?.left, width: pos?.width, maxHeight: pos?.maxHeight }}
       className="z-[100] bg-white border border-gray-200 rounded-lg shadow-xl flex flex-col overflow-hidden"
     >
+      {/* The field this opened from is somewhere down the form and behind the
+          scrim, so the docked panel leads with its own search box — otherwise
+          there is nowhere on screen to see what is being typed. */}
+      {dock && (
+        <div className="p-2 border-b border-gray-100 flex-shrink-0">
+          <input
+            autoFocus
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder={placeholder}
+            className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-brand-secondary"
+          />
+        </div>
+      )}
       <div className="overflow-y-auto">
         {onSelectOther && (
           <button
@@ -173,6 +198,7 @@ export function AttendeeSearchSelect({
         })}
       </div>
     </div>
+    </>
   );
 
   return (
@@ -190,7 +216,7 @@ export function AttendeeSearchSelect({
           className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-secondary"
         />
       </div>
-      {open && mounted && pos && createPortal(menu, document.body)}
+      {open && mounted && (dock ? dockRect : pos) && createPortal(menu, document.body)}
     </div>
   );
 }

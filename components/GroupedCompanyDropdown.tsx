@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useMobileDock, useDockRect } from '@/lib/mobileSearchDock';
 
 export interface CompanyOption {
   id: number;
@@ -119,6 +120,10 @@ export function GroupedCompanyDropdown({
   // it; that means positioning it against the field's viewport rect by hand.
   const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const [mounted, setMounted] = useState(false);
+  // On a phone the menu docks under the header instead of anchoring to the
+  // field — see lib/mobileSearchDock.
+  const dock = useMobileDock();
+  const dockRect = useDockRect(open && !disabled && dock);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -157,7 +162,7 @@ export function GroupedCompanyDropdown({
   }, []);
 
   useEffect(() => {
-    if (!open) { setMenuPos(null); return; }
+    if (!open || dock) { setMenuPos(null); return; }
     positionMenu();
     const onScroll = () => positionMenu();
     window.addEventListener('scroll', onScroll, true);
@@ -166,7 +171,9 @@ export function GroupedCompanyDropdown({
       window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', onScroll);
     };
-  }, [open, positionMenu]);
+  }, [open, dock, positionMenu]);
+
+  const box = dock ? dockRect : menuPos;
 
   // Close on outside click
   useEffect(() => {
@@ -224,16 +231,22 @@ export function GroupedCompanyDropdown({
         )}
       </div>
 
-      {open && !disabled && mounted && menuPos && createPortal(
+      {open && !disabled && mounted && box && createPortal(
+        <>
+        {/* Docked, the menu is no longer visually attached to its field, so a
+            scrim gives a tap target for dismissing it without picking. */}
+        {dock && <div className="fixed inset-0 z-[9999] bg-black/20" onClick={() => { setOpen(false); setSearch(''); }} />}
         <div
           ref={menuRef}
-          style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, width: menuPos.width, maxHeight: menuPos.maxHeight }}
+          style={{ position: 'fixed', top: box.top, left: box.left, width: box.width, maxHeight: box.maxHeight }}
           // Above app modals (z-[200]) — the menu portals to the body, so a
           // lower value leaves it stranded behind whatever opened it.
           className="z-[10000] bg-white border border-gray-200 rounded-lg shadow-lg overflow-y-auto"
         >
-          {/* Search box inside panel when a value is not selected */}
-          {value == null && (
+          {/* Search box inside the panel. Docked it is the only search box on
+              screen — the field it came from is behind the scrim — so it shows
+              whether or not something is already selected. */}
+          {(value == null || dock) && (
             <div className="sticky top-0 bg-white border-b border-gray-100 px-2 py-1.5 z-10">
               <input
                 autoFocus
@@ -241,7 +254,7 @@ export function GroupedCompanyDropdown({
                 className="w-full text-sm px-2 py-1 rounded border border-gray-200 focus:outline-none focus:ring-1 focus:ring-brand-secondary"
                 placeholder="Search…"
                 value={search}
-                onChange={e => setSearch(e.target.value)}
+                onChange={e => { if (value != null && onClear) onClear(); setSearch(e.target.value); }}
               />
             </div>
           )}
@@ -294,7 +307,8 @@ export function GroupedCompanyDropdown({
               </div>
             ))
           )}
-        </div>,
+        </div>
+        </>,
         document.body,
       )}
     </div>
