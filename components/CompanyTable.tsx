@@ -22,6 +22,7 @@ import { CustomColumnCell } from './CustomColumnCell';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
 import { AttendeeTooltip, ConferenceTooltip } from '@/components/CountPills';
+import { CARD_TABLE, CARD_TABLE_HEAD, CARD_TABLE_SCROLL_X, CARD_TABLE_WRAP, cardRowClass, selectionColumnWidth } from '@/components/tableCards';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import { useUser } from './UserContext';
 import { CompanyAttendeesDrawer, type CompanyAttendeeLite } from './CompanyAttendeesDrawer';
@@ -268,8 +269,12 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS);
   const COL_DEFAULT_WIDTH = 120;
+  // Selection is a primary action on this table, so the checkboxes are always
+  // there rather than appearing on hover.
+  const selWidth = selectionColumnWidth(true);
+
   const companyNameStickyLeft = (() => {
-    let left = 40;
+    let left = selWidth;
     for (const col of orderedColumns) {
       if (col.key === 'name') break;
       if (!isVisible(col.key)) continue;
@@ -1172,12 +1177,18 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         )}
 
         {/* Desktop table layout */}
-        <div className="hidden lg:block overflow-auto" style={{ maxHeight: 'calc(100vh - 18rem)' }}>
-          <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
-            <thead className="sticky top-0 z-10">
+        <div className={`hidden lg:block ${CARD_TABLE_WRAP}`}>
+        {/* Grows with the page instead of scrolling inside a capped height, so
+            there is no scrollbar down the side of the table. The header row
+            goes with it: there is no longer an inner viewport for it to stick
+            within, and sticking it to the page would collide with the tab bar
+            that is already pinned there. */}
+        <div className={CARD_TABLE_SCROLL_X}>
+          <table className={`w-full text-sm ${CARD_TABLE}`} style={{ tableLayout: 'fixed' }}>
+            <thead className={CARD_TABLE_HEAD}>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-3 py-3 text-left w-10 sticky left-0 z-30 bg-gray-50">
-                  <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(filtered.map(c => c.id))); else setSelectedIds(new Set()); }} className="accent-brand-secondary" />
+                <th className="py-3 text-left sticky left-0 z-30 bg-gray-50" style={{ width: selWidth }}>
+                  <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(filtered.map(c => c.id))); else setSelectedIds(new Set()); }} className="accent-brand-secondary ml-3" />
                 </th>
                 {orderedColumns.map(col => {
                   if (!isVisible(col.key)) return null;
@@ -1206,7 +1217,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 {conferenceId != null && <th className="px-2 py-3 sticky right-0 z-30 bg-gray-50" style={{ width: 48 }} aria-label="Actions" />}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {filtered.length === 0 ? (
                 <tr><td colSpan={1 + (['name','type','sfowner','status','attendees','conferences','wse','updated_on','relationships'] as const).filter(k => isVisible(k)).length + customColumns.filter(c => c.visible).length + (rowAction ? 1 : 0) + (conferenceId != null ? 1 : 0)} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
               ) : paginated.map(company => {
@@ -1214,11 +1225,14 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 // Frozen cells need a background of their own — the row's
                 // paints behind them, not through them — so the selected and
                 // hover treatments are repeated here.
-                const frozenBg = rowSelected ? 'bg-blue-50' : 'bg-white group-hover:bg-gray-50';
+                // The card fill now comes from the row's cell styling, which
+                // the frozen columns need as much as any other cell — they
+                // paint over what scrolls beneath them.
+                const frozenBg = '';
                 const dimmed = actionsCompanyId != null && actionsCompanyId !== company.id;
                 return (
-                <tr key={company.id} className={`group hover:bg-gray-50 transition-all ${rowSelected ? 'bg-blue-50' : ''} ${dimmed ? 'opacity-40' : ''}`}>
-                  <td className={`px-3 py-3 sticky left-0 z-10 ${frozenBg}`}><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-brand-secondary" /></td>
+                <tr key={company.id} className={`group transition-all ${cardRowClass(rowSelected)} ${dimmed ? 'opacity-40' : ''}`}>
+                  <td className="py-3 sticky left-0 z-10" style={{ width: selWidth }}><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-brand-secondary ml-3" /></td>
                   {orderedColumns.map(col => {
                     if (!isVisible(col.key)) return null;
                     switch (col.key) {
@@ -1409,6 +1423,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
               })}
             </tbody>
           </table>
+        </div>
         </div>
       </div>
 

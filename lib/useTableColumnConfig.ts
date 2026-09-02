@@ -186,16 +186,54 @@ function fetchConfig(tableName: string): Promise<Record<string, ColumnEntry>> {
   return _pending[tableName]!;
 }
 
+/**
+ * Told about a config change, so mounted tables re-read it.
+ *
+ * Clearing the cache alone only helps a table that mounts afterwards. A table
+ * already on screen — in this tab or another one, which is the usual shape:
+ * admin settings open beside the page being configured — keeps showing the old
+ * columns until it is reloaded by hand. Both are notified here.
+ */
+const CONFIG_CHANGED_EVENT = 'parlay:table-config-changed';
+const CONFIG_CHANGED_KEY = 'parlay_table_config_changed';
+
 export function invalidateTableColumnConfig(tableName?: string) {
   if (tableName) {
     delete _cache[tableName];
   } else {
     for (const k of Object.keys(_cache)) delete _cache[k];
   }
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(CONFIG_CHANGED_EVENT, { detail: tableName ?? null }));
+  // Other tabs hear about it through storage, which only fires in the tabs that
+  // did not write it — exactly the ones holding a stale copy.
+  try {
+    localStorage.setItem(CONFIG_CHANGED_KEY, `${tableName ?? ''}:${Date.now()}`);
+  } catch { /* private mode */ }
 }
 
 export function useTableColumnConfig(tableName: string) {
   const [config, setConfig] = useState<Record<string, ColumnEntry>>(_cache[tableName] ?? {});
+
+  useEffect(() => {
+    const reload = (changed: string | null) => {
+      if (changed && changed !== tableName) return;
+      delete _cache[tableName];
+      fetchConfig(tableName).then(setConfig);
+    };
+    const onLocal = (e: Event) => reload((e as CustomEvent<string | null>).detail ?? null);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== CONFIG_CHANGED_KEY || !e.newValue) return;
+      const changed = e.newValue.split(':')[0];
+      reload(changed || null);
+    };
+    window.addEventListener(CONFIG_CHANGED_EVENT, onLocal);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener(CONFIG_CHANGED_EVENT, onLocal);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, [tableName]);
 
   useEffect(() => {
     fetchConfig(tableName).then(setConfig);

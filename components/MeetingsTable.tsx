@@ -14,6 +14,7 @@ import { useUser } from '@/components/UserContext';
 import { OverlappingRepPills } from '@/components/OverlappingRepPills';
 import { NotesPopoverCard } from '@/components/NotesPopoverCard';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
+import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_WRAP, SelectionCell, cardRowClass } from '@/components/tableCards';
 import { AssignFollowUpDialog } from '@/components/AssignFollowUpDialog';
 import { AdditionalAttendeesModal, AdditionalAttendeesButton } from '@/components/AdditionalAttendeesModal';
 import {
@@ -1091,6 +1092,10 @@ export function MeetingsTable({
   );
   const [meetingTypeOptions, setMeetingTypeOptions] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  // Checkboxes stay out of the way until the table is being used: hovering it
+  // offers them, and any selection keeps them out.
+  const [checksHovered, setChecksHovered] = useState(false);
+  const checksRevealed = checksHovered || selectedIds.size > 0;
   const [bulkRepIds, setBulkRepIds] = useState<number[]>([]);
   const tableColorMaps = useConfigColors();
   const kanbanScrollRef = useRef<HTMLDivElement>(null);
@@ -1523,18 +1528,24 @@ export function MeetingsTable({
       meetingTypeOptions={meetingTypeOptions}
     />
   ) : (
+    // Each row is a card. The fill, border and rounded ends are applied to the
+    // cells rather than the row, because a <tr> cannot be rounded — done with a
+    // child selector so every cell picks it up without the switch below having
+    // to repeat it. Same treatment as the follow-ups table.
     <tr
       key={m.id}
-      className={`transition-colors align-top hover:bg-gray-50 ${selectedIds.has(m.id) ? 'bg-blue-50' : ''}`}
+      className={`align-top ${cardRowClass(selectedIds.has(m.id))}`}
     >
       {hasSelection && (
-        <td className="pl-3 pr-1 py-2 w-8">
-          <input
-            type="checkbox"
-            checked={selectedIds.has(m.id)}
-            onChange={() => toggleSelect(m.id)}
-            className="h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
-          />
+        <td className="p-0 py-2 w-0">
+          <SelectionCell revealed={checksRevealed}>
+            <input
+              type="checkbox"
+              checked={selectedIds.has(m.id)}
+              onChange={() => toggleSelect(m.id)}
+              className="h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
+            />
+          </SelectionCell>
         </td>
       )}
       {orderedColumns.map(col => {
@@ -1803,20 +1814,31 @@ export function MeetingsTable({
       </div>
 
       {/* Desktop table layout */}
+      {/* The cards sit on the same grey the header row uses, inset from the
+          container so the gap around them matches the gap between them. */}
       {!cardsOnly && viewMode === 'table' && (
-      <div className="hidden lg:block overflow-x-auto">
-        <table className="w-full" style={{ fontSize: '0.7rem' }}>
+      <div
+        className={`hidden lg:block ${CARD_TABLE_WRAP}`}
+        onMouseEnter={() => setChecksHovered(true)}
+        onMouseLeave={() => setChecksHovered(false)}
+      >
+      <div className={CARD_TABLE_SCROLL}>
+        {/* border-spacing gives the cards the gap between them that a plain
+            table has nowhere to put. */}
+        <table className={`w-full ${CARD_TABLE}`} style={{ fontSize: '0.7rem' }}>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               {hasSelection && (
-                <th className="pl-3 pr-1 py-2 w-8">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    ref={el => { if (el) el.indeterminate = someSelected; }}
-                    onChange={toggleAll}
-                    className="h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
-                  />
+                <th className="p-0 py-2 w-0">
+                  <SelectionCell revealed={checksRevealed}>
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      ref={el => { if (el) el.indeterminate = someSelected; }}
+                      onChange={toggleAll}
+                      className="h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
+                    />
+                  </SelectionCell>
                 </th>
               )}
               {orderedColumns.map(col => {
@@ -1842,7 +1864,7 @@ export function MeetingsTable({
               {hasActions && <th className="px-3 py-2"></th>}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody>
             {groupedMeetings
               ? groupedMeetings.map(([key, group], gi) => (
                   <Fragment key={`${mode}-${key || 'none'}`}>
@@ -1873,6 +1895,7 @@ export function MeetingsTable({
               : sorted.map(renderTableRow)}
           </tbody>
         </table>
+      </div>
       </div>
       )}
       {quickView && (
