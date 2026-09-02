@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { ColumnMappingModal } from './ColumnMappingModal';
 import { type ColumnMapping } from '@/lib/columnMapping';
+import { ConferenceLogoField } from '@/components/ConferenceLogoField';
 import { SeriesSeasonCombobox, type SeriesOption } from './SeriesSeasonCombobox';
 import { LocationAutocompleteInput, type LocationDetails } from './LocationAutocompleteInput';
 
@@ -57,6 +58,9 @@ export function ConferenceForm() {
   const industryDropdownRef = useRef<HTMLDivElement>(null);
   const [conferenceTypeInput, setConferenceTypeInput] = useState('');
   const [websiteInput, setWebsiteInput] = useState('');
+  // The conference does not exist yet, so the cropped logo waits here and is
+  // uploaded once the create returns an id.
+  const [logoBlob, setLogoBlob] = useState<Blob | null>(null);
   const [sponsorshipOptions, setSponsorshipOptions] = useState<{ id: number; value: string; color: string | null; is_system: number }[]>([]);
   const [selectedSponsorshipLevel, setSelectedSponsorshipLevel] = useState('');
   const [sponsorshipAddOpen, setSponsorshipAddOpen] = useState(false);
@@ -281,6 +285,17 @@ export function ConferenceForm() {
 
       const result = await res.json();
 
+      // Attached after the fact rather than as part of the create: the upload
+      // route keys off the conference id, and a logo that failed to save is not
+      // a reason to fail a conference that already exists.
+      if (logoBlob && result?.id) {
+        try {
+          const logoForm = new FormData();
+          logoForm.append('file', new File([logoBlob], 'logo.jpg', { type: 'image/jpeg' }));
+          await fetch(`/api/conferences/${result.id}/logo`, { method: 'POST', body: logoForm });
+        } catch { toast.error('The conference was created, but the logo could not be saved.'); }
+      }
+
       if (result.status === 'processing') {
         localStorage.setItem('upload_job_in_progress', JSON.stringify({
           jobId: result.job_id,
@@ -431,6 +446,10 @@ export function ConferenceForm() {
                 placeholder="https://example.com"
               />
             </div>
+          </div>
+
+          <div>
+            <ConferenceLogoField onPending={setLogoBlob} />
           </div>
 
           <div className="md:col-span-2">
