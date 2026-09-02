@@ -14,6 +14,7 @@ import { useUser } from '@/components/UserContext';
 import { OverlappingRepPills } from '@/components/OverlappingRepPills';
 import { NotesPopoverCard } from '@/components/NotesPopoverCard';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
+import { CARD_TABLE, CARD_TABLE_WRAP, SelectionCell, cardRowClass } from '@/components/tableCards';
 import { AssignFollowUpDialog } from '@/components/AssignFollowUpDialog';
 import { AdditionalAttendeesModal, AdditionalAttendeesButton } from '@/components/AdditionalAttendeesModal';
 import {
@@ -64,29 +65,6 @@ export interface Meeting {
 }
 
 /** Circular marker for a row the viewer only attends as a guest. */
-/**
- * The selection column, which is only there when it is wanted.
- *
- * Collapsed it keeps 8px — the card's left padding — so the row still has a
- * proper rounded corner to sit behind; revealed it widens to hold the checkbox,
- * which pushes the row's contents right.
- *
- * A table's columns share one width, so this reveals for the whole table rather
- * than for the single hovered row: a cell cannot be wider than its column in
- * one row and narrower in the next.
- */
-function SelectionCell({ revealed, children }: { revealed: boolean; children: React.ReactNode }) {
-  return (
-    <div
-      className={`overflow-hidden transition-[width,opacity] duration-200 ease-out flex items-center justify-end ${
-        revealed ? 'w-7 opacity-100' : 'w-2 opacity-0'
-      }`}
-    >
-      {children}
-    </div>
-  );
-}
-
 function AdditionalAttendeeBadge() {
   return (
     <span
@@ -1556,11 +1534,7 @@ export function MeetingsTable({
     // to repeat it. Same treatment as the follow-ups table.
     <tr
       key={m.id}
-      className={`align-top [&>td]:transition-colors [&>td]:border-y [&>td]:border-gray-200 [&>td:first-child]:border-l [&>td:first-child]:rounded-l-lg [&>td:last-child]:border-r [&>td:last-child]:rounded-r-lg ${
-        selectedIds.has(m.id)
-          ? '[&>td]:bg-blue-50 [&>td]:border-brand-secondary/40'
-          : '[&>td]:bg-white [&:hover>td]:bg-gray-50'
-      }`}
+      className={`align-top ${cardRowClass(selectedIds.has(m.id))}`}
     >
       {hasSelection && (
         <td className="p-0 py-2 w-0">
@@ -1844,13 +1818,13 @@ export function MeetingsTable({
           container so the gap around them matches the gap between them. */}
       {!cardsOnly && viewMode === 'table' && (
       <div
-        className="hidden lg:block overflow-x-auto bg-gray-50 rounded-lg px-2 pb-2"
+        className={`hidden lg:block overflow-x-auto ${CARD_TABLE_WRAP}`}
         onMouseEnter={() => setChecksHovered(true)}
         onMouseLeave={() => setChecksHovered(false)}
       >
         {/* border-spacing gives the cards the gap between them that a plain
             table has nowhere to put. */}
-        <table className="w-full border-separate [border-spacing:0_0.5rem]" style={{ fontSize: '0.7rem' }}>
+        <table className={`w-full ${CARD_TABLE}`} style={{ fontSize: '0.7rem' }}>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               {hasSelection && (

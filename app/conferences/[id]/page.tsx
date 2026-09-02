@@ -28,6 +28,7 @@ import { SocialEventsTable, type SocialEvent } from '@/components/SocialEventsTa
 import { BackButton } from '@/components/BackButton';
 import { TargetToggleButton } from '@/components/TargetToggleButton';
 import { ConferenceLogoField } from '@/components/ConferenceLogoField';
+import { CARD_TABLE, CARD_TABLE_WRAP, cardRowClass, selectionColumnWidth } from '@/components/tableCards';
 import { useConferenceTargets } from '@/lib/useConferenceTargets';
 import { useIcpCompanyTypes, matchesIcpCompanyType } from '@/lib/useIcpCompanyTypes';
 import { effectiveSeniority } from '@/lib/parsers';
@@ -491,8 +492,13 @@ export default function ConferenceDetailPage() {
    * custom ones) contributes its rendered default.
    */
   const CONF_COL_DEFAULT_WIDTH = 140;
+  // Checkboxes stay out of the way until the table is being used; the column is
+  // fixed-width here, so the sticky Name column follows the same number.
+  const [attendeeChecksHovered, setAttendeeChecksHovered] = useState(false);
+  const attendeeChecksRevealed = attendeeChecksHovered || selectedAttendeeIds.size > 0;
+  const attendeeSelWidth = selectionColumnWidth(attendeeChecksRevealed);
   const attendeeNameStickyLeft = (() => {
-    let left = 40;
+    let left = attendeeSelWidth;
     for (const col of confAttendeeColumns) {
       if (col.key === 'name') break;
       if (!isConfAttendeeColVisible(col.key)) continue;
@@ -3495,11 +3501,15 @@ export default function ConferenceDetailPage() {
               </MobileCardList>
 
               {/* Desktop table */}
-            <div className="hidden lg:block overflow-x-auto">
-              <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
+            <div
+              className={`hidden lg:block overflow-x-auto ${CARD_TABLE_WRAP}`}
+              onMouseEnter={() => setAttendeeChecksHovered(true)}
+              onMouseLeave={() => setAttendeeChecksHovered(false)}
+            >
+              <table className={`w-full text-sm ${CARD_TABLE}`} style={{ tableLayout: 'fixed' }}>
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left sticky left-0 z-30 bg-gray-50" style={{ width: 40 }}>
+                    <th className="py-3 text-left sticky left-0 z-30 bg-gray-50 overflow-hidden transition-[width] duration-200 ease-out" style={{ width: attendeeSelWidth }}>
                       <input
                         type="checkbox"
                         checked={selectedAttendeeIds.size === filteredAttendees.length && filteredAttendees.length > 0}
@@ -3507,7 +3517,7 @@ export default function ConferenceDetailPage() {
                           if (e.target.checked) setSelectedAttendeeIds(new Set(filteredAttendees.map((a) => a.id)));
                           else setSelectedAttendeeIds(new Set());
                         }}
-                        className="accent-brand-secondary"
+                        className={`accent-brand-secondary ml-3 transition-opacity duration-200 ${attendeeChecksRevealed ? 'opacity-100' : 'opacity-0'}`}
                       />
                     </th>
                     {confAttendeeColumns.map(col => {
@@ -3546,22 +3556,25 @@ export default function ConferenceDetailPage() {
                     <th className="px-2 py-3 sticky right-0 z-30 bg-gray-50" style={{ width: 48 }} aria-label="Actions" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody>
                   {paginatedAttendees.map((attendee) => {
                     const rowSelected = selectedAttendeeIds.has(attendee.id);
                     // Frozen cells need a background of their own — the row's
                     // paints behind them, not through them — so the selected
                     // and hover treatments are repeated here.
-                    const frozenBg = rowSelected ? 'bg-blue-50' : 'bg-white group-hover:bg-gray-50';
+                    // The card fill now comes from the row's cell styling,
+                    // which the frozen columns need as much as any other cell —
+                    // they paint over what scrolls beneath them.
+                    const frozenBg = '';
                     const dimmed = actionsAttendeeId != null && actionsAttendeeId !== attendee.id;
                     return (
-                    <tr key={attendee.id} className={`group hover:bg-gray-50 transition-all ${rowSelected ? 'bg-blue-50' : ''} ${dimmed ? 'opacity-40' : ''}`}>
-                      <td className={`px-4 py-3 sticky left-0 z-10 ${frozenBg}`}>
+                    <tr key={attendee.id} className={`group transition-all ${cardRowClass(rowSelected)} ${dimmed ? 'opacity-40' : ''}`}>
+                      <td className="py-3 sticky left-0 z-10 overflow-hidden transition-[width] duration-200 ease-out" style={{ width: attendeeSelWidth }}>
                         <input
                           type="checkbox"
                           checked={selectedAttendeeIds.has(attendee.id)}
                           onChange={() => toggleAttendeeSelect(attendee.id)}
-                          className="accent-brand-secondary"
+                          className={`accent-brand-secondary ml-3 transition-opacity duration-200 ${attendeeChecksRevealed ? 'opacity-100' : 'opacity-0'}`}
                         />
                       </td>
                       {confAttendeeColumns.map(col => {
