@@ -11,6 +11,7 @@ import { RelationshipMapDrawer } from './RelationshipMapDrawer';
 import { MobileFormSheet } from '@/components/MobileFormSheet';
 import { SectionAddButton } from '@/components/SectionAddButton';
 import { useCollapsibleSection } from '@/lib/sectionExpansion';
+import { AnimatedCollapse } from '@/components/CollapseAnimation';
 
 interface InternalRelationship {
   id: number;
@@ -497,7 +498,7 @@ export function InternalRelationshipsSection({
         </div>
       )}
 
-      {sectionExpanded && (
+      <AnimatedCollapse open={sectionExpanded}>
         <div className="mt-3">
           {/* Add Form */}
           {showForm && (
@@ -563,7 +564,7 @@ export function InternalRelationshipsSection({
             </div>
           )}
         </div>
-      )}
+      </AnimatedCollapse>
 
       {/* Relationship map drawer — opened by internal button (attendee context) or external prop (company header) */}
       {(showMapDrawer || mapOpen) && (

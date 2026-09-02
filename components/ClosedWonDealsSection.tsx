@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { SectionAddButton } from '@/components/SectionAddButton';
 import { useCollapsibleSection } from '@/lib/sectionExpansion';
 import { useClosedDealDraft, type ClosedDeal } from '@/lib/ClosedDealDraftContext';
+import { AnimatedCollapse } from '@/components/CollapseAnimation';
 
 export type { ClosedDeal };
 
@@ -150,7 +151,7 @@ export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = 
         )}
       </div>
 
-      {expanded && (<div className="mt-3">
+      <AnimatedCollapse open={expanded}><div className="mt-3">
 
       {/* Summary cards row */}
       {deals.length > 0 && !hasMixedCurrencies && (
@@ -377,7 +378,7 @@ export function ClosedWonDealsSection({ companyId, initialDeals = [], canEdit = 
           })}
         </div>
       )}
-      </div>)}
+      </div></AnimatedCollapse>
     </>
   );
 }

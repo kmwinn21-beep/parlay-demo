@@ -30,6 +30,7 @@ import { SuggestedUpdatesSection } from '@/components/SuggestedUpdatesSection';
 import { SectionJumpMenu } from '@/components/SectionJumpMenu';
 import { useCollapsibleSection, setAllSections, useAnySectionExpanded } from '@/lib/sectionExpansion';
 import { ConferenceTimeline } from '@/components/ConferenceTimeline';
+import { AnimatedCollapse, FadeCollapse } from '@/components/CollapseAnimation';
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { ComposeEmailModal } from '@/components/ComposeEmailModal';
 import { CompanyDrawer } from '@/components/CompanyDrawer';
@@ -195,9 +196,7 @@ export default function CompanyDetailPage() {
   const [allCompanies, setAllCompanies] = useState<{ id: number; name: string }[]>([]);
   const [editingCompanyAttendeeId, setEditingCompanyAttendeeId] = useState<number | null>(null);
   const [savingCompanyAttendeeId, setSavingCompanyAttendeeId] = useState<number | null>(null);
-  const [attendeesExpanded, setAttendeesExpanded] = useState(false);
   const [productsExpanded, setProductsExpanded] = useCollapsibleSection(false);
-  const ATTENDEE_COLLAPSED_COUNT = 4;
 
   // Dynamic config options
   const [statusOptions, setStatusOptions] = useState<string[]>([]);
@@ -816,10 +815,9 @@ export default function CompanyDetailPage() {
   const filteredAttendees = company?.attendees || [];
 
   const attendeeTotalPages = Math.ceil(filteredAttendees.length / ATTENDEE_PAGE_SIZE);
-  const displayedAttendees = attendeesExpanded
-    ? filteredAttendees
-    : filteredAttendees.slice(0, ATTENDEE_COLLAPSED_COUNT);
-  const paginatedAttendees = displayedAttendees;
+  // Every attendee is rendered; FadeCollapse decides how much of the list is
+  // visible, which is what lets the cut land mid-row rather than between rows.
+  const paginatedAttendees = filteredAttendees;
 
   if (isLoading) {
     return (
@@ -1338,15 +1336,6 @@ export default function CompanyDetailPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 9.5v6M22 12.5h-6" />
               </svg>
             </button>
-            {filteredAttendees.length > ATTENDEE_COLLAPSED_COUNT && (
-              <button
-                onClick={() => setAttendeesExpanded(prev => !prev)}
-                className="text-gray-400 hover:text-brand-secondary transition-colors p-1 rounded hover:bg-gray-50"
-                title={attendeesExpanded ? 'Collapse attendees' : 'Expand attendees'}
-              >
-                <svg className={`w-5 h-5 transition-transform ${attendeesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-              </button>
-            )}
           </div>
         </div>
 
@@ -1429,13 +1418,13 @@ export default function CompanyDetailPage() {
         {filteredAttendees.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-4">No attendees for this company yet.</p>
         ) : (
-          <>
+          <FadeCollapse rows={2}>
             {/* Mobile card layout */}
             <div className="block lg:hidden divide-y divide-gray-100">
               {paginatedAttendees.map((attendee) => {
                 const seniority = effectiveSeniority(attendee.seniority, attendee.title);
                 return (
-                <div key={attendee.id} className="p-4 bg-white">
+                <div key={attendee.id} data-collapse-row className="p-4 bg-white">
                   <div className="flex items-start gap-3">
                     {/* Photo when they have one — clicking it opens the card */}
                     <AttendeeInitialsAvatar
@@ -1504,7 +1493,7 @@ export default function CompanyDetailPage() {
                   {paginatedAttendees.map((attendee) => {
                     const seniority = effectiveSeniority(attendee.seniority, attendee.title);
                     return (
-                    <tr key={attendee.id} className="hover:bg-gray-50 transition-colors group">
+                    <tr key={attendee.id} data-collapse-row className="hover:bg-gray-50 transition-colors group">
                       <td className="px-4 py-3 font-medium overflow-hidden" style={{ maxWidth: 220 }}>
                         <div className="flex items-center gap-1.5">
                           <AttendeeInitialsAvatar
@@ -1592,7 +1581,7 @@ export default function CompanyDetailPage() {
                 </tbody>
               </table>
             </div>
-          </>
+          </FadeCollapse>
         )}
 
       </div>
@@ -1704,6 +1693,7 @@ export default function CompanyDetailPage() {
           <NotesSection
             entityType="company"
             entityId={Number(id)}
+            fadeCollapse
             initialNotes={companyNotes}
             parentEntityId={company.child_companies && company.child_companies.length > 0 ? Number(id) : undefined}
             conferences={company.conferences || []}
@@ -1738,7 +1728,7 @@ export default function CompanyDetailPage() {
                     </svg>
                     <h2 className="text-base font-semibold text-brand-primary font-serif">{getSectionLabel('status')}</h2>
                   </button>
-                  {statusExpanded && (<>
+                  <AnimatedCollapse open={statusExpanded}>
                   <p className="text-xs text-gray-500 mt-1 mb-3">Setting a company status will update all associated attendees.</p>
                   <div className="flex flex-wrap gap-2">
                     {statusOptionObjects.map(opt => {
@@ -1759,7 +1749,7 @@ export default function CompanyDetailPage() {
                       );
                     })}
                   </div>
-                  </>)}
+                  </AnimatedCollapse>
                 </div>
               ),
               closed_deals: (
@@ -1873,7 +1863,7 @@ export default function CompanyDetailPage() {
                         {getSectionLabel('products')} <span className="text-gray-400 font-normal text-sm">({entries.length})</span>
                       </h2>
                     </button>
-                    {productsExpanded && (
+                    <AnimatedCollapse open={productsExpanded}>
                       <div className="space-y-3 mt-3">
                         {entries.map(([product, attendees]) => {
                           const preset = getPreset((colorMaps.products ?? {})[product]);
@@ -1893,7 +1883,7 @@ export default function CompanyDetailPage() {
                           );
                         })}
                       </div>
-                    )}
+                    </AnimatedCollapse>
                   </div>
                 );
               })(),
