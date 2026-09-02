@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import { effectiveSeniority } from '@/lib/parsers';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { AttendeeAvatar, ImageCropModal, readImageFromClipboard } from '@/components/AttendeePhoto';
+import { ConferenceTimeline } from '@/components/ConferenceTimeline';
 import { ScrollRow } from '@/components/ScrollRow';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
@@ -153,7 +154,6 @@ export default function AttendeeDetailPage() {
   const [showTitleClassifier, setShowTitleClassifier] = useState(false);
   const [titleRuleForm, setTitleRuleForm] = useState({ normalized_title: '', function_id: '', seniority_id: '', buyer_role: 'target_title' as BuyerRoleKey, confidence: 'high', notes: '', apply_all_exact: true });
   const [isSavingTitleRule, setIsSavingTitleRule] = useState(false);
-  const [conferencesExpanded, setConferencesExpanded] = useState(false);
 
   // Follow-ups
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
@@ -1479,67 +1479,8 @@ export default function AttendeeDetailPage() {
                 </div>
               ),
               conferences: (
-                <div key="conferences" className="card">
-                  {(() => {
-                    const today = new Date().toISOString().slice(0, 10);
-                    const inProgressConfs = attendee.conferences.filter(conf => conf.start_date <= today && conf.end_date >= today);
-                    return (
-                      <>
-                        <button
-                          onClick={() => setConferencesExpanded(prev => !prev)}
-                          className="flex items-center justify-between w-full text-left"
-                        >
-                          <h2 className="text-lg font-semibold text-brand-primary font-serif">{getSectionLabel('conferences')} ({attendee.conferences.length})</h2>
-                          <svg className={`w-5 h-5 text-gray-400 transition-transform ${conferencesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                        </button>
-                        {!conferencesExpanded && inProgressConfs.length > 0 && (
-                          <div className="space-y-2 mt-4">
-                            {inProgressConfs.map(conf => (
-                              <Link key={conf.id} href={`/conferences/${conf.id}`} className="flex items-center justify-between p-3 rounded-lg border border-brand-secondary hover:bg-blue-50 transition-all">
-                                <div className="min-w-0">
-                                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-secondary mb-1">
-                                    <span className="w-2 h-2 rounded-full bg-brand-secondary animate-pulse" />
-                                    In Progress
-                                  </span>
-                                  <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
-                                  <p className="text-xs text-gray-500">{formatDate(conf.start_date)}</p>
-                                </div>
-                                <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                              </Link>
-                            ))}
-                          </div>
-                        )}
-                        {conferencesExpanded && (
-                          <>
-                            {attendee.conferences.length === 0 ? (
-                              <p className="text-sm text-gray-400 text-center py-4 mt-4">Not associated with any conferences.</p>
-                            ) : (
-                              <div className="space-y-2 mt-4">
-                                {attendee.conferences.map(conf => {
-                                  const isActive = conf.start_date <= today && conf.end_date >= today;
-                                  return (
-                                    <Link key={conf.id} href={`/conferences/${conf.id}`} className={`flex items-center justify-between p-3 rounded-lg border transition-all hover:bg-blue-50 ${isActive ? 'border-brand-secondary' : 'border-gray-100 hover:border-brand-secondary'}`}>
-                                      <div className="min-w-0">
-                                        {isActive && (
-                                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-secondary mb-1">
-                                            <span className="w-2 h-2 rounded-full bg-brand-secondary animate-pulse" />
-                                            In Progress
-                                          </span>
-                                        )}
-                                        <p className="text-sm font-medium text-gray-800 truncate">{conf.name}</p>
-                                        <p className="text-xs text-gray-500">{formatDate(conf.start_date)}</p>
-                                      </div>
-                                      <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                                    </Link>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </>
-                    );
-                  })()}
+                <div key="conferences">
+                  <ConferenceTimeline entityType="attendee" entityId={Number(id)} title={getSectionLabel('conferences')} />
                 </div>
               ),
               relationships: attendee.company_id ? (
