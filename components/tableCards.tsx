@@ -12,8 +12,29 @@ import type { ReactNode } from 'react';
  * child selector so the switch that builds each cell doesn't repeat them.
  */
 
-/** Grey ground, and the inset that gives the cards their left/right margin. */
-export const CARD_TABLE_WRAP = 'bg-gray-50 rounded-lg px-2 pb-2';
+/**
+ * Grey ground and the inset that gives the cards their left/right margin.
+ *
+ * The inset is on this element and the scrolling happens on the one inside it.
+ * Padding on a scroll container is inside the scrollport, so a horizontally
+ * scrolled table slides its cards through the margin instead of being clipped
+ * by it.
+ */
+export const CARD_TABLE_WRAP = 'bg-gray-50 rounded-lg px-2';
+
+/** The scrollport, inset by the wrapper above. */
+export const CARD_TABLE_SCROLL = 'overflow-auto';
+
+/**
+ * A sticky header row over card rows.
+ *
+ * Each cell carries the grey itself — with border-separate a row's background
+ * does not reliably cover its cells — and a shadow paints the 8px of
+ * border-spacing below the header, which is otherwise a transparent band that
+ * rows show through as they scroll under. The z-index sits above the frozen
+ * body cells, which have one of their own.
+ */
+export const CARD_TABLE_STICKY_HEAD = 'sticky top-0 z-40 [&>tr>th]:bg-gray-50 [&>tr>th]:shadow-[0_8px_0_0_rgb(249,250,251)]';
 
 /** border-spacing is the only place a table has to put a gap between rows. */
 export const CARD_TABLE = 'border-separate [border-spacing:0_0.5rem]';

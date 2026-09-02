@@ -22,7 +22,7 @@ import { CustomColumnCell } from './CustomColumnCell';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
 import { AttendeeTooltip, ConferenceTooltip } from '@/components/CountPills';
-import { CARD_TABLE, CARD_TABLE_WRAP, cardRowClass, selectionColumnWidth } from '@/components/tableCards';
+import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_STICKY_HEAD, CARD_TABLE_WRAP, cardRowClass, selectionColumnWidth } from '@/components/tableCards';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import { useUser } from './UserContext';
 import { CompanyAttendeesDrawer, type CompanyAttendeeLite } from './CompanyAttendeesDrawer';
@@ -269,12 +269,9 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS);
   const COL_DEFAULT_WIDTH = 120;
-  // Checkboxes stay out of the way until the table is being used; the column
-  // is fixed-width here, so the width is animated on the cells themselves and
-  // the sticky Name column follows the same number.
-  const [checksHovered, setChecksHovered] = useState(false);
-  const checksRevealed = checksHovered || selectedIds.size > 0;
-  const selWidth = selectionColumnWidth(checksRevealed);
+  // Selection is a primary action on this table, so the checkboxes are always
+  // there rather than appearing on hover.
+  const selWidth = selectionColumnWidth(true);
 
   const companyNameStickyLeft = (() => {
     let left = selWidth;
@@ -1180,17 +1177,13 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         )}
 
         {/* Desktop table layout */}
-        <div
-          className={`hidden lg:block overflow-auto ${CARD_TABLE_WRAP}`}
-          style={{ maxHeight: 'calc(100vh - 18rem)' }}
-          onMouseEnter={() => setChecksHovered(true)}
-          onMouseLeave={() => setChecksHovered(false)}
-        >
+        <div className={`hidden lg:block ${CARD_TABLE_WRAP}`}>
+        <div className={CARD_TABLE_SCROLL} style={{ maxHeight: 'calc(100vh - 18rem)' }}>
           <table className={`w-full text-sm ${CARD_TABLE}`} style={{ tableLayout: 'fixed' }}>
-            <thead className="sticky top-0 z-10">
+            <thead className={CARD_TABLE_STICKY_HEAD}>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="py-3 text-left sticky left-0 z-30 bg-gray-50 overflow-hidden transition-[width] duration-200 ease-out" style={{ width: selWidth }}>
-                  <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(filtered.map(c => c.id))); else setSelectedIds(new Set()); }} className={`accent-brand-secondary ml-3 transition-opacity duration-200 ${checksRevealed ? 'opacity-100' : 'opacity-0'}`} />
+                <th className="py-3 text-left sticky left-0 z-30 bg-gray-50" style={{ width: selWidth }}>
+                  <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={e => { if (e.target.checked) setSelectedIds(new Set(filtered.map(c => c.id))); else setSelectedIds(new Set()); }} className="accent-brand-secondary ml-3" />
                 </th>
                 {orderedColumns.map(col => {
                   if (!isVisible(col.key)) return null;
@@ -1234,7 +1227,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 const dimmed = actionsCompanyId != null && actionsCompanyId !== company.id;
                 return (
                 <tr key={company.id} className={`group transition-all ${cardRowClass(rowSelected)} ${dimmed ? 'opacity-40' : ''}`}>
-                  <td className="py-3 sticky left-0 z-10 overflow-hidden transition-[width] duration-200 ease-out" style={{ width: selWidth }}><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className={`accent-brand-secondary ml-3 transition-opacity duration-200 ${checksRevealed ? 'opacity-100' : 'opacity-0'}`} /></td>
+                  <td className="py-3 sticky left-0 z-10" style={{ width: selWidth }}><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-brand-secondary ml-3" /></td>
                   {orderedColumns.map(col => {
                     if (!isVisible(col.key)) return null;
                     switch (col.key) {
@@ -1425,6 +1418,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
               })}
             </tbody>
           </table>
+        </div>
         </div>
       </div>
 

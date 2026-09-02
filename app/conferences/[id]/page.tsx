@@ -28,7 +28,7 @@ import { SocialEventsTable, type SocialEvent } from '@/components/SocialEventsTa
 import { BackButton } from '@/components/BackButton';
 import { TargetToggleButton } from '@/components/TargetToggleButton';
 import { ConferenceLogoField } from '@/components/ConferenceLogoField';
-import { CARD_TABLE, CARD_TABLE_WRAP, cardRowClass, selectionColumnWidth } from '@/components/tableCards';
+import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_WRAP, cardRowClass, selectionColumnWidth } from '@/components/tableCards';
 import { useConferenceTargets } from '@/lib/useConferenceTargets';
 import { useIcpCompanyTypes, matchesIcpCompanyType } from '@/lib/useIcpCompanyTypes';
 import { effectiveSeniority } from '@/lib/parsers';
@@ -492,11 +492,9 @@ export default function ConferenceDetailPage() {
    * custom ones) contributes its rendered default.
    */
   const CONF_COL_DEFAULT_WIDTH = 140;
-  // Checkboxes stay out of the way until the table is being used; the column is
-  // fixed-width here, so the sticky Name column follows the same number.
-  const [attendeeChecksHovered, setAttendeeChecksHovered] = useState(false);
-  const attendeeChecksRevealed = attendeeChecksHovered || selectedAttendeeIds.size > 0;
-  const attendeeSelWidth = selectionColumnWidth(attendeeChecksRevealed);
+  // Selection is a primary action on this table, so the checkboxes are always
+  // there rather than appearing on hover.
+  const attendeeSelWidth = selectionColumnWidth(true);
   const attendeeNameStickyLeft = (() => {
     let left = attendeeSelWidth;
     for (const col of confAttendeeColumns) {
@@ -3501,15 +3499,12 @@ export default function ConferenceDetailPage() {
               </MobileCardList>
 
               {/* Desktop table */}
-            <div
-              className={`hidden lg:block overflow-x-auto ${CARD_TABLE_WRAP}`}
-              onMouseEnter={() => setAttendeeChecksHovered(true)}
-              onMouseLeave={() => setAttendeeChecksHovered(false)}
-            >
+            <div className={`hidden lg:block ${CARD_TABLE_WRAP}`}>
+            <div className={CARD_TABLE_SCROLL}>
               <table className={`w-full text-sm ${CARD_TABLE}`} style={{ tableLayout: 'fixed' }}>
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="py-3 text-left sticky left-0 z-30 bg-gray-50 overflow-hidden transition-[width] duration-200 ease-out" style={{ width: attendeeSelWidth }}>
+                    <th className="py-3 text-left sticky left-0 z-30 bg-gray-50" style={{ width: attendeeSelWidth }}>
                       <input
                         type="checkbox"
                         checked={selectedAttendeeIds.size === filteredAttendees.length && filteredAttendees.length > 0}
@@ -3517,7 +3512,7 @@ export default function ConferenceDetailPage() {
                           if (e.target.checked) setSelectedAttendeeIds(new Set(filteredAttendees.map((a) => a.id)));
                           else setSelectedAttendeeIds(new Set());
                         }}
-                        className={`accent-brand-secondary ml-3 transition-opacity duration-200 ${attendeeChecksRevealed ? 'opacity-100' : 'opacity-0'}`}
+                        className="accent-brand-secondary ml-3"
                       />
                     </th>
                     {confAttendeeColumns.map(col => {
@@ -3569,12 +3564,12 @@ export default function ConferenceDetailPage() {
                     const dimmed = actionsAttendeeId != null && actionsAttendeeId !== attendee.id;
                     return (
                     <tr key={attendee.id} className={`group transition-all ${cardRowClass(rowSelected)} ${dimmed ? 'opacity-40' : ''}`}>
-                      <td className="py-3 sticky left-0 z-10 overflow-hidden transition-[width] duration-200 ease-out" style={{ width: attendeeSelWidth }}>
+                      <td className="py-3 sticky left-0 z-10" style={{ width: attendeeSelWidth }}>
                         <input
                           type="checkbox"
                           checked={selectedAttendeeIds.has(attendee.id)}
                           onChange={() => toggleAttendeeSelect(attendee.id)}
-                          className={`accent-brand-secondary ml-3 transition-opacity duration-200 ${attendeeChecksRevealed ? 'opacity-100' : 'opacity-0'}`}
+                          className="accent-brand-secondary ml-3"
                         />
                       </td>
                       {confAttendeeColumns.map(col => {
@@ -3724,6 +3719,7 @@ export default function ConferenceDetailPage() {
                   })}
                 </tbody>
               </table>
+            </div>
             </div>
             </>
           )}

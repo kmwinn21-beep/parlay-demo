@@ -14,7 +14,7 @@ import { useUser } from '@/components/UserContext';
 import { OverlappingRepPills } from '@/components/OverlappingRepPills';
 import { NotesPopoverCard } from '@/components/NotesPopoverCard';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
-import { CARD_TABLE, CARD_TABLE_WRAP, SelectionCell, cardRowClass } from '@/components/tableCards';
+import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_WRAP, SelectionCell, cardRowClass } from '@/components/tableCards';
 import { AssignFollowUpDialog } from '@/components/AssignFollowUpDialog';
 import { AdditionalAttendeesModal, AdditionalAttendeesButton } from '@/components/AdditionalAttendeesModal';
 import {
@@ -1818,10 +1818,11 @@ export function MeetingsTable({
           container so the gap around them matches the gap between them. */}
       {!cardsOnly && viewMode === 'table' && (
       <div
-        className={`hidden lg:block overflow-x-auto ${CARD_TABLE_WRAP}`}
+        className={`hidden lg:block ${CARD_TABLE_WRAP}`}
         onMouseEnter={() => setChecksHovered(true)}
         onMouseLeave={() => setChecksHovered(false)}
       >
+      <div className={CARD_TABLE_SCROLL}>
         {/* border-spacing gives the cards the gap between them that a plain
             table has nowhere to put. */}
         <table className={`w-full ${CARD_TABLE}`} style={{ fontSize: '0.7rem' }}>
@@ -1894,6 +1895,7 @@ export function MeetingsTable({
               : sorted.map(renderTableRow)}
           </tbody>
         </table>
+      </div>
       </div>
       )}
       {quickView && (
