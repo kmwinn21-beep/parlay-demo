@@ -1523,9 +1523,17 @@ export function MeetingsTable({
       meetingTypeOptions={meetingTypeOptions}
     />
   ) : (
+    // Each row is a card. The fill, border and rounded ends are applied to the
+    // cells rather than the row, because a <tr> cannot be rounded — done with a
+    // child selector so every cell picks it up without the switch below having
+    // to repeat it. Same treatment as the follow-ups table.
     <tr
       key={m.id}
-      className={`transition-colors align-top hover:bg-gray-50 ${selectedIds.has(m.id) ? 'bg-blue-50' : ''}`}
+      className={`align-top [&>td]:transition-colors [&>td]:border-y [&>td]:border-gray-200 [&>td:first-child]:border-l [&>td:first-child]:rounded-l-lg [&>td:last-child]:border-r [&>td:last-child]:rounded-r-lg ${
+        selectedIds.has(m.id)
+          ? '[&>td]:bg-blue-50 [&>td]:border-brand-secondary/40'
+          : '[&>td]:bg-white [&:hover>td]:bg-gray-50'
+      }`}
     >
       {hasSelection && (
         <td className="pl-3 pr-1 py-2 w-8">
@@ -1805,7 +1813,9 @@ export function MeetingsTable({
       {/* Desktop table layout */}
       {!cardsOnly && viewMode === 'table' && (
       <div className="hidden lg:block overflow-x-auto">
-        <table className="w-full" style={{ fontSize: '0.7rem' }}>
+        {/* border-spacing gives the cards the gap between them that a plain
+            table has nowhere to put. */}
+        <table className="w-full border-separate [border-spacing:0_0.5rem]" style={{ fontSize: '0.7rem' }}>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               {hasSelection && (
@@ -1842,7 +1852,7 @@ export function MeetingsTable({
               {hasActions && <th className="px-3 py-2"></th>}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody>
             {groupedMeetings
               ? groupedMeetings.map(([key, group], gi) => (
                   <Fragment key={`${mode}-${key || 'none'}`}>
