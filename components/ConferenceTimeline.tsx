@@ -141,6 +141,9 @@ export function ConferenceTimeline({ entityType, entityId, title = 'Conference T
   const [sortOpen, setSortOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [collapsedHeight, setCollapsedHeight] = useState<number | null>(null);
+  // The open height is measured too, because `max-height: none` cannot be
+  // animated from — a transition needs two numbers.
+  const [fullHeight, setFullHeight] = useState<number | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
   const sortRef = useRef<HTMLDivElement>(null);
@@ -199,6 +202,9 @@ export function ConferenceTimeline({ entityType, entityId, title = 'Conference T
       ? second.getBoundingClientRect().top - listTop + 20
       : first.getBoundingClientRect().bottom - listTop;
     setCollapsedHeight(Math.round(cut));
+    // Re-measured alongside the cut, so opening a subtext while the section is
+    // open grows the section with it rather than clipping it.
+    setFullHeight(Math.ceil(list.scrollHeight));
   }, []);
 
   useLayoutEffect(() => {
@@ -263,8 +269,12 @@ export function ConferenceTimeline({ entityType, entityId, title = 'Conference T
       ) : (
         <>
           <div
-            className="relative overflow-hidden"
-            style={{ maxHeight: !expanded && canCollapse ? collapsedHeight! : undefined }}
+            className="relative overflow-hidden transition-[max-height] duration-300 ease-out"
+            style={{
+              maxHeight: canCollapse
+                ? (expanded ? (fullHeight ?? undefined) : collapsedHeight!)
+                : undefined,
+            }}
           >
             <div ref={listRef} className="space-y-5">
               {ordered.map(conf => {
@@ -325,9 +335,15 @@ export function ConferenceTimeline({ entityType, entityId, title = 'Conference T
               })}
             </div>
 
-            {/* Fades rather than cuts, so the list visibly continues. */}
-            {!expanded && canCollapse && (
-              <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white to-transparent pointer-events-none" />
+            {/* Fades rather than cuts, so the list visibly continues. Faded out
+                rather than unmounted, so it doesn't vanish a frame before the
+                section has finished opening. */}
+            {canCollapse && (
+              <div
+                className={`absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white to-transparent pointer-events-none transition-opacity duration-300 ${
+                  expanded ? 'opacity-0' : 'opacity-100'
+                }`}
+              />
             )}
           </div>
 
