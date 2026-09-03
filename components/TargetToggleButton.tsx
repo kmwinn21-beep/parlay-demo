@@ -13,17 +13,25 @@
  * directions: the same click that adds them takes them off again, because the
  * common correction to a mis-tap is immediate.
  */
-export function TargetToggleButton({ active, busy = false, onToggle, size = 'md', name }: {
+export function TargetToggleButton({ active, busy = false, onToggle, size = 'md', variant = 'chip', name }: {
   active: boolean;
   busy?: boolean;
   onToggle: () => void;
   /** `sm` sits in a row of pills; `md` in a table cell or a card's badge row. */
   size?: 'sm' | 'md';
+  /**
+   * `chip` is the filled circle used where the button sits among pills and
+   * needs to read as one of them. `bare` is the icon alone, for a row of
+   * actions that are already icons — a filled circle beside a kebab reads as
+   * the odd one out rather than as its neighbour.
+   */
+  variant?: 'chip' | 'bare';
   /** The attendee's name, for the tooltip and the accessible label. */
   name?: string;
 }) {
-  const box = size === 'sm' ? 'w-6 h-6' : 'w-8 h-8';
-  const icon = size === 'sm' ? 'w-4 h-4' : 'w-5 h-5';
+  const bare = variant === 'bare';
+  const box = bare ? 'w-6 h-6' : size === 'sm' ? 'w-6 h-6' : 'w-8 h-8';
+  const icon = bare ? 'w-5 h-5' : size === 'sm' ? 'w-4 h-4' : 'w-5 h-5';
   const label = active
     ? `Remove ${name ?? 'this attendee'} as a target`
     : `Add ${name ?? 'this attendee'} as a target`;
@@ -37,9 +45,11 @@ export function TargetToggleButton({ active, busy = false, onToggle, size = 'md'
       title={label}
       aria-label={label}
       className={`inline-flex items-center justify-center ${box} rounded-full flex-shrink-0 transition-colors disabled:opacity-60 ${
-        active
-          ? 'bg-red-100 hover:bg-red-200 text-red-500'
-          : 'bg-gray-100 hover:bg-gray-200 text-gray-400 hover:text-gray-500'
+        bare
+          ? (active ? 'text-red-500 hover:bg-red-50' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100')
+          : active
+            ? 'bg-red-100 hover:bg-red-200 text-red-500'
+            : 'bg-gray-100 hover:bg-gray-200 text-gray-400 hover:text-gray-500'
       }`}
     >
       <svg className={icon} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
