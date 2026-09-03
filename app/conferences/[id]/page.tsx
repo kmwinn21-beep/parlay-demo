@@ -473,7 +473,7 @@ export default function ConferenceDetailPage() {
   const [metaPillsExpanded, setMetaPillsExpanded] = useState(false);
 
   // Resizable column widths
-  const [colWidths, setColWidths] = useState<Record<string, number>>({ name: 220, title: 160, company: 160, type: 120, seniority: 120, conferences: 80 });
+  const [colWidths, setColWidths] = useState<Record<string, number>>({ name: 300, title: 160, company: 160, type: 120, seniority: 120, conferences: 80 });
   // The attendee row whose actions menu is open — the others recede so it's
   // obvious which record the menu is about.
   const [actionsAttendeeId, setActionsAttendeeId] = useState<number | null>(null);
@@ -3525,13 +3525,9 @@ export default function ConferenceDetailPage() {
                         // as a configurable column: it is an action on the
                         // person, not a field of theirs, and it only means
                         // anything next to who it applies to.
-                        case 'name': return (
-                          <Fragment key="name">
-                            <th onClick={() => handleSort('name')} className={`${sortThCls} sticky z-30 bg-gray-50`} style={{ width: colWidths.name, left: attendeeNameStickyLeft }}>Name{sortKey === 'name' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}{rh('name')}</th>
-                            <th className={plainThCls} style={{ width: 64 }} aria-label="Target" />
-                          </Fragment>
-                        );
-                        case 'title': return <th key="title" onClick={() => handleSort('title')} className={sortThCls} style={{ width: colWidths.title }}>Title{sortKey === 'title' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}{rh('title')}</th>;
+                        // Name now carries the target button and the title too,
+                        // so it is one column rather than three.
+                        case 'name': return <th key="name" onClick={() => handleSort('name')} className={`${sortThCls} sticky z-30 bg-gray-50`} style={{ width: colWidths.name, left: attendeeNameStickyLeft }}>Name{sortKey === 'name' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}{rh('name')}</th>;
                         case 'company': return <th key="company" onClick={() => handleSort('company')} className={sortThCls} style={{ width: colWidths.company }}>Company{sortKey === 'company' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}{rh('company')}</th>;
                         case 'type': return <th key="type" className={plainThCls} style={{ width: colWidths.type }}>Type{rh('type')}</th>;
                         case 'seniority': return <th key="seniority" onClick={() => handleSort('seniority')} className={sortThCls} style={{ width: colWidths.seniority }}>Seniority{sortKey === 'seniority' && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}{rh('seniority')}</th>;
@@ -3576,51 +3572,53 @@ export default function ConferenceDetailPage() {
                         if (!isConfAttendeeColVisible(col.key)) return null;
                         switch (col.key) {
                           case 'name': return (
-                            <Fragment key="name">
-                            <td className={`px-4 py-3 font-medium sticky z-10 ${frozenBg}`} style={{ left: attendeeNameStickyLeft }}>
-                              {/* The name opens the drawer, so the icon that
-                                  used to do that is gone. */}
-                              <div className="flex items-center gap-1 text-left">
-                                <button
-                                  type="button"
-                                  onClick={() => { setQuickViewId(attendee.id); setQuickViewType('attendee'); }}
-                                  className="text-brand-secondary hover:underline block truncate text-left"
-                                  title={`${attendee.first_name} ${attendee.last_name}`}
-                                >
-                                  {attendee.first_name} {attendee.last_name}
-                                </button>
-                              </div>
-                            </td>
-                            {/* Only where the company is one the account
-                                actually targets — offering it on every row
-                                would say nothing about who is worth the walk. */}
-                            <td className="px-4 py-3">
-                              {matchesIcpCompanyType(attendee.company_type, icpCompanyTypes) && (
-                                <TargetToggleButton
-                                  active={targetIds.has(attendee.id)}
-                                  busy={targetBusyId === attendee.id}
-                                  onToggle={() => toggleTarget(attendee.id)}
-                                  name={`${attendee.first_name} ${attendee.last_name}`.trim()}
-                                />
-                              )}
-                            </td>
-                            </Fragment>
-                          );
-                          case 'title': return (
-                            <td key="title" className="px-4 py-3 text-gray-600 overflow-visible relative" style={{ maxWidth: colWidths.title }}>
-                              <div className="flex items-start gap-1 min-w-0">
-                                {attendee.title ? (
-                                  <button type="button" className="text-left flex-1 min-w-0 hover:text-brand-secondary" onClick={() => setClassifyingAttendee({ id: attendee.id, title: attendee.title! })}>
-                                    <span className="block text-xs leading-snug break-words whitespace-normal">{attendee.title}</span>
+                            <td key="name" className={`px-4 py-3 font-medium sticky z-10 ${frozenBg}`} style={{ left: attendeeNameStickyLeft }}>
+                              <div className="flex items-start gap-2">
+                                {/* The slot is always here, so names line up
+                                    whether or not the row can be targeted —
+                                    only companies of an ICP type can. */}
+                                <span className="w-8 flex-shrink-0 flex items-center justify-center">
+                                  {matchesIcpCompanyType(attendee.company_type, icpCompanyTypes) && (
+                                    <TargetToggleButton
+                                      active={targetIds.has(attendee.id)}
+                                      busy={targetBusyId === attendee.id}
+                                      onToggle={() => toggleTarget(attendee.id)}
+                                      name={`${attendee.first_name} ${attendee.last_name}`.trim()}
+                                    />
+                                  )}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  {/* The name opens the drawer, so the icon that
+                                      used to do that is gone. */}
+                                  <button
+                                    type="button"
+                                    onClick={() => { setQuickViewId(attendee.id); setQuickViewType('attendee'); }}
+                                    className="text-brand-secondary hover:underline block truncate text-left w-full"
+                                    title={`${attendee.first_name} ${attendee.last_name}`}
+                                  >
+                                    {attendee.first_name} {attendee.last_name}
                                   </button>
-                                ) : (
-                                  <span className="text-gray-300">—</span>
-                                )}
-                                {!titleMetaLoading && attendee.title && shouldWarnForTitleMetadata(titleMetaMap[attendee.id]) && (
-                                  <span className="flex-shrink-0 text-amber-500 mt-0.5 pointer-events-none">
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
-                                  </span>
-                                )}
+                                  {/* Title reads under the name rather than in a
+                                      column of its own: it is what qualifies the
+                                      name, and a column narrow enough to fit
+                                      wrapped most of them onto two lines anyway. */}
+                                  {attendee.title ? (
+                                    <span className="flex items-start gap-1 mt-0.5">
+                                      <button
+                                        type="button"
+                                        className="text-left min-w-0 text-xs leading-snug text-gray-500 hover:text-brand-secondary break-words"
+                                        onClick={() => setClassifyingAttendee({ id: attendee.id, title: attendee.title! })}
+                                      >
+                                        {attendee.title}
+                                      </button>
+                                      {!titleMetaLoading && shouldWarnForTitleMetadata(titleMetaMap[attendee.id]) && (
+                                        <span className="flex-shrink-0 text-amber-500 mt-0.5 pointer-events-none">
+                                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                                        </span>
+                                      )}
+                                    </span>
+                                  ) : null}
+                                </div>
                               </div>
                             </td>
                           );
