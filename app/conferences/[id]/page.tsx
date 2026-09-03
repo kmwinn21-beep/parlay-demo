@@ -473,7 +473,7 @@ export default function ConferenceDetailPage() {
   const [metaPillsExpanded, setMetaPillsExpanded] = useState(false);
 
   // Resizable column widths
-  const [colWidths, setColWidths] = useState<Record<string, number>>({ name: 300, title: 160, company: 160, type: 120, seniority: 120, conferences: 80 });
+  const [colWidths, setColWidths] = useState<Record<string, number>>({ name: 260, title: 160, company: 160, type: 120, seniority: 120, conferences: 80 });
   // The attendee row whose actions menu is open — the others recede so it's
   // obvious which record the menu is about.
   const [actionsAttendeeId, setActionsAttendeeId] = useState<number | null>(null);
@@ -3544,7 +3544,7 @@ export default function ConferenceDetailPage() {
                     ))}
                     {/* Actions pin to the right edge: the menu is reachable at
                         any scroll position, and the columns pass under it. */}
-                    <th className="px-2 py-3 sticky right-0 z-30 bg-gray-50" style={{ width: 48 }} aria-label="Actions" />
+                    <th className="px-2 py-3 sticky right-0 z-30 bg-gray-50" style={{ width: 76 }} aria-label="Actions" />
                   </tr>
                 </thead>
                 <tbody>
@@ -3574,19 +3574,6 @@ export default function ConferenceDetailPage() {
                           case 'name': return (
                             <td key="name" className={`px-4 py-3 font-medium sticky z-10 ${frozenBg}`} style={{ left: attendeeNameStickyLeft }}>
                               <div className="flex items-start gap-2">
-                                {/* The slot is always here, so names line up
-                                    whether or not the row can be targeted —
-                                    only companies of an ICP type can. */}
-                                <span className="w-8 flex-shrink-0 flex items-center justify-center">
-                                  {matchesIcpCompanyType(attendee.company_type, icpCompanyTypes) && (
-                                    <TargetToggleButton
-                                      active={targetIds.has(attendee.id)}
-                                      busy={targetBusyId === attendee.id}
-                                      onToggle={() => toggleTarget(attendee.id)}
-                                      name={`${attendee.first_name} ${attendee.last_name}`.trim()}
-                                    />
-                                  )}
-                                </span>
                                 <div className="min-w-0 flex-1">
                                   {/* The name opens the drawer, so the icon that
                                       used to do that is gone. */}
@@ -3700,7 +3687,23 @@ export default function ConferenceDetailPage() {
                           <CustomColumnCell column={col} value={(attendee as unknown as Record<string, unknown>)[col.data_key]} />
                         </td>
                       ))}
-                      <td className={`px-2 py-3 sticky right-0 z-10 ${frozenBg}`} style={{ width: 48 }}>
+                      <td className={`px-2 py-3 sticky right-0 z-10 ${frozenBg}`} style={{ width: 76 }}>
+                        <div className="flex items-center justify-end gap-1">
+                        {/* Only where the company is one the account actually
+                            targets — offering it on every row would say nothing
+                            about who is worth the walk. The slot stays either
+                            way so the kebab does not shift between rows. */}
+                        <span className="w-6 flex-shrink-0 flex items-center justify-center">
+                          {matchesIcpCompanyType(attendee.company_type, icpCompanyTypes) && (
+                            <TargetToggleButton
+                              variant="bare"
+                              active={targetIds.has(attendee.id)}
+                              busy={targetBusyId === attendee.id}
+                              onToggle={() => toggleTarget(attendee.id)}
+                              name={`${attendee.first_name} ${attendee.last_name}`.trim()}
+                            />
+                          )}
+                        </span>
                         <RowActionsKebab
                           entityType="attendee"
                           conferenceId={Number(id)}
@@ -3711,6 +3714,7 @@ export default function ConferenceDetailPage() {
                           onDone={fetchConference}
                           onOpenChange={open => setActionsAttendeeId(open ? attendee.id : null)}
                         />
+                        </div>
                       </td>
                     </tr>
                     );
