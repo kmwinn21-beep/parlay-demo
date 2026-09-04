@@ -219,6 +219,7 @@ export default function CompanyDetailPage() {
   const [relatedDrawerCompanyId, setRelatedDrawerCompanyId] = useState<number | null>(null);
   const [relatedDrawerCompanyName, setRelatedDrawerCompanyName] = useState<string | undefined>();
   const [statusExpanded, setStatusExpanded] = useCollapsibleSection(false);
+  const [communitiesExpanded, setCommunitiesExpanded] = useCollapsibleSection(false);
   const anySectionExpanded = useAnySectionExpanded();
   const [configuredProductNames, setConfiguredProductNames] = useState<Set<string>>(new Set());
   const [showAssignFollowUp, setShowAssignFollowUp] = useState(false);
@@ -1789,10 +1790,20 @@ export default function CompanyDetailPage() {
                 if (related.length === 0) return null;
                 return (
                   <div key="communities" className="card">
-                    <h2 className="text-base font-semibold text-brand-primary font-serif mb-3">
-                      {getSectionLabel('communities')} ({related.length})
-                    </h2>
-                    <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => setCommunitiesExpanded(v => !v)}
+                      className="w-full flex items-center gap-2 text-left"
+                    >
+                      <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${communitiesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                      <h2 className="text-base font-semibold text-brand-primary font-serif">
+                        {getSectionLabel('communities')} ({related.length})
+                      </h2>
+                    </button>
+                    <AnimatedCollapse open={communitiesExpanded}>
+                    <div className="space-y-2 mt-3">
                       {related.map(rel => (
                         <Link key={`${rel.designation}-${rel.id}`} href={`/companies/${rel.id}`} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-brand-secondary hover:bg-blue-50 transition-all">
                           <div className="min-w-0">
@@ -1808,6 +1819,7 @@ export default function CompanyDetailPage() {
                         </Link>
                       ))}
                     </div>
+                    </AnimatedCollapse>
                   </div>
                 );
               })(),

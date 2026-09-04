@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { CompanyTable } from '@/components/CompanyTable';
 import { BackButton } from '@/components/BackButton';
+import { KebabMenu } from '@/components/KebabMenu';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { useForm } from 'react-hook-form';
 import { useConfigOptions } from '@/lib/useConfigOptions';
@@ -38,6 +39,7 @@ export default function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [refreshingFamilies, setRefreshingFamilies] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<AddCompanyForm>({
@@ -74,6 +76,30 @@ export default function CompaniesPage() {
 
   useEffect(() => {
     fetchCompanies();
+  }, [fetchCompanies]);
+
+  /**
+   * Re-apply the parent's type and rep to every child that has drifted from
+   * it. Reports how many companies actually changed, so a run that found
+   * nothing says so rather than looking as though it did nothing.
+   */
+  const handleRefreshFamilies = useCallback(async () => {
+    setRefreshingFamilies(true);
+    try {
+      const res = await fetch('/api/companies/parent-child/refresh', { method: 'POST' });
+      if (!res.ok) throw new Error();
+      const data = await res.json() as { updated: number };
+      toast.success(
+        data.updated === 0
+          ? 'Every child already matches its parent.'
+          : `Updated ${data.updated} ${data.updated === 1 ? 'company' : 'companies'} to match their parent.`,
+      );
+      if (data.updated > 0) fetchCompanies();
+    } catch {
+      toast.error('Could not refresh parent/child fields.');
+    } finally {
+      setRefreshingFamilies(false);
+    }
   }, [fetchCompanies]);
 
   const onSubmit = async (data: AddCompanyForm) => {
@@ -142,15 +168,30 @@ export default function CompaniesPage() {
           <h1 className="text-2xl font-bold text-brand-primary font-serif">Companies</h1>
           <p className="text-sm text-gray-500">{companies.length} compan{companies.length !== 1 ? 'ies' : 'y'} in your database</p>
         </div>
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          className="btn-primary flex items-center gap-2"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          Add Company
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            className="btn-primary flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            Add Company
+          </button>
+          <KebabMenu
+            title="Company actions"
+            items={[{
+              label: refreshingFamilies ? 'Refreshing…' : 'Refresh Parent/Child Fields',
+              disabled: refreshingFamilies,
+              onClick: handleRefreshFamilies,
+              icon: (
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              ),
+            }]}
+          />
+        </div>
       </div>
 
       {/* Add Company Form */}
