@@ -799,8 +799,9 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
    * suppresses what the group row above it already says: the parent name,
    * and the parent/child glyph in the type pill.
    */
-  const renderCompanyRow = (company: Company, opts?: { inFamily?: boolean }) => {
+  const renderCompanyRow = (company: Company, opts?: { inFamily?: boolean; isFamilyParent?: boolean }) => {
     const inFamily = !!opts?.inFamily;
+    const isFamilyParent = !!opts?.isFamilyParent;
     const rowSelected = selectedIds.has(company.id);
     // Frozen cells need a background of their own — the row's
     // paints behind them, not through them — so the selected and
@@ -858,6 +859,12 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                   {company.parent_company_name}
                 </button>
               </p>
+            )}
+            {/* The one exception to hiding the subtitle under a family: the
+                parent's own row sits directly beneath a header of the same
+                name, which without this reads as the same row drawn twice. */}
+            {isFamilyParent && (
+              <p className="text-[10px] text-gray-400 mt-0.5">Parent</p>
             )}
             </div>
           </td>;
@@ -1230,7 +1237,10 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         return (
           <React.Fragment key={`family-${entry.key}`}>
             {renderGroupRow(entry)}
-            {!isFamilyCollapsed(entry.key) && entry.all.map(c => renderCompanyRow(c, { inFamily: true }))}
+            {!isFamilyCollapsed(entry.key) && entry.all.map(c => renderCompanyRow(c, {
+              inFamily: true,
+              isFamilyParent: c.id === entry.parent?.id,
+            }))}
           </React.Fragment>
         );
       }
@@ -1266,6 +1276,34 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         <ScrollRow className="w-full lg:hidden" gapClass="gap-2">{filterButtons}</ScrollRow>
         <div className="hidden lg:contents">{filterButtons}</div>
 
+        {/* Offered only where it would do something: a conference whose
+            companies form no family has nothing to group. Kept on screen while
+            grouped even if a filter leaves no family standing, so the way back
+            to the flat view cannot disappear from under the reader. */}
+        {groupingOffered && (families.familyCount > 0 || grouped) && (
+          <div className="ml-auto inline-flex flex-shrink-0 rounded-lg border border-gray-200 overflow-hidden self-start">
+            {([
+              { key: 'flat' as const, label: 'Flat', path: 'M4 6h16M4 12h16M4 18h16' },
+              { key: 'grouped' as const, label: 'Grouped', path: 'M3 7h18M7 12h14M11 17h10' },
+            ]).map((opt, i) => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => setGrouped(opt.key === 'grouped')}
+                title={opt.key === 'grouped' ? 'Group companies by parent company' : 'One row per company'}
+                aria-pressed={grouped === (opt.key === 'grouped')}
+                className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
+                  grouped === (opt.key === 'grouped') ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={opt.path} />
+                </svg>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Bulk actions — one line under the toolbar, chevrons rather than a
@@ -1354,6 +1392,12 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 {icpOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
               </select>
             </div>
+            {/* Grouping answers this question already, and any setting of it
+                would draw a family with its own parent or its own children
+                filtered out. Hidden rather than disabled: a disabled select
+                still reading "Child" looks like a filter that is applied. The
+                value is put back when the reader returns to the flat view. */}
+            {!grouped && (
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Parent / Child</p>
               <select value={filterHierarchy} onChange={e => setFilterHierarchy(e.target.value)} className="input-field w-full text-sm">
@@ -1362,6 +1406,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 <option value="child">Child</option>
               </select>
             </div>
+            )}
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5"># Conferences</p>
               <div className="relative">
