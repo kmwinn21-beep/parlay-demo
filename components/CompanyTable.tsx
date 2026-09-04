@@ -18,13 +18,13 @@ import { INLINE_EDIT_FIELD_CLASS, InlineEditCancelButton, InlineEditRow, InlineE
 import { RepMultiSelect } from './RepMultiSelect';
 import { MultiSelectDropdown } from './MultiSelectDropdown';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
-import { buildCompanyFamilies, compareCompanies, entriesToCompanies } from '@/lib/companyFamilies';
+import { applyGroupingToHierarchyFilter, buildCompanyFamilies, compareCompanies, entriesToCompanies, type Family } from '@/lib/companyFamilies';
 import { CustomColumnCell } from './CustomColumnCell';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
 import { AttendeeTooltip, ConferenceTooltip } from '@/components/CountPills';
 import { EntityStructureIcon } from '@/components/EntityStructureIcon';
-import { CARD_TABLE, CARD_TABLE_HEAD, CARD_TABLE_SCROLL_X, CARD_TABLE_WRAP, cardEmphasisClass, cardRowClass, selectionColumnWidth, useCardFocus } from '@/components/tableCards';
+import { CARD_TABLE, CARD_TABLE_HEAD, CARD_TABLE_SCROLL_X, CARD_TABLE_WRAP, cardEmphasisClass, cardGroupRowClass, cardRowClass, selectionColumnWidth, useCardFocus } from '@/components/tableCards';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import { useUser } from './UserContext';
 import { CompanyAttendeesDrawer, type CompanyAttendeeLite } from './CompanyAttendeesDrawer';
@@ -462,13 +462,9 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const setGrouped = useCallback((next: boolean) => {
     setGroupByParent(next);
     try { localStorage.setItem(GROUPED_STORAGE_KEY, next ? 'true' : 'false'); } catch { /* site data blocked */ }
-    if (next) {
-      setStashedHierarchy(filterHierarchy);
-      setFilterHierarchy('');
-    } else {
-      if (stashedHierarchy) setFilterHierarchy(stashedHierarchy);
-      setStashedHierarchy(null);
-    }
+    const hierarchy = applyGroupingToHierarchyFilter(next, { filterHierarchy, stashedHierarchy });
+    setFilterHierarchy(hierarchy.filterHierarchy);
+    setStashedHierarchy(hierarchy.stashedHierarchy);
   }, [filterHierarchy, stashedHierarchy]);
 
   const toggleSelect = (id: number) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -709,6 +705,19 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
     }
   };
 
+  /**
+   * Columns the desktop table renders. Kept as one expression so the empty-state
+   * row and the section divider always span the same width.
+   *
+   * Note it omits 'value' — that is the expression as it already stood, left
+   * alone rather than corrected here.
+   */
+  const tableColSpan = 1
+    + (['name','type','sfowner','status','attendees','conferences','wse','updated_on','relationships'] as const).filter(k => isVisible(k)).length
+    + customColumns.filter(c => c.visible).length
+    + (rowAction ? 1 : 0)
+    + (conferenceId != null ? 1 : 0);
+
   const thCls = 'px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none hover:text-brand-primary whitespace-nowrap relative';
 
   const ResizeHandle = ({ col }: { col: string }) => (
@@ -781,6 +790,468 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
       </button>
     </>
   );
+
+  /**
+   * One company, as a card row.
+   *
+   * Called directly when the table is flat and from inside a family when it
+   * is grouped — the row itself is the same either way. `inFamily` only
+   * suppresses what the group row above it already says: the parent name,
+   * and the parent/child glyph in the type pill.
+   */
+  const renderCompanyRow = (company: Company, opts?: { inFamily?: boolean }) => {
+    const inFamily = !!opts?.inFamily;
+    const rowSelected = selectedIds.has(company.id);
+    // Frozen cells need a background of their own — the row's
+    // paints behind them, not through them — so the selected and
+    // hover treatments are repeated here.
+    // The card fill now comes from the row's cell styling, which
+    // the frozen columns need as much as any other cell — they
+    // paint over what scrolls beneath them.
+    const frozenBg = '';
+    const dimmed = actionsCompanyId != null && actionsCompanyId !== company.id;
+    const focused = focusedCompanyId === company.id;
+    return (
+    <tr
+      key={company.id}
+      onClick={onCompanyCardClick(company.id)}
+      className={`group ${cardRowClass(rowSelected, focused)} ${cardEmphasisClass({ focused, otherFocused: focusedCompanyId != null && !focused, dimmed })}`}
+    >
+      <td className="py-3 sticky left-0 z-10" style={{ width: selWidth }}><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-brand-secondary ml-3" /></td>
+      {orderedColumns.map(col => {
+        if (!isVisible(col.key)) return null;
+        switch (col.key) {
+          case 'name': return <td key="name" className={`px-3 py-3 sticky z-10 ${frozenBg}`} style={{ maxWidth: colWidths.name, left: companyNameStickyLeft }}>
+            {/* Under a family the name steps in behind an elbow, so the run
+                reads as belonging to the row above it. */}
+            <div className={inFamily ? 'relative pl-[22px]' : ''}>
+            {inFamily && (
+              <span
+                aria-hidden="true"
+                className="absolute left-[7px] top-0 h-[11px] w-[9px] border-l border-b border-gray-300 rounded-bl-[4px]"
+              />
+            )}
+            {/* The name opens the details drawer, the way the
+                phone's card already does — which leaves the eye
+                icon that used to do it saying the same thing. */}
+            <div className="flex items-center gap-1 text-left">
+              <button
+                type="button"
+                onClick={() => openQuickView(company.id)}
+                className="font-medium text-brand-secondary hover:underline text-sm break-words whitespace-normal leading-snug text-left"
+              >
+                {company.name}
+              </button>
+            </div>
+            {/* The group row above already names the parent; repeating it on
+                every child of that parent is noise. */}
+            {!inFamily && company.parent_company_name && company.parent_company_id != null && (
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                {/* Opens the parent in the same drawer rather than
+                    leaving the table: the reader is comparing rows,
+                    and a full page navigation loses their place. */}
+                <button
+                  type="button"
+                  onClick={() => openQuickView(company.parent_company_id!, company.name)}
+                  className="hover:text-brand-secondary hover:underline text-left"
+                >
+                  {company.parent_company_name}
+                </button>
+              </p>
+            )}
+            </div>
+          </td>;
+          case 'type': return <td key="type" className="px-3 py-3">
+            {editingCell?.companyId === company.id && editingCell.field === 'company_type' ? (
+              <InlineEditRow onCancel={() => setEditingCell(null)}>
+                  <select
+                    className={INLINE_EDIT_FIELD_CLASS}
+                    value={cellDraft}
+                    onChange={(e) => setCellDraft(e.target.value)}
+                    onBlur={() => saveInlineEdit(company, 'company_type')}
+                    onKeyDown={(e) => { if (e.key === 'Escape') setEditingCell(null); }}
+                    autoFocus
+                  >
+                    <option value="">—</option>
+                    {companyTypeOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+              </InlineEditRow>
+            ) : (
+              <button type="button" onClick={() => startInlineEdit(company, 'company_type')} title="Click to set type">
+                {company.company_type
+                  ? <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}>
+                      {/* The glyph says "this one is a child"; under a family
+                          header that is the one thing already beyond doubt. */}
+                      {!inFamily && <EntityStructureIcon structure={company.entity_structure} />}
+                      {company.company_type}
+                    </span>
+                  : <InlineEditPlaceholder label="Type" />}
+              </button>
+            )}
+          </td>;
+          case 'sfowner': return <td key="sfowner" className="px-3 py-3">
+            {editingRepCompanyId === company.id && !showRepModal ? (
+              <div className="flex items-start gap-1">
+                <div className="flex-1 min-w-0">
+                  <RepMultiSelect
+                    options={userOptionsFull}
+                    selectedIds={editingRepIds}
+                    onChange={setEditingRepIds}
+                    onClose={(ids) => handleRepSave(company.id, ids)}
+                  />
+                </div>
+                <InlineEditCancelButton onCancel={() => setEditingRepCompanyId(null)} />
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => startEditRep(company)}
+                title="Click to assign rep"
+                className="inline-flex flex-wrap gap-1 hover:opacity-70 transition-opacity text-left w-full"
+              >
+                {parseRepIds(company.assigned_user ?? '').map(id => userOptionsFull.find(u => u.id === id)).filter(Boolean).map((user, i) => (
+                  <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
+                    <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    {getRepInitials(user!.value)}
+                  </span>
+                ))}
+                {!company.assigned_user && (
+                  <span className="text-[10px] text-gray-300 hover:text-gray-400 transition-colors">+ Rep</span>
+                )}
+              </button>
+            )}
+          </td>;
+          case 'status': return <td key="status" className="px-3 py-3">
+            {editingCell?.companyId === company.id && editingCell.field === 'status' ? (
+              <InlineEditRow onCancel={() => setEditingCell(null)}>
+                  <select
+                    className={INLINE_EDIT_FIELD_CLASS}
+                    value={cellDraft}
+                    onChange={(e) => setCellDraft(e.target.value)}
+                    onBlur={() => saveInlineEdit(company, 'status')}
+                    onKeyDown={(e) => { if (e.key === 'Escape') setEditingCell(null); }}
+                    autoFocus
+                  >
+                    <option value="">—</option>
+                    {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+              </InlineEditRow>
+            ) : (
+              <button type="button" onClick={() => startInlineEdit(company, 'status')} title="Click to set status">
+                <span className="flex flex-wrap gap-1">
+                  {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{formatStatusLabel(s)}</span>)}
+                  {(company.my_user_status_ids || []).map(optId => {
+                    const label = userScopedStatusMap.get(optId);
+                    return label ? <span key={optId} className={getBadgeClass(label, colorMaps.status || {})}>{formatStatusLabel(label)}</span> : null;
+                  })}
+                  {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && (company.my_user_status_ids || []).length === 0 && <InlineEditPlaceholder label="Status" />}
+                </span>
+              </button>
+            )}
+          </td>;
+          case 'attendees': return <td key="attendees" className="px-3 py-3"><AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} onClick={conferenceAttendees ? () => setAttendeesDrawerCompany(company) : undefined} /></td>;
+          case 'conferences': return <td key="conferences" className="px-3 py-3"><ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} /></td>;
+          case 'wse': return <td key="wse" className="px-3 py-3">
+            {editingCell?.companyId === company.id && editingCell.field === 'wse' ? (
+              <InlineEditRow onCancel={() => setEditingCell(null)}>
+                  <input
+                    className={INLINE_EDIT_FIELD_CLASS}
+                    value={cellDraft}
+                    onChange={(e) => setCellDraft(e.target.value)}
+                    onBlur={() => saveInlineEdit(company, 'wse')}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveInlineEdit(company, 'wse');
+                      if (e.key === 'Escape') setEditingCell(null);
+                    }}
+                    autoFocus
+                  />
+              </InlineEditRow>
+            ) : (
+              <button type="button" onClick={() => startInlineEdit(company, 'wse')} title={`Click to set ${unitTypeLabel}`}>
+                {company.wse != null ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
+                    <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+                    {Number(company.wse).toLocaleString()}
+                  </span>
+                ) : <InlineEditPlaceholder label={unitTypeLabel} />}
+              </button>
+            )}
+          </td>;
+          case 'value': return (
+            <td key="value" className="px-3 py-3 overflow-hidden" style={{ maxWidth: colWidths.value }}>
+              {(() => {
+                const pill = formatValuePill(company.wse, avgCostPerUnit);
+                return pill ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
+                    {pill}
+                  </span>
+                ) : <span className="text-gray-300">—</span>;
+              })()}
+            </td>
+          );
+          case 'updated_on': return <td key="updated_on" className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(company.updated_at)}</td>;
+          case 'relationships': return (
+            <td key="relationships" className="px-3 py-3">
+              {Number(company.relationship_count) > 0 && (
+                <button
+                  type="button"
+                  onClick={e => { e.preventDefault(); e.stopPropagation(); setRelPopupCompany({ id: company.id, name: company.name }); }}
+                  title="View relationships"
+                  className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
+                >
+                  {Number(company.relationship_count)}
+                </button>
+              )}
+            </td>
+          );
+          default: return null;
+        }
+      })}
+      {customColumns.filter(c => c.visible).map(col => (
+        <td key={`custom_${col.id}`} className="px-3 py-3">
+          <CustomColumnCell column={col} value={(company as unknown as Record<string, unknown>)[col.data_key]} />
+        </td>
+      ))}
+      {rowAction && <td className="px-3 py-3">{rowAction(company)}</td>}
+      {conferenceId != null && (
+        <td className={`px-2 py-3 sticky right-0 z-10 ${frozenBg}`} style={{ width: 48 }}>
+          <RowActionsKebab
+            entityType="company"
+            conferenceId={conferenceId}
+            companyId={company.id}
+            companyName={company.name}
+            onDone={onRefresh}
+            onOpenChange={open => setActionsCompanyId(open ? company.id : null)}
+          />
+        </td>
+      )}
+    </tr>
+    );
+  };
+
+  /**
+   * A family's own row: the parent, and what its companies at this conference
+   * add up to.
+   *
+   * Deliberately no onClick — the pick-a-card behaviour belongs to companies,
+   * and a group row that could be picked would both steal the pick from the
+   * rows it heads and collide with them, since a family is keyed by a company
+   * id. The chevron is a real button so it is reachable by keyboard.
+   */
+  const renderGroupRow = (family: Family<Company>) => {
+    const collapsed = isFamilyCollapsed(family.key);
+    const ids = family.all.map(c => c.id);
+    const selectedCount = ids.filter(id => selectedIds.has(id)).length;
+    const allSelected = selectedCount === ids.length && ids.length > 0;
+    const someSelected = selectedCount > 0 && !allSelected;
+    const reps = family.rollup.repIds
+      .map(id => userOptionsFull.find(u => u.id === id))
+      .filter(Boolean) as typeof userOptionsFull;
+    const valuePill = formatValuePill(family.rollup.units, avgCostPerUnit);
+
+    const toggleWholeFamily = () => setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allSelected) ids.forEach(id => next.delete(id));
+      else ids.forEach(id => next.add(id));
+      return next;
+    });
+
+    return (
+      <tr key={`family-${family.key}`} className={cardGroupRowClass()}>
+        <td className="py-3 sticky left-0 z-10" style={{ width: selWidth }}>
+          <input
+            type="checkbox"
+            checked={allSelected}
+            /* indeterminate is a DOM property with no attribute to set it
+               from JSX, so it is written on the node itself. */
+            ref={el => { if (el) el.indeterminate = someSelected; }}
+            onChange={toggleWholeFamily}
+            aria-label={`Select every company under ${family.parentName}`}
+            className="accent-brand-secondary ml-3"
+          />
+        </td>
+        {orderedColumns.map(col => {
+          if (!isVisible(col.key)) return null;
+          switch (col.key) {
+            case 'name': return (
+              <td key="name" className="px-3 py-3 sticky z-10" style={{ maxWidth: colWidths.name, left: companyNameStickyLeft }}>
+                <div className="flex items-start gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => toggleFamily(family.key)}
+                    aria-expanded={!collapsed}
+                    aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${family.parentName}`}
+                    className="flex-shrink-0 mt-0.5 p-0.5 -ml-0.5 rounded text-gray-400 hover:text-brand-primary transition-colors"
+                  >
+                    <svg className={`w-3.5 h-3.5 transition-transform ${collapsed ? '-rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  <div className="min-w-0">
+                    <p className="font-serif font-bold text-brand-primary text-[15px] leading-snug break-words">
+                      {family.parentName}
+                    </p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">
+                      {family.rollup.memberCount} at this conference
+                    </p>
+                  </div>
+                </div>
+              </td>
+            );
+            case 'type': return (
+              <td key="type" className="px-3 py-3">
+                {family.parent?.company_type ? (
+                  <span className={`${getBadgeClass(family.parent.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}>
+                    <EntityStructureIcon structure={family.parent.entity_structure} />
+                    {family.parent.company_type}
+                  </span>
+                ) : !family.parent ? (
+                  /* The family is real — its children point at this parent —
+                     but the parent itself has nobody here, so it has no row of
+                     its own and nothing to act on. */
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-lg border border-dashed border-gray-300 text-[10px] text-gray-400 whitespace-nowrap">
+                    Not attending
+                  </span>
+                ) : null}
+              </td>
+            );
+            case 'sfowner': return (
+              <td key="sfowner" className="px-3 py-3">
+                <span className="inline-flex flex-wrap gap-1">
+                  {reps.slice(0, 2).map((user, i) => (
+                    <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[user.value]).badgeClass}`}>
+                      <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      {getRepInitials(user.value)}
+                    </span>
+                  ))}
+                  {reps.length > 2 && (
+                    <span
+                      title={reps.slice(2).map(u => u.value).join(', ')}
+                      className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap bg-gray-100 text-gray-600 border border-gray-300"
+                    >
+                      +{reps.length - 2}
+                    </span>
+                  )}
+                </span>
+              </td>
+            );
+            /* Status has nothing to roll up: a family does not have one. */
+            case 'status': return <td key="status" className="px-3 py-3" />;
+            case 'attendees': return (
+              <td key="attendees" className="px-3 py-3">
+                {/* The attendee badge at the family's weight. Written out
+                    rather than reusing .badge-gray, whose font-medium would
+                    otherwise have to be fought with !important. */}
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-100 text-gray-700">
+                  {family.rollup.attendees}
+                </span>
+              </td>
+            );
+            /* Conferences does not roll up either — each company has been to
+               its own, and a sum of them would be a number of nothing. */
+            case 'conferences': return <td key="conferences" className="px-3 py-3" />;
+            case 'wse': return (
+              <td key="wse" className="px-3 py-3">
+                {family.rollup.units != null && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-yellow-50 text-yellow-700 border border-yellow-200">
+                    <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+                    {family.rollup.units.toLocaleString()}
+                  </span>
+                )}
+              </td>
+            );
+            case 'value': return (
+              <td key="value" className="px-3 py-3 overflow-hidden" style={{ maxWidth: colWidths.value }}>
+                {/* Recomputed from the summed units — adding up the children's
+                    formatted values would be adding up rounded strings. */}
+                {valuePill && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
+                    {valuePill}
+                  </span>
+                )}
+              </td>
+            );
+            /* One date for several companies would be a date for none. */
+            case 'updated_on': return <td key="updated_on" className="px-3 py-3" />;
+            case 'relationships': return (
+              <td key="relationships" className="px-3 py-3">
+                {family.rollup.relationships > 0 && family.parent && (
+                  <button
+                    type="button"
+                    onClick={e => { e.preventDefault(); e.stopPropagation(); setRelPopupCompany({ id: family.parent!.id, name: family.parent!.name }); }}
+                    title="View relationships"
+                    className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
+                  >
+                    {family.rollup.relationships}
+                  </button>
+                )}
+              </td>
+            );
+            default: return null;
+          }
+        })}
+        {customColumns.filter(c => c.visible).map(col => (
+          <td key={`custom_${col.id}`} className="px-3 py-3" />
+        ))}
+        {rowAction && <td className="px-3 py-3" />}
+        {conferenceId != null && (
+          <td className="px-2 py-3 sticky right-0 z-10" style={{ width: 48 }}>
+            {/* Every action behind the kebab is about a company record. With no
+                parent row here there is no record to open one against. */}
+            {family.parent && (
+              <RowActionsKebab
+                entityType="company"
+                conferenceId={conferenceId}
+                companyId={family.parent.id}
+                companyName={family.parent.name}
+                onDone={onRefresh}
+                onOpenChange={open => setActionsCompanyId(open ? family.parent!.id : null)}
+              />
+            )}
+          </td>
+        )}
+      </tr>
+    );
+  };
+
+  /**
+   * The page's rows when grouped: each family followed by its companies, then
+   * everything that belongs to no family under a divider naming the section.
+   */
+  const renderGroupedRows = () => {
+    const looseTotal = families.entries.length - families.familyCount;
+    let dividerDrawn = false;
+    return pagedEntries.map(entry => {
+      if (entry.kind === 'family') {
+        return (
+          <React.Fragment key={`family-${entry.key}`}>
+            {renderGroupRow(entry)}
+            {!isFamilyCollapsed(entry.key) && entry.all.map(c => renderCompanyRow(c, { inFamily: true }))}
+          </React.Fragment>
+        );
+      }
+      const first = !dividerDrawn;
+      dividerDrawn = true;
+      return (
+        <React.Fragment key={`loose-${entry.key}`}>
+          {first && (
+            <tr>
+              <td colSpan={tableColSpan} className="pt-4 pb-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                  No parent company · {looseTotal}
+                </span>
+              </td>
+            </tr>
+          )}
+          {renderCompanyRow(entry.company)}
+        </React.Fragment>
+      );
+    });
+  };
 
   return (
     <div>
@@ -1305,220 +1776,8 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={1 + (['name','type','sfowner','status','attendees','conferences','wse','updated_on','relationships'] as const).filter(k => isVisible(k)).length + customColumns.filter(c => c.visible).length + (rowAction ? 1 : 0) + (conferenceId != null ? 1 : 0)} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
-              ) : rowsToRender.map(company => {
-                const rowSelected = selectedIds.has(company.id);
-                // Frozen cells need a background of their own — the row's
-                // paints behind them, not through them — so the selected and
-                // hover treatments are repeated here.
-                // The card fill now comes from the row's cell styling, which
-                // the frozen columns need as much as any other cell — they
-                // paint over what scrolls beneath them.
-                const frozenBg = '';
-                const dimmed = actionsCompanyId != null && actionsCompanyId !== company.id;
-                const focused = focusedCompanyId === company.id;
-                return (
-                <tr
-                  key={company.id}
-                  onClick={onCompanyCardClick(company.id)}
-                  className={`group ${cardRowClass(rowSelected, focused)} ${cardEmphasisClass({ focused, otherFocused: focusedCompanyId != null && !focused, dimmed })}`}
-                >
-                  <td className="py-3 sticky left-0 z-10" style={{ width: selWidth }}><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-brand-secondary ml-3" /></td>
-                  {orderedColumns.map(col => {
-                    if (!isVisible(col.key)) return null;
-                    switch (col.key) {
-                      case 'name': return <td key="name" className={`px-3 py-3 sticky z-10 ${frozenBg}`} style={{ maxWidth: colWidths.name, left: companyNameStickyLeft }}>
-                        {/* The name opens the details drawer, the way the
-                            phone's card already does — which leaves the eye
-                            icon that used to do it saying the same thing. */}
-                        <div className="flex items-center gap-1 text-left">
-                          <button
-                            type="button"
-                            onClick={() => openQuickView(company.id)}
-                            className="font-medium text-brand-secondary hover:underline text-sm break-words whitespace-normal leading-snug text-left"
-                          >
-                            {company.name}
-                          </button>
-                        </div>
-                        {company.parent_company_name && company.parent_company_id != null && (
-                          <p className="text-[10px] text-gray-400 mt-0.5">
-                            {/* Opens the parent in the same drawer rather than
-                                leaving the table: the reader is comparing rows,
-                                and a full page navigation loses their place. */}
-                            <button
-                              type="button"
-                              onClick={() => openQuickView(company.parent_company_id!, company.name)}
-                              className="hover:text-brand-secondary hover:underline text-left"
-                            >
-                              {company.parent_company_name}
-                            </button>
-                          </p>
-                        )}
-                      </td>;
-                      case 'type': return <td key="type" className="px-3 py-3">
-                        {editingCell?.companyId === company.id && editingCell.field === 'company_type' ? (
-                          <InlineEditRow onCancel={() => setEditingCell(null)}>
-                              <select
-                                className={INLINE_EDIT_FIELD_CLASS}
-                                value={cellDraft}
-                                onChange={(e) => setCellDraft(e.target.value)}
-                                onBlur={() => saveInlineEdit(company, 'company_type')}
-                                onKeyDown={(e) => { if (e.key === 'Escape') setEditingCell(null); }}
-                                autoFocus
-                              >
-                                <option value="">—</option>
-                                {companyTypeOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                              </select>
-                          </InlineEditRow>
-                        ) : (
-                          <button type="button" onClick={() => startInlineEdit(company, 'company_type')} title="Click to set type">
-                            {company.company_type
-                              ? <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span>
-                              : <InlineEditPlaceholder label="Type" />}
-                          </button>
-                        )}
-                      </td>;
-                      case 'sfowner': return <td key="sfowner" className="px-3 py-3">
-                        {editingRepCompanyId === company.id && !showRepModal ? (
-                          <div className="flex items-start gap-1">
-                            <div className="flex-1 min-w-0">
-                              <RepMultiSelect
-                                options={userOptionsFull}
-                                selectedIds={editingRepIds}
-                                onChange={setEditingRepIds}
-                                onClose={(ids) => handleRepSave(company.id, ids)}
-                              />
-                            </div>
-                            <InlineEditCancelButton onCancel={() => setEditingRepCompanyId(null)} />
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => startEditRep(company)}
-                            title="Click to assign rep"
-                            className="inline-flex flex-wrap gap-1 hover:opacity-70 transition-opacity text-left w-full"
-                          >
-                            {parseRepIds(company.assigned_user ?? '').map(id => userOptionsFull.find(u => u.id === id)).filter(Boolean).map((user, i) => (
-                              <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
-                                <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                </svg>
-                                {getRepInitials(user!.value)}
-                              </span>
-                            ))}
-                            {!company.assigned_user && (
-                              <span className="text-[10px] text-gray-300 hover:text-gray-400 transition-colors">+ Rep</span>
-                            )}
-                          </button>
-                        )}
-                      </td>;
-                      case 'status': return <td key="status" className="px-3 py-3">
-                        {editingCell?.companyId === company.id && editingCell.field === 'status' ? (
-                          <InlineEditRow onCancel={() => setEditingCell(null)}>
-                              <select
-                                className={INLINE_EDIT_FIELD_CLASS}
-                                value={cellDraft}
-                                onChange={(e) => setCellDraft(e.target.value)}
-                                onBlur={() => saveInlineEdit(company, 'status')}
-                                onKeyDown={(e) => { if (e.key === 'Escape') setEditingCell(null); }}
-                                autoFocus
-                              >
-                                <option value="">—</option>
-                                {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                              </select>
-                          </InlineEditRow>
-                        ) : (
-                          <button type="button" onClick={() => startInlineEdit(company, 'status')} title="Click to set status">
-                            <span className="flex flex-wrap gap-1">
-                              {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{formatStatusLabel(s)}</span>)}
-                              {(company.my_user_status_ids || []).map(optId => {
-                                const label = userScopedStatusMap.get(optId);
-                                return label ? <span key={optId} className={getBadgeClass(label, colorMaps.status || {})}>{formatStatusLabel(label)}</span> : null;
-                              })}
-                              {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 && (company.my_user_status_ids || []).length === 0 && <InlineEditPlaceholder label="Status" />}
-                            </span>
-                          </button>
-                        )}
-                      </td>;
-                      case 'attendees': return <td key="attendees" className="px-3 py-3"><AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} onClick={conferenceAttendees ? () => setAttendeesDrawerCompany(company) : undefined} /></td>;
-                      case 'conferences': return <td key="conferences" className="px-3 py-3"><ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} /></td>;
-                      case 'wse': return <td key="wse" className="px-3 py-3">
-                        {editingCell?.companyId === company.id && editingCell.field === 'wse' ? (
-                          <InlineEditRow onCancel={() => setEditingCell(null)}>
-                              <input
-                                className={INLINE_EDIT_FIELD_CLASS}
-                                value={cellDraft}
-                                onChange={(e) => setCellDraft(e.target.value)}
-                                onBlur={() => saveInlineEdit(company, 'wse')}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') saveInlineEdit(company, 'wse');
-                                  if (e.key === 'Escape') setEditingCell(null);
-                                }}
-                                autoFocus
-                              />
-                          </InlineEditRow>
-                        ) : (
-                          <button type="button" onClick={() => startInlineEdit(company, 'wse')} title={`Click to set ${unitTypeLabel}`}>
-                            {company.wse != null ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
-                                <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
-                                {Number(company.wse).toLocaleString()}
-                              </span>
-                            ) : <InlineEditPlaceholder label={unitTypeLabel} />}
-                          </button>
-                        )}
-                      </td>;
-                      case 'value': return (
-                        <td key="value" className="px-3 py-3 overflow-hidden" style={{ maxWidth: colWidths.value }}>
-                          {(() => {
-                            const pill = formatValuePill(company.wse, avgCostPerUnit);
-                            return pill ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
-                                {pill}
-                              </span>
-                            ) : <span className="text-gray-300">—</span>;
-                          })()}
-                        </td>
-                      );
-                      case 'updated_on': return <td key="updated_on" className="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(company.updated_at)}</td>;
-                      case 'relationships': return (
-                        <td key="relationships" className="px-3 py-3">
-                          {Number(company.relationship_count) > 0 && (
-                            <button
-                              type="button"
-                              onClick={e => { e.preventDefault(); e.stopPropagation(); setRelPopupCompany({ id: company.id, name: company.name }); }}
-                              title="View relationships"
-                              className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
-                            >
-                              {Number(company.relationship_count)}
-                            </button>
-                          )}
-                        </td>
-                      );
-                      default: return null;
-                    }
-                  })}
-                  {customColumns.filter(c => c.visible).map(col => (
-                    <td key={`custom_${col.id}`} className="px-3 py-3">
-                      <CustomColumnCell column={col} value={(company as unknown as Record<string, unknown>)[col.data_key]} />
-                    </td>
-                  ))}
-                  {rowAction && <td className="px-3 py-3">{rowAction(company)}</td>}
-                  {conferenceId != null && (
-                    <td className={`px-2 py-3 sticky right-0 z-10 ${frozenBg}`} style={{ width: 48 }}>
-                      <RowActionsKebab
-                        entityType="company"
-                        conferenceId={conferenceId}
-                        companyId={company.id}
-                        companyName={company.name}
-                        onDone={onRefresh}
-                        onOpenChange={open => setActionsCompanyId(open ? company.id : null)}
-                      />
-                    </td>
-                  )}
-                </tr>
-                );
-              })}
+                <tr><td colSpan={tableColSpan} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
+              ) : grouped ? renderGroupedRows() : rowsToRender.map(company => renderCompanyRow(company))}
             </tbody>
           </table>
         </div>

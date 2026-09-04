@@ -259,6 +259,42 @@ export function buildCompanyFamilies<T extends GroupableCompany>(
   };
 }
 
+/**
+ * What the Parent/Child filter should be, either side of the grouping switch.
+ *
+ * Grouping and that filter answer the same question by different means, and
+ * every combination of them draws a family with its own parent or its own
+ * children filtered out of it — so grouping takes the filter away. Taking it
+ * away without remembering it would quietly discard something the reader chose,
+ * so it is stashed on the way in and handed back on the way out.
+ *
+ * Pure and separate from the component so the round trip can be tested by
+ * calling it, rather than by driving a control that only exists on screen.
+ */
+export interface HierarchyFilterState {
+  /** The live value of the Parent/Child filter. */
+  filterHierarchy: string;
+  /** What it was before grouping took it, or null when grouping is off. */
+  stashedHierarchy: string | null;
+}
+
+export function applyGroupingToHierarchyFilter(
+  grouping: boolean, current: HierarchyFilterState,
+): HierarchyFilterState {
+  if (grouping) {
+    return {
+      filterHierarchy: '',
+      // Switching on twice must not overwrite the original stash with the
+      // blank the first switch left behind.
+      stashedHierarchy: current.stashedHierarchy ?? (current.filterHierarchy || null),
+    };
+  }
+  return {
+    filterHierarchy: current.stashedHierarchy ?? current.filterHierarchy,
+    stashedHierarchy: null,
+  };
+}
+
 /** Every company on screen for a page of entries, families flattened. */
 export function entriesToCompanies<T extends GroupableCompany>(entries: GroupEntry<T>[]): T[] {
   return entries.flatMap(e => (e.kind === 'family' ? e.all : [e.company]));

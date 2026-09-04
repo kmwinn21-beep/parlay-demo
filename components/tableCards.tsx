@@ -81,6 +81,36 @@ export function cardRowClass(selected: boolean, focused = false): string {
 }
 
 /**
+ * A family's own row, sitting above the companies it gathers.
+ *
+ * Same card shape as the rows beneath it — border-y, rounded outer corners,
+ * the 8px gap from border-spacing — so it reads as one of them rather than as
+ * chrome. What separates it is a wash of the account's primary and a darker
+ * border: enough to lead a run of rows, not so much that it competes with the
+ * selected and picked states, which are the ones a reader is acting on.
+ *
+ * The wash is the brand token rather than a fixed navy, so an account that has
+ * set its own primary gets its own tint. At the default primary it composites to
+ * exactly rgba(34, 58, 94, 0.055) over the table's ground.
+ *
+ * It has to be opaque, though, and a 5.5% fill is not. Three of these cells are
+ * sticky, and a translucent sticky cell has the rows it is holding still over
+ * sliding beneath it — which reads as a dark band down the frozen columns as
+ * soon as the table is scrolled sideways. So the tint is laid as a gradient over
+ * an opaque ground rather than set as the colour: same result, nothing shows
+ * through.
+ */
+export function cardGroupRowClass(): string {
+  return [
+    '[&>td]:transition-colors [&>td]:border-y [&>td]:border-gray-300',
+    '[&>td:first-child]:border-l [&>td:first-child]:rounded-l-lg',
+    '[&>td:last-child]:border-r [&>td:last-child]:rounded-r-lg',
+    '[&>td]:bg-gray-50',
+    '[&>td]:bg-[linear-gradient(rgb(var(--brand-primary-rgb)/0.055),rgb(var(--brand-primary-rgb)/0.055))]',
+  ].join(' ');
+}
+
+/**
  * Everything that handles its own click. A click that lands on one of these is
  * that control's, not the card's — picking a card must not fight with opening a
  * record, editing a cell in place or ticking a checkbox.
