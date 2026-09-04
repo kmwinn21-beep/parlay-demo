@@ -181,7 +181,9 @@ export default function CompaniesPage() {
           <KebabMenu
             title="Company actions"
             items={[{
-              label: refreshingFamilies ? 'Refreshing…' : 'Refresh Parent/Child Fields',
+              // Short enough to sit on one line beside its icon; what it does
+              // is reported by the toast rather than by the label.
+              label: 'Parent/Child',
               disabled: refreshingFamilies,
               onClick: handleRefreshFamilies,
               icon: (

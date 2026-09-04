@@ -256,6 +256,16 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [quickViewId, setQuickViewId] = useState<number | null>(null);
+  /**
+   * The child whose row the reader came from, when the drawer was opened by
+   * following a parent link. It only labels the header — the record itself is
+   * the same one the full page shows.
+   */
+  const [quickViewParentOf, setQuickViewParentOf] = useState<string | null>(null);
+  const openQuickView = useCallback((id: number, parentOf?: string) => {
+    setQuickViewId(id);
+    setQuickViewParentOf(parentOf ?? null);
+  }, []);
   const [showParentChildModal, setShowParentChildModal] = useState(false);
   const [showRepRelModal, setShowRepRelModal] = useState(false);
   const [showBulkVendorRel, setShowBulkVendorRel] = useState(false);
@@ -1003,7 +1013,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                           used to do that is redundant on a phone. */}
                       <button
                         type="button"
-                        onClick={() => setQuickViewId(company.id)}
+                        onClick={() => openQuickView(company.id)}
                         className="font-semibold text-brand-secondary hover:underline text-sm leading-snug text-left"
                       >
                         {company.name}
@@ -1016,9 +1026,15 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                         </span>
                       )}
                     </div>
-                    {company.parent_company_name && (
+                    {company.parent_company_name && company.parent_company_id != null && (
                       <p className="text-[10px] text-gray-400 mt-0.5">
-                        <Link href={`/companies/${company.parent_company_id}`} className="hover:text-brand-secondary">{company.parent_company_name}</Link>
+                        <button
+                          type="button"
+                          onClick={() => openQuickView(company.parent_company_id!, company.name)}
+                          className="hover:text-brand-secondary hover:underline text-left"
+                        >
+                          {company.parent_company_name}
+                        </button>
                       </p>
                     )}
                   </div>
@@ -1243,17 +1259,24 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                         <div className="flex items-center gap-1 text-left">
                           <button
                             type="button"
-                            onClick={() => setQuickViewId(company.id)}
+                            onClick={() => openQuickView(company.id)}
                             className="font-medium text-brand-secondary hover:underline text-sm break-words whitespace-normal leading-snug text-left"
                           >
                             {company.name}
                           </button>
                         </div>
-                        {company.parent_company_name && (
+                        {company.parent_company_name && company.parent_company_id != null && (
                           <p className="text-[10px] text-gray-400 mt-0.5">
-                            <Link href={`/companies/${company.parent_company_id}`} className="hover:text-brand-secondary">
+                            {/* Opens the parent in the same drawer rather than
+                                leaving the table: the reader is comparing rows,
+                                and a full page navigation loses their place. */}
+                            <button
+                              type="button"
+                              onClick={() => openQuickView(company.parent_company_id!, company.name)}
+                              className="hover:text-brand-secondary hover:underline text-left"
+                            >
                               {company.parent_company_name}
-                            </Link>
+                            </button>
                           </p>
                         )}
                       </td>;
@@ -1501,7 +1524,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
       {quickViewId !== null && (
         <>
           <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
-          <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setQuickViewId(null)} />
+          <div className="fixed inset-0 z-40 bg-black/30" onClick={() => { setQuickViewId(null); setQuickViewParentOf(null); }} />
           <div
             className="drawer-mobile-responsive fixed bottom-0 left-0 right-0 sm:inset-y-0 sm:left-auto sm:right-0 h-[90vh] sm:h-auto w-full sm:w-[480px] bg-white shadow-2xl flex flex-col rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none z-50"
             style={qvPanelStyle}
@@ -1518,7 +1541,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
               </a>
               <button
                 type="button"
-                onClick={() => setQuickViewId(null)}
+                onClick={() => { setQuickViewId(null); setQuickViewParentOf(null); }}
                 className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1527,7 +1550,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
               </button>
             </div>
             <iframe
-              src={`/companies/${quickViewId}?embed=true`}
+              src={`/companies/${quickViewId}?embed=true${quickViewParentOf ? `&parent_of=${encodeURIComponent(quickViewParentOf)}` : ''}`}
               className="flex-1 w-full border-0"
               title="Quick View"
             />
