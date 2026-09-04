@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 
 /**
@@ -70,7 +71,9 @@ export function cardRowClass(selected: boolean, focused = false): string {
     '[&>td:first-child]:border-l [&>td:first-child]:rounded-l-lg',
     '[&>td:last-child]:border-r [&>td:last-child]:rounded-r-lg',
     focused
-      ? '[&>td]:bg-brand-highlight/25 [&>td]:border-brand-highlight'
+      // Dark grey rather than more of the accent: the fill is already the
+      // accent, and an outline in the same colour has nothing to draw against.
+      ? '[&>td]:bg-brand-highlight/25 [&>td]:border-gray-500'
       : selected
         ? '[&>td]:bg-blue-50 [&>td]:border-brand-secondary/40'
         : '[&>td]:bg-white sm:[&:hover>td]:bg-brand-highlight/20',
@@ -111,6 +114,39 @@ export function cardEmphasisClass({ focused, otherFocused, dimmed }: {
   if (otherFocused) return `${base} opacity-20`;
   if (dimmed) return `${base} opacity-40`;
   return base;
+}
+
+/**
+ * Which card the reader has picked out, and the region that keeps it picked.
+ *
+ * Put the returned ref on the element that wraps the table: a press anywhere
+ * outside it lets the pick go. Picking a card is a way of reading the table, so
+ * it should not outlive the reader's attention on it — leaving the table with
+ * one card still lit and the rest greyed out is a state nobody asked to keep.
+ *
+ * Listens on mousedown rather than click so a press that starts outside the
+ * table releases the pick even if the pointer is dragged before it lifts.
+ */
+export function useCardFocus<T extends HTMLElement = HTMLDivElement>() {
+  const [focusedId, setFocusedId] = useState<number | null>(null);
+  const regionRef = useRef<T>(null);
+
+  useEffect(() => {
+    if (focusedId == null) return;
+    const onDown = (e: globalThis.MouseEvent) => {
+      if (!regionRef.current?.contains(e.target as Node)) setFocusedId(null);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [focusedId]);
+
+  /** Toggle from a click on the card itself; a click on a control is ignored. */
+  const onCardClick = (id: number) => (e: MouseEvent) => {
+    if (!isCardBackgroundClick(e)) return;
+    setFocusedId(cur => (cur === id ? null : id));
+  };
+
+  return { focusedId, setFocusedId, regionRef, onCardClick };
 }
 
 /** Width of the selection column, open and collapsed. */

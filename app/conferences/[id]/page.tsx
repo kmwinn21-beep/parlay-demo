@@ -29,7 +29,7 @@ import { SocialEventsTable, type SocialEvent } from '@/components/SocialEventsTa
 import { BackButton } from '@/components/BackButton';
 import { TargetToggleButton } from '@/components/TargetToggleButton';
 import { ConferenceLogoField } from '@/components/ConferenceLogoField';
-import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_WRAP, cardEmphasisClass, cardRowClass, isCardBackgroundClick, selectionColumnWidth } from '@/components/tableCards';
+import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_WRAP, cardEmphasisClass, cardRowClass, selectionColumnWidth, useCardFocus } from '@/components/tableCards';
 import { ConferenceTimelineDialog } from '@/components/ConferenceTimelineDialog';
 import { useConferenceTargets } from '@/lib/useConferenceTargets';
 import { useIcpCompanyTypes, matchesIcpCompanyType } from '@/lib/useIcpCompanyTypes';
@@ -483,8 +483,8 @@ export default function ConferenceDetailPage() {
   const [actionsAttendeeId, setActionsAttendeeId] = useState<number | null>(null);
   // The attendee card the reader has picked out. Clicking the card itself —
   // anywhere that isn't a control — puts every other card behind it; clicking
-  // it again puts them back.
-  const [focusedAttendeeId, setFocusedAttendeeId] = useState<number | null>(null);
+  // it again, or pressing anywhere outside the table, puts them back.
+  const { focusedId: focusedAttendeeId, regionRef: attendeeTableRef, onCardClick: onAttendeeCardClick } = useCardFocus();
   // The attendee whose conference history is open as a dialog, from the # Conf
   // pill. Held as the row so the header can name them without a second fetch.
   const [timelineAttendee, setTimelineAttendee] = useState<{ id: number; first_name: string; last_name: string } | null>(null);
@@ -3515,7 +3515,7 @@ export default function ConferenceDetailPage() {
               </MobileCardList>
 
               {/* Desktop table */}
-            <div className={`hidden lg:block ${CARD_TABLE_WRAP}`}>
+            <div ref={attendeeTableRef} className={`hidden lg:block ${CARD_TABLE_WRAP}`}>
             <div className={CARD_TABLE_SCROLL}>
               <table className={`w-full text-sm ${CARD_TABLE}`} style={{ tableLayout: 'fixed' }}>
                 <thead>
@@ -3578,7 +3578,7 @@ export default function ConferenceDetailPage() {
                     return (
                     <tr
                       key={attendee.id}
-                      onClick={e => { if (isCardBackgroundClick(e)) setFocusedAttendeeId(cur => (cur === attendee.id ? null : attendee.id)); }}
+                      onClick={onAttendeeCardClick(attendee.id)}
                       className={`group ${cardRowClass(rowSelected, focused)} ${cardEmphasisClass({ focused, otherFocused: focusedAttendeeId != null && !focused, dimmed })}`}
                     >
                       <td className="py-3 sticky left-0 z-10" style={{ width: attendeeSelWidth }}>

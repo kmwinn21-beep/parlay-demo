@@ -14,7 +14,7 @@ import { useUser } from '@/components/UserContext';
 import { OverlappingRepPills } from '@/components/OverlappingRepPills';
 import { NotesPopoverCard } from '@/components/NotesPopoverCard';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
-import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_WRAP, SelectionCell, cardEmphasisClass, cardRowClass, isCardBackgroundClick } from '@/components/tableCards';
+import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_WRAP, SelectionCell, cardEmphasisClass, cardRowClass, useCardFocus } from '@/components/tableCards';
 import { AssignFollowUpDialog } from '@/components/AssignFollowUpDialog';
 import { AdditionalAttendeesModal, AdditionalAttendeesButton } from '@/components/AdditionalAttendeesModal';
 import {
@@ -1008,8 +1008,9 @@ export function MeetingsTable({
   const [sortKey, setSortKey] = useState<SortKey>('datetime');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [editingId, setEditingId] = useState<number | null>(null);
-  // The meeting card the reader has picked out; the rest recede behind it.
-  const [focusedMeetingId, setFocusedMeetingId] = useState<number | null>(null);
+  // The meeting card the reader has picked out; the rest recede behind it,
+  // until it is clicked again or something outside the table is pressed.
+  const { focusedId: focusedMeetingId, regionRef: meetingTableRef, onCardClick: onMeetingCardClick } = useCardFocus();
   const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
   // A follow-up the outcome change just created, waiting to be assigned.
   const [assignFollowUp, setAssignFollowUp] = useState<{ ids: number[]; meeting: Meeting; outcome: string } | null>(null);
@@ -1536,7 +1537,7 @@ export function MeetingsTable({
     // to repeat it. Same treatment as the follow-ups table.
     <tr
       key={m.id}
-      onClick={e => { if (isCardBackgroundClick(e)) setFocusedMeetingId(cur => (cur === m.id ? null : m.id)); }}
+      onClick={onMeetingCardClick(m.id)}
       className={`align-top ${cardRowClass(selectedIds.has(m.id), focusedMeetingId === m.id)} ${cardEmphasisClass({
         focused: focusedMeetingId === m.id,
         otherFocused: focusedMeetingId != null && focusedMeetingId !== m.id,
@@ -1825,6 +1826,7 @@ export function MeetingsTable({
           container so the gap around them matches the gap between them. */}
       {!cardsOnly && viewMode === 'table' && (
       <div
+        ref={meetingTableRef}
         className={`hidden lg:block ${CARD_TABLE_WRAP}`}
         onMouseEnter={() => setChecksHovered(true)}
         onMouseLeave={() => setChecksHovered(false)}

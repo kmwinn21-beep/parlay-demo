@@ -23,7 +23,7 @@ import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
 import { AttendeeTooltip, ConferenceTooltip } from '@/components/CountPills';
 import { EntityStructureIcon } from '@/components/EntityStructureIcon';
-import { CARD_TABLE, CARD_TABLE_HEAD, CARD_TABLE_SCROLL_X, CARD_TABLE_WRAP, cardEmphasisClass, cardRowClass, isCardBackgroundClick, selectionColumnWidth } from '@/components/tableCards';
+import { CARD_TABLE, CARD_TABLE_HEAD, CARD_TABLE_SCROLL_X, CARD_TABLE_WRAP, cardEmphasisClass, cardRowClass, selectionColumnWidth, useCardFocus } from '@/components/tableCards';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import { useUser } from './UserContext';
 import { CompanyAttendeesDrawer, type CompanyAttendeeLite } from './CompanyAttendeesDrawer';
@@ -254,8 +254,9 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   // The company row whose actions menu is open — the others recede so it's
   // obvious which record the menu is about.
   const [actionsCompanyId, setActionsCompanyId] = useState<number | null>(null);
-  // The card the reader has picked out; every other one recedes behind it.
-  const [focusedCompanyId, setFocusedCompanyId] = useState<number | null>(null);
+  // The card the reader has picked out; every other one recedes behind it,
+  // until it is clicked again or something outside the table is pressed.
+  const { focusedId: focusedCompanyId, regionRef: companyTableRef, onCardClick: onCompanyCardClick } = useCardFocus();
   const [relPopupCompany, setRelPopupCompany] = useState<{ id: number; name: string } | null>(null);
   const [showAddToConf, setShowAddToConf] = useState(false);
   const [showBulkAssignOutreach, setShowBulkAssignOutreach] = useState(false);
@@ -1177,7 +1178,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         )}
 
         {/* Desktop table layout */}
-        <div className={`hidden lg:block ${CARD_TABLE_WRAP}`}>
+        <div ref={companyTableRef} className={`hidden lg:block ${CARD_TABLE_WRAP}`}>
         {/* Grows with the page instead of scrolling inside a capped height, so
             there is no scrollbar down the side of the table. The header row
             goes with it: there is no longer an inner viewport for it to stick
@@ -1234,7 +1235,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 return (
                 <tr
                   key={company.id}
-                  onClick={e => { if (isCardBackgroundClick(e)) setFocusedCompanyId(cur => (cur === company.id ? null : company.id)); }}
+                  onClick={onCompanyCardClick(company.id)}
                   className={`group ${cardRowClass(rowSelected, focused)} ${cardEmphasisClass({ focused, otherFocused: focusedCompanyId != null && !focused, dimmed })}`}
                 >
                   <td className="py-3 sticky left-0 z-10" style={{ width: selWidth }}><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-brand-secondary ml-3" /></td>
