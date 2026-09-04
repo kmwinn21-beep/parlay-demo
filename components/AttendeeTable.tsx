@@ -4,6 +4,7 @@ import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { MergeModal } from './MergeModal';
+import { EntityStructureIcon } from '@/components/EntityStructureIcon';
 import { InternalRelationshipModal } from './InternalRelationshipsSection';
 import { AddToConferenceModal } from './AddToConferenceModal';
 import { effectiveSeniority } from '@/lib/parsers';
@@ -897,7 +898,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                     )}
                     {attendee.company_type && (attendee.company_type === 'Competitor'
                       ? <CompetitorBadge type={attendee.company_type} competitorType={attendee.company_competitor_type} colorMaps={colorMaps} />
-                      : <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>
+                      : <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs inline-flex items-center gap-1`}><EntityStructureIcon structure={attendee.company_entity_structure} />{attendee.company_type}</span>
                     )}
                   </div>
                 )}
@@ -1089,7 +1090,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                             ) : (
                               <button type="button" onClick={() => startInlineEdit(attendee, 'company_type')} title="Click to set type">
                                 {attendee.company_type ? (
-                                  <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>
+                                  <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs inline-flex items-center gap-1`}><EntityStructureIcon structure={attendee.company_entity_structure} />{attendee.company_type}</span>
                                 ) : <InlineEditPlaceholder label="Type" />}
                               </button>
                             )}

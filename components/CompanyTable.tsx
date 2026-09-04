@@ -22,6 +22,7 @@ import { CustomColumnCell } from './CustomColumnCell';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
 import { AttendeeTooltip, ConferenceTooltip } from '@/components/CountPills';
+import { EntityStructureIcon } from '@/components/EntityStructureIcon';
 import { CARD_TABLE, CARD_TABLE_HEAD, CARD_TABLE_SCROLL_X, CARD_TABLE_WRAP, cardRowClass, selectionColumnWidth } from '@/components/tableCards';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import { useUser } from './UserContext';
@@ -114,25 +115,6 @@ interface CompanyTableProps {
   // When provided (also Conference Details' Companies tab), enables the bulk
   // "Assign Outreach" action, scoped to this conference.
   conferenceId?: number;
-}
-
-function EntityStructureIcon({ structure }: { structure?: string }) {
-  if (!structure) return null;
-  if (structure === 'Parent') {
-    return (
-      <svg className="w-3 h-3 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-      </svg>
-    );
-  }
-  if (structure === 'Child') {
-    return (
-      <svg className="w-3 h-3 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4" />
-      </svg>
-    );
-  }
-  return null;
 }
 
 /** Bulk-action button — a thin outline, no fill; colour is what varies. */
