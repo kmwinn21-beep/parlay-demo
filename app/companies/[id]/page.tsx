@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
@@ -173,6 +173,12 @@ function ConferenceCountTooltip({ count, names }: { count: number; names?: strin
 export default function CompanyDetailPage() {
   const params = useParams();
   const router = useRouter();
+  /**
+   * Set when this record is embedded as the parent of a row the reader was
+   * just looking at, so the header can say which child brought them here. The
+   * full record page is never opened with it.
+   */
+  const parentOfChild = useSearchParams().get('parent_of');
   const id = params.id as string;
   const colorMaps = useConfigColors();
   const { getLabel: getSectionLabel, orderedKeys: sectionOrder, isVisible: isSectionVisible } = useSectionConfig('company');
@@ -219,6 +225,7 @@ export default function CompanyDetailPage() {
   const [relatedDrawerCompanyId, setRelatedDrawerCompanyId] = useState<number | null>(null);
   const [relatedDrawerCompanyName, setRelatedDrawerCompanyName] = useState<string | undefined>();
   const [statusExpanded, setStatusExpanded] = useCollapsibleSection(false);
+  const [communitiesExpanded, setCommunitiesExpanded] = useCollapsibleSection(false);
   const anySectionExpanded = useAnySectionExpanded();
   const [configuredProductNames, setConfiguredProductNames] = useState<Set<string>>(new Set());
   const [showAssignFollowUp, setShowAssignFollowUp] = useState(false);
@@ -1153,6 +1160,9 @@ export default function CompanyDetailPage() {
                         )}
                       </span>
                     </h1>
+                    {parentOfChild && (
+                      <p className="text-sm text-gray-500 mt-0.5">Parent of {parentOfChild}</p>
+                    )}
                     {company.parent_company && (
                       <p className="text-sm text-gray-500 mt-0.5">
                         Subsidiary of{' '}
@@ -1789,10 +1799,20 @@ export default function CompanyDetailPage() {
                 if (related.length === 0) return null;
                 return (
                   <div key="communities" className="card">
-                    <h2 className="text-base font-semibold text-brand-primary font-serif mb-3">
-                      {getSectionLabel('communities')} ({related.length})
-                    </h2>
-                    <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => setCommunitiesExpanded(v => !v)}
+                      className="w-full flex items-center gap-2 text-left"
+                    >
+                      <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${communitiesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                      <h2 className="text-base font-semibold text-brand-primary font-serif">
+                        {getSectionLabel('communities')} ({related.length})
+                      </h2>
+                    </button>
+                    <AnimatedCollapse open={communitiesExpanded}>
+                    <div className="space-y-2 mt-3">
                       {related.map(rel => (
                         <Link key={`${rel.designation}-${rel.id}`} href={`/companies/${rel.id}`} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-brand-secondary hover:bg-blue-50 transition-all">
                           <div className="min-w-0">
@@ -1808,6 +1828,7 @@ export default function CompanyDetailPage() {
                         </Link>
                       ))}
                     </div>
+                    </AnimatedCollapse>
                   </div>
                 );
               })(),
