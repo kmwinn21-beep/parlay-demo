@@ -7,6 +7,7 @@ import { BackButton } from '@/components/BackButton';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { ConferenceStageBadge } from '@/components/ConferenceStageBadge';
 import { ConferenceKanbanBoard } from '@/components/ConferenceKanbanBoard';
+import { ConferenceAvatar } from '@/components/ConferenceAvatar';
 import { ProgramConferenceCard, RepAvatarStack, TerritoryPill, ListStatusPill, OutreachStatusPill, type ProgramCardConference } from '@/components/ProgramConferenceCard';
 import { QuickViewDrawer, QuickViewIcon, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { computeConferenceStage, postConferenceDaysRemaining, type ConferenceStage } from '@/lib/conference-stage';
@@ -27,6 +28,7 @@ interface Conference {
   stage_override?: string | null;
   series_id?: string | null;
   series_name?: string | null;
+  logo_url?: string | null;
 }
 
 // Enriched shape returned by GET /api/conferences?enriched=1 — only used by
@@ -175,6 +177,8 @@ function ConferenceCard({ conf }: { conf: Conference }) {
       className="card p-3 hover:shadow-md transition-all hover:border-brand-secondary border border-transparent group flex flex-col"
     >
       <div className="flex items-start justify-between gap-2">
+        {/* The logo leads the name and the date/location lines. */}
+        <ConferenceAvatar name={conf.name} logoUrl={conf.logo_url} size={36} />
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2 mb-0.5">
             <h4 className="text-md font-semibold text-brand-primary group-hover:text-brand-secondary font-serif leading-snug line-clamp-2">

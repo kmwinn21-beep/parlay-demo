@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { computeConferenceStage, postConferenceDaysRemaining } from '@/lib/conference-stage';
 import type { ConferenceStage } from '@/lib/conference-stage';
 import { ConferenceStageBadge } from '@/components/ConferenceStageBadge';
+import { ConferenceAvatar } from '@/components/ConferenceAvatar';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Conference {
@@ -22,6 +23,7 @@ interface Conference {
   territory_scope?: string | null;
   territory_ids?: string | null;
   conference_type?: string | null;
+  logo_url?: string | null;
 }
 
 interface TerritoryOption {
@@ -269,6 +271,8 @@ function KanbanCard({
       className="block card p-3 hover:shadow-md transition-all hover:border-brand-secondary border border-transparent group"
     >
       <div className="flex items-start justify-between gap-2">
+        {/* The logo leads the name and the date/location lines. */}
+        <ConferenceAvatar name={conf.name} logoUrl={conf.logo_url} size={32} />
         <div className="flex-1 min-w-0">
           <h4 className="text-sm font-semibold text-brand-primary group-hover:text-brand-secondary font-serif leading-snug line-clamp-2">
             {conf.name}
