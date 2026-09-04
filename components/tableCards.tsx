@@ -1,6 +1,7 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 
 /**
  * The card treatment shared by the desktop record tables — meetings, attendees
@@ -53,19 +54,99 @@ export const CARD_TABLE_HEAD = '[&>tr>th]:bg-gray-50';
 export const CARD_TABLE = 'border-separate [border-spacing:0_0.5rem]';
 
 /**
- * The row's cell styling. `selected` swaps the fill and outlines the card by
- * colouring its own border — a ring is inset on all four sides of every cell,
- * which draws the column divisions back on as grid lines.
+ * The row's cell styling. `selected` and `focused` swap the fill and outline the
+ * card by colouring its own border — a ring is inset on all four sides of every
+ * cell, which draws the column divisions back on as grid lines.
+ *
+ * The three states are mutually exclusive so the fill is decided in one place;
+ * none of them needs `!important` to beat another.
+ *
+ * Hover is a wash of the account's second accent, and only from `sm`: a tap on a
+ * touch screen leaves the hover style stuck on the last card touched, which on a
+ * phone reads as a selection nobody made.
  */
-export function cardRowClass(selected: boolean): string {
+export function cardRowClass(selected: boolean, focused = false): string {
   return [
     '[&>td]:transition-colors [&>td]:border-y [&>td]:border-gray-200',
     '[&>td:first-child]:border-l [&>td:first-child]:rounded-l-lg',
     '[&>td:last-child]:border-r [&>td:last-child]:rounded-r-lg',
-    selected
-      ? '[&>td]:bg-blue-50 [&>td]:border-brand-secondary/40'
-      : '[&>td]:bg-white [&:hover>td]:bg-gray-50',
+    focused
+      // Dark grey rather than more of the accent: the fill is already the
+      // accent, and an outline in the same colour has nothing to draw against.
+      ? '[&>td]:bg-brand-highlight/25 [&>td]:border-gray-500'
+      : selected
+        ? '[&>td]:bg-blue-50 [&>td]:border-brand-secondary/40'
+        : '[&>td]:bg-white sm:[&:hover>td]:bg-brand-highlight/20',
   ].join(' ');
+}
+
+/**
+ * Everything that handles its own click. A click that lands on one of these is
+ * that control's, not the card's — picking a card must not fight with opening a
+ * record, editing a cell in place or ticking a checkbox.
+ */
+const INTERACTIVE_SELECTOR =
+  'a, button, input, select, textarea, label, [role="button"], [role="menuitem"], [contenteditable="true"]';
+
+/** True when the click was on the card itself — its text or its whitespace. */
+export function isCardBackgroundClick(e: MouseEvent): boolean {
+  const target = e.target as HTMLElement | null;
+  return !!target && !target.closest(INTERACTIVE_SELECTOR);
+}
+
+/**
+ * How much of the table a card gets to itself.
+ *
+ * Picking a card pushes every other one further back than the kebab does — the
+ * kebab is a menu you are about to use and the rows behind it still matter,
+ * whereas picking a card is a deliberate "this one", and the point is that
+ * nothing else competes with it.
+ */
+export function cardEmphasisClass({ focused, otherFocused, dimmed }: {
+  focused: boolean;
+  /** Some other card in this table is the picked one. */
+  otherFocused: boolean;
+  /** Another row's actions menu is open. */
+  dimmed: boolean;
+}): string {
+  const base = 'transition-opacity duration-200 ease-out';
+  if (focused) return base;
+  if (otherFocused) return `${base} opacity-20`;
+  if (dimmed) return `${base} opacity-40`;
+  return base;
+}
+
+/**
+ * Which card the reader has picked out, and the region that keeps it picked.
+ *
+ * Put the returned ref on the element that wraps the table: a press anywhere
+ * outside it lets the pick go. Picking a card is a way of reading the table, so
+ * it should not outlive the reader's attention on it — leaving the table with
+ * one card still lit and the rest greyed out is a state nobody asked to keep.
+ *
+ * Listens on mousedown rather than click so a press that starts outside the
+ * table releases the pick even if the pointer is dragged before it lifts.
+ */
+export function useCardFocus<T extends HTMLElement = HTMLDivElement>() {
+  const [focusedId, setFocusedId] = useState<number | null>(null);
+  const regionRef = useRef<T>(null);
+
+  useEffect(() => {
+    if (focusedId == null) return;
+    const onDown = (e: globalThis.MouseEvent) => {
+      if (!regionRef.current?.contains(e.target as Node)) setFocusedId(null);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [focusedId]);
+
+  /** Toggle from a click on the card itself; a click on a control is ignored. */
+  const onCardClick = (id: number) => (e: MouseEvent) => {
+    if (!isCardBackgroundClick(e)) return;
+    setFocusedId(cur => (cur === id ? null : id));
+  };
+
+  return { focusedId, setFocusedId, regionRef, onCardClick };
 }
 
 /** Width of the selection column, open and collapsed. */

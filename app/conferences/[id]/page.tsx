@@ -29,7 +29,8 @@ import { SocialEventsTable, type SocialEvent } from '@/components/SocialEventsTa
 import { BackButton } from '@/components/BackButton';
 import { TargetToggleButton } from '@/components/TargetToggleButton';
 import { ConferenceLogoField } from '@/components/ConferenceLogoField';
-import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_WRAP, cardRowClass, selectionColumnWidth } from '@/components/tableCards';
+import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_WRAP, cardEmphasisClass, cardRowClass, selectionColumnWidth, useCardFocus } from '@/components/tableCards';
+import { ConferenceTimelineDialog } from '@/components/ConferenceTimelineDialog';
 import { useConferenceTargets } from '@/lib/useConferenceTargets';
 import { useIcpCompanyTypes, matchesIcpCompanyType } from '@/lib/useIcpCompanyTypes';
 import { effectiveSeniority } from '@/lib/parsers';
@@ -480,6 +481,13 @@ export default function ConferenceDetailPage() {
   // The attendee row whose actions menu is open — the others recede so it's
   // obvious which record the menu is about.
   const [actionsAttendeeId, setActionsAttendeeId] = useState<number | null>(null);
+  // The attendee card the reader has picked out. Clicking the card itself —
+  // anywhere that isn't a control — puts every other card behind it; clicking
+  // it again, or pressing anywhere outside the table, puts them back.
+  const { focusedId: focusedAttendeeId, regionRef: attendeeTableRef, onCardClick: onAttendeeCardClick } = useCardFocus();
+  // The attendee whose conference history is open as a dialog, from the # Conf
+  // pill. Held as the row so the header can name them without a second fetch.
+  const [timelineAttendee, setTimelineAttendee] = useState<{ id: number; first_name: string; last_name: string } | null>(null);
   // How the meetings table sections its rows. Same segmented control the
   // program planner's plan tab uses for its groupings.
   const [meetingGroupMode, setMeetingGroupMode] = useState<'date' | 'rep' | 'outcome'>('date');
@@ -597,11 +605,11 @@ export default function ConferenceDetailPage() {
 
   // Open field report drawer if ?fieldreport=true is in the URL
   useEffect(() => {
-    if (searchParams.get('fieldreport') === 'true' && isInternalAttendee) {
+    if (searchParams.get('fieldreport') === 'true') {
       setShowDebrief(true);
       window.history.replaceState(null, '', window.location.pathname);
     }
-  }, [searchParams, isInternalAttendee]);
+  }, [searchParams]);
 
   // Fetch snapshot + YoY data when executive brief opens
   useEffect(() => {
@@ -2554,7 +2562,10 @@ export default function ConferenceDetailPage() {
                           it. Both stay below the drawers and modals at z-50. */}
                       <div className="fixed inset-0 z-30" onClick={() => setReportMenuOpen(false)} />
                       <div className="absolute top-full right-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-100 py-1.5 z-40">
-                        {isInternalAttendee && (
+                        {/* The field report is open to everyone on the account,
+                            not only the reps listed as internal attendees —
+                            reading what happened at a conference is not the
+                            same as having been sent to it. */}
                         <button
                           type="button"
                           onClick={() => { setShowDebrief(true); setReportMenuOpen(false); }}
@@ -2569,7 +2580,6 @@ export default function ConferenceDetailPage() {
                           </svg>
                           Field Report
                         </button>
-                        )}
                         {isInternalAttendee && (
                         <button
                           type="button"
@@ -2612,8 +2622,10 @@ export default function ConferenceDetailPage() {
                             Export CRM Files
                           </button>
                         )}
-                        {/* The header's own actions, kept apart from the reports */}
-                        {isInternalAttendee && <div className="my-1 border-t border-gray-100" />}
+                        {/* The header's own actions, kept apart from the
+                            reports. The field report is always above this line,
+                            so the divider always has something to divide. */}
+                        <div className="my-1 border-t border-gray-100" />
                         <button
                           type="button"
                           onClick={() => window.location.reload()}
@@ -3475,6 +3487,7 @@ export default function ConferenceDetailPage() {
                     userOptions={userOptions}
                     colorMaps={colorMaps}
                     dimmed={actionsAttendeeId != null && actionsAttendeeId !== attendee.id}
+                    onOpenConferences={() => setTimelineAttendee({ id: attendee.id, first_name: attendee.first_name, last_name: attendee.last_name })}
                     leadingPill={matchesIcpCompanyType(attendee.company_type, icpCompanyTypes) ? (
                       <TargetToggleButton
                         active={targetIds.has(attendee.id)}
@@ -3502,7 +3515,7 @@ export default function ConferenceDetailPage() {
               </MobileCardList>
 
               {/* Desktop table */}
-            <div className={`hidden lg:block ${CARD_TABLE_WRAP}`}>
+            <div ref={attendeeTableRef} className={`hidden lg:block ${CARD_TABLE_WRAP}`}>
             <div className={CARD_TABLE_SCROLL}>
               <table className={`w-full text-sm ${CARD_TABLE}`} style={{ tableLayout: 'fixed' }}>
                 <thead>
@@ -3561,8 +3574,13 @@ export default function ConferenceDetailPage() {
                     // they paint over what scrolls beneath them.
                     const frozenBg = '';
                     const dimmed = actionsAttendeeId != null && actionsAttendeeId !== attendee.id;
+                    const focused = focusedAttendeeId === attendee.id;
                     return (
-                    <tr key={attendee.id} className={`group transition-all ${cardRowClass(rowSelected)} ${dimmed ? 'opacity-40' : ''}`}>
+                    <tr
+                      key={attendee.id}
+                      onClick={onAttendeeCardClick(attendee.id)}
+                      className={`group ${cardRowClass(rowSelected, focused)} ${cardEmphasisClass({ focused, otherFocused: focusedAttendeeId != null && !focused, dimmed })}`}
+                    >
                       <td className="py-3 sticky left-0 z-10" style={{ width: attendeeSelWidth }}>
                         <input
                           type="checkbox"
@@ -3671,7 +3689,11 @@ export default function ConferenceDetailPage() {
                           );
                           case 'conferences': return (
                             <td key="conferences" className="px-4 py-3">
-                              <ConferenceCountTooltip count={Number(attendee.conference_count ?? 0)} names={attendee.conference_names as string | undefined} />
+                              <ConferenceCountTooltip
+                                count={Number(attendee.conference_count ?? 0)}
+                                names={attendee.conference_names as string | undefined}
+                                onOpen={() => setTimelineAttendee({ id: attendee.id, first_name: attendee.first_name, last_name: attendee.last_name })}
+                              />
                             </td>
                           );
                           case 'notes': return (
@@ -4471,6 +4493,10 @@ export default function ConferenceDetailPage() {
           conferenceName={conference?.name || ''}
           userEmail={currentUser?.email || ''}
         />
+      )}
+
+      {timelineAttendee && (
+        <ConferenceTimelineDialog attendee={timelineAttendee} onClose={() => setTimelineAttendee(null)} />
       )}
 
       <MyDebriefDrawer

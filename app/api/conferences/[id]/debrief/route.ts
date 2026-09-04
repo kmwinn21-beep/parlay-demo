@@ -32,7 +32,7 @@ export async function GET(
 
     // 2. Get user config_id and display (rep) name
     const userResult = await db.execute({
-      sql: `SELECT u.config_id, co.value as rep_name
+      sql: `SELECT u.config_id, u.display_name, u.first_name, u.last_name, co.value as rep_name
             FROM users u LEFT JOIN config_options co ON co.id = u.config_id
             WHERE u.id = ?`,
       args: [user.id],
@@ -40,22 +40,30 @@ export async function GET(
     const configId = userResult.rows[0]?.config_id != null ? Number(userResult.rows[0].config_id) : null;
     const repName = userResult.rows[0]?.rep_name ? String(userResult.rows[0].rep_name) : null;
 
-    // 3. Internal attendee check
-    const internalNames = (conf.internal_attendees as string | null)
-      ?.split(',').map(s => s.trim()).filter(Boolean) ?? [];
-    if (!repName || !internalNames.includes(repName)) {
-      return NextResponse.json({ error: 'Not an internal attendee of this conference' }, { status: 403 });
-    }
+    // 3. Whose report this is.
+    //
+    // Everything below is scoped to the caller — the meetings they scheduled,
+    // the follow-ups assigned to them — so the report is personal by
+    // construction and there is nothing to gate. Someone who was not sent to
+    // the conference gets their own (empty) report rather than a refusal.
+    //
+    // The rep name is what ties a user to that activity; without one there is
+    // nothing to match, so the report is empty and only needs a name to
+    // address itself with.
+    const displayName = userResult.rows[0]?.display_name ? String(userResult.rows[0].display_name).trim() : '';
+    const nameParts = [userResult.rows[0]?.first_name, userResult.rows[0]?.last_name]
+      .map(v => (v != null ? String(v).trim() : '')).filter(Boolean).join(' ');
+    const reportName = repName || displayName || nameParts || user.email.split('@')[0];
 
-    if (configId == null) {
-      // User has no config entry — can't match scheduled_by / assigned_rep
+    if (configId == null || repName == null) {
+      // No rep mapping — nothing to match scheduled_by / assigned_rep against.
       return NextResponse.json({
         conference: {
           id: Number(conf.id), name: String(conf.name),
           start_date: String(conf.start_date), end_date: String(conf.end_date ?? conf.start_date),
           location: String(conf.location),
         },
-        repName, repFirstName: repName.split(' ')[0],
+        repName: reportName, repFirstName: reportName.split(' ')[0],
         configId: null,
         stats: { companiesEngaged: 0, meetingsHeld: 0, touchpoints: 0, followUpsDue: 0, sesScore: null },
         companies: [],
@@ -435,8 +443,8 @@ export async function GET(
         start_date: String(conf.start_date), end_date: String(conf.end_date ?? conf.start_date),
         location: String(conf.location),
       },
-      repName,
-      repFirstName: repName.split(' ')[0],
+      repName: reportName,
+      repFirstName: reportName.split(' ')[0],
       configId,
       stats: {
         companiesEngaged: companyMap.size,
