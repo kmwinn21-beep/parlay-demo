@@ -36,7 +36,16 @@ export interface AttendeeCardRow {
  * The conference count, with the conference names on tap. Lives here rather
  * than in the conference page so the attendees drawer can show the same thing.
  */
-export function ConferenceCountTooltip({ count, names }: { count: number; names?: string }) {
+export function ConferenceCountTooltip({ count, names, onOpen }: {
+  count: number;
+  names?: string;
+  /**
+   * Given, a click opens the full conference history instead of toggling the
+   * list of names. Hovering still peeks at the names on a desktop — the peek
+   * answers "which ones", the click answers "what happened at them".
+   */
+  onOpen?: () => void;
+}) {
   const [pos, setPos] = useState<{ top: number; left: number; width: number; above: boolean } | null>(null);
   const ref = useRef<HTMLSpanElement>(null);
   const list = names ? names.split(',').map(n => n.trim()).filter(Boolean) : [];
@@ -55,8 +64,12 @@ export function ConferenceCountTooltip({ count, names }: { count: number; names?
         ref={ref}
         onMouseEnter={open}
         onMouseLeave={() => setPos(null)}
-        onClick={e => { e.stopPropagation(); pos ? setPos(null) : open(); }}
-        className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium ${list.length ? 'cursor-pointer' : ''}`}
+        onClick={e => {
+          e.stopPropagation();
+          if (onOpen) { setPos(null); onOpen(); return; }
+          pos ? setPos(null) : open();
+        }}
+        className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium ${list.length || onOpen ? 'cursor-pointer' : ''}`}
       >
         {count}
       </span>
@@ -81,7 +94,7 @@ export function ConferenceCountTooltip({ count, names }: { count: number; names?
 export function MobileAttendeeCard({
   attendee, showPhotos, selected, onToggleSelect, onOpenAttendee, onOpenCompany,
   onClassifyTitle, titleWarning = false, userOptions, colorMaps, actions, dimmed = false,
-  hideAssignedRep = false, leadingPill,
+  hideAssignedRep = false, leadingPill, onOpenConferences,
 }: {
   attendee: AttendeeCardRow;
   showPhotos: boolean;
@@ -103,6 +116,8 @@ export function MobileAttendeeCard({
   /** Drops the company's assigned-rep pill — for the confirm prompt, where
    *  who owns the account isn't what's being decided. */
   hideAssignedRep?: boolean;
+  /** Given, the conference count pill opens this attendee's full history. */
+  onOpenConferences?: () => void;
 }) {
   const seniority = effectiveSeniority(attendee.seniority ?? undefined, attendee.title ?? undefined);
   const statuses = (attendee.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown');
@@ -220,7 +235,7 @@ export function MobileAttendeeCard({
         </span>
         <span className="inline-flex items-center gap-1 flex-shrink-0 whitespace-nowrap">
           <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-          <ConferenceCountTooltip count={Number(attendee.conference_count ?? 0)} names={attendee.conference_names ?? undefined} />
+          <ConferenceCountTooltip count={Number(attendee.conference_count ?? 0)} names={attendee.conference_names ?? undefined} onOpen={onOpenConferences} />
         </span>
         {Number(attendee.entity_notes_count ?? 0) > 0 && (
           <span className="flex-shrink-0">

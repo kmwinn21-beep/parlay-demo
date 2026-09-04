@@ -129,11 +129,24 @@ function Subtext({ text }: { text: string }) {
   );
 }
 
-export function ConferenceTimeline({ entityType, entityId, title = 'Conference Timeline' }: {
+export function ConferenceTimeline({
+  entityType, entityId, title = 'Conference Timeline',
+  showSort = true, showCount = true, collapsible = true, chrome = true,
+}: {
   entityType: 'attendee' | 'company';
   entityId: number;
   /** Overridable because section names are renameable per account. */
   title?: string;
+  /**
+   * The next four drop the parts of the section that only make sense where it
+   * sits in a page column. Opened as a dialog it is already the only thing on
+   * screen: it has its own card, its own scroll and its own heading, so the
+   * sort control, the count, the collapse and the card chrome all go.
+   */
+  showSort?: boolean;
+  showCount?: boolean;
+  collapsible?: boolean;
+  chrome?: boolean;
 }) {
   const [conferences, setConferences] = useState<TimelineConference[]>([]);
   const [attendeeCount, setAttendeeCount] = useState(0);
@@ -182,14 +195,16 @@ export function ConferenceTimeline({ entityType, entityId, title = 'Conference T
     ? `${conferences.length} ${conferences.length === 1 ? 'conference' : 'conferences'} · ${attendeeCount} ${attendeeCount === 1 ? 'attendee' : 'attendees'}`
     : `${conferences.length} ${conferences.length === 1 ? 'conference' : 'conferences'}`;
 
-  return (
-    <div className="card">
-      {/* Wraps rather than breaking the title: this section sits in a narrow
-          column on both pages, and a two-line "Conference / Timeline" reads
-          worse than the count dropping to its own row. */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        <h2 className="text-base font-semibold text-brand-primary font-serif whitespace-nowrap">{title}</h2>
+  // Nothing left to head the list with when the caller has taken the title, the
+  // sort and the count away — the dialog heads it itself.
+  const header = !title && !showSort && !showCount ? null : (
+    /* Wraps rather than breaking the title: this section sits in a narrow
+       column on both pages, and a two-line "Conference / Timeline" reads worse
+       than the count dropping to its own row. */
+    <div className="flex flex-wrap items-center gap-2 mb-4">
+      <h2 className="text-base font-semibold text-brand-primary font-serif whitespace-nowrap">{title}</h2>
 
+      {showSort && (
         <div className="relative" ref={sortRef}>
           <button
             type="button"
@@ -219,14 +234,13 @@ export function ConferenceTimeline({ entityType, entityId, title = 'Conference T
             </div>
           )}
         </div>
+      )}
 
-        <span className="ml-auto text-xs text-gray-400 whitespace-nowrap">{countText}</span>
-      </div>
+      {showCount && <span className="ml-auto text-xs text-gray-400 whitespace-nowrap">{countText}</span>}
+    </div>
+  );
 
-      {ordered.length === 0 ? (
-        <p className="text-sm text-gray-400">No conferences yet.</p>
-      ) : (
-        <FadeCollapse rows={1} label="conference timeline">
+  const rows = (
           <div className="space-y-5">
               {ordered.map(conf => {
                 // A conference that has been and gone with nothing recorded
@@ -285,8 +299,22 @@ export function ConferenceTimeline({ entityType, entityId, title = 'Conference T
                 );
               })}
           </div>
-        </FadeCollapse>
-      )}
+  );
+
+  const body = ordered.length === 0
+    ? <p className="text-sm text-gray-400">No conferences yet.</p>
+    : collapsible
+      ? <FadeCollapse rows={1} label="conference timeline">{rows}</FadeCollapse>
+      : rows;
+
+  if (!chrome) {
+    return <>{header}{body}</>;
+  }
+
+  return (
+    <div className="card">
+      {header}
+      {body}
     </div>
   );
 }

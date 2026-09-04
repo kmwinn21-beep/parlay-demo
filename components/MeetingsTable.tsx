@@ -14,7 +14,7 @@ import { useUser } from '@/components/UserContext';
 import { OverlappingRepPills } from '@/components/OverlappingRepPills';
 import { NotesPopoverCard } from '@/components/NotesPopoverCard';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
-import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_WRAP, SelectionCell, cardRowClass } from '@/components/tableCards';
+import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_WRAP, SelectionCell, cardEmphasisClass, cardRowClass, isCardBackgroundClick } from '@/components/tableCards';
 import { AssignFollowUpDialog } from '@/components/AssignFollowUpDialog';
 import { AdditionalAttendeesModal, AdditionalAttendeesButton } from '@/components/AdditionalAttendeesModal';
 import {
@@ -1008,6 +1008,8 @@ export function MeetingsTable({
   const [sortKey, setSortKey] = useState<SortKey>('datetime');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [editingId, setEditingId] = useState<number | null>(null);
+  // The meeting card the reader has picked out; the rest recede behind it.
+  const [focusedMeetingId, setFocusedMeetingId] = useState<number | null>(null);
   const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
   // A follow-up the outcome change just created, waiting to be assigned.
   const [assignFollowUp, setAssignFollowUp] = useState<{ ids: number[]; meeting: Meeting; outcome: string } | null>(null);
@@ -1534,7 +1536,12 @@ export function MeetingsTable({
     // to repeat it. Same treatment as the follow-ups table.
     <tr
       key={m.id}
-      className={`align-top ${cardRowClass(selectedIds.has(m.id))}`}
+      onClick={e => { if (isCardBackgroundClick(e)) setFocusedMeetingId(cur => (cur === m.id ? null : m.id)); }}
+      className={`align-top ${cardRowClass(selectedIds.has(m.id), focusedMeetingId === m.id)} ${cardEmphasisClass({
+        focused: focusedMeetingId === m.id,
+        otherFocused: focusedMeetingId != null && focusedMeetingId !== m.id,
+        dimmed: false,
+      })}`}
     >
       {hasSelection && (
         <td className="p-0 py-2 w-0">
