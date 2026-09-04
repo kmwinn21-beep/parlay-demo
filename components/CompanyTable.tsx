@@ -18,6 +18,7 @@ import { INLINE_EDIT_FIELD_CLASS, InlineEditCancelButton, InlineEditRow, InlineE
 import { RepMultiSelect } from './RepMultiSelect';
 import { MultiSelectDropdown } from './MultiSelectDropdown';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
+import { buildCompanyFamilies, compareCompanies, entriesToCompanies } from '@/lib/companyFamilies';
 import { CustomColumnCell } from './CustomColumnCell';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
@@ -127,6 +128,13 @@ type SortDir = 'asc' | 'desc';
 const CONF_COUNT_OPTIONS = ['1', '2', '3', '4+'];
 const PAGE_SIZE = 100;
 
+/**
+ * Whether the reader wants companies gathered into families. Global rather than
+ * per-conference: it is a way of reading a list, not a fact about one
+ * conference, and re-choosing it on every conference would be the annoyance.
+ */
+const GROUPED_STORAGE_KEY = 'parlay-conference-companies-grouped';
+
 function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
   if (col !== sortKey) return <svg className="w-3 h-3 ml-1 text-gray-300 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" /></svg>;
   return sortDir === 'asc'
@@ -233,6 +241,22 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   // 'parent' = no parent_company_id (standalone or explicit parent)
   // 'child'  = has parent_company_id set
   const [filterHierarchy, setFilterHierarchy] = useState('');
+  /**
+   * Gather the rows into the families they belong to.
+   *
+   * Conference-scoped only: on the standalone companies page a family is not
+   * the unit anyone is reading, and the roll-ups would be account-wide rather
+   * than "at this conference", which is the only reading that makes them mean
+   * anything.
+   */
+  const [groupByParent, setGroupByParent] = useState(false);
+  /**
+   * What Parent/Child was set to before grouping took it away, so switching
+   * back restores the reader's filter rather than silently dropping it.
+   */
+  const [stashedHierarchy, setStashedHierarchy] = useState<string | null>(null);
+  /** Families the reader has folded up. Expanded is the default posture. */
+  const [collapsedFamilies, setCollapsedFamilies] = useState<Set<number>>(new Set());
   const [page, setPage] = useState(1);
   const [attendeesDrawerCompany, setAttendeesDrawerCompany] = useState<Company | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -308,7 +332,15 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
 
   useEffect(() => {
     setPage(1);
-  }, [search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, wseMin, wseMax, quickFilterIcp, quickFilterTypes, quickFilterMyAccounts]);
+  }, [search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, wseMin, wseMax, quickFilterIcp, quickFilterTypes, quickFilterMyAccounts, groupByParent]);
+
+  // Read once on mount rather than in a lazy initialiser: this renders on the
+  // server too, where localStorage does not exist.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(GROUPED_STORAGE_KEY) === 'true') setGroupByParent(true);
+    } catch { /* site data blocked */ }
+  }, []);
 
   const allConferenceNames = useMemo(() => {
     const names = new Set<string>();
@@ -379,19 +411,65 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
       const matchQuickMyAccounts = !quickFilterMyAccounts || (currentUser?.configId != null && parseRepIds(c.assigned_user).includes(currentUser.configId));
       return matchSearch && matchSFOwner && matchType && matchStatus && matchConf && matchConference && matchICP && matchWSE && matchUpdatedWithin && matchHierarchy && matchQuickIcp && matchQuickTypes && matchQuickMyAccounts;
     });
-    list.sort((a, b) => {
-      let aVal: string | number, bVal: string | number;
-      if (sortKey === 'status') { aVal = (a.status || '').toLowerCase(); bVal = (b.status || '').toLowerCase(); }
-      else { aVal = a[sortKey] ?? ''; bVal = b[sortKey] ?? ''; if (typeof aVal === 'string') aVal = aVal.toLowerCase(); if (typeof bVal === 'string') bVal = bVal.toLowerCase(); }
-      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
-      return 0;
-    });
+    // Same comparator the grouped view orders families and their members with,
+    // so the two views agree about what "sorted by name" means.
+    list.sort((a, b) => compareCompanies(a, b, sortKey, sortDir));
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localCompanies, search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, filterHierarchy, wseFilterActive, effectiveWseMin, effectiveWseMax, sortKey, sortDir, userScopedStatusMap, quickFilterIcp, quickFilterTypes, quickFilterMyAccounts]);
 
+  /**
+   * Grouping is offered on a conference only. `grouped` is the one flag the
+   * render reads — the stored preference is global, so a reader who turned it
+   * on for one conference does not have to turn it on for the next.
+   */
+  const groupingOffered = conferenceId != null;
+  const grouped = groupingOffered && groupByParent;
+
+  const families = useMemo(
+    () => buildCompanyFamilies(filtered, { sortKey, sortDir, parseRepIds }),
+    [filtered, sortKey, sortDir],
+  );
+
+  /**
+   * A page is 100 top-level entries rather than 100 companies, so a family
+   * cannot be cut in half by a page boundary: you cannot split a list whose
+   * elements are whole families. A page can therefore carry more than 100 rows,
+   * which costs nothing at the sizes a conference actually reaches.
+   */
+  const pageUnitCount = grouped ? families.entries.length : filtered.length;
+  const pagedEntries = useMemo(
+    () => families.entries.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [families, page],
+  );
+
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  /** The companies this page shows, in the order it shows them. */
+  const rowsToRender = grouped ? entriesToCompanies(pagedEntries) : paginated;
+
+  const isFamilyCollapsed = (key: number) => collapsedFamilies.has(key);
+  const toggleFamily = (key: number) => setCollapsedFamilies(prev => {
+    const next = new Set(prev);
+    next.has(key) ? next.delete(key) : next.add(key);
+    return next;
+  });
+
+  /**
+   * Turning grouping on takes the Parent/Child filter away — the two answer the
+   * same question, and every combination of them draws a family with its parent
+   * or its children filtered out of it. The filter is put back on the way out.
+   */
+  const setGrouped = useCallback((next: boolean) => {
+    setGroupByParent(next);
+    try { localStorage.setItem(GROUPED_STORAGE_KEY, next ? 'true' : 'false'); } catch { /* site data blocked */ }
+    if (next) {
+      setStashedHierarchy(filterHierarchy);
+      setFilterHierarchy('');
+    } else {
+      if (stashedHierarchy) setFilterHierarchy(stashedHierarchy);
+      setStashedHierarchy(null);
+    }
+  }, [filterHierarchy, stashedHierarchy]);
 
   const toggleSelect = (id: number) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const selectedCompanies = localCompanies.filter(c => selectedIds.has(c.id));
@@ -972,7 +1050,14 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         </div>
       )}
 
-      <p className="text-xs text-gray-500 mb-3">Showing {filtered.length} of {localCompanies.length} companies{selectedIds.size > 0 && ` · ${selectedIds.size} selected`}</p>
+      {/* Companies stay the unit here — it is what anyone counting is counting.
+          The pager below counts entries, so the family count is named alongside
+          rather than left to be inferred from two numbers that disagree. */}
+      <p className="text-xs text-gray-500 mb-3">
+        Showing {filtered.length} of {localCompanies.length} companies
+        {grouped && families.familyCount > 0 && ` · ${families.familyCount} ${families.familyCount === 1 ? 'family' : 'families'}`}
+        {selectedIds.size > 0 && ` · ${selectedIds.size} selected`}
+      </p>
 
       <div className="lg:rounded-xl lg:border lg:border-gray-200 lg:overflow-hidden">
         {/* Mobile card layout */}
@@ -981,7 +1066,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         <div className="block lg:hidden -mx-6">
           {filtered.length === 0 ? (
             <div className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</div>
-          ) : <MobileCardList>{paginated.map(company => (
+          ) : <MobileCardList>{rowsToRender.map(company => (
             <MobileCard key={company.id}>
             <div
               className={`px-4 py-4 transition-opacity ${selectedIds.has(company.id) ? 'bg-blue-50' : 'bg-white'} ${
@@ -1221,7 +1306,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
             <tbody>
               {filtered.length === 0 ? (
                 <tr><td colSpan={1 + (['name','type','sfowner','status','attendees','conferences','wse','updated_on','relationships'] as const).filter(k => isVisible(k)).length + customColumns.filter(c => c.visible).length + (rowAction ? 1 : 0) + (conferenceId != null ? 1 : 0)} className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</td></tr>
-              ) : paginated.map(company => {
+              ) : rowsToRender.map(company => {
                 const rowSelected = selectedIds.has(company.id);
                 // Frozen cells need a background of their own — the row's
                 // paints behind them, not through them — so the selected and
@@ -1440,14 +1525,16 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         </div>
       </div>
 
-      {filtered.length > PAGE_SIZE && (
+      {/* Paged in whatever the current view's top-level unit is: companies when
+          flat, families-and-leftovers when grouped. */}
+      {pageUnitCount > PAGE_SIZE && (
         <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
           <span className="text-xs text-gray-500">
-            Page {page} of {Math.ceil(filtered.length / PAGE_SIZE)} · {filtered.length} total
+            Page {page} of {Math.ceil(pageUnitCount / PAGE_SIZE)} · {pageUnitCount} total
           </span>
           <div className="flex items-center gap-2">
             <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Previous</button>
-            <button disabled={page >= Math.ceil(filtered.length / PAGE_SIZE)} onClick={() => setPage(p => p + 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Next</button>
+            <button disabled={page >= Math.ceil(pageUnitCount / PAGE_SIZE)} onClick={() => setPage(p => p + 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Next</button>
           </div>
         </div>
       )}
