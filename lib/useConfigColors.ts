@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { buildColorMap, type ColorMap } from '@/lib/colors';
-import { getConfig } from '@/lib/configCache';
+import { getConfig, invalidateConfigCache } from '@/lib/configCache';
 
 interface ConfigOption {
   id: number;
@@ -48,7 +48,14 @@ export function useConfigColors(): Record<string, ColorMap> {
   return maps;
 }
 
-/** Invalidate the cache (call after admin panel saves a color) */
+/**
+ * Invalidate the cache (call after admin panel saves a color).
+ *
+ * Clears the shared /api/config entry as well: these maps are derived from it,
+ * so dropping them alone just re-derives the same colours from the cached
+ * response.
+ */
 export function invalidateConfigColors() {
   globalCache = null;
+  invalidateConfigCache();
 }
