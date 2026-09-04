@@ -597,11 +597,11 @@ export default function ConferenceDetailPage() {
 
   // Open field report drawer if ?fieldreport=true is in the URL
   useEffect(() => {
-    if (searchParams.get('fieldreport') === 'true' && isInternalAttendee) {
+    if (searchParams.get('fieldreport') === 'true') {
       setShowDebrief(true);
       window.history.replaceState(null, '', window.location.pathname);
     }
-  }, [searchParams, isInternalAttendee]);
+  }, [searchParams]);
 
   // Fetch snapshot + YoY data when executive brief opens
   useEffect(() => {
@@ -2554,7 +2554,10 @@ export default function ConferenceDetailPage() {
                           it. Both stay below the drawers and modals at z-50. */}
                       <div className="fixed inset-0 z-30" onClick={() => setReportMenuOpen(false)} />
                       <div className="absolute top-full right-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-100 py-1.5 z-40">
-                        {isInternalAttendee && (
+                        {/* The field report is open to everyone on the account,
+                            not only the reps listed as internal attendees —
+                            reading what happened at a conference is not the
+                            same as having been sent to it. */}
                         <button
                           type="button"
                           onClick={() => { setShowDebrief(true); setReportMenuOpen(false); }}
@@ -2569,7 +2572,6 @@ export default function ConferenceDetailPage() {
                           </svg>
                           Field Report
                         </button>
-                        )}
                         {isInternalAttendee && (
                         <button
                           type="button"
@@ -2612,8 +2614,10 @@ export default function ConferenceDetailPage() {
                             Export CRM Files
                           </button>
                         )}
-                        {/* The header's own actions, kept apart from the reports */}
-                        {isInternalAttendee && <div className="my-1 border-t border-gray-100" />}
+                        {/* The header's own actions, kept apart from the
+                            reports. The field report is always above this line,
+                            so the divider always has something to divide. */}
+                        <div className="my-1 border-t border-gray-100" />
                         <button
                           type="button"
                           onClick={() => window.location.reload()}
