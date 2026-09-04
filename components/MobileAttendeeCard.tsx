@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { ScrollRow } from '@/components/ScrollRow';
 import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
 import { NotesPopover } from '@/components/NotesPopover';
+import { EntityStructureIcon } from '@/components/EntityStructureIcon';
 import { getBadgeClass, formatStatusLabel, getPreset } from '@/lib/colors';
 import { effectiveSeniority } from '@/lib/parsers';
 import { parseRepIds, getRepInitials, type UserOption } from '@/lib/useUserOptions';
@@ -22,6 +23,8 @@ export interface AttendeeCardRow {
   company_id?: number | null;
   company_name?: string | null;
   company_type?: string | null;
+  /** 'Parent' | 'Child' on the attendee's company — drawn inside the type pill. */
+  company_entity_structure?: string | null;
   company_assigned_user?: string | null;
   conference_count?: number | string | null;
   conference_names?: string | null;
@@ -204,7 +207,9 @@ export function MobileAttendeeCard({
             </span>
           ))}
         {attendee.company_type && (
-          <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs flex-shrink-0 whitespace-nowrap`}>{attendee.company_type}</span>
+          <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs flex-shrink-0 whitespace-nowrap inline-flex items-center gap-1`}>
+            <EntityStructureIcon structure={attendee.company_entity_structure} />{attendee.company_type}
+          </span>
         )}
         {statuses.map(s => (
           <span key={s} className={`${getBadgeClass(s, colorMaps.status || {})} flex-shrink-0 whitespace-nowrap`}>{formatStatusLabel(s)}</span>

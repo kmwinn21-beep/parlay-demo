@@ -24,6 +24,7 @@ import { AttendeeSearchSelect, type AttendeeSearchRow } from '@/components/Atten
 import { ConfirmAddAttendeeDialog } from '@/components/ConfirmAddAttendeeDialog';
 import { INLINE_EDIT_FIELD_CLASS, InlineEditRow, InlineEditPlaceholder } from '@/components/InlineEditField';
 import { CompanyTable } from '@/components/CompanyTable';
+import { EntityStructureIcon } from '@/components/EntityStructureIcon';
 import { SocialEventsTable, type SocialEvent } from '@/components/SocialEventsTable';
 import { BackButton } from '@/components/BackButton';
 import { TargetToggleButton } from '@/components/TargetToggleButton';
@@ -96,6 +97,8 @@ interface Attendee {
   company_wse?: number;
   company_icp?: string;
   company_assigned_user?: string;
+  /** 'Parent' | 'Child' on the attendee's company — drawn inside the type pill. */
+  company_entity_structure?: string | null;
   email?: string;
   status?: string;
   seniority?: string;
@@ -3642,7 +3645,7 @@ export default function ConferenceDetailPage() {
                                 </InlineEditRow>
                               ) : (
                                 <button type="button" onClick={() => startInlineEdit(attendee, 'company_type')} title="Click to set type">
-                                  {attendee.company_type ? (<span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs`}>{attendee.company_type}</span>) : <InlineEditPlaceholder label="Type" />}
+                                  {attendee.company_type ? (<span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs inline-flex items-center gap-1`}><EntityStructureIcon structure={attendee.company_entity_structure} />{attendee.company_type}</span>) : <InlineEditPlaceholder label="Type" />}
                                 </button>
                               )}
                             </td>
