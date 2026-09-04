@@ -36,7 +36,12 @@ export function ConferenceTimelineDialog({ attendee, onClose }: {
       onClick={onClose}
     >
       <div
-        className="modal-sheet-mobile bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[85vh] flex flex-col"
+        /* On a phone the sheet is a fixed 90vh — the same height the attendee
+           and company drawers rise to. Sized to its contents it barely cleared
+           the bottom edge for someone with two conferences, which read as a
+           glitch rather than as a panel. On a desktop the dialog still takes
+           only the room it needs. */
+        className="modal-sheet-mobile bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl h-[90vh] sm:h-auto sm:max-h-[85vh] flex flex-col"
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
