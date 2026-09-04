@@ -15,6 +15,7 @@ import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { MatchMasterAccountField, type MasterAccountApplyPatch } from '@/components/MatchMasterAccountField';
 import { useConfigColors } from '@/lib/useConfigColors';
+import { useConfigOptions } from '@/lib/useConfigOptions';
 import { getPillClass, getBadgeClass, getPreset, formatStatusLabel} from '@/lib/colors';
 import { effectiveSeniority } from '@/lib/parsers';
 import { evaluateIcpRules, type IcpConfig } from '@/lib/icpRulesEval';
@@ -114,15 +115,34 @@ function normalizeIcpValue(raw: string | null | undefined, options: string[]): s
  * parent/child glyphs the companies table puts on its company-type pill, so
  * the two readings of the relationship look like the same thing.
  */
-function EntityDesignationPill({ designation }: { designation: 'Parent' | 'Child' }) {
+/**
+ * What a related company is to this one, named and coloured by the account's
+ * own Entity Structure options.
+ *
+ * The designation itself is derived from the links rather than chosen — a
+ * company is the child one if it has a parent, the parent one if it has
+ * children — so the two config options are resolved positionally: the first is
+ * what a parent is called here, the second what a child is called. An exact
+ * match on the seeded names wins where they are still in use, so reordering
+ * the list doesn't silently swap the two.
+ */
+function resolveEntityDesignation(options: string[] | undefined, canonical: 'Parent' | 'Child'): string {
+  const list = options ?? [];
+  const exact = list.find(o => o.trim().toLowerCase() === canonical.toLowerCase());
+  if (exact) return exact;
+  return list[canonical === 'Parent' ? 0 : 1] ?? canonical;
+}
+
+function EntityDesignationPill({ designation, label, colorMap }: {
+  /** Which end of the link this is — not the text, which the account names. */
+  designation: 'Parent' | 'Child';
+  label: string;
+  colorMap: Record<string, string | null>;
+}) {
   const isParent = designation === 'Parent';
   return (
     <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${
-        isParent
-          ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-          : 'bg-teal-50 text-teal-700 border-teal-200'
-      }`}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getPreset(colorMap[label]).badgeClass}`}
     >
       <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         {isParent ? (
@@ -131,7 +151,7 @@ function EntityDesignationPill({ designation }: { designation: 'Parent' | 'Child
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4" />
         )}
       </svg>
-      {designation}
+      {label}
     </span>
   );
 }
@@ -181,6 +201,10 @@ export default function CompanyDetailPage() {
   const parentOfChild = useSearchParams().get('parent_of');
   const id = params.id as string;
   const colorMaps = useConfigColors();
+  // Named by the account: the Related Entities pills read their labels from
+  // Entity Structure rather than saying "Parent"/"Child" whatever it is called
+  // here. Values come back ordered by sort_order.
+  const entityStructureOptions = useConfigOptions().entity_structure;
   const { getLabel: getSectionLabel, orderedKeys: sectionOrder, isVisible: isSectionVisible } = useSectionConfig('company');
   const unitTypeLabel = useUnitTypeLabel();
   const { planCapabilities } = useCapabilities();
@@ -1821,7 +1845,11 @@ export default function CompanyDetailPage() {
                               {rel.company_type && (
                                 <span className={`${getBadgeClass(rel.company_type, colorMaps.company_type || {})} text-xs`}>{rel.company_type}</span>
                               )}
-                              <EntityDesignationPill designation={rel.designation} />
+                              <EntityDesignationPill
+                                designation={rel.designation}
+                                label={resolveEntityDesignation(entityStructureOptions, rel.designation)}
+                                colorMap={colorMaps.entity_structure || {}}
+                              />
                             </div>
                           </div>
                           <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
