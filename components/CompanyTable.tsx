@@ -1547,34 +1547,6 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         <ScrollRow className="w-full lg:hidden" gapClass="gap-2">{filterButtons}</ScrollRow>
         <div className="hidden lg:contents">{filterButtons}</div>
 
-        {/* Offered only where it would do something: a conference whose
-            companies form no family has nothing to group. Kept on screen while
-            grouped even if a filter leaves no family standing, so the way back
-            to the flat view cannot disappear from under the reader. */}
-        {groupingOffered && (families.familyCount > 0 || grouped) && (
-          <div className="ml-auto inline-flex flex-shrink-0 rounded-lg border border-gray-200 overflow-hidden self-start">
-            {([
-              { key: 'flat' as const, label: 'Flat', path: 'M4 6h16M4 12h16M4 18h16' },
-              { key: 'grouped' as const, label: 'Grouped', path: 'M3 7h18M7 12h14M11 17h10' },
-            ]).map((opt, i) => (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => setGrouped(opt.key === 'grouped')}
-                title={opt.key === 'grouped' ? 'Group companies by parent company' : 'One row per company'}
-                aria-pressed={grouped === (opt.key === 'grouped')}
-                className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
-                  grouped === (opt.key === 'grouped') ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
-                }`}
-              >
-                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={opt.path} />
-                </svg>
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Bulk actions — one line under the toolbar, chevrons rather than a
@@ -1837,14 +1809,50 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         </div>
       )}
 
-      {/* Companies stay the unit here — it is what anyone counting is counting.
-          The pager below counts entries, so the family count is named alongside
-          rather than left to be inferred from two numbers that disagree. */}
-      <p className="text-xs text-gray-500 mb-3">
-        Showing {filtered.length} of {localCompanies.length} companies
-        {grouped && families.familyCount > 0 && ` · ${families.familyCount} ${families.familyCount === 1 ? 'family' : 'families'}`}
-        {selectedIds.size > 0 && ` · ${selectedIds.size} selected`}
-      </p>
+      {/* The count and the control that changes it, on one line. */}
+      <div className="flex items-center justify-between gap-3 mb-3">
+        {/* Companies stay the unit here — it is what anyone counting is
+            counting. The pager below counts entries, so the family count is
+            named alongside rather than left to be inferred from two numbers
+            that disagree. On a phone the sentence drops to its figures: the
+            column it heads says what is being counted. */}
+        <p className="text-xs text-gray-500 min-w-0">
+          <span className="hidden sm:inline">Showing </span>
+          {filtered.length} of {localCompanies.length}
+          <span className="hidden sm:inline"> companies</span>
+          {grouped && families.familyCount > 0 && ` · ${families.familyCount} ${families.familyCount === 1 ? 'family' : 'families'}`}
+          {selectedIds.size > 0 && ` · ${selectedIds.size} selected`}
+        </p>
+
+        {/* Offered only where it would do something: a conference whose
+            companies form no family has nothing to group. Kept on screen while
+            grouped even if a filter leaves no family standing, so the way back
+            to the single view cannot disappear from under the reader. */}
+        {groupingOffered && (families.familyCount > 0 || grouped) && (
+          <div className="inline-flex flex-shrink-0 rounded-lg border border-gray-200 overflow-hidden">
+            {([
+              { key: 'flat' as const, label: 'Single', path: 'M4 6h16M4 12h16M4 18h16' },
+              { key: 'grouped' as const, label: 'Grouped', path: 'M3 7h18M7 12h14M11 17h10' },
+            ]).map((opt, i) => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => setGrouped(opt.key === 'grouped')}
+                title={opt.key === 'grouped' ? 'Group companies by parent company' : 'One row per company'}
+                aria-pressed={grouped === (opt.key === 'grouped')}
+                className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
+                  grouped === (opt.key === 'grouped') ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={opt.path} />
+                </svg>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="lg:rounded-xl lg:border lg:border-gray-200 lg:overflow-hidden">
         {/* Mobile card layout */}
