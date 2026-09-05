@@ -542,6 +542,24 @@ Recorded here so a later session doesn't relitigate them.
 | 5 | **Pagination** — page size becomes **100 top-level entries** (a family counts as one). Pager reads the grouped length; `groupByParent` joins the `setPage(1)` dep list. |
 | 6 | **Selection** — the group checkbox includes the parent when present, and is derived (`checked` / `indeterminate` via ref callback). Pure display change; no bulk-action code touched. |
 | 7 | **Mobile** — group-header card followed by **indented** child cards. Collapse `Set` shared with desktop. |
-| 8 | **Default collapse** — families render **expanded**. Collapsing is the user's move. |
+| 8 | **Default collapse** — families render **collapsed**. Opening one is the user's move. (This reverses the decision as originally recorded here — the view shipped expanded, and was changed in a later pass because a page of open families buried the parentless companies below them.) |
 | 9 | **Count labels** — the "Showing N of M companies" line keeps counting companies and appends the family count, so the two units are visibly different. |
 | 10 | **Scope** — conference-scoped only (`conferenceId != null`). The standalone `/companies` page does not get the view. |
+
+---
+
+## 8. Known defects, logged not fixed
+
+Found while surveying the **Attendees** table of the same page ahead of its own
+grouped view. None is caused by the grouping work and none is fixed by it; they
+are recorded so the next cleanup pass has them in one place rather than
+rediscovering them. The first three are the same class as the `tableColSpan`
+omission and the `setPage(1)` dependency gap already fixed on the Companies
+side, which suggests the pass should sweep every table rather than one.
+
+| # | Where | Defect |
+|---|---|---|
+| A | `lib/useTableColumnConfig.ts:154` | The `value` column is registered for `conference_attendees` but has no `case 'value'` in either the header or the row `switch` in `app/conferences/[id]/page.tsx`. Enabling it in column settings renders a header-less, cell-less column — the toggle appears to do nothing. |
+| B | `app/conferences/[id]/page.tsx:484` | `colWidths` carries a `title: 160` entry that no column reads. The title moved under the name and became part of the Name cell; the width entry was left behind. |
+| C | `app/conferences/[id]/page.tsx:1590` | The `setAttendeePage(1)` effect omits `sortKey`, `sortDir` and `quickFilterPlaceholders` from its dependency list. Re-sorting, or toggling the placeholder quick-filter, leaves the reader on a page of a list that reordered underneath them. |
+| D | `lib/entityStructureLabels.ts` | `resolveEntityDesignation` is purely positional — the first Entity Structure option means parent, the second means child, whatever they are named. This is deliberate and documented in the file, and the alternative (matching on the words "Parent"/"Child") is worse. But the consequence is real: dragging those two options into a different order in admin silently swaps every parent/child label in the app, with nothing on screen saying so. Admin marks which row is which; it does not warn on reorder. |
