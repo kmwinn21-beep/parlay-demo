@@ -905,10 +905,12 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                     drawn everywhere else. The glyph stays keyed to the role
                     rather than the label — it says which end of the link this
                     is, whatever the link's ends are called here. */}
-                {/* h-3 with no vertical padding: at 10px with leading-none the
-                    text is exactly the 12px the box allows, so the pill sits as
-                    a marker beside the name rather than as another badge. */}
-                <span className={`inline-flex items-center gap-1 h-3 px-1.5 leading-none rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.entity_structure?.[parentLabel]).badgeClass}`}>
+                {/* Built to the units pill's box rather than to a number: the
+                    same py-0.5 over a 16px line box, so the two stand the same
+                    height even though this one's text is smaller. Pinning a
+                    pixel height here instead would drift the moment that pill's
+                    padding changed. */}
+                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 leading-4 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.entity_structure?.[parentLabel]).badgeClass}`}>
                   <EntityStructureIcon structure="Parent" />
                   {parentLabel}
                 </span>
@@ -1389,10 +1391,12 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                     drawn everywhere else. The glyph stays keyed to the role
                     rather than the label — it says which end of the link this
                     is, whatever the link's ends are called here. */}
-                {/* h-3 with no vertical padding: at 10px with leading-none the
-                    text is exactly the 12px the box allows, so the pill sits as
-                    a marker beside the name rather than as another badge. */}
-                <span className={`inline-flex items-center gap-1 h-3 px-1.5 leading-none rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.entity_structure?.[parentLabel]).badgeClass}`}>
+                {/* Built to the units pill's box rather than to a number: the
+                    same py-0.5 over a 16px line box, so the two stand the same
+                    height even though this one's text is smaller. Pinning a
+                    pixel height here instead would drift the moment that pill's
+                    padding changed. */}
+                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 leading-4 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.entity_structure?.[parentLabel]).badgeClass}`}>
                   <EntityStructureIcon structure="Parent" />
                   {parentLabel}
                 </span>
