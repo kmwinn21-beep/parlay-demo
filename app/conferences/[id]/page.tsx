@@ -2355,6 +2355,38 @@ export default function ConferenceDetailPage() {
   const emptyGroupCell = (key: string) => <td key={key} className="px-4 py-3" />;
 
   /**
+   * The roll-up is a sentence, not a cell value.
+   *
+   * In the 120px Seniority column it broke over three lines, which on a group
+   * row is the widest thing there and sets the row's height — while every
+   * column to its right sits empty, because a family has no conference count
+   * or note of its own. So it takes them: one cell from Seniority to the last
+   * column before the actions, and the sentence gets to be one line.
+   *
+   * Derived from the live column order rather than a constant, since these
+   * columns are reorderable and hideable — "the ones after Seniority" is a
+   * different set for every reader. Nothing spans when Seniority is hidden.
+   */
+  const groupRollupColumns = (() => {
+    const shown = confAttendeeColumns.filter(
+      c => isConfAttendeeColVisible(c.key) && RENDERED_ATTENDEE_COLUMNS.has(c.key),
+    );
+    const at = shown.findIndex(c => c.key === 'seniority');
+    if (at === -1) return { span: 0, suppressed: new Set<string>() };
+    return {
+      span: (shown.length - at) + customColumns.filter(c => c.visible).length,
+      suppressed: new Set(shown.slice(at + 1).map(c => c.key)),
+    };
+  })();
+
+  /** The roll-up's cell, and the empty ones it has swallowed. */
+  const groupRollupCell = (rollup: SeniorityRollup) => (
+    <td key="seniority" className="px-4 py-3" colSpan={groupRollupColumns.span || undefined}>
+      {renderSeniorityRollup(rollup)}
+    </td>
+  );
+
+  /**
    * A family's own row — tier 1.
    *
    * Styled as the Companies tab styles its group rows, because it is the same
@@ -2433,13 +2465,16 @@ export default function ConferenceDetailPage() {
                 ) : null}
               </td>
             );
-            case 'seniority': return (
-              <td key="seniority" className="px-4 py-3">{renderSeniorityRollup(family.seniority)}</td>
-            );
-            default: return emptyGroupCell(col.key);
+            case 'seniority': return groupRollupCell(family.seniority);
+            // Nothing for a column that draws no cell on a person's row
+            // either: `value` is registered for this table and rendered by
+            // neither switch, and an empty cell for it here would put one more
+            // column on a group row than the header has.
+            default: return groupRollupColumns.suppressed.has(col.key) || !RENDERED_ATTENDEE_COLUMNS.has(col.key)
+              ? null : emptyGroupCell(col.key);
           }
         })}
-        {customColumns.filter(c => c.visible).map(col => emptyGroupCell(`custom_${col.id}`))}
+        {groupRollupColumns.span === 0 && customColumns.filter(c => c.visible).map(col => emptyGroupCell(`custom_${col.id}`))}
         <td className="px-2 py-3 sticky right-0 z-10" style={{ width: 76 }} />
       </tr>
     );
@@ -2523,13 +2558,16 @@ export default function ConferenceDetailPage() {
                 ) : null}
               </td>
             );
-            case 'seniority': return (
-              <td key="seniority" className="px-4 py-3">{renderSeniorityRollup(node.seniority)}</td>
-            );
-            default: return emptyGroupCell(col.key);
+            case 'seniority': return groupRollupCell(node.seniority);
+            // Nothing for a column that draws no cell on a person's row
+            // either: `value` is registered for this table and rendered by
+            // neither switch, and an empty cell for it here would put one more
+            // column on a group row than the header has.
+            default: return groupRollupColumns.suppressed.has(col.key) || !RENDERED_ATTENDEE_COLUMNS.has(col.key)
+              ? null : emptyGroupCell(col.key);
           }
         })}
-        {customColumns.filter(c => c.visible).map(col => emptyGroupCell(`custom_${col.id}`))}
+        {groupRollupColumns.span === 0 && customColumns.filter(c => c.visible).map(col => emptyGroupCell(`custom_${col.id}`))}
         <td className="px-2 py-3 sticky right-0 z-10" style={{ width: 76 }} />
       </tr>
     );
