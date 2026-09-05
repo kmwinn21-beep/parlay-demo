@@ -1614,7 +1614,7 @@ export default function ConferenceDetailPage() {
     await doUpload(pendingMapping, resolutions);
   };
 
-  useEffect(() => { setAttendeePage(1); }, [attendeeSearch, filterSeniority, filterCompanyType, filterStatus, filterConfCounts, filterUpdatedWithin, filterNeedsReview, quickFilterIcp, quickFilterTypes, quickFilterMyAccounts]);
+  useEffect(() => { setAttendeePage(1); }, [attendeeSearch, filterSeniority, filterCompanyType, filterStatus, filterConfCounts, filterUpdatedWithin, filterNeedsReview, quickFilterIcp, quickFilterTypes, quickFilterMyAccounts, attendeesGrouped]);
 
   const CONF_COUNT_OPTIONS = ['1', '2', '3', '4+'];
   const toggleConfFilter = (val: string) => {
@@ -1732,7 +1732,20 @@ export default function ConferenceDetailPage() {
   // Two tiers of container above the person: a family's tint, a company's rule.
   // A person and a building must not read as the same object at two depths, so
   // the indents are only half of what separates them.
-  const GROUP_COMPANY_INDENT = 24;
+  //
+  // THESE ARE TUNED FOR WHERE THE TEXT LANDS, NOT FOR THE BOX THAT HOLDS IT.
+  // A tier's chrome sits between its container and its first character — the
+  // company tier spends 3px of rule plus its padding — so a tier that adds
+  // chrome and keeps its number moves its text right and can overtake the tier
+  // below it. That is exactly what happened here: 24 and 48 put the person's
+  // name five pixels LEFT of the company's, because the company's rule and
+  // chevron spent thirty-one pixels the person's row did not. The chevron now
+  // hangs in the rule's gutter instead of pushing the text.
+  //
+  // Measured optical positions from the Name cell's left edge, which is what
+  // any change here has to preserve: family 36px, company 55px, person 64px.
+  // If you add anything before a tier's text, re-measure all three.
+  const GROUP_COMPANY_INDENT = 20;
   const GROUP_ATTENDEE_INDENT = 48;
 
   const attendeeParentLabel = resolveEntityDesignation(allConfigOptions.entity_structure, 'Parent');
@@ -1799,9 +1812,15 @@ export default function ConferenceDetailPage() {
 
   // The companies fetch belongs to the Companies tab; grouping is the second
   // thing that needs it. It self-guards, so this asks at most once.
+  //
+  // It has to run on the attendees tab whether or not grouping is on, because
+  // the control that turns grouping on is only offered where there are
+  // families to group — and nothing on an attendee row says whether its company
+  // has a parent. Fetching only once grouping was on made the control appear
+  // only after it had been used, which is to say never.
   useEffect(() => {
-    if (attendeesGrouped) loadCompanies();
-  }, [attendeesGrouped, loadCompanies]);
+    if (attendeesGrouped || activeTab === 'attendees') loadCompanies();
+  }, [attendeesGrouped, activeTab, loadCompanies]);
 
   // Without companies there are no parents, and a grouped view with no parents
   // is an empty screen that looks broken rather than one that failed. Say so
@@ -1813,6 +1832,21 @@ export default function ConferenceDetailPage() {
   }, [attendeesGrouped, companiesLoadFailed]);
 
   const attendeeGroupingLoading = attendeesGrouped && isLoadingCompanies && !companiesLoaded;
+
+  /**
+   * Switching views changes only the view.
+   *
+   * The selection, the sort and the search are the reader's, not the layout's,
+   * so nothing here touches them — the same people stay picked across a toggle
+   * and the same order survives it.
+   */
+  const setAttendeesGroupedView = useCallback((next: boolean) => {
+    setAttendeesGrouped(next);
+    try { localStorage.setItem(ATTENDEES_GROUPED_KEY, next ? 'true' : 'false'); } catch { /* site data blocked */ }
+    // Every arrival starts from the accounts themselves rather than from
+    // whatever the last visit was left holding open.
+    if (next) setAttendeeCollapse(EMPTY_COLLAPSE_STATE);
+  }, []);
 
   if (isLoading) {
     return (
@@ -2171,14 +2205,19 @@ export default function ConferenceDetailPage() {
           switch (col.key) {
             case 'name': return (
               <td key="name" className="px-4 py-3 sticky z-10" style={{ left: attendeeNameStickyLeft }}>
-                <div style={{ marginLeft: GROUP_COMPANY_INDENT }} className="border-l-[3px] border-brand-primary/35 pl-2">
+                <div style={{ marginLeft: GROUP_COMPANY_INDENT }} className="border-l-[3px] border-brand-primary/35 pl-4">
+                  {/* The chevron hangs in the padding beside the rule rather
+                      than sitting in the text's way. In the flow it would push
+                      every character right by its own width plus a gap, which
+                      is what put this tier's text to the right of the tier
+                      below it. */}
                   <button
                     type="button"
                     onClick={() => setAttendeeCollapse(s => toggleCompany(s, node.companyId))}
                     aria-expanded={expanded}
-                    className="flex items-start gap-1.5 min-w-0 w-full text-left"
+                    className="relative flex items-start min-w-0 w-full text-left"
                   >
-                    <svg className={`w-3 h-3 flex-shrink-0 mt-1 text-gray-400 transition-transform ${expanded ? '' : '-rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className={`absolute left-[-14px] top-1 w-3 h-3 flex-shrink-0 text-gray-400 transition-transform ${expanded ? '' : '-rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                     <span className="min-w-0">
@@ -4039,7 +4078,60 @@ export default function ConferenceDetailPage() {
             </div>
           )}
 
-          {filteredAttendees.length === 0 ? (
+          {/* The count and the control that changes it, on one line. */}
+          <div className="flex items-center justify-between gap-3 mb-3">
+            {/* People stay the unit: it is what anyone counting this table is
+                counting. Grouped, the two containers above them are named
+                alongside rather than left to be inferred. A selection made by
+                one tick on a family is fifteen people, so it says so — silence
+                there is how someone deletes more than they meant to. On a
+                phone the sentence drops to its figures. */}
+            <p className="text-xs text-gray-500 min-w-0">
+              <span className="hidden sm:inline">Showing </span>
+              {filteredAttendees.length} of {(conference?.attendees ?? []).length}
+              <span className="hidden sm:inline"> attendees</span>
+              {attendeesGrouped && ` · ${attendeeGroups.companyCount} ${attendeeGroups.companyCount === 1 ? 'company' : 'companies'}`}
+              {attendeesGrouped && attendeeGroups.familyCount > 0 && ` · ${attendeeGroups.familyCount} ${attendeeGroups.familyCount === 1 ? 'family' : 'families'}`}
+              {selectedAttendeeIds.size > 0 && ` · ${selectedAttendeeIds.size} selected`}
+            </p>
+
+            {/* Offered only where it would do something: a conference whose
+                companies form no family has nothing to group. Kept on screen
+                while grouped even if a filter leaves no family standing, so
+                the way back cannot disappear from under the reader. */}
+            {(attendeeGroups.familyCount > 0 || attendeesGrouped) && (
+              <div className="inline-flex flex-shrink-0 rounded-lg border border-gray-200 overflow-hidden">
+                {([
+                  { key: 'flat' as const, label: 'Single', path: 'M4 6h16M4 12h16M4 18h16' },
+                  { key: 'grouped' as const, label: 'Grouped', path: 'M3 7h18M7 12h14M11 17h10' },
+                ]).map((opt, i) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setAttendeesGroupedView(opt.key === 'grouped')}
+                    title={opt.key === 'grouped' ? 'Group attendees by company and parent company' : 'One row per attendee'}
+                    aria-pressed={attendeesGrouped === (opt.key === 'grouped')}
+                    className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
+                      attendeesGrouped === (opt.key === 'grouped') ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                    }`}
+                  >
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={opt.path} />
+                    </svg>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {attendeeGroupingLoading ? (
+            // The companies arrive on their own schedule the first time. An
+            // empty grouped table for that second reads as a broken one.
+            <div className="flex justify-center py-12">
+              <div className="animate-spin w-6 h-6 border-4 border-brand-secondary border-t-transparent rounded-full" />
+            </div>
+          ) : filteredAttendees.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-gray-400 text-sm">
                 {attendeeSearch ? 'No attendees match your search.' : 'No attendees for this conference yet.'}
@@ -4149,12 +4241,12 @@ export default function ConferenceDetailPage() {
           )}
 
           {/* Pagination */}
-          {attendeeTotalPages > 1 && (
+          {effectiveAttendeeTotalPages > 1 && (
             <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100">
-              <span className="text-xs text-gray-500">Page {attendeePage} of {attendeeTotalPages} · {filteredAttendees.length} total</span>
+              <span className="text-xs text-gray-500">Page {attendeePage} of {effectiveAttendeeTotalPages} · {attendeesGrouped ? `${attendeeGroups.entries.length} ${attendeeGroups.entries.length === 1 ? 'entry' : 'entries'}` : `${filteredAttendees.length} total`}</span>
               <div className="flex items-center gap-2">
                 <button disabled={attendeePage === 1} onClick={() => setAttendeePage(p => p - 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Previous</button>
-                <button disabled={attendeePage >= attendeeTotalPages} onClick={() => setAttendeePage(p => p + 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Next</button>
+                <button disabled={attendeePage >= effectiveAttendeeTotalPages} onClick={() => setAttendeePage(p => p + 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Next</button>
               </div>
             </div>
           )}
