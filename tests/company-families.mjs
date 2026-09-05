@@ -184,10 +184,20 @@ console.log('\n— what the account calls a parent and a child —');
     resolveEntityDesignation(['Holding Co', 'Subsidiary'], 'Parent'),
     resolveEntityDesignation(['Holding Co', 'Subsidiary'], 'Child'),
   ], ['Holding Co', 'Subsidiary']);
-  eq('reordering does not swap the seeded names', [
+  // Position decides, not the words: admin shows which row is which and lets
+  // them be dragged, so the order on screen has to be the order that counts.
+  eq('order decides, even when the words say otherwise', [
     resolveEntityDesignation(['Child', 'Parent'], 'Parent'),
     resolveEntityDesignation(['Child', 'Parent'], 'Child'),
-  ], ['Parent', 'Child']);
+  ], ['Child', 'Parent']);
+  eq('a half-renamed pair still follows the order', [
+    resolveEntityDesignation(['Holding Co', 'Child'], 'Parent'),
+    resolveEntityDesignation(['Holding Co', 'Child'], 'Child'),
+  ], ['Holding Co', 'Child']);
+  eq('one option configured leaves the other canonical', [
+    resolveEntityDesignation(['Holding Co'], 'Parent'),
+    resolveEntityDesignation(['Holding Co'], 'Child'),
+  ], ['Holding Co', 'Child']);
   eq('nothing configured falls back to the canonical words', [
     resolveEntityDesignation(undefined, 'Parent'),
     resolveEntityDesignation([], 'Child'),

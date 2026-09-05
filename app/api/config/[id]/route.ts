@@ -41,9 +41,15 @@ export async function PUT(
     const category = String(existing.rows[0].category);
     const isSystem = Number(existing.rows[0].is_system) === 1;
 
-    // Company type and products display names are always editable.
-    // For all other system-seeded categories, the value is locked.
-    if (isSystem && value !== oldValue && category !== 'company_type' && category !== 'products' && category !== 'product_category') {
+    // Company type and products display names are always editable, and so is
+    // Entity Structure: nothing matches those two options by name — which one
+    // means parent and which means child is decided by their order — so an
+    // account can call them whatever it calls them. For the remaining
+    // system-seeded categories the code does match on the value, and renaming
+    // one would quietly break that match.
+    if (isSystem && value !== oldValue
+        && category !== 'company_type' && category !== 'products'
+        && category !== 'product_category' && category !== 'entity_structure') {
       return NextResponse.json({ error: 'System options cannot be renamed.' }, { status: 403 });
     }
 
@@ -97,6 +103,17 @@ export async function PUT(
                   AND rule_id IN (SELECT id FROM icp_rules WHERE category = 'company_type')`,
             args: [value, oldValue],
           }).catch(() => {});
+        } else if (category === 'entity_structure') {
+          // companies.entity_structure is derived from the parent/child links on
+          // every read, so renaming the stored literals there would be undone
+          // immediately and is not attempted. ICP rules do match the stored
+          // value, though, so those follow the rename.
+          await db.execute({
+            sql: `UPDATE icp_rule_conditions SET option_value = ?
+                  WHERE option_value = ?
+                  AND rule_id IN (SELECT id FROM icp_rules WHERE category = 'entity_structure')`,
+            args: [value, oldValue],
+          });
         } else if (category === 'profit_type') {
           await db.execute({
             sql: 'UPDATE companies SET profit_type = ? WHERE profit_type = ?',

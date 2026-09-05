@@ -180,6 +180,17 @@ h1, h2, h3 {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* A family's rows arriving when it is opened. Further and slower than the
+   meetings regroup above, because this one has to read as the family unfolding
+   rather than as a repaint — the rows drop in from behind the header they
+   belong to. Callers stagger them by a few frames each so a family unrolls
+   instead of appearing all at once, and use `backwards` so a row waiting its
+   turn stays hidden rather than flashing at full opacity first. */
+@keyframes groupRowIn {
+  from { opacity: 0; transform: translateY(-14px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 /* Hide scrollbar utility */
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }

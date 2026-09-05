@@ -819,7 +819,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
    * suppresses what the group row above it already says: the parent name,
    * and the parent/child glyph in the type pill.
    */
-  const renderCompanyRow = (company: Company, opts?: { inFamily?: boolean; isFamilyParent?: boolean }) => {
+  const renderCompanyRow = (company: Company, opts?: { inFamily?: boolean; isFamilyParent?: boolean; index?: number }) => {
     const inFamily = !!opts?.inFamily;
     const isFamilyParent = !!opts?.isFamilyParent;
     const rowSelected = selectedIds.has(company.id);
@@ -841,6 +841,12 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
          beside it. The child selector outranks the py-3 on each cell without
          needing to shout about it. */
       className={`group ${cardRowClass(rowSelected, focused)} ${cardEmphasisClass({ focused, otherFocused: focusedCompanyId != null && !focused, dimmed })} ${inFamily ? '[&>td]:py-1.5' : ''}`}
+      /* Only the rows inside a family, and only as they arrive: a family's rows
+         exist just while it is open, so this runs on the open and not again
+         while it stays open. The stagger is capped so a family of twenty
+         unrolls at the same pace as a family of three rather than taking most
+         of a second to finish. */
+      style={inFamily ? { animation: 'groupRowIn 300ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards', animationDelay: `${Math.min(opts?.index ?? 0, 6) * 55}ms` } : undefined}
     >
       <td className="py-3 sticky left-0 z-10" style={{ width: selWidth }}><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-brand-secondary ml-3" /></td>
       {orderedColumns.map(col => {
@@ -894,9 +900,14 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 name, which without this reads as the same row drawn twice. */}
             {isFamilyParent && (
               <p className="mt-1">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-300 whitespace-nowrap">
+                {/* The word and the colour both belong to the account: this is
+                    its Entity Structure option, drawn the way that option is
+                    drawn everywhere else. The glyph stays keyed to the role
+                    rather than the label — it says which end of the link this
+                    is, whatever the link's ends are called here. */}
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.entity_structure?.[parentLabel]).badgeClass}`}>
                   <EntityStructureIcon structure="Parent" />
-                  Parent
+                  {parentLabel}
                 </span>
               </p>
             )}
@@ -1137,7 +1148,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                     {/* Where the people here came from, not how many company
                         records the family has. One figure could not say whether
                         anyone from the parent came at all. */}
-                    <p className="text-[10px] text-gray-500 mt-0.5">
+                    <p className="text-[10px] font-semibold text-gray-500 mt-0.5">
                       {family.rollup.parentAttendees} {parentLabel} · {family.rollup.childAttendees} {childLabel} Attendees
                     </p>
                   </div>
@@ -1274,9 +1285,10 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         return (
           <React.Fragment key={`family-${entry.key}`}>
             {renderGroupRow(entry)}
-            {!isFamilyCollapsed(entry.key) && entry.all.map(c => renderCompanyRow(c, {
+            {!isFamilyCollapsed(entry.key) && entry.all.map((c, i) => renderCompanyRow(c, {
               inFamily: true,
               isFamilyParent: c.id === entry.parent?.id,
+              index: i,
             }))}
           </React.Fragment>
         );
@@ -1308,7 +1320,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
    * merged with the desktop one: a card and a row share their pills and
    * nothing else.
    */
-  const renderCompanyCard = (company: Company, opts?: { inFamily?: boolean; isFamilyParent?: boolean }) => {
+  const renderCompanyCard = (company: Company, opts?: { inFamily?: boolean; isFamilyParent?: boolean; index?: number }) => {
     const inFamily = !!opts?.inFamily;
     const isFamilyParent = !!opts?.isFamilyParent;
     return (
@@ -1316,7 +1328,11 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
        An indent alone is easy to miss at this width — a card and a slightly
        narrower card are nearly the same object; the rule says the run belongs
        to the header above it. */
-    <MobileCard key={company.id} className={inFamily ? 'ml-4 border-l-[3px] border-l-brand-primary/20' : ''}>
+    <MobileCard
+      key={company.id}
+      className={inFamily ? 'ml-4 border-l-[3px] border-l-brand-primary/20' : ''}
+      style={inFamily ? { animation: 'groupRowIn 300ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards', animationDelay: `${Math.min(opts?.index ?? 0, 6) * 55}ms` } : undefined}
+    >
     <div
       className={`px-4 py-4 transition-opacity ${selectedIds.has(company.id) ? 'bg-blue-50' : 'bg-white'} ${
         actionsCompanyId != null && actionsCompanyId !== company.id ? 'opacity-40' : ''
@@ -1361,9 +1377,14 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 the header card drawn twice. */}
             {isFamilyParent && (
               <p className="mt-1">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-300 whitespace-nowrap">
+                {/* The word and the colour both belong to the account: this is
+                    its Entity Structure option, drawn the way that option is
+                    drawn everywhere else. The glyph stays keyed to the role
+                    rather than the label — it says which end of the link this
+                    is, whatever the link's ends are called here. */}
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.entity_structure?.[parentLabel]).badgeClass}`}>
                   <EntityStructureIcon structure="Parent" />
-                  Parent
+                  {parentLabel}
                 </span>
               </p>
             )}
@@ -1508,14 +1529,19 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 <span className="block font-serif font-bold text-brand-primary text-[15px] leading-snug break-words">
                   {family.parentName}
                 </span>
-                <span className="block text-[10px] text-gray-500 mt-0.5">
+                <span className="block text-[10px] font-semibold text-gray-500 mt-0.5">
                   {family.rollup.parentAttendees} {parentLabel} · {family.rollup.childAttendees} {childLabel} Attendees
                 </span>
               </span>
             </button>
           </div>
 
-          {/* The roll-ups, on the line the cards use for their own pills. */}
+          {/* The roll-ups, on the line the cards use for their own pills.
+              The attendee total is not among them: the line above already
+              gives it, split by who it came from, and an unlabelled number
+              beside a type pill said less than the sentence does. Skipped
+              entirely when nothing is left to put on it. */}
+          {(family.parent?.company_type || !family.parent || family.rollup.units != null || valuePill) && (
           <div className="mt-2 ml-6 flex items-center gap-2 flex-wrap">
             {family.parent?.company_type ? (
               <span className={`${getBadgeClass(family.parent.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1 flex-shrink-0`}>
@@ -1527,9 +1553,6 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 Not attending
               </span>
             ) : null}
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-100 text-gray-700 flex-shrink-0">
-              {family.rollup.attendees}
-            </span>
             {family.rollup.units != null && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-yellow-50 text-yellow-700 border border-yellow-200 flex-shrink-0">
                 <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
@@ -1542,6 +1565,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
               </span>
             )}
           </div>
+          )}
         </div>
       </MobileCard>
     );
@@ -1556,9 +1580,10 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         return (
           <React.Fragment key={`family-${entry.key}`}>
             {renderGroupCard(entry)}
-            {!isFamilyCollapsed(entry.key) && entry.all.map(c => renderCompanyCard(c, {
+            {!isFamilyCollapsed(entry.key) && entry.all.map((c, i) => renderCompanyCard(c, {
               inFamily: true,
               isFamilyParent: c.id === entry.parent?.id,
+              index: i,
             }))}
           </React.Fragment>
         );
