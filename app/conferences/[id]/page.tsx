@@ -114,6 +114,10 @@ interface Attendee {
   company_assigned_user?: string;
   /** 'Parent' | 'Child' on the attendee's company — drawn inside the type pill. */
   company_entity_structure?: string | null;
+  /** The attendee's company's parent, when it has one. Carried on the row so
+   *  the page can tell whether this conference contains families without
+   *  fetching every company in the account. */
+  parent_company_id?: number | null;
   email?: string;
   status?: string;
   seniority?: string;
@@ -1811,16 +1815,11 @@ export default function ConferenceDetailPage() {
   }, []);
 
   // The companies fetch belongs to the Companies tab; grouping is the second
-  // thing that needs it. It self-guards, so this asks at most once.
-  //
-  // It has to run on the attendees tab whether or not grouping is on, because
-  // the control that turns grouping on is only offered where there are
-  // families to group — and nothing on an attendee row says whether its company
-  // has a parent. Fetching only once grouping was on made the control appear
-  // only after it had been used, which is to say never.
+  // thing that needs it, for the parent names and the roll-ups. It self-guards,
+  // so this asks at most once — and only once someone has asked for the view.
   useEffect(() => {
-    if (attendeesGrouped || activeTab === 'attendees') loadCompanies();
-  }, [attendeesGrouped, activeTab, loadCompanies]);
+    if (attendeesGrouped) loadCompanies();
+  }, [attendeesGrouped, loadCompanies]);
 
   // Without companies there are no parents, and a grouped view with no parents
   // is an empty screen that looks broken rather than one that failed. Say so
@@ -1832,6 +1831,36 @@ export default function ConferenceDetailPage() {
   }, [attendeesGrouped, companiesLoadFailed]);
 
   const attendeeGroupingLoading = attendeesGrouped && isLoadingCompanies && !companiesLoaded;
+
+  /**
+   * Whether this conference contains a family at all.
+   *
+   * Answered from the attendee rows, which now carry their company's parent,
+   * rather than from the company list — deciding whether to render a button
+   * must not cost a fetch of every company in the account on the default tab
+   * of every conference.
+   *
+   * A family means two companies here under one parent, which is the rule
+   * `buildCompanyFamilies` applies. This reads one level where that walks the
+   * chain, and the two agree because linking a company reassigns its
+   * grandchildren straight to the top parent, so chains of two do not occur.
+   * The view itself still groups through the shared code; this only decides
+   * whether to offer it.
+   */
+  const attendeeFamiliesPresent = useMemo(() => {
+    const familyKeyByCompany = new Map<number, number>();
+    for (const a of conference?.attendees ?? []) {
+      if (a.company_id == null) continue;
+      familyKeyByCompany.set(a.company_id, a.parent_company_id ?? a.company_id);
+    }
+    const companiesPerFamily = new Map<number, number>();
+    for (const key of Array.from(familyKeyByCompany.values())) {
+      const n = (companiesPerFamily.get(key) ?? 0) + 1;
+      if (n >= 2) return true;
+      companiesPerFamily.set(key, n);
+    }
+    return false;
+  }, [conference?.attendees]);
 
   /**
    * Switching views changes only the view.
@@ -1857,6 +1886,234 @@ export default function ConferenceDetailPage() {
   }
 
   if (!conference) return null;
+
+  /**
+   * One person's card. The flat list and the grouped list both render through
+   * here, so the two cannot drift; a tier changes only where the card sits.
+   */
+  const renderAttendeeMobileCard = (attendee: Attendee, opts?: { inCompany?: boolean }) => (
+  <MobileCard
+    key={attendee.id}
+    /* Under a company the card steps in again and takes a quieter rule
+       than the company's own. Two rules 12px apart is the most this width
+       will carry; making the inner one grey rather than brand keeps the
+       pair reading as depth instead of as a pattern. */
+    className={opts?.inCompany ? 'ml-6 border-l-[3px] border-l-gray-200' : ''}
+  >
+  <MobileAttendeeCard
+    attendee={attendee as unknown as AttendeeCardRow}
+    showPhotos={showAttendeePhotos}
+    selected={selectedAttendeeIds.has(attendee.id)}
+    onToggleSelect={toggleAttendeeSelect}
+    onOpenAttendee={(id) => { setQuickViewId(id); setQuickViewType('attendee'); }}
+    onOpenCompany={(id) => { setQuickViewId(id); setQuickViewType('company'); }}
+    onClassifyTitle={(id, title) => setClassifyingAttendee({ id, title })}
+    titleWarning={!titleMetaLoading && shouldWarnForTitleMetadata(titleMetaMap[attendee.id])}
+    userOptions={userOptions}
+    colorMaps={colorMaps}
+    dimmed={actionsAttendeeId != null && actionsAttendeeId !== attendee.id}
+    onOpenConferences={() => setTimelineAttendee({ id: attendee.id, first_name: attendee.first_name, last_name: attendee.last_name })}
+    leadingPill={matchesIcpCompanyType(attendee.company_type, icpCompanyTypes) ? (
+      <TargetToggleButton
+        active={targetIds.has(attendee.id)}
+        busy={targetBusyId === attendee.id}
+        onToggle={() => toggleTarget(attendee.id)}
+        name={`${attendee.first_name} ${attendee.last_name}`.trim()}
+        size="sm"
+      />
+    ) : undefined}
+    actions={
+      <RowActionsKebab
+        entityType="attendee"
+        conferenceId={Number(id)}
+        attendeeId={attendee.id}
+        attendeeName={`${attendee.first_name} ${attendee.last_name}`.trim()}
+        companyId={attendee.company_id ?? null}
+        companyName={attendee.company_name ?? null}
+        onDone={fetchConference}
+        onOpenChange={open => setActionsAttendeeId(open ? attendee.id : null)}
+      />
+    }
+  />
+  </MobileCard>
+  );
+
+  /**
+   * A family's card — tier 1 on the phone.
+   *
+   * The whole card collapses it. At this width a chevron alone is a 14px
+   * target in a 358px card, and the header has nothing else it could mean.
+   */
+  const renderAttendeeFamilyCard = (family: FamilyNode<Attendee>) => {
+    const ids = attendeesUnder(family).map(a => a.id);
+    const allSelected = ids.length > 0 && ids.every(fid => selectedAttendeeIds.has(fid));
+    const someSelected = !allSelected && ids.some(fid => selectedAttendeeIds.has(fid));
+    const expanded = isFamilyExpanded(attendeeCollapse, family.key);
+    return (
+      <MobileCard key={`family-${family.key}`} className="border-gray-300">
+        <button
+          type="button"
+          onClick={() => setAttendeeCollapse(s => toggleFamily(s, family.key))}
+          aria-expanded={expanded}
+          className="w-full text-left px-4 py-3 bg-brand-primary/[0.055]"
+        >
+          <div className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              ref={el => { if (el) el.indeterminate = someSelected; }}
+              onChange={() => setSelectedAttendeeIds(prev => {
+                const next = new Set(prev);
+                if (allSelected) ids.forEach(fid => next.delete(fid));
+                else ids.forEach(fid => next.add(fid));
+                return next;
+              })}
+              // The tick is its own action; the card around it collapses.
+              onClick={e => e.stopPropagation()}
+              aria-label={`Select everyone under ${family.parentName}`}
+              className="accent-brand-secondary flex-shrink-0 mt-1"
+            />
+            <svg className={`w-3.5 h-3.5 flex-shrink-0 mt-1 text-gray-400 transition-transform ${expanded ? '' : '-rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+            <span className="min-w-0 flex-1">
+              <span className="block font-serif font-bold text-brand-primary text-[15px] leading-snug break-words">
+                {family.parentName}
+              </span>
+              <span className="block text-[10px] font-semibold text-gray-500 mt-0.5">
+                {family.companyCount} {family.companyCount === 1 ? 'company' : 'companies'} · {family.attendeeCount} {family.attendeeCount === 1 ? 'attendee' : 'attendees'}
+              </span>
+            </span>
+          </div>
+          <div className="mt-2 ml-6 flex items-center gap-2 flex-wrap">
+            {family.parent?.company_type ? (
+              <span className={`${getBadgeClass(family.parent.company_type, colorMaps.company_type || {})} text-xs inline-flex items-center gap-1`}>
+                <EntityStructureIcon structure="Parent" />
+                {family.parent.company_type}
+              </span>
+            ) : !family.parent ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-lg border border-dashed border-gray-300 text-[10px] text-gray-400 whitespace-nowrap">
+                Not attending
+              </span>
+            ) : null}
+            {renderSeniorityRollup(family.seniority)}
+          </div>
+        </button>
+      </MobileCard>
+    );
+  };
+
+  /**
+   * A company's card — tier 2 on the phone.
+   *
+   * Stepped in and ruled in the account's own colour, so the run of people
+   * below it reads as belonging to it rather than as the next thing along.
+   */
+  const renderAttendeeCompanyCard = (node: CompanyNode<Attendee>) => {
+    const ids = node.attendees.map(a => a.id);
+    const allSelected = ids.length > 0 && ids.every(cid => selectedAttendeeIds.has(cid));
+    const someSelected = !allSelected && ids.some(cid => selectedAttendeeIds.has(cid));
+    const expanded = isCompanyExpanded(attendeeCollapse, node.companyId);
+    return (
+      <MobileCard key={`company-${node.companyId}`} className="ml-3 border-l-[3px] border-l-brand-primary/35">
+        <button
+          type="button"
+          onClick={() => setAttendeeCollapse(s => toggleCompany(s, node.companyId))}
+          aria-expanded={expanded}
+          className="w-full text-left px-3 py-2.5 bg-white"
+        >
+          <div className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              ref={el => { if (el) el.indeterminate = someSelected; }}
+              onChange={() => setSelectedAttendeeIds(prev => {
+                const next = new Set(prev);
+                if (allSelected) ids.forEach(cid => next.delete(cid));
+                else ids.forEach(cid => next.add(cid));
+                return next;
+              })}
+              onClick={e => e.stopPropagation()}
+              aria-label={`Select everyone from ${node.companyName}`}
+              className="accent-brand-secondary flex-shrink-0 mt-1"
+            />
+            <svg className={`w-3 h-3 flex-shrink-0 mt-1.5 text-gray-400 transition-transform ${expanded ? '' : '-rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-gray-800 leading-snug break-words">
+                {node.companyName}
+              </span>
+              <span className="block text-[10px] text-gray-500 mt-0.5">
+                {node.attendees.length} {node.attendees.length === 1 ? 'attendee' : 'attendees'}
+              </span>
+            </span>
+          </div>
+          <div className="mt-1.5 ml-6 flex items-center gap-2 flex-wrap">
+            {node.isFamilyParent && (
+              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 leading-4 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.entity_structure?.[attendeeParentLabel]).badgeClass}`}>
+                <EntityStructureIcon structure="Parent" />
+                {attendeeParentLabel}
+              </span>
+            )}
+            {node.company?.company_type && (
+              <span className={`${getBadgeClass(node.company.company_type, colorMaps.company_type || {})} text-xs inline-flex items-center gap-1`}>
+                <EntityStructureIcon structure={node.company.entity_structure} />
+                {node.company.company_type}
+              </span>
+            )}
+            {renderSeniorityRollup(node.seniority)}
+          </div>
+        </button>
+      </MobileCard>
+    );
+  };
+
+  /** The grouped card list — the same tree the table draws, stacked. */
+  const renderGroupedAttendeeCards = () => {
+    const cards: React.ReactNode[] = [];
+    let dividerDrawn = false;
+    const looseTotal = pagedAttendeeEntries.filter(e => e.kind === 'company').length;
+
+    const peopleUnder = (node: CompanyNode<Attendee>) =>
+      isCompanyExpanded(attendeeCollapse, node.companyId)
+        ? node.attendees.map(a => renderAttendeeMobileCard(a, { inCompany: true }))
+        : [];
+
+    for (const entry of pagedAttendeeEntries) {
+      if (entry.kind === 'family') {
+        cards.push(renderAttendeeFamilyCard(entry));
+        if (isFamilyExpanded(attendeeCollapse, entry.key)) {
+          for (const node of entry.companies) {
+            cards.push(renderAttendeeCompanyCard(node));
+            cards.push(...peopleUnder(node));
+          }
+        }
+        continue;
+      }
+      if (!dividerDrawn) {
+        cards.push(
+          <p key="divider-loose" className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 pt-3 pb-1 px-1">
+            No parent company · {looseTotal} {looseTotal === 1 ? 'company' : 'companies'}
+          </p>,
+        );
+        dividerDrawn = true;
+      }
+      cards.push(renderAttendeeCompanyCard(entry));
+      cards.push(...peopleUnder(entry));
+    }
+
+    if (isLastAttendeePage && attendeeGroups.noCompany.length > 0) {
+      cards.push(
+        <p key="divider-nocompany" className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 pt-3 pb-1 px-1">
+          No company · {attendeeGroups.noCompany.length} {attendeeGroups.noCompany.length === 1 ? 'attendee' : 'attendees'}
+        </p>,
+      );
+      for (const a of attendeeGroups.noCompany) cards.push(renderAttendeeMobileCard(a));
+    }
+
+    return cards;
+  };
 
   /**
    * One person's row, at whatever depth the view is drawing them.
@@ -4099,7 +4356,7 @@ export default function ConferenceDetailPage() {
                 companies form no family has nothing to group. Kept on screen
                 while grouped even if a filter leaves no family standing, so
                 the way back cannot disappear from under the reader. */}
-            {(attendeeGroups.familyCount > 0 || attendeesGrouped) && (
+            {(attendeeFamiliesPresent || attendeesGrouped) && (
               <div className="inline-flex flex-shrink-0 rounded-lg border border-gray-200 overflow-hidden">
                 {([
                   { key: 'flat' as const, label: 'Single', path: 'M4 6h16M4 12h16M4 18h16' },
@@ -4141,45 +4398,7 @@ export default function ConferenceDetailPage() {
             <>
               {/* Mobile card list */}
               <MobileCardList className="block lg:hidden -mx-6">
-                {paginatedAttendees.map((attendee) => (
-                  <MobileCard key={attendee.id}>
-                  <MobileAttendeeCard
-                    attendee={attendee as unknown as AttendeeCardRow}
-                    showPhotos={showAttendeePhotos}
-                    selected={selectedAttendeeIds.has(attendee.id)}
-                    onToggleSelect={toggleAttendeeSelect}
-                    onOpenAttendee={(id) => { setQuickViewId(id); setQuickViewType('attendee'); }}
-                    onOpenCompany={(id) => { setQuickViewId(id); setQuickViewType('company'); }}
-                    onClassifyTitle={(id, title) => setClassifyingAttendee({ id, title })}
-                    titleWarning={!titleMetaLoading && shouldWarnForTitleMetadata(titleMetaMap[attendee.id])}
-                    userOptions={userOptions}
-                    colorMaps={colorMaps}
-                    dimmed={actionsAttendeeId != null && actionsAttendeeId !== attendee.id}
-                    onOpenConferences={() => setTimelineAttendee({ id: attendee.id, first_name: attendee.first_name, last_name: attendee.last_name })}
-                    leadingPill={matchesIcpCompanyType(attendee.company_type, icpCompanyTypes) ? (
-                      <TargetToggleButton
-                        active={targetIds.has(attendee.id)}
-                        busy={targetBusyId === attendee.id}
-                        onToggle={() => toggleTarget(attendee.id)}
-                        name={`${attendee.first_name} ${attendee.last_name}`.trim()}
-                        size="sm"
-                      />
-                    ) : undefined}
-                    actions={
-                      <RowActionsKebab
-                        entityType="attendee"
-                        conferenceId={Number(id)}
-                        attendeeId={attendee.id}
-                        attendeeName={`${attendee.first_name} ${attendee.last_name}`.trim()}
-                        companyId={attendee.company_id ?? null}
-                        companyName={attendee.company_name ?? null}
-                        onDone={fetchConference}
-                        onOpenChange={open => setActionsAttendeeId(open ? attendee.id : null)}
-                      />
-                    }
-                  />
-                  </MobileCard>
-                ))}
+                {attendeesGrouped ? renderGroupedAttendeeCards() : paginatedAttendees.map(attendee => renderAttendeeMobileCard(attendee))}
               </MobileCardList>
 
               {/* Desktop table */}
