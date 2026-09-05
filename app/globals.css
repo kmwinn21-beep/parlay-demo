@@ -180,6 +180,15 @@ h1, h2, h3 {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* The same motion for a family's rows arriving when it is opened, so opening
+   one reads as it unfolding rather than as the list jumping. Named apart from
+   the meetings one only because that name says meetings; the two are the same
+   two frames and could fairly be merged. */
+@keyframes groupRowIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* Hide scrollbar utility */
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
