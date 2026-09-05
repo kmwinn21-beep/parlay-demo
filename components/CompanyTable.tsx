@@ -873,7 +873,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                    step down from the family heading — three sizes for three
                    levels, so the run can be read without the elbows. */
                 className={`font-medium text-brand-secondary hover:underline break-words whitespace-normal leading-snug text-left ${
-                  inFamily && !isFamilyParent ? 'text-[13px]' : 'text-sm'
+                  inFamily && !isFamilyParent ? 'text-[11px]' : 'text-sm'
                 }`}
               >
                 {company.name}
@@ -905,7 +905,10 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                     drawn everywhere else. The glyph stays keyed to the role
                     rather than the label — it says which end of the link this
                     is, whatever the link's ends are called here. */}
-                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.entity_structure?.[parentLabel]).badgeClass}`}>
+                {/* h-3 with no vertical padding: at 10px with leading-none the
+                    text is exactly the 12px the box allows, so the pill sits as
+                    a marker beside the name rather than as another badge. */}
+                <span className={`inline-flex items-center gap-1 h-3 px-1.5 leading-none rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.entity_structure?.[parentLabel]).badgeClass}`}>
                   <EntityStructureIcon structure="Parent" />
                   {parentLabel}
                 </span>
@@ -1349,7 +1352,11 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
               <button
                 type="button"
                 onClick={() => openQuickView(company.id)}
-                className="font-semibold text-brand-secondary hover:underline text-sm leading-snug text-left"
+                /* A child steps down a size from the parent's own card, which
+                   is itself a step down from the family heading. */
+                className={`font-semibold text-brand-secondary hover:underline leading-snug text-left ${
+                  inFamily && !isFamilyParent ? 'text-xs' : 'text-sm'
+                }`}
               >
                 {company.name}
               </button>
@@ -1382,7 +1389,10 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                     drawn everywhere else. The glyph stays keyed to the role
                     rather than the label — it says which end of the link this
                     is, whatever the link's ends are called here. */}
-                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.entity_structure?.[parentLabel]).badgeClass}`}>
+                {/* h-3 with no vertical padding: at 10px with leading-none the
+                    text is exactly the 12px the box allows, so the pill sits as
+                    a marker beside the name rather than as another badge. */}
+                <span className={`inline-flex items-center gap-1 h-3 px-1.5 leading-none rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.entity_structure?.[parentLabel]).badgeClass}`}>
                   <EntityStructureIcon structure="Parent" />
                   {parentLabel}
                 </span>
