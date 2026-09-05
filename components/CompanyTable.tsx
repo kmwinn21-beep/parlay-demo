@@ -255,8 +255,16 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
    * back restores the reader's filter rather than silently dropping it.
    */
   const [stashedHierarchy, setStashedHierarchy] = useState<string | null>(null);
-  /** Families the reader has folded up. Expanded is the default posture. */
-  const [collapsedFamilies, setCollapsedFamilies] = useState<Set<number>>(new Set());
+  /**
+   * Families the reader has opened.
+   *
+   * Held as what is open rather than what is shut, so the default falls out of
+   * an empty set: arriving in the grouped view you see the families, one line
+   * each, and open the one you came for. Tracking the closed ones instead would
+   * mean seeding the set with every key on the way in, and again whenever a
+   * filter brought a new family into view.
+   */
+  const [expandedFamilies, setExpandedFamilies] = useState<Set<number>>(new Set());
   const [page, setPage] = useState(1);
   const [attendeesDrawerCompany, setAttendeesDrawerCompany] = useState<Company | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -447,8 +455,8 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   /** The companies this page shows, in the order it shows them. */
   const rowsToRender = grouped ? entriesToCompanies(pagedEntries) : paginated;
 
-  const isFamilyCollapsed = (key: number) => collapsedFamilies.has(key);
-  const toggleFamily = (key: number) => setCollapsedFamilies(prev => {
+  const isFamilyCollapsed = (key: number) => !expandedFamilies.has(key);
+  const toggleFamily = (key: number) => setExpandedFamilies(prev => {
     const next = new Set(prev);
     next.has(key) ? next.delete(key) : next.add(key);
     return next;
@@ -462,6 +470,9 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const setGrouped = useCallback((next: boolean) => {
     setGroupByParent(next);
     try { localStorage.setItem(GROUPED_STORAGE_KEY, next ? 'true' : 'false'); } catch { /* site data blocked */ }
+    // Every arrival in the grouped view starts from the families themselves,
+    // not from wherever the last visit was left open.
+    if (next) setExpandedFamilies(new Set());
     const hierarchy = applyGroupingToHierarchyFilter(next, { filterHierarchy, stashedHierarchy });
     setFilterHierarchy(hierarchy.filterHierarchy);
     setStashedHierarchy(hierarchy.stashedHierarchy);
@@ -816,7 +827,11 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
     <tr
       key={company.id}
       onClick={onCompanyCardClick(company.id)}
-      className={`group ${cardRowClass(rowSelected, focused)} ${cardEmphasisClass({ focused, otherFocused: focusedCompanyId != null && !focused, dimmed })}`}
+      /* Inside a family the rows draw in: half the vertical padding, so a run
+         of them reads as belonging to the row above rather than as more rows
+         beside it. The child selector outranks the py-3 on each cell without
+         needing to shout about it. */
+      className={`group ${cardRowClass(rowSelected, focused)} ${cardEmphasisClass({ focused, otherFocused: focusedCompanyId != null && !focused, dimmed })} ${inFamily ? '[&>td]:py-1.5' : ''}`}
     >
       <td className="py-3 sticky left-0 z-10" style={{ width: selWidth }}><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-brand-secondary ml-3" /></td>
       {orderedColumns.map(col => {
@@ -839,7 +854,12 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
               <button
                 type="button"
                 onClick={() => openQuickView(company.id)}
-                className="font-medium text-brand-secondary hover:underline text-sm break-words whitespace-normal leading-snug text-left"
+                /* One step down from the parent's own row, which is itself a
+                   step down from the family heading — three sizes for three
+                   levels, so the run can be read without the elbows. */
+                className={`font-medium text-brand-secondary hover:underline break-words whitespace-normal leading-snug text-left ${
+                  inFamily && !isFamilyParent ? 'text-[13px]' : 'text-sm'
+                }`}
               >
                 {company.name}
               </button>
@@ -864,7 +884,12 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 parent's own row sits directly beneath a header of the same
                 name, which without this reads as the same row drawn twice. */}
             {isFamilyParent && (
-              <p className="text-[10px] text-gray-400 mt-0.5">Parent</p>
+              <p className="mt-1">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-300 whitespace-nowrap">
+                  <EntityStructureIcon structure="Parent" />
+                  Parent
+                </span>
+              </p>
             )}
             </div>
           </td>;
@@ -1322,7 +1347,14 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
             )}
             {/* Except on the parent's own card, which without this reads as
                 the header card drawn twice. */}
-            {isFamilyParent && <p className="text-[10px] text-gray-400 mt-0.5">Parent</p>}
+            {isFamilyParent && (
+              <p className="mt-1">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-300 whitespace-nowrap">
+                  <EntityStructureIcon structure="Parent" />
+                  Parent
+                </span>
+              </p>
+            )}
           </div>
         </div>
         {/* Rep pills — upper right, tap to edit */}
