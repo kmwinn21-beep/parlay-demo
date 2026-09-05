@@ -819,7 +819,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
    * suppresses what the group row above it already says: the parent name,
    * and the parent/child glyph in the type pill.
    */
-  const renderCompanyRow = (company: Company, opts?: { inFamily?: boolean; isFamilyParent?: boolean }) => {
+  const renderCompanyRow = (company: Company, opts?: { inFamily?: boolean; isFamilyParent?: boolean; index?: number }) => {
     const inFamily = !!opts?.inFamily;
     const isFamilyParent = !!opts?.isFamilyParent;
     const rowSelected = selectedIds.has(company.id);
@@ -843,8 +843,10 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
       className={`group ${cardRowClass(rowSelected, focused)} ${cardEmphasisClass({ focused, otherFocused: focusedCompanyId != null && !focused, dimmed })} ${inFamily ? '[&>td]:py-1.5' : ''}`}
       /* Only the rows inside a family, and only as they arrive: a family's rows
          exist just while it is open, so this runs on the open and not again
-         while it stays open. */
-      style={inFamily ? { animation: 'groupRowIn 200ms ease-out' } : undefined}
+         while it stays open. The stagger is capped so a family of twenty
+         unrolls at the same pace as a family of three rather than taking most
+         of a second to finish. */
+      style={inFamily ? { animation: 'groupRowIn 300ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards', animationDelay: `${Math.min(opts?.index ?? 0, 6) * 55}ms` } : undefined}
     >
       <td className="py-3 sticky left-0 z-10" style={{ width: selWidth }}><input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-brand-secondary ml-3" /></td>
       {orderedColumns.map(col => {
@@ -1278,9 +1280,10 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         return (
           <React.Fragment key={`family-${entry.key}`}>
             {renderGroupRow(entry)}
-            {!isFamilyCollapsed(entry.key) && entry.all.map(c => renderCompanyRow(c, {
+            {!isFamilyCollapsed(entry.key) && entry.all.map((c, i) => renderCompanyRow(c, {
               inFamily: true,
               isFamilyParent: c.id === entry.parent?.id,
+              index: i,
             }))}
           </React.Fragment>
         );
@@ -1312,7 +1315,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
    * merged with the desktop one: a card and a row share their pills and
    * nothing else.
    */
-  const renderCompanyCard = (company: Company, opts?: { inFamily?: boolean; isFamilyParent?: boolean }) => {
+  const renderCompanyCard = (company: Company, opts?: { inFamily?: boolean; isFamilyParent?: boolean; index?: number }) => {
     const inFamily = !!opts?.inFamily;
     const isFamilyParent = !!opts?.isFamilyParent;
     return (
@@ -1323,7 +1326,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
     <MobileCard
       key={company.id}
       className={inFamily ? 'ml-4 border-l-[3px] border-l-brand-primary/20' : ''}
-      style={inFamily ? { animation: 'groupRowIn 200ms ease-out' } : undefined}
+      style={inFamily ? { animation: 'groupRowIn 300ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards', animationDelay: `${Math.min(opts?.index ?? 0, 6) * 55}ms` } : undefined}
     >
     <div
       className={`px-4 py-4 transition-opacity ${selectedIds.has(company.id) ? 'bg-blue-50' : 'bg-white'} ${
@@ -1567,9 +1570,10 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         return (
           <React.Fragment key={`family-${entry.key}`}>
             {renderGroupCard(entry)}
-            {!isFamilyCollapsed(entry.key) && entry.all.map(c => renderCompanyCard(c, {
+            {!isFamilyCollapsed(entry.key) && entry.all.map((c, i) => renderCompanyCard(c, {
               inFamily: true,
               isFamilyParent: c.id === entry.parent?.id,
+              index: i,
             }))}
           </React.Fragment>
         );
