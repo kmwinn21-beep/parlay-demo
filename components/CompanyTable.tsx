@@ -900,9 +900,14 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 name, which without this reads as the same row drawn twice. */}
             {isFamilyParent && (
               <p className="mt-1">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-300 whitespace-nowrap">
+                {/* The word and the colour both belong to the account: this is
+                    its Entity Structure option, drawn the way that option is
+                    drawn everywhere else. The glyph stays keyed to the role
+                    rather than the label — it says which end of the link this
+                    is, whatever the link's ends are called here. */}
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.entity_structure?.[parentLabel]).badgeClass}`}>
                   <EntityStructureIcon structure="Parent" />
-                  Parent
+                  {parentLabel}
                 </span>
               </p>
             )}
@@ -1372,9 +1377,14 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 the header card drawn twice. */}
             {isFamilyParent && (
               <p className="mt-1">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-300 whitespace-nowrap">
+                {/* The word and the colour both belong to the account: this is
+                    its Entity Structure option, drawn the way that option is
+                    drawn everywhere else. The glyph stays keyed to the role
+                    rather than the label — it says which end of the link this
+                    is, whatever the link's ends are called here. */}
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.entity_structure?.[parentLabel]).badgeClass}`}>
                   <EntityStructureIcon structure="Parent" />
-                  Parent
+                  {parentLabel}
                 </span>
               </p>
             )}
