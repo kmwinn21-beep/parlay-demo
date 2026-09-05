@@ -53,10 +53,47 @@ export function invalidateCached(key: string) {
 // /api/config convenience wrapper (backwards-compat with Prompt 5 callers)
 // ---------------------------------------------------------------------------
 
-export function getConfig(): Promise<unknown> {
-  return getCached('__config__', () => fetch('/api/config').then(r => r.json()));
+/**
+ * When the account's config options were last edited from this browser.
+ *
+ * /api/config is answered from the browser's own HTTP cache for five minutes,
+ * which is right for a few hundred rows every page wants and nobody changes —
+ * and wrong for the minute after an admin changes one, when clearing the entry
+ * above only means the refetch is served the very body we just threw away.
+ *
+ * So the URL carries the version: repeat loads ask for the same URL and are
+ * still answered from the cache, while an edit moves every later fetch to a URL
+ * the cache has never seen. In localStorage rather than a module variable
+ * because it has to survive a reload — and because the admin's other tabs are
+ * looking at the same stale copy.
+ */
+const CONFIG_VERSION_KEY = 'parlay_config_version';
+
+function configVersion(): string {
+  try {
+    return localStorage.getItem(CONFIG_VERSION_KEY) ?? '0';
+  } catch {
+    // Storage can throw outright where site data is blocked. A constant version
+    // is the pre-existing behaviour, not a new failure.
+    return '0';
+  }
 }
 
+export function getConfig(): Promise<unknown> {
+  return getCached('__config__', () =>
+    fetch(`/api/config?v=${configVersion()}`).then(r => r.json()));
+}
+
+/**
+ * Drop the cached config, here and in the browser.
+ *
+ * Call it after anything writes to config_options. The per-hook invalidators
+ * do: they clear their own derived maps but then read straight back through
+ * this cache, so on their own they were no-ops.
+ */
 export function invalidateConfigCache() {
+  try {
+    localStorage.setItem(CONFIG_VERSION_KEY, String(Date.now()));
+  } catch { /* see configVersion */ }
   invalidateCached('__config__');
 }

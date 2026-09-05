@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { FadeCollapse } from '@/components/CollapseAnimation';
+import { ConferenceAvatar } from '@/components/ConferenceAvatar';
 
 /**
  * Every conference a record has been to, most recent first, with what happened
@@ -45,12 +46,6 @@ const DOT: Record<TimelineItem['key'], string> = {
   touchpoints: 'bg-purple-500',
   event_attendees: 'bg-emerald-500',
 };
-
-function initials(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return '?';
-  return (words[0][0] + (words[1]?.[0] ?? '')).toUpperCase();
-}
 
 /** "Aug 24–26, 2026", or the long form when the range crosses a month. */
 function formatRange(start: string | null, end: string | null): string {
@@ -248,14 +243,7 @@ export function ConferenceTimeline({
                 const quiet = !conf.upcoming && conf.items.length === 0;
                 return (
                   <div key={conf.id} className="flex gap-3">
-                    <div className={`w-10 h-10 rounded-lg flex-shrink-0 overflow-hidden flex items-center justify-center text-xs font-bold font-serif ${
-                      quiet ? 'bg-gray-100 text-gray-300' : 'bg-brand-primary text-white'
-                    }`}>
-                      {conf.logo_url
-                        // eslint-disable-next-line @next/next/no-img-element
-                        ? <img src={conf.logo_url} alt="" className={`w-full h-full object-contain ${quiet ? 'opacity-40' : ''}`} />
-                        : initials(conf.name)}
-                    </div>
+                    <ConferenceAvatar name={conf.name} logoUrl={conf.logo_url} muted={quiet} />
 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">

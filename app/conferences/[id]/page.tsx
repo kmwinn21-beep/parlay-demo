@@ -341,7 +341,11 @@ export default function ConferenceDetailPage() {
   useEffect(() => {
     if (activeTab === 'attendees' || activeTab === 'companies') reloadTargets();
   }, [activeTab, reloadTargets]);
-  const [conferenceCompanies, setConferenceCompanies] = useState<{ id: number; name: string; website?: string; profit_type?: string; company_type?: string; status?: string; icp?: string; assigned_user?: string; attendee_count: number; conference_count: number; conference_names?: string }[]>([]);
+  // parent_company_id / parent_company_name / entity_structure arrive from
+  // /api/companies and reach the table by the spread in loadCompanies. Named
+  // here so the grouped-by-parent view breaks loudly rather than silently if
+  // this ever stops spreading the row.
+  const [conferenceCompanies, setConferenceCompanies] = useState<{ id: number; name: string; website?: string; profit_type?: string; company_type?: string; status?: string; icp?: string; assigned_user?: string; attendee_count: number; conference_count: number; conference_names?: string; parent_company_id?: number; parent_company_name?: string; entity_structure?: string }[]>([]);
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [companiesLoaded, setCompaniesLoaded] = useState(false);
   /** Set when a tab was switched while pinned, so the arriving content re-pins. */

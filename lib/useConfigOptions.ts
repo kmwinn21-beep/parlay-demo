@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getConfig } from '@/lib/configCache';
+import { getConfig, invalidateConfigCache } from '@/lib/configCache';
 
 interface ConfigOption {
   id: number;
@@ -72,6 +72,8 @@ export function useConfigOptions(formKey?: string): Record<string, string[]> {
 }
 
 /** Invalidate the cache (call after admin panel saves an option) */
+/** Same for the value lists — and for the response they are derived from. */
 export function invalidateConfigOptions() {
   globalCache = {};
+  invalidateConfigCache();
 }

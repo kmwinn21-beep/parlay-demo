@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { ConferenceStageBadge } from './ConferenceStageBadge';
+import { ConferenceAvatar } from './ConferenceAvatar';
 import { RepAssignmentPopover, type AssignedRep } from './RepAssignmentPopover';
 import { QuickViewIcon, type QuickViewTarget } from './QuickViewDrawer';
 import { postConferenceDaysRemaining, type ConferenceStage } from '@/lib/conference-stage';
@@ -26,6 +27,7 @@ export interface ProgramCardConference {
   location: string;
   location_city?: string | null;
   location_state?: string | null;
+  logo_url?: string | null;
   stage: ConferenceStage | null;
   post_conference_days?: number | null;
   assignedReps: ProgramCardRep[];
@@ -263,20 +265,27 @@ export function ProgramConferenceCard({ conference, territories, planYear, allCo
       </div>
 
       <div style={{ padding: '10px 12px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <div className="flex items-start justify-between gap-1.5">
-          <div className="flex items-start gap-2 min-w-0">
-            <p style={{ fontSize: 13, fontWeight: 500, margin: 0, color: 'var(--text-primary, #111827)' }} className="line-clamp-2">
-              {conference.name}
+        {/* The logo leads the name and the date/location line together, so the
+            two read as one block beside it rather than as separate rows. */}
+        <div className="flex items-start gap-2.5">
+          <ConferenceAvatar name={conference.name} logoUrl={conference.logo_url} size={32} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-1.5">
+              <div className="flex items-start gap-2 min-w-0">
+                <p style={{ fontSize: 13, fontWeight: 500, margin: 0, color: 'var(--text-primary, #111827)' }} className="line-clamp-2">
+                  {conference.name}
+                </p>
+                <QuickViewIcon onClick={() => onQuickView({ type: 'conference', id: conference.id, name: conference.name })} />
+              </div>
+              <TerritoryPill conference={conference} territories={territories} />
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--text-secondary, #6B7280)', margin: '2px 0 0' }} className="truncate">
+              {formatDate(conference.start_date)}
+              {conference.end_date && conference.end_date !== conference.start_date ? ` – ${formatDate(conference.end_date)}` : ''}
+              {conference.location ? ` · ${cityStateLabel(conference)}` : ''}
             </p>
-            <QuickViewIcon onClick={() => onQuickView({ type: 'conference', id: conference.id, name: conference.name })} />
           </div>
-          <TerritoryPill conference={conference} territories={territories} />
         </div>
-        <p style={{ fontSize: 11, color: 'var(--text-secondary, #6B7280)', margin: '2px 0 0' }} className="truncate">
-          {formatDate(conference.start_date)}
-          {conference.end_date && conference.end_date !== conference.start_date ? ` – ${formatDate(conference.end_date)}` : ''}
-          {conference.location ? ` · ${cityStateLabel(conference)}` : ''}
-        </p>
 
         <div style={{ marginTop: 8 }} onClick={e => { if (canAssignReps) { e.preventDefault(); e.stopPropagation(); } }}>
           {canAssignReps ? (
