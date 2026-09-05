@@ -709,11 +709,12 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
    * Columns the desktop table renders. Kept as one expression so the empty-state
    * row and the section divider always span the same width.
    *
-   * Note it omits 'value' — that is the expression as it already stood, left
-   * alone rather than corrected here.
+   * Counted off the same list the header and the rows are built from, rather
+   * than a second list written out by hand: the hand-written one had lost
+   * 'value' and left both rows a column short whenever that column was on.
    */
   const tableColSpan = 1
-    + (['name','type','sfowner','status','attendees','conferences','wse','updated_on','relationships'] as const).filter(k => isVisible(k)).length
+    + orderedColumns.filter(col => isVisible(col.key)).length
     + customColumns.filter(c => c.visible).length
     + (rowAction ? 1 : 0)
     + (conferenceId != null ? 1 : 0);
