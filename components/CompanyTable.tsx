@@ -330,9 +330,21 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
     setWseMax(prev => prev === null ? wseGlobalMax : prev);
   }, [wseGlobalMin, wseGlobalMax]);
 
+  /**
+   * Anything that changes which rows exist, or what order they are in, sends
+   * the reader back to the first page — page 3 of one list is page 3 of a
+   * different list otherwise, and they were not asking to be moved.
+   *
+   * Deliberately not listed: `localCompanies`, which changes when the data
+   * reloads rather than when anyone filters, and would throw the reader to the
+   * top on every inline edit; `userScopedStatusMap`, which comes from config
+   * and only bites through `filterStatus`, already here; and the effective
+   * unit-range bounds, which move when the data does — `wseMin`/`wseMax` are
+   * the halves of that a reader actually drags.
+   */
   useEffect(() => {
     setPage(1);
-  }, [search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, wseMin, wseMax, quickFilterIcp, quickFilterTypes, quickFilterMyAccounts, groupByParent]);
+  }, [search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, filterHierarchy, wseMin, wseMax, quickFilterIcp, quickFilterTypes, quickFilterMyAccounts, groupByParent, sortKey, sortDir]);
 
   // Read once on mount rather than in a lazy initialiser: this renders on the
   // server too, where localStorage does not exist.
