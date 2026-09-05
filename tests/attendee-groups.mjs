@@ -223,14 +223,14 @@ console.log('\n— reading the tree —');
 console.log('\n— what is open —');
 {
   const s = EMPTY_COLLAPSE_STATE;
-  eq('families start open', isFamilyExpanded(s, 1), true);
+  eq('families start shut', isFamilyExpanded(s, 1), false);
   eq('companies start shut', isCompanyExpanded(s, 1), false);
 }
 {
   const s = toggleFamily(EMPTY_COLLAPSE_STATE, 7);
-  eq('shutting a family shuts it', isFamilyExpanded(s, 7), false);
-  eq('  and leaves its neighbours alone', isFamilyExpanded(s, 8), true);
-  eq('  reopening reopens', isFamilyExpanded(toggleFamily(s, 7), 7), true);
+  eq('opening a family opens it', isFamilyExpanded(s, 7), true);
+  eq('  and leaves its neighbours alone', isFamilyExpanded(s, 8), false);
+  eq('  shutting it again shuts it', isFamilyExpanded(toggleFamily(s, 7), 7), false);
 }
 {
   const s = toggleCompany(EMPTY_COLLAPSE_STATE, 3);
@@ -240,7 +240,7 @@ console.log('\n— what is open —');
 {
   // The independence property: an ancestor closing is not the reader undoing
   // what they opened inside it.
-  let s = EMPTY_COLLAPSE_STATE;
+  let s = toggleFamily(EMPTY_COLLAPSE_STATE, 7);
   s = toggleCompany(s, 3);
   s = toggleCompany(s, 4);
   const openBefore = [isCompanyExpanded(s, 3), isCompanyExpanded(s, 4)];
@@ -254,7 +254,7 @@ console.log('\n— what is open —');
 {
   const before = EMPTY_COLLAPSE_STATE;
   const after = toggleFamily(before, 1);
-  eq('state is replaced, never mutated', [before.collapsedFamilies.size, after.collapsedFamilies.size], [0, 1]);
+  eq('state is replaced, never mutated', [before.expandedFamilies.size, after.expandedFamilies.size], [0, 1]);
   eq('  and the untouched set is carried across', after.expandedCompanies, before.expandedCompanies);
 }
 

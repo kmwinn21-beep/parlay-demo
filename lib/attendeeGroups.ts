@@ -357,13 +357,17 @@ export function countEntries<A extends AttendeeLike>(entries: readonly TopLevelE
 // ---------------------------------------------------------------------------
 
 /**
- * Which tiers are open, held as two sets with opposite polarity.
+ * Which tiers are open, held as two sets of what someone opened.
  *
- * Families default open and companies default shut, so each set stores the
- * exception rather than the rule: `collapsedFamilies` are the families someone
- * closed, `expandedCompanies` the companies someone opened. Storing the rule
- * instead would mean seeding both sets from the data on every rebuild, and a
- * family arriving mid-session would arrive shut.
+ * Both tiers default shut, so each set stores the exception rather than the
+ * rule: these are the families and the companies a reader asked for. Storing
+ * the rule instead would mean seeding both sets from the data on every
+ * rebuild, and a family arriving mid-session would arrive in whichever state
+ * the seeding happened to give it.
+ *
+ * Shut is the point of the view. A page of it is the accounts at the
+ * conference and how senior each delegation is — one line per account — and
+ * everything below that is there when a reader asks for it by name.
  *
  * The sets never touch each other. Closing a family hides its companies
  * without forgetting which of them were open, so reopening it gives back the
@@ -371,21 +375,21 @@ export function countEntries<A extends AttendeeLike>(entries: readonly TopLevelE
  * what they did, and collapsing an ancestor is not undoing it.
  */
 export interface GroupCollapseState {
-  collapsedFamilies: ReadonlySet<number>;
+  expandedFamilies: ReadonlySet<number>;
   expandedCompanies: ReadonlySet<number>;
 }
 
 export const EMPTY_COLLAPSE_STATE: GroupCollapseState = {
-  collapsedFamilies: new Set<number>(),
+  expandedFamilies: new Set<number>(),
   expandedCompanies: new Set<number>(),
 };
 
-/** Families are open until someone shuts them. */
+/** Families are shut until someone opens them. */
 export function isFamilyExpanded(state: GroupCollapseState, key: number): boolean {
-  return !state.collapsedFamilies.has(key);
+  return state.expandedFamilies.has(key);
 }
 
-/** Companies are shut until someone opens them — the point of the view. */
+/** Companies are shut until someone opens them. */
 export function isCompanyExpanded(state: GroupCollapseState, companyId: number): boolean {
   return state.expandedCompanies.has(companyId);
 }
@@ -398,7 +402,7 @@ function toggled(set: ReadonlySet<number>, key: number): Set<number> {
 }
 
 export function toggleFamily(state: GroupCollapseState, key: number): GroupCollapseState {
-  return { ...state, collapsedFamilies: toggled(state.collapsedFamilies, key) };
+  return { ...state, expandedFamilies: toggled(state.expandedFamilies, key) };
 }
 
 export function toggleCompany(state: GroupCollapseState, companyId: number): GroupCollapseState {

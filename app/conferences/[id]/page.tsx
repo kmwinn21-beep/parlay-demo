@@ -2335,7 +2335,7 @@ export default function ConferenceDetailPage() {
           return (
             <span key={bucket.label} className="inline-flex items-center gap-1 whitespace-nowrap">
               {i > 0 && <span className="text-gray-300 mr-0.5">·</span>}
-              <span className="text-gray-500">{bucket.label}</span>
+              <span className="font-semibold text-gray-500">{bucket.label}</span>
               <span className={`inline-flex items-center justify-center min-w-[17px] h-[17px] px-1 rounded-full text-[10px] font-bold ${swatch}`}>
                 {bucket.count}
               </span>
@@ -2585,9 +2585,9 @@ export default function ConferenceDetailPage() {
   /**
    * The grouped body.
    *
-   * Families open, their companies shut. A page of this is the accounts at
-   * the conference and how senior each one's delegation is; the people appear
-   * when a reader asks for a company by name.
+   * Every tier arrives shut. A page of this is one line per account at the
+   * conference, with how senior its delegation is beside the name; the
+   * companies and then the people appear as a reader asks for them.
    */
   const renderGroupedAttendeeRows = () => {
     const rows: React.ReactNode[] = [];
