@@ -1894,15 +1894,19 @@ export default function ConferenceDetailPage() {
   const renderAttendeeMobileCard = (attendee: Attendee, opts?: { inCompany?: boolean }) => (
   <MobileCard
     key={attendee.id}
-    /* Under a company the card steps in again and takes a quieter rule
-       than the company's own. Two rules 12px apart is the most this width
-       will carry; making the inner one grey rather than brand keeps the
-       pair reading as depth instead of as a pattern. */
-    className={opts?.inCompany ? 'ml-6 border-l-[3px] border-l-gray-200' : ''}
+    /* Under a company the card steps in again and takes a quieter rule than
+       the company's own — grey rather than brand, so the pair reads as depth
+       and not as a pattern. Grey-300 rather than grey-200: at this width, on a
+       white card against a near-white page, the lighter one was invisible and
+       a 12px indent was carrying the tier alone. */
+    className={opts?.inCompany ? 'ml-6 border-l-[3px] border-l-gray-300' : ''}
   >
   <MobileAttendeeCard
     attendee={attendee as unknown as AttendeeCardRow}
     showPhotos={showAttendeePhotos}
+    /* Under a company header, naming the company on all eleven cards
+       beneath it says nothing the header did not already say. */
+    hideCompany={!!opts?.inCompany}
     selected={selectedAttendeeIds.has(attendee.id)}
     onToggleSelect={toggleAttendeeSelect}
     onOpenAttendee={(id) => { setQuickViewId(id); setQuickViewType('attendee'); }}
