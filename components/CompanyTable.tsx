@@ -1263,6 +1263,277 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
     });
   };
 
+  /**
+   * One company, as a card on a phone.
+   *
+   * The mobile twin of renderCompanyRow, and it takes the same two
+   * suppressions for the same reason. Left as its own render rather than
+   * merged with the desktop one: a card and a row share their pills and
+   * nothing else.
+   */
+  const renderCompanyCard = (company: Company, opts?: { inFamily?: boolean; isFamilyParent?: boolean }) => {
+    const inFamily = !!opts?.inFamily;
+    const isFamilyParent = !!opts?.isFamilyParent;
+    return (
+    /* Under a family the card steps in and takes a rule down its left edge.
+       An indent alone is easy to miss at this width — a card and a slightly
+       narrower card are nearly the same object; the rule says the run belongs
+       to the header above it. */
+    <MobileCard key={company.id} className={inFamily ? 'ml-4 border-l-[3px] border-l-brand-primary/20' : ''}>
+    <div
+      className={`px-4 py-4 transition-opacity ${selectedIds.has(company.id) ? 'bg-blue-50' : 'bg-white'} ${
+        actionsCompanyId != null && actionsCompanyId !== company.id ? 'opacity-40' : ''
+      }`}
+    >
+      {/* Row 1: name (left) | rep pills (upper-right) */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-brand-secondary flex-shrink-0" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {/* The name opens the quick-view drawer; the icon that
+                  used to do that is redundant on a phone. */}
+              <button
+                type="button"
+                onClick={() => openQuickView(company.id)}
+                className="font-semibold text-brand-secondary hover:underline text-sm leading-snug text-left"
+              >
+                {company.name}
+              </button>
+              {Number(company.pinned_notes_count) > 0 && (
+                <span title="Has pinned note" className="flex-shrink-0 inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-400 text-white">
+                  <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                  </svg>
+                </span>
+              )}
+            </div>
+            {/* The header card above already names the parent. */}
+            {!inFamily && company.parent_company_name && company.parent_company_id != null && (
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                <button
+                  type="button"
+                  onClick={() => openQuickView(company.parent_company_id!, company.name)}
+                  className="hover:text-brand-secondary hover:underline text-left"
+                >
+                  {company.parent_company_name}
+                </button>
+              </p>
+            )}
+            {/* Except on the parent's own card, which without this reads as
+                the header card drawn twice. */}
+            {isFamilyParent && <p className="text-[10px] text-gray-400 mt-0.5">Parent</p>}
+          </div>
+        </div>
+        {/* Rep pills — upper right, tap to edit */}
+        <button
+          type="button"
+          onClick={() => startEditRepModal(company)}
+          title="Tap to assign rep"
+          className="flex-shrink-0 inline-flex flex-wrap justify-end gap-1 hover:opacity-70 transition-opacity"
+        >
+          {parseRepIds(company.assigned_user ?? '').map(id => userOptionsFull.find(u => u.id === id)).filter(Boolean).map((user, i) => (
+            <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
+              <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              {getRepInitials(user!.value)}
+            </span>
+          ))}
+          {!company.assigned_user && (
+            <span className="text-[10px] text-gray-300">+ Rep</span>
+          )}
+        </button>
+      </div>
+      {/* Rows 2-4 ride one scrolling line, company type first. The
+          actions menu sits at the end of that line and stays put — the
+          pills pass behind it rather than pushing it off the edge. */}
+      <div className="mt-2 ml-6 flex items-center gap-2">
+      <ScrollRow className="flex-1 min-w-0" gapClass="gap-2">
+        {company.company_type && (
+          <span className="flex-shrink-0 whitespace-nowrap">
+            {/* The glyph says "this one is a child" — under a family header
+                that is the one thing already beyond doubt. */}
+            {company.company_type === 'Competitor'
+              ? <CompetitorTypePill competitorType={company.competitor_type} badgeClass={getBadgeClass(company.company_type, colorMaps.company_type || {})}>{!inFamily && <EntityStructureIcon structure={company.entity_structure} />}{company.company_type}</CompetitorTypePill>
+              : <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}>{!inFamily && <EntityStructureIcon structure={company.entity_structure} />}{company.company_type}</span>
+            }
+          </span>
+        )}
+        {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => (
+          <span key={s} className={`${getBadgeClass(s, colorMaps.status || {})} flex-shrink-0 whitespace-nowrap`}>{formatStatusLabel(s)}</span>
+        ))}
+        {(company.my_user_status_ids || []).map(optId => {
+          const label = userScopedStatusMap.get(optId);
+          return label ? <span key={optId} className={`${getBadgeClass(label, colorMaps.status || {})} flex-shrink-0 whitespace-nowrap`}>{formatStatusLabel(label)}</span> : null;
+        })}
+        <span className="inline-flex items-center gap-1 text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">
+          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+          <AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} onClick={conferenceAttendees ? () => setAttendeesDrawerCompany(company) : undefined} disableTooltip />
+        </span>
+        <span className="inline-flex items-center gap-1 text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">
+          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+          <ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} />
+        </span>
+        {Number(company.relationship_count) > 0 && (
+          <button
+            type="button"
+            onClick={e => { e.preventDefault(); e.stopPropagation(); setRelPopupCompany({ id: company.id, name: company.name }); }}
+            title="View relationships"
+            className="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
+          >
+            {Number(company.relationship_count)}
+          </button>
+        )}
+        {company.wse != null && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200 flex-shrink-0 whitespace-nowrap">
+            <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+            {Number(company.wse).toLocaleString()}
+          </span>
+        )}
+        {(() => {
+          const pill = formatValuePill(company.wse, avgCostPerUnit);
+          return pill ? (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap flex-shrink-0">
+              {pill}
+            </span>
+          ) : null;
+        })()}
+      </ScrollRow>
+      {conferenceId != null && (
+        <div className="flex-shrink-0">
+          <RowActionsKebab
+            entityType="company"
+            conferenceId={conferenceId}
+            companyId={company.id}
+            companyName={company.name}
+            onDone={onRefresh}
+            onOpenChange={open => setActionsCompanyId(open ? company.id : null)}
+          />
+        </div>
+      )}
+      </div>
+    </div>
+    </MobileCard>
+    );
+  };
+
+  /**
+   * A family's header card on a phone.
+   *
+   * The whole card is the collapse control — at this width a chevron alone is a
+   * small target, and there is nothing else on the card to tap. The chevron
+   * stays as the thing that says which way it will go.
+   */
+  const renderGroupCard = (family: Family<Company>) => {
+    const collapsed = isFamilyCollapsed(family.key);
+    const ids = family.all.map(c => c.id);
+    const selectedCount = ids.filter(id => selectedIds.has(id)).length;
+    const allSelected = selectedCount === ids.length && ids.length > 0;
+    const someSelected = selectedCount > 0 && !allSelected;
+    const valuePill = formatValuePill(family.rollup.units, avgCostPerUnit);
+
+    return (
+      <MobileCard key={`family-${family.key}`} className="border-gray-300">
+        <div className="px-4 py-3 bg-brand-primary/[0.055]">
+          <div className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              ref={el => { if (el) el.indeterminate = someSelected; }}
+              onChange={() => setSelectedIds(prev => {
+                const next = new Set(prev);
+                if (allSelected) ids.forEach(id => next.delete(id));
+                else ids.forEach(id => next.add(id));
+                return next;
+              })}
+              onClick={e => e.stopPropagation()}
+              aria-label={`Select every company under ${family.parentName}`}
+              className="accent-brand-secondary flex-shrink-0 mt-1"
+            />
+            <button
+              type="button"
+              onClick={() => toggleFamily(family.key)}
+              aria-expanded={!collapsed}
+              className="flex items-start gap-2 min-w-0 flex-1 text-left"
+            >
+              <svg className={`w-3.5 h-3.5 flex-shrink-0 mt-1 text-gray-400 transition-transform ${collapsed ? '-rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+              <span className="min-w-0">
+                <span className="block font-serif font-bold text-brand-primary text-[15px] leading-snug break-words">
+                  {family.parentName}
+                </span>
+                <span className="block text-[10px] text-gray-500 mt-0.5">
+                  {family.rollup.memberCount} at this conference
+                </span>
+              </span>
+            </button>
+          </div>
+
+          {/* The roll-ups, on the line the cards use for their own pills. */}
+          <div className="mt-2 ml-6 flex items-center gap-2 flex-wrap">
+            {family.parent?.company_type ? (
+              <span className={`${getBadgeClass(family.parent.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1 flex-shrink-0`}>
+                <EntityStructureIcon structure={family.parent.entity_structure} />
+                {family.parent.company_type}
+              </span>
+            ) : !family.parent ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-lg border border-dashed border-gray-300 text-[10px] text-gray-400 whitespace-nowrap flex-shrink-0">
+                Not attending
+              </span>
+            ) : null}
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-100 text-gray-700 flex-shrink-0">
+              {family.rollup.attendees}
+            </span>
+            {family.rollup.units != null && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-yellow-50 text-yellow-700 border border-yellow-200 flex-shrink-0">
+                <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+                {family.rollup.units.toLocaleString()}
+              </span>
+            )}
+            {valuePill && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap flex-shrink-0">
+                {valuePill}
+              </span>
+            )}
+          </div>
+        </div>
+      </MobileCard>
+    );
+  };
+
+  /** The phone's list when grouped: each family, its cards, then the rest. */
+  const renderGroupedCards = () => {
+    const looseTotal = families.entries.length - families.familyCount;
+    let dividerDrawn = false;
+    return pagedEntries.map(entry => {
+      if (entry.kind === 'family') {
+        return (
+          <React.Fragment key={`family-${entry.key}`}>
+            {renderGroupCard(entry)}
+            {!isFamilyCollapsed(entry.key) && entry.all.map(c => renderCompanyCard(c, {
+              inFamily: true,
+              isFamilyParent: c.id === entry.parent?.id,
+            }))}
+          </React.Fragment>
+        );
+      }
+      const first = !dividerDrawn;
+      dividerDrawn = true;
+      return (
+        <React.Fragment key={`loose-${entry.key}`}>
+          {first && (
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 pt-3 pb-1 px-1">
+              No parent company · {looseTotal}
+            </p>
+          )}
+          {renderCompanyCard(entry.company)}
+        </React.Fragment>
+      );
+    });
+  };
+
   return (
     <div>
       {/* Toolbar */}
@@ -1582,138 +1853,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         <div className="block lg:hidden -mx-6">
           {filtered.length === 0 ? (
             <div className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</div>
-          ) : <MobileCardList>{rowsToRender.map(company => (
-            <MobileCard key={company.id}>
-            <div
-              className={`px-4 py-4 transition-opacity ${selectedIds.has(company.id) ? 'bg-blue-50' : 'bg-white'} ${
-                actionsCompanyId != null && actionsCompanyId !== company.id ? 'opacity-40' : ''
-              }`}
-            >
-              {/* Row 1: name (left) | rep pills (upper-right) */}
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <input type="checkbox" checked={selectedIds.has(company.id)} onChange={() => toggleSelect(company.id)} className="accent-brand-secondary flex-shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {/* The name opens the quick-view drawer; the icon that
-                          used to do that is redundant on a phone. */}
-                      <button
-                        type="button"
-                        onClick={() => openQuickView(company.id)}
-                        className="font-semibold text-brand-secondary hover:underline text-sm leading-snug text-left"
-                      >
-                        {company.name}
-                      </button>
-                      {Number(company.pinned_notes_count) > 0 && (
-                        <span title="Has pinned note" className="flex-shrink-0 inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-400 text-white">
-                          <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
-                          </svg>
-                        </span>
-                      )}
-                    </div>
-                    {company.parent_company_name && company.parent_company_id != null && (
-                      <p className="text-[10px] text-gray-400 mt-0.5">
-                        <button
-                          type="button"
-                          onClick={() => openQuickView(company.parent_company_id!, company.name)}
-                          className="hover:text-brand-secondary hover:underline text-left"
-                        >
-                          {company.parent_company_name}
-                        </button>
-                      </p>
-                    )}
-                  </div>
-                </div>
-                {/* Rep pills — upper right, tap to edit */}
-                <button
-                  type="button"
-                  onClick={() => startEditRepModal(company)}
-                  title="Tap to assign rep"
-                  className="flex-shrink-0 inline-flex flex-wrap justify-end gap-1 hover:opacity-70 transition-opacity"
-                >
-                  {parseRepIds(company.assigned_user ?? '').map(id => userOptionsFull.find(u => u.id === id)).filter(Boolean).map((user, i) => (
-                    <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
-                      <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                      {getRepInitials(user!.value)}
-                    </span>
-                  ))}
-                  {!company.assigned_user && (
-                    <span className="text-[10px] text-gray-300">+ Rep</span>
-                  )}
-                </button>
-              </div>
-              {/* Rows 2-4 ride one scrolling line, company type first. The
-                  actions menu sits at the end of that line and stays put — the
-                  pills pass behind it rather than pushing it off the edge. */}
-              <div className="mt-2 ml-6 flex items-center gap-2">
-              <ScrollRow className="flex-1 min-w-0" gapClass="gap-2">
-                {company.company_type && (
-                  <span className="flex-shrink-0 whitespace-nowrap">
-                    {company.company_type === 'Competitor'
-                      ? <CompetitorTypePill competitorType={company.competitor_type} badgeClass={getBadgeClass(company.company_type, colorMaps.company_type || {})}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</CompetitorTypePill>
-                      : <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}><EntityStructureIcon structure={company.entity_structure} />{company.company_type}</span>
-                    }
-                  </span>
-                )}
-                {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => (
-                  <span key={s} className={`${getBadgeClass(s, colorMaps.status || {})} flex-shrink-0 whitespace-nowrap`}>{formatStatusLabel(s)}</span>
-                ))}
-                {(company.my_user_status_ids || []).map(optId => {
-                  const label = userScopedStatusMap.get(optId);
-                  return label ? <span key={optId} className={`${getBadgeClass(label, colorMaps.status || {})} flex-shrink-0 whitespace-nowrap`}>{formatStatusLabel(label)}</span> : null;
-                })}
-                <span className="inline-flex items-center gap-1 text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">
-                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                  <AttendeeTooltip count={Number(company.attendee_count)} summary={company.attendee_summary} onClick={conferenceAttendees ? () => setAttendeesDrawerCompany(company) : undefined} disableTooltip />
-                </span>
-                <span className="inline-flex items-center gap-1 text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">
-                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                  <ConferenceTooltip count={Number(company.conference_count)} names={company.conference_names} />
-                </span>
-                {Number(company.relationship_count) > 0 && (
-                  <button
-                    type="button"
-                    onClick={e => { e.preventDefault(); e.stopPropagation(); setRelPopupCompany({ id: company.id, name: company.name }); }}
-                    title="View relationships"
-                    className="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
-                  >
-                    {Number(company.relationship_count)}
-                  </button>
-                )}
-                {company.wse != null && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200 flex-shrink-0 whitespace-nowrap">
-                    <svg className="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
-                    {Number(company.wse).toLocaleString()}
-                  </span>
-                )}
-                {(() => {
-                  const pill = formatValuePill(company.wse, avgCostPerUnit);
-                  return pill ? (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap flex-shrink-0">
-                      {pill}
-                    </span>
-                  ) : null;
-                })()}
-              </ScrollRow>
-              {conferenceId != null && (
-                <div className="flex-shrink-0">
-                  <RowActionsKebab
-                    entityType="company"
-                    conferenceId={conferenceId}
-                    companyId={company.id}
-                    companyName={company.name}
-                    onDone={onRefresh}
-                    onOpenChange={open => setActionsCompanyId(open ? company.id : null)}
-                  />
-                </div>
-              )}
-              </div>
-            </div>
-            </MobileCard>
-          ))}</MobileCardList>}
+          ) : <MobileCardList>{grouped ? renderGroupedCards() : rowsToRender.map(company => renderCompanyCard(company))}</MobileCardList>}
         </div>
 
         {/* Mobile rep selection bottom sheet */}
