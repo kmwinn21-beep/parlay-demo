@@ -58,8 +58,14 @@ export const CARD_TABLE = 'border-separate [border-spacing:0_0.5rem]';
  * card by colouring its own border — a ring is inset on all four sides of every
  * cell, which draws the column divisions back on as grid lines.
  *
- * The three states are mutually exclusive so the fill is decided in one place;
- * none of them needs `!important` to beat another.
+ * The three states are mutually exclusive, and each names both its fill and its
+ * border. That matters: two border-colour utilities of equal specificity are
+ * settled by the order Tailwind happens to emit them in, not by the order they
+ * are written here, so a base colour alongside a state colour is a coin toss.
+ * It landed the wrong way — the resting grey was emitted after the selected
+ * blue and beat it, and a selected row never showed the border it asked for.
+ * Deciding the colour once per state removes the contest rather than winning
+ * it, and it is why focused now beats selected on purpose.
  *
  * Hover is a wash of the account's second accent, and only from `sm`: a tap on a
  * touch screen leaves the hover style stuck on the last card touched, which on a
@@ -67,7 +73,7 @@ export const CARD_TABLE = 'border-separate [border-spacing:0_0.5rem]';
  */
 export function cardRowClass(selected: boolean, focused = false): string {
   return [
-    '[&>td]:transition-colors [&>td]:border-y [&>td]:border-gray-200',
+    '[&>td]:transition-colors [&>td]:border-y',
     '[&>td:first-child]:border-l [&>td:first-child]:rounded-l-lg',
     '[&>td:last-child]:border-r [&>td:last-child]:rounded-r-lg',
     focused
@@ -76,7 +82,7 @@ export function cardRowClass(selected: boolean, focused = false): string {
       ? '[&>td]:bg-brand-highlight/25 [&>td]:border-gray-500'
       : selected
         ? '[&>td]:bg-blue-50 [&>td]:border-brand-secondary/40'
-        : '[&>td]:bg-white sm:[&:hover>td]:bg-brand-highlight/20',
+        : '[&>td]:bg-white [&>td]:border-gray-200 sm:[&:hover>td]:bg-brand-highlight/20',
   ].join(' ');
 }
 
