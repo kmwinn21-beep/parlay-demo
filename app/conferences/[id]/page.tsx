@@ -2322,13 +2322,26 @@ export default function ConferenceDetailPage() {
     if (rollup.total === 0) return <span className="text-gray-300">—</span>;
     return (
       <span className="inline-flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[11px] leading-tight">
-        {rollup.named.map((bucket, i) => (
-          <span key={bucket.label} className="whitespace-nowrap">
-            {i > 0 && <span className="text-gray-300 mr-1">·</span>}
-            <span className="font-semibold text-gray-700">{bucket.count}</span>
-            <span className="text-gray-500"> {bucket.label}</span>
-          </span>
-        ))}
+        {rollup.named.map((bucket, i) => {
+          // The badge takes the seniority's own colour, so the roll-up and the
+          // badges on the rows underneath it agree on sight as well as in
+          // arithmetic. It borrows the badge palette rather than the raw hex:
+          // the hex is a swatch, and for the lighter options — yellow above
+          // all — full-strength swatch on a tint of itself is a number you
+          // cannot read. The border is dropped; at 17px an outline closes the
+          // disc up.
+          const swatch = getPreset(colorMaps.seniority?.[bucket.label]).badgeClass
+            .replace(/\bborder(-\S+)?\b/g, '').trim();
+          return (
+            <span key={bucket.label} className="inline-flex items-center gap-1 whitespace-nowrap">
+              {i > 0 && <span className="text-gray-300 mr-0.5">·</span>}
+              <span className="text-gray-500">{bucket.label}</span>
+              <span className={`inline-flex items-center justify-center min-w-[17px] h-[17px] px-1 rounded-full text-[10px] font-bold ${swatch}`}>
+                {bucket.count}
+              </span>
+            </span>
+          );
+        })}
         {rollup.overflow > 0 && (
           <span className="whitespace-nowrap text-gray-400">
             <span className="text-gray-300 mr-1">·</span>+{rollup.overflow}
