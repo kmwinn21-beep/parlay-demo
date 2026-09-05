@@ -18,6 +18,9 @@ export interface GroupableCompany {
   parent_company_id?: number | null;
   parent_company_name?: string | null;
   company_type?: string;
+  /** Derived by /api/companies from the links, not stored. Read by rows that
+   *  draw the parent/child glyph beside a company's type. */
+  entity_structure?: string | null;
   status?: string;
   assigned_user?: string;
   wse?: number | null;
