@@ -75,6 +75,15 @@ export interface FamilyRollup {
   repIds: number[];
   /** Companies in this family at this conference, the parent included. */
   memberCount: number;
+  /**
+   * The attendee sum split by who they came from.
+   *
+   * A single figure for a family cannot say whether the people here came from
+   * the parent, from its children, or from both — and a reader looking at an
+   * account wants exactly that. `attendees` is still the two added together.
+   */
+  parentAttendees: number;
+  childAttendees: number;
 }
 
 export interface Family<T extends GroupableCompany> {
@@ -135,9 +144,11 @@ function resolveFamilyKey<T extends GroupableCompany>(company: T, byId: Map<numb
 }
 
 function rollUp<T extends GroupableCompany>(
-  all: T[],
+  parent: T | null,
+  members: T[],
   parseRepIds: (value: string | undefined) => number[],
 ): FamilyRollup {
+  const all = parent ? [parent, ...members] : members;
   let attendees = 0;
   let units = 0;
   let anyUnits = false;
@@ -156,7 +167,15 @@ function rollUp<T extends GroupableCompany>(
     }
   }
 
-  return { attendees, units: anyUnits ? units : null, relationships, repIds, memberCount: all.length };
+  return {
+    attendees,
+    units: anyUnits ? units : null,
+    relationships,
+    repIds,
+    memberCount: all.length,
+    parentAttendees: parent ? Number(parent.attendee_count) || 0 : 0,
+    childAttendees: members.reduce((n, c) => n + (Number(c.attendee_count) || 0), 0),
+  };
 }
 
 /**
@@ -245,7 +264,7 @@ export function buildCompanyFamilies<T extends GroupableCompany>(
       parentName,
       members,
       all,
-      rollup: rollUp(all, opts.parseRepIds),
+      rollup: rollUp(parent, members, opts.parseRepIds),
     });
   }
 

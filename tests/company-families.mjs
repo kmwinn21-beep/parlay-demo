@@ -11,6 +11,7 @@ import {
   entriesToCompanies,
   applyGroupingToHierarchyFilter,
 } from '../lib/companyFamilies.ts';
+import { resolveEntityDesignation } from '../lib/entityStructureLabels.ts';
 
 const parseRepIds = v => String(v ?? '').split(',').map(s => s.trim()).filter(Boolean).map(Number);
 const C = (id, name, o = {}) => ({ id, name, attendee_count: 1, conference_count: 1, ...o });
@@ -83,6 +84,29 @@ console.log('\n— roll-ups —');
   const r = build([C(2, 'P', { wse: null }), C(1, 'C', { parent_company_id: 2, wse: null })]);
   eq('units null when every member is null', r.entries[0].rollup.units, null);
 }
+{
+  // The attendee sum split by who they came from — one figure cannot say
+  // whether anyone from the parent came at all.
+  const r = build([
+    C(2, 'Parent Co', { attendee_count: 4 }),
+    C(1, 'Child A', { parent_company_id: 2, attendee_count: 3 }),
+    C(3, 'Child B', { parent_company_id: 2, attendee_count: 2 }),
+  ]);
+  const f = r.entries[0].rollup;
+  eq('parent attendees are the parent\'s own', f.parentAttendees, 4);
+  eq('child attendees exclude the parent', f.childAttendees, 5);
+  eq('  and the two still add up to the total', f.parentAttendees + f.childAttendees, f.attendees);
+}
+{
+  // Parent not at the conference: nobody came from it, and saying so is the
+  // point of splitting the figure.
+  const r = build([
+    C(1, 'Child A', { parent_company_id: 9, parent_company_name: 'Away', attendee_count: 3 }),
+    C(3, 'Child B', { parent_company_id: 9, parent_company_name: 'Away', attendee_count: 2 }),
+  ]);
+  const f = r.entries[0].rollup;
+  eq('absent parent contributes no attendees', [f.parentAttendees, f.childAttendees, f.attendees], [0, 5, 5]);
+}
 
 console.log('\n— ordering —');
 {
@@ -148,6 +172,26 @@ console.log('\n— pagination unit —');
   eq('4 companies -> 2 top-level entries', r.entries.length, 2);
   eq('flattening a page restores every company', entriesToCompanies(r.entries).map(c => c.id).sort(), [1, 2, 3, 4]);
   eq('groupedCompanyCount', r.groupedCompanyCount, 3);
+}
+
+console.log('\n— what the account calls a parent and a child —');
+{
+  eq('seeded names resolve to themselves', [
+    resolveEntityDesignation(['Parent', 'Child'], 'Parent'),
+    resolveEntityDesignation(['Parent', 'Child'], 'Child'),
+  ], ['Parent', 'Child']);
+  eq('renamed options are used', [
+    resolveEntityDesignation(['Holding Co', 'Subsidiary'], 'Parent'),
+    resolveEntityDesignation(['Holding Co', 'Subsidiary'], 'Child'),
+  ], ['Holding Co', 'Subsidiary']);
+  eq('reordering does not swap the seeded names', [
+    resolveEntityDesignation(['Child', 'Parent'], 'Parent'),
+    resolveEntityDesignation(['Child', 'Parent'], 'Child'),
+  ], ['Parent', 'Child']);
+  eq('nothing configured falls back to the canonical words', [
+    resolveEntityDesignation(undefined, 'Parent'),
+    resolveEntityDesignation([], 'Child'),
+  ], ['Parent', 'Child']);
 }
 
 console.log('\n— Parent/Child filter, stashed and handed back —');

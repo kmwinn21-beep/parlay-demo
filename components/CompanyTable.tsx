@@ -12,6 +12,7 @@ import { ScrollRow } from '@/components/ScrollRow';
 import { AddToConferenceModal } from './AddToConferenceModal';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useConfigOptions } from '@/lib/useConfigOptions';
+import { resolveEntityDesignation } from '@/lib/entityStructureLabels';
 import { getBadgeClass, getPreset, formatStatusLabel} from '@/lib/colors';
 import { useUserOptions, parseRepIds, resolveRepInitials, getRepInitials } from '@/lib/useUserOptions';
 import { INLINE_EDIT_FIELD_CLASS, InlineEditCancelButton, InlineEditRow, InlineEditPlaceholder } from '@/components/InlineEditField';
@@ -155,6 +156,14 @@ function fmtDate(dateStr?: string): string {
 export function CompanyTable({ companies, onRefresh, tableName = 'companies', rowAction, onDecoupleSelected, conferenceAttendees, conferenceLabel, conferenceId }: CompanyTableProps) {
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions('company_table');
+  /**
+   * Entity Structure is registered against the company detail form, not this
+   * table's, so it is read from the unscoped set. Used to name the two halves
+   * of a family's attendee count in whatever words the account uses.
+   */
+  const entityStructureOptions = useConfigOptions().entity_structure;
+  const parentLabel = resolveEntityDesignation(entityStructureOptions, 'Parent');
+  const childLabel = resolveEntityDesignation(entityStructureOptions, 'Child');
   const unitTypeLabel = useUnitTypeLabel();
   const avgCostPerUnit = useAvgCostPerUnit();
   const userOptionsFull = useUserOptions();
@@ -1125,8 +1134,11 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                     <p className="font-serif font-bold text-brand-primary text-[15px] leading-snug break-words">
                       {family.parentName}
                     </p>
+                    {/* Where the people here came from, not how many company
+                        records the family has. One figure could not say whether
+                        anyone from the parent came at all. */}
                     <p className="text-[10px] text-gray-500 mt-0.5">
-                      {family.rollup.memberCount} at this conference
+                      {family.rollup.parentAttendees} {parentLabel} · {family.rollup.childAttendees} {childLabel} Attendees
                     </p>
                   </div>
                 </div>
@@ -1497,7 +1509,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                   {family.parentName}
                 </span>
                 <span className="block text-[10px] text-gray-500 mt-0.5">
-                  {family.rollup.memberCount} at this conference
+                  {family.rollup.parentAttendees} {parentLabel} · {family.rollup.childAttendees} {childLabel} Attendees
                 </span>
               </span>
             </button>
