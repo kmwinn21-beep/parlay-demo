@@ -29,6 +29,12 @@ export async function GET(
       sql: `SELECT a.*, c.name as company_name, c.company_type, c.wse as company_wse,
                    c.icp as company_icp, c.assigned_user as company_assigned_user,
                    c.entity_structure as company_entity_structure,
+                   -- Enough to tell whether this conference has families in it
+                   -- at all, which decides whether the grouped view is offered.
+                   -- Drawing the view itself needs the companies; deciding
+                   -- whether to offer it must not, or every conference open
+                   -- pays for the whole company list to place one button.
+                   c.parent_company_id as parent_company_id,
                    COALESCE(conf_agg.conference_count, 0) as conference_count,
                    conf_agg.conference_names,
                    COALESCE(notes_agg.notes_count, 0) as entity_notes_count

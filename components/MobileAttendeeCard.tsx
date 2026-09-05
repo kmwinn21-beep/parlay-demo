@@ -94,7 +94,7 @@ export function ConferenceCountTooltip({ count, names, onOpen }: {
 export function MobileAttendeeCard({
   attendee, showPhotos, selected, onToggleSelect, onOpenAttendee, onOpenCompany,
   onClassifyTitle, titleWarning = false, userOptions, colorMaps, actions, dimmed = false,
-  hideAssignedRep = false, leadingPill, onOpenConferences,
+  hideAssignedRep = false, hideCompany = false, leadingPill, onOpenConferences,
 }: {
   attendee: AttendeeCardRow;
   showPhotos: boolean;
@@ -116,6 +116,11 @@ export function MobileAttendeeCard({
   /** Drops the company's assigned-rep pill — for the confirm prompt, where
    *  who owns the account isn't what's being decided. */
   hideAssignedRep?: boolean;
+  /** Drops the company line — for a list that is already grouped by company,
+   *  where a header two pixels above says the same name for every card under
+   *  it. Off everywhere else: naming the company is most of what a card in a
+   *  flat list is for. */
+  hideCompany?: boolean;
   /** Given, the conference count pill opens this attendee's full history. */
   onOpenConferences?: () => void;
 }) {
@@ -169,7 +174,7 @@ export function MobileAttendeeCard({
             </div>
           )}
 
-          {attendee.company_name && (
+          {attendee.company_name && !hideCompany && (
             <div className={`mt-1 flex items-center gap-1.5 flex-wrap ${onToggleSelect ? 'ml-6' : ''}`}>
               {attendee.company_id ? (
                 <button

@@ -25,11 +25,25 @@ import { ConfirmAddAttendeeDialog } from '@/components/ConfirmAddAttendeeDialog'
 import { INLINE_EDIT_FIELD_CLASS, InlineEditRow, InlineEditPlaceholder } from '@/components/InlineEditField';
 import { CompanyTable } from '@/components/CompanyTable';
 import { EntityStructureIcon } from '@/components/EntityStructureIcon';
+import {
+  buildAttendeeGroups,
+  attendeesUnder,
+  isFamilyExpanded,
+  isCompanyExpanded,
+  toggleFamily,
+  toggleCompany,
+  EMPTY_COLLAPSE_STATE,
+  type GroupCollapseState,
+  type FamilyNode,
+  type CompanyNode,
+  type SeniorityRollup,
+} from '@/lib/attendeeGroups';
+import { resolveEntityDesignation } from '@/lib/entityStructureLabels';
 import { SocialEventsTable, type SocialEvent } from '@/components/SocialEventsTable';
 import { BackButton } from '@/components/BackButton';
 import { TargetToggleButton } from '@/components/TargetToggleButton';
 import { ConferenceLogoField } from '@/components/ConferenceLogoField';
-import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_WRAP, cardEmphasisClass, cardRowClass, selectionColumnWidth, useCardFocus } from '@/components/tableCards';
+import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_WRAP, cardEmphasisClass, cardGroupRowClass, cardRowClass, selectionColumnWidth, useCardFocus } from '@/components/tableCards';
 import { ConferenceTimelineDialog } from '@/components/ConferenceTimelineDialog';
 import { useConferenceTargets } from '@/lib/useConferenceTargets';
 import { useIcpCompanyTypes, matchesIcpCompanyType } from '@/lib/useIcpCompanyTypes';
@@ -100,6 +114,10 @@ interface Attendee {
   company_assigned_user?: string;
   /** 'Parent' | 'Child' on the attendee's company — drawn inside the type pill. */
   company_entity_structure?: string | null;
+  /** The attendee's company's parent, when it has one. Carried on the row so
+   *  the page can tell whether this conference contains families without
+   *  fetching every company in the account. */
+  parent_company_id?: number | null;
   email?: string;
   status?: string;
   seniority?: string;
@@ -120,6 +138,16 @@ function fmtDate(dateStr?: string): string {
 }
 
 const ATTENDEE_PAGE_SIZE = 100;
+/** Stable identity, so an account with no configured seniority list does not
+ *  hand the grouping memo a fresh empty array on every render. */
+const EMPTY_SENIORITY_ORDER: string[] = [];
+/** Global rather than per-conference: how someone reads a delegation list is a
+ *  habit, not a property of the conference they happen to be looking at. */
+const ATTENDEES_GROUPED_KEY = 'parlay-conference-attendees-grouped';
+/** The column keys the conference attendee table draws a cell for. */
+const RENDERED_ATTENDEE_COLUMNS = new Set([
+  'name', 'company', 'type', 'seniority', 'conferences', 'notes', 'date_added',
+]);
 
 function conferenceBadgeClass(count: number) {
   if (count >= 4) return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700';
@@ -442,6 +470,9 @@ export default function ConferenceDetailPage() {
   const [attendeeFiltersOpen, setAttendeeFiltersOpen] = useState(false);
   const [attendeePage, setAttendeePage] = useState(1);
   const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<Set<number>>(new Set());
+  const [attendeesGrouped, setAttendeesGrouped] = useState(false);
+  const [attendeeCollapse, setAttendeeCollapse] = useState<GroupCollapseState>(EMPTY_COLLAPSE_STATE);
+  const [companiesLoadFailed, setCompaniesLoadFailed] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [showAttendeeEdit, setShowAttendeeEdit] = useState(false);
   const [attendeeEditFields, setAttendeeEditFields] = useState<{ status?: string; seniority?: string; function?: string; company_id?: string; consent?: string }>({});
@@ -1002,7 +1033,7 @@ export default function ConferenceDetailPage() {
         }));
       setConferenceCompanies(filtered);
       setCompaniesLoaded(true);
-    } catch { /* non-fatal */ } finally { setIsLoadingCompanies(false); }
+    } catch { setCompaniesLoadFailed(true); } finally { setIsLoadingCompanies(false); }
   }, [conference, companiesLoaded]);
 
   useEffect(() => {
@@ -1587,7 +1618,7 @@ export default function ConferenceDetailPage() {
     await doUpload(pendingMapping, resolutions);
   };
 
-  useEffect(() => { setAttendeePage(1); }, [attendeeSearch, filterSeniority, filterCompanyType, filterStatus, filterConfCounts, filterUpdatedWithin, filterNeedsReview, quickFilterIcp, quickFilterTypes, quickFilterMyAccounts]);
+  useEffect(() => { setAttendeePage(1); }, [attendeeSearch, filterSeniority, filterCompanyType, filterStatus, filterConfCounts, filterUpdatedWithin, filterNeedsReview, quickFilterIcp, quickFilterTypes, quickFilterMyAccounts, attendeesGrouped]);
 
   const CONF_COUNT_OPTIONS = ['1', '2', '3', '4+'];
   const toggleConfFilter = (val: string) => {
@@ -1701,6 +1732,151 @@ export default function ConferenceDetailPage() {
   const attendeeTotalPages = Math.ceil(filteredAttendees.length / ATTENDEE_PAGE_SIZE);
   const paginatedAttendees = filteredAttendees.slice((attendeePage - 1) * ATTENDEE_PAGE_SIZE, attendeePage * ATTENDEE_PAGE_SIZE);
 
+  // --- Grouped attendee view ------------------------------------------------
+  // Two tiers of container above the person: a family's tint, a company's rule.
+  // A person and a building must not read as the same object at two depths, so
+  // the indents are only half of what separates them.
+  //
+  // THESE ARE TUNED FOR WHERE THE TEXT LANDS, NOT FOR THE BOX THAT HOLDS IT.
+  // A tier's chrome sits between its container and its first character — the
+  // company tier spends 3px of rule plus its padding — so a tier that adds
+  // chrome and keeps its number moves its text right and can overtake the tier
+  // below it. That is exactly what happened here: 24 and 48 put the person's
+  // name five pixels LEFT of the company's, because the company's rule and
+  // chevron spent thirty-one pixels the person's row did not. The chevron now
+  // hangs in the rule's gutter instead of pushing the text.
+  //
+  // Measured optical positions from the Name cell's left edge, which is what
+  // any change here has to preserve: family 36px, company 55px, person 64px.
+  // If you add anything before a tier's text, re-measure all three.
+  const GROUP_COMPANY_INDENT = 20;
+  const GROUP_ATTENDEE_INDENT = 48;
+
+  const attendeeParentLabel = resolveEntityDesignation(allConfigOptions.entity_structure, 'Parent');
+  const attendeeSeniorityOrder = configOptions.seniority ?? EMPTY_SENIORITY_ORDER;
+
+  /**
+   * The grouped tree.
+   *
+   * `filteredAttendees` is rebuilt on every render, so listing it here would
+   * memoise nothing. The dependencies are the raw inputs that decide what it
+   * contains instead.
+   *
+   * ANY NEW FILTER OR SORT ON THIS TABLE MUST BE ADDED TO THIS LIST. Forget,
+   * and the grouped view keeps showing rows the filter has already dropped —
+   * loudly and immediately, which is the point: a stale tree is visible on the
+   * first click, where a suppression that hid the whole question would not be.
+   */
+  const attendeeGroups = useMemo(
+    () => buildAttendeeGroups(filteredAttendees, conferenceCompanies, {
+      // The derived value, never the stored column: the roll-up has to agree
+      // with the badge rendered on the row beneath it.
+      seniorityOf: (a) => effectiveSeniority(a.seniority, a.title),
+      seniorityOrder: attendeeSeniorityOrder,
+      // Only a company sort has an opinion about the order of companies.
+      companySortDir: sortKey === 'company' ? sortDir : 'asc',
+    }),
+    [
+      conference?.attendees, conferenceCompanies, attendeeSeniorityOrder, sortKey, sortDir,
+      attendeeSearch, filterSeniority, filterCompanyType, filterStatus, filterConfCounts,
+      filterUpdatedWithin, filterNeedsReview, quickFilterIcp, quickFilterTypes,
+      quickFilterMyAccounts, quickFilterPlaceholders, titleMetaMap, conflictedPlaceholderIds,
+      currentUser?.configId,
+    ],
+  );
+
+  // A page is 100 top-level entries — a family counts as one, however many
+  // companies and people hang off it.
+  const attendeeEntryTotalPages = Math.ceil(attendeeGroups.entries.length / ATTENDEE_PAGE_SIZE);
+  const effectiveAttendeeTotalPages = attendeesGrouped ? attendeeEntryTotalPages : attendeeTotalPages;
+  const pagedAttendeeEntries = attendeeGroups.entries.slice(
+    (attendeePage - 1) * ATTENDEE_PAGE_SIZE, attendeePage * ATTENDEE_PAGE_SIZE,
+  );
+  const isLastAttendeePage = attendeePage >= Math.max(1, effectiveAttendeeTotalPages);
+
+  // Counting "visible" columns is not the same as counting rendered ones:
+  // `value` is registered for this table and toggleable, but has no case in
+  // either the header or the row switch, so it occupies a slot in the config
+  // and none on screen. Counting it would leave a divider spanning a column
+  // that does not exist and pushing the row off the table's right edge.
+  // (Logged in COMPANIES_TABLE_REPORT.md §8; not fixed here.)
+  const attendeeTableColSpan = 1
+    + confAttendeeColumns.filter(c => isConfAttendeeColVisible(c.key) && RENDERED_ATTENDEE_COLUMNS.has(c.key)).length
+    + customColumns.filter(c => c.visible).length
+    + 1;
+
+  // Restored in an effect rather than in useState, so the server's HTML and
+  // the first client render agree about which view this is. The control that
+  // writes the key arrives with the toggle.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(ATTENDEES_GROUPED_KEY) === 'true') setAttendeesGrouped(true);
+    } catch { /* private mode, or storage refused; the list still works */ }
+  }, []);
+
+  // The companies fetch belongs to the Companies tab; grouping is the second
+  // thing that needs it, for the parent names and the roll-ups. It self-guards,
+  // so this asks at most once — and only once someone has asked for the view.
+  useEffect(() => {
+    if (attendeesGrouped) loadCompanies();
+  }, [attendeesGrouped, loadCompanies]);
+
+  // Without companies there are no parents, and a grouped view with no parents
+  // is an empty screen that looks broken rather than one that failed. Say so
+  // and go back to the list that still works.
+  useEffect(() => {
+    if (!attendeesGrouped || !companiesLoadFailed) return;
+    setAttendeesGrouped(false);
+    toast.error('Could not load company data — showing the single list.');
+  }, [attendeesGrouped, companiesLoadFailed]);
+
+  const attendeeGroupingLoading = attendeesGrouped && isLoadingCompanies && !companiesLoaded;
+
+  /**
+   * Whether this conference contains a family at all.
+   *
+   * Answered from the attendee rows, which now carry their company's parent,
+   * rather than from the company list — deciding whether to render a button
+   * must not cost a fetch of every company in the account on the default tab
+   * of every conference.
+   *
+   * A family means two companies here under one parent, which is the rule
+   * `buildCompanyFamilies` applies. This reads one level where that walks the
+   * chain, and the two agree because linking a company reassigns its
+   * grandchildren straight to the top parent, so chains of two do not occur.
+   * The view itself still groups through the shared code; this only decides
+   * whether to offer it.
+   */
+  const attendeeFamiliesPresent = useMemo(() => {
+    const familyKeyByCompany = new Map<number, number>();
+    for (const a of conference?.attendees ?? []) {
+      if (a.company_id == null) continue;
+      familyKeyByCompany.set(a.company_id, a.parent_company_id ?? a.company_id);
+    }
+    const companiesPerFamily = new Map<number, number>();
+    for (const key of Array.from(familyKeyByCompany.values())) {
+      const n = (companiesPerFamily.get(key) ?? 0) + 1;
+      if (n >= 2) return true;
+      companiesPerFamily.set(key, n);
+    }
+    return false;
+  }, [conference?.attendees]);
+
+  /**
+   * Switching views changes only the view.
+   *
+   * The selection, the sort and the search are the reader's, not the layout's,
+   * so nothing here touches them — the same people stay picked across a toggle
+   * and the same order survives it.
+   */
+  const setAttendeesGroupedView = useCallback((next: boolean) => {
+    setAttendeesGrouped(next);
+    try { localStorage.setItem(ATTENDEES_GROUPED_KEY, next ? 'true' : 'false'); } catch { /* site data blocked */ }
+    // Every arrival starts from the accounts themselves rather than from
+    // whatever the last visit was left holding open.
+    if (next) setAttendeeCollapse(EMPTY_COLLAPSE_STATE);
+  }, []);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -1710,6 +1886,753 @@ export default function ConferenceDetailPage() {
   }
 
   if (!conference) return null;
+
+  /**
+   * One person's card. The flat list and the grouped list both render through
+   * here, so the two cannot drift; a tier changes only where the card sits.
+   */
+  const renderAttendeeMobileCard = (attendee: Attendee, opts?: { inCompany?: boolean }) => (
+  <MobileCard
+    key={attendee.id}
+    /* Under a company the card steps in again and takes a quieter rule than
+       the company's own — grey rather than brand, so the pair reads as depth
+       and not as a pattern. Grey-300 rather than grey-200: at this width, on a
+       white card against a near-white page, the lighter one was invisible and
+       a 12px indent was carrying the tier alone. */
+    className={opts?.inCompany ? 'ml-6 border-l-[3px] border-l-gray-300' : ''}
+  >
+  <MobileAttendeeCard
+    attendee={attendee as unknown as AttendeeCardRow}
+    showPhotos={showAttendeePhotos}
+    /* Under a company header, naming the company on all eleven cards
+       beneath it says nothing the header did not already say. */
+    hideCompany={!!opts?.inCompany}
+    selected={selectedAttendeeIds.has(attendee.id)}
+    onToggleSelect={toggleAttendeeSelect}
+    onOpenAttendee={(id) => { setQuickViewId(id); setQuickViewType('attendee'); }}
+    onOpenCompany={(id) => { setQuickViewId(id); setQuickViewType('company'); }}
+    onClassifyTitle={(id, title) => setClassifyingAttendee({ id, title })}
+    titleWarning={!titleMetaLoading && shouldWarnForTitleMetadata(titleMetaMap[attendee.id])}
+    userOptions={userOptions}
+    colorMaps={colorMaps}
+    dimmed={actionsAttendeeId != null && actionsAttendeeId !== attendee.id}
+    onOpenConferences={() => setTimelineAttendee({ id: attendee.id, first_name: attendee.first_name, last_name: attendee.last_name })}
+    leadingPill={matchesIcpCompanyType(attendee.company_type, icpCompanyTypes) ? (
+      <TargetToggleButton
+        active={targetIds.has(attendee.id)}
+        busy={targetBusyId === attendee.id}
+        onToggle={() => toggleTarget(attendee.id)}
+        name={`${attendee.first_name} ${attendee.last_name}`.trim()}
+        size="sm"
+      />
+    ) : undefined}
+    actions={
+      <RowActionsKebab
+        entityType="attendee"
+        conferenceId={Number(id)}
+        attendeeId={attendee.id}
+        attendeeName={`${attendee.first_name} ${attendee.last_name}`.trim()}
+        companyId={attendee.company_id ?? null}
+        companyName={attendee.company_name ?? null}
+        onDone={fetchConference}
+        onOpenChange={open => setActionsAttendeeId(open ? attendee.id : null)}
+      />
+    }
+  />
+  </MobileCard>
+  );
+
+  /**
+   * A family's card — tier 1 on the phone.
+   *
+   * The whole card collapses it. At this width a chevron alone is a 14px
+   * target in a 358px card, and the header has nothing else it could mean.
+   */
+  const renderAttendeeFamilyCard = (family: FamilyNode<Attendee>) => {
+    const ids = attendeesUnder(family).map(a => a.id);
+    const allSelected = ids.length > 0 && ids.every(fid => selectedAttendeeIds.has(fid));
+    const someSelected = !allSelected && ids.some(fid => selectedAttendeeIds.has(fid));
+    const expanded = isFamilyExpanded(attendeeCollapse, family.key);
+    return (
+      <MobileCard key={`family-${family.key}`} className="border-gray-300">
+        <button
+          type="button"
+          onClick={() => setAttendeeCollapse(s => toggleFamily(s, family.key))}
+          aria-expanded={expanded}
+          className="w-full text-left px-4 py-3 bg-brand-primary/[0.055]"
+        >
+          <div className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              ref={el => { if (el) el.indeterminate = someSelected; }}
+              onChange={() => setSelectedAttendeeIds(prev => {
+                const next = new Set(prev);
+                if (allSelected) ids.forEach(fid => next.delete(fid));
+                else ids.forEach(fid => next.add(fid));
+                return next;
+              })}
+              // The tick is its own action; the card around it collapses.
+              onClick={e => e.stopPropagation()}
+              aria-label={`Select everyone under ${family.parentName}`}
+              className="accent-brand-secondary flex-shrink-0 mt-1"
+            />
+            <svg className={`w-3.5 h-3.5 flex-shrink-0 mt-1 text-gray-400 transition-transform ${expanded ? '' : '-rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+            <span className="min-w-0 flex-1">
+              <span className="block font-serif font-bold text-brand-primary text-[15px] leading-snug break-words">
+                {family.parentName}
+              </span>
+              <span className="block text-[10px] font-semibold text-gray-500 mt-0.5">
+                {family.companyCount} {family.companyCount === 1 ? 'company' : 'companies'} · {family.attendeeCount} {family.attendeeCount === 1 ? 'attendee' : 'attendees'}
+              </span>
+            </span>
+          </div>
+          <div className="mt-2 ml-6 flex items-center gap-2 flex-wrap">
+            {family.parent?.company_type ? (
+              <span className={`${getBadgeClass(family.parent.company_type, colorMaps.company_type || {})} text-xs inline-flex items-center gap-1`}>
+                <EntityStructureIcon structure="Parent" />
+                {family.parent.company_type}
+              </span>
+            ) : !family.parent ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-lg border border-dashed border-gray-300 text-[10px] text-gray-400 whitespace-nowrap">
+                Not attending
+              </span>
+            ) : null}
+            {renderSeniorityRollup(family.seniority)}
+          </div>
+        </button>
+      </MobileCard>
+    );
+  };
+
+  /**
+   * A company's card — tier 2 on the phone.
+   *
+   * Stepped in and ruled in the account's own colour, so the run of people
+   * below it reads as belonging to it rather than as the next thing along.
+   */
+  const renderAttendeeCompanyCard = (node: CompanyNode<Attendee>) => {
+    const ids = node.attendees.map(a => a.id);
+    const allSelected = ids.length > 0 && ids.every(cid => selectedAttendeeIds.has(cid));
+    const someSelected = !allSelected && ids.some(cid => selectedAttendeeIds.has(cid));
+    const expanded = isCompanyExpanded(attendeeCollapse, node.companyId);
+    return (
+      <MobileCard key={`company-${node.companyId}`} className="ml-3 border-l-[3px] border-l-brand-primary/35">
+        <button
+          type="button"
+          onClick={() => setAttendeeCollapse(s => toggleCompany(s, node.companyId))}
+          aria-expanded={expanded}
+          className="w-full text-left px-3 py-2.5 bg-white"
+        >
+          <div className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              ref={el => { if (el) el.indeterminate = someSelected; }}
+              onChange={() => setSelectedAttendeeIds(prev => {
+                const next = new Set(prev);
+                if (allSelected) ids.forEach(cid => next.delete(cid));
+                else ids.forEach(cid => next.add(cid));
+                return next;
+              })}
+              onClick={e => e.stopPropagation()}
+              aria-label={`Select everyone from ${node.companyName}`}
+              className="accent-brand-secondary flex-shrink-0 mt-1"
+            />
+            <svg className={`w-3 h-3 flex-shrink-0 mt-1.5 text-gray-400 transition-transform ${expanded ? '' : '-rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-gray-800 leading-snug break-words">
+                {node.companyName}
+              </span>
+              <span className="block text-[10px] text-gray-500 mt-0.5">
+                {node.attendees.length} {node.attendees.length === 1 ? 'attendee' : 'attendees'}
+              </span>
+            </span>
+          </div>
+          <div className="mt-1.5 ml-6 flex items-center gap-2 flex-wrap">
+            {node.isFamilyParent && (
+              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 leading-4 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.entity_structure?.[attendeeParentLabel]).badgeClass}`}>
+                <EntityStructureIcon structure="Parent" />
+                {attendeeParentLabel}
+              </span>
+            )}
+            {node.company?.company_type && (
+              <span className={`${getBadgeClass(node.company.company_type, colorMaps.company_type || {})} text-xs inline-flex items-center gap-1`}>
+                <EntityStructureIcon structure={node.company.entity_structure} />
+                {node.company.company_type}
+              </span>
+            )}
+            {renderSeniorityRollup(node.seniority)}
+          </div>
+        </button>
+      </MobileCard>
+    );
+  };
+
+  /** The grouped card list — the same tree the table draws, stacked. */
+  const renderGroupedAttendeeCards = () => {
+    const cards: React.ReactNode[] = [];
+    let dividerDrawn = false;
+    const looseTotal = pagedAttendeeEntries.filter(e => e.kind === 'company').length;
+
+    const peopleUnder = (node: CompanyNode<Attendee>) =>
+      isCompanyExpanded(attendeeCollapse, node.companyId)
+        ? node.attendees.map(a => renderAttendeeMobileCard(a, { inCompany: true }))
+        : [];
+
+    for (const entry of pagedAttendeeEntries) {
+      if (entry.kind === 'family') {
+        cards.push(renderAttendeeFamilyCard(entry));
+        if (isFamilyExpanded(attendeeCollapse, entry.key)) {
+          for (const node of entry.companies) {
+            cards.push(renderAttendeeCompanyCard(node));
+            cards.push(...peopleUnder(node));
+          }
+        }
+        continue;
+      }
+      if (!dividerDrawn) {
+        cards.push(
+          <p key="divider-loose" className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 pt-3 pb-1 px-1">
+            No parent company · {looseTotal} {looseTotal === 1 ? 'company' : 'companies'}
+          </p>,
+        );
+        dividerDrawn = true;
+      }
+      cards.push(renderAttendeeCompanyCard(entry));
+      cards.push(...peopleUnder(entry));
+    }
+
+    if (isLastAttendeePage && attendeeGroups.noCompany.length > 0) {
+      cards.push(
+        <p key="divider-nocompany" className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 pt-3 pb-1 px-1">
+          No company · {attendeeGroups.noCompany.length} {attendeeGroups.noCompany.length === 1 ? 'attendee' : 'attendees'}
+        </p>,
+      );
+      for (const a of attendeeGroups.noCompany) cards.push(renderAttendeeMobileCard(a));
+    }
+
+    return cards;
+  };
+
+  /**
+   * One person's row, at whatever depth the view is drawing them.
+   *
+   * The flat table and all three grouped tiers render through here, so a row
+   * cannot drift between the two views — the only differences a tier is
+   * allowed are how far its contents are pushed in and whether the Company
+   * cell repeats what the header above already said.
+   */
+  const renderAttendeeRow = (attendee: Attendee, opts?: { indent?: number; hideCompany?: boolean }) => {
+    const indent = opts?.indent ?? 0;
+    const rowSelected = selectedAttendeeIds.has(attendee.id);
+    // Frozen cells need a background of their own — the row's
+    // paints behind them, not through them — so the selected
+    // and hover treatments are repeated here.
+    // The card fill now comes from the row's cell styling,
+    // which the frozen columns need as much as any other cell —
+    // they paint over what scrolls beneath them.
+    const frozenBg = '';
+    const dimmed = actionsAttendeeId != null && actionsAttendeeId !== attendee.id;
+    const focused = focusedAttendeeId === attendee.id;
+    return (
+    <tr
+      key={attendee.id}
+      onClick={onAttendeeCardClick(attendee.id)}
+      className={`group ${cardRowClass(rowSelected, focused)} ${cardEmphasisClass({ focused, otherFocused: focusedAttendeeId != null && !focused, dimmed })}`}
+    >
+      <td className="py-3 sticky left-0 z-10" style={{ width: attendeeSelWidth }}>
+        <input
+          type="checkbox"
+          checked={selectedAttendeeIds.has(attendee.id)}
+          onChange={() => toggleAttendeeSelect(attendee.id)}
+          className="accent-brand-secondary ml-3"
+        />
+      </td>
+      {confAttendeeColumns.map(col => {
+        if (!isConfAttendeeColVisible(col.key)) return null;
+        switch (col.key) {
+          case 'name': return (
+            <td key="name" className={`px-4 py-3 font-medium sticky z-10 ${frozenBg}`} style={{ left: attendeeNameStickyLeft }}>
+              <div className="flex items-start gap-2" style={indent ? { marginLeft: indent } : undefined}>
+                <div className="min-w-0 flex-1">
+                  {/* The name opens the drawer, so the icon that
+                      used to do that is gone. */}
+                  <button
+                    type="button"
+                    onClick={() => { setQuickViewId(attendee.id); setQuickViewType('attendee'); }}
+                    className="text-brand-secondary hover:underline block truncate text-left w-full"
+                    title={`${attendee.first_name} ${attendee.last_name}`}
+                  >
+                    {attendee.first_name} {attendee.last_name}
+                  </button>
+                  {/* Title reads under the name rather than in a
+                      column of its own: it is what qualifies the
+                      name, and a column narrow enough to fit
+                      wrapped most of them onto two lines anyway. */}
+                  {attendee.title ? (
+                    <span className="flex items-start gap-1 mt-0.5">
+                      <button
+                        type="button"
+                        className="text-left min-w-0 text-xs leading-snug text-gray-500 hover:text-brand-secondary break-words"
+                        onClick={() => setClassifyingAttendee({ id: attendee.id, title: attendee.title! })}
+                      >
+                        {attendee.title}
+                      </button>
+                      {!titleMetaLoading && shouldWarnForTitleMetadata(titleMetaMap[attendee.id]) && (
+                        <span className="flex-shrink-0 text-amber-500 mt-0.5 pointer-events-none">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                        </span>
+                      )}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </td>
+          );
+          case 'company': return opts?.hideCompany ? (
+            <td key="company" className="px-4 py-3" />
+          ) : (
+            <td key="company" className="px-4 py-3 overflow-visible relative">
+              {attendee.company_name ? (
+                <div>
+                  {attendee.company_id ? (
+                    <Link href={`/companies/${attendee.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">{attendee.company_name}</Link>
+                  ) : (
+                    <span className="text-xs text-gray-800 break-words whitespace-normal leading-snug">{attendee.company_name}</span>
+                  )}
+                </div>
+              ) : (
+                <span className="text-gray-300">—</span>
+              )}
+            </td>
+          );
+          case 'type': return (
+            <td key="type" className="px-4 py-3">
+              {editingCell?.attendeeId === attendee.id && editingCell.field === 'company_type' ? (
+                <InlineEditRow onCancel={() => setEditingCell(null)}>
+                  <select
+                    className={INLINE_EDIT_FIELD_CLASS}
+                    value={cellDraft}
+                    onChange={(e) => setCellDraft(e.target.value)}
+                    onBlur={() => saveInlineEdit(attendee, 'company_type')}
+                    onKeyDown={(e) => { if (e.key === 'Escape') setEditingCell(null); }}
+                    autoFocus
+                  >
+                    <option value="">—</option>
+                    {companyTypeFilterOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </InlineEditRow>
+              ) : (
+                <button type="button" onClick={() => startInlineEdit(attendee, 'company_type')} title="Click to set type">
+                  {attendee.company_type ? (<span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs inline-flex items-center gap-1`}><EntityStructureIcon structure={attendee.company_entity_structure} />{attendee.company_type}</span>) : <InlineEditPlaceholder label="Type" />}
+                </button>
+              )}
+            </td>
+          );
+          case 'seniority': return (
+            <td key="seniority" className="px-4 py-3">
+              {editingCell?.attendeeId === attendee.id && editingCell.field === 'seniority' ? (
+                <InlineEditRow onCancel={() => setEditingCell(null)}>
+                  <select
+                    className={INLINE_EDIT_FIELD_CLASS}
+                    value={cellDraft}
+                    onChange={(e) => setCellDraft(e.target.value)}
+                    onBlur={() => saveInlineEdit(attendee, 'seniority')}
+                    onKeyDown={(e) => { if (e.key === 'Escape') setEditingCell(null); }}
+                    autoFocus
+                  >
+                    <option value="">Auto-detect</option>
+                    {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </InlineEditRow>
+              ) : ((() => { const s = effectiveSeniority(attendee.seniority, attendee.title); return (<button type="button" onClick={() => startInlineEdit(attendee, 'seniority')} title="Click to set seniority">{s ? <span className={getBadgeClass(s, colorMaps.seniority || {})}>{s}</span> : <InlineEditPlaceholder label="Seniority" />}</button>); })())}
+            </td>
+          );
+          case 'conferences': return (
+            <td key="conferences" className="px-4 py-3">
+              <ConferenceCountTooltip
+                count={Number(attendee.conference_count ?? 0)}
+                names={attendee.conference_names as string | undefined}
+                onOpen={() => setTimelineAttendee({ id: attendee.id, first_name: attendee.first_name, last_name: attendee.last_name })}
+              />
+            </td>
+          );
+          case 'notes': return (
+            <td key="notes" className="px-4 py-3">
+              {Number(attendee.entity_notes_count ?? 0) > 0 ? <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.entity_notes_count)} /> : <span className="text-gray-300">—</span>}
+            </td>
+          );
+          case 'date_added': return (
+            <td key="date_added" className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(attendee.created_at)}</td>
+          );
+          default: return null;
+        }
+      })}
+      {customColumns.filter(c => c.visible).map(col => (
+        <td key={`custom_${col.id}`} className="px-4 py-3 whitespace-nowrap">
+          <CustomColumnCell column={col} value={(attendee as unknown as Record<string, unknown>)[col.data_key]} />
+        </td>
+      ))}
+      <td className={`px-2 py-3 sticky right-0 z-10 ${frozenBg}`} style={{ width: 76 }}>
+        <div className="flex items-center justify-end gap-1">
+        {/* Only where the company is one the account actually
+            targets — offering it on every row would say nothing
+            about who is worth the walk. The slot stays either
+            way so the kebab does not shift between rows. */}
+        <span className="w-6 flex-shrink-0 flex items-center justify-center">
+          {matchesIcpCompanyType(attendee.company_type, icpCompanyTypes) && (
+            <TargetToggleButton
+              variant="bare"
+              active={targetIds.has(attendee.id)}
+              busy={targetBusyId === attendee.id}
+              onToggle={() => toggleTarget(attendee.id)}
+              name={`${attendee.first_name} ${attendee.last_name}`.trim()}
+            />
+          )}
+        </span>
+        <RowActionsKebab
+          entityType="attendee"
+          conferenceId={Number(id)}
+          attendeeId={attendee.id}
+          attendeeName={`${attendee.first_name} ${attendee.last_name}`.trim()}
+          companyId={attendee.company_id ?? null}
+          companyName={attendee.company_name ?? null}
+          onDone={fetchConference}
+          onOpenChange={open => setActionsAttendeeId(open ? attendee.id : null)}
+        />
+        </div>
+      </td>
+    </tr>
+    );
+  };
+
+  /**
+   * The seniority distribution, as a group row shows it.
+   *
+   * Two buckets spelled out and the rest behind a "+n": the whole point is
+   * that a family which sent thirty-six people and no decision maker should
+   * say so before anything is opened, and thirty-six is not that sentence.
+   */
+  const renderSeniorityRollup = (rollup: SeniorityRollup) => {
+    if (rollup.total === 0) return <span className="text-gray-300">—</span>;
+    return (
+      <span className="inline-flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[11px] leading-tight">
+        {rollup.named.map((bucket, i) => {
+          // The badge takes the seniority's own colour, so the roll-up and the
+          // badges on the rows underneath it agree on sight as well as in
+          // arithmetic. It borrows the badge palette rather than the raw hex:
+          // the hex is a swatch, and for the lighter options — yellow above
+          // all — full-strength swatch on a tint of itself is a number you
+          // cannot read. The border is dropped; at 17px an outline closes the
+          // disc up.
+          const swatch = getPreset(colorMaps.seniority?.[bucket.label]).badgeClass
+            .replace(/\bborder(-\S+)?\b/g, '').trim();
+          return (
+            <span key={bucket.label} className="inline-flex items-center gap-1 whitespace-nowrap">
+              {i > 0 && <span className="text-gray-300 mr-0.5">·</span>}
+              <span className="font-semibold text-gray-500">{bucket.label}</span>
+              <span className={`inline-flex items-center justify-center min-w-[17px] h-[17px] px-1 rounded-full text-[10px] font-bold ${swatch}`}>
+                {bucket.count}
+              </span>
+            </span>
+          );
+        })}
+        {rollup.overflow > 0 && (
+          <span className="whitespace-nowrap text-gray-400">
+            <span className="text-gray-300 mr-1">·</span>+{rollup.overflow}
+          </span>
+        )}
+      </span>
+    );
+  };
+
+  /** The cells a group row leaves empty, so the columns still line up. */
+  const emptyGroupCell = (key: string) => <td key={key} className="px-4 py-3" />;
+
+  /**
+   * The roll-up is a sentence, not a cell value.
+   *
+   * In the 120px Seniority column it broke over three lines, which on a group
+   * row is the widest thing there and sets the row's height — while every
+   * column to its right sits empty, because a family has no conference count
+   * or note of its own. So it takes them: one cell from Seniority to the last
+   * column before the actions, and the sentence gets to be one line.
+   *
+   * Derived from the live column order rather than a constant, since these
+   * columns are reorderable and hideable — "the ones after Seniority" is a
+   * different set for every reader. Nothing spans when Seniority is hidden.
+   */
+  const groupRollupColumns = (() => {
+    const shown = confAttendeeColumns.filter(
+      c => isConfAttendeeColVisible(c.key) && RENDERED_ATTENDEE_COLUMNS.has(c.key),
+    );
+    const at = shown.findIndex(c => c.key === 'seniority');
+    if (at === -1) return { span: 0, suppressed: new Set<string>() };
+    return {
+      span: (shown.length - at) + customColumns.filter(c => c.visible).length,
+      suppressed: new Set(shown.slice(at + 1).map(c => c.key)),
+    };
+  })();
+
+  /** The roll-up's cell, and the empty ones it has swallowed. */
+  const groupRollupCell = (rollup: SeniorityRollup) => (
+    <td key="seniority" className="px-4 py-3" colSpan={groupRollupColumns.span || undefined}>
+      {renderSeniorityRollup(rollup)}
+    </td>
+  );
+
+  /**
+   * A family's own row — tier 1.
+   *
+   * Styled as the Companies tab styles its group rows, because it is the same
+   * object seen from a different table and a reader moving between the two
+   * should not have to learn it twice.
+   */
+  const renderAttendeeFamilyRow = (family: FamilyNode<Attendee>) => {
+    const ids = attendeesUnder(family).map(a => a.id);
+    const allSelected = ids.length > 0 && ids.every(fid => selectedAttendeeIds.has(fid));
+    const someSelected = !allSelected && ids.some(fid => selectedAttendeeIds.has(fid));
+    const expanded = isFamilyExpanded(attendeeCollapse, family.key);
+    return (
+      // No onClick: a group header taking row focus would dim the very rows it
+      // heads. The chevron is a button so the keyboard still reaches it.
+      <tr key={`family-${family.key}`} className={cardGroupRowClass()}>
+        <td className="py-3 sticky left-0 z-10" style={{ width: attendeeSelWidth }}>
+          <input
+            type="checkbox"
+            checked={allSelected}
+            ref={el => { if (el) el.indeterminate = someSelected; }}
+            onChange={() => setSelectedAttendeeIds(prev => {
+              const next = new Set(prev);
+              if (allSelected) ids.forEach(fid => next.delete(fid));
+              else ids.forEach(fid => next.add(fid));
+              return next;
+            })}
+            aria-label={`Select everyone under ${family.parentName}`}
+            className="accent-brand-secondary ml-3"
+          />
+        </td>
+        {confAttendeeColumns.map(col => {
+          if (!isConfAttendeeColVisible(col.key)) return null;
+          switch (col.key) {
+            case 'name': return (
+              <td key="name" className="px-4 py-3 sticky z-10" style={{ left: attendeeNameStickyLeft }}>
+                <button
+                  type="button"
+                  onClick={() => setAttendeeCollapse(s => toggleFamily(s, family.key))}
+                  aria-expanded={expanded}
+                  className="flex items-start gap-1.5 min-w-0 w-full text-left"
+                >
+                  <svg className={`w-3.5 h-3.5 flex-shrink-0 mt-1 text-gray-400 transition-transform ${expanded ? '' : '-rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                  <span className="min-w-0">
+                    <span className="block font-serif font-bold text-brand-primary text-[15px] leading-snug break-words">
+                      {family.parentName}
+                    </span>
+                    <span className="block text-[10px] font-semibold text-gray-500 mt-0.5">
+                      {family.companyCount} {family.companyCount === 1 ? 'company' : 'companies'} · {family.attendeeCount} {family.attendeeCount === 1 ? 'attendee' : 'attendees'}
+                    </span>
+                  </span>
+                </button>
+              </td>
+            );
+            case 'company': return (
+              <td key="company" className="px-4 py-3">
+                <span className="inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-bold bg-gray-100 text-gray-700">
+                  {family.attendeeCount}
+                </span>
+              </td>
+            );
+            case 'type': return (
+              <td key="type" className="px-4 py-3">
+                {family.parent?.company_type ? (
+                  <span className={`${getBadgeClass(family.parent.company_type, colorMaps.company_type || {})} text-xs inline-flex items-center gap-1`}>
+                    <EntityStructureIcon structure="Parent" />
+                    {family.parent.company_type}
+                  </span>
+                ) : !family.parent ? (
+                  // The family exists because its children point at it, not
+                  // because it is here. Saying so is more use than a blank.
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-lg border border-dashed border-gray-300 text-[10px] text-gray-400 whitespace-nowrap">
+                    Not attending
+                  </span>
+                ) : null}
+              </td>
+            );
+            case 'seniority': return groupRollupCell(family.seniority);
+            // Nothing for a column that draws no cell on a person's row
+            // either: `value` is registered for this table and rendered by
+            // neither switch, and an empty cell for it here would put one more
+            // column on a group row than the header has.
+            default: return groupRollupColumns.suppressed.has(col.key) || !RENDERED_ATTENDEE_COLUMNS.has(col.key)
+              ? null : emptyGroupCell(col.key);
+          }
+        })}
+        {groupRollupColumns.span === 0 && customColumns.filter(c => c.visible).map(col => emptyGroupCell(`custom_${col.id}`))}
+        <td className="px-2 py-3 sticky right-0 z-10" style={{ width: 76 }} />
+      </tr>
+    );
+  };
+
+  /**
+   * A company's row — tier 2.
+   *
+   * A white card with a rule down its left edge rather than the family's
+   * tinted block: a person and a building must not read as the same object at
+   * different depths, and indentation alone would say exactly that.
+   */
+  const renderAttendeeCompanyRow = (node: CompanyNode<Attendee>) => {
+    const ids = node.attendees.map(a => a.id);
+    const allSelected = ids.length > 0 && ids.every(cid => selectedAttendeeIds.has(cid));
+    const someSelected = !allSelected && ids.some(cid => selectedAttendeeIds.has(cid));
+    const expanded = isCompanyExpanded(attendeeCollapse, node.companyId);
+    return (
+      <tr key={`company-${node.companyId}`} className={cardRowClass(false, false)}>
+        <td className="py-3 sticky left-0 z-10" style={{ width: attendeeSelWidth }}>
+          <input
+            type="checkbox"
+            checked={allSelected}
+            ref={el => { if (el) el.indeterminate = someSelected; }}
+            onChange={() => setSelectedAttendeeIds(prev => {
+              const next = new Set(prev);
+              if (allSelected) ids.forEach(cid => next.delete(cid));
+              else ids.forEach(cid => next.add(cid));
+              return next;
+            })}
+            aria-label={`Select everyone from ${node.companyName}`}
+            className="accent-brand-secondary ml-3"
+          />
+        </td>
+        {confAttendeeColumns.map(col => {
+          if (!isConfAttendeeColVisible(col.key)) return null;
+          switch (col.key) {
+            case 'name': return (
+              <td key="name" className="px-4 py-3 sticky z-10" style={{ left: attendeeNameStickyLeft }}>
+                <div style={{ marginLeft: GROUP_COMPANY_INDENT }} className="border-l-[3px] border-brand-primary/35 pl-4">
+                  {/* The chevron hangs in the padding beside the rule rather
+                      than sitting in the text's way. In the flow it would push
+                      every character right by its own width plus a gap, which
+                      is what put this tier's text to the right of the tier
+                      below it. */}
+                  <button
+                    type="button"
+                    onClick={() => setAttendeeCollapse(s => toggleCompany(s, node.companyId))}
+                    aria-expanded={expanded}
+                    className="relative flex items-start min-w-0 w-full text-left"
+                  >
+                    <svg className={`absolute left-[-14px] top-1 w-3 h-3 flex-shrink-0 text-gray-400 transition-transform ${expanded ? '' : '-rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-gray-800 leading-snug break-words">
+                        {node.companyName}
+                      </span>
+                      <span className="block text-[10px] text-gray-500 mt-0.5">
+                        {node.attendees.length} {node.attendees.length === 1 ? 'attendee' : 'attendees'}
+                      </span>
+                    </span>
+                  </button>
+                  {node.isFamilyParent && (
+                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 leading-4 mt-1 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.entity_structure?.[attendeeParentLabel]).badgeClass}`}>
+                      <EntityStructureIcon structure="Parent" />
+                      {attendeeParentLabel}
+                    </span>
+                  )}
+                </div>
+              </td>
+            );
+            case 'company': return emptyGroupCell('company');
+            case 'type': return (
+              <td key="type" className="px-4 py-3">
+                {node.company?.company_type ? (
+                  <span className={`${getBadgeClass(node.company.company_type, colorMaps.company_type || {})} text-xs inline-flex items-center gap-1`}>
+                    <EntityStructureIcon structure={node.company.entity_structure} />
+                    {node.company.company_type}
+                  </span>
+                ) : null}
+              </td>
+            );
+            case 'seniority': return groupRollupCell(node.seniority);
+            // Nothing for a column that draws no cell on a person's row
+            // either: `value` is registered for this table and rendered by
+            // neither switch, and an empty cell for it here would put one more
+            // column on a group row than the header has.
+            default: return groupRollupColumns.suppressed.has(col.key) || !RENDERED_ATTENDEE_COLUMNS.has(col.key)
+              ? null : emptyGroupCell(col.key);
+          }
+        })}
+        {groupRollupColumns.span === 0 && customColumns.filter(c => c.visible).map(col => emptyGroupCell(`custom_${col.id}`))}
+        <td className="px-2 py-3 sticky right-0 z-10" style={{ width: 76 }} />
+      </tr>
+    );
+  };
+
+  /** A labelled break between the families and everything below them. */
+  const renderGroupDivider = (key: string, label: string) => (
+    <tr key={key}>
+      <td colSpan={attendeeTableColSpan} className="px-4 pt-5 pb-1">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</span>
+      </td>
+    </tr>
+  );
+
+  /**
+   * The grouped body.
+   *
+   * Every tier arrives shut. A page of this is one line per account at the
+   * conference, with how senior its delegation is beside the name; the
+   * companies and then the people appear as a reader asks for them.
+   */
+  const renderGroupedAttendeeRows = () => {
+    const rows: React.ReactNode[] = [];
+    let dividerDrawn = false;
+
+    for (const entry of pagedAttendeeEntries) {
+      if (entry.kind === 'family') {
+        rows.push(renderAttendeeFamilyRow(entry));
+        if (isFamilyExpanded(attendeeCollapse, entry.key)) {
+          for (const node of entry.companies) {
+            rows.push(renderAttendeeCompanyRow(node));
+            if (isCompanyExpanded(attendeeCollapse, node.companyId)) {
+              for (const a of node.attendees) {
+                rows.push(renderAttendeeRow(a, { indent: GROUP_ATTENDEE_INDENT, hideCompany: true }));
+              }
+            }
+          }
+        }
+        continue;
+      }
+      // A company with no parent gets no family header invented for it: two
+      // tiers, under one divider that says what this part of the list is.
+      if (!dividerDrawn) {
+        const loose = pagedAttendeeEntries.filter(e => e.kind === 'company').length;
+        rows.push(renderGroupDivider('divider-loose', `No parent company · ${loose} ${loose === 1 ? 'company' : 'companies'}`));
+        dividerDrawn = true;
+      }
+      rows.push(renderAttendeeCompanyRow(entry));
+      if (isCompanyExpanded(attendeeCollapse, entry.companyId)) {
+        for (const a of entry.attendees) {
+          rows.push(renderAttendeeRow(a, { indent: GROUP_ATTENDEE_INDENT, hideCompany: true }));
+        }
+      }
+    }
+
+    // People with no company at all trail the whole list, flat, and only on
+    // the last page — they are not an account, so they are not a page's worth
+    // of entries and must not repeat under every page of them.
+    if (isLastAttendeePage && attendeeGroups.noCompany.length > 0) {
+      rows.push(renderGroupDivider('divider-nocompany', `No company · ${attendeeGroups.noCompany.length} ${attendeeGroups.noCompany.length === 1 ? 'attendee' : 'attendees'}`));
+      for (const a of attendeeGroups.noCompany) rows.push(renderAttendeeRow(a));
+    }
+
+    return rows;
+  };
 
   // "Dec. 28-30, 2026" — or "Jan. 31 - Feb. 2, 2026" when the run crosses a
   // month — for the phone, where the long form eats the row.
@@ -3467,7 +4390,60 @@ export default function ConferenceDetailPage() {
             </div>
           )}
 
-          {filteredAttendees.length === 0 ? (
+          {/* The count and the control that changes it, on one line. */}
+          <div className="flex items-center justify-between gap-3 mb-3">
+            {/* People stay the unit: it is what anyone counting this table is
+                counting. Grouped, the two containers above them are named
+                alongside rather than left to be inferred. A selection made by
+                one tick on a family is fifteen people, so it says so — silence
+                there is how someone deletes more than they meant to. On a
+                phone the sentence drops to its figures. */}
+            <p className="text-xs text-gray-500 min-w-0">
+              <span className="hidden sm:inline">Showing </span>
+              {filteredAttendees.length} of {(conference?.attendees ?? []).length}
+              <span className="hidden sm:inline"> attendees</span>
+              {attendeesGrouped && ` · ${attendeeGroups.companyCount} ${attendeeGroups.companyCount === 1 ? 'company' : 'companies'}`}
+              {attendeesGrouped && attendeeGroups.familyCount > 0 && ` · ${attendeeGroups.familyCount} ${attendeeGroups.familyCount === 1 ? 'family' : 'families'}`}
+              {selectedAttendeeIds.size > 0 && ` · ${selectedAttendeeIds.size} selected`}
+            </p>
+
+            {/* Offered only where it would do something: a conference whose
+                companies form no family has nothing to group. Kept on screen
+                while grouped even if a filter leaves no family standing, so
+                the way back cannot disappear from under the reader. */}
+            {(attendeeFamiliesPresent || attendeesGrouped) && (
+              <div className="inline-flex flex-shrink-0 rounded-lg border border-gray-200 overflow-hidden">
+                {([
+                  { key: 'flat' as const, label: 'Single', path: 'M4 6h16M4 12h16M4 18h16' },
+                  { key: 'grouped' as const, label: 'Grouped', path: 'M3 7h18M7 12h14M11 17h10' },
+                ]).map((opt, i) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setAttendeesGroupedView(opt.key === 'grouped')}
+                    title={opt.key === 'grouped' ? 'Group attendees by company and parent company' : 'One row per attendee'}
+                    aria-pressed={attendeesGrouped === (opt.key === 'grouped')}
+                    className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${i > 0 ? 'border-l border-gray-200' : ''} ${
+                      attendeesGrouped === (opt.key === 'grouped') ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                    }`}
+                  >
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={opt.path} />
+                    </svg>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {attendeeGroupingLoading ? (
+            // The companies arrive on their own schedule the first time. An
+            // empty grouped table for that second reads as a broken one.
+            <div className="flex justify-center py-12">
+              <div className="animate-spin w-6 h-6 border-4 border-brand-secondary border-t-transparent rounded-full" />
+            </div>
+          ) : filteredAttendees.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-gray-400 text-sm">
                 {attendeeSearch ? 'No attendees match your search.' : 'No attendees for this conference yet.'}
@@ -3477,45 +4453,7 @@ export default function ConferenceDetailPage() {
             <>
               {/* Mobile card list */}
               <MobileCardList className="block lg:hidden -mx-6">
-                {paginatedAttendees.map((attendee) => (
-                  <MobileCard key={attendee.id}>
-                  <MobileAttendeeCard
-                    attendee={attendee as unknown as AttendeeCardRow}
-                    showPhotos={showAttendeePhotos}
-                    selected={selectedAttendeeIds.has(attendee.id)}
-                    onToggleSelect={toggleAttendeeSelect}
-                    onOpenAttendee={(id) => { setQuickViewId(id); setQuickViewType('attendee'); }}
-                    onOpenCompany={(id) => { setQuickViewId(id); setQuickViewType('company'); }}
-                    onClassifyTitle={(id, title) => setClassifyingAttendee({ id, title })}
-                    titleWarning={!titleMetaLoading && shouldWarnForTitleMetadata(titleMetaMap[attendee.id])}
-                    userOptions={userOptions}
-                    colorMaps={colorMaps}
-                    dimmed={actionsAttendeeId != null && actionsAttendeeId !== attendee.id}
-                    onOpenConferences={() => setTimelineAttendee({ id: attendee.id, first_name: attendee.first_name, last_name: attendee.last_name })}
-                    leadingPill={matchesIcpCompanyType(attendee.company_type, icpCompanyTypes) ? (
-                      <TargetToggleButton
-                        active={targetIds.has(attendee.id)}
-                        busy={targetBusyId === attendee.id}
-                        onToggle={() => toggleTarget(attendee.id)}
-                        name={`${attendee.first_name} ${attendee.last_name}`.trim()}
-                        size="sm"
-                      />
-                    ) : undefined}
-                    actions={
-                      <RowActionsKebab
-                        entityType="attendee"
-                        conferenceId={Number(id)}
-                        attendeeId={attendee.id}
-                        attendeeName={`${attendee.first_name} ${attendee.last_name}`.trim()}
-                        companyId={attendee.company_id ?? null}
-                        companyName={attendee.company_name ?? null}
-                        onDone={fetchConference}
-                        onOpenChange={open => setActionsAttendeeId(open ? attendee.id : null)}
-                      />
-                    }
-                  />
-                  </MobileCard>
-                ))}
+                {attendeesGrouped ? renderGroupedAttendeeCards() : paginatedAttendees.map(attendee => renderAttendeeMobileCard(attendee))}
               </MobileCardList>
 
               {/* Desktop table */}
@@ -3568,186 +4506,7 @@ export default function ConferenceDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedAttendees.map((attendee) => {
-                    const rowSelected = selectedAttendeeIds.has(attendee.id);
-                    // Frozen cells need a background of their own — the row's
-                    // paints behind them, not through them — so the selected
-                    // and hover treatments are repeated here.
-                    // The card fill now comes from the row's cell styling,
-                    // which the frozen columns need as much as any other cell —
-                    // they paint over what scrolls beneath them.
-                    const frozenBg = '';
-                    const dimmed = actionsAttendeeId != null && actionsAttendeeId !== attendee.id;
-                    const focused = focusedAttendeeId === attendee.id;
-                    return (
-                    <tr
-                      key={attendee.id}
-                      onClick={onAttendeeCardClick(attendee.id)}
-                      className={`group ${cardRowClass(rowSelected, focused)} ${cardEmphasisClass({ focused, otherFocused: focusedAttendeeId != null && !focused, dimmed })}`}
-                    >
-                      <td className="py-3 sticky left-0 z-10" style={{ width: attendeeSelWidth }}>
-                        <input
-                          type="checkbox"
-                          checked={selectedAttendeeIds.has(attendee.id)}
-                          onChange={() => toggleAttendeeSelect(attendee.id)}
-                          className="accent-brand-secondary ml-3"
-                        />
-                      </td>
-                      {confAttendeeColumns.map(col => {
-                        if (!isConfAttendeeColVisible(col.key)) return null;
-                        switch (col.key) {
-                          case 'name': return (
-                            <td key="name" className={`px-4 py-3 font-medium sticky z-10 ${frozenBg}`} style={{ left: attendeeNameStickyLeft }}>
-                              <div className="flex items-start gap-2">
-                                <div className="min-w-0 flex-1">
-                                  {/* The name opens the drawer, so the icon that
-                                      used to do that is gone. */}
-                                  <button
-                                    type="button"
-                                    onClick={() => { setQuickViewId(attendee.id); setQuickViewType('attendee'); }}
-                                    className="text-brand-secondary hover:underline block truncate text-left w-full"
-                                    title={`${attendee.first_name} ${attendee.last_name}`}
-                                  >
-                                    {attendee.first_name} {attendee.last_name}
-                                  </button>
-                                  {/* Title reads under the name rather than in a
-                                      column of its own: it is what qualifies the
-                                      name, and a column narrow enough to fit
-                                      wrapped most of them onto two lines anyway. */}
-                                  {attendee.title ? (
-                                    <span className="flex items-start gap-1 mt-0.5">
-                                      <button
-                                        type="button"
-                                        className="text-left min-w-0 text-xs leading-snug text-gray-500 hover:text-brand-secondary break-words"
-                                        onClick={() => setClassifyingAttendee({ id: attendee.id, title: attendee.title! })}
-                                      >
-                                        {attendee.title}
-                                      </button>
-                                      {!titleMetaLoading && shouldWarnForTitleMetadata(titleMetaMap[attendee.id]) && (
-                                        <span className="flex-shrink-0 text-amber-500 mt-0.5 pointer-events-none">
-                                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
-                                        </span>
-                                      )}
-                                    </span>
-                                  ) : null}
-                                </div>
-                              </div>
-                            </td>
-                          );
-                          case 'company': return (
-                            <td key="company" className="px-4 py-3 overflow-visible relative">
-                              {attendee.company_name ? (
-                                <div>
-                                  {attendee.company_id ? (
-                                    <Link href={`/companies/${attendee.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">{attendee.company_name}</Link>
-                                  ) : (
-                                    <span className="text-xs text-gray-800 break-words whitespace-normal leading-snug">{attendee.company_name}</span>
-                                  )}
-                                </div>
-                              ) : (
-                                <span className="text-gray-300">—</span>
-                              )}
-                            </td>
-                          );
-                          case 'type': return (
-                            <td key="type" className="px-4 py-3">
-                              {editingCell?.attendeeId === attendee.id && editingCell.field === 'company_type' ? (
-                                <InlineEditRow onCancel={() => setEditingCell(null)}>
-                                  <select
-                                    className={INLINE_EDIT_FIELD_CLASS}
-                                    value={cellDraft}
-                                    onChange={(e) => setCellDraft(e.target.value)}
-                                    onBlur={() => saveInlineEdit(attendee, 'company_type')}
-                                    onKeyDown={(e) => { if (e.key === 'Escape') setEditingCell(null); }}
-                                    autoFocus
-                                  >
-                                    <option value="">—</option>
-                                    {companyTypeFilterOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                                  </select>
-                                </InlineEditRow>
-                              ) : (
-                                <button type="button" onClick={() => startInlineEdit(attendee, 'company_type')} title="Click to set type">
-                                  {attendee.company_type ? (<span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-xs inline-flex items-center gap-1`}><EntityStructureIcon structure={attendee.company_entity_structure} />{attendee.company_type}</span>) : <InlineEditPlaceholder label="Type" />}
-                                </button>
-                              )}
-                            </td>
-                          );
-                          case 'seniority': return (
-                            <td key="seniority" className="px-4 py-3">
-                              {editingCell?.attendeeId === attendee.id && editingCell.field === 'seniority' ? (
-                                <InlineEditRow onCancel={() => setEditingCell(null)}>
-                                  <select
-                                    className={INLINE_EDIT_FIELD_CLASS}
-                                    value={cellDraft}
-                                    onChange={(e) => setCellDraft(e.target.value)}
-                                    onBlur={() => saveInlineEdit(attendee, 'seniority')}
-                                    onKeyDown={(e) => { if (e.key === 'Escape') setEditingCell(null); }}
-                                    autoFocus
-                                  >
-                                    <option value="">Auto-detect</option>
-                                    {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                                  </select>
-                                </InlineEditRow>
-                              ) : ((() => { const s = effectiveSeniority(attendee.seniority, attendee.title); return (<button type="button" onClick={() => startInlineEdit(attendee, 'seniority')} title="Click to set seniority">{s ? <span className={getBadgeClass(s, colorMaps.seniority || {})}>{s}</span> : <InlineEditPlaceholder label="Seniority" />}</button>); })())}
-                            </td>
-                          );
-                          case 'conferences': return (
-                            <td key="conferences" className="px-4 py-3">
-                              <ConferenceCountTooltip
-                                count={Number(attendee.conference_count ?? 0)}
-                                names={attendee.conference_names as string | undefined}
-                                onOpen={() => setTimelineAttendee({ id: attendee.id, first_name: attendee.first_name, last_name: attendee.last_name })}
-                              />
-                            </td>
-                          );
-                          case 'notes': return (
-                            <td key="notes" className="px-4 py-3">
-                              {Number(attendee.entity_notes_count ?? 0) > 0 ? <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.entity_notes_count)} /> : <span className="text-gray-300">—</span>}
-                            </td>
-                          );
-                          case 'date_added': return (
-                            <td key="date_added" className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(attendee.created_at)}</td>
-                          );
-                          default: return null;
-                        }
-                      })}
-                      {customColumns.filter(c => c.visible).map(col => (
-                        <td key={`custom_${col.id}`} className="px-4 py-3 whitespace-nowrap">
-                          <CustomColumnCell column={col} value={(attendee as unknown as Record<string, unknown>)[col.data_key]} />
-                        </td>
-                      ))}
-                      <td className={`px-2 py-3 sticky right-0 z-10 ${frozenBg}`} style={{ width: 76 }}>
-                        <div className="flex items-center justify-end gap-1">
-                        {/* Only where the company is one the account actually
-                            targets — offering it on every row would say nothing
-                            about who is worth the walk. The slot stays either
-                            way so the kebab does not shift between rows. */}
-                        <span className="w-6 flex-shrink-0 flex items-center justify-center">
-                          {matchesIcpCompanyType(attendee.company_type, icpCompanyTypes) && (
-                            <TargetToggleButton
-                              variant="bare"
-                              active={targetIds.has(attendee.id)}
-                              busy={targetBusyId === attendee.id}
-                              onToggle={() => toggleTarget(attendee.id)}
-                              name={`${attendee.first_name} ${attendee.last_name}`.trim()}
-                            />
-                          )}
-                        </span>
-                        <RowActionsKebab
-                          entityType="attendee"
-                          conferenceId={Number(id)}
-                          attendeeId={attendee.id}
-                          attendeeName={`${attendee.first_name} ${attendee.last_name}`.trim()}
-                          companyId={attendee.company_id ?? null}
-                          companyName={attendee.company_name ?? null}
-                          onDone={fetchConference}
-                          onOpenChange={open => setActionsAttendeeId(open ? attendee.id : null)}
-                        />
-                        </div>
-                      </td>
-                    </tr>
-                    );
-                  })}
+                  {attendeesGrouped ? renderGroupedAttendeeRows() : paginatedAttendees.map(attendee => renderAttendeeRow(attendee))}
                 </tbody>
               </table>
             </div>
@@ -3756,12 +4515,12 @@ export default function ConferenceDetailPage() {
           )}
 
           {/* Pagination */}
-          {attendeeTotalPages > 1 && (
+          {effectiveAttendeeTotalPages > 1 && (
             <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100">
-              <span className="text-xs text-gray-500">Page {attendeePage} of {attendeeTotalPages} · {filteredAttendees.length} total</span>
+              <span className="text-xs text-gray-500">Page {attendeePage} of {effectiveAttendeeTotalPages} · {attendeesGrouped ? `${attendeeGroups.entries.length} ${attendeeGroups.entries.length === 1 ? 'entry' : 'entries'}` : `${filteredAttendees.length} total`}</span>
               <div className="flex items-center gap-2">
                 <button disabled={attendeePage === 1} onClick={() => setAttendeePage(p => p - 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Previous</button>
-                <button disabled={attendeePage >= attendeeTotalPages} onClick={() => setAttendeePage(p => p + 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Next</button>
+                <button disabled={attendeePage >= effectiveAttendeeTotalPages} onClick={() => setAttendeePage(p => p + 1)} className="px-3 py-1 text-xs rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Next</button>
               </div>
             </div>
           )}
