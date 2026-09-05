@@ -402,6 +402,26 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
     setEditVisibleForms(prev => prev.includes(formKey) ? prev.filter(f => f !== formKey) : [...prev, formKey]);
   };
 
+  /**
+   * Whether an option's name is the system's to keep.
+   *
+   * A system option is normally one the code matches on by name, so renaming it
+   * would quietly break the match. Entity Structure is the exception: nothing
+   * matches those two by name — which of them means parent and which means
+   * child is decided by their order — so an account is free to call them
+   * whatever it calls them.
+   */
+  const isNameLocked = (opt: ConfigOption) =>
+    opt.is_system
+    && category !== 'products'
+    && category !== 'product_category'
+    && category !== 'entity_structure'
+    && !(category === 'company_type' && opt.action_key === 'prospect');
+
+  /** Entity Structure resolves its two roles by position; see lib/entityStructureLabels. */
+  const entityRole = (index: number) =>
+    category !== 'entity_structure' ? null : index === 0 ? 'Parent' : index === 1 ? 'Child' : null;
+
   return (
     <div className="card">
       <button
@@ -464,6 +484,14 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
                           {showScopeDropdown && opt.scope === 'user' && (
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700">User</span>
                           )}
+                          {/* These two can be called anything, so the row has to
+                              say which of them the app treats as the parent and
+                              which as the child. */}
+                          {entityRole(index) && (
+                            <span className="inline-flex flex-shrink-0 items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-800 whitespace-nowrap">
+                              {entityRole(index)} designation
+                            </span>
+                          )}
                         </span>
                       )}
                       {category === 'company_type' && opt.action_key === 'prospect' && !isEditing && (
@@ -485,7 +513,7 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
                         </>
                       )}
                       <div className="flex-shrink-0 w-[104px] flex items-center justify-end">
-                        {opt.is_system && category !== 'products' && category !== 'product_category' && !(category === 'company_type' && opt.action_key === 'prospect')
+                        {isNameLocked(opt)
                           ? <div className="flex items-center gap-0.5">
                               <span className="inline-flex items-center gap-1 text-xs text-gray-400 px-2 py-1 italic">
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
@@ -517,9 +545,16 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
                     )}
                     {isOptionExpanded && (
                       <div className="px-7 pb-3 pt-1 border-t border-gray-200 space-y-3">
+                        {entityRole(index) && (
+                          <p className="text-xs text-blue-800 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                            Whatever you call it, this is the <strong>{entityRole(index)?.toLowerCase()}</strong> in a
+                            parent/child link — the one at the top of the list is the parent, the one below it the
+                            child. Drag to swap them.
+                          </p>
+                        )}
                         <div>
                           <label className="text-xs text-gray-500 mb-1 block">Option Name</label>
-                          {opt.is_system && category !== 'products' && category !== 'product_category' && !(category === 'company_type' && opt.action_key === 'prospect') ? (
+                          {isNameLocked(opt) ? (
                             <div className="input-field w-full text-sm bg-gray-50 text-gray-500 flex items-center justify-between">
                               <span>{opt.value}</span>
                               <span className="text-[10px] text-gray-400 italic ml-2">locked</span>
