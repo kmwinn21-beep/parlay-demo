@@ -73,6 +73,9 @@ globalThis.fetch = async (url, init) => {
       access_token: 'fixture-bot-credential-installed-9999',
       bot_user_id: 'U-BOT',
       team: { id: 'T-INSTALLED', name: 'Installer Inc' },
+      // Returned whether or not user scopes were asked for — the installer's
+      // own Slack id, which the install uses to link them for free.
+      authed_user: { id: 'U-ADMIN-SLACK' },
     }), { headers: { 'Content-Type': 'application/json' } });
   }
   return realFetch(url, init);
@@ -205,6 +208,10 @@ console.log('\n— the legitimate flow —');
   const row = await db.execute({ sql: `SELECT bot_token FROM slack_workspaces WHERE account_id = ?`, args: [ACCOUNT] });
   eq('  stored encrypted', String(row.rows[0].bot_token).startsWith('v1.'), true);
   eq('  and only in that account', await store.getWorkspace(OTHER_ACCOUNT), null);
+  const link = await store.getUserLink(ACCOUNT, ADMIN.id);
+  eq('  and links the installer, who Slack already identified',
+    [link.parlayUserId, link.slackUserId], [ADMIN.id, 'U-ADMIN-SLACK']);
+  eq('  and nobody else', (await store.listUserLinks(ACCOUNT)).length, 1);
 }
 {
   // A state is a bearer value for one install; nothing here makes it single-use,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireRealAdmin } from '@/lib/slack/adminGuard';
+import { requireRealAdmin } from '@/lib/slack/guards';
 import { signSlackState } from '@/lib/slack/state';
 import { buildInstallUrl } from '@/lib/slack/oauth';
 

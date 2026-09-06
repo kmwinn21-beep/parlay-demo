@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireRealAdmin } from '@/lib/slack/adminGuard';
+import { requireRealAdmin } from '@/lib/slack/guards';
 import { deleteWorkspace } from '@/lib/slack/store';
 
 export const dynamic = 'force-dynamic';

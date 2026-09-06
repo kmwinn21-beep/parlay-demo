@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireRealAdmin } from '@/lib/slack/adminGuard';
+import { requireRealAdmin } from '@/lib/slack/guards';
 import { verifySlackState } from '@/lib/slack/state';
 import { exchangeCodeForToken } from '@/lib/slack/oauth';
-import { saveWorkspace } from '@/lib/slack/store';
+import { saveUserLink, saveWorkspace } from '@/lib/slack/store';
 
 export const dynamic = 'force-dynamic';
 
@@ -77,6 +77,19 @@ export async function GET(request: NextRequest) {
       botUserId: result.botUserId,
       installedByUserId: auth.user.id,
     });
+
+    // The installer clicked Allow in the workspace we just installed into, so
+    // Slack has already told us who they are there — `authed_user.id`, free of
+    // any user scope or second call. Linking them here saves them walking the
+    // connect flow to establish something we already know. Everyone else still
+    // connects for themselves.
+    if (result.authedUserId) {
+      await saveUserLink({
+        accountId: auth.user.accountId,
+        parlayUserId: auth.user.id,
+        slackUserId: result.authedUserId,
+      });
+    }
   } catch (err) {
     // Most likely a missing or malformed ENCRYPTION_KEY, which must fail the
     // install rather than store the token unencrypted.
