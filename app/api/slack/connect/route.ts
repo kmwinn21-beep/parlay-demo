@@ -6,7 +6,7 @@ import { getWorkspace } from '@/lib/slack/store';
 
 export const dynamic = 'force-dynamic';
 
-const SETTINGS = '/auth/account?tab=slack';
+const SETTINGS = '/auth/account?section=slack';
 
 function baseUrl(): string {
   return process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000';

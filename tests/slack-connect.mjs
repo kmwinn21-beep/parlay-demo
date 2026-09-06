@@ -59,6 +59,7 @@ const connect = (await import('@/app/api/slack/connect/route')).GET;
 const connectCallback = (await import('@/app/api/slack/connect/callback/route')).GET;
 const disconnectMe = (await import('@/app/api/slack/disconnect/me/route')).POST;
 const installCallback = (await import('@/app/api/slack/oauth/callback/route')).GET;
+const slackStatus = (await import('@/app/api/slack/status/route')).GET;
 
 const ACCOUNT = 'acct-home';
 const OTHER_ACCOUNT = 'acct-elsewhere';
@@ -324,6 +325,50 @@ console.log('\n— disconnecting yourself —');
   const res = await disconnectMe(await request('https://parlay.test/api/slack/disconnect/me', OUTSIDER));
   eq('an outsider unlinking touches only their own account', res.status, 200);
   eq('  leaving this account alone', (await store.listUserLinks(ACCOUNT)).length, 1);
+}
+
+// ── What the settings screens read ───────────────────────────────────────────
+
+console.log('\n— the status the screens render —');
+{
+  const status = await (await slackStatus(await request('https://parlay.test/api/slack/status', MEMBER))).json();
+  eq('reports the installed workspace', [status.workspace.teamId, status.workspace.teamName], ['T-HOME', 'Home Inc']);
+  eq('  and the caller\'s own link', status.link.slackUserId, 'U-MEMBER-SLACK-NEW');
+  eq('  with ENCRYPTION_KEY present', status.encryptionConfigured, true);
+  // The bot token must not reach a browser under any key. SlackWorkspace does
+  // not carry one, and this asserts that stays true of the wire format.
+  eq('  and no credential anywhere in the payload',
+    /token|xox|v1\.[0-9a-f]/i.test(JSON.stringify(status)), false);
+  // The installer's name lives in the TENANT database, which this harness has
+  // no provisioned copy of — so resolving it throws, and the logged error above
+  // is expected. What matters is that it degrades to a missing name rather than
+  // to a screen reporting Slack as disconnected.
+  eq('  and an unresolvable installer name does not hide the connection',
+    [status.workspace.teamId, status.workspace.installedBy], ['T-HOME', null]);
+}
+{
+  // There is no user parameter to substitute, so a caller can only ever read
+  // their own link — including a caller whose id exists in another account.
+  const status = await (await slackStatus(await request('https://parlay.test/api/slack/status', COLLEAGUE))).json();
+  eq('a colleague sees the same workspace', status.workspace.teamId, 'T-HOME');
+  eq('  and their own absent link, not their colleague\'s', status.link, null);
+}
+{
+  const status = await (await slackStatus(await request('https://parlay.test/api/slack/status', UNINSTALLED))).json();
+  eq('an account with no workspace reports null', status.workspace, null);
+  eq('  which is what hides the connect control', status.link, null);
+}
+{
+  const res = await slackStatus(await request('https://parlay.test/api/slack/status', null));
+  eq('an anonymous caller reads nothing', res.status, 401);
+}
+{
+  const saved = process.env.ENCRYPTION_KEY;
+  delete process.env.ENCRYPTION_KEY;
+  const status = await (await slackStatus(await request('https://parlay.test/api/slack/status', MEMBER))).json();
+  eq('a missing ENCRYPTION_KEY is reported, not discovered at the last step',
+    status.encryptionConfigured, false);
+  process.env.ENCRYPTION_KEY = saved;
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

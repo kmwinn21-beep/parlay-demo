@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { buildDefaultTierConfig } from '@/lib/strategyAssessment';
 import toast from 'react-hot-toast';
 import { BackButton } from '@/components/BackButton';
+import { SlackAdminSection } from '@/components/SlackSettings';
 import { SalesRepsTab } from '@/components/admin/SalesRepsTab';
 import { MasterAccountsTab } from '@/components/admin/MasterAccountsTab';
 import { COLOR_PRESETS, getPreset } from '@/lib/colors';
@@ -112,7 +113,7 @@ const TABLE_LABELS: Record<string, string> = {
   conference_meetings:   'Conference Detail — Meetings',
 };
 
-type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'icp' | 'products-solutions' | 'forms' | 'users' | 'sales-reps' | 'master-accounts' | 'email-templates' | 'effectiveness' | 'usage';
+type Tab = 'types' | 'tables' | 'sections' | 'brand' | 'icp' | 'products-solutions' | 'forms' | 'users' | 'sales-reps' | 'master-accounts' | 'email-templates' | 'effectiveness' | 'usage' | 'slack';
 
 interface IcpRuleDraft {
   id?: number;
@@ -1053,6 +1054,15 @@ export default function AdminPage() {
   const [tab, setTab] = useState<Tab>('types');
   const { planId } = useCapabilities();
   const { onboardingTrack, onboardingProgress } = useOnboarding();
+
+  // Open the tab named in the URL. The Slack OAuth callback redirects back to
+  // /admin?tab=slack&error=… and the message is worthless on the Types tab.
+  // Read from window.location rather than useSearchParams, which would force
+  // this whole page into a Suspense boundary at build time.
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('tab');
+    if (requested === 'slack') setTab('slack');
+  }, []);
 
   // Admin Settings tab bar — scroll via chevrons instead of a visible scrollbar
   const tabBarRef = useRef<HTMLDivElement>(null);
@@ -2340,14 +2350,14 @@ export default function AdminPage() {
         </button>
         <div ref={tabBarRef} className="flex-1 min-w-0 overflow-x-auto scrollbar-hide">
           <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
-            {(['types', 'tables', 'sections', 'brand', 'icp', 'products-solutions', 'forms', 'users', 'sales-reps', 'master-accounts', 'email-templates', 'effectiveness', 'usage'] as Tab[]).map(t => (
+            {(['types', 'tables', 'sections', 'brand', 'icp', 'products-solutions', 'forms', 'users', 'sales-reps', 'master-accounts', 'email-templates', 'effectiveness', 'usage', 'slack'] as Tab[]).map(t => (
               <button
                 key={t}
                 type="button"
                 onClick={() => setTab(t)}
                 className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${tab === t ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
               >
-                {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'icp' ? 'ICP' : t === 'products-solutions' ? 'Products & Solutions' : t === 'forms' ? 'Custom Forms' : t === 'users' ? 'User Management' : t === 'sales-reps' ? 'Sales Reps' : t === 'master-accounts' ? 'Master accounts' : t === 'email-templates' ? 'Email Templates' : t === 'effectiveness' ? 'Effectiveness Defaults' : 'Usage'}
+                {t === 'types' ? 'Types' : t === 'tables' ? 'Edit Tables' : t === 'sections' ? 'Section Management' : t === 'brand' ? 'Brand' : t === 'icp' ? 'ICP' : t === 'products-solutions' ? 'Products & Solutions' : t === 'forms' ? 'Custom Forms' : t === 'users' ? 'User Management' : t === 'sales-reps' ? 'Sales Reps' : t === 'master-accounts' ? 'Master accounts' : t === 'email-templates' ? 'Email Templates' : t === 'effectiveness' ? 'Effectiveness Defaults' : t === 'usage' ? 'Usage' : 'Slack'}
               </button>
             ))}
           </nav>
@@ -4177,6 +4187,9 @@ export default function AdminPage() {
 
       {/* ── Usage tab ── */}
       {tab === 'usage' && <AdminUsageTab />}
+
+      {/* ── Slack tab ── */}
+      {tab === 'slack' && <SlackAdminSection />}
 
       {/* ── User Management tab ── */}
       {tab === 'users' && (

@@ -6,6 +6,7 @@ import { useEditor } from '@tiptap/react';
 import { useUser } from '@/components/UserContext';
 import { BackButton } from '@/components/BackButton';
 import { RichTextEditor, getEditorExtensions } from '@/components/RichTextEditor';
+import { SlackAccountSection } from '@/components/SlackSettings';
 
 interface ConfigOption {
   id: number;
@@ -576,6 +577,7 @@ export default function AccountPage() {
 
       <ProfileSection onRefresh={refresh} />
       <EmailSignatureSection />
+      <SlackAccountSection />
       <NotificationPrefsSection />
       <ChangePasswordSection />
 
