@@ -34,7 +34,6 @@ import { useCollapsibleSection, setAllSections, useAnySectionExpanded } from '@/
 import { ConferenceTimeline } from '@/components/ConferenceTimeline';
 import { AnimatedCollapse, FadeCollapse } from '@/components/CollapseAnimation';
 import { useSectionConfig } from '@/lib/useSectionConfig';
-import { ComposeEmailModal } from '@/components/ComposeEmailModal';
 import { CompanyDrawer } from '@/components/CompanyDrawer';
 import { ActivityTimelineModal } from '@/components/ActivityTimelineModal';
 import { useCapabilities } from '@/lib/useCapabilities';
@@ -236,7 +235,6 @@ export default function CompanyDetailPage() {
   const anySectionExpanded = useAnySectionExpanded();
   const [configuredProductNames, setConfiguredProductNames] = useState<Set<string>>(new Set());
   const [showAssignFollowUp, setShowAssignFollowUp] = useState(false);
-  const [composeTarget, setComposeTarget] = useState<{ email: string; name: string } | null>(null);
   const [showMeeting, setShowMeeting] = useState(false);
 
   // Pinned notes state
@@ -1463,18 +1461,6 @@ export default function CompanyDetailPage() {
                           >
                             {attendee.first_name} {attendee.last_name}
                           </button>
-                          {attendee.email && (
-                            <button
-                              type="button"
-                              title={`Send email to ${attendee.email}`}
-                              onClick={() => setComposeTarget({ email: attendee.email!, name: `${attendee.first_name} ${attendee.last_name}` })}
-                              className="text-gray-400 hover:text-brand-secondary transition-colors flex-shrink-0"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                              </svg>
-                            </button>
-                          )}
                         </div>
                         <ConferenceCountTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} />
                       </div>
@@ -1497,11 +1483,6 @@ export default function CompanyDetailPage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Name</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Title</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Seniority</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-16">
-                      <svg className="w-4 h-4 mx-auto text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                      </svg>
-                    </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Company</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Conferences</th>
                   </tr>
@@ -1540,20 +1521,6 @@ export default function CompanyDetailPage() {
                       <td className="px-4 py-3">
                         {seniority ? (
                           <span className={getBadgeClass(seniority, colorMaps.seniority || {})}>{seniority}</span>
-                        ) : <span className="text-gray-300">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {attendee.email ? (
-                          <button
-                            type="button"
-                            title={`Send email to ${attendee.email}`}
-                            onClick={() => setComposeTarget({ email: attendee.email!, name: `${attendee.first_name} ${attendee.last_name}` })}
-                            className="inline-flex items-center justify-center text-gray-400 hover:text-brand-secondary transition-colors"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                            </svg>
-                          </button>
                         ) : <span className="text-gray-300">—</span>}
                       </td>
                       <td className="px-4 py-3">
@@ -1946,14 +1913,6 @@ export default function CompanyDetailPage() {
         defaultCompanyId={Number(id)}
         availableConferences={company?.conferences}
       />
-
-      {composeTarget && (
-        <ComposeEmailModal
-          contactEmail={composeTarget.email}
-          contactName={composeTarget.name}
-          onClose={() => setComposeTarget(null)}
-        />
-      )}
 
       <CompanyTouchpointMatrix
         companyId={id}

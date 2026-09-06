@@ -26,7 +26,6 @@ import { useUserOptions, resolveRepInitials, getRepInitials } from '@/lib/useUse
 import { InternalRelationshipsSection } from '@/components/InternalRelationshipsSection';
 import { TouchpointsSection } from '@/components/TouchpointsSection';
 import { useSectionConfig } from '@/lib/useSectionConfig';
-import { ComposeEmailModal } from '@/components/ComposeEmailModal';
 import { BUYER_ROLE_OPTIONS, shouldWarnForTitleMetadata, type BuyerRoleKey, type TitleMatchMetadata } from '@/lib/titleNormalization';
 import { ActivityTimelineModal } from '@/components/ActivityTimelineModal';
 import { useCapabilities } from '@/lib/useCapabilities';
@@ -150,7 +149,6 @@ export default function AttendeeDetailPage() {
   const [userOptions, setUserOptions] = useState<import('@/lib/useUserOptions').UserOption[]>([]);
 
   const [showAssignFollowUp, setShowAssignFollowUp] = useState(false);
-  const [showComposeEmail, setShowComposeEmail] = useState(false);
   const [showTitleClassifier, setShowTitleClassifier] = useState(false);
   const [titleRuleForm, setTitleRuleForm] = useState({ normalized_title: '', function_id: '', seniority_id: '', buyer_role: 'target_title' as BuyerRoleKey, confidence: 'high', notes: '', apply_all_exact: true });
   const [isSavingTitleRule, setIsSavingTitleRule] = useState(false);
@@ -1298,16 +1296,6 @@ export default function AttendeeDetailPage() {
                         </a>
                         <button
                           type="button"
-                          onClick={() => setShowComposeEmail(true)}
-                          title="Send email"
-                          className="flex-shrink-0 text-gray-400 hover:text-brand-secondary transition-colors"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                          </svg>
-                        </button>
-                        <button
-                          type="button"
                           onClick={() => {
                             navigator.clipboard.writeText(attendee.email!)
                               .then(() => toast.success('Email copied to clipboard.'))
@@ -1787,14 +1775,6 @@ export default function AttendeeDetailPage() {
             </div>
           </div>
         </div>
-      )}
-
-      {showComposeEmail && attendee?.email && (
-        <ComposeEmailModal
-          contactEmail={attendee.email}
-          contactName={`${attendee.first_name} ${attendee.last_name}`}
-          onClose={() => setShowComposeEmail(false)}
-        />
       )}
 
       {/* Add to Guest List Modal */}

@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { createNotifications, getConfigIdByEmail } from '@/lib/notifications';
-import { buildInputRequestEmailHtml, sendInputRequestEmail } from '@/lib/email';
-import { getValidToken, sendViaGoogle, sendViaMicrosoft, type OAuthProvider } from '@/lib/oauthEmail';
+import { sendInputRequestEmail } from '@/lib/email';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,13 +74,6 @@ export async function POST(request: NextRequest) {
   const parlayLink = `${BASE_URL}/calendar-intelligence?conference=${conferenceId}`;
   const clampedDays = Math.max(1, Math.min(90, Number(expiryDays) || 7));
   const expiresAt = new Date(Date.now() + clampedDays * 24 * 60 * 60 * 1000);
-
-  // Check if requester has a connected OAuth account for sending from their own email
-  const oauthRow = await db.execute({
-    sql: 'SELECT provider, provider_email FROM oauth_connections WHERE user_id = ? LIMIT 1',
-    args: [authResult.id],
-  }).catch(() => ({ rows: [] }));
-  const oauthConn = oauthRow.rows[0] as unknown as { provider: string; provider_email: string | null } | undefined;
 
   // Resolved once — the sender is the same for every recipient in the loop.
   const requesterConfigId = await getConfigIdByEmail(db, authResult.email);
@@ -176,21 +168,7 @@ export async function POST(request: NextRequest) {
       expiresAt: expiresAt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
       expiryDays: clampedDays,
     };
-    if (oauthConn) {
-      await (async () => {
-        const accessToken = await getValidToken(db, authResult.id, oauthConn.provider as OAuthProvider);
-        const html = buildInputRequestEmailHtml(emailOpts);
-        const subject = `${requesterName} wants your input on ${conferenceName}`;
-        const fromEmail = oauthConn.provider_email ?? authResult.email;
-        if (oauthConn.provider === 'google') {
-          await sendViaGoogle({ accessToken, from: fromEmail, to: email, subject, htmlBody: html, attachments: [] });
-        } else {
-          await sendViaMicrosoft({ accessToken, to: email, subject, htmlBody: html, attachments: [] });
-        }
-      })().catch(() => sendInputRequestEmail(emailOpts).catch(() => {}));
-    } else {
-      await sendInputRequestEmail(emailOpts).catch(() => {});
-    }
+    await sendInputRequestEmail(emailOpts).catch(() => {});
 
     requestsSent++;
   }
