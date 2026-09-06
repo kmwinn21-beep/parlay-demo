@@ -1891,7 +1891,7 @@ export default function ConferenceDetailPage() {
    * One person's card. The flat list and the grouped list both render through
    * here, so the two cannot drift; a tier changes only where the card sits.
    */
-  const renderAttendeeMobileCard = (attendee: Attendee, opts?: { inCompany?: boolean }) => (
+  const renderAttendeeMobileCard = (attendee: Attendee, opts?: { inCompany?: boolean; revealIndex?: number }) => (
   <MobileCard
     key={attendee.id}
     /* Under a company the card steps in again and takes a quieter rule than
@@ -1900,6 +1900,7 @@ export default function ConferenceDetailPage() {
        white card against a near-white page, the lighter one was invisible and
        a 12px indent was carrying the tier alone. */
     className={opts?.inCompany ? 'ml-6 border-l-[3px] border-l-gray-300' : ''}
+    style={revealStyle(opts?.revealIndex)}
   >
   <MobileAttendeeCard
     attendee={attendee as unknown as AttendeeCardRow}
@@ -2013,13 +2014,13 @@ export default function ConferenceDetailPage() {
    * Stepped in and ruled in the account's own colour, so the run of people
    * below it reads as belonging to it rather than as the next thing along.
    */
-  const renderAttendeeCompanyCard = (node: CompanyNode<Attendee>) => {
+  const renderAttendeeCompanyCard = (node: CompanyNode<Attendee>, opts?: { revealIndex?: number }) => {
     const ids = node.attendees.map(a => a.id);
     const allSelected = ids.length > 0 && ids.every(cid => selectedAttendeeIds.has(cid));
     const someSelected = !allSelected && ids.some(cid => selectedAttendeeIds.has(cid));
     const expanded = isCompanyExpanded(attendeeCollapse, node.companyId);
     return (
-      <MobileCard key={`company-${node.companyId}`} className="ml-3 border-l-[3px] border-l-brand-primary/35">
+      <MobileCard key={`company-${node.companyId}`} className="ml-3 border-l-[3px] border-l-brand-primary/35" style={revealStyle(opts?.revealIndex)}>
         <button
           type="button"
           onClick={() => setAttendeeCollapse(s => toggleCompany(s, node.companyId))}
@@ -2081,17 +2082,17 @@ export default function ConferenceDetailPage() {
 
     const peopleUnder = (node: CompanyNode<Attendee>) =>
       isCompanyExpanded(attendeeCollapse, node.companyId)
-        ? node.attendees.map(a => renderAttendeeMobileCard(a, { inCompany: true }))
+        ? node.attendees.map((a, ai) => renderAttendeeMobileCard(a, { inCompany: true, revealIndex: ai }))
         : [];
 
     for (const entry of pagedAttendeeEntries) {
       if (entry.kind === 'family') {
         cards.push(renderAttendeeFamilyCard(entry));
         if (isFamilyExpanded(attendeeCollapse, entry.key)) {
-          for (const node of entry.companies) {
-            cards.push(renderAttendeeCompanyCard(node));
+          entry.companies.forEach((node, ci) => {
+            cards.push(renderAttendeeCompanyCard(node, { revealIndex: ci }));
             cards.push(...peopleUnder(node));
-          }
+          });
         }
         continue;
       }
@@ -2103,6 +2104,7 @@ export default function ConferenceDetailPage() {
         );
         dividerDrawn = true;
       }
+      // No reveal index: a loose company is on screen because the page is.
       cards.push(renderAttendeeCompanyCard(entry));
       cards.push(...peopleUnder(entry));
     }
@@ -2127,7 +2129,7 @@ export default function ConferenceDetailPage() {
    * allowed are how far its contents are pushed in and whether the Company
    * cell repeats what the header above already said.
    */
-  const renderAttendeeRow = (attendee: Attendee, opts?: { indent?: number; hideCompany?: boolean }) => {
+  const renderAttendeeRow = (attendee: Attendee, opts?: { indent?: number; hideCompany?: boolean; revealIndex?: number }) => {
     const indent = opts?.indent ?? 0;
     const rowSelected = selectedAttendeeIds.has(attendee.id);
     // Frozen cells need a background of their own — the row's
@@ -2144,6 +2146,7 @@ export default function ConferenceDetailPage() {
       key={attendee.id}
       onClick={onAttendeeCardClick(attendee.id)}
       className={`group ${cardRowClass(rowSelected, focused)} ${cardEmphasisClass({ focused, otherFocused: focusedAttendeeId != null && !focused, dimmed })}`}
+      style={revealStyle(opts?.revealIndex)}
     >
       <td className="py-3 sticky left-0 z-10" style={{ width: attendeeSelWidth }}>
         <input
@@ -2351,6 +2354,24 @@ export default function ConferenceDetailPage() {
     );
   };
 
+  /**
+   * A row or card arriving because someone opened the thing above it.
+   *
+   * The same drop the Companies tab uses when a family unfolds — same
+   * keyframes, same easing, same stagger — so opening an account behaves the
+   * same way on both tabs. `backwards` keeps a row waiting its turn hidden
+   * instead of flashing at full opacity first, and the stagger is capped so a
+   * company of thirty does not take two seconds to finish arriving.
+   *
+   * Given only to rows a click revealed. A loose company is on screen because
+   * the page is, and animating it would say something happened that did not.
+   */
+  const revealStyle = (index: number | undefined): React.CSSProperties | undefined =>
+    index == null ? undefined : {
+      animation: 'groupRowIn 300ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards',
+      animationDelay: `${Math.min(index, 6) * 55}ms`,
+    };
+
   /** The cells a group row leaves empty, so the columns still line up. */
   const emptyGroupCell = (key: string) => <td key={key} className="px-4 py-3" />;
 
@@ -2487,13 +2508,13 @@ export default function ConferenceDetailPage() {
    * tinted block: a person and a building must not read as the same object at
    * different depths, and indentation alone would say exactly that.
    */
-  const renderAttendeeCompanyRow = (node: CompanyNode<Attendee>) => {
+  const renderAttendeeCompanyRow = (node: CompanyNode<Attendee>, opts?: { revealIndex?: number }) => {
     const ids = node.attendees.map(a => a.id);
     const allSelected = ids.length > 0 && ids.every(cid => selectedAttendeeIds.has(cid));
     const someSelected = !allSelected && ids.some(cid => selectedAttendeeIds.has(cid));
     const expanded = isCompanyExpanded(attendeeCollapse, node.companyId);
     return (
-      <tr key={`company-${node.companyId}`} className={cardRowClass(false, false)}>
+      <tr key={`company-${node.companyId}`} className={cardRowClass(false, false)} style={revealStyle(opts?.revealIndex)}>
         <td className="py-3 sticky left-0 z-10" style={{ width: attendeeSelWidth }}>
           <input
             type="checkbox"
@@ -2597,14 +2618,16 @@ export default function ConferenceDetailPage() {
       if (entry.kind === 'family') {
         rows.push(renderAttendeeFamilyRow(entry));
         if (isFamilyExpanded(attendeeCollapse, entry.key)) {
-          for (const node of entry.companies) {
-            rows.push(renderAttendeeCompanyRow(node));
+          // The stagger restarts inside each company: the run that arrives is
+          // that company's people, not their position in the family.
+          entry.companies.forEach((node, ci) => {
+            rows.push(renderAttendeeCompanyRow(node, { revealIndex: ci }));
             if (isCompanyExpanded(attendeeCollapse, node.companyId)) {
-              for (const a of node.attendees) {
-                rows.push(renderAttendeeRow(a, { indent: GROUP_ATTENDEE_INDENT, hideCompany: true }));
-              }
+              node.attendees.forEach((a, ai) => {
+                rows.push(renderAttendeeRow(a, { indent: GROUP_ATTENDEE_INDENT, hideCompany: true, revealIndex: ai }));
+              });
             }
-          }
+          });
         }
         continue;
       }
@@ -2615,11 +2638,12 @@ export default function ConferenceDetailPage() {
         rows.push(renderGroupDivider('divider-loose', `No parent company · ${loose} ${loose === 1 ? 'company' : 'companies'}`));
         dividerDrawn = true;
       }
+      // No reveal index on the company itself: nothing opened to put it here.
       rows.push(renderAttendeeCompanyRow(entry));
       if (isCompanyExpanded(attendeeCollapse, entry.companyId)) {
-        for (const a of entry.attendees) {
-          rows.push(renderAttendeeRow(a, { indent: GROUP_ATTENDEE_INDENT, hideCompany: true }));
-        }
+        entry.attendees.forEach((a, ai) => {
+          rows.push(renderAttendeeRow(a, { indent: GROUP_ATTENDEE_INDENT, hideCompany: true, revealIndex: ai }));
+        });
       }
     }
 
