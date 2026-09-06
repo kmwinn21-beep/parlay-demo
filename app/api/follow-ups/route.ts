@@ -192,14 +192,14 @@ async function batchAssignRep(
   }
   if (gained.size === 0) return;
 
-  const changedByConfigId = await getConfigIdByEmail(user.email, db);
+  const changedByConfigId = await getConfigIdByEmail(db, user.email);
 
   for (const [repId, rows] of Array.from(gained.entries())) {
-    const userIds = await resolveUserIds(String(repId), changedByConfigId);
+    const userIds = await resolveUserIds(db, String(repId), changedByConfigId);
     if (userIds.length === 0) continue;
 
     const single = rows.length === 1 && rows[0].attendeeId != null;
-    await createNotifications({
+    await createNotifications(db, {
       userIds,
       type: 'attendee',
       recordId: rows[0].id,
@@ -305,9 +305,9 @@ export async function PATCH(request: NextRequest) {
         if (fuRow.rows.length > 0) {
           const a = fuRow.rows[0];
           const attendeeName = `${a.first_name} ${a.last_name}`.trim();
-          const changedByConfigId = await getConfigIdByEmail(user.email, db);
-          const userIds = await resolveUserIds(addedIds.join(','), changedByConfigId);
-          createNotifications({
+          const changedByConfigId = await getConfigIdByEmail(db, user.email);
+          const userIds = await resolveUserIds(db, addedIds.join(','), changedByConfigId);
+          createNotifications(db, {
             userIds,
             type: 'attendee',
             recordId: id,

@@ -154,8 +154,7 @@ async function processAccount(
       // no config id to credit and the sender reads as 'system' — both stated
       // here rather than left implicit in the SQL. The debrief email below is
       // the one the reader gets, so the helper's generic one is skipped.
-      await createNotifications({
-        db: tenantDb,
+      await createNotifications(tenantDb, {
         userIds: [userId],
         type: 'conference',
         recordId: conferenceId,

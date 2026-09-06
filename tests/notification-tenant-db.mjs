@@ -15,8 +15,9 @@
  * This stands up a real master and a real tenant database, puts the user in the
  * tenant one exactly as production does, and asserts that each entry point
  * actually delivers. It is written against the API where the caller passes the
- * client it wants written to, which is what `createNotifications` already
- * accepts and what the rest must.
+ * client it wants written to, as a required first argument — a required field
+ * in an options bag is type-safe but reads as optional at the call site, which
+ * is the ergonomic that produced this bug in the first place.
  *
  * Slow by the standards of the other tests here — it runs the real migrations
  * against two SQLite files — because the alternative is a hand-written schema
@@ -163,8 +164,7 @@ console.log('\n— resolveUserIds —');
 console.log('\n— notifyMentionedUsers —');
 {
   await reset();
-  await notifyMentionedUsers({
-    db: tenant,
+  await notifyMentionedUsers(tenant, {
     taggedConfigIds: [REP_CONFIG_ID],
     mentionerName: 'Sam Patel',
     mentionerEmail: 'sam@tenant.test',
@@ -180,8 +180,7 @@ console.log('\n— notifyMentionedUsers —');
 console.log('\n— notifyCompanyAssignees —');
 {
   await reset();
-  await notifyCompanyAssignees({
-    db: tenant,
+  await notifyCompanyAssignees(tenant, {
     companyId: COMPANY_ID,
     companyName: 'MorningStar Senior Living',
     message: 'New note added: "site visit booked"',
@@ -195,8 +194,7 @@ console.log('\n— notifyCompanyAssignees —');
 console.log('\n— notifyNoteComment (opt-in) —');
 {
   await reset();
-  await notifyNoteComment({
-    db: tenant,
+  await notifyNoteComment(tenant, {
     noteId: NOTE_ID,
     noteAuthorUserId: REP_USER_ID,
     commenterUserId: 9002,
@@ -217,8 +215,7 @@ console.log('\n— notifyNoteComment (opt-in) —');
   // the notification ON gets nothing, which is the worst version of this bug.
   await reset();
   await tenant.execute({ sql: 'UPDATE notification_preferences SET note_comment_received = 0 WHERE user_id = ?', args: [REP_USER_ID] });
-  await notifyNoteComment({
-    db: tenant,
+  await notifyNoteComment(tenant, {
     noteId: NOTE_ID,
     noteAuthorUserId: REP_USER_ID,
     commenterUserId: 9002,

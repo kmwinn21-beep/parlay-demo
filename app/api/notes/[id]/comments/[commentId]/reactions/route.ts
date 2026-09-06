@@ -86,8 +86,8 @@ export async function POST(
         }
         const nameRow = await db.execute({ sql: 'SELECT COALESCE(display_name, email) AS name FROM users WHERE id = ?', args: [user.id] });
         const reactorName = nameRow.rows.length ? String(nameRow.rows[0].name) : user.email;
-        const reactorConfigId = await getConfigIdByEmail(user.email, db);
-        notifyCommentReaction({
+        const reactorConfigId = await getConfigIdByEmail(db, user.email);
+        notifyCommentReaction(db, {
           commentAuthorUserId: Number(comment.user_id),
           reactorUserId: user.id,
           reactorName,

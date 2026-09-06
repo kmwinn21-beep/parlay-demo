@@ -1,8 +1,22 @@
 /**
  * Notification helpers — best-effort, never throws.
  * Errors are swallowed so a notification failure never breaks a primary mutation.
+ *
+ * Every function here takes the database client to work against as its first
+ * argument, and this module deliberately does not import the `db` singleton
+ * from ./db. Accounts each have their own database: a tenant's users, their
+ * preferences and the records a notification is about all live there, and none
+ * of them exist in master. Reaching for the singleton meant reading a database
+ * the recipient was not in — no preferences row, no resolved recipients,
+ * nothing written — and because this path swallows its errors, nothing said so.
+ *
+ * The client is required rather than defaulted for the same reason. A default
+ * is a decision made by whoever forgets to pass one, and it silently picks the
+ * wrong database for every tenant user. Not importing the singleton at all is
+ * what makes that unavailable rather than merely discouraged.
+ *
+ * See tests/notification-tenant-db.mjs, which stands up both databases.
  */
-import { db } from './db';
 import type { Client } from '@libsql/client';
 import { sendNotificationEmail } from './email';
 
@@ -44,13 +58,6 @@ interface CreateNotificationsInput {
   entityId: number;
   prefKey?: NotifPrefKey;
   /**
-   * The database to write against. Accounts each have their own, and a
-   * notification written to the master DB for a tenant user reaches nobody —
-   * their users row isn't there. Callers holding a tenant client should pass
-   * it. Defaults to master, which is what every caller got before this existed.
-   */
-  db?: Client;
-  /**
    * Skip the generic notification email. For callers that send their own,
    * better one — an input request with decision links, a debrief with stats —
    * so the reader doesn't get both.
@@ -91,6 +98,7 @@ export function parseNotifIds(str: string | null | undefined): number[] {
  * (users.id) whose config_id matches, excluding the given actor config ID.
  */
 export async function resolveUserIds(
+  client: Client,
   configIdStr: string | null | undefined,
   excludeConfigId?: number | null,
 ): Promise<number[]> {
@@ -98,7 +106,7 @@ export async function resolveUserIds(
   if (ids.length === 0) return [];
   try {
     const ph = ids.map(() => '?').join(',');
-    const rows = await db.execute({
+    const rows = await client.execute({
       sql: `SELECT id, config_id FROM users WHERE config_id IN (${ph})`,
       args: ids,
     });
@@ -114,9 +122,8 @@ export async function resolveUserIds(
  * Get the config_id for a user identified by email.
  * Returns null if the user is not found or has no config_id set.
  */
-export async function getConfigIdByEmail(email: string, tenantDb?: Client): Promise<number | null> {
+export async function getConfigIdByEmail(client: Client, email: string): Promise<number | null> {
   try {
-    const client = tenantDb ?? db;
     const r = await client.execute({
       sql: 'SELECT config_id FROM users WHERE email = ?',
       args: [email],
@@ -129,9 +136,8 @@ export async function getConfigIdByEmail(email: string, tenantDb?: Client): Prom
 }
 
 /** Insert notification rows — one per user. Respects notification_preferences opt-outs. Errors are swallowed. */
-export async function createNotifications(p: CreateNotificationsInput): Promise<void> {
+export async function createNotifications(client: Client, p: CreateNotificationsInput): Promise<void> {
   if (p.userIds.length === 0) return;
-  const client = p.db ?? db;
   try {
     let eligibleIds = p.userIds;
     if (p.prefKey) {
@@ -197,7 +203,7 @@ export async function createNotifications(p: CreateNotificationsInput): Promise<
 /**
  * Notify all users assigned to a company (excluding the actor).
  */
-export async function notifyCompanyAssignees(opts: {
+export async function notifyCompanyAssignees(client: Client, opts: {
   companyId: number;
   companyName: string;
   message: string;
@@ -208,16 +214,17 @@ export async function notifyCompanyAssignees(opts: {
   entityId?: number;
 }): Promise<void> {
   try {
-    const r = await db.execute({
+    const r = await client.execute({
       sql: 'SELECT assigned_user FROM companies WHERE id = ?',
       args: [opts.companyId],
     });
     if (!r.rows.length) return;
     const userIds = await resolveUserIds(
+      client,
       r.rows[0].assigned_user as string | null,
       opts.changedByConfigId,
     );
-    await createNotifications({
+    await createNotifications(client, {
       userIds,
       type: opts.type ?? 'company',
       recordId: opts.companyId,
@@ -238,7 +245,7 @@ export async function notifyCompanyAssignees(opts: {
  * Notify users listed as internal attendees on a conference (excluding the actor).
  * The notification links to the conference record.
  */
-export async function notifyConferenceInternalAttendees(opts: {
+export async function notifyConferenceInternalAttendees(client: Client, opts: {
   conferenceId: number;
   conferenceName: string;
   message: string;
@@ -246,16 +253,17 @@ export async function notifyConferenceInternalAttendees(opts: {
   changedByConfigId: number | null;
 }): Promise<void> {
   try {
-    const r = await db.execute({
+    const r = await client.execute({
       sql: 'SELECT internal_attendees FROM conferences WHERE id = ?',
       args: [opts.conferenceId],
     });
     if (!r.rows.length) return;
     const userIds = await resolveUserIds(
+      client,
       r.rows[0].internal_attendees as string | null,
       opts.changedByConfigId,
     );
-    await createNotifications({
+    await createNotifications(client, {
       userIds,
       type: 'conference',
       recordId: opts.conferenceId,
@@ -273,7 +281,7 @@ export async function notifyConferenceInternalAttendees(opts: {
 /**
  * Notify users who were @mentioned in a note.
  */
-export async function notifyMentionedUsers(opts: {
+export async function notifyMentionedUsers(client: Client, opts: {
   taggedConfigIds: number[];
   mentionerName: string;
   mentionerEmail: string;
@@ -287,11 +295,12 @@ export async function notifyMentionedUsers(opts: {
   if (opts.taggedConfigIds.length === 0) return;
   try {
     const userIds = await resolveUserIds(
+      client,
       opts.taggedConfigIds.join(','),
       opts.mentionerConfigId,
     );
     const message = `${opts.mentionerName} mentioned you in a ${opts.surface ?? 'note'} related to ${opts.entityName}`;
-    await createNotifications({
+    await createNotifications(client, {
       userIds,
       type: opts.entityType as NotifType,
       recordId: opts.entityId,
@@ -324,11 +333,11 @@ interface CreateOptInNotificationsInput {
   entityId: number;
 }
 
-async function createOptInNotifications(p: CreateOptInNotificationsInput): Promise<void> {
+async function createOptInNotifications(client: Client, p: CreateOptInNotificationsInput): Promise<void> {
   if (p.userIds.length === 0) return;
   try {
     const ph = p.userIds.map(() => '?').join(',');
-    const optInRows = await db.execute({
+    const optInRows = await client.execute({
       sql: `SELECT user_id FROM notification_preferences WHERE user_id IN (${ph}) AND ${p.prefKey} = 1`,
       args: p.userIds,
     });
@@ -336,7 +345,7 @@ async function createOptInNotifications(p: CreateOptInNotificationsInput): Promi
     if (eligibleIds.length === 0) return;
 
     for (const uid of eligibleIds) {
-      await db.execute({
+      await client.execute({
         sql: `INSERT INTO notifications
               (user_id, type, record_id, record_name, message,
                changed_by_config_id, changed_by_email, entity_type, entity_id, is_read)
@@ -351,14 +360,14 @@ async function createOptInNotifications(p: CreateOptInNotificationsInput): Promi
 
     try {
       const ph2 = eligibleIds.map(() => '?').join(',');
-      const emailOptInRows = await db.execute({
+      const emailOptInRows = await client.execute({
         sql: `SELECT user_id FROM notification_preferences WHERE user_id IN (${ph2}) AND ${p.emailPrefKey} = 1`,
         args: eligibleIds,
       });
       const emailIds = emailOptInRows.rows.map(r => Number(r.user_id));
       if (emailIds.length > 0) {
         const ph3 = emailIds.map(() => '?').join(',');
-        const userRows = await db.execute({
+        const userRows = await client.execute({
           sql: `SELECT id, email FROM users WHERE id IN (${ph3})`,
           args: emailIds,
         });
@@ -377,7 +386,7 @@ async function createOptInNotifications(p: CreateOptInNotificationsInput): Promi
   }
 }
 
-export async function notifyNoteComment(opts: {
+export async function notifyNoteComment(client: Client, opts: {
   noteId: number;
   noteAuthorUserId: number | null;
   commenterUserId: number;
@@ -399,7 +408,7 @@ export async function notifyNoteComment(opts: {
     entityId: opts.entityId,
   };
   if (opts.noteAuthorUserId && opts.noteAuthorUserId !== opts.commenterUserId) {
-    createOptInNotifications({
+    createOptInNotifications(client, {
       ...base,
       userIds: [opts.noteAuthorUserId],
       prefKey: 'note_comment_received',
@@ -411,7 +420,7 @@ export async function notifyNoteComment(opts: {
     id => id !== opts.commenterUserId && id !== opts.noteAuthorUserId,
   );
   if (threadIds.length > 0) {
-    createOptInNotifications({
+    createOptInNotifications(client, {
       ...base,
       userIds: threadIds,
       prefKey: 'note_comment_thread',
@@ -421,7 +430,7 @@ export async function notifyNoteComment(opts: {
   }
 }
 
-export async function notifyNoteReaction(opts: {
+export async function notifyNoteReaction(client: Client, opts: {
   noteId: number;
   noteAuthorUserId: number | null;
   reactorUserId: number;
@@ -435,7 +444,7 @@ export async function notifyNoteReaction(opts: {
 }): Promise<void> {
   if (!opts.noteAuthorUserId || opts.noteAuthorUserId === opts.reactorUserId) return;
   const emoji = opts.reactionType === 'like' ? '👍' : '👎';
-  createOptInNotifications({
+  createOptInNotifications(client, {
     userIds: [opts.noteAuthorUserId],
     prefKey: 'note_reaction_received',
     emailPrefKey: 'note_reaction_received_email',
@@ -450,7 +459,7 @@ export async function notifyNoteReaction(opts: {
   });
 }
 
-export async function notifyNoteLetsTalk(opts: {
+export async function notifyNoteLetsTalk(client: Client, opts: {
   noteId: number;
   triggerUserId: number;
   triggerName: string;
@@ -463,7 +472,7 @@ export async function notifyNoteLetsTalk(opts: {
 }): Promise<void> {
   const recipients = opts.recipientUserIds.filter(id => id !== opts.triggerUserId);
   if (recipients.length === 0) return;
-  createOptInNotifications({
+  createOptInNotifications(client, {
     userIds: recipients,
     prefKey: 'note_lets_talk',
     emailPrefKey: 'note_lets_talk_email',
@@ -478,7 +487,7 @@ export async function notifyNoteLetsTalk(opts: {
   });
 }
 
-export async function notifyCommentReaction(opts: {
+export async function notifyCommentReaction(client: Client, opts: {
   commentAuthorUserId: number;
   reactorUserId: number;
   reactorName: string;
@@ -492,7 +501,7 @@ export async function notifyCommentReaction(opts: {
 }): Promise<void> {
   if (opts.commentAuthorUserId === opts.reactorUserId) return;
   const emoji = opts.reactionType === 'like' ? '👍' : '👎';
-  createOptInNotifications({
+  createOptInNotifications(client, {
     userIds: [opts.commentAuthorUserId],
     prefKey: 'comment_reaction_received',
     emailPrefKey: 'comment_reaction_received_email',
@@ -507,7 +516,7 @@ export async function notifyCommentReaction(opts: {
   });
 }
 
-export async function notifyForAttendee(opts: {
+export async function notifyForAttendee(client: Client, opts: {
   attendeeId: number;
   attendeeName: string;
   message: string;
@@ -515,7 +524,7 @@ export async function notifyForAttendee(opts: {
   changedByConfigId: number | null;
 }): Promise<void> {
   try {
-    const r = await db.execute({
+    const r = await client.execute({
       sql: `SELECT co.assigned_user FROM attendees a
             LEFT JOIN companies co ON a.company_id = co.id
             WHERE a.id = ?`,
@@ -523,10 +532,11 @@ export async function notifyForAttendee(opts: {
     });
     if (!r.rows.length) return;
     const userIds = await resolveUserIds(
+      client,
       r.rows[0].assigned_user as string | null,
       opts.changedByConfigId,
     );
-    await createNotifications({
+    await createNotifications(client, {
       userIds,
       type: 'attendee',
       recordId: opts.attendeeId,

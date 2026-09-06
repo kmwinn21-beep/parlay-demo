@@ -30,7 +30,7 @@ export async function POST(
     await db.execute({ sql: 'UPDATE entity_notes SET lets_talk = 1 WHERE id = ?', args: [noteId] });
 
     // Resolve recipients: tagged users + previous commenters
-    const taggedUserIds = await resolveUserIds(
+    const taggedUserIds = await resolveUserIds(db, 
       note.tagged_users != null ? String(note.tagged_users) : null,
       null,
     );
@@ -63,9 +63,9 @@ export async function POST(
 
     const nameRow = await db.execute({ sql: 'SELECT COALESCE(display_name, email) AS name FROM users WHERE id = ?', args: [user.id] });
     const triggerName = nameRow.rows.length ? String(nameRow.rows[0].name) : user.email;
-    const triggerConfigId = await getConfigIdByEmail(user.email, db);
+    const triggerConfigId = await getConfigIdByEmail(db, user.email);
 
-    notifyNoteLetsTalk({
+    notifyNoteLetsTalk(db, {
       noteId,
       triggerUserId: user.id,
       triggerName,

@@ -168,7 +168,7 @@ export async function POST(request: NextRequest) {
 
     // Notify internal attendees on this conference (in-app + email) — best-effort, never
     // throws, so a notification failure can't fail the submission itself.
-    await notifyConferenceInternalAttendees({
+    await notifyConferenceInternalAttendees(db, {
       conferenceId: conference_id,
       conferenceName,
       message: `${nameVal || 'Someone'}${companyVal ? ` from ${companyVal}` : ''} submitted the "${formName}" form via the public link`,

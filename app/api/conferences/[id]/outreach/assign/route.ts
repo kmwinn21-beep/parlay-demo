@@ -153,7 +153,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const [conferenceRow, assignerRow, notifyUserIds] = await Promise.all([
         db.execute({ sql: `SELECT name FROM conferences WHERE id = ?`, args: [conferenceId] }),
         db.execute({ sql: `SELECT display_name, first_name, last_name, email FROM users WHERE id = ?`, args: [authResult.id] }),
-        resolveUserIds(added.join(',')),
+        resolveUserIds(db, added.join(',')),
       ]);
       const companyName = String(companyRow.rows[0].name);
       const conferenceName = conferenceRow.rows.length > 0 ? String(conferenceRow.rows[0].name) : 'this conference';
@@ -164,7 +164,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       // assigned and unaffected by the change. Reps with no linked login
       // account (resolveUserIds drops them) just don't get one.
       if (notifyUserIds.length > 0) {
-        await createNotifications({
+        await createNotifications(db, {
           userIds: notifyUserIds,
           type: 'conference',
           recordId: conferenceId,

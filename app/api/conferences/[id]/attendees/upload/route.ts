@@ -1203,15 +1203,14 @@ export async function POST(
           }).catch(() => {});
           // In-app notification. The email below is the one the reader gets,
           // so the helper's generic one is skipped.
-          await createNotifications({
-            db,
+          await createNotifications(db, {
             userIds: [currentUser.id],
             type: 'conference',
             recordId: conferenceId,
             recordName: conferenceName,
             message: `Upload complete for ${conferenceName}: ${result.new_count} new attendee(s) added, ${result.updated_count} record(s) updated.`,
             changedByEmail: currentUser.email,
-            changedByConfigId: await getConfigIdByEmail(currentUser.email, db),
+            changedByConfigId: await getConfigIdByEmail(db, currentUser.email),
             entityType: 'conference',
             entityId: conferenceId,
             skipEmail: true,
@@ -1232,15 +1231,14 @@ export async function POST(
           }).catch(() => {});
           // In-app only, as before — someone watching the upload fail in the UI
           // doesn't need an email about it too.
-          await createNotifications({
-            db,
+          await createNotifications(db, {
             userIds: [currentUser.id],
             type: 'conference',
             recordId: conferenceId,
             recordName: conferenceName,
             message: `Upload failed for ${conferenceName}. Please try again or contact support if the issue persists.`,
             changedByEmail: currentUser.email,
-            changedByConfigId: await getConfigIdByEmail(currentUser.email, db),
+            changedByConfigId: await getConfigIdByEmail(db, currentUser.email),
             entityType: 'conference',
             entityId: conferenceId,
             skipEmail: true,
