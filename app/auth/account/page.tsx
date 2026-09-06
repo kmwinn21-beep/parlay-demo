@@ -484,6 +484,11 @@ function EmailSignatureSection() {
   const [loaded, setLoaded] = useState(false);
 
   const editor = useEditor({
+    // This page is server-rendered before it hydrates, and Tiptap throws on
+    // sight of that unless told to hold off until the client. Without this the
+    // whole of My Account falls into the error boundary in development —
+    // production happens to escape it, which is why it went unnoticed.
+    immediatelyRender: false,
     extensions: getEditorExtensions({ withImage: true }),
     content: '',
     editorProps: {
