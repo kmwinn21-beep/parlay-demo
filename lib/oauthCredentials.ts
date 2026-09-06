@@ -1,4 +1,16 @@
-import { db, dbReady } from './db';
+/**
+ * The OAuth app credentials the email-outreach connections are made with.
+ *
+ * Environment only. These were once overridable per account, through a
+ * `site_settings` row an admin could write from a settings screen — but the
+ * write went to the tenant database and the read came from master, so the
+ * override was saved, displayed as saved, and never once used. Every
+ * connection has always been made with the values below.
+ *
+ * That feature is gone rather than repaired: it had never worked, and no
+ * account had a row. Reading the environment directly is what production has
+ * been doing all along. See TENANT_DB_AUDIT.md.
+ */
 
 interface GoogleCredentials {
   clientId: string;
@@ -11,31 +23,19 @@ interface MicrosoftCredentials {
   tenantId: string;
 }
 
-async function readSettings(keys: string[]): Promise<Record<string, string>> {
-  await dbReady;
-  const placeholders = keys.map(() => '?').join(',');
-  const result = await db.execute({
-    sql: `SELECT key, value FROM site_settings WHERE key IN (${placeholders})`,
-    args: keys,
-  });
-  const out: Record<string, string> = {};
-  for (const row of result.rows) out[String(row.key)] = String(row.value);
-  return out;
-}
-
 export async function getGoogleCredentials(): Promise<GoogleCredentials> {
-  const s = await readSettings(['oauth_google_client_id', 'oauth_google_client_secret']);
   return {
-    clientId: s['oauth_google_client_id'] || process.env.GOOGLE_CLIENT_ID || '',
-    clientSecret: s['oauth_google_client_secret'] || process.env.GOOGLE_CLIENT_SECRET || '',
+    clientId: process.env.GOOGLE_CLIENT_ID || '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
   };
 }
 
 export async function getMicrosoftCredentials(): Promise<MicrosoftCredentials> {
-  const s = await readSettings(['oauth_microsoft_client_id', 'oauth_microsoft_client_secret', 'oauth_microsoft_tenant_id']);
   return {
-    clientId: s['oauth_microsoft_client_id'] || process.env.MICROSOFT_CLIENT_ID || '',
-    clientSecret: s['oauth_microsoft_client_secret'] || process.env.MICROSOFT_CLIENT_SECRET || '',
-    tenantId: s['oauth_microsoft_tenant_id'] || process.env.MICROSOFT_TENANT_ID || 'common',
+    clientId: process.env.MICROSOFT_CLIENT_ID || '',
+    clientSecret: process.env.MICROSOFT_CLIENT_SECRET || '',
+    // 'common' where unset, which is the multi-tenant endpoint and what the
+    // previous lookup fell back to.
+    tenantId: process.env.MICROSOFT_TENANT_ID || 'common',
   };
 }
