@@ -9,8 +9,10 @@
  * Two rewrites, both only ever applied to a specifier Node has already failed
  * to resolve:
  *
- *   `@/lib/db`  →  <repo root>/lib/db      — the tsconfig path alias
- *   `./foo`     →  `./foo.ts`              — the missing extension
+ *   `@/lib/db`     →  <repo root>/lib/db   — the tsconfig path alias
+ *   `./foo`        →  `./foo.ts`           — the missing extension
+ *   `next/server`  →  `next/server.js`     — a subpath the bundler resolves
+ *                                            through conditions Node does not
  *
  * The fix belongs in the test runner rather than in the source: writing
  * `./companyFamilies.ts` in the app's own imports would need
@@ -36,12 +38,23 @@ export async function resolve(specifier, context, next) {
   try {
     return await next(spec, context);
   } catch (error) {
-    // Only rewrite extensionless paths — a bare package name that failed to
-    // resolve failed for its own reasons, and hiding that behind a ".ts" guess
-    // would report the wrong problem.
     const isPath = spec.startsWith('.') || spec.startsWith('file:');
     if (isPath && !/\.[mc]?[jt]sx?$/.test(spec)) {
-      return next(`${spec}.ts`, context);
+      // `.ts` first, then the shapes a dependency's own extensionless relative
+      // import can take. Guessing only `.ts` breaks any package a test loads.
+      for (const candidate of [`${spec}.ts`, `${spec}.js`, `${spec}/index.js`, `${spec}/index.ts`]) {
+        try {
+          return await next(candidate, context);
+        } catch { /* try the next shape */ }
+      }
+      throw error;
+    }
+    // A bare subpath like `next/server` that the bundler reaches through export
+    // conditions Node does not apply. Only retried when it already looks like a
+    // subpath — a bare package name that failed to resolve failed for its own
+    // reasons, and hiding that behind a guess would report the wrong problem.
+    if (!isPath && spec.includes('/') && !/\.[mc]?[jt]sx?$/.test(spec)) {
+      return next(`${spec}.js`, context);
     }
     throw error;
   }

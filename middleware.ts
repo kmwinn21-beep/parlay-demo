@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+import { sanitizeForwardedHeaders } from '@/lib/requestHeaders';
 import type { ClerkMiddlewareAuth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -38,6 +39,18 @@ const isAdminRoute = createRouteMatcher(['/admin(.*)']);
 // after login the ops user lands on the dashboard rather than re-entering ops.
 const isOpsRoute = createRouteMatcher(['/ops(.*)', '/api/ops(.*)']);
 
+/**
+ * Continue to the handler with any client-supplied copies of the headers
+ * middleware owns removed, and its own values set.
+ *
+ * Every forwarding path goes through here. `NextResponse.next()` with no
+ * argument passes the original request headers straight through, so a bare call
+ * is the same hole in a different place. See lib/requestHeaders.ts.
+ */
+function forward(request: NextRequest, set?: Record<string, string>): NextResponse {
+  return NextResponse.next({ request: { headers: sanitizeForwardedHeaders(request.headers, set) } });
+}
+
 // Core middleware logic shared by both Clerk and legacy (JWT-only) paths.
 // When clerkAuth is null, Clerk is not configured — session validation is
 // delegated to per-route requireAuth() (JWT cookie path, e.g. demo env).
@@ -65,7 +78,7 @@ async function handleCore(
 
   // ── Public routes — skip all auth ────────────────────────────────────────
   if (isPublicRoute(request)) {
-    return NextResponse.next();
+    return forward(request);
   }
 
   // ── Ops routes — bypass Clerk entirely ───────────────────────────────────
@@ -75,12 +88,7 @@ async function handleCore(
   // so the ops panel remains accessible even if Clerk is unavailable.
   if (isOpsRoute(request)) {
     const impersonationId = request.cookies.get('ops_impersonation')?.value;
-    if (impersonationId) {
-      const requestHeaders = new Headers(request.headers);
-      requestHeaders.set('x-ops-impersonation-id', impersonationId);
-      return NextResponse.next({ request: { headers: requestHeaders } });
-    }
-    return NextResponse.next();
+    return forward(request, impersonationId ? { 'x-ops-impersonation-id': impersonationId } : undefined);
   }
 
   // ── Clerk session check (only when Clerk is configured) ──────────────────
@@ -135,9 +143,7 @@ async function handleCore(
 
   // ── Forward impersonation header for main-app API routes ─────────────────
   if (impersonationId) {
-    const requestHeaders = new Headers(request.headers);
-    requestHeaders.set('x-ops-impersonation-id', impersonationId);
-    return NextResponse.next({ request: { headers: requestHeaders } });
+    return forward(request, { 'x-ops-impersonation-id': impersonationId });
   }
 
   // ── Demo mode — intercept all mutations ──────────────────────────────────
@@ -167,7 +173,7 @@ async function handleCore(
     }
   }
 
-  return NextResponse.next();
+  return forward(request);
 }
 
 // When CLERK_SECRET_KEY is present, wrap with clerkMiddleware so auth() works.

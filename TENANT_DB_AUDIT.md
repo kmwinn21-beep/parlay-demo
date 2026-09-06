@@ -213,10 +213,189 @@ trigger it, only someone who read the query string — and nothing about it woul
 have shown up in logs or error rates, because from the server's point of view
 it was a successful request doing exactly what it was told.
 
-**The audit for other instances of this pattern is still outstanding.** Reading
-imports found the wrong-database class; finding this class means auditing every
-route that reads an identifier from a request and uses it to scope data access,
-which is a different sweep and has not been done.
+**That sweep has since been done.** Its results are below.
+
+---
+
+## The sweep for request-scoped data access
+
+Every route that takes an identifier from user-controlled input — query param,
+path segment, request body, OAuth state, header, cookie — and uses it to select
+a database or scope a read or write, rather than merely to select within data
+already scoped by the session.
+
+**One finding, one lesser finding, and a clean result everywhere else.** The
+excluded cases are listed with reasons rather than omitted, so a later reader
+knows they were examined.
+
+### Finding 1 — `x-ops-impersonation-id` was trusted from the request — RESOLVED
+
+`lib/auth.ts:185`, inside `requireAuth`, which nearly every authenticated route
+calls:
+
+```ts
+const impersonationId = request.headers.get('x-ops-impersonation-id');
+if (impersonationId) {
+  const row = await db.execute({
+    sql: `SELECT account_id FROM impersonation_sessions
+          WHERE id = ? AND ended_at IS NULL
+            AND last_active_at > datetime('now', '-60 minutes')`,
+    args: [impersonationId],
+  });
+  if (row.rows[0]) {
+    return { ...user, accountId: String(row.rows[0].account_id) };
+  }
+}
+```
+
+That `accountId` is what every route hands to `getDb(...)`, so this header
+selects the tenant database for the rest of the request.
+
+Three things combine:
+
+1. **Nothing strips an inbound copy.** `middleware.ts` only ever *sets* the
+   header, from the `ops_impersonation` cookie (`middleware.ts:80,139`), and
+   `headers.delete` appears **zero** times in that file. With no cookie present
+   that branch never runs, so a client-supplied header reaches the handler
+   untouched.
+2. **The session's owner is never checked.** `impersonation_sessions` has an
+   `admin_user_id` column (`lib/db-migrations.ts:685`) which is written at
+   creation and **read nowhere** — every other occurrence of that column name
+   belongs to `admin_audit_log`. The query asks whether the session is live,
+   never whether it is *yours*, and never whether you are an ops admin at all.
+3. **The read-only guard keys off the cookie, not the header.** The write-block
+   at `middleware.ts:125` reads `request.cookies.get('ops_impersonation')`. A
+   forged header with no cookie passes it.
+
+| | |
+|---|---|
+| Fails | **open** — acts on real data in the wrong tenant |
+| Tenant boundary | **crossed** |
+| Authentication | present; the *scope* is what comes from the request |
+| Privilege | escalates beyond what the feature legitimately grants |
+
+**Stated accurately, because the headline version overstates it.** The session
+id is a `randomUUID()`, so it cannot be guessed or enumerated. Holding a live
+one means being an ops admin — and an ops admin already has legitimate
+cross-tenant access. So the escalation is **read-only to read-write, within an
+already-privileged group**, not "any authenticated user reads any tenant". An
+ops admin who moves their own id from the cookie to a header defeats the
+read-only guard the product applies to impersonation. That needs no leak and is
+available today.
+
+The genuinely dangerous version is the leak path: any authenticated user of any
+account who obtains a live UUID gets an hour of cross-tenant **write**. The
+cookie carrying it is `httpOnly`, `secure` in production, `sameSite=lax` and
+expires in an hour, so it is not readable by client-side script and an XSS does
+not hand it over. It can still surface in server and proxy logs that capture
+cookies, in error-tracking payloads, and in support screenshots — devtools
+displays `httpOnly` cookies even though script cannot read them.
+
+**Half the fix was already in the schema.** Somebody created `admin_user_id`
+knowing a session belongs to a specific administrator. The check that would use
+it was never written.
+
+#### Resolved
+
+Two locks, because either alone leaves the other half of the problem standing.
+
+**The lookup now asks whose session it is.** `requireAuth` joins on
+`admin_user_id` and on the caller still being an active ops admin — not merely
+having been one when the session was opened:
+
+```sql
+SELECT s.account_id
+FROM impersonation_sessions s
+JOIN users u ON u.id = s.admin_user_id
+WHERE s.id = ?
+  AND s.admin_user_id = ?
+  AND s.ended_at IS NULL
+  AND s.last_active_at > datetime('now', '-60 minutes')
+  AND u.active = 1
+  AND (u.is_admin = 1 OR ? = 1)      -- the OPS_ADMIN_EMAILS allow-list
+```
+
+The allow-list is mirrored in `lib/auth.ts` rather than imported from
+`lib/opsAuth.ts`, which imports this module.
+
+**Middleware strips what a client must not supply.** Every forwarding path now
+goes through one function that removes the headers middleware owns before
+setting its own. A bare `NextResponse.next()` forwards the original request
+headers, so the four call sites that used one were the same hole in different
+places. The list lives in `lib/requestHeaders.ts` rather than `middleware.ts`
+so it can be tested — that module imports `@clerk/nextjs/server` at load, which
+does not resolve outside the bundler.
+
+**The read-only guard covers the ground again.** It keys off the
+`ops_impersonation` cookie, and before the strip a forged header with no cookie
+reached a handler without ever passing it — which is how a forged header bought
+a write where the legitimate feature grants only reads. With the strip in
+place, a header can reach a handler only if middleware set it from the cookie,
+so cookie and header now imply each other and the guard covers every path that
+can produce an impersonated `accountId`.
+
+**Tested** in `tests/impersonation-scope.mjs`, red before green: a tenant user
+of another account, a second ops admin, and an admin whose access had since
+been revoked were each scoped to the victim account against the previous
+commit. Alongside them are the assertions that must not break — the owning
+admin is still scoped to their session, and ended, idle and unknown sessions
+still scope nothing.
+
+### Finding 2 — spoofable client IP behind a rate limit
+
+`app/api/public/score-audience/route.ts:81`:
+
+```ts
+req.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
+  req.headers.get('x-real-ip') ?? '0.0.0.0';
+if (!checkRateLimit(ip)) { /* 429 */ }
+```
+
+Public and unauthenticated, and both headers are attacker-supplied, so the rate
+limit is bypassed by varying them. It scopes no data, crosses no tenant
+boundary and reads no database — the route touches no database at all. An
+abuse-control weakness, not an authorization one, and ranked accordingly.
+
+### Considered and excluded, with reasons
+
+| What | Why it is not a finding |
+|---|---|
+| `aid` query param / body field in `app/api/input/respond`, `app/api/public/conference-forms`, `app/api/public/form-submissions` | Public and unauthenticated, and `aid` does select the tenant database — but every access is then gated on an independent unguessable secret **in that same database** (`WHERE cf.public_token = ? AND cf.is_public = 1`; `WHERE t.token = ?`, one-time and expiring). A wrong `aid` finds no matching token and returns 404. They **fail closed**: `aid` is a routing hint, not an authorization decision. |
+| `getDb(accountId)` in `conference-series`, `conference-series/[seriesId]/seasons`, `program-intelligence/saturation`, `program-intelligence/saturation/[conferenceId]` | `accountId` is a local variable assigned from `authResult.accountId ?? ''`. Session-derived. |
+| `createClient` / `createTenantDb` across 12 `app/api/ops/` routes | Ops admins are legitimately cross-tenant. All are gated by `requireOpsAdmin`. |
+| `app/api/ops/recompute-relationship-floors`, `app/api/ops/recompute-saturation` | Have no ops guard, but use `requireAuth` and scope to the caller's own `accountId`. Filed under `/ops` without being cross-tenant. Misfiled, not vulnerable. |
+| `app/api/ops/impersonate/end` | No ops guard, but acts only on the id in the caller's **own** cookie. Ending a session revokes access rather than granting it. |
+| `demo_bypass` cookie | Compared against the `DEMO_BYPASS_SECRET` env var, and inert when that is unset. Lifts demo-mode write-blocking; scopes no data. |
+| `x-forwarded-proto` in `conferences/[id]/executive-brief-pdf` | Builds a base URL for asset links inside returned HTML. No fetch, no data scoping. |
+| `x-forwarded-for` in `lib/auth.ts` and `app/api/auth/login` | Recorded for session logging only. |
+| Path params and body ids on non-ops routes | Every non-ops route resolves its client as `getDb(session.accountId)`, so a request-supplied id selects *within* the caller's tenant. That is "what is touched", not "which" — outside this class. |
+| Request-supplied user ids | None outside `/ops`: `body.userId`, `body.user_id`, `params.userId` and the `userId`/`user_id` query params return no matches. |
+| Account ids from the request on non-ops routes | None. |
+| Remaining OAuth `state` consumers | None. The surviving `.state` matches are a company's US state field. |
+
+### Scope of the sweep
+
+- **368** `getDb()` call sites: 353 pass a session field directly; 7 pass a
+  session-derived local; 5 are deliberate master in ops routes; 3 are the `aid`
+  routes above.
+- **22** routes under `app/api/ops/`, each checked for a guard.
+- **4** public unauthenticated routes, each traced to what gates it.
+- Every header `middleware.ts` sets — **exactly one**, `x-ops-impersonation-id`
+  — and every custom header any handler reads (`x-forwarded-for`, `x-real-ip`,
+  `x-forwarded-proto`).
+- Every cookie read anywhere: `ops_impersonation`, `demo_bypass`.
+
+### One fix, informed by the whole sweep
+
+Middleware strips no inbound headers at all, but it also *sets* only one. So a
+strip-list has exactly one entry today, and the value of writing it now is that
+the next header added to middleware inherits the habit rather than the bug.
+
+Paired with the ownership check that `admin_user_id` was created for, that is
+the whole of Finding 1. **Both are now implemented** — see "Resolved" above.
+
+Finding 2, the spoofable client IP behind the rate limit, is left as logged.
+It is abuse control rather than authorization and is being handled separately.
 
 ---
 
@@ -241,3 +420,156 @@ Tightening them to a required parameter is a future cleanup pass, not this work.
 The mechanical part is small; the cost is that each one turns into a compiler
 error at every call site, which is the point of doing it deliberately rather
 than alongside something else.
+
+---
+
+## The worked example — Slack OAuth, built to the second rule
+
+The rule in "A second rule, from a second class of bug" says what not to do.
+The Slack integration is the first flow built after it, and it is written to be
+the thing the rule points at. Copy this shape; do not re-derive one.
+
+`lib/slack/state.ts`, `lib/slack/oauth.ts`, `lib/slack/guards.ts`,
+`app/api/slack/{install,oauth/callback,connect,connect/callback}/route.ts`.
+Tests: `tests/slack-install.mjs`, `tests/slack-connect.mjs`.
+
+### The four checks, in this order
+
+Both callbacks run the same four. The order is part of it — the cheapest and
+most decisive check first, so a forged request is refused before it can reach a
+database or an outbound call.
+
+```ts
+// 1. The state is one we signed, for THIS purpose, and is not stale.
+const state = await verifySlackState(searchParams.get('state'));
+if (!state) return settingsError('slack_invalid_state');
+
+// 2. The caller has a session, and is who the route requires them to be.
+const auth = await requireRealAdmin(request);
+if ('refusal' in auth) return settingsError(/* … */);
+
+// 3. The session user IS the user named in the state. The state says who
+//    started the flow; the session says who is finishing it.
+if (auth.user.id !== state.userId) return settingsError('slack_state_mismatch');
+
+// 4. The account matches too — and the account WRITTEN TO comes from the
+//    session, never from the state.
+if (auth.user.accountId !== state.accountId) return settingsError('slack_state_mismatch');
+
+await saveWorkspace({ accountId: auth.user.accountId, /* … */ });
+```
+
+The deleted Google callback got 1, 2 and 4 wrong simultaneously: an unsigned
+state, no authentication at all, and `getDb(accountIdFromState)`.
+
+Note what check 4 is *not*. The state's `accountId` is never passed to `getDb`
+or to a store function. It exists only to be compared. A genuinely signed state
+naming another account is refused, and installs nothing there and nothing
+anywhere else. If the comparison were deleted the flow would still write to the
+session's account — the compare is a second layer, not the mechanism.
+
+### The state is signed, and scoped to one flow
+
+A `jose` HS256 JWT on `JWT_SECRET` — the same library and secret the session
+cookie uses, because a second hand-rolled HMAC is a second thing to get wrong.
+`sub` is the user id, `accountId` a claim, `jti` a `randomUUID()` nonce, and the
+expiry is **10 minutes**: long enough to read a consent screen and pick a
+workspace, short enough that a state captured from browser history or a referrer
+log is usually already dead.
+
+Sharing one secret across several token types is what makes the **audience**
+mandatory rather than decorative. There are three tokens signed with
+`JWT_SECRET`, and each carries an `aud` that its own verification requires:
+
+| token | `aud` |
+| --- | --- |
+| session cookie | (the app's own) |
+| workspace install state | `slack-oauth-state` |
+| user connect state | `slack-user-connect` |
+
+The two Slack states are non-interchangeable in both directions *by audience*.
+Without the split, an ordinary member — who holds a connect state legitimately —
+could present it where a workspace gets installed. Both directions have tests,
+and both are mutation-checked: merging the two Slack audiences fails 5
+assertions; dropping `{ audience }` from `jwtVerify` fails 9.
+
+**A correction worth reading, because the obvious summary of the table above is
+wrong.** The audience does *not* symmetrically protect the session cookie. It
+stops a session cookie being used as a state — the state verification requires
+an audience the cookie does not carry. It does **not** stop a state being used
+as a session cookie: `verifyToken` in `lib/auth.ts` calls `jwtVerify` with no
+audience option, so it accepts any `aud`. That direction is refused for a
+different reason — a state carries no `email` and no `role`, and `verifyToken`
+requires both:
+
+```ts
+if (!payload.sub || !payload.email || !payload.role) return null;
+```
+
+Which is a genuine protection, and `tests/slack-connect.mjs` pins it. But it is a
+property of the *claims*, not of the audience, so adding `email` or `role` to a
+Slack state would silently turn it into a valid seven-day session cookie. The
+durable fix is to give the session cookie its own audience and require it in
+`verifyToken`; that is a change to the authentication path for every existing
+signed-in user, so it is recorded here rather than done in passing.
+
+**The states are deliberately not single-use.** Nothing records issued `jti`s,
+so one can be replayed inside its ten-minute window — by the same person, in the
+same account, for the same flow. The payload of that replay is relinking someone
+to themselves. A `jti` table with a TTL sweep is real infrastructure; this was
+judged not to earn it. Recorded so the absence reads as a decision.
+
+### One more check this shape needs, and a general point
+
+The user-connect callback adds a fifth: the Slack user Slack just identified
+must belong to the **same `team_id`** as the workspace the account installed.
+Slack will issue a perfectly valid Sign in with Slack token for a user in an
+unrelated workspace, and a link naming them would read as connected and be
+permanently undeliverable, because the bot that sends lives elsewhere.
+
+The general point: **the four checks establish who the caller is; they say
+nothing about whether the third party's answer is about the same thing you
+asked about.** Whatever the provider hands back still has to be reconciled with
+what this account already knows. Two places in this flow do that, and both are
+easy to leave out:
+
+- the `team_id` comparison above;
+- the `aud` on Slack's `id_token`, checked against `SLACK_CLIENT_ID`. Its
+  signature deliberately is *not* verified — it arrives in the body of our own
+  TLS POST to `slack.com` authenticated with the client secret, which OIDC Core
+  §3.1.3.7 accepts — but TLS says nothing about which Slack *app* the token was
+  minted for, and that is exactly what `aud` catches.
+
+### Roles, and why `requireAdmin` was not used
+
+`requireAuth` and `requireAdmin` both promote every authenticated caller to
+administrator when `NEXT_PUBLIC_DEMO_MODE` is on. That is safe for the screens
+they were written for, because middleware fakes the writes. It is not safe here:
+installing a workspace consumes a real authorization code and stores a real
+credential against a real account, and middleware cannot fake any of that.
+
+So `lib/slack/guards.ts` has `requireRealAdmin`, which reads the session's actual
+role with no demo branch, and `requireAccountUser`, which requires only a session
+and an `accountId` — linking your own Slack account is not an administrative act.
+Both require `accountId`: without one there is no workspace to act on, and the
+call would otherwise fall through to master.
+
+**If a route has an effect outside this deployment, check the real role.**
+
+### Where these rows live, and why that is not a contradiction
+
+`slack_workspaces` and `slack_user_links` are in **master**, deliberately, and
+`lib/slack/store.ts` is their only access point. One row per account; accounts
+live in master; and a bot token is a credential whose revocation should not be a
+fan-out across every tenant database that can half-finish. The module header says
+so and every query repeats "Master by intent" at its site, precisely because the
+default assumption in this codebase is now the opposite.
+
+`slack_user_links` is keyed on `(account_id, parlay_user_id)`, never on
+`parlay_user_id` alone — `users.id` is an `AUTOINCREMENT` in each database, so
+user 42 exists in many accounts and is a different person in each.
+
+The one tenant read in this flow is the installer's display name, in
+`app/api/slack/status/route.ts`. It uses `getDb(auth.user.accountId)` — account
+from the session, per the rule — and degrades to a blank name rather than to a
+screen reporting Slack as disconnected.

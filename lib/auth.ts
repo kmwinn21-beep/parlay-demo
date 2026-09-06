@@ -187,9 +187,35 @@ export async function requireAuth(
     try {
       const { db, dbReady } = await import('./db');
       await dbReady;
+      // Three conditions, not one. A live session is not enough: middleware
+      // sets this header from the ops_impersonation cookie, but the header can
+      // also arrive from the client, so the row has to prove it belongs to
+      // whoever is asking.
+      //
+      //   s.admin_user_id = ?  — the session is the caller's own. The column
+      //                          was there from the start and read nowhere,
+      //                          which is how a borrowed session used to work.
+      //   u.is_admin = 1       — and they still hold ops access now, not merely
+      //                          when the session was opened.
+      //   the env allow-list   — the other route into ops admin, mirrored from
+      //                          lib/opsAuth so a bootstrapping admin with no
+      //                          is_admin column set is not locked out. Read
+      //                          here rather than imported, because opsAuth
+      //                          imports this module.
+      const envOpsAdmin = (process.env.OPS_ADMIN_EMAILS ?? '')
+        .split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+        .includes(user.email.toLowerCase());
       const row = await db.execute({
-        sql: `SELECT account_id FROM impersonation_sessions WHERE id = ? AND ended_at IS NULL AND last_active_at > datetime('now', '-60 minutes')`,
-        args: [impersonationId],
+        sql: `SELECT s.account_id
+              FROM impersonation_sessions s
+              JOIN users u ON u.id = s.admin_user_id
+              WHERE s.id = ?
+                AND s.admin_user_id = ?
+                AND s.ended_at IS NULL
+                AND s.last_active_at > datetime('now', '-60 minutes')
+                AND u.active = 1
+                AND (u.is_admin = 1 OR ? = 1)`,
+        args: [impersonationId, user.id, envOpsAdmin ? 1 : 0],
       });
       if (row.rows[0]) {
         return { ...user, accountId: String(row.rows[0].account_id) };
