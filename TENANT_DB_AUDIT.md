@@ -56,7 +56,7 @@ not.
 
 | # | Module | Should be tenant-scoped? | User-visible symptom | Silent? | Call sites |
 |---|---|---|---|---|---|
-| **1** | `lib/oauthCredentials.ts` | **Yes — and it is not** | A tenant admin's own Google/Microsoft OAuth app is saved, shown as saved, and never used. Every connection runs on the platform's env credentials, so users see Parlay's consent screen instead of their own. Where no env fallback is set, the flow fails with an opaque provider error pointing nowhere near the cause. | **Silent** | 4 |
+| **1** | `lib/oauthCredentials.ts` | **~~Yes — and it is not~~ RESOLVED BY DELETION** | ~~A tenant admin's own Google/Microsoft OAuth app is saved, shown as saved, and never used. Every connection runs on the platform's env credentials, so users see Parlay's consent screen instead of their own. Where no env fallback is set, the flow fails with an opaque provider error pointing nowhere near the cause.~~ The override feature is gone; credentials now come from the environment, which is what every connection had always used. | **Silent** | 4 → 0 |
 | **2** | `lib/fuzzy.ts` | Yes — and it was not | Would have matched attendees and companies against master and run `INSERT INTO companies` there. Never triggered: nothing imported it. | Silent | 0 |
 | 3 | `lib/icpRules.ts` | Optional, master default | Empty ICP config — nothing scores as ICP, every ICP filter and badge silently empties. | Silent | 11 (all pass a client) |
 | 4 | `lib/trialState.ts` | Optional, master default | Wrong plan/trial state, so feature gating reads from the wrong account. | Silent | 14 (all pass a client) |
@@ -88,7 +88,7 @@ and use each for the right tables.
 | `recordUserSession` | had the singleton; now takes a required `Client` | before this audit — see the comment at `lib/auth.ts:100`, which describes master data surfacing in Server Components | fixed previously |
 | `resolveUserIds` + 8 `notify*` wrappers + `createOptInNotifications` | reached for the singleton | proved with a two-database harness after the notification system survey | fixed on `claude/fix-notification-tenant-db-EMwKD` |
 | `getConfigIdByEmail` | `tenantDb?: Client` — optional, master default | **only** because threading the module stopped it compiling. 36 call sites, most passing nothing. Neither reviewer knew it existed. | fixed in the same branch |
-| `lib/oauthCredentials.ts` | reaches for the singleton | this audit | outstanding |
+| `lib/oauthCredentials.ts` | reached for the singleton | this audit | resolved by deleting the feature |
 
 Every one failed the same way: a helper that looked complete, a default that
 looked safe, and a wrong read that returned empty instead of raising.
@@ -101,9 +101,9 @@ bug from invisible to impossible to miss.
 
 ---
 
-## `lib/oauthCredentials.ts` — the outstanding one
+## `lib/oauthCredentials.ts` — what it was
 
-The read and the write disagree about which database they are in.
+The read and the write disagreed about which database they were in.
 
 **Write** — `app/api/admin/oauth-config/route.ts:18,46`, tenant:
 
@@ -134,9 +134,18 @@ clientId: s['oauth_google_client_id'] || process.env.GOOGLE_CLIENT_ID || '',
 Four call sites: `app/api/oauth/google/route.ts`,
 `app/api/oauth/google/callback/route.ts`, and the Microsoft pair.
 
-Because the feature has therefore never worked, removing it is behaviour-
-preserving: reading the env vars directly is what production has always done.
-That deletion is the subject of this branch.
+### Resolved by deletion, not by adding a client parameter
+
+The rest of this audit argues for threading a required client. This finding was
+resolved the other way — the feature was deleted — because it had never worked
+and no account had an `oauth_%` row to preserve. Fixing the parameter would have
+switched on a per-tenant override for the first time, which is a behaviour
+change dressed as a bug fix; deleting it kept production identical.
+
+`lib/oauthCredentials.ts` now reads the environment directly and imports
+nothing. `app/api/admin/oauth-config/route.ts` and the Integrations tab that was
+its only UI are gone. The `site_settings` table stays: it holds unrelated keys,
+and any orphaned `oauth_` rows are inert now that nothing reads them.
 
 ---
 
