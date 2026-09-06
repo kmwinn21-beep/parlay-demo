@@ -114,12 +114,12 @@ export async function POST(request: NextRequest) {
 
     // Notify rep_ids users (best-effort)
     if (rep_ids) {
-      const changedByConfigId = await getConfigIdByEmail(user.email);
+      const changedByConfigId = await getConfigIdByEmail(db, user.email);
       const companyRow = await db.execute({ sql: 'SELECT name FROM companies WHERE id = ?', args: [Number(company_id)] });
       const companyName = companyRow.rows.length > 0 ? String(companyRow.rows[0].name) : `Company #${company_id}`;
       const repConfigIds = parseNotifIds(rep_ids);
-      const userIds = await resolveUserIds(repConfigIds.join(','), changedByConfigId);
-      createNotifications({
+      const userIds = await resolveUserIds(db, repConfigIds.join(','), changedByConfigId);
+      createNotifications(db, {
         userIds,
         type: 'company',
         recordId: Number(company_id),

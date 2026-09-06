@@ -108,8 +108,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .map(s => parseInt(s.trim(), 10))
       .filter(n => !isNaN(n) && n > 0);
     if (taggedConfigIds.length > 0) {
-      const changedByConfigId = await getConfigIdByEmail(authResult.email, db);
-      notifyMentionedUsers({
+      const changedByConfigId = await getConfigIdByEmail(db, authResult.email);
+      notifyMentionedUsers(db, {
         taggedConfigIds,
         mentionerName: userName,
         mentionerEmail: authResult.email,

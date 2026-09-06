@@ -71,8 +71,8 @@ export async function POST(
       if (coId && coName) {
         const confRow = await db.execute({ sql: 'SELECT name FROM conferences WHERE id = ?', args: [params.id] });
         const confName = confRow.rows.length > 0 ? String(confRow.rows[0].name) : `Conference #${params.id}`;
-        const changedByConfigId = await getConfigIdByEmail(user.email);
-        notifyCompanyAssignees({
+        const changedByConfigId = await getConfigIdByEmail(db, user.email);
+        notifyCompanyAssignees(db, {
           companyId: coId,
           companyName: coName,
           message: `${`${row.first_name ?? ''} ${row.last_name ?? ''}`.trim()} added to ${confName}`,
@@ -170,8 +170,8 @@ export async function POST(
       const confRow = await db.execute({ sql: 'SELECT name FROM conferences WHERE id = ?', args: [params.id] });
       const confName = confRow.rows.length > 0 ? String(confRow.rows[0].name) : `Conference #${params.id}`;
       const attendeeName = `${first_name} ${last_name}`.trim();
-      const changedByConfigId = await getConfigIdByEmail(user.email);
-      notifyCompanyAssignees({
+      const changedByConfigId = await getConfigIdByEmail(db, user.email);
+      notifyCompanyAssignees(db, {
         companyId,
         companyName,
         message: `${attendeeName} added to ${confName}`,

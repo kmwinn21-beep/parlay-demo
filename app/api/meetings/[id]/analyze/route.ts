@@ -439,15 +439,14 @@ RULES
     const attendeeName = `${mtg.first_name} ${mtg.last_name}`;
     // Tells the person who ran the analysis that it finished. In-app only, as
     // before — they are the one who kicked it off and are waiting on screen.
-    await createNotifications({
-      db,
+    await createNotifications(db, {
       userIds: [Number(user.id)],
       type: 'meeting',
       recordId: meetingId,
       recordName: attendeeName,
       message: `Meeting analysis ready: ${attendeeName} · ${mtg.conference_name}`,
       changedByEmail: user.email ?? '',
-      changedByConfigId: await getConfigIdByEmail(user.email ?? '', db),
+      changedByConfigId: await getConfigIdByEmail(db, user.email ?? ''),
       entityType: 'meeting',
       entityId: meetingId,
       skipEmail: true,

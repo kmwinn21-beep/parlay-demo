@@ -402,8 +402,8 @@ Rules:
 
     // Notify all internal attendees — fire and forget
     if (conferenceName) {
-      const changedByConfigId = await getConfigIdByEmail(authResult.email, db);
-      notifyConferenceInternalAttendees({
+      const changedByConfigId = await getConfigIdByEmail(db, authResult.email);
+      notifyConferenceInternalAttendees(db, {
         conferenceId,
         conferenceName,
         message: `The Agenda for ${conferenceName} has been added/updated!`,

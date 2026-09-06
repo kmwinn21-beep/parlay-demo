@@ -212,8 +212,8 @@ export async function POST(request: NextRequest) {
     if (attendeeRow.rows.length > 0) {
       const a = attendeeRow.rows[0];
       const attendeeName = `${a.first_name} ${a.last_name}`.trim();
-      const changedByConfigId = await getConfigIdByEmail(user.email, db);
-      notifyForAttendee({
+      const changedByConfigId = await getConfigIdByEmail(db, user.email);
+      notifyForAttendee(db, {
         attendeeId: Number(attendee_id),
         attendeeName,
         message: `Meeting scheduled on ${meeting_date}`,

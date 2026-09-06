@@ -1017,15 +1017,14 @@ export async function POST(request: NextRequest) {
               });
               // The tailored email below is the one that goes out, so the
               // helper's generic one is skipped.
-              await createNotifications({
-                db,
+              await createNotifications(db, {
                 userIds: [authResult.id],
                 type: 'conference',
                 recordId: conferenceId,
                 recordName: name,
                 message: `Upload complete: ${count} attendees imported`,
                 changedByEmail: authResult.email,
-                changedByConfigId: await getConfigIdByEmail(authResult.email, db),
+                changedByConfigId: await getConfigIdByEmail(db, authResult.email),
                 entityType: 'conference',
                 entityId: conferenceId,
                 skipEmail: true,

@@ -203,7 +203,7 @@ async function applyTarget(
     const relatedId = await resolveCompany(db, payload);
     if (!relatedId) return { ok: false, error: 'Pick or name the related company.' };
     if (relatedId === entityId) return { ok: false, error: 'A company cannot be related to itself.' };
-    const repId = await getConfigIdByEmail(email, db);
+    const repId = await getConfigIdByEmail(db, email);
     await db.execute({
       sql: `INSERT INTO vendor_relationships
               (company_id, related_company_id, rep_id, relationship_status, strength, vendor_type, notes)

@@ -71,8 +71,8 @@ export async function POST(
         const attendeeName = `${a.first_name} ${a.last_name}`.trim();
         const eventRow = await db.execute({ sql: 'SELECT name FROM social_events WHERE id = ?', args: [id] });
         const eventName = eventRow.rows.length > 0 ? String(eventRow.rows[0].name) : `Social Event #${id}`;
-        const changedByConfigId = await getConfigIdByEmail(user.email);
-        notifyForAttendee({
+        const changedByConfigId = await getConfigIdByEmail(db, user.email);
+        notifyForAttendee(db, {
           attendeeId: aid,
           attendeeName,
           message: `${attendeeName} added to guest list for ${eventName}`,

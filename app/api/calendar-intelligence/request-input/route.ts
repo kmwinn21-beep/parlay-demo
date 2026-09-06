@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
   const oauthConn = oauthRow.rows[0] as unknown as { provider: string; provider_email: string | null } | undefined;
 
   // Resolved once — the sender is the same for every recipient in the loop.
-  const requesterConfigId = await getConfigIdByEmail(authResult.email, db);
+  const requesterConfigId = await getConfigIdByEmail(db, authResult.email);
 
   let requestsSent = 0;
 
@@ -136,8 +136,7 @@ export async function POST(request: NextRequest) {
     // carries the one-click decision links, so the helper's generic one is
     // skipped rather than arriving alongside it.
     if (recipientUserId) {
-      await createNotifications({
-        db,
+      await createNotifications(db, {
         userIds: [recipientUserId],
         type: 'conference',
         recordId: conferenceId,

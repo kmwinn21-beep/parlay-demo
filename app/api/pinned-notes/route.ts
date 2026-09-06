@@ -97,14 +97,14 @@ export async function POST(request: NextRequest) {
     if (entity_type === 'company' || entity_type === 'attendee') {
       const [noteRow, changedByConfigId] = await Promise.all([
         db.execute({ sql: 'SELECT content FROM entity_notes WHERE id = ?', args: [note_id] }),
-        getConfigIdByEmail(pinned_by),
+        getConfigIdByEmail(db, pinned_by),
       ]);
       const snippet = noteRow.rows.length > 0 ? String(noteRow.rows[0].content).slice(0, 80) : '';
 
       if (entity_type === 'company') {
         const coRow = await db.execute({ sql: 'SELECT name FROM companies WHERE id = ?', args: [entity_id] });
         const nameStr = coRow.rows.length > 0 ? String(coRow.rows[0].name) : `Company #${entity_id}`;
-        notifyCompanyAssignees({
+        notifyCompanyAssignees(db, {
           companyId: Number(entity_id),
           companyName: nameStr,
           message: `Note pinned: "${snippet}"`,
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
         const nameStr = attRow.rows.length > 0
           ? `${attRow.rows[0].first_name} ${attRow.rows[0].last_name}`.trim()
           : `Attendee #${entity_id}`;
-        notifyForAttendee({
+        notifyForAttendee(db, {
           attendeeId: Number(entity_id),
           attendeeName: nameStr,
           message: `Note pinned: "${snippet}"`,

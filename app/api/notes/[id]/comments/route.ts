@@ -156,13 +156,13 @@ export async function POST(
       }
     } catch { /* non-fatal */ }
 
-    const commenterConfigId = await getConfigIdByEmail(user.email, db);
+    const commenterConfigId = await getConfigIdByEmail(db, user.email);
 
     // The comment stored tagged_users but nobody was ever told about it.
     // Same gate as a mention in the note itself, only the wording differs.
     const taggedConfigIds = parseNotifIds(tagged_users);
     if (taggedConfigIds.length > 0) {
-      notifyMentionedUsers({
+      notifyMentionedUsers(db, {
         taggedConfigIds,
         mentionerName: commenterName,
         mentionerEmail: user.email,
@@ -174,7 +174,7 @@ export async function POST(
       });
     }
 
-    notifyNoteComment({
+    notifyNoteComment(db, {
       noteId,
       noteAuthorUserId: note.author_user_id != null ? Number(note.author_user_id) : null,
       commenterUserId: user.id,

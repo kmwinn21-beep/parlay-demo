@@ -110,6 +110,16 @@ export async function sendNotificationEmail(
   message: string,
   link: string | null,
 ): Promise<void> {
+  // A switch for the notification emails alone, while the fixed delivery path
+  // runs in production for the first time — every other send here is
+  // transactional and unaffected, as are the callers that build their own
+  // notification email. Remove once that path has run for a few days.
+  if (process.env.NOTIFICATION_EMAIL_DISABLED === 'true') {
+    // Logged so that "no email arrived" reads as this switch rather than as a
+    // broken send path, which is the whole reason for having it.
+    console.log(`[email] notification suppressed by NOTIFICATION_EMAIL_DISABLED — to: ${email} | subject: ${subject}`);
+    return;
+  }
   await sendEmail(
     email,
     subject,

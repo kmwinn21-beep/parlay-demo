@@ -184,7 +184,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
             if (!ctx.companyId) return;
             let author: string = user.email;
             try {
-              const configId = await getConfigIdByEmail(user.email, db);
+              const configId = await getConfigIdByEmail(db, user.email);
               if (configId) {
                 const nameRow = await db.execute({
                   sql: 'SELECT value FROM config_options WHERE id = ?',

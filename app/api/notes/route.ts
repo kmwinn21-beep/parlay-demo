@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
     let resolvedRep = rep || null;
     if (!resolvedRep) {
       try {
-        const configId = await getConfigIdByEmail(user.email, db);
+        const configId = await getConfigIdByEmail(db, user.email);
         if (configId) {
           const nameRow = await db.execute({
             sql: 'SELECT value FROM config_options WHERE id = ?',
@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
           // follow-up was assigned to in that column, which is someone else.
           let author: string = user.email;
           try {
-            const configId = await getConfigIdByEmail(user.email, db);
+            const configId = await getConfigIdByEmail(db, user.email);
             if (configId) {
               const nameRow = await db.execute({
                 sql: 'SELECT value FROM config_options WHERE id = ?',
@@ -248,7 +248,7 @@ export async function POST(request: NextRequest) {
 
     // Fire standard notifications (best-effort) — skipped on cross-posts to avoid duplicates
     if (!skip_notification) {
-      const changedByConfigId = await getConfigIdByEmail(user.email, db);
+      const changedByConfigId = await getConfigIdByEmail(db, user.email);
       const snippet = content.trim().slice(0, 80);
       if (entity_type === 'attendee') {
         const attRow = await db.execute({
@@ -258,7 +258,7 @@ export async function POST(request: NextRequest) {
         const nameStr = attRow.rows.length > 0
           ? `${attRow.rows[0].first_name} ${attRow.rows[0].last_name}`.trim()
           : `Attendee #${entity_id}`;
-        notifyForAttendee({
+        notifyForAttendee(db, {
           attendeeId: Number(entity_id),
           attendeeName: nameStr,
           message: `New note added: "${snippet}"`,
@@ -271,7 +271,7 @@ export async function POST(request: NextRequest) {
           args: [entity_id],
         });
         const nameStr = coRow.rows.length > 0 ? String(coRow.rows[0].name) : `Company #${entity_id}`;
-        notifyCompanyAssignees({
+        notifyCompanyAssignees(db, {
           companyId: Number(entity_id),
           companyName: nameStr,
           message: `New note added: "${snippet}"`,
@@ -284,7 +284,7 @@ export async function POST(request: NextRequest) {
           args: [entity_id],
         });
         const nameStr = confRow.rows.length > 0 ? String(confRow.rows[0].name) : `Conference #${entity_id}`;
-        notifyConferenceInternalAttendees({
+        notifyConferenceInternalAttendees(db, {
           conferenceId: Number(entity_id),
           conferenceName: nameStr,
           message: `New note added: "${snippet}"`,
@@ -302,7 +302,7 @@ export async function POST(request: NextRequest) {
         .filter(n => !isNaN(n) && n > 0);
 
       if (taggedConfigIds.length > 0) {
-        const changedByConfigId = await getConfigIdByEmail(user.email, db);
+        const changedByConfigId = await getConfigIdByEmail(db, user.email);
         // Resolve entity name for the notification message
         let entityName = '';
         try {
@@ -336,7 +336,7 @@ export async function POST(request: NextRequest) {
           } catch { /* non-fatal */ }
         }
 
-        notifyMentionedUsers({
+        notifyMentionedUsers(db, {
           taggedConfigIds,
           mentionerName,
           mentionerEmail: user.email,

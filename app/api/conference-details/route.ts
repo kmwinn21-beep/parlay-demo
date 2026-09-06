@@ -94,8 +94,8 @@ export async function POST(request: NextRequest) {
         const nextStepsLabel = configRow.rows.length > 0
           ? String(configRow.rows[0].value)
           : String(next_steps);
-        const changedByConfigId = await getConfigIdByEmail(user.email);
-        notifyForAttendee({
+        const changedByConfigId = await getConfigIdByEmail(db, user.email);
+        notifyForAttendee(db, {
           attendeeId: Number(attendee_id),
           attendeeName,
           message: `Follow-up created: "${nextStepsLabel}"`,

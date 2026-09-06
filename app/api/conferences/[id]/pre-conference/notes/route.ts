@@ -82,10 +82,10 @@ export async function POST(
     const [userRow, changedByConfigId, entityName] = await Promise.all([
       db.execute({ sql: 'SELECT display_name, first_name, last_name, email FROM users WHERE id = ?', args: [user.id] })
         .catch(() => ({ rows: [] as Record<string, unknown>[] })),
-      getConfigIdByEmail(user.email, db),
+      getConfigIdByEmail(db, user.email),
       resolveEntityName(db, String(entity_type), Number(entity_id), { attendee_name, company_name, conference_name }),
     ]);
-    notifyMentionedUsers({
+    notifyMentionedUsers(db, {
       taggedConfigIds,
       mentionerName: userRow.rows.length > 0 ? resolveUserDisplayName(userRow.rows[0]) : user.email,
       mentionerEmail: user.email,

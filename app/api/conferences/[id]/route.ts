@@ -147,9 +147,9 @@ export async function PUT(
       const newIds = parseNotifIds(internal_attendees);
       const addedIds = newIds.filter(id => !prevIds.has(id));
       if (addedIds.length > 0) {
-        const changedByConfigId = await getConfigIdByEmail(user.email);
-        const userIds = await resolveUserIds(addedIds.join(','), changedByConfigId);
-        createNotifications({
+        const changedByConfigId = await getConfigIdByEmail(db, user.email);
+        const userIds = await resolveUserIds(db, addedIds.join(','), changedByConfigId);
+        createNotifications(db, {
           userIds,
           type: 'conference',
           recordId: Number(params.id),
