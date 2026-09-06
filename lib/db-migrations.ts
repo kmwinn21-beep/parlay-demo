@@ -2377,4 +2377,39 @@ export const migrations: string[] = [
   // length, so a mid-array entry leaves the count unchanged against an
   // already-stamped database and never runs.
   `ALTER TABLE conferences ADD COLUMN logo_url TEXT`,
+  // ── Slack ──────────────────────────────────────────────────────────────────
+  // Master-scoped by intent, though this array is applied to every database, so
+  // these will also exist empty in each tenant. lib/slack/store.ts is the only
+  // thing that reads or writes them and it always uses the master client; see
+  // the rationale in that module's header.
+  //
+  // No FOREIGN KEY on account_id or the user columns: accounts lives in master
+  // while the users these reference live in their own tenant database, so there
+  // is nothing here for a constraint to point at.
+  `CREATE TABLE IF NOT EXISTS slack_workspaces (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id TEXT NOT NULL UNIQUE,
+      team_id TEXT NOT NULL,
+      team_name TEXT,
+      bot_token TEXT NOT NULL,
+      bot_user_id TEXT,
+      installed_by_user_id INTEGER,
+      installed_at TEXT DEFAULT (datetime('now'))
+    )`,
+  // One workspace per account, so reconnecting replaces rather than accumulates.
+  // account_id is already UNIQUE above; this indexes the other lookup, which is
+  // "which account owns the workspace this event came from".
+  `CREATE INDEX IF NOT EXISTS idx_slack_workspaces_team ON slack_workspaces(team_id)`,
+  `CREATE TABLE IF NOT EXISTS slack_user_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id TEXT NOT NULL,
+      parlay_user_id INTEGER NOT NULL,
+      slack_user_id TEXT NOT NULL,
+      linked_at TEXT DEFAULT (datetime('now')),
+      UNIQUE (account_id, parlay_user_id)
+    )`,
+  // users.id is an AUTOINCREMENT per database, so it identifies a person only
+  // together with their account. Every lookup here is by the pair, and the
+  // UNIQUE above is on the pair for the same reason.
+  `CREATE INDEX IF NOT EXISTS idx_slack_user_links_slack_user ON slack_user_links(account_id, slack_user_id)`,
 ];
