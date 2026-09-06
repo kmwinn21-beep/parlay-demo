@@ -213,10 +213,140 @@ trigger it, only someone who read the query string — and nothing about it woul
 have shown up in logs or error rates, because from the server's point of view
 it was a successful request doing exactly what it was told.
 
-**The audit for other instances of this pattern is still outstanding.** Reading
-imports found the wrong-database class; finding this class means auditing every
-route that reads an identifier from a request and uses it to scope data access,
-which is a different sweep and has not been done.
+**That sweep has since been done.** Its results are below.
+
+---
+
+## The sweep for request-scoped data access
+
+Every route that takes an identifier from user-controlled input — query param,
+path segment, request body, OAuth state, header, cookie — and uses it to select
+a database or scope a read or write, rather than merely to select within data
+already scoped by the session.
+
+**One finding, one lesser finding, and a clean result everywhere else.** The
+excluded cases are listed with reasons rather than omitted, so a later reader
+knows they were examined.
+
+### Finding 1 — `x-ops-impersonation-id` is trusted from the request
+
+`lib/auth.ts:185`, inside `requireAuth`, which nearly every authenticated route
+calls:
+
+```ts
+const impersonationId = request.headers.get('x-ops-impersonation-id');
+if (impersonationId) {
+  const row = await db.execute({
+    sql: `SELECT account_id FROM impersonation_sessions
+          WHERE id = ? AND ended_at IS NULL
+            AND last_active_at > datetime('now', '-60 minutes')`,
+    args: [impersonationId],
+  });
+  if (row.rows[0]) {
+    return { ...user, accountId: String(row.rows[0].account_id) };
+  }
+}
+```
+
+That `accountId` is what every route hands to `getDb(...)`, so this header
+selects the tenant database for the rest of the request.
+
+Three things combine:
+
+1. **Nothing strips an inbound copy.** `middleware.ts` only ever *sets* the
+   header, from the `ops_impersonation` cookie (`middleware.ts:80,139`), and
+   `headers.delete` appears **zero** times in that file. With no cookie present
+   that branch never runs, so a client-supplied header reaches the handler
+   untouched.
+2. **The session's owner is never checked.** `impersonation_sessions` has an
+   `admin_user_id` column (`lib/db-migrations.ts:685`) which is written at
+   creation and **read nowhere** — every other occurrence of that column name
+   belongs to `admin_audit_log`. The query asks whether the session is live,
+   never whether it is *yours*, and never whether you are an ops admin at all.
+3. **The read-only guard keys off the cookie, not the header.** The write-block
+   at `middleware.ts:125` reads `request.cookies.get('ops_impersonation')`. A
+   forged header with no cookie passes it.
+
+| | |
+|---|---|
+| Fails | **open** — acts on real data in the wrong tenant |
+| Tenant boundary | **crossed** |
+| Authentication | present; the *scope* is what comes from the request |
+| Privilege | escalates beyond what the feature legitimately grants |
+
+**Stated accurately, because the headline version overstates it.** The session
+id is a `randomUUID()`, so it cannot be guessed or enumerated. Holding a live
+one means being an ops admin — and an ops admin already has legitimate
+cross-tenant access. So the escalation is **read-only to read-write, within an
+already-privileged group**, not "any authenticated user reads any tenant". An
+ops admin who moves their own id from the cookie to a header defeats the
+read-only guard the product applies to impersonation. That needs no leak and is
+available today.
+
+The genuinely dangerous version is the leak path: any authenticated user of any
+account who obtains a live UUID gets an hour of cross-tenant **write**. The
+cookie carrying it is `httpOnly`, `secure` in production, `sameSite=lax` and
+expires in an hour, so it is not readable by client-side script and an XSS does
+not hand it over. It can still surface in server and proxy logs that capture
+cookies, in error-tracking payloads, and in support screenshots — devtools
+displays `httpOnly` cookies even though script cannot read them.
+
+**Half the fix is already in the schema.** Somebody created `admin_user_id`
+knowing a session belongs to a specific administrator. The check that would use
+it was never written.
+
+### Finding 2 — spoofable client IP behind a rate limit
+
+`app/api/public/score-audience/route.ts:81`:
+
+```ts
+req.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
+  req.headers.get('x-real-ip') ?? '0.0.0.0';
+if (!checkRateLimit(ip)) { /* 429 */ }
+```
+
+Public and unauthenticated, and both headers are attacker-supplied, so the rate
+limit is bypassed by varying them. It scopes no data, crosses no tenant
+boundary and reads no database — the route touches no database at all. An
+abuse-control weakness, not an authorization one, and ranked accordingly.
+
+### Considered and excluded, with reasons
+
+| What | Why it is not a finding |
+|---|---|
+| `aid` query param / body field in `app/api/input/respond`, `app/api/public/conference-forms`, `app/api/public/form-submissions` | Public and unauthenticated, and `aid` does select the tenant database — but every access is then gated on an independent unguessable secret **in that same database** (`WHERE cf.public_token = ? AND cf.is_public = 1`; `WHERE t.token = ?`, one-time and expiring). A wrong `aid` finds no matching token and returns 404. They **fail closed**: `aid` is a routing hint, not an authorization decision. |
+| `getDb(accountId)` in `conference-series`, `conference-series/[seriesId]/seasons`, `program-intelligence/saturation`, `program-intelligence/saturation/[conferenceId]` | `accountId` is a local variable assigned from `authResult.accountId ?? ''`. Session-derived. |
+| `createClient` / `createTenantDb` across 12 `app/api/ops/` routes | Ops admins are legitimately cross-tenant. All are gated by `requireOpsAdmin`. |
+| `app/api/ops/recompute-relationship-floors`, `app/api/ops/recompute-saturation` | Have no ops guard, but use `requireAuth` and scope to the caller's own `accountId`. Filed under `/ops` without being cross-tenant. Misfiled, not vulnerable. |
+| `app/api/ops/impersonate/end` | No ops guard, but acts only on the id in the caller's **own** cookie. Ending a session revokes access rather than granting it. |
+| `demo_bypass` cookie | Compared against the `DEMO_BYPASS_SECRET` env var, and inert when that is unset. Lifts demo-mode write-blocking; scopes no data. |
+| `x-forwarded-proto` in `conferences/[id]/executive-brief-pdf` | Builds a base URL for asset links inside returned HTML. No fetch, no data scoping. |
+| `x-forwarded-for` in `lib/auth.ts` and `app/api/auth/login` | Recorded for session logging only. |
+| Path params and body ids on non-ops routes | Every non-ops route resolves its client as `getDb(session.accountId)`, so a request-supplied id selects *within* the caller's tenant. That is "what is touched", not "which" — outside this class. |
+| Request-supplied user ids | None outside `/ops`: `body.userId`, `body.user_id`, `params.userId` and the `userId`/`user_id` query params return no matches. |
+| Account ids from the request on non-ops routes | None. |
+| Remaining OAuth `state` consumers | None. The surviving `.state` matches are a company's US state field. |
+
+### Scope of the sweep
+
+- **368** `getDb()` call sites: 353 pass a session field directly; 7 pass a
+  session-derived local; 5 are deliberate master in ops routes; 3 are the `aid`
+  routes above.
+- **22** routes under `app/api/ops/`, each checked for a guard.
+- **4** public unauthenticated routes, each traced to what gates it.
+- Every header `middleware.ts` sets — **exactly one**, `x-ops-impersonation-id`
+  — and every custom header any handler reads (`x-forwarded-for`, `x-real-ip`,
+  `x-forwarded-proto`).
+- Every cookie read anywhere: `ops_impersonation`, `demo_bypass`.
+
+### One fix, informed by the whole sweep
+
+Middleware strips no inbound headers at all, but it also *sets* only one. So a
+strip-list has exactly one entry today, and the value of writing it now is that
+the next header added to middleware inherits the habit rather than the bug.
+
+Paired with the ownership check that `admin_user_id` was created for, that is
+the whole of Finding 1. Neither is implemented here — this document reports.
 
 ---
 
