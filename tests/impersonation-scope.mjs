@@ -49,9 +49,10 @@ const { NextRequest } = await import('next/server');
 const { db, dbReady, seedFreshDb } = await import('@/lib/db');
 const { signToken, requireAuth } = await import('@/lib/auth');
 await dbReady;
-// The master bootstrap is lock-guarded and geared to a long-lived process;
-// seeding through the app's own schema builder gives this file the same tables
-// production has, without depending on that path.
+// initDb runs its migrations in the background and does not await them, so
+// dbReady means "connection verified", not "schema ready" — locally the tables
+// land about 1.3s later. Seeding through the app's own schema builder is how
+// this file gets production's tables without racing that.
 await seedFreshDb(db);
 
 // ── Cast ─────────────────────────────────────────────────────────────────────
