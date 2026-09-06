@@ -228,7 +228,7 @@ already scoped by the session.
 excluded cases are listed with reasons rather than omitted, so a later reader
 knows they were examined.
 
-### Finding 1 — `x-ops-impersonation-id` is trusted from the request
+### Finding 1 — `x-ops-impersonation-id` was trusted from the request — RESOLVED
 
 `lib/auth.ts:185`, inside `requireAuth`, which nearly every authenticated route
 calls:
@@ -291,9 +291,55 @@ not hand it over. It can still surface in server and proxy logs that capture
 cookies, in error-tracking payloads, and in support screenshots — devtools
 displays `httpOnly` cookies even though script cannot read them.
 
-**Half the fix is already in the schema.** Somebody created `admin_user_id`
+**Half the fix was already in the schema.** Somebody created `admin_user_id`
 knowing a session belongs to a specific administrator. The check that would use
 it was never written.
+
+#### Resolved
+
+Two locks, because either alone leaves the other half of the problem standing.
+
+**The lookup now asks whose session it is.** `requireAuth` joins on
+`admin_user_id` and on the caller still being an active ops admin — not merely
+having been one when the session was opened:
+
+```sql
+SELECT s.account_id
+FROM impersonation_sessions s
+JOIN users u ON u.id = s.admin_user_id
+WHERE s.id = ?
+  AND s.admin_user_id = ?
+  AND s.ended_at IS NULL
+  AND s.last_active_at > datetime('now', '-60 minutes')
+  AND u.active = 1
+  AND (u.is_admin = 1 OR ? = 1)      -- the OPS_ADMIN_EMAILS allow-list
+```
+
+The allow-list is mirrored in `lib/auth.ts` rather than imported from
+`lib/opsAuth.ts`, which imports this module.
+
+**Middleware strips what a client must not supply.** Every forwarding path now
+goes through one function that removes the headers middleware owns before
+setting its own. A bare `NextResponse.next()` forwards the original request
+headers, so the four call sites that used one were the same hole in different
+places. The list lives in `lib/requestHeaders.ts` rather than `middleware.ts`
+so it can be tested — that module imports `@clerk/nextjs/server` at load, which
+does not resolve outside the bundler.
+
+**The read-only guard covers the ground again.** It keys off the
+`ops_impersonation` cookie, and before the strip a forged header with no cookie
+reached a handler without ever passing it — which is how a forged header bought
+a write where the legitimate feature grants only reads. With the strip in
+place, a header can reach a handler only if middleware set it from the cookie,
+so cookie and header now imply each other and the guard covers every path that
+can produce an impersonated `accountId`.
+
+**Tested** in `tests/impersonation-scope.mjs`, red before green: a tenant user
+of another account, a second ops admin, and an admin whose access had since
+been revoked were each scoped to the victim account against the previous
+commit. Alongside them are the assertions that must not break — the owning
+admin is still scoped to their session, and ended, idle and unknown sessions
+still scope nothing.
 
 ### Finding 2 — spoofable client IP behind a rate limit
 
@@ -346,7 +392,10 @@ strip-list has exactly one entry today, and the value of writing it now is that
 the next header added to middleware inherits the habit rather than the bug.
 
 Paired with the ownership check that `admin_user_id` was created for, that is
-the whole of Finding 1. Neither is implemented here — this document reports.
+the whole of Finding 1. **Both are now implemented** — see "Resolved" above.
+
+Finding 2, the spoofable client IP behind the rate limit, is left as logged.
+It is abuse control rather than authorization and is being handled separately.
 
 ---
 
