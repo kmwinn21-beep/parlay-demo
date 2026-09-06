@@ -420,3 +420,156 @@ Tightening them to a required parameter is a future cleanup pass, not this work.
 The mechanical part is small; the cost is that each one turns into a compiler
 error at every call site, which is the point of doing it deliberately rather
 than alongside something else.
+
+---
+
+## The worked example — Slack OAuth, built to the second rule
+
+The rule in "A second rule, from a second class of bug" says what not to do.
+The Slack integration is the first flow built after it, and it is written to be
+the thing the rule points at. Copy this shape; do not re-derive one.
+
+`lib/slack/state.ts`, `lib/slack/oauth.ts`, `lib/slack/guards.ts`,
+`app/api/slack/{install,oauth/callback,connect,connect/callback}/route.ts`.
+Tests: `tests/slack-install.mjs`, `tests/slack-connect.mjs`.
+
+### The four checks, in this order
+
+Both callbacks run the same four. The order is part of it — the cheapest and
+most decisive check first, so a forged request is refused before it can reach a
+database or an outbound call.
+
+```ts
+// 1. The state is one we signed, for THIS purpose, and is not stale.
+const state = await verifySlackState(searchParams.get('state'));
+if (!state) return settingsError('slack_invalid_state');
+
+// 2. The caller has a session, and is who the route requires them to be.
+const auth = await requireRealAdmin(request);
+if ('refusal' in auth) return settingsError(/* … */);
+
+// 3. The session user IS the user named in the state. The state says who
+//    started the flow; the session says who is finishing it.
+if (auth.user.id !== state.userId) return settingsError('slack_state_mismatch');
+
+// 4. The account matches too — and the account WRITTEN TO comes from the
+//    session, never from the state.
+if (auth.user.accountId !== state.accountId) return settingsError('slack_state_mismatch');
+
+await saveWorkspace({ accountId: auth.user.accountId, /* … */ });
+```
+
+The deleted Google callback got 1, 2 and 4 wrong simultaneously: an unsigned
+state, no authentication at all, and `getDb(accountIdFromState)`.
+
+Note what check 4 is *not*. The state's `accountId` is never passed to `getDb`
+or to a store function. It exists only to be compared. A genuinely signed state
+naming another account is refused, and installs nothing there and nothing
+anywhere else. If the comparison were deleted the flow would still write to the
+session's account — the compare is a second layer, not the mechanism.
+
+### The state is signed, and scoped to one flow
+
+A `jose` HS256 JWT on `JWT_SECRET` — the same library and secret the session
+cookie uses, because a second hand-rolled HMAC is a second thing to get wrong.
+`sub` is the user id, `accountId` a claim, `jti` a `randomUUID()` nonce, and the
+expiry is **10 minutes**: long enough to read a consent screen and pick a
+workspace, short enough that a state captured from browser history or a referrer
+log is usually already dead.
+
+Sharing one secret across several token types is what makes the **audience**
+mandatory rather than decorative. There are three tokens signed with
+`JWT_SECRET`, and each carries an `aud` that its own verification requires:
+
+| token | `aud` |
+| --- | --- |
+| session cookie | (the app's own) |
+| workspace install state | `slack-oauth-state` |
+| user connect state | `slack-user-connect` |
+
+The two Slack states are non-interchangeable in both directions *by audience*.
+Without the split, an ordinary member — who holds a connect state legitimately —
+could present it where a workspace gets installed. Both directions have tests,
+and both are mutation-checked: merging the two Slack audiences fails 5
+assertions; dropping `{ audience }` from `jwtVerify` fails 9.
+
+**A correction worth reading, because the obvious summary of the table above is
+wrong.** The audience does *not* symmetrically protect the session cookie. It
+stops a session cookie being used as a state — the state verification requires
+an audience the cookie does not carry. It does **not** stop a state being used
+as a session cookie: `verifyToken` in `lib/auth.ts` calls `jwtVerify` with no
+audience option, so it accepts any `aud`. That direction is refused for a
+different reason — a state carries no `email` and no `role`, and `verifyToken`
+requires both:
+
+```ts
+if (!payload.sub || !payload.email || !payload.role) return null;
+```
+
+Which is a genuine protection, and `tests/slack-connect.mjs` pins it. But it is a
+property of the *claims*, not of the audience, so adding `email` or `role` to a
+Slack state would silently turn it into a valid seven-day session cookie. The
+durable fix is to give the session cookie its own audience and require it in
+`verifyToken`; that is a change to the authentication path for every existing
+signed-in user, so it is recorded here rather than done in passing.
+
+**The states are deliberately not single-use.** Nothing records issued `jti`s,
+so one can be replayed inside its ten-minute window — by the same person, in the
+same account, for the same flow. The payload of that replay is relinking someone
+to themselves. A `jti` table with a TTL sweep is real infrastructure; this was
+judged not to earn it. Recorded so the absence reads as a decision.
+
+### One more check this shape needs, and a general point
+
+The user-connect callback adds a fifth: the Slack user Slack just identified
+must belong to the **same `team_id`** as the workspace the account installed.
+Slack will issue a perfectly valid Sign in with Slack token for a user in an
+unrelated workspace, and a link naming them would read as connected and be
+permanently undeliverable, because the bot that sends lives elsewhere.
+
+The general point: **the four checks establish who the caller is; they say
+nothing about whether the third party's answer is about the same thing you
+asked about.** Whatever the provider hands back still has to be reconciled with
+what this account already knows. Two places in this flow do that, and both are
+easy to leave out:
+
+- the `team_id` comparison above;
+- the `aud` on Slack's `id_token`, checked against `SLACK_CLIENT_ID`. Its
+  signature deliberately is *not* verified — it arrives in the body of our own
+  TLS POST to `slack.com` authenticated with the client secret, which OIDC Core
+  §3.1.3.7 accepts — but TLS says nothing about which Slack *app* the token was
+  minted for, and that is exactly what `aud` catches.
+
+### Roles, and why `requireAdmin` was not used
+
+`requireAuth` and `requireAdmin` both promote every authenticated caller to
+administrator when `NEXT_PUBLIC_DEMO_MODE` is on. That is safe for the screens
+they were written for, because middleware fakes the writes. It is not safe here:
+installing a workspace consumes a real authorization code and stores a real
+credential against a real account, and middleware cannot fake any of that.
+
+So `lib/slack/guards.ts` has `requireRealAdmin`, which reads the session's actual
+role with no demo branch, and `requireAccountUser`, which requires only a session
+and an `accountId` — linking your own Slack account is not an administrative act.
+Both require `accountId`: without one there is no workspace to act on, and the
+call would otherwise fall through to master.
+
+**If a route has an effect outside this deployment, check the real role.**
+
+### Where these rows live, and why that is not a contradiction
+
+`slack_workspaces` and `slack_user_links` are in **master**, deliberately, and
+`lib/slack/store.ts` is their only access point. One row per account; accounts
+live in master; and a bot token is a credential whose revocation should not be a
+fan-out across every tenant database that can half-finish. The module header says
+so and every query repeats "Master by intent" at its site, precisely because the
+default assumption in this codebase is now the opposite.
+
+`slack_user_links` is keyed on `(account_id, parlay_user_id)`, never on
+`parlay_user_id` alone — `users.id` is an `AUTOINCREMENT` in each database, so
+user 42 exists in many accounts and is a different person in each.
+
+The one tenant read in this flow is the installer's display name, in
+`app/api/slack/status/route.ts`. It uses `getDb(auth.user.accountId)` — account
+from the session, per the rule — and degrades to a blank name rather than to a
+screen reporting Slack as disconnected.

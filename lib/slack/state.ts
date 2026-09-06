@@ -24,8 +24,15 @@
  *
  * Reusing the secret across token types would let one be replayed as another, so
  * every token here carries an audience that verification requires. A session
- * cookie presented as a state fails, and a state presented as a session cookie
- * fails, because neither audience matches the other's check.
+ * cookie presented as a state fails on that audience.
+ *
+ * The reverse direction is refused too, but NOT by the audience: `verifyToken`
+ * in lib/auth.ts calls `jwtVerify` without an audience option, so it accepts any
+ * `aud`. What stops a state being used as a session cookie is that it carries no
+ * `email` and no `role`, both of which `verifyToken` requires. That is a real
+ * protection and there is a test for it — but it is a property of the CLAIMS,
+ * not of the audience, so adding `email` or `role` to a state here would quietly
+ * turn it into a valid seven-day session cookie. Do not.
  *
  * There are two Slack states, and they are deliberately NOT interchangeable:
  *

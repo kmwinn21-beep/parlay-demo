@@ -184,6 +184,19 @@ console.log('\n— an install state and a connect state are not interchangeable 
   eq('  and a member is stopped twice over', ['slack_invalid_state', 'slack_forbidden'].includes(outcome(memberRes)), true);
 }
 
+{
+  // The other direction, which the audience does NOT cover: verifyToken calls
+  // jwtVerify with no audience option, so a state's `aud` does not bother it.
+  // What refuses it is that a state carries no email and no role, both of which
+  // verifyToken requires. Pinned here because that makes adding either claim to
+  // a state a silent way to mint a seven-day session cookie.
+  const { verifyToken } = await import('@/lib/auth');
+  const installState = await signSlackState({ accountId: ACCOUNT, userId: ADMIN.id });
+  const connectState = await signSlackConnectState({ accountId: ACCOUNT, userId: MEMBER.id });
+  eq('neither state is usable as a session cookie',
+    [await verifyToken(installState), await verifyToken(connectState)], [null, null]);
+}
+
 console.log('\n— a state that is not ours is refused —');
 {
   const res = await connectCallback(await request(cbUrl('not-a-real-state'), MEMBER));
