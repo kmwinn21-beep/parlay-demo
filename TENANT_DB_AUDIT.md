@@ -149,6 +149,77 @@ and any orphaned `oauth_` rows are inert now that nothing reads them.
 
 ---
 
+## A second rule, from a second class of bug
+
+The audit above is about a helper reaching for the wrong database *by default*.
+This one is about a route being *told* which database to use, by whoever called
+it.
+
+> **Never derive an account id or user id from user-supplied input — a query
+> parameter, an OAuth state string, or anything else — and use it to select a
+> database or scope a write. Derive it from the authenticated session.**
+
+### Where it was
+
+`app/api/oauth/google/callback/route.ts` and its Microsoft twin. The authorize
+step put the caller's identity into the OAuth `state` in plain text:
+
+```ts
+state: `${user.id}:${user.accountId ?? ''}`,
+```
+
+and the callback — which had **no `requireAuth` at all** — took both ids back
+out of it and used them to pick a database and scope a write:
+
+```ts
+const [stateId, stateAccountId] = state.split(':');
+const userId = parseInt(stateId, 10);
+const accountId = stateAccountId || undefined;
+// …
+const db = await getDb(accountId);
+await db.execute({
+  sql: `INSERT INTO oauth_connections (user_id, provider, …) VALUES (?, 'google', …)`,
+  args: [userId, providerEmail, tokens.access_token, …],
+});
+```
+
+**What it allowed.** Anyone could complete a Google or Microsoft OAuth flow
+with their own account, then request the callback with someone else's ids in
+the state — `?code=<their own code>&state=<victim_user_id>:<victim_account_id>`
+— and their access and refresh tokens would be written into the victim's row in
+the victim's tenant database. The victim's outbound mail would then send
+through the attacker's mailbox. No authentication, no signature, no check that
+the state had ever been issued.
+
+### Resolved by deleting the feature
+
+Signing the state would have fixed it. The feature was deleted instead, because
+it earned little: sending outreach from a rep's own mailbox, through a compose
+modal on the company and attendee pages, plus a `From:` header on calendar
+input requests. The calendar routes already fell back to the platform's SMTP
+path whenever the OAuth send failed, so that path was already the one running
+for everyone who had never connected.
+
+Gone: the whole `app/api/oauth/` tree, `app/api/emails/send`,
+`lib/oauthEmail.ts`, `lib/oauthCredentials.ts`, the compose modal and the
+Connected Accounts section. The `oauth_connections` table stays — shared
+migrations array, and unread rows are inert.
+
+### Why this one is different from the rest of this document
+
+Every other finding here fails *closed*: a wrong read returns empty and a
+feature quietly does nothing. This one failed *open*. It did not need a bug to
+trigger it, only someone who read the query string — and nothing about it would
+have shown up in logs or error rates, because from the server's point of view
+it was a successful request doing exactly what it was told.
+
+**The audit for other instances of this pattern is still outstanding.** Reading
+imports found the wrong-database class; finding this class means auditing every
+route that reads an identifier from a request and uses it to scope data access,
+which is a different sweep and has not been done.
+
+---
+
 ## Latent — signatures that permit the same bug
 
 `lib/icpRules.ts`, `lib/trialState.ts` and `lib/titleNormalizationRules.ts` all
