@@ -36,32 +36,51 @@ function formatInstalledAt(raw: string | null): string | null {
   return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
+export interface SlackCallbackResult {
+  error: string | null;
+  connected: boolean;
+}
+
+let captured: SlackCallbackResult | null = null;
+
 /**
- * Read the callback's `error` / `connected` params and clear them from the URL.
+ * The callback's `error` / `connected` params, read once per page load.
+ *
+ * Captured at module scope rather than per component because TWO things on
+ * /auth/account need to know a link just happened — the Slack card, which shows
+ * the banner, and the notification preferences card, which offers to switch the
+ * Slack column on. Whichever mounts first used to strip the params from the URL
+ * and the other would see nothing. Capturing once removes the race instead of
+ * ordering the components.
  *
  * Read from `window.location` rather than `useSearchParams` deliberately: that
  * hook forces the whole page into a Suspense boundary at build time, and these
- * are two screens with a great deal else on them. The params are consumed once
- * on mount and then removed, so a refresh does not replay a stale message.
+ * are two screens with a great deal else on them. The params are removed from
+ * the URL after capture, so a refresh does not replay a stale message.
  */
-function useCallbackResult(): { error: string | null; connected: boolean } {
-  const [result, setResult] = useState<{ error: string | null; connected: boolean }>({
-    error: null,
-    connected: false,
-  });
+export function readSlackCallback(): SlackCallbackResult {
+  if (captured) return captured;
+  if (typeof window === 'undefined') return { error: null, connected: false };
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const error = params.get('error');
-    const connected = params.get('connected') === 'slack';
-    if (!error && !connected) return;
-    setResult({ error, connected });
+  const params = new URLSearchParams(window.location.search);
+  captured = { error: params.get('error'), connected: params.get('connected') === 'slack' };
+  if (captured.error || captured.connected) {
     params.delete('error');
     params.delete('connected');
     const query = params.toString();
     window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
-  }, []);
+  }
+  return captured;
+}
 
+/** Forget the captured result, so a suggestion dismissed once stays dismissed. */
+export function clearSlackCallback(): void {
+  captured = { error: null, connected: false };
+}
+
+function useCallbackResult(): SlackCallbackResult {
+  const [result, setResult] = useState<SlackCallbackResult>({ error: null, connected: false });
+  useEffect(() => { setResult(readSlackCallback()); }, []);
   return result;
 }
 

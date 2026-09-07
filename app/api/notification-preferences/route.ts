@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/getDb';
 import { getSessionUser } from '@/lib/auth';
+import { SLACK_EVENTS, slackColumn } from '@/lib/slack/preferences';
 
 const OPT_OUT_KEYS = [
   'company_status_change', 'follow_up_assigned', 'note_tagged',
@@ -16,8 +17,14 @@ const OPT_IN_KEYS = [
   'comment_reaction_received', 'comment_reaction_received_email',
 ] as const;
 
-const ALL_KEYS = [...OPT_OUT_KEYS, ...OPT_IN_KEYS] as const;
-type PrefKey = typeof ALL_KEYS[number];
+// Slack is opt-in on EVERY event, including the three whose in-app and email
+// columns above are opt-out. A missing row must mean no Slack message — see
+// lib/slack/preferences.ts. Keeping these in their own list is what makes that
+// true here too: the GET below defaults OPT_OUT_KEYS to true, and a Slack key in
+// that list would report "on" to a user who never asked for anything.
+const SLACK_KEYS = SLACK_EVENTS.map(slackColumn) as readonly string[];
+
+const ALL_KEYS = [...OPT_OUT_KEYS, ...OPT_IN_KEYS, ...SLACK_KEYS] as const;
 
 export async function GET(request: NextRequest) {
   try {
@@ -36,6 +43,7 @@ export async function GET(request: NextRequest) {
       const defaults: Record<string, boolean> = {};
       for (const k of OPT_OUT_KEYS) defaults[k] = true;
       for (const k of OPT_IN_KEYS) defaults[k] = false;
+      for (const k of SLACK_KEYS) defaults[k] = false;
       return NextResponse.json(defaults);
     }
 
@@ -43,6 +51,9 @@ export async function GET(request: NextRequest) {
     const out: Record<string, boolean> = {};
     for (const k of OPT_OUT_KEYS) out[k] = row[k] == null ? true : Boolean(row[k]);
     for (const k of OPT_IN_KEYS) out[k] = row[k] == null ? false : Boolean(row[k]);
+    // Never `? true`. A row written before these columns existed reads as off,
+    // which is the honest answer and the one the sender will act on.
+    for (const k of SLACK_KEYS) out[k] = row[k] == null ? false : Boolean(row[k]);
     return NextResponse.json(out);
   } catch (err) {
     console.error('GET notification-preferences error:', err);

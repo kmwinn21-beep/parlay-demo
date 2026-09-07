@@ -2412,4 +2412,23 @@ export const migrations: string[] = [
   // together with their account. Every lookup here is by the pair, and the
   // UNIQUE above is on the pair for the same reason.
   `CREATE INDEX IF NOT EXISTS idx_slack_user_links_slack_user ON slack_user_links(account_id, slack_user_id)`,
+  // Slack delivery preference, one column per event, matching the in-app and
+  // email columns above.
+  //
+  // Every one of these defaults to 0, INCLUDING the three events whose in-app
+  // and email columns default to 1. That asymmetry is the point. No preference
+  // row is written when a user is created, so for the opt-out events "no row"
+  // has always meant "receives" — which is right for a bell icon and an email
+  // to an address they already gave us, and wrong for a direct message in a
+  // workspace they only just linked. Slack is opt-in on every event, and the
+  // reader is an inclusion list (`= 1`), so a missing row and a missing column
+  // both resolve to silence rather than to a surprise DM.
+  `ALTER TABLE notification_preferences ADD COLUMN company_status_change_slack INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE notification_preferences ADD COLUMN follow_up_assigned_slack INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE notification_preferences ADD COLUMN note_tagged_slack INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE notification_preferences ADD COLUMN note_comment_received_slack INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE notification_preferences ADD COLUMN note_comment_thread_slack INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE notification_preferences ADD COLUMN note_reaction_received_slack INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE notification_preferences ADD COLUMN note_lets_talk_slack INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE notification_preferences ADD COLUMN comment_reaction_received_slack INTEGER NOT NULL DEFAULT 0`,
 ];

@@ -6,7 +6,7 @@ import { useEditor } from '@tiptap/react';
 import { useUser } from '@/components/UserContext';
 import { BackButton } from '@/components/BackButton';
 import { RichTextEditor, getEditorExtensions } from '@/components/RichTextEditor';
-import { SlackAccountSection } from '@/components/SlackSettings';
+import { SlackAccountSection, readSlackCallback, clearSlackCallback } from '@/components/SlackSettings';
 
 interface ConfigOption {
   id: number;
@@ -20,16 +20,24 @@ interface NotifPrefs {
   company_status_change_email: boolean;
   follow_up_assigned_email: boolean;
   note_tagged_email: boolean;
+  company_status_change_slack: boolean;
+  follow_up_assigned_slack: boolean;
+  note_tagged_slack: boolean;
   note_comment_received: boolean;
   note_comment_received_email: boolean;
+  note_comment_received_slack: boolean;
   note_comment_thread: boolean;
   note_comment_thread_email: boolean;
+  note_comment_thread_slack: boolean;
   note_reaction_received: boolean;
   note_reaction_received_email: boolean;
+  note_reaction_received_slack: boolean;
   note_lets_talk: boolean;
   note_lets_talk_email: boolean;
+  note_lets_talk_slack: boolean;
   comment_reaction_received: boolean;
   comment_reaction_received_email: boolean;
+  comment_reaction_received_slack: boolean;
 }
 
 function formatMemberSince(raw: string | null): string {
@@ -293,7 +301,7 @@ function ProfileSection({ onRefresh }: { onRefresh: () => void }) {
 
 // ─── Section: Notification Preferences ───────────────────────────────────────
 
-function Toggle({ checked, disabled, onClick }: { checked: boolean; disabled: boolean; onClick: () => void }) {
+function Toggle({ checked, disabled, muted, onClick }: { checked: boolean; disabled: boolean; muted?: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -301,9 +309,12 @@ function Toggle({ checked, disabled, onClick }: { checked: boolean; disabled: bo
       aria-checked={checked}
       disabled={disabled}
       onClick={onClick}
+      // `muted` is "this can never deliver", which needs to look inert.
+      // `disabled` alone is also true for the moment a save is in flight, and
+      // fading every toggle on every tap would read as breakage.
       className={`relative flex-shrink-0 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary ${
         checked ? 'bg-brand-secondary' : 'bg-gray-200'
-      }`}
+      } ${muted ? 'opacity-40 cursor-not-allowed' : ''}`}
       style={{ height: '22px', width: '40px' }}
     >
       <span
@@ -315,15 +326,55 @@ function Toggle({ checked, disabled, onClick }: { checked: boolean; disabled: bo
   );
 }
 
+/** Whether this user has somewhere for a Slack message to go. */
+interface SlackDelivery {
+  workspaceInstalled: boolean;
+  linked: boolean;
+}
+
+// Static — defined outside the component so the suggestion effect below has a
+// stable dependency rather than a new array on every render.
+type PrefItem = { key: keyof NotifPrefs; emailKey: keyof NotifPrefs; slackKey: keyof NotifPrefs; label: string; description: string };
+
+const prefItemsOptOut: PrefItem[] = [
+  { key: 'company_status_change', emailKey: 'company_status_change_email', slackKey: 'company_status_change_slack', label: 'Company Status Changes', description: 'When a company you\'re assigned to changes status.' },
+  { key: 'follow_up_assigned', emailKey: 'follow_up_assigned_email', slackKey: 'follow_up_assigned_slack', label: 'Follow-up Assigned', description: 'When a follow-up task is assigned to you.' },
+  { key: 'note_tagged', emailKey: 'note_tagged_email', slackKey: 'note_tagged_slack', label: 'Note Mentions', description: 'When someone @mentions you in a note.' },
+];
+
+const prefItemsOptIn: PrefItem[] = [
+  { key: 'note_comment_received', emailKey: 'note_comment_received_email', slackKey: 'note_comment_received_slack', label: 'Comment on My Note', description: 'When someone comments on a note you wrote.' },
+  { key: 'note_comment_thread', emailKey: 'note_comment_thread_email', slackKey: 'note_comment_thread_slack', label: 'Thread Update', description: 'When a new comment is added to a note thread you\'ve joined.' },
+  { key: 'note_reaction_received', emailKey: 'note_reaction_received_email', slackKey: 'note_reaction_received_slack', label: 'Note Reaction', description: 'When someone likes or dislikes your note.' },
+  { key: 'note_lets_talk', emailKey: 'note_lets_talk_email', slackKey: 'note_lets_talk_slack', label: 'Let\'s Talk', description: 'When the Let\'s Talk button is triggered on a note you\'re involved in.' },
+  { key: 'comment_reaction_received', emailKey: 'comment_reaction_received_email', slackKey: 'comment_reaction_received_slack', label: 'Comment Reaction', description: 'When someone likes or dislikes your comment.' },
+];
+
+const allItems = [...prefItemsOptOut, ...prefItemsOptIn];
+
 function NotificationPrefsSection() {
   const [prefs, setPrefs] = useState<NotifPrefs | null>(null);
   const [saving, setSaving] = useState(false);
+  const [slack, setSlack] = useState<SlackDelivery | null>(null);
+  // Set once, on the render after a link just completed — see the suggestion
+  // panel below.
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggested, setSuggested] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetch('/api/notification-preferences')
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setPrefs(data); })
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/slack/status')
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { workspace: unknown; link: unknown } | null) => {
+        setSlack(data ? { workspaceInstalled: Boolean(data.workspace), linked: Boolean(data.link) } : null);
+      })
+      .catch(() => setSlack(null));
   }, []);
 
   const toggle = async (key: keyof NotifPrefs) => {
@@ -349,21 +400,58 @@ function NotificationPrefsSection() {
     }
   };
 
-  type PrefItem = { key: keyof NotifPrefs; emailKey: keyof NotifPrefs; label: string; description: string };
 
-  const prefItemsOptOut: PrefItem[] = [
-    { key: 'company_status_change', emailKey: 'company_status_change_email', label: 'Company Status Changes', description: 'When a company you\'re assigned to changes status.' },
-    { key: 'follow_up_assigned', emailKey: 'follow_up_assigned_email', label: 'Follow-up Assigned', description: 'When a follow-up task is assigned to you.' },
-    { key: 'note_tagged', emailKey: 'note_tagged_email', label: 'Note Mentions', description: 'When someone @mentions you in a note.' },
-  ];
+  // A Slack toggle that cannot deliver is worse than no toggle: it reads as a
+  // promise. Until there is a link, the column is present but inert, and the
+  // note below says whose job the missing piece is.
+  const slackDeliverable = slack?.linked === true;
 
-  const prefItemsOptIn: PrefItem[] = [
-    { key: 'note_comment_received', emailKey: 'note_comment_received_email', label: 'Comment on My Note', description: 'When someone comments on a note you wrote.' },
-    { key: 'note_comment_thread', emailKey: 'note_comment_thread_email', label: 'Thread Update', description: 'When a new comment is added to a note thread you\'ve joined.' },
-    { key: 'note_reaction_received', emailKey: 'note_reaction_received_email', label: 'Note Reaction', description: 'When someone likes or dislikes your note.' },
-    { key: 'note_lets_talk', emailKey: 'note_lets_talk_email', label: 'Let\'s Talk', description: 'When the Let\'s Talk button is triggered on a note you\'re involved in.' },
-    { key: 'comment_reaction_received', emailKey: 'comment_reaction_received_email', label: 'Comment Reaction', description: 'When someone likes or dislikes your comment.' },
-  ];
+  // ── The suggestion, offered once, right after a link ───────────────────────
+  //
+  // Linking is a strong signal that someone wants Slack notifications, and
+  // making them then hunt through this table is friction immediately after they
+  // did us a favour. So the toggles are PRE-CHECKED from their current in-app
+  // settings — the closest thing we have to a statement of what they care about
+  // — and nothing is written until they press Turn these on. A silent write
+  // here would be the same mistake as an opt-out default, just faster.
+  useEffect(() => {
+    if (!prefs || !slackDeliverable || suggesting) return;
+    if (!readSlackCallback().connected) return;
+    // Nothing to suggest if they already have Slack turned on somewhere: they
+    // have been here before and made a choice.
+    if (allItems.some(item => prefs[item.slackKey])) { clearSlackCallback(); return; }
+    const initial: Record<string, boolean> = {};
+    for (const item of allItems) initial[item.slackKey] = Boolean(prefs[item.key]);
+    setSuggested(initial);
+    setSuggesting(true);
+  }, [prefs, slackDeliverable, suggesting, allItems]);
+
+  const dismissSuggestion = () => {
+    clearSlackCallback();
+    setSuggesting(false);
+  };
+
+  const applySuggestion = async () => {
+    if (!prefs) return;
+    const chosen = Object.fromEntries(Object.entries(suggested).filter(([, on]) => on));
+    if (Object.keys(chosen).length === 0) { dismissSuggestion(); return; }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/notification-preferences', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(chosen),
+      });
+      if (!res.ok) { toast.error('Failed to save preferences.'); return; }
+      setPrefs({ ...prefs, ...chosen });
+      toast.success('Slack notifications turned on.');
+      dismissSuggestion();
+    } catch {
+      toast.error('Network error.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="card">
@@ -379,11 +467,54 @@ function NotificationPrefsSection() {
           <div className="flex items-center justify-end gap-6 pr-0.5">
             <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide" style={{ width: '40px', textAlign: 'center' }}>In-App</span>
             <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide" style={{ width: '40px', textAlign: 'center' }}>Email</span>
+            <span className={`text-[11px] font-semibold uppercase tracking-wide ${slackDeliverable ? 'text-gray-400' : 'text-gray-300'}`} style={{ width: '40px', textAlign: 'center' }}>Slack</span>
           </div>
+
+          {/* Why the Slack column is inert. Says whose job the missing piece is,
+              because the two reasons have different people fixing them. */}
+          {slack && !slackDeliverable && (
+            <p className="text-xs text-gray-400 -mt-2">
+              {slack.workspaceInstalled
+                ? 'Slack notifications need your Slack account linked. Connect it in the Slack section above.'
+                : 'Slack notifications need a workspace connected by an administrator first.'}
+            </p>
+          )}
+
+          {suggesting && (
+            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+              <div>
+                <p className="text-sm font-medium text-gray-800">Turn on Slack notifications?</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Your Slack account is linked. These match your in-app settings — nothing is saved until you confirm.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                {allItems.map(({ slackKey, label }) => (
+                  <label key={slackKey} className="flex items-center gap-2 text-xs text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(suggested[slackKey])}
+                      onChange={e => setSuggested(prev => ({ ...prev, [slackKey]: e.target.checked }))}
+                      className="rounded border-gray-300"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={applySuggestion} disabled={saving} className="btn-primary text-xs">
+                  {saving ? 'Saving…' : 'Turn these on'}
+                </button>
+                <button type="button" onClick={dismissSuggestion} className="text-xs text-gray-500 font-medium hover:underline">
+                  Not now
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Opt-out section */}
           <div className="space-y-4">
-            {prefItemsOptOut.map(({ key, emailKey, label, description }) => (
+            {prefItemsOptOut.map(({ key, emailKey, slackKey, label, description }) => (
               <div key={key} className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-sm font-medium text-gray-800">{label}</p>
@@ -392,6 +523,9 @@ function NotificationPrefsSection() {
                 <div className="flex items-center gap-6 flex-shrink-0">
                   <Toggle checked={prefs[key]} disabled={saving} onClick={() => toggle(key)} />
                   <Toggle checked={prefs[emailKey]} disabled={saving} onClick={() => toggle(emailKey)} />
+                  {/* Off, not on, even though the two toggles to its left default
+                      to on for these three events. No row means no Slack. */}
+                  <Toggle checked={prefs[slackKey]} disabled={saving || !slackDeliverable} muted={!slackDeliverable} onClick={() => toggle(slackKey)} />
                 </div>
               </div>
             ))}
@@ -401,7 +535,7 @@ function NotificationPrefsSection() {
           <div className="border-t border-gray-100 pt-4">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Note Engagement</p>
             <div className="space-y-4">
-              {prefItemsOptIn.map(({ key, emailKey, label, description }) => (
+              {prefItemsOptIn.map(({ key, emailKey, slackKey, label, description }) => (
                 <div key={key} className="flex items-center justify-between gap-4">
                   <div>
                     <p className="text-sm font-medium text-gray-800">{label}</p>
@@ -410,6 +544,7 @@ function NotificationPrefsSection() {
                   <div className="flex items-center gap-6 flex-shrink-0">
                     <Toggle checked={prefs[key]} disabled={saving} onClick={() => toggle(key)} />
                     <Toggle checked={prefs[emailKey]} disabled={saving} onClick={() => toggle(emailKey)} />
+                    <Toggle checked={prefs[slackKey]} disabled={saving || !slackDeliverable} muted={!slackDeliverable} onClick={() => toggle(slackKey)} />
                   </div>
                 </div>
               ))}
