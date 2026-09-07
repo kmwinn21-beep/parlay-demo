@@ -109,14 +109,37 @@ console.log('\n— what the screens do with a workspace that is not there —');
   const account = readFileSync('components/SlackSettings.tsx', 'utf8');
   // The not-installed branch must explain rather than offer a control that
   // leads to a failure the user cannot fix.
+  // The branch now sits after the revoked one — see below — so it is sliced
+  // between its own opening and the linked branch that follows it.
   const notInstalled = account.slice(
-    account.indexOf('{!status.workspace ?'),
+    account.indexOf(') : !status.workspace ? ('),
     account.indexOf(') : status.link ?'),
   );
   eq('the not-installed branch exists', notInstalled.length > 0, true);
   eq('  offers no link to a connect route', notInstalled.includes('/api/slack/connect'), false);
   eq('  offers no button', /<button/.test(notInstalled), false);
   eq('  and says who can fix it', /administrator/i.test(notInstalled), true);
+}
+
+console.log('\n— a workspace Slack has revoked —');
+{
+  const ui = readFileSync('components/SlackSettings.tsx', 'utf8');
+  // The failure shape this codebase keeps producing is a green light with
+  // nothing arriving behind it. A revoked workspace must not read as Connected.
+  eq('the admin badge is driven by revokedAt', ui.includes("const revoked = workspace?.revokedAt != null"), true);
+  const badge = ui.slice(ui.indexOf('revoked ? \'bg-red-100'), ui.indexOf('</span>', ui.indexOf('revoked ? \'bg-red-100')));
+  eq('  and reads as disconnected, not merely unbadged', badge.includes('Disconnected in Slack'), true);
+  eq('  with Reconnect promoted to the primary action',
+    ui.includes("revoked ? 'btn-primary' : 'btn-secondary'"), true);
+  // The individual's card must not claim a working link either, and must not
+  // offer them a control for a problem only an administrator can fix.
+  const userBranch = ui.slice(ui.indexOf('{status.workspace?.revokedAt != null ?'), ui.indexOf(') : !status.workspace ? ('));
+  eq('the member card has its own revoked branch', userBranch.length > 0, true);
+  eq('  offering no control', /<button|href="\/api\/slack\/connect"/.test(userBranch), false);
+  eq('  and saying an administrator must reconnect', /administrator/i.test(userBranch), true);
+
+  const status = readFileSync('app/api/slack/status/route.ts', 'utf8');
+  eq('the endpoint actually reports it', status.includes('revokedAt: workspace.revokedAt'), true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

@@ -12,6 +12,13 @@ export interface SlackStatus {
     teamName: string | null;
     installedBy: string | null;
     installedAt: string | null;
+    /**
+     * Set when Slack told us the installation is gone — uninstalled from the
+     * Slack side, most likely. Reported so the screen can say so: a card
+     * reading "Connected" over a workspace that cannot receive anything is the
+     * failure shape this codebase keeps producing.
+     */
+    revokedAt: string | null;
   } | null;
   /** The caller's own link. Never anybody else's — see below. */
   link: { slackUserId: string } | null;
@@ -81,6 +88,7 @@ export async function GET(request: NextRequest) {
           teamName: workspace.teamName,
           installedBy,
           installedAt: workspace.installedAt,
+          revokedAt: workspace.revokedAt,
         }
       : null,
     link: link ? { slackUserId: link.slackUserId } : null,

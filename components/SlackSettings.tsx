@@ -24,6 +24,7 @@ interface SlackStatus {
     teamName: string | null;
     installedBy: string | null;
     installedAt: string | null;
+    revokedAt: string | null;
   } | null;
   link: { slackUserId: string } | null;
   encryptionConfigured: boolean;
@@ -139,6 +140,11 @@ export function SlackAdminSection() {
 
   const workspace = status?.workspace ?? null;
   const installedAt = formatInstalledAt(workspace?.installedAt ?? null);
+  // A workspace row still exists, but Slack has told us the installation is
+  // gone. This is its own state, not a missing badge: "Connected" over a
+  // workspace that can no longer receive anything is exactly the green light
+  // with nothing arriving behind it.
+  const revoked = workspace?.revokedAt != null;
 
   return (
     <div className="space-y-6">
@@ -170,21 +176,33 @@ export function SlackAdminSection() {
         ) : workspace ? (
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
-                Connected
+              <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                revoked ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+              }`}>
+                {revoked ? 'Disconnected in Slack' : 'Connected'}
               </span>
               <span className="text-sm font-medium text-gray-800">
                 {workspace.teamName ?? workspace.teamId}
               </span>
             </div>
 
+            {revoked && (
+              <Banner tone="error">
+                Slack reports that {workspace.teamName ?? 'this workspace'} no longer has
+                {' '}{process.env.NEXT_PUBLIC_APP_NAME ?? 'Parlay'} installed, so no Slack
+                notifications are being delivered. Reconnect to resume — everyone who had
+                linked their Slack account stays linked.
+                {formatInstalledAt(workspace.revokedAt) && ` Noticed ${formatInstalledAt(workspace.revokedAt)}.`}
+              </Banner>
+            )}
+
             <dl className="space-y-2">
               <div>
-                <dt className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Connected by</dt>
+                <dt className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Installed by</dt>
                 <dd className="text-sm text-gray-800 mt-0.5">{workspace.installedBy ?? '—'}</dd>
               </div>
               <div>
-                <dt className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Connected on</dt>
+                <dt className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Installed on</dt>
                 <dd className="text-sm text-gray-800 mt-0.5">{installedAt ?? '—'}</dd>
               </div>
             </dl>
@@ -210,7 +228,7 @@ export function SlackAdminSection() {
               </div>
             ) : (
               <div className="flex items-center gap-4">
-                <a href="/api/slack/install" className="btn-secondary text-sm">Reconnect</a>
+                <a href="/api/slack/install" className={`text-sm ${revoked ? 'btn-primary' : 'btn-secondary'}`}>Reconnect</a>
                 <button
                   type="button"
                   onClick={() => setConfirming(true)}
@@ -306,7 +324,17 @@ export function SlackAccountSection() {
       {slackError && <Banner tone="error">{slackErrorMessage(slackError)}</Banner>}
       {connected && !slackError && <Banner tone="success">Slack account linked.</Banner>}
 
-      {!status.workspace ? (
+      {status.workspace?.revokedAt != null ? (
+        // Their link is intact and will start working again the moment an
+        // administrator reconnects, so this does not offer them a control —
+        // there is nothing for them to do, and a Connect button here would send
+        // them round Slack to no effect.
+        <p className="text-sm text-gray-500">
+          Slack notifications are paused: your workspace no longer has
+          {' '}{process.env.NEXT_PUBLIC_APP_NAME ?? 'Parlay'} installed. An administrator
+          needs to reconnect it. Your Slack account stays linked in the meantime.
+        </p>
+      ) : !status.workspace ? (
         // No workspace: explain, and offer no control. A Connect button here
         // would go to Slack and come back with an error nobody can act on,
         // because the fix belongs to an administrator, not to this user.

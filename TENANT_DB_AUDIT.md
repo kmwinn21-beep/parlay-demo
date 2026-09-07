@@ -556,6 +556,39 @@ call would otherwise fall through to master.
 
 **If a route has an effect outside this deployment, check the real role.**
 
+### A second place account scoping lives: the client→account WeakMap
+
+`lib/getDb.ts` now records which account each tenant client was opened for, and
+`accountIdForClient(client)` reads it back. It belongs in this document because
+it is the only other place in the codebase where an account id is derived rather
+than passed, and this document exists because derivations like that go wrong
+silently.
+
+**What it does.** `getDb(accountId)` calls `registerTenantClient` on every client
+it creates, into a `WeakMap<Client, string>`. Nothing else writes to it outside
+tests. A `Client` carries no identity of its own, and almost nothing needs it to:
+for reading and writing tenant tables, the client *is* the account.
+
+**Why it exists.** Slack delivery is the exception. A Slack link lives in MASTER,
+keyed on `(account_id, parlay_user_id)`, so a caller holding only a tenant client
+cannot name the account its recipients are in. `lib/notifications.ts` is where
+delivery happens and its input type carries no account id — adding one would mean
+editing 61 call sites to pass a value every one of them already implies, and 61
+edits is 61 chances to pass the wrong one. Reading it back from the client is one
+edit and cannot disagree with the database the notification was just written to.
+
+**Master correctly returns `undefined`.** It is not an account, `getDb` returns it
+without registering it, and `undefined` is the honest answer rather than a
+fallback. Every consumer treats it as "no Slack recipients" and returns silently —
+`deliverToSlack` in `lib/notifications.ts` does exactly that. This is the one
+place in this document where an absent account id is *not* a bug: it means the
+caller is operating on master, which has no per-user Slack links to deliver to.
+
+A client built by hand — a test, a future script — is also unregistered and gets
+the same silence. `tests/slack-delivery.mjs` asserts both: that an unregistered
+client sends no Slack message, and that it logs nothing while doing so, because
+this is an ordinary state and not a failure.
+
 ### Where these rows live, and why that is not a contradiction
 
 `slack_workspaces` and `slack_user_links` are in **master**, deliberately, and
@@ -573,3 +606,45 @@ The one tenant read in this flow is the installer's display name, in
 `app/api/slack/status/route.ts`. It uses `getDb(auth.user.accountId)` — account
 from the session, per the rule — and degrades to a blank name rather than to a
 screen reporting Slack as disconnected.
+
+---
+
+## Known defects, logged and not fixed
+
+### The opt-in wrappers do not await their own work
+
+`notifyNoteComment`, `notifyNoteReaction`, `notifyNoteLetsTalk` and
+`notifyCommentReaction` call `createOptInNotifications(...)` **without
+`await`**. The promise is created and dropped:
+
+```ts
+if (opts.noteAuthorUserId && opts.noteAuthorUserId !== opts.commenterUserId) {
+  createOptInNotifications(client, {   // ← no await
+    ...base,
+    userIds: [opts.noteAuthorUserId],
+    prefKey: 'note_comment_received',
+    …
+  });
+}
+```
+
+This predates the Slack work and is true of the email path too, but Slack makes
+its consequences easier to hit. The notification INSERT usually wins the race
+because it is the first thing that happens; the email and the Slack DM are two
+and three network calls further down. On a serverless runtime the response can
+return — and the function be frozen or reclaimed — before either finishes.
+
+**Why it is worth writing down rather than shrugging at.** The symptom is a
+notification that appears in the bell icon reliably and arrives in Slack
+*sometimes*, with no error anywhere, because nothing failed: the work was simply
+abandoned mid-flight. That reads exactly like "Slack is flaky", which is the
+wrong diagnosis and one nobody will question a year from now.
+
+`tests/slack-delivery.mjs` has to wait for the work to settle before asserting on
+it, and says so at the site. That wait is the test acknowledging the defect, not
+working around a slow database.
+
+**The fix** is to `await` the four calls, which means auditing every route that
+calls them for whether it is prepared to wait on an email and a Slack round trip
+before responding. That is a real piece of work with a real latency cost, not a
+one-line change, which is why it is recorded here instead of done in passing.
