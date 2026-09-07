@@ -24,6 +24,7 @@ interface SlackStatus {
     teamName: string | null;
     installedBy: string | null;
     installedAt: string | null;
+    revokedAt: string | null;
   } | null;
   link: { slackUserId: string } | null;
   encryptionConfigured: boolean;
@@ -36,32 +37,51 @@ function formatInstalledAt(raw: string | null): string | null {
   return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
+export interface SlackCallbackResult {
+  error: string | null;
+  connected: boolean;
+}
+
+let captured: SlackCallbackResult | null = null;
+
 /**
- * Read the callback's `error` / `connected` params and clear them from the URL.
+ * The callback's `error` / `connected` params, read once per page load.
+ *
+ * Captured at module scope rather than per component because TWO things on
+ * /auth/account need to know a link just happened — the Slack card, which shows
+ * the banner, and the notification preferences card, which offers to switch the
+ * Slack column on. Whichever mounts first used to strip the params from the URL
+ * and the other would see nothing. Capturing once removes the race instead of
+ * ordering the components.
  *
  * Read from `window.location` rather than `useSearchParams` deliberately: that
  * hook forces the whole page into a Suspense boundary at build time, and these
- * are two screens with a great deal else on them. The params are consumed once
- * on mount and then removed, so a refresh does not replay a stale message.
+ * are two screens with a great deal else on them. The params are removed from
+ * the URL after capture, so a refresh does not replay a stale message.
  */
-function useCallbackResult(): { error: string | null; connected: boolean } {
-  const [result, setResult] = useState<{ error: string | null; connected: boolean }>({
-    error: null,
-    connected: false,
-  });
+export function readSlackCallback(): SlackCallbackResult {
+  if (captured) return captured;
+  if (typeof window === 'undefined') return { error: null, connected: false };
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const error = params.get('error');
-    const connected = params.get('connected') === 'slack';
-    if (!error && !connected) return;
-    setResult({ error, connected });
+  const params = new URLSearchParams(window.location.search);
+  captured = { error: params.get('error'), connected: params.get('connected') === 'slack' };
+  if (captured.error || captured.connected) {
     params.delete('error');
     params.delete('connected');
     const query = params.toString();
     window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : ''));
-  }, []);
+  }
+  return captured;
+}
 
+/** Forget the captured result, so a suggestion dismissed once stays dismissed. */
+export function clearSlackCallback(): void {
+  captured = { error: null, connected: false };
+}
+
+function useCallbackResult(): SlackCallbackResult {
+  const [result, setResult] = useState<SlackCallbackResult>({ error: null, connected: false });
+  useEffect(() => { setResult(readSlackCallback()); }, []);
   return result;
 }
 
@@ -120,6 +140,11 @@ export function SlackAdminSection() {
 
   const workspace = status?.workspace ?? null;
   const installedAt = formatInstalledAt(workspace?.installedAt ?? null);
+  // A workspace row still exists, but Slack has told us the installation is
+  // gone. This is its own state, not a missing badge: "Connected" over a
+  // workspace that can no longer receive anything is exactly the green light
+  // with nothing arriving behind it.
+  const revoked = workspace?.revokedAt != null;
 
   return (
     <div className="space-y-6">
@@ -151,21 +176,33 @@ export function SlackAdminSection() {
         ) : workspace ? (
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
-                Connected
+              <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                revoked ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+              }`}>
+                {revoked ? 'Disconnected in Slack' : 'Connected'}
               </span>
               <span className="text-sm font-medium text-gray-800">
                 {workspace.teamName ?? workspace.teamId}
               </span>
             </div>
 
+            {revoked && (
+              <Banner tone="error">
+                Slack reports that {workspace.teamName ?? 'this workspace'} no longer has
+                {' '}{process.env.NEXT_PUBLIC_APP_NAME ?? 'Parlay'} installed, so no Slack
+                notifications are being delivered. Reconnect to resume — everyone who had
+                linked their Slack account stays linked.
+                {formatInstalledAt(workspace.revokedAt) && ` Noticed ${formatInstalledAt(workspace.revokedAt)}.`}
+              </Banner>
+            )}
+
             <dl className="space-y-2">
               <div>
-                <dt className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Connected by</dt>
+                <dt className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Installed by</dt>
                 <dd className="text-sm text-gray-800 mt-0.5">{workspace.installedBy ?? '—'}</dd>
               </div>
               <div>
-                <dt className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Connected on</dt>
+                <dt className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Installed on</dt>
                 <dd className="text-sm text-gray-800 mt-0.5">{installedAt ?? '—'}</dd>
               </div>
             </dl>
@@ -191,7 +228,7 @@ export function SlackAdminSection() {
               </div>
             ) : (
               <div className="flex items-center gap-4">
-                <a href="/api/slack/install" className="btn-secondary text-sm">Reconnect</a>
+                <a href="/api/slack/install" className={`text-sm ${revoked ? 'btn-primary' : 'btn-secondary'}`}>Reconnect</a>
                 <button
                   type="button"
                   onClick={() => setConfirming(true)}
@@ -287,7 +324,17 @@ export function SlackAccountSection() {
       {slackError && <Banner tone="error">{slackErrorMessage(slackError)}</Banner>}
       {connected && !slackError && <Banner tone="success">Slack account linked.</Banner>}
 
-      {!status.workspace ? (
+      {status.workspace?.revokedAt != null ? (
+        // Their link is intact and will start working again the moment an
+        // administrator reconnects, so this does not offer them a control —
+        // there is nothing for them to do, and a Connect button here would send
+        // them round Slack to no effect.
+        <p className="text-sm text-gray-500">
+          Slack notifications are paused: your workspace no longer has
+          {' '}{process.env.NEXT_PUBLIC_APP_NAME ?? 'Parlay'} installed. An administrator
+          needs to reconnect it. Your Slack account stays linked in the meantime.
+        </p>
+      ) : !status.workspace ? (
         // No workspace: explain, and offer no control. A Connect button here
         // would go to Slack and come back with an error nobody can act on,
         // because the fix belongs to an administrator, not to this user.

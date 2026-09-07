@@ -13,6 +13,36 @@ const tenantCache = new Map<string, Client>();
 // Deduplicates concurrent first-access calls — prevents multiple migration runs
 const tenantPending = new Map<string, Promise<Client>>();
 
+/**
+ * Which account a tenant client belongs to.
+ *
+ * `Client` carries no identity of its own, and most of this codebase does not
+ * need it to: a tenant client IS the account, as far as reading and writing
+ * tenant tables goes. Slack delivery is the exception, because a Slack link
+ * lives in MASTER and is keyed on (account_id, parlay_user_id) — so a caller
+ * holding only a tenant client cannot name the account the recipient is in.
+ *
+ * Recording it here rather than threading an `accountId` parameter through
+ * lib/notifications.ts keeps 61 call sites unchanged. A WeakMap so a client
+ * dropped from the cache is not kept alive by this.
+ *
+ * Master returns undefined, correctly: it is not an account.
+ */
+const clientAccounts = new WeakMap<Client, string>();
+
+/** The account a client was opened for, or undefined for master and for clients built by hand. */
+export function accountIdForClient(client: Client): string | undefined {
+  return clientAccounts.get(client);
+}
+
+/**
+ * Associate a client with an account. Called by `getDb`; exported so tests can
+ * stand up a tenant client without provisioning a real account.
+ */
+export function registerTenantClient(client: Client, accountId: string): void {
+  clientAccounts.set(client, accountId);
+}
+
 export async function getDb(accountId: string | undefined): Promise<Client> {
   if (!accountId) return db; // ops admin — no tenant, uses master DB directly
   const cached = tenantCache.get(accountId);
@@ -38,6 +68,7 @@ export async function getDb(accountId: string | undefined): Promise<Client> {
       authToken: String(r.turso_auth_token),
     });
     await migrateTenantDb(client);
+    registerTenantClient(client, accountId);
     tenantCache.set(accountId, client);
     return client;
   })().finally(() => {
