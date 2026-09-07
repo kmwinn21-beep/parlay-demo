@@ -2431,4 +2431,15 @@ export const migrations: string[] = [
   `ALTER TABLE notification_preferences ADD COLUMN note_reaction_received_slack INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE notification_preferences ADD COLUMN note_lets_talk_slack INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE notification_preferences ADD COLUMN comment_reaction_received_slack INTEGER NOT NULL DEFAULT 0`,
+  // Set when Slack tells us the installation is gone — `account_inactive` or
+  // `token_revoked`, which is what an admin uninstalling Parlay from the Slack
+  // side looks like from here. There is no webhook for it; the first we learn is
+  // a failed send.
+  //
+  // Marked rather than deleted. Deleting would take every user link with it, so
+  // a reinstall would silently require everyone to reconnect, and nothing would
+  // remain to tell an administrator why their Slack notifications stopped. A
+  // stamped row keeps the links, keeps the audit trail, and gives the settings
+  // screen something true to say.
+  `ALTER TABLE slack_workspaces ADD COLUMN revoked_at TEXT`,
 ];

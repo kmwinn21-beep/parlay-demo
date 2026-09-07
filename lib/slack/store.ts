@@ -37,6 +37,13 @@ export interface SlackWorkspace {
   botUserId: string | null;
   installedByUserId: number | null;
   installedAt: string | null;
+  /**
+   * When Slack last told us this installation no longer exists.
+   *
+   * Null for a healthy workspace. Non-null means a send failed with
+   * `account_inactive` or `token_revoked` — see `markWorkspaceRevoked`.
+   */
+  revokedAt: string | null;
 }
 
 export interface SlackUserLink {
@@ -54,6 +61,7 @@ function toWorkspace(row: Record<string, unknown>): SlackWorkspace {
     botUserId: row.bot_user_id != null ? String(row.bot_user_id) : null,
     installedByUserId: row.installed_by_user_id != null ? Number(row.installed_by_user_id) : null,
     installedAt: row.installed_at != null ? String(row.installed_at) : null,
+    revokedAt: row.revoked_at != null ? String(row.revoked_at) : null,
   };
 }
 
@@ -72,7 +80,7 @@ export async function getWorkspace(accountId: string): Promise<SlackWorkspace | 
   await dbReady;
   // Master by intent — see this module's header.
   const result = await db.execute({
-    sql: `SELECT account_id, team_id, team_name, bot_user_id, installed_by_user_id, installed_at
+    sql: `SELECT account_id, team_id, team_name, bot_user_id, installed_by_user_id, installed_at, revoked_at
           FROM slack_workspaces WHERE account_id = ?`,
     args: [accountId],
   });
@@ -129,12 +137,44 @@ export async function saveWorkspace(input: {
             bot_token = excluded.bot_token,
             bot_user_id = excluded.bot_user_id,
             installed_by_user_id = excluded.installed_by_user_id,
-            installed_at = excluded.installed_at`,
+            installed_at = excluded.installed_at,
+            -- A reinstall is the cure for a revocation, so it clears the mark.
+            revoked_at = NULL`,
     args: [
       input.accountId, input.teamId, input.teamName,
       encrypted, input.botUserId, input.installedByUserId,
     ],
   });
+}
+
+/**
+ * Record that Slack says this installation is gone.
+ *
+ * Called when a send fails with `account_inactive` or `token_revoked`, which is
+ * what an administrator uninstalling Parlay from inside Slack looks like from
+ * this side — there is no webhook, so a failed send is the first we hear of it.
+ *
+ * Deliberately NOT a delete. The token is already worthless, but the user links
+ * are not: reinstalling restores delivery for everyone who had connected, and
+ * deleting would make every one of them reconnect for no reason. It also leaves
+ * something for the settings screen to explain, instead of a workspace that
+ * silently reverted to "not connected".
+ *
+ * Idempotent, and best-effort: this runs inside a notification path that must
+ * not throw, so a failure here is logged and swallowed.
+ */
+export async function markWorkspaceRevoked(accountId: string): Promise<void> {
+  try {
+    await dbReady;
+    // Master by intent — see this module's header.
+    await db.execute({
+      sql: `UPDATE slack_workspaces SET revoked_at = datetime('now')
+            WHERE account_id = ? AND revoked_at IS NULL`,
+      args: [accountId],
+    });
+  } catch (err) {
+    console.error(`[slack] could not mark workspace revoked for account ${accountId}:`, err);
+  }
 }
 
 /**

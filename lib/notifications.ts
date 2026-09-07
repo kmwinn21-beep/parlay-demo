@@ -19,6 +19,8 @@
  */
 import type { Client } from '@libsql/client';
 import { sendNotificationEmail } from './email';
+import { sendSlackNotification } from './slack/send';
+import { accountIdForClient } from './getDb';
 
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub';
 
@@ -135,6 +137,48 @@ export async function getConfigIdByEmail(client: Client, email: string): Promise
   }
 }
 
+/**
+ * Deliver the same notification to Slack, for whoever asked for it there.
+ *
+ * Called last, after the notification rows and the email, and wrapped in its own
+ * catch on top of the one inside `sendSlackNotification`. Slack is additive: the
+ * two channels people already rely on have landed by the time this runs, and
+ * nothing it does can undo them.
+ *
+ * The account comes from the client itself (lib/getDb.ts). A Slack link lives in
+ * MASTER, keyed on (account_id, parlay_user_id), so delivery needs an account id
+ * that `CreateNotificationsInput` does not carry — and adding one would mean
+ * editing 61 call sites to pass a value every one of them already implies.
+ *
+ * A client with no account is master, or one built by hand in a test. Neither
+ * has Slack recipients, so this returns without a log: it is the ordinary case,
+ * not a failure.
+ */
+async function deliverToSlack(
+  client: Client,
+  event: string,
+  userIds: number[],
+  message: string,
+  entityType: string,
+  entityId: number,
+): Promise<void> {
+  try {
+    if (userIds.length === 0) return;
+    const accountId = accountIdForClient(client);
+    if (!accountId) return;
+    const BASE = process.env.NEXT_PUBLIC_BASE_URL ?? '';
+    await sendSlackNotification({
+      client, accountId, event, userIds, message,
+      link: entityLink(BASE, entityType, entityId),
+    });
+  } catch (err) {
+    // sendSlackNotification does not throw. This is the second net, so that a
+    // future change inside it cannot reach the mutation that triggered the
+    // notification.
+    console.error('[notifications] slack delivery error:', err);
+  }
+}
+
 /** Insert notification rows — one per user. Respects notification_preferences opt-outs. Errors are swallowed. */
 export async function createNotifications(client: Client, p: CreateNotificationsInput): Promise<void> {
   if (p.userIds.length === 0) return;
@@ -192,6 +236,13 @@ export async function createNotifications(client: Client, p: CreateNotifications
       }
     } catch (err) {
       console.error('[notifications] email send error:', err);
+    }
+
+    // Last, and only for events that have a Slack column. `prefKey` is absent
+    // for a handful of callers that pass no preference at all; those have no
+    // Slack toggle either, so there is nothing a user could have opted into.
+    if (p.prefKey) {
+      await deliverToSlack(client, p.prefKey, eligibleIds, p.message, p.entityType, p.entityId);
     }
   } catch (err) {
     console.error('[notifications] insert error:', err);
@@ -381,6 +432,8 @@ async function createOptInNotifications(client: Client, p: CreateOptInNotificati
     } catch (err) {
       console.error('[notifications] opt-in email error:', err);
     }
+
+    await deliverToSlack(client, p.prefKey, eligibleIds, p.message, p.entityType, p.entityId);
   } catch (err) {
     console.error('[notifications] createOptInNotifications error:', err);
   }
