@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { startPolling, stopPolling } from '@/lib/pollingManager';
+import { useMobileCollapse } from '@/lib/useMobileCollapse';
 import {
   FEED_SCOPES, matchesFilter, rendersBody,
   type FeedColour, type FeedFilter, type FeedItem, type FeedKind, type FeedScope,
@@ -414,6 +415,10 @@ export function DashboardFeed({ className = '' }: { className?: string }) {
   const [refreshing, setRefreshing] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [lastSeen, setLastSeen] = useState<string | null>(null);
+  // The same fold every other dashboard section uses. Without it the Feed was
+  // the one card on a phone that could not be got out of the way, and it is the
+  // tallest of the three.
+  const { isMobile, expanded, toggle, showBody } = useMobileCollapse();
   const scopeRef = useRef(scope);
   scopeRef.current = scope;
 
@@ -501,29 +506,43 @@ export function DashboardFeed({ className = '' }: { className?: string }) {
 
   return (
     <div className={`card flex flex-col min-h-0 ${className}`}>
-      {/* Header */}
+      {/* Header. The leading icon is w-5 h-5 with gap-2, exactly as Floor Notes
+          has it, so the F of "Floor Notes" and the F of "Feed" share a left
+          edge down the phone. Targets was wrapping its icon in a 32px circle
+          and sitting 12px further right; it now matches too. */}
       <div className="flex items-center gap-2 flex-shrink-0">
-        <span className="relative flex w-2 h-2 flex-shrink-0" aria-hidden>
-          {shouldPoll && (
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-60" />
-          )}
-          <span className={`relative inline-flex rounded-full h-2 w-2 ${shouldPoll ? 'bg-green-500' : 'bg-gray-300'}`} />
-        </span>
-        <h2 className="text-base font-semibold text-brand-primary font-serif">Feed</h2>
-        {newCount > 0 && (
-          <button
-            type="button"
-            onClick={markSeen}
-            title="Mark as seen"
-            className="px-1.5 py-0.5 rounded-full bg-brand-secondary/10 text-brand-secondary text-[10px] font-semibold"
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={!isMobile || expanded}
+          className={`flex items-center gap-2 text-left group min-w-0 ${isMobile ? '' : 'cursor-default'}`}
+        >
+          {/* Replaces the live dot. The signal it carried is not lost — the icon
+              turns green while a conference is running, which is the same fact
+              in the same place without a second mark to explain. */}
+          <svg
+            className={`w-5 h-5 flex-shrink-0 transition-colors ${shouldPoll ? 'text-green-500' : 'text-brand-secondary'}`}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden
           >
-            {newCount} new
-          </button>
-        )}
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <span className="text-lg font-semibold text-brand-primary font-serif group-hover:text-brand-secondary transition-colors">Feed</span>
+          {newCount > 0 && (
+            <span
+              onClick={e => { e.stopPropagation(); markSeen(); }}
+              title="Mark as seen"
+              className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-brand-secondary/10 text-brand-secondary text-[10px] font-bold leading-none"
+            >
+              {newCount}
+            </span>
+          )}
+          <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200 lg:hidden ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
 
-        {/* Three options now, so the padding is tighter than the two-way
-            version was — the header still has to hold a title, a count and a
-            refresh button in a ~290px column. */}
+        {/* The controls belong to the body, so they fold away with it. */}
+        {showBody && (
         <div className="ml-auto inline-flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5 flex-shrink-0">
           {FEED_SCOPES.map(({ key, label }) => (
             <button
@@ -538,10 +557,12 @@ export function DashboardFeed({ className = '' }: { className?: string }) {
             </button>
           ))}
         </div>
+        )}
 
         {/* Refresh. The stream polls itself, but only while a conference is
             running — between shows this is the only way to pull new items, and
             during one it answers "is this actually live?" without waiting 45s. */}
+        {showBody && (
         <button
           type="button"
           onClick={() => { void load({ silent: true, spin: true }); }}
@@ -554,16 +575,18 @@ export function DashboardFeed({ className = '' }: { className?: string }) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
         </button>
+        )}
       </div>
 
       {/* Type filters — one row, client-side over what is already loaded.
           Five chips do not fit a ~290px column, and wrapping them cost a second
           line of chrome above a stream that wants the height. Scrolls instead,
           with the same chevron pair the Admin Settings tab bar uses. */}
-      <ChipRail filter={filter} onSelect={setFilter} />
+      {showBody && <ChipRail filter={filter} onSelect={setFilter} />}
 
       {/* The stream. Ordinary vertical scroll — the wheel behaves the way a
           list is expected to, and variable-height cards make paging erratic. */}
+      {showBody && (
       <div className="mt-3 flex-1 min-h-0 overflow-y-auto -mr-1 pr-1">
         {loading ? (
           <div className="space-y-2">
@@ -612,6 +635,7 @@ export function DashboardFeed({ className = '' }: { className?: string }) {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

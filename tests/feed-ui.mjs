@@ -173,7 +173,12 @@ console.log('\n— the filter rail —');
 
 console.log('\n— the refresh button —');
 {
-  const header = feed.slice(feed.indexOf('{/* Header */}'), feed.indexOf('<ChipRail'));
+  // Anchored on '{/* Header' rather than the full old comment, which was
+  // rewritten when the icon replaced the live dot — an exact match returned -1
+  // and sliced from the end of the file, which fails as loudly as it should.
+  const headerStart = feed.indexOf('{/* Header');
+  const header = feed.slice(headerStart, feed.indexOf('<ChipRail', headerStart));
+  eq('the header slice is not empty', header.length > 200, true);
   eq('sits in the header row', header.includes('aria-label="Refresh the feed"'), true);
   eq('  after the scope toggle', header.indexOf('In progress') < header.indexOf('Refresh the feed'), true);
   eq('  and is labelled for a screen reader, not just a title', header.includes('aria-label'), true);
@@ -205,6 +210,55 @@ console.log('\n— dates and times on a card —');
   // A social event carries its date as a pill rather than a subtitle.
   eq('a date arriving as a pill is formatted too',
     /\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\.test\(p\) \? formatDateOnly\(p\)/.test(feed), true);
+}
+
+console.log('\n— the header, and its alignment with the others —');
+{
+  const notes = readFileSync('components/QuickNotesSection.tsx', 'utf8');
+  const targets = readFileSync('components/DashboardTargetsSection.tsx', 'utf8');
+
+  // Every dashboard header leads with the SAME 20px icon and the same gap, so
+  // the first letters share a left edge down a phone. Targets used to wrap its
+  // icon in a 32px circle and sat 12px further right.
+  // The class list ends in a quote before >Feed<, which [^"]* cannot cross —
+  // the first version of this failed on its own regex, not on the markup.
+  eq('the feed heading matches the others\' type',
+    /text-lg font-semibold text-brand-primary font-serif[\s\S]{0,80}>Feed</.test(feed), true);
+  eq('  which is what Floor Notes uses',
+    notes.includes('text-lg font-semibold text-brand-primary font-serif'), true);
+  eq('  and Targets', targets.includes('text-lg font-semibold text-brand-primary font-serif'), true);
+
+  eq('the feed leads with a w-5 icon', /className=\{`w-5 h-5 flex-shrink-0 transition-colors/.test(feed), true);
+  eq('  and Targets no longer wraps its icon in a circle',
+    /w-8 h-8 rounded-full bg-red-100/.test(targets), false);
+  eq('  its icon being w-5 too', /className="w-5 h-5 text-red-500 flex-shrink-0"/.test(targets), true);
+  eq('  with its label in an element of its own, like the other two',
+    targets.includes('<span>Targets</span>'), true);
+
+  // The live dot is gone, but the signal it carried is not: the icon turns
+  // green while a conference is running.
+  eq('no separate live dot', /animate-ping[\s\S]{0,200}bg-gray-300/.test(feed), false);
+  eq('  the icon carries that state instead',
+    /shouldPoll \? 'text-green-500' : 'text-brand-secondary'/.test(feed), true);
+}
+
+console.log('\n— the feed folds on a phone, like every other section —');
+{
+  eq('it uses the shared collapse hook', feed.includes("from '@/lib/useMobileCollapse'"), true);
+  eq('  with a chevron that hides on desktop', /rotate-180[\s\S]{0,120}lg:hidden|lg:hidden[\s\S]{0,120}rotate-180/.test(feed), true);
+  // Everything below the title belongs to the body and folds with it —
+  // otherwise a collapsed card still shows a scope toggle and a filter rail.
+  eq('the chip rail folds away', /\{showBody && <ChipRail/.test(feed), true);
+  eq('  as does the stream', /\{showBody && \(\s*<div className="mt-3 flex-1/.test(feed), true);
+  eq('  and the scope toggle and refresh', (feed.match(/\{showBody && \(/g) ?? []).length >= 3, true);
+
+  // The wrapper must not force a height on a phone, or the card cannot fold —
+  // exactly the bug Floor Notes had.
+  eq('the page gives the feed no mobile height', /lg:col-start-3 h-\[600px\]/.test(page), false);
+  // The cap is on the CARD, because the stream is a flex child that needs a
+  // bounded parent to scroll against.
+  eq('  and caps the card instead, so the stream still scrolls',
+    /max-h-\[70vh\] lg:max-h-none lg:h-full/.test(page), true);
 }
 
 console.log('\n— the dashboard grid —');

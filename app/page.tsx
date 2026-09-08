@@ -356,8 +356,13 @@ export default function DashboardPage() {
             sizes to its content would drive the row height, and a feed of forty
             items would stretch the grid to 1500px instead of scrolling inside
             the space the other two cards define. */}
-        <div className="lg:row-span-2 lg:row-start-1 lg:col-start-3 h-[600px] lg:h-auto lg:relative">
-          <DashboardFeed className="h-full lg:absolute lg:inset-0" />
+        {/* No height on a phone, so the card can fold to its header like the
+            two above it. The cap lives on the CARD rather than this wrapper,
+            because the stream inside is a flex child that needs a bounded
+            parent to scroll against — a max-height on an auto-height wrapper
+            would not give it one. */}
+        <div className="lg:row-span-2 lg:row-start-1 lg:col-start-3 lg:h-auto lg:relative">
+          <DashboardFeed className="max-h-[70vh] lg:max-h-none lg:h-full lg:absolute lg:inset-0" />
         </div>
       </div>
     </div>
