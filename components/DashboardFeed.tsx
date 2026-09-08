@@ -159,6 +159,7 @@ function actionPrefix(item: FeedItem): string {
     case 'note_pinned': return 'Pinned a note on';
     case 'vendor_relationship': return 'Logged';
     case 'attendee_added': return 'Added';
+    case 'attendee_list_uploaded': return 'Uploaded';
     case 'social_event_created': return 'Created';
     case 'rsvp': return 'RSVP from';
   }
@@ -172,6 +173,11 @@ function actionSuffix(item: FeedItem): string | null {
     return item.detail1 ? `as a ${item.detail1} vendor of ${item.detail2}` : `as a vendor of ${item.detail2}`;
   }
   if (item.kind === 'attendee_added' && item.conference) return 'to the attendee list';
+  if (item.kind === 'attendee_list_uploaded') {
+    // The subject is a count, so the sentence has to supply its noun. Singular
+    // matters: "Uploaded 1 attendees" is the kind of thing people notice.
+    return Number(item.subject) === 1 ? 'attendee to the list' : 'attendees to the list';
+  }
   if (item.kind === 'rsvp' && item.detail1) return `for ${item.detail1}`;
   return null;
 }

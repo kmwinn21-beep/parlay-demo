@@ -100,8 +100,14 @@ await db.execute(`INSERT INTO pinned_notes (id, note_id, entity_type, entity_id,
 await db.execute(`INSERT INTO vendor_relationships (id, company_id, related_company_id, rep_id,
     vendor_type, relationship_status, created_at)
   VALUES (1, 1, 2, 900, 'SaaS', 'Active pilot', '${ts(6 * HOUR)}')`);
-await db.execute(`INSERT INTO conference_attendees (conference_id, attendee_id, created_at, created_by)
-  VALUES (${RUNNING}, 1, '${ts(7 * HOUR)}', 'Brianna Tate')`);
+await db.execute(`INSERT INTO conference_attendees (conference_id, attendee_id, created_at, created_by, source)
+  VALUES (${RUNNING}, 1, '${ts(7 * HOUR)}', 'Brianna Tate', 'manual')`);
+// The first list upload for the running conference — one job row, which is the
+// whole point: the app already recorded this and the feed reports it once.
+await db.execute(`INSERT INTO upload_jobs (id, conference_id, conference_name, status,
+    total_rows, new_count, created_by_email, created_at, completed_at)
+  VALUES ('job-1', ${RUNNING}, 'ALIS FWD', 'done', 530, 530, 'Kevin Winn',
+    '${ts(10 * DAY)}', '${ts(10 * DAY)}')`);
 await db.execute(`INSERT INTO social_events (id, conference_id, entered_by, event_name, event_type,
     venue_name, event_date, invite_only, created_at)
   VALUES (1, ${RUNNING}, 'Kevin Winn', 'Teton VBC Dinner', 'Dinner', 'The Bellagio', '2026-06-16', 'Yes', '${ts(8 * HOUR)}')`);
@@ -141,7 +147,7 @@ console.log('\n— every kind appears —');
   // And the conference scopes carry the other eight, so dropping the vendor
   // branch from them did not quietly drop anything else.
   const active = new Set(kindsOf(await feed('active')));
-  eq('  eight of them under Active, all but the one with no conference',
+  eq('  all but the one with no conference under Active',
     FEED_KINDS.filter(k => !active.has(k)), ['vendor_relationship']);
 }
 
@@ -385,9 +391,9 @@ console.log('\n— the chip filter —');
     FEED_KINDS.filter(k => matchesFilter(k, 'meetings')), ['meeting_held', 'meeting_scheduled']);
   eq('notes matches both note kinds',
     FEED_KINDS.filter(k => matchesFilter(k, 'notes')), ['note', 'note_pinned']);
-  eq('people matches the three people kinds',
+  eq('people matches the four people kinds',
     FEED_KINDS.filter(k => matchesFilter(k, 'people')),
-    ['attendee_added', 'social_event_created', 'rsvp']);
+    ['attendee_added', 'attendee_list_uploaded', 'social_event_created', 'rsvp']);
   eq('every kind is reachable by exactly one chip',
     FEED_KINDS.every(k => ['meetings', 'touchpoints', 'notes', 'relationships', 'people']
       .filter(f => matchesFilter(k, f)).length === 1), true);
@@ -659,6 +665,85 @@ console.log('\n— a user is named by their rep profile —');
     VALUES (71, 'attendee', 1, 'By someone with no rep profile.', ${RUNNING}, 12, 'Robyn Yerger', '${ts(32 * HOUR)}')`);
   const item = (await feed('active')).items.find(i => i.occurredAt === ts(32 * HOUR));
   eq('display_name is the fallback when there is no rep profile', item.actor.name, 'No Profile');
+}
+
+console.log('\n— a list upload is one event, not five hundred —');
+{
+  // 530 rows arriving from one file used to produce 530 "Added X to the
+  // attendee list" cards. The upload is the thing that happened.
+  const bulk = Array.from({ length: 12 }, (_, i) => 200 + i);
+  for (const id of bulk) {
+    await db.execute(`INSERT INTO attendees (id, first_name, last_name, company_id, created_at)
+      VALUES (${id}, 'Bulk', 'Person${id}', 1, '${ts(10 * DAY)}')`);
+    await db.execute(`INSERT INTO conference_attendees (conference_id, attendee_id, created_at, source)
+      VALUES (${RUNNING}, ${id}, '${ts(10 * DAY)}', 'initial_upload')`);
+  }
+
+  const items = (await feed('active')).items;
+  eq('none of the bulk rows becomes its own card',
+    items.filter(i => i.kind === 'attendee_added' && i.subject.startsWith('Bulk ')).length, 0);
+  const upload = items.find(i => i.kind === 'attendee_list_uploaded');
+  eq('one upload card stands for all of them', upload != null, true);
+  eq('  carrying the count as its subject', upload.subject, '530');
+  eq('  attributed to whoever ran it', upload.actor.name, 'Kevin Winn');
+  eq('  and pointing at the conference', [upload.conference.name, upload.href], ['ALIS FWD', '/conferences/1']);
+  eq('  with exactly one of them, not one per row',
+    items.filter(i => i.kind === 'attendee_list_uploaded').length, 1);
+}
+
+console.log('\n— a person added by hand still gets a card —');
+{
+  // The manual row seeded at the top. This is the half that must survive:
+  // suppressing the bulk must not suppress the individual adds.
+  const items = (await feed('active')).items;
+  eq('a manual add is reported individually',
+    items.some(i => i.kind === 'attendee_added' && i.subject === 'Robyn Yerger'), true);
+}
+
+console.log('\n— a LATER upload reports its new people individually —');
+{
+  // A conference that already had a list did not have "a list uploaded"; it
+  // gained some people, and who joined late is worth seeing person by person.
+  await db.execute(`INSERT INTO upload_jobs (id, conference_id, conference_name, status,
+      total_rows, new_count, created_by_email, created_at, completed_at)
+    VALUES ('job-2', ${RUNNING}, 'ALIS FWD', 'done', 3, 3, 'Kevin Winn',
+      '${ts(4 * DAY)}', '${ts(4 * DAY)}')`);
+  for (const id of [300, 301, 302]) {
+    await db.execute(`INSERT INTO attendees (id, first_name, last_name, company_id, created_at)
+      VALUES (${id}, 'Late', 'Arrival${id}', 1, '${ts(4 * DAY)}')`);
+    await db.execute(`INSERT INTO conference_attendees (conference_id, attendee_id, created_at, source)
+      VALUES (${RUNNING}, ${id}, '${ts(4 * DAY)}', 'upload')`);
+  }
+
+  const items = (await feed('active')).items;
+  eq('each new person from the second file gets a card',
+    items.filter(i => i.kind === 'attendee_added' && i.subject.startsWith('Late ')).length, 3);
+  // Only the FIRST upload is "the list was uploaded".
+  eq('  and the second upload adds no second upload card',
+    items.filter(i => i.kind === 'attendee_list_uploaded').length, 1);
+  eq('  which is still the first one', items.find(i => i.kind === 'attendee_list_uploaded').subject, '530');
+}
+
+console.log('\n— an upload that did not finish is not an event —');
+{
+  await db.execute(`INSERT INTO upload_jobs (id, conference_id, conference_name, status,
+      total_rows, created_by_email, created_at)
+    VALUES ('job-3', ${FUTURE}, 'Next Year', 'error', 100, 'Kevin Winn', '${ts(3 * DAY)}')`);
+  const upcoming = await feed('upcoming');
+  eq('a failed job alone produces no card',
+    upcoming.items.filter(i => i.kind === 'attendee_list_uploaded').length, 0);
+}
+{
+  // The case that makes the status filter load-bearing: a failed attempt FIRST,
+  // then a successful one. "The first upload" has to mean the first that
+  // worked, or a conference whose first try errored would never report a list.
+  await db.execute(`INSERT INTO upload_jobs (id, conference_id, conference_name, status,
+      total_rows, new_count, created_by_email, created_at, completed_at)
+    VALUES ('job-4', ${FUTURE}, 'Next Year', 'done', 44, 44, 'Kevin Winn',
+      '${ts(2 * DAY)}', '${ts(2 * DAY)}')`);
+  const cards = (await feed('upcoming')).items.filter(i => i.kind === 'attendee_list_uploaded');
+  eq('the retry after a failure is the upload that counts', cards.length, 1);
+  eq('  reporting its own count, not the failed attempt\'s', cards[0].subject, '44');
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

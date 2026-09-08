@@ -5,7 +5,7 @@
  * module that talks to a database.
  */
 
-/** The nine things the feed reports. */
+/** The ten things the feed reports. */
 export const FEED_KINDS = [
   'meeting_held',
   'meeting_scheduled',
@@ -14,6 +14,7 @@ export const FEED_KINDS = [
   'note_pinned',
   'vendor_relationship',
   'attendee_added',
+  'attendee_list_uploaded',
   'social_event_created',
   'rsvp',
 ] as const;
@@ -21,7 +22,7 @@ export const FEED_KINDS = [
 export type FeedKind = typeof FEED_KINDS[number];
 
 /**
- * Five colours, not nine.
+ * Five colours, not ten.
  *
  * The colour answers "what sort of thing is this" at a glance while scrolling;
  * nine would be a legend nobody reads. Pinning is deliberately absent — it is an
@@ -38,6 +39,7 @@ export const COLOUR_BY_KIND: Record<FeedKind, FeedColour> = {
   note_pinned: 'notes',
   vendor_relationship: 'relationships',
   attendee_added: 'people',
+  attendee_list_uploaded: 'people',
   social_event_created: 'people',
   rsvp: 'people',
 };

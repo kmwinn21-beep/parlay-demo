@@ -1100,10 +1100,22 @@ export async function POST(
 
     if (bgJobId) await db.execute({ sql: 'UPDATE upload_jobs SET processed_rows=? WHERE id=?', args: [Math.round(valid.length * 0.7), bgJobId] }).catch(() => {});
 
+    // Whether this conference had a list at all before this file. It decides
+    // how the activity feed reports the upload: the first list is ONE event —
+    // "the list was uploaded" — while a later file adding new people is one
+    // event per person, because who turned up late is worth seeing.
+    //
+    // Counted before the inserts below, obviously, and only once for the batch.
+    const priorLinks = await db.execute({
+      sql: 'SELECT COUNT(*) AS n FROM conference_attendees WHERE conference_id = ?',
+      args: [conferenceId],
+    }).catch(() => ({ rows: [{ n: 0 }] }));
+    const attendeeSource = Number(priorLinks.rows[0]?.n ?? 0) === 0 ? 'initial_upload' : 'upload';
+
     // Batch-insert conference_attendees
     await batchInsert(db, attendeeIdsToLink, (aid) => ({
-      sql: `INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id, created_at) VALUES (?, ?, datetime('now'))`,
-      args: [conferenceId, aid],
+      sql: `INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id, created_at, source) VALUES (?, ?, datetime('now'), ?)`,
+      args: [conferenceId, aid, attendeeSource],
     }));
     // Real attendees just landed — clear any company-only stand-ins they make
     // redundant. Runs once for the whole batch, after the links are written.

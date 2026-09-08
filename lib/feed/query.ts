@@ -323,6 +323,12 @@ function buildBranches(opts: {
   // ── People ─────────────────────────────────────────────────────────────────
   // Added to a conference, not created in the database: the same person joining
   // a second show is a second event, which is what a conference feed wants.
+  // One card per person — but NOT for the bulk that first populated an empty
+  // list. Five hundred rows arriving from one file is one event reported five
+  // hundred times; the upload branch below reports it once. A LATER upload is a
+  // different matter: its new rows carry source 'upload' and appear here
+  // individually, because who joined a list that already existed is worth
+  // seeing person by person.
   branches.push({
     kind: 'attendee_added',
     sql: `SELECT 'attendee_added' AS kind, ca.created_at AS occurred_at,
@@ -338,7 +344,41 @@ function buildBranches(opts: {
           JOIN attendees a ON a.id = ca.attendee_id
           LEFT JOIN companies co ON co.id = a.company_id
           WHERE ${window('ca.created_at')}
+            AND COALESCE(ca.source, '') != 'initial_upload'
             ${scoped ? `AND ca.conference_id IN (${inConf})` : ''}`,
+    args: [...windowArgs(), ...(scoped ? conferenceIds : [])],
+  });
+
+  // The list upload itself, from upload_jobs — a record the app already kept,
+  // one row per file, with the counts and who ran it.
+  //
+  // Only the FIRST completed upload for a conference. A conference that already
+  // had a list and received another file did not have "a list uploaded"; it
+  // gained some people, and those are the attendee_added cards above.
+  branches.push({
+    kind: 'attendee_list_uploaded',
+    sql: `SELECT 'attendee_list_uploaded' AS kind, COALESCE(uj.completed_at, uj.created_at) AS occurred_at,
+                 CASE WHEN COALESCE(TRIM(uj.created_by_email), '') != '' THEN 'text'
+                      ELSE 'system' END AS actor_source,
+                 uj.created_by_email AS actor_id,
+                 uj.conference_id AS conference_id, NULL AS conference_name,
+                 -- The COUNT is the subject, not the conference name: the
+                 -- conference is already on the card as its pill, and a line
+                 -- reading "the attendee list for ConfExpo" beside a ConfExpo
+                 -- pill says the same thing twice.
+                 CAST(COALESCE(NULLIF(uj.new_count, 0), uj.total_rows, 0) AS TEXT) AS subject,
+                 NULL AS detail1,
+                 NULL AS detail2,
+                 NULL AS pill1, NULL AS pill2,
+                 NULL AS body, 'conference' AS entity_kind, uj.conference_id AS entity_id, 0 AS pinned
+          FROM upload_jobs uj
+          WHERE ${window("COALESCE(uj.completed_at, uj.created_at)")}
+            AND uj.status = 'done'
+            AND uj.id = (
+              SELECT u2.id FROM upload_jobs u2
+              WHERE u2.conference_id = uj.conference_id AND u2.status = 'done'
+              ORDER BY u2.created_at ASC LIMIT 1)
+            ${scoped ? `AND uj.conference_id IN (${inConf})` : ''}`,
     args: [...windowArgs(), ...(scoped ? conferenceIds : [])],
   });
 
