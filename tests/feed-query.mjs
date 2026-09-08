@@ -130,12 +130,19 @@ console.log('\n— the in-progress set —');
 
 console.log('\n— every kind appears —');
 {
-  const r = await feed('active');
+  // Asserted against ALL, which is the only scope every kind can reach: a
+  // vendor relationship has no conference, so it belongs to no conference
+  // scope. A union arm reading the wrong column returns nothing and the query
+  // still works, which is what this catches.
+  const r = await feed('all');
   const seen = new Set(kindsOf(r));
-  const missing = FEED_KINDS.filter(k => !seen.has(k));
-  // A union arm reading the wrong column returns nothing and the query still
-  // works. This is the assertion that catches it.
-  eq('all nine kinds are returned', missing, []);
+  eq('all nine kinds are returned', FEED_KINDS.filter(k => !seen.has(k)), []);
+
+  // And the conference scopes carry the other eight, so dropping the vendor
+  // branch from them did not quietly drop anything else.
+  const active = new Set(kindsOf(await feed('active')));
+  eq('  eight of them under Active, all but the one with no conference',
+    FEED_KINDS.filter(k => !active.has(k)), ['vendor_relationship']);
 }
 
 console.log('\n— newest first —');
@@ -150,7 +157,7 @@ console.log('\n— newest first —');
 
 console.log('\n— each kind gets the right colour and shape —');
 {
-  const r = await feed('active');
+  const r = await feed('all');
   const byKind = Object.fromEntries(r.items.map(i => [i.kind, i]));
 
   eq('meetings are blue', [byKind.meeting_held.colour, byKind.meeting_scheduled.colour],
@@ -172,7 +179,7 @@ console.log('\n— each kind gets the right colour and shape —');
 
 console.log('\n— a note card shows its text, and only a note card —');
 {
-  const r = await feed('active');
+  const r = await feed('all');
   const byKind = Object.fromEntries(r.items.map(i => [i.kind, i]));
   // A note card that does not show its text is a card saying a note exists.
   eq('the note carries its body', byKind.note.body, 'They want a pilot in two communities first.');
@@ -185,7 +192,7 @@ console.log('\n— a note card shows its text, and only a note card —');
 
 console.log('\n— the conference pill —');
 {
-  const r = await feed('active');
+  const r = await feed('all');
   const byKind = Object.fromEntries(r.items.map(i => [i.kind, i]));
   eq('an id-backed pill is named and linkable',
     [byKind.meeting_held.conference.id, byKind.meeting_held.conference.name], [RUNNING, 'ALIS FWD']);
@@ -200,7 +207,7 @@ console.log('\n— the conference pill —');
 
 console.log('\n— the actor —');
 {
-  const r = await feed('active');
+  const r = await feed('all');
   const byKind = Object.fromEntries(r.items.map(i => [i.kind, i]));
   eq('a config_options id resolves', byKind.meeting_held.actor.name, 'Kevin Winn');
   eq('a users.id resolves', byKind.note.actor.name, 'Sarah Chen');
@@ -273,21 +280,41 @@ console.log('\n— in progress vs all —');
   eq('  with no id, so it is not a link', orphan.conference.id, null);
 }
 {
-  // The vendor-relationship join: no conference column, included under
-  // in_progress because one of its companies has an attendee at a running show.
-  const scoped = await feed('active');
-  eq('a vendor relationship reaches in progress via its companies\' attendees',
-    scoped.items.some(i => i.kind === 'vendor_relationship'), true);
-
+  // A vendor relationship has no conference column, so under the one rule every
+  // branch follows it belongs to neither conference scope. An earlier version
+  // reached it into `active` through "either company has an attendee at a
+  // running show", and that exception was the leak: relationships logged
+  // against no conference surfaced under Active.
   await db.execute(`INSERT INTO companies (id, name) VALUES (3, 'Unrelated Co'), (4, 'Also Unrelated')`);
   await db.execute(`INSERT INTO vendor_relationships (id, company_id, related_company_id, rep_id, created_at)
     VALUES (2, 3, 4, 900, '${ts(13 * HOUR)}')`);
-  const after = await feed('active');
-  eq('  and one whose companies are at no running show is excluded',
-    after.items.filter(i => i.kind === 'vendor_relationship' && i.subject === 'Also Unrelated').length, 0);
+
+  const active = await feed('active');
+  eq('no vendor relationship appears under Active',
+    active.items.filter(i => i.kind === 'vendor_relationship'), []);
+  const upcoming = await feed('upcoming');
+  eq('  nor under Upcoming',
+    upcoming.items.filter(i => i.kind === 'vendor_relationship'), []);
+
   const all = await feed('all');
-  eq('  while all still shows it',
-    all.items.some(i => i.kind === 'vendor_relationship' && i.subject === 'Also Unrelated'), true);
+  // Both of them — the one whose companies ARE at the running show, and the one
+  // whose are not. Neither has a conference, so neither is special.
+  eq('All shows them, whatever their companies are doing',
+    all.items.filter(i => i.kind === 'vendor_relationship').length, 2);
+}
+{
+  // The rule, stated as an invariant rather than case by case: nothing in a
+  // conference scope may lack a conference, and every conference it names must
+  // be at that scope's stage.
+  for (const [scope, stage] of [['active', 'in_progress'], ['upcoming', 'planning']]) {
+    const r = await feed(scope);
+    const { conferencesAtStage } = await import('@/lib/feed/query');
+    const allowed = (await conferencesAtStage(db, NOW, stage)).map(c => c.id);
+    const orphans = r.items.filter(i => i.conference?.id == null);
+    eq(`${scope}: every item has a conference`, orphans.map(i => i.kind), []);
+    const strays = r.items.filter(i => !allowed.includes(i.conference.id));
+    eq(`  and every one is at the ${stage} stage`, strays.map(i => i.kind), []);
+  }
 }
 
 console.log('\n— nothing running —');
@@ -397,11 +424,15 @@ console.log('\n— RSVPs —');
 
 console.log('\n— cards link to the record —');
 {
-  const r = await feed('active');
+  const r = await feed('all');
   const byKind = Object.fromEntries(r.items.map(i => [i.kind, i]));
   eq('a meeting opens the attendee', byKind.meeting_held.href, '/attendees/1');
   eq('a touchpoint opens the attendee', byKind.touchpoint.href, '/attendees/1');
-  eq('a vendor relationship opens the company', byKind.vendor_relationship.href, '/companies/1');
+  // Named explicitly. byKind keeps the LAST item of each kind and there are now
+  // two vendor relationships, so a bare lookup was asserting against whichever
+  // happened to sort last rather than the one this line describes.
+  const inspiren = r.items.find(i => i.kind === 'vendor_relationship' && i.subject === 'Inspiren');
+  eq('a vendor relationship opens the company it is a vendor OF', inspiren.href, '/companies/1');
   eq('a social event opens its conference', byKind.social_event_created.href, '/conferences/1');
   eq('nothing has an empty href string', r.items.filter(i => i.href === '').length, 0);
 }
