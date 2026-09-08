@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { LocationAutocompleteInput } from './LocationAutocompleteInput';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -15,6 +16,10 @@ import { CardActionMenu, CardField, CardGuestListButton, CardNotesButton, Social
 import { ConferenceDatePicker } from './ConferenceDatePicker';
 import { SocialEventNotesDrawer } from './SocialEventNotesDrawer';
 import { AttendeeInitialsAvatar } from './AttendeePhoto';
+import {
+  EMPTY_RANK, RANK_VALUES, rankBadgeClass, sortByRank,
+  type GuestRank,
+} from '@/lib/guestRank';
 
 type RsvpStatus = 'yes' | 'no' | 'maybe' | 'attended';
 
@@ -34,8 +39,16 @@ export interface SocialEvent {
   invite_only: string;
   prospect_attendees: string | null;
   notes: string | null;
+  /** Optional cap on how many guests can attend. Null means no limit. */
+  guest_limit?: number | null;
   created_at: string;
-  rsvps: Array<{ attendee_id: number; rsvp_status: string }>;
+  rsvps: Array<{
+    attendee_id: number;
+    rsvp_status: string;
+    /** 1 (highest) to 25 (lowest), or null when unranked. See lib/guestRank.ts. */
+    rep_rank?: number | null;
+    team_rank?: number | null;
+  }>;
 }
 
 const COMPETITOR_TYPE_DEFS: Record<string, string> = {
@@ -294,7 +307,145 @@ function RSVPSummaryBar({ invitedIds, rsvpMap, selectedTypes, icpCompanyTypes, a
 }
 
 /* ─── Individual attendee card with RSVP picker ─── */
-function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMaps, companies, userOptionsFull }: {
+/* ─── Guest ranking ─── */
+
+/**
+ * One inline-editable rank, shown as a circular colour-coded badge.
+ *
+ * Unranked renders as a dashed `+ Rank` pill rather than an empty circle: an
+ * empty circle reads as a rank of nothing-in-particular, where a dashed outline
+ * reads as a thing to fill in.
+ *
+ * The eyebrow header sits above the badge so the two fields are legible side by
+ * side without a tooltip — "3" next to "7" says nothing on its own.
+ */
+function RankField({ label, value, onChange, disabled }: {
+  label: string;
+  value: number | null;
+  onChange: (next: number | null) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * The menu is rendered into document.body, not next to the button.
+   *
+   * These badges sit inside a card with `overflow-hidden` (for its rounded
+   * corners), inside a drawer that scrolls. An absolutely positioned menu is
+   * clipped by the first of those and scrolls away with the second — the first
+   * version of this was sliced in half by the card border. A portal escapes
+   * every ancestor's overflow, at the cost of positioning it by hand.
+   */
+  const place = useCallback(() => {
+    const rect = btnRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const MENU_H = 190;
+    // Above the badge when there is room, below when there is not — near the
+    // bottom of a drawer there rarely is room below.
+    const above = rect.top > MENU_H + 8;
+    setMenuPos({
+      top: above ? rect.top - MENU_H - 6 : rect.bottom + 6,
+      right: Math.max(8, window.innerWidth - rect.right),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    place();
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (ref.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    // Closed rather than repositioned on scroll: a menu that follows its badge
+    // up the screen while the list moves underneath is harder to hit, not easier.
+    const onScroll = () => setOpen(false);
+    document.addEventListener('mousedown', onDown);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [open, place]);
+
+  const choose = (next: number | null) => { setOpen(false); if (next !== value) onChange(next); };
+
+  return (
+    // items-end, not items-center: the eyebrow is wider than the badge, so a
+    // centred badge floats away from the right edge of its own column and the
+    // pair reads as inset from the card even when the labels are flush.
+    <div className="flex flex-col items-end gap-0.5 flex-shrink-0" ref={ref}>
+      <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide leading-none whitespace-nowrap">{label}</span>
+      <div className="relative">
+        <button
+          ref={btnRef}
+          type="button"
+          disabled={disabled}
+          title={`${label}${value != null ? `: ${value}` : ' — not set'}`}
+          onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
+          className={
+            value == null
+              ? 'px-2 h-6 rounded-full border border-dashed border-gray-300 text-[10px] font-medium text-gray-400 hover:border-gray-400 hover:text-gray-600 transition-colors whitespace-nowrap'
+              : `w-6 h-6 rounded-full text-[11px] font-bold flex items-center justify-center transition-colors ${rankBadgeClass(value)}`
+          }
+        >
+          {value == null ? '+ Rank' : value}
+        </button>
+
+        {open && menuPos && createPortal(
+          <div
+            ref={menuRef}
+            onClick={e => e.stopPropagation()}
+            style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}
+            className="z-[200] w-[150px] rounded-lg border border-gray-200 bg-white shadow-xl p-1"
+          >
+            <button
+              type="button"
+              onClick={() => choose(null)}
+              className="w-full text-left px-2 py-1 rounded text-[11px] text-gray-500 hover:bg-gray-100"
+            >
+              — None —
+            </button>
+            <div className="grid grid-cols-5 gap-0.5 p-0.5">
+              {RANK_VALUES.map(n => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => choose(n)}
+                  className={`h-6 rounded-full text-[11px] font-bold flex items-center justify-center transition-colors ${rankBadgeClass(n)} ${n === value ? 'ring-2 ring-brand-secondary' : 'hover:opacity-80'}`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>,
+          document.body,
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The Rep and Team pair, as they appear at the right of a guest's pill row. */
+function RankFields({ rank, onChange }: {
+  rank: GuestRank;
+  onChange: (next: GuestRank) => void;
+}) {
+  return (
+    <div className="flex items-end gap-3 flex-shrink-0 ml-auto">
+      <RankField label="Rep Rank" value={rank.repRank} onChange={v => onChange({ ...rank, repRank: v })} />
+      <RankField label="Team Rank" value={rank.teamRank} onChange={v => onChange({ ...rank, teamRank: v })} />
+    </div>
+  );
+}
+
+function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMaps, companies, userOptionsFull, rank, onRankChange }: {
   attendee: Attendee;
   statuses: RsvpStatus[];
   onToggleRsvp: (s: RsvpStatus) => void;
@@ -302,6 +453,8 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMap
   colorMaps: Record<string, Record<string, string | null>>;
   companies: CompanyOption[];
   userOptionsFull: Array<{ id: number; value: string }>;
+  rank: GuestRank;
+  onRankChange: (next: GuestRank) => void;
 }) {
   const [open, setOpen] = useState(false);
   const company = companies.find(c => c.id === attendee.company_id);
@@ -333,14 +486,6 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMap
                 ? <a href={`/companies/${attendee.company_id}`} onClick={e => e.stopPropagation()} className="text-xs text-brand-primary hover:underline mt-0.5 block">{attendee.company_name}</a>
                 : <p className="text-xs text-gray-600 mt-0.5">{attendee.company_name}</p>
             )}
-            <div className="flex flex-wrap items-center gap-1 mt-1.5">
-              {attendee.company_type && (
-                attendee.company_type === 'Competitor'
-                  ? <CompetitorBadgeSE type={attendee.company_type} competitorType={attendee.company_competitor_type} badgeClass={getBadgeClass(attendee.company_type, colorMaps.company_type || {})} />
-                  : <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-[10px]`}>{attendee.company_type}</span>
-              )}
-              <AssignedUserPill assignedUser={company?.assigned_user} userOptionsFull={userOptionsFull} />
-            </div>
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <RSVPIcon statuses={statuses} />
@@ -356,6 +501,23 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMap
                 </svg>
               </button>
             )}
+          </div>
+        </div>
+
+        {/* Pill row, spanning the whole card rather than the name column, so the
+            ranks land against its right edge. Indented past the avatar (w-9 plus
+            the gap) to line up under the name above. */}
+        <div className="flex items-end gap-2 mt-1.5 pl-11">
+          <div className="flex flex-wrap items-center gap-1 min-w-0">
+            {attendee.company_type && (
+              attendee.company_type === 'Competitor'
+                ? <CompetitorBadgeSE type={attendee.company_type} competitorType={attendee.company_competitor_type} badgeClass={getBadgeClass(attendee.company_type, colorMaps.company_type || {})} />
+                : <span className={`${getBadgeClass(attendee.company_type, colorMaps.company_type || {})} text-[10px]`}>{attendee.company_type}</span>
+            )}
+            <AssignedUserPill assignedUser={company?.assigned_user} userOptionsFull={userOptionsFull} />
+          </div>
+          <div onClick={e => e.stopPropagation()} className="ml-auto">
+            <RankFields rank={rank} onChange={onRankChange} />
           </div>
         </div>
       </div>
@@ -385,7 +547,7 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMap
 }
 
 /* ─── Guest list: bottom sheet on a phone, a 500px right drawer on desktop ─── */
-function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, onClose, colorMaps, companies, userOptionsFull, icpCompanyTypes, allAttendees, onSaveGuestList }: {
+function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, onClose, colorMaps, companies, userOptionsFull, icpCompanyTypes, allAttendees, onSaveGuestList, rankOf, onRankChange }: {
   event: SocialEvent;
   invitedAttendees: Attendee[];
   rsvpMap: Record<number, RsvpStatus[]>;
@@ -399,6 +561,13 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
   /** Everyone at the conference — the pool the guest list picker draws from. */
   allAttendees: Attendee[];
   onSaveGuestList: (ids: number[]) => void;
+  /**
+   * Ranks come from the parent rather than being fetched here, because the
+   * Build Guest List modal below renders the same numbers and both have to
+   * change together. One source of truth, one place that writes.
+   */
+  rankOf: (attendeeId: number) => GuestRank;
+  onRankChange: (attendeeId: number, next: GuestRank) => void;
 }) {
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
   const toggleType = (t: string) => setSelectedTypes(prev => {
@@ -413,10 +582,13 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
     setActiveFilters(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
   };
   const byPrimaryType = selectedTypes.size > 0 ? invitedAttendees.filter(a => a.company_type != null && selectedTypes.has(a.company_type)) : invitedAttendees;
-  const visible = activeFilters.length === 0 ? byPrimaryType : byPrimaryType.filter(a => {
+  const filtered = activeFilters.length === 0 ? byPrimaryType : byPrimaryType.filter(a => {
     const s = rsvpMap[a.id] || [];
     return activeFilters.some(f => s.includes(f));
   });
+  // Team rank, then rep rank, then last name — see lib/guestRank.ts. Applied
+  // after filtering so the order of what is shown is always the full order.
+  const visible = sortByRank(filtered, a => rankOf(a.id));
   const buildGuestListBtn = (
     <button
       type="button"
@@ -424,7 +596,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-brand-primary hover:bg-gray-200 transition-colors flex-shrink-0"
     >
       <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-      Guest List
+      Add/Edit
     </button>
   );
   return (
@@ -451,7 +623,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
           {visible.length === 0
             ? <p className="text-sm text-gray-400 text-center py-8">No attendees to show.</p>
             : visible.map(att => (
-              <AttendeeRSVPCard key={att.id} attendee={att} statuses={rsvpMap[att.id] || []} onToggleRsvp={s => onToggleRsvp(att.id, s)} onRemove={() => onRemoveGuest(att.id)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} />
+              <AttendeeRSVPCard key={att.id} attendee={att} statuses={rsvpMap[att.id] || []} onToggleRsvp={s => onToggleRsvp(att.id, s)} onRemove={() => onRemoveGuest(att.id)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} rank={rankOf(att.id)} onRankChange={next => onRankChange(att.id, next)} />
             ))}
         </div>
       </div>
@@ -463,6 +635,8 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
           onConfirm={ids => onSaveGuestList(ids.map(Number).filter(n => !isNaN(n)))}
           onClose={() => setEditingGuests(false)}
           icpCompanyTypes={icpCompanyTypes}
+          rankOf={rankOf}
+          onRankChange={onRankChange}
         />
         </div>
       )}
@@ -471,12 +645,19 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
 }
 
 /* ─── Build Guest List modal ─── */
-function GuestListModal({ attendees, selected, onConfirm, onClose, icpCompanyTypes }: {
+function GuestListModal({ attendees, selected, onConfirm, onClose, icpCompanyTypes, rankOf, onRankChange }: {
   attendees: Attendee[];
   selected: string[];
   onConfirm: (ids: string[]) => void;
   onClose: () => void;
   icpCompanyTypes: string[];
+  /**
+   * Optional: the modal is also opened from the Add Social Event form, where
+   * the event does not exist yet and there is nothing to rank against. Without
+   * these the rank column simply is not rendered.
+   */
+  rankOf?: (attendeeId: number) => GuestRank;
+  onRankChange?: (attendeeId: number, next: GuestRank) => void;
 }) {
   const [draft, setDraft] = useState<string[]>(selected);
   const [search, setSearch] = useState('');
@@ -491,13 +672,24 @@ function GuestListModal({ attendees, selected, onConfirm, onClose, icpCompanyTyp
   });
 
   const q = search.toLowerCase().trim();
-  const visible = q
+  const matching = q
     ? sorted.filter(a =>
         `${a.first_name} ${a.last_name}`.toLowerCase().includes(q) ||
         (a.company_name || '').toLowerCase().includes(q) ||
         (a.title || '').toLowerCase().includes(q)
       )
     : sorted;
+
+  // Selected guests float to the top, in the same order the drawer shows them.
+  // Below them the pool keeps its own ICP-first ordering, because that is what
+  // makes somebody findable when they are not on the list yet. The split
+  // re-computes as boxes are ticked, so a guest joins the top block on the
+  // click that selects them.
+  const isSelected = (a: Attendee) => draft.includes(String(a.id));
+  const chosen = sortByRank(matching.filter(isSelected), a => (rankOf ? rankOf(a.id) : EMPTY_RANK));
+  const rest = matching.filter(a => !isSelected(a));
+  const visible = [...chosen, ...rest];
+  const firstUnselectedId = rest[0]?.id ?? null;
 
   const toggle = (id: string) =>
     setDraft(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -557,24 +749,39 @@ function GuestListModal({ attendees, selected, onConfirm, onClose, icpCompanyTyp
                 const id = String(att.id);
                 const checked = draft.includes(id);
                 const op = att.company_type != null && icpTypeSet.has(att.company_type);
+                // Marks where the selected block ends, so the top of the list
+                // reads as the guest list rather than as an arbitrary ordering.
+                const startsPool = chosen.length > 0 && att.id === firstUnselectedId;
                 return (
-                  <tr key={att.id} onClick={() => toggle(id)} className={`cursor-pointer transition-colors ${checked ? 'bg-blue-50 hover:bg-blue-50' : 'hover:bg-gray-50'}`}>
+                  <tr key={att.id} onClick={() => toggle(id)} className={`cursor-pointer transition-colors ${checked ? 'bg-blue-50 hover:bg-blue-50' : 'hover:bg-gray-50'} ${startsPool ? 'border-t-2 border-gray-200' : ''}`}>
                     <td className="pl-4 pr-2 py-2.5 align-middle">
                       <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${checked ? 'bg-brand-secondary border-brand-secondary' : 'border-gray-300'}`}>
                         {checked && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                       </span>
                     </td>
                     <td className="px-3 py-2 align-middle">
-                      <div className="flex items-center gap-1.5">
-                        {op && (
-                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-100 text-green-700 border border-green-300 text-[9px] font-bold flex-shrink-0">O</span>
+                      <div className="flex items-end gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            {op && (
+                              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-100 text-green-700 border border-green-300 text-[9px] font-bold flex-shrink-0">O</span>
+                            )}
+                            <span className="font-medium text-gray-900">{att.first_name} {att.last_name}</span>
+                          </div>
+                          <div className="text-xs text-gray-400 mt-0.5 pl-0.5">
+                            {att.title && <span>{att.title}</span>}
+                            {att.title && att.company_name && <span className="mx-1">·</span>}
+                            {att.company_name && <span>{att.company_name}</span>}
+                          </div>
+                        </div>
+                        {/* Only on selected rows. An unselected attendee has
+                            nothing to rank against yet, and a control there
+                            would invite a click that quietly does nothing. */}
+                        {checked && rankOf && onRankChange && (
+                          <div onClick={e => e.stopPropagation()}>
+                            <RankFields rank={rankOf(att.id)} onChange={next => onRankChange(att.id, next)} />
+                          </div>
                         )}
-                        <span className="font-medium text-gray-900">{att.first_name} {att.last_name}</span>
-                      </div>
-                      <div className="text-xs text-gray-400 mt-0.5 pl-0.5">
-                        {att.title && <span>{att.title}</span>}
-                        {att.title && att.company_name && <span className="mx-1">·</span>}
-                        {att.company_name && <span>{att.company_name}</span>}
                       </div>
                     </td>
                   </tr>
@@ -629,7 +836,7 @@ export function SocialEventsTable({
   const [formData, setFormData] = useState({
     entered_by: '', internal_attendees: [] as string[], event_name: '', event_type: '',
     host: '', venue_name: '', location: '', company_hosted: false, event_date: '', event_time: '',
-    invite_only: 'No', prospect_attendees: [] as string[], notes: '',
+    invite_only: 'No', prospect_attendees: [] as string[], notes: '', guest_limit: '',
   });
   const [internalOpen, setInternalOpen] = useState(false);
   const [showGuestListModal, setShowGuestListModal] = useState(false);
@@ -640,6 +847,16 @@ export function SocialEventsTable({
 
   /* RSVP state */
   const [localRsvps, setLocalRsvps] = useState<Record<string, RsvpStatus[]>>({});
+  /**
+   * Optimistic guest ranks, keyed `${eventId}:${attendeeId}`.
+   *
+   * Mirrors localRsvps deliberately. Both the drawer and the Build Guest List
+   * modal read through `getEffectiveRank` and write through `handleSetRank`, so
+   * the two surfaces cannot disagree — the modal is rendered inside the drawer,
+   * and both are looking at this one piece of state rather than at two copies
+   * kept in step.
+   */
+  const [localRanks, setLocalRanks] = useState<Record<string, GuestRank>>({});
   const [guestListEventId, setGuestListEventId] = useState<number | null>(null);
   // The guest list only lives in the drawer now, so a card tap opens it at
   // every width rather than expanding an inline table.
@@ -695,6 +912,34 @@ export function SocialEventsTable({
     return r ? parseStatuses(r.rsvp_status) : [];
   }, [localRsvps, events]);
 
+  /* Rank helpers — the same read-through/write-through shape as the RSVP pair. */
+  const getEffectiveRank = useCallback((eventId: number, attendeeId: number): GuestRank => {
+    const key = `${eventId}:${attendeeId}`;
+    if (key in localRanks) return localRanks[key];
+    const ev = events.find(e => e.id === eventId);
+    const r = ev?.rsvps?.find(r => r.attendee_id === attendeeId);
+    return r ? { repRank: r.rep_rank ?? null, teamRank: r.team_rank ?? null } : EMPTY_RANK;
+  }, [localRanks, events]);
+
+  const handleSetRank = useCallback(async (eventId: number, attendeeId: number, next: GuestRank) => {
+    const key = `${eventId}:${attendeeId}`;
+    const previous = getEffectiveRank(eventId, attendeeId);
+    // Optimistic, so the list re-sorts on the click rather than after a round
+    // trip. Rolled back below if the write fails.
+    setLocalRanks(prev => ({ ...prev, [key]: next }));
+    try {
+      const res = await fetch(`/api/social-events/${eventId}/rank`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_id: attendeeId, rep_rank: next.repRank, team_rank: next.teamRank }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setLocalRanks(prev => ({ ...prev, [key]: previous }));
+      toast.error('Failed to save the rank.');
+    }
+  }, [getEffectiveRank]);
+
   const handleToggleRsvp = useCallback(async (eventId: number, attendeeId: number, status: RsvpStatus) => {
     const key = `${eventId}:${attendeeId}`;
     const current = localRsvps[key] ?? ((): RsvpStatus[] => {
@@ -720,7 +965,7 @@ export function SocialEventsTable({
 
   /* form helpers */
   const resetForm = () => {
-    setFormData({ entered_by: '', internal_attendees: [], event_name: '', event_type: '', host: '', venue_name: '', location: '', company_hosted: false, event_date: '', event_time: '', invite_only: 'No', prospect_attendees: [], notes: '' });
+    setFormData({ entered_by: '', internal_attendees: [], event_name: '', event_type: '', host: '', venue_name: '', location: '', company_hosted: false, event_date: '', event_time: '', invite_only: 'No', prospect_attendees: [], notes: '', guest_limit: '' });
     setEditingEventId(null);
     setShowForm(false);
   };
@@ -738,6 +983,7 @@ export function SocialEventsTable({
       event_date: ev.event_date || '',
       event_time: ev.event_time || '',
       invite_only: ev.invite_only || 'No',
+      guest_limit: ev.guest_limit != null ? String(ev.guest_limit) : '',
       prospect_attendees: ev.prospect_attendees ? ev.prospect_attendees.split(',').map(n => n.trim()).filter(Boolean) : [],
       notes: ev.notes || '',
     });
@@ -765,6 +1011,7 @@ export function SocialEventsTable({
         event_date: formData.event_date || null,
         event_time: formData.event_time || null,
         invite_only: formData.invite_only,
+        guest_limit: formData.guest_limit.trim() === '' ? null : Number(formData.guest_limit),
         prospect_attendees: formData.prospect_attendees.length > 0 ? formData.prospect_attendees.join(',') : null,
         notes: formData.notes || null,
       };
@@ -994,9 +1241,24 @@ export function SocialEventsTable({
               </select>
             </div>
 
-            {/* Address — two columns so the full street address fits,
-                with the venue name beside it. */}
-            <div className="lg:col-span-2">
+            {/* Guest Limit — optional, and first in the row so the cap reads
+                before the place it applies to. */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Guest Limit</label>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                inputMode="numeric"
+                value={formData.guest_limit}
+                onChange={e => setFormData(p => ({ ...p, guest_limit: e.target.value.replace(/[^0-9]/g, '') }))}
+                placeholder="No limit"
+                className="input-field text-sm w-full"
+              />
+            </div>
+
+            {/* Address — the wider cell of the row, with the venue name beside it. */}
+            <div>
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Address</label>
               {/* Same Places-backed lookup as the conference Location field.
                   Only formatted_address is kept — social_events has no columns
@@ -1093,7 +1355,14 @@ export function SocialEventsTable({
         <div className="flex gap-3 items-start">
         <div className="flex-1 min-w-0 space-y-2">
           {events.map(ev => {
-            const { invited } = getEventData(ev);
+            const { invited, rsvpMap } = getEventData(ev);
+            // Seats left = the cap minus everyone who said yes. Counted from
+            // the same effective RSVP map the drawer renders, so accepting an
+            // invitation moves this number without a refetch.
+            const yesCount = invited.filter(a => (rsvpMap[a.id] || []).includes('yes')).length;
+            const openSeats = ev.guest_limit != null && ev.guest_limit > 0
+              ? { remaining: ev.guest_limit - yesCount, limit: ev.guest_limit }
+              : null;
             return (
               <div key={ev.id} className="border border-gray-200 rounded-xl bg-white overflow-hidden hover:border-gray-300 transition-colors">
                 {/* ── Header + meta, shared with the pre-conference card ── */}
@@ -1109,6 +1378,7 @@ export function SocialEventsTable({
                   inviteOnly={ev.invite_only}
                   internalAttendees={ev.internal_attendees}
                   invitedCount={invited.length}
+                  openSeats={openSeats}
                   onToggle={() => toggleEvent(ev.id)}
                   extraFields={customColumns.filter(c => c.visible).length > 0 ? (
                     <div className="grid grid-cols-[1fr_1fr_auto] gap-x-3 sm:contents">
@@ -1156,7 +1426,7 @@ export function SocialEventsTable({
         if (!ev) return null;
         const { invited, rsvpMap } = getEventData(ev);
         return (
-          <GuestListSheet event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)} onClose={() => setGuestListEventId(null)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} icpCompanyTypes={icpCompanyTypes} allAttendees={attendees} onSaveGuestList={ids => handleSaveGuestList(ev.id, ids)} />
+          <GuestListSheet event={ev} invitedAttendees={invited} rsvpMap={rsvpMap} onToggleRsvp={(aid, s) => handleToggleRsvp(ev.id, aid, s)} onRemoveGuest={aid => handleRemoveGuest(ev.id, aid)} onClose={() => setGuestListEventId(null)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} icpCompanyTypes={icpCompanyTypes} allAttendees={attendees} onSaveGuestList={ids => handleSaveGuestList(ev.id, ids)} rankOf={aid => getEffectiveRank(ev.id, aid)} onRankChange={(aid, next) => handleSetRank(ev.id, aid, next)} />
         );
       })()}
     </div>
