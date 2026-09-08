@@ -377,7 +377,10 @@ function RankField({ label, value, onChange, disabled }: {
   const choose = (next: number | null) => { setOpen(false); if (next !== value) onChange(next); };
 
   return (
-    <div className="flex flex-col items-center gap-0.5 flex-shrink-0" ref={ref}>
+    // items-end, not items-center: the eyebrow is wider than the badge, so a
+    // centred badge floats away from the right edge of its own column and the
+    // pair reads as inset from the card even when the labels are flush.
+    <div className="flex flex-col items-end gap-0.5 flex-shrink-0" ref={ref}>
       <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide leading-none whitespace-nowrap">{label}</span>
       <div className="relative">
         <button
@@ -435,7 +438,7 @@ function RankFields({ rank, onChange }: {
   onChange: (next: GuestRank) => void;
 }) {
   return (
-    <div className="flex items-end gap-2 flex-shrink-0 ml-auto">
+    <div className="flex items-end gap-3 flex-shrink-0 ml-auto">
       <RankField label="Rep Rank" value={rank.repRank} onChange={v => onChange({ ...rank, repRank: v })} />
       <RankField label="Team Rank" value={rank.teamRank} onChange={v => onChange({ ...rank, teamRank: v })} />
     </div>
