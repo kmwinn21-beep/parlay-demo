@@ -746,5 +746,116 @@ console.log('\n— an upload that did not finish is not an event —');
   eq('  reporting its own count, not the failed attempt\'s', cards[0].subject, '44');
 }
 
+console.log('\n— one note written three times is one card —');
+{
+  // What /api/notes actually does: a note attached to a conference, a company
+  // and an attendee is three POSTs and three rows, seconds apart, with nothing
+  // linking them. The feed showed all three.
+  const T = 40 * HOUR;
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id,
+      conference_name, author_user_id, rep, note_type, created_at)
+    VALUES (400, 'conference', ${RUNNING}, 'Scheduling a demo with Melissa.', ${RUNNING},
+      'ALIS FWD', 11, 'Parlay User', 'note', '${ts(T)}')`);
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id,
+      conference_name, author_user_id, rep, note_type, created_at)
+    VALUES (401, 'company', 1, 'Scheduling a demo with Melissa.', ${RUNNING},
+      'ALIS FWD', 11, 'Parlay User', 'note', '${ts(T - 1000)}')`);
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id,
+      conference_name, author_user_id, rep, note_type, created_at)
+    VALUES (402, 'attendee', 1, 'Scheduling a demo with Melissa.', ${RUNNING},
+      'ALIS FWD', 11, 'Parlay User', 'note', '${ts(T - 2000)}')`);
+
+  const copies = (await feed('active')).items
+    .filter(i => i.kind === 'note' && i.body === 'Scheduling a demo with Melissa.');
+  eq('three stored copies produce one card', copies.length, 1);
+  eq('  the most specific one', copies[0].subject, 'Robyn Yerger');
+  eq('  which is also the one that links somewhere useful', copies[0].href, '/attendees/1');
+  eq('  and it survives in All too',
+    (await feed('all')).items.filter(i => i.body === 'Scheduling a demo with Melissa.').length, 1);
+}
+{
+  // The other half. Two people can write the same short note, and one person
+  // can write it twice — those are separate events and must both show. What
+  // makes a copy a copy is that it sits on a DIFFERENT entity type.
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id,
+      author_user_id, attendee_name, created_at)
+    VALUES (410, 'attendee', 1, 'Great chat.', ${RUNNING}, 11, 'Robyn Yerger', '${ts(41 * HOUR)}')`);
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id,
+      author_user_id, attendee_name, created_at)
+    VALUES (411, 'attendee', 2, 'Great chat.', ${RUNNING}, 11, 'Philip Gisi', '${ts(41 * HOUR - 4000)}')`);
+  eq('the same text on two attendees stays two cards',
+    (await feed('active')).items.filter(i => i.body === 'Great chat.').length, 2);
+}
+{
+  // Same shape as a copy, different author: two people, two events.
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id,
+      author_user_id, attendee_name, created_at)
+    VALUES (420, 'attendee', 1, 'Booth was busy.', ${RUNNING}, 11, 'Robyn Yerger', '${ts(42 * HOUR)}')`);
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id,
+      author_user_id, company_name, created_at)
+    VALUES (421, 'company', 1, 'Booth was busy.', ${RUNNING}, 12, 'Arrow Senior Living', '${ts(42 * HOUR - 2000)}')`);
+  eq('the same text by two authors stays two cards',
+    (await feed('active')).items.filter(i => i.body === 'Booth was busy.').length, 2);
+}
+{
+  // And the window. Far enough apart, it is a second note about the same thing,
+  // not the same note written twice.
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id,
+      author_user_id, attendee_name, created_at)
+    VALUES (430, 'attendee', 1, 'Following up next week.', ${RUNNING}, 11, 'Robyn Yerger', '${ts(43 * HOUR)}')`);
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id,
+      author_user_id, company_name, created_at)
+    VALUES (431, 'company', 1, 'Following up next week.', ${RUNNING}, 11, 'Arrow Senior Living', '${ts(43 * HOUR - 60_000)}')`);
+  eq('a minute apart is not a copy',
+    (await feed('active')).items.filter(i => i.body === 'Following up next week.').length, 2);
+}
+
+console.log('\n— pinning that note is one card, under a name —');
+{
+  // Pinning pins each pinnable copy: one action, two pinned_notes rows. And
+  // every caller stores user.email in pinned_by, so the card read
+  // "kevin@teton.ai" directly above a card saying "Parlay User".
+  const T = 44 * HOUR;
+  await db.execute(`INSERT INTO pinned_notes (id, note_id, entity_type, entity_id, pinned_by,
+      conference_name, attendee_name, created_at)
+    VALUES (400, 401, 'company', 1, 'kwinn@useparlay.app', 'ALIS FWD', 'Robyn Yerger', '${ts(T)}')`);
+  await db.execute(`INSERT INTO pinned_notes (id, note_id, entity_type, entity_id, pinned_by,
+      conference_name, attendee_name, created_at)
+    VALUES (401, 402, 'attendee', 1, 'kwinn@useparlay.app', 'ALIS FWD', NULL, '${ts(T - 2000)}')`);
+
+  const pins = (await feed('active')).items
+    .filter(i => i.kind === 'note_pinned' && i.body === 'Scheduling a demo with Melissa.');
+  eq('two pin rows from one action produce one card', pins.length, 1);
+  eq('  the attendee one', pins[0].href, '/attendees/1');
+  // The attendee pin is exactly the row with no denormalised attendee_name, so
+  // keeping it only works because the subject is resolved from the record.
+  eq('  which still names the person', pins[0].subject, 'Robyn Yerger');
+  eq('  attributed by rep profile, not by email', pins[0].actor.name, 'Parlay User');
+  eq('  and sharing an avatar with the note card',
+    pins[0].actor.avatarSeed,
+    (await feed('active')).items.find(i => i.body === 'Scheduling a demo with Melissa.' && i.kind === 'note').actor.avatarSeed);
+}
+{
+  // An email that belongs to nobody is still better read as itself than as
+  // "Unknown user" — it says who, just not prettily.
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id,
+      conference_name, author_user_id, created_at)
+    VALUES (440, 'attendee', 2, 'Pinned by a departed colleague.', ${RUNNING}, 'ALIS FWD', 11, '${ts(45 * HOUR)}')`);
+  await db.execute(`INSERT INTO pinned_notes (id, note_id, entity_type, entity_id, pinned_by,
+      conference_name, attendee_name, created_at)
+    VALUES (410, 440, 'attendee', 2, 'gone@nowhere.test', 'ALIS FWD', NULL, '${ts(45 * HOUR)}')`);
+  const pin = (await feed('active')).items
+    .find(i => i.kind === 'note_pinned' && i.body === 'Pinned by a departed colleague.');
+  eq('an unmatched email renders as itself', pin.actor.name, 'gone@nowhere.test');
+  eq('  and is not called unknown', pin.actor.unresolved, false);
+}
+{
+  // A free-text actor that is a name is untouched — the lookup must not start
+  // second-guessing the column it is documented to read.
+  const seeded = (await feed('active')).items.find(i => i.kind === 'note_pinned'
+    && i.occurredAt === ts(5 * HOUR));
+  eq('a pinned_by that really is a name is left alone', seeded.actor.name, 'Marcus Silva');
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

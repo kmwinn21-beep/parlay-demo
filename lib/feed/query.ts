@@ -1,5 +1,5 @@
 /**
- * The conference activity feed — one query, nine kinds, two scopes.
+ * The conference activity feed — one query, ten kinds, three scopes.
  *
  * ── Why a UNION and not an activity table ────────────────────────────────────
  *
@@ -45,6 +45,7 @@
 import type { Client } from '@libsql/client';
 import { computeConferenceStage } from '@/lib/conference-stage';
 import { resolveActors, actorFor, type ActorRef } from '@/lib/feed/actors';
+import { specificityCase, withinCopyWindow } from '@/lib/notes/copies';
 import {
   ALL_SCOPE_DAYS, COLOUR_BY_KIND, isConferenceScoped,
   type FeedItem, type FeedKind, type FeedScope,
@@ -145,6 +146,28 @@ interface Branch {
 const PROJECTION = `
   kind, occurred_at, actor_source, actor_id, conference_id, conference_name,
   subject, detail1, detail2, pill1, pill2, body, entity_kind, entity_id, pinned`;
+
+/**
+ * ── One note is three rows ───────────────────────────────────────────────────
+ *
+ * Writing a note against a conference, a company and an attendee at once posts
+ * three times to /api/notes and stores THREE `entity_notes` rows. Pinning that
+ * note then writes up to two more rows in `pinned_notes`, one per pinnable
+ * copy. What makes rows copies of each other is defined once, in
+ * lib/notes/copies.ts, because the delete flow needs the same answer.
+ *
+ * Here a row is dropped when a STRICTLY more specific sibling exists — the
+ * attendee copy beats the company copy beats the conference copy — because the
+ * specific one is the card worth reading: it names a person and links to them,
+ * where the conference copy names a show that is already the card's pill.
+ *
+ * Strictly is the whole safety argument, and it is load-bearing rather than
+ * stylistic. Two genuinely separate notes with identical text — "Great chat"
+ * logged on two attendees seconds apart — are both `attendee` rows, so they
+ * TIE on specificity and neither suppresses the other. Only a real copy set,
+ * which spans different entity types by construction, has an ordering at all.
+ */
+const specificity = specificityCase;
 
 function buildBranches(opts: {
   scope: FeedScope;
@@ -262,8 +285,24 @@ function buildBranches(opts: {
           LEFT JOIN companies nc ON en.entity_type = 'company' AND nc.id = en.entity_id
           LEFT JOIN conferences ncf ON en.entity_type = 'conference' AND ncf.id = en.entity_id
           WHERE ${window('en.created_at')}
-            ${scoped ? `AND en.conference_id IN (${inConf})` : ''}`,
-    args: [...windowArgs(), ...(scoped ? conferenceIds : [])],
+            ${scoped ? `AND en.conference_id IN (${inConf})` : ''}
+            AND NOT EXISTS (
+              SELECT 1 FROM entity_notes s
+              WHERE s.content = en.content
+                AND COALESCE(s.author_user_id, -1) = COALESCE(en.author_user_id, -1)
+                AND COALESCE(TRIM(s.rep), '') = COALESCE(TRIM(en.rep), '')
+                AND ${withinCopyWindow('s.created_at', 'en.created_at')}
+                AND ${specificity('s')} < ${specificity('en')}
+                -- The sibling has to be one the page would itself have shown.
+                -- Otherwise a copy suppressed by a more specific twin that sits
+                -- the far side of a paging boundary disappears entirely.
+                AND ${window('s.created_at')}
+                ${scoped ? `AND s.conference_id IN (${inConf})` : ''}
+            )`,
+    args: [
+      ...windowArgs(), ...(scoped ? conferenceIds : []),
+      ...windowArgs(), ...(scoped ? conferenceIds : []),
+    ],
   });
 
   // ── Pinned notes ───────────────────────────────────────────────────────────
@@ -281,14 +320,37 @@ function buildBranches(opts: {
                       ELSE 'system' END AS actor_source,
                  pn.pinned_by AS actor_id,
                  NULL AS conference_id, pn.conference_name AS conference_name,
-                 COALESCE(NULLIF(pn.attendee_name, ''), 'a record') AS subject,
+                 -- Same problem the note branch has: attendee_name is a
+                 -- denormalised copy, and the pin written against the ATTENDEE
+                 -- is the one that leaves it null — so the copy this branch now
+                 -- keeps was exactly the one reading "a record". Resolved from
+                 -- the record the pin hangs off instead.
+                 COALESCE(
+                   NULLIF(pn.attendee_name, ''),
+                   NULLIF(TRIM(COALESCE(pa.first_name, '') || ' ' || COALESCE(pa.last_name, '')), ''),
+                   NULLIF(pc.name, ''),
+                   'a record'
+                 ) AS subject,
                  NULL AS detail1, NULL AS detail2,
                  NULL AS pill1, NULL AS pill2,
                  en.content AS body, pn.entity_type AS entity_kind, pn.entity_id AS entity_id, 1 AS pinned
           FROM pinned_notes pn
           LEFT JOIN entity_notes en ON en.id = pn.note_id
-          WHERE ${window('pn.created_at')}`,
-    args: windowArgs(),
+          LEFT JOIN attendees pa ON pn.entity_type = 'attendee' AND pa.id = pn.entity_id
+          LEFT JOIN companies pc ON pn.entity_type = 'company' AND pc.id = pn.entity_id
+          WHERE ${window('pn.created_at')}
+            -- Pinning one note pins each of its copies: the same person, the
+            -- same text, the same second, on different entity types. One pin.
+            AND NOT EXISTS (
+              SELECT 1 FROM pinned_notes s
+              LEFT JOIN entity_notes sn ON sn.id = s.note_id
+              WHERE COALESCE(sn.content, '') = COALESCE(en.content, '')
+                AND COALESCE(TRIM(s.pinned_by), '') = COALESCE(TRIM(pn.pinned_by), '')
+                AND ${withinCopyWindow('s.created_at', 'pn.created_at')}
+                AND ${specificity('s')} < ${specificity('pn')}
+                AND ${window('s.created_at')}
+            )`,
+    args: [...windowArgs(), ...windowArgs()],
   });
 
   // ── Vendor relationships ───────────────────────────────────────────────────
