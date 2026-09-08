@@ -4,10 +4,9 @@ import Link from 'next/link';
 import { dbReady } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
 import { QuickNotesSection } from '@/components/QuickNotesSection';
-import { DashboardTouchpointsSection } from '@/components/DashboardTouchpointsSection';
+import { DashboardFeed } from '@/components/DashboardFeed';
 import { getServerSessionUser } from '@/lib/auth';
 import { DashboardConferenceBanner, type BannerData } from '@/components/DashboardConferenceBanner';
-import { DashboardNotificationsSection } from '@/components/DashboardNotificationsSection';
 import type { DashboardConference } from '@/components/RecentSection';
 import { DashboardTargetsSection } from '@/components/DashboardTargetsSection';
 import { DashboardActionCard } from '@/components/DashboardActionCard';
@@ -240,10 +239,10 @@ function StatsSkeleton() {
   );
 }
 
-function TargetsAndUpcomingSkeleton() {
+function TargetsSkeleton() {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-pulse">
-      <div className="lg:col-span-2 card">
+    <div className="animate-pulse">
+      <div className="card">
         <div className="flex items-center justify-between mb-4">
           <div className="h-6 w-24 bg-gray-200 rounded" />
           <div className="h-9 w-48 bg-gray-200 rounded-lg" />
@@ -255,15 +254,6 @@ function TargetsAndUpcomingSkeleton() {
         </div>
         <div className="grid grid-cols-2 gap-3">
           {[1, 2, 3, 4].map(i => (
-            <div key={i} className="h-20 bg-gray-100 rounded-xl" />
-          ))}
-        </div>
-      </div>
-      {/* Open Follow-Ups placeholder — desktop only, like the card itself */}
-      <div className="card hidden lg:block">
-        <div className="h-6 w-36 bg-gray-200 rounded mb-5" />
-        <div className="space-y-3">
-          {[1, 2, 3].map(i => (
             <div key={i} className="h-20 bg-gray-100 rounded-xl" />
           ))}
         </div>
@@ -294,18 +284,23 @@ async function StatsSection() {
   );
 }
 
-async function TargetsAndRecentSection() {
+/**
+ * Targets, as one cell of the shared grid below.
+ *
+ * It no longer owns a grid of its own. The Feed spans both rows, and a CSS
+ * row-span cannot cross two sibling grids — so the two rows became one, and
+ * this kept only the async data fetch it actually needs. Still inside its own
+ * Suspense boundary, so a slow conference query does not block the Feed or
+ * Floor Notes from painting.
+ */
+async function TargetsSection() {
   const sessionUser = await getServerSessionUser();
   const tenantDb = await getDb(sessionUser?.accountId);
   const allConferences = await getAllConferences(tenantDb);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-2 card">
-        <DashboardTargetsSection allConferences={allConferences} />
-      </div>
-      {/* Desktop only — a phone reads notifications from the header bell. */}
-      <DashboardNotificationsSection />
+    <div className="card">
+      <DashboardTargetsSection allConferences={allConferences} />
     </div>
   );
 }
@@ -323,23 +318,43 @@ export default function DashboardPage() {
         <StatsSection />
       </Suspense>
 
-      {/* Floor Notes, with the touchpoint types beside it. On desktop the notes
-          card is taken out of flow so the number of notes can't drive the row —
-          Touchpoints sets the height and the notes page through it on their own
-          chevron. */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
-        <div className="lg:col-span-2 max-h-[489px] lg:max-h-none flex flex-col min-h-0 lg:block lg:relative">
+      {/* ── Floor Notes + Targets on the left, the Feed spanning both on the
+             right ──────────────────────────────────────────────────────────
+          ONE grid, not two. The Feed occupies the right-hand column of both
+          rows, and a CSS row-span cannot cross two sibling grids — the previous
+          layout had these as separate containers, one of them inside its own
+          Suspense boundary.
+
+          Targets keeps its Suspense boundary as a grid CHILD rather than a grid
+          owner, so it still streams in without blocking the other two cells and
+          without needing to become synchronous.
+
+          Below lg everything stacks in source order: Floor Notes, Targets,
+          Feed. The Feed last is deliberate — on a phone the two cards you act
+          on come first, and the feed is something you scroll to. */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-rows-[auto_auto] gap-6 items-stretch">
+        {/* Floor Notes. It used to take its height from the Touchpoints card
+            beside it; with that gone it needs an explicit one, chosen to match
+            what it rendered at before. */}
+        <div className="lg:col-span-2 lg:row-start-1 h-[489px] flex flex-col min-h-0 lg:block lg:relative">
           <QuickNotesSection className="lg:absolute lg:inset-0" />
         </div>
-        <div className="lg:col-span-1 flex flex-col min-h-0">
-          <DashboardTouchpointsSection />
+
+        <Suspense fallback={<div className="lg:col-span-2 lg:row-start-2"><TargetsSkeleton /></div>}>
+          <div className="lg:col-span-2 lg:row-start-2">
+            <TargetsSection />
+          </div>
+        </Suspense>
+
+        {/* The full-height right-hand column.
+            Taken out of flow on desktop, exactly as Floor Notes is: a card that
+            sizes to its content would drive the row height, and a feed of forty
+            items would stretch the grid to 1500px instead of scrolling inside
+            the space the other two cards define. */}
+        <div className="lg:row-span-2 lg:row-start-1 lg:col-start-3 h-[600px] lg:h-auto lg:relative">
+          <DashboardFeed className="h-full lg:absolute lg:inset-0" />
         </div>
       </div>
-
-      {/* Targets + Recent */}
-      <Suspense fallback={<TargetsAndUpcomingSkeleton />}>
-        <TargetsAndRecentSection />
-      </Suspense>
     </div>
   );
 }
