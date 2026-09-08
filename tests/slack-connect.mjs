@@ -384,5 +384,100 @@ console.log('\n— the status the screens render —');
   process.env.ENCRYPTION_KEY = saved;
 }
 
+// ── The test-message button ──────────────────────────────────────────────────
+
+console.log('\n— sending yourself a test message —');
+{
+  const slackTest = (await import('@/app/api/slack/test/route')).POST;
+  const post = async (user) => {
+    const headers = {};
+    if (user) headers.cookie = `auth_token=${await signToken(user)}`;
+    return slackTest(new NextRequest('https://parlay.test/api/slack/test', { method: 'POST', headers }));
+  };
+
+  // MEMBER is linked from the flow above; ADMIN in this account is not.
+  eq('the caller is already linked', (await store.getUserLink(ACCOUNT, MEMBER.id)).slackUserId, 'U-MEMBER-SLACK-NEW');
+
+  let sentTo = null;
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    const target = String(url);
+    if (target.includes('conversations.open')) {
+      sentTo = JSON.parse(init.body).users;
+      return new Response(JSON.stringify({ ok: true, channel: { id: 'D-TEST' } }), { headers: { 'Content-Type': 'application/json' } });
+    }
+    if (target.includes('chat.postMessage')) {
+      return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } });
+    }
+    return previousFetch(url, init);
+  };
+
+  {
+    const res = await post(MEMBER);
+    eq('a linked member can send one', res.status, 200);
+    // There is no user parameter on this route, so the recipient can only ever
+    // be the session's own linked account.
+    eq('  to their own Slack account, resolved from the session', sentTo, 'U-MEMBER-SLACK-NEW');
+  }
+  {
+    const res = await post(null);
+    eq('an anonymous caller cannot', res.status, 401);
+  }
+  {
+    // ADMIN is an administrator of this account but has no link of their own.
+    // Each precondition must name itself rather than failing generically.
+    const res = await post(ADMIN);
+    const body = await res.json();
+    eq('an unlinked caller is told so', res.status, 400);
+    eq('  and pointed at My Account', /My Account/.test(body.error), true);
+  }
+  {
+    const res = await post(UNINSTALLED);
+    const body = await res.json();
+    eq('an account with no workspace is told that instead', res.status, 400);
+    eq('  and pointed at an administrator', /administrator/i.test(body.error), true);
+  }
+
+  // Slack refusing gives back its own code as well as a sentence — the code is
+  // the half a search engine understands.
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes('conversations.open')) {
+      return new Response(JSON.stringify({ ok: false, error: 'missing_scope' }), { headers: { 'Content-Type': 'application/json' } });
+    }
+    return previousFetch(url, init);
+  };
+  {
+    const res = await post(MEMBER);
+    const body = await res.json();
+    eq('a Slack refusal is reported as a 502', res.status, 502);
+    eq('  with the raw code', body.slackError, 'missing_scope');
+    eq('  and a sentence that explains it', /reconnect the workspace/i.test(body.error), true);
+    eq('  which still names the code for searching', body.error.includes('missing_scope'), true);
+  }
+
+  // A revoked installation discovered by the button must leave the account in
+  // the same state a failed notification would, or the card keeps reading
+  // Connected until a real notification happens to fire.
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('conversations.open')) {
+      return new Response(JSON.stringify({ ok: false, error: 'token_revoked' }), { headers: { 'Content-Type': 'application/json' } });
+    }
+    return previousFetch(url);
+  };
+  {
+    eq('the workspace starts healthy', (await store.getWorkspace(ACCOUNT)).revokedAt, null);
+    const res = await post(MEMBER);
+    eq('a revoked install is reported', res.status, 502);
+    eq('  and the workspace is marked, as a real failure would', (await store.getWorkspace(ACCOUNT)).revokedAt != null, true);
+    // And the next press says so before calling Slack at all.
+    const again = await post(MEMBER);
+    const body = await again.json();
+    eq('  so the next attempt refuses locally', again.status, 400);
+    eq('  naming Admin Settings as the fix', /Admin Settings/.test(body.error), true);
+  }
+
+  globalThis.fetch = previousFetch;
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

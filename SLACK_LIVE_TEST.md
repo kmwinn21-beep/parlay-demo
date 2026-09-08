@@ -8,7 +8,42 @@ written during install, and Slack columns at their default of 0.
 
 ---
 
-## Read this first — you cannot notify yourself
+## Start here — the test-message button
+
+**Admin Settings → Slack → Send a test message.** Also on My Account → Slack,
+once you are linked.
+
+It DMs your own linked Slack account and tells you what happened, inline. No
+second user, no note to write, no toggles to set. Do this before anything else:
+it is the only step that isolates "is Slack delivery working at all" from
+everything layered on top of it.
+
+**What it proves:** the workspace row, the bot token and its decryption, your
+link, and Slack accepting `conversations.open` and `chat.postMessage`. It calls
+the same function the notification path calls, so a success here means the Slack
+half genuinely works.
+
+**What it does not prove:** anything about your per-event Slack toggles, because
+it does not go through the notification dispatcher at all. That split is
+deliberate — if the button succeeds and a real notification still does not
+arrive, the problem is the preference gate, and the rest of this document is
+about a much smaller search.
+
+**If it fails,** it tells you which precondition failed in a sentence, and
+includes Slack's own error code where Slack refused — `missing_scope` and the
+like, which is the half a search engine understands. Take that code to the
+"Step 4" table below.
+
+One side effect worth knowing: if the button discovers the workspace has been
+uninstalled from Slack's side, it marks it revoked exactly as a real failed
+notification would, so the card will switch to **Disconnected in Slack** in
+front of you. That is correct, not the button breaking something.
+
+Once a test message arrives, continue below to test the real notification path.
+
+---
+
+## Read this next — you cannot notify yourself
 
 **Every notification path in this codebase excludes the person who caused it.**
 Assigning a follow-up to yourself sends you nothing. Mentioning yourself in a
@@ -112,9 +147,20 @@ env var; nothing in the Slack code is wrong.
 
 ## If nothing arrives
 
-### Step 0 — establish whether the notification fired at all
+### Step 0 — press the test-message button
 
-**Do this before looking at any logs.** Check your in-app bell icon.
+Admin Settings → Slack → **Send a test message**. This separates a Slack problem
+from a preferences problem in one click, and it answers on screen rather than in
+Vercel.
+
+| result | meaning |
+| --- | --- |
+| **the DM arrives** | Slack delivery works. Your problem is the preference gate or the trigger — go to step 1, and expect it to be the toggle. |
+| **it reports an error** | the sentence names the precondition or carries Slack's code. Jump to the matching step below. |
+
+### Step 0b — establish whether the notification fired at all
+
+**Still before looking at any logs.** Check your in-app bell icon.
 
 | bell | meaning |
 | --- | --- |
@@ -298,6 +344,11 @@ notification system did not resolve you as a recipient. Most likely, in order:
 **Yes, there is one — three, in fact**, and they are step 1 above: no Slack
 toggle, no link, no workspace. All three return silently by design.
 
+**The test-message button distinguishes two of the three for you** — it reports
+"no workspace" and "not linked" as sentences rather than silence. Only the
+toggle-off case is invisible to it, by design, because it does not read
+preferences.
+
 **How to tell them apart from "the message was never triggered":** the in-app
 bell. If the notification is in your bell, the dispatcher ran and reached the
 Slack step, so a silent skip means one of those three preconditions. If the bell
@@ -438,7 +489,7 @@ deleted design exists to prevent.
 
 | what happened | search Vercel for |
 | --- | --- |
-| toggle off / no link / no workspace | *nothing — check the bell and the screens* |
+| toggle off / no link / no workspace | *nothing — press the test button, then check the bell* |
 | workspace uninstalled in Slack | `the installation is gone` |
 | token will not decrypt | `ENCRYPTION_KEY` |
 | your Slack user unreachable | `this person is no longer reachable` |

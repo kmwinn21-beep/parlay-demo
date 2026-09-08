@@ -163,6 +163,60 @@ export async function sendSlackNotification(input: SlackNotificationInput): Prom
   }
 }
 
+export type PostResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Open a DM with one Slack user and post to it.
+ *
+ * Extracted from the notification path so the "send a test message" button can
+ * exercise EXACTLY the same two calls — open, then post — rather than a
+ * simplified imitation of them. A diagnostic that takes a different route than
+ * the thing it is diagnosing is worse than none.
+ *
+ * Returns Slack's raw error string rather than logging it, because the caller
+ * decides what to do with it: the notification path classifies and logs, the
+ * test route shows it to the person who pressed the button.
+ *
+ * Throws only on transport failure or timeout.
+ */
+export async function postDirectMessage(
+  token: string,
+  slackUserId: string,
+  text: string,
+): Promise<PostResult> {
+  // A DM channel has to be opened before it can be posted to. Idempotent —
+  // Slack returns the existing channel for a pair that already has one — so
+  // there is nothing to cache.
+  const opened = await callSlack(OPEN_URL, token, { users: slackUserId });
+  if (!opened.ok || !opened.channel) {
+    return { ok: false, error: describe(opened) };
+  }
+
+  const posted = await callSlack(POST_URL, token, {
+    channel: opened.channel,
+    text,
+    // The notification text is already the whole message; a preview card for
+    // the link underneath it is noise in a DM.
+    unfurl_links: false,
+    unfurl_media: false,
+  });
+  if (!posted.ok) return { ok: false, error: describe(posted) };
+
+  return { ok: true };
+}
+
+/** Slack's error string, with the rate-limit wait folded in where there is one. */
+function describe(result: SlackApiResult): string {
+  const error = result.error ?? 'unknown_error';
+  if (error === 'ratelimited' && result.retryAfter) return `ratelimited:${result.retryAfter}`;
+  return error;
+}
+
+/** True when this Slack error means the installation itself is gone. */
+export function isInstallationGone(error: string): boolean {
+  return INSTALLATION_GONE.has(error.split(':')[0]);
+}
+
 type DeliveryOutcome = 'ok' | 'failed' | 'installation-gone';
 
 /** One DM. Never throws; the outcome tells the caller whether to keep going. */
@@ -174,28 +228,10 @@ async function deliverOne(
 ): Promise<DeliveryOutcome> {
   const who = `account ${input.accountId} user ${parlayUserId} (slack ${slackUserId})`;
   try {
-    // A DM channel has to be opened before it can be posted to. This is
-    // idempotent — Slack returns the existing channel for a pair that already
-    // has one — so there is nothing to cache.
-    const opened = await callSlack(OPEN_URL, token, { users: slackUserId });
-    if (!opened.ok || !opened.channel) {
-      return report(opened, `[slack] could not open a DM for ${who}`);
-    }
-
     const text = input.link ? `${input.message}\n${input.link}` : input.message;
-    const posted = await callSlack(POST_URL, token, {
-      channel: opened.channel,
-      text,
-      // The notification text is already the whole message; a preview card for
-      // the link underneath it is noise in a DM.
-      unfurl_links: false,
-      unfurl_media: false,
-    });
-    if (!posted.ok) {
-      return report(posted, `[slack] could not post to ${who}`);
-    }
-
-    return 'ok';
+    const result = await postDirectMessage(token, slackUserId, text);
+    if (result.ok) return 'ok';
+    return report(result.error, `[slack] could not deliver to ${who}`);
   } catch (err) {
     // A transport failure or the 5s timeout. Named separately from an `ok:
     // false` because the fix is different: this one is us or the network.
@@ -208,8 +244,8 @@ async function deliverOne(
 }
 
 /** Log one Slack `ok: false` at the detail its cause deserves, and classify it. */
-function report(result: SlackApiResult, context: string): DeliveryOutcome {
-  const error = result.error ?? 'unknown_error';
+function report(raw: string, context: string): DeliveryOutcome {
+  const [error, retryAfter] = raw.split(':');
 
   if (INSTALLATION_GONE.has(error)) {
     console.error(
@@ -239,7 +275,7 @@ function report(result: SlackApiResult, context: string): DeliveryOutcome {
     // the email have already landed; the DM is what is lost.
     console.error(
       `${context}: rate limited by Slack` +
-      (result.retryAfter ? `, retry after ${result.retryAfter}s` : '') +
+      (retryAfter ? `, retry after ${retryAfter}s` : '') +
       `. Not retried — the in-app and email notifications were already delivered.`,
     );
     return 'failed';
