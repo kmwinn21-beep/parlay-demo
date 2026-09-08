@@ -11,7 +11,8 @@
  *                                rows, plain names instead of ids
  *   attendee_touchpoints.logged_by                            (same)
  *   vendor_relationships.rep_id                               (same)
- *   entity_notes.author_user_id  `users.id`
+ *   entity_notes.author_user_id  `users.id`, but NULL on older rows, which
+ *                                carry the author's name in `rep` instead
  *   pinned_notes.pinned_by       free text — a display name, as typed
  *   social_events.entered_by     free text — a display name from a <select>
  *   conference_attendees.created_by   free text (new; see db-migrations)
@@ -186,13 +187,17 @@ export async function resolveActors(
     const key = actorKey(ref);
     if (key === 'system' || out.has(key)) continue;
 
+    // Deduplicated. The stored list can repeat an id — the same rep recorded
+    // more than once on one meeting — and counting the repeats produced
+    // "Parlay User +2" for a meeting one person logged.
     const names: string[] = [];
+    const addName = (name: string) => { if (name && !names.includes(name)) names.push(name); };
     for (const part of splitRefs(ref.id)) {
       if (isNumericId(part)) {
         const found = out.get(`rep_config:${part}`);
-        if (found) names.push(found.name);
+        if (found) addName(found.name);
       } else {
-        names.push(part);
+        addName(part);
       }
     }
     if (names.length > 0) {

@@ -199,10 +199,18 @@ function buildBranches(opts: {
   // time, and plenty of rows have neither — those were rendering as "Note on a
   // record", a card that links somewhere but will not say where. The joins
   // resolve the actual record the note hangs off, by its own entity_type.
+  //
+  // The actor has the same shape of problem. `author_user_id` is only set on
+  // notes written since it was added; older rows carry the author's name in
+  // `rep`. Falling straight through to the system actor made those cards read
+  // "Parlay" — the system actor's own name — for notes a person wrote.
   branches.push({
     kind: 'note',
     sql: `SELECT 'note' AS kind, en.created_at AS occurred_at,
-                 'user' AS actor_source, CAST(en.author_user_id AS TEXT) AS actor_id,
+                 CASE WHEN en.author_user_id IS NOT NULL THEN 'user'
+                      WHEN COALESCE(TRIM(en.rep), '') != '' THEN 'text'
+                      ELSE 'system' END AS actor_source,
+                 COALESCE(CAST(en.author_user_id AS TEXT), en.rep) AS actor_id,
                  en.conference_id AS conference_id, en.conference_name AS conference_name,
                  COALESCE(
                    NULLIF(en.attendee_name, ''),
@@ -236,7 +244,9 @@ function buildBranches(opts: {
   branches.push({
     kind: 'note_pinned',
     sql: `SELECT 'note_pinned' AS kind, pn.created_at AS occurred_at,
-                 'text' AS actor_source, pn.pinned_by AS actor_id,
+                 CASE WHEN COALESCE(TRIM(pn.pinned_by), '') != '' THEN 'text'
+                      ELSE 'system' END AS actor_source,
+                 pn.pinned_by AS actor_id,
                  NULL AS conference_id, pn.conference_name AS conference_name,
                  COALESCE(NULLIF(pn.attendee_name, ''), 'a record') AS subject,
                  NULL AS detail1, NULL AS detail2,
@@ -302,7 +312,9 @@ function buildBranches(opts: {
   branches.push({
     kind: 'social_event_created',
     sql: `SELECT 'social_event_created' AS kind, se.created_at AS occurred_at,
-                 'text' AS actor_source, se.entered_by AS actor_id,
+                 CASE WHEN COALESCE(TRIM(se.entered_by), '') != '' THEN 'text'
+                      ELSE 'system' END AS actor_source,
+                 se.entered_by AS actor_id,
                  se.conference_id AS conference_id, NULL AS conference_name,
                  COALESCE(NULLIF(se.event_name, ''), NULLIF(se.event_type, ''), 'Social event') AS subject,
                  se.event_type AS detail1,

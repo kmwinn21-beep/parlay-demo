@@ -440,6 +440,58 @@ console.log('\n— a meeting booked by more than one rep —');
   eq('an unresolvable id in a list does not lose the resolvable one', got.name, 'Kevin Winn');
 }
 
+{
+  // The stored list can repeat an id — the same rep recorded more than once on
+  // one meeting. Counting the repeats produced "Parlay User +2" for a meeting
+  // one person logged.
+  await db.execute(`INSERT INTO meetings (id, attendee_id, conference_id, meeting_date, meeting_time,
+      scheduled_by, created_at)
+    VALUES (22, 1, ${RUNNING}, '2026-06-16', '16:00', '900,900,900', '${ts(26 * HOUR)}')`);
+  const item = (await feed('in_progress')).items.find(i => i.occurredAt === ts(26 * HOUR));
+  eq('a repeated rep id is one person, not three', item.actor.name, 'Kevin Winn');
+}
+{
+  // Two DIFFERENT reps still count, so the dedupe has not simply flattened
+  // every list to its first entry.
+  await db.execute(`INSERT INTO meetings (id, attendee_id, conference_id, meeting_date, meeting_time,
+      scheduled_by, created_at)
+    VALUES (23, 1, ${RUNNING}, '2026-06-16', '17:00', '900,902,900', '${ts(27 * HOUR)}')`);
+  const item = (await feed('in_progress')).items.find(i => i.occurredAt === ts(27 * HOUR));
+  eq('  while two distinct reps still read as two', item.actor.name, 'Kevin Winn +1');
+}
+
+console.log('\n— a note whose author predates author_user_id —');
+{
+  // entity_notes.author_user_id is only set on notes written since it was
+  // added; older rows carry the author's name in `rep`. Falling through to the
+  // system actor made those cards read "Parlay" — the system actor's own name —
+  // for notes a person wrote.
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id, rep, attendee_name, created_at)
+    VALUES (40, 'attendee', 1, 'An older note with no author id.', ${RUNNING}, 'Parlay User', 'Robyn Yerger', '${ts(28 * HOUR)}')`);
+  const item = (await feed('in_progress')).items.find(i => i.occurredAt === ts(28 * HOUR));
+  eq('the rep name is used', item.actor.name, 'Parlay User');
+  eq('  and it is not the system actor', item.actor.system, false);
+  eq('  nor flagged unresolved', item.actor.unresolved, false);
+}
+{
+  // With neither, it genuinely is nobody — and that must still read as the
+  // system actor rather than a blank.
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id, attendee_name, created_at)
+    VALUES (41, 'attendee', 1, 'No author at all.', ${RUNNING}, 'Robyn Yerger', '${ts(29 * HOUR)}')`);
+  const item = (await feed('in_progress')).items.find(i => i.occurredAt === ts(29 * HOUR));
+  eq('no author and no rep is the system actor', item.actor.system, true);
+  eq('  named Parlay, deliberately', item.actor.name, 'Parlay');
+}
+{
+  // The same fallback on the two other free-text actors, so an empty column
+  // does not become an actor called "".
+  await db.execute(`INSERT INTO social_events (id, conference_id, event_name, event_type, event_date, invite_only, created_at)
+    VALUES (50, ${RUNNING}, 'An event nobody signed', 'Dinner', '2026-06-16', 'No', '${ts(30 * HOUR)}')`);
+  const item = (await feed('in_progress')).items.find(i => i.occurredAt === ts(30 * HOUR));
+  eq('a social event with no entered_by is the system actor', item.actor.system, true);
+  eq('  and never a blank name', item.actor.name.length > 0, true);
+}
+
 console.log('\n— a conference is in progress on its LAST day —');
 {
   const { computeConferenceStage } = await import('@/lib/conference-stage');
