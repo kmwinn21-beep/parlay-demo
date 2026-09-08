@@ -165,6 +165,26 @@ console.log('\n— the refresh button —');
   eq('  with refreshing separate from loading', /const \[refreshing, setRefreshing\]/.test(feed), true);
 }
 
+console.log('\n— dates and times on a card —');
+{
+  // A meeting card was printing "2026-09-10 · 06:00".
+  eq('dates render mm/dd/yyyy', /return m \? `\$\{m\[2\]\}\/\$\{m\[3\]\}\/\$\{m\[1\]\}`/.test(feed), true);
+  eq('times carry AM or PM', /const suffix = h24 < 12 \? 'AM' : 'PM'/.test(feed), true);
+  eq('  with 12 rather than 0 at noon and midnight', /h24 % 12 === 0 \? 12 : h24 % 12/.test(feed), true);
+
+  // A calendar date is text, not an instant. new Date('2026-09-10') is midnight
+  // UTC, and formatting that west of UTC prints the 9th.
+  eq('a date-only value is split, not parsed through Date',
+    /function formatDateOnly[\s\S]{0,300}exec\(raw/.test(feed), true);
+  eq('  and never goes through toLocaleDateString',
+    /function formatDateOnly[\s\S]{0,300}toLocaleDateString/.test(feed), false);
+
+  eq('the subtitle formats both slots', /formatDetail\(item\.kind, 1[\s\S]{0,200}formatDetail\(item\.kind, 2/.test(feed), true);
+  // A social event carries its date as a pill rather than a subtitle.
+  eq('a date arriving as a pill is formatted too',
+    /\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\.test\(p\) \? formatDateOnly\(p\)/.test(feed), true);
+}
+
 console.log('\n— the dashboard grid —');
 {
   // A CSS row-span cannot cross two sibling grids. The two rows were merged

@@ -195,16 +195,31 @@ function buildBranches(opts: {
 
   // ── Notes ──────────────────────────────────────────────────────────────────
   // author_user_id is a `users.id`, unlike every branch above it.
+  // `attendee_name` and `company_name` are denormalised copies written at the
+  // time, and plenty of rows have neither — those were rendering as "Note on a
+  // record", a card that links somewhere but will not say where. The joins
+  // resolve the actual record the note hangs off, by its own entity_type.
   branches.push({
     kind: 'note',
     sql: `SELECT 'note' AS kind, en.created_at AS occurred_at,
                  'user' AS actor_source, CAST(en.author_user_id AS TEXT) AS actor_id,
                  en.conference_id AS conference_id, en.conference_name AS conference_name,
-                 COALESCE(NULLIF(en.attendee_name, ''), NULLIF(en.company_name, ''), 'a record') AS subject,
-                 NULL AS detail1, NULL AS detail2,
+                 COALESCE(
+                   NULLIF(en.attendee_name, ''),
+                   NULLIF(en.company_name, ''),
+                   NULLIF(TRIM(COALESCE(na.first_name, '') || ' ' || COALESCE(na.last_name, '')), ''),
+                   NULLIF(nc.name, ''),
+                   NULLIF(ncf.name, ''),
+                   'a record'
+                 ) AS subject,
+                 NULL AS detail1, nco.name AS detail2,
                  en.note_type AS pill1, NULL AS pill2,
                  en.content AS body, en.entity_type AS entity_kind, en.entity_id AS entity_id, 0 AS pinned
           FROM entity_notes en
+          LEFT JOIN attendees na ON en.entity_type = 'attendee' AND na.id = en.entity_id
+          LEFT JOIN companies nco ON nco.id = na.company_id
+          LEFT JOIN companies nc ON en.entity_type = 'company' AND nc.id = en.entity_id
+          LEFT JOIN conferences ncf ON en.entity_type = 'conference' AND ncf.id = en.entity_id
           WHERE ${window('en.created_at')}
             ${scoped ? `AND en.conference_id IN (${inConf})` : ''}`,
     args: [...windowArgs(), ...(scoped ? conferenceIds : [])],
@@ -339,6 +354,21 @@ function hrefFor(entityKind: string | null, entityId: number | null): string | n
   }
 }
 
+/**
+ * The one response an RSVP card should show.
+ *
+ * `rsvp_status` holds a comma-separated multi-select, so 'maybe,no' and
+ * 'maybe,yes' are both real. A yes is the strongest signal and a no is the next
+ * — a maybe alongside either is noise, and the raw string printed as a pill read
+ * as a state nobody chose.
+ */
+function rsvpDecision(status: string | null): string | null {
+  const parts = String(status ?? '').toLowerCase().split(',').map(s => s.trim());
+  if (parts.includes('yes')) return 'Yes';
+  if (parts.includes('no')) return 'No';
+  return null;
+}
+
 /** Drop empties and duplicates without reordering — pills read left to right. */
 function pillsFrom(...values: Array<string | null>): string[] {
   const out: string[] = [];
@@ -438,7 +468,12 @@ export async function fetchFeed(client: Client, opts: FeedOptions): Promise<Feed
       subject: String(r.subject ?? '').trim() || 'a record',
       detail1: r.detail1 != null && String(r.detail1).trim() !== '' ? String(r.detail1) : null,
       detail2: r.detail2 != null && String(r.detail2).trim() !== '' ? String(r.detail2) : null,
-      pills: pillsFrom(r.pill1 as string | null, r.pill2 as string | null),
+      pills: kind === 'rsvp'
+        // rsvp_status is a comma-separated multi-select — 'maybe,no' is a real
+        // stored value. The feed reports the decision, so a yes or a no wins
+        // over a maybe rather than the raw string being printed.
+        ? pillsFrom(rsvpDecision(r.pill1 as string | null), r.pill2 as string | null)
+        : pillsFrom(r.pill1 as string | null, r.pill2 as string | null),
       body: r.body != null && String(r.body).trim() !== '' ? String(r.body) : null,
       pinned: Number(r.pinned ?? 0) === 1,
     };

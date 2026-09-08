@@ -92,6 +92,40 @@ function relativeTime(raw: string, nowMs: number): string {
   return `${Math.round(days / 7)}w`;
 }
 
+/**
+ * A stored `YYYY-MM-DD` as `mm/dd/yyyy`.
+ *
+ * Split rather than parsed: `new Date('2026-09-10')` is midnight UTC, and
+ * formatting that in a timezone behind UTC prints the 9th. These are calendar
+ * dates with no time in them, so they are treated as text.
+ */
+function formatDateOnly(raw: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw.trim());
+  return m ? `${m[2]}/${m[3]}/${m[1]}` : raw;
+}
+
+/** A stored `HH:MM` as `h:MM AM/PM`. */
+function formatTimeOnly(raw: string): string {
+  const m = /^(\d{1,2}):(\d{2})/.exec(raw.trim());
+  if (!m) return raw;
+  const h24 = Number(m[1]);
+  const suffix = h24 < 12 ? 'AM' : 'PM';
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${m[2]} ${suffix}`;
+}
+
+/**
+ * The subtitle values a card shows, formatted for the kinds that carry dates.
+ *
+ * Only these two kinds put a raw date or time in a detail slot; everything else
+ * carries a title or a company name and is passed through untouched.
+ */
+function formatDetail(kind: FeedKind, slot: 1 | 2, value: string): string {
+  if (kind === 'meeting_scheduled') return slot === 1 ? formatDateOnly(value) : formatTimeOnly(value);
+  if (kind === 'social_event_created' && slot === 1) return value;
+  return value;
+}
+
 function dayKey(raw: string): string {
   const d = toDate(raw);
   return isNaN(d.getTime()) ? 'unknown' : d.toISOString().slice(0, 10);
@@ -164,7 +198,11 @@ function FeedCard({ item, nowMs }: { item: FeedItem; nowMs: number }) {
           style={{ backgroundColor: item.actor.system ? '#9CA3AF' : avatarColour(item.actor.avatarSeed) }}
           title={item.actor.name}
         >
-          {item.actor.system ? '◆' : initials(item.actor.name)}
+          {/* Initials from the SEED, not the display name: a meeting booked by
+              two reps reads "Kevin Winn +1", whose last word is "+1" — that
+              produced "K+" on the avatar. The seed is the lead rep's own name,
+              which is also what colours it. */}
+          {item.actor.system ? '◆' : initials(item.actor.avatarSeed)}
         </span>
         {/* The name gets the space first. The column is ~290px, and a pill that
             refused to shrink was truncating "Marcus Silva" to "Marcus Sil…" —
@@ -202,7 +240,10 @@ function FeedCard({ item, nowMs }: { item: FeedItem; nowMs: number }) {
         <>
           {(item.detail1 || item.detail2) && (
             <p className="text-[11px] text-gray-400 mt-0.5 truncate">
-              {[item.detail1, item.detail2].filter(Boolean).join(' · ')}
+              {[
+                item.detail1 ? formatDetail(item.kind, 1, item.detail1) : null,
+                item.detail2 ? formatDetail(item.kind, 2, item.detail2) : null,
+              ].filter(Boolean).join(' · ')}
             </p>
           )}
           {item.pills.length > 0 && (
@@ -216,7 +257,8 @@ function FeedCard({ item, nowMs }: { item: FeedItem; nowMs: number }) {
                       : 'bg-gray-100 text-gray-600'
                   }`}
                 >
-                  {p}
+                  {/* A social event carries its date as a pill. */}
+                  {/^\d{4}-\d{2}-\d{2}$/.test(p) ? formatDateOnly(p) : p}
                 </span>
               ))}
             </div>

@@ -5,7 +5,10 @@
  *
  * The tables the feed unions over do not agree on what "the actor" is:
  *
- *   meetings.scheduled_by        `config_options.id` where category = 'user'
+ *   meetings.scheduled_by        a COMMA-SEPARATED LIST of `config_options.id`
+ *                                where category = 'user' — a meeting can be
+ *                                booked by more than one rep — and, on older
+ *                                rows, plain names instead of ids
  *   attendee_touchpoints.logged_by                            (same)
  *   vendor_relationships.rep_id                               (same)
  *   entity_notes.author_user_id  `users.id`
@@ -76,6 +79,28 @@ export const SYSTEM_ACTOR: ResolvedActor = {
   unresolved: false,
 };
 
+/** The parts of a possibly comma-separated identifier, trimmed and non-empty. */
+function splitRefs(id: string | number | null | undefined): string[] {
+  return String(id ?? '').split(',').map(s => s.trim()).filter(Boolean);
+}
+
+/** True for a value that looks like a row id rather than a name. */
+function isNumericId(value: string): boolean {
+  return value !== '' && !Number.isNaN(Number(value));
+}
+
+/**
+ * One display string for a list of resolved parts.
+ *
+ * Two reps booked a meeting together; the card has room for one name. The first
+ * plus a count says so without pretending the second does not exist.
+ */
+function joinNames(names: string[]): string {
+  if (names.length === 0) return '';
+  if (names.length === 1) return names[0];
+  return `${names[0]} +${names.length - 1}`;
+}
+
 /** A stable key for one reference, so a Map can hold the answers. */
 export function actorKey(ref: ActorRef): string {
   if (ref.source === 'system' || ref.id == null || String(ref.id).trim() === '') return 'system';
@@ -111,7 +136,14 @@ export async function resolveActors(
       out.set(key, { name, avatarSeed: name, system: false, unresolved: false });
       continue;
     }
-    if (ref.source === 'rep_config') repIds.add(String(ref.id).trim());
+    // `rep_config` values are a comma-separated LIST — a meeting can be booked
+    // by several reps — and legacy rows hold plain names where newer ones hold
+    // ids. Passing the raw string as one id was why every meeting in the feed
+    // read "Unknown user" while the attendee page showed the right rep: the
+    // page splits and resolves each part, and this did not.
+    if (ref.source === 'rep_config') {
+      for (const part of splitRefs(ref.id)) if (isNumericId(part)) repIds.add(part);
+    }
     if (ref.source === 'user') userIds.add(String(ref.id).trim());
   }
 
@@ -144,6 +176,31 @@ export async function resolveActors(
     if (!name) continue;
     out.set(`user:${String((row as Record<string, unknown>).id)}`,
       { name, avatarSeed: name, system: false, unresolved: false });
+  }
+
+  // Resolve each rep reference from its parts. A numeric part that looked up
+  // becomes a name; a non-numeric part IS a name already, on a row written
+  // before ids were stored.
+  for (const ref of refs) {
+    if (ref.source !== 'rep_config') continue;
+    const key = actorKey(ref);
+    if (key === 'system' || out.has(key)) continue;
+
+    const names: string[] = [];
+    for (const part of splitRefs(ref.id)) {
+      if (isNumericId(part)) {
+        const found = out.get(`rep_config:${part}`);
+        if (found) names.push(found.name);
+      } else {
+        names.push(part);
+      }
+    }
+    if (names.length > 0) {
+      const name = joinNames(names);
+      // Seeded from the FIRST name, not the joined string, so "Kevin Winn" and
+      // "Kevin Winn +1" get the same avatar — it is the same person leading.
+      out.set(key, { name, avatarSeed: names[0], system: false, unresolved: false });
+    }
   }
 
   // Anything still missing: a deleted rep profile, a removed user, an id that

@@ -376,8 +376,10 @@ console.log('\n— RSVPs —');
     VALUES (1, 2, 'maybe', '${ts(14 * HOUR)}', 'Kevin Winn')`);
   const r = await feed('in_progress');
   const rsvps = r.items.filter(i => i.kind === 'rsvp');
-  eq('a yes is reported', rsvps.some(i => i.pills.includes('yes')), true);
-  eq('a maybe is not', rsvps.some(i => i.pills.includes('maybe')), false);
+  // Capitalised: the pill is a rendered decision, not the raw stored token.
+  // See "an RSVP reports a decision" below for the multi-value cases.
+  eq('a yes is reported', rsvps.some(i => i.pills.includes('Yes')), true);
+  eq('a maybe is not', rsvps.some(i => /maybe/i.test(i.pills.join(','))), false);
   eq('  and it names the attendee and the event',
     [rsvps[0].subject, rsvps[0].detail1], ['Robyn Yerger', 'Teton VBC Dinner']);
 }
@@ -402,6 +404,95 @@ console.log('\n— cards link to the record —');
   eq('a vendor relationship opens the company', byKind.vendor_relationship.href, '/companies/1');
   eq('a social event opens its conference', byKind.social_event_created.href, '/conferences/1');
   eq('nothing has an empty href string', r.items.filter(i => i.href === '').length, 0);
+}
+
+// ── The five bugs found in the live preview ─────────────────────────────────
+
+console.log('\n— a meeting booked by more than one rep —');
+{
+  // scheduled_by is a comma-separated LIST of config_option ids, and older rows
+  // hold plain names. Passing the raw string as one id made every meeting in
+  // the feed read "Unknown user" while the attendee page showed the right rep.
+  await db.execute(`INSERT INTO config_options (id, category, value) VALUES (902, 'user', 'Ace Ventura')`);
+  await db.execute(`INSERT INTO meetings (id, attendee_id, conference_id, meeting_date, meeting_time,
+      scheduled_by, created_at)
+    VALUES (20, 1, ${RUNNING}, '2026-06-16', '14:00', '900,902', '${ts(20 * HOUR)}')`);
+  const item = (await feed('in_progress')).items.find(i => i.id.includes('meeting_scheduled') && i.occurredAt === ts(20 * HOUR));
+  eq('a two-rep meeting names the first and counts the rest', item.actor.name, 'Kevin Winn +1');
+  eq('  and is not "Unknown user"', item.actor.unresolved, false);
+  // Same person leading means the same avatar, whether or not they had help.
+  eq('  seeded from the lead rep, so the avatar matches theirs', item.actor.avatarSeed, 'Kevin Winn');
+}
+{
+  // A row written before ids were stored holds the name itself.
+  await db.execute(`INSERT INTO meetings (id, attendee_id, conference_id, meeting_date, meeting_time,
+      scheduled_by, created_at)
+    VALUES (21, 1, ${RUNNING}, '2026-06-16', '15:00', 'Harry Dunn', '${ts(21 * HOUR)}')`);
+  const item = (await feed('in_progress')).items.find(i => i.occurredAt === ts(21 * HOUR));
+  eq('a legacy name resolves to itself', item.actor.name, 'Harry Dunn');
+  eq('  without being flagged unresolved', item.actor.unresolved, false);
+}
+{
+  const { resolveActors, actorKey } = await import('@/lib/feed/actors');
+  const ref = { source: 'rep_config', id: '900,99999' };
+  const got = (await resolveActors(db, [ref])).get(actorKey(ref));
+  // One bad id in a list must not lose the good one.
+  eq('an unresolvable id in a list does not lose the resolvable one', got.name, 'Kevin Winn');
+}
+
+console.log('\n— a conference is in progress on its LAST day —');
+{
+  const { computeConferenceStage } = await import('@/lib/conference-stage');
+  const c = { start_date: '2026-09-09', end_date: '2026-09-11' };
+  // new Date('2026-09-11') is midnight at the START of the 11th, so `now <= end`
+  // ended a three-day show after two. validate-conference-stage gates writes on
+  // the same function, so actions allowed only during a conference were refused
+  // on its closing day.
+  eq('the morning of the last day', computeConferenceStage(c, Date.parse('2026-09-11T00:00:01Z')), 'in_progress');
+  eq('the evening of the last day', computeConferenceStage(c, Date.parse('2026-09-11T23:59:00Z')), 'in_progress');
+  eq('  and the day after is not', computeConferenceStage(c, Date.parse('2026-09-12T00:00:01Z')), 'post_conference');
+  eq('the day before the start is still planning',
+    computeConferenceStage(c, Date.parse('2026-09-08T20:00:00Z')), 'planning');
+}
+{
+  // The same boundary, through the feed's own scope.
+  const onLastDay = await fetchFeed(db, { scope: 'in_progress', nowMs: Date.parse('2026-06-17T18:00:00Z'), limit: 100 });
+  eq('the feed still scopes to a conference on its closing day',
+    onLastDay.inProgressConferenceIds.includes(RUNNING), true);
+}
+
+console.log('\n— an RSVP reports a decision, not the stored string —');
+{
+  // rsvp_status is a comma-separated multi-select, so 'maybe,no' is a real value.
+  // Attendee 2 already has a maybe from the section above; this changes it.
+  await db.execute(`UPDATE social_event_rsvps SET rsvp_status = 'maybe,no', rsvp_set_at = '${ts(22 * HOUR)}'
+    WHERE social_event_id = 1 AND attendee_id = 2`);
+  await db.execute(`UPDATE social_event_rsvps SET rsvp_status = 'maybe,yes' WHERE social_event_id = 1 AND attendee_id = 1`);
+  const rsvps = (await feed('in_progress')).items.filter(i => i.kind === 'rsvp');
+  const all = rsvps.flatMap(i => i.pills);
+  eq('a stored "maybe,yes" shows Yes', all.includes('Yes'), true);
+  eq('a stored "maybe,no" shows No', all.includes('No'), true);
+  eq('  and no card prints a maybe', all.some(p => /maybe/i.test(p)), false);
+  eq('  nor the raw comma-separated value', all.some(p => p.includes(',')), false);
+}
+
+console.log('\n— a note names the record it is on —');
+{
+  // entity_notes carries denormalised attendee_name / company_name that plenty
+  // of rows simply do not have. Those were rendering as "Note on a record".
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id, author_user_id, created_at)
+    VALUES (30, 'attendee', 1, 'No denormalised name on this row.', ${RUNNING}, 10, '${ts(23 * HOUR)}')`);
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id, author_user_id, created_at)
+    VALUES (31, 'company', 1, 'A company note.', ${RUNNING}, 10, '${ts(24 * HOUR)}')`);
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id, author_user_id, created_at)
+    VALUES (32, 'conference', ${RUNNING}, 'A conference note.', ${RUNNING}, 10, '${ts(25 * HOUR)}')`);
+  const items = (await feed('in_progress')).items;
+  const byTs = t => items.find(i => i.occurredAt === ts(t));
+  eq('an attendee note names the attendee', byTs(23 * HOUR).subject, 'Robyn Yerger');
+  eq('  and their company in the subtitle', byTs(23 * HOUR).detail2, 'Arrow Senior Living');
+  eq('a company note names the company', byTs(24 * HOUR).subject, 'Arrow Senior Living');
+  eq('a conference note names the conference', byTs(25 * HOUR).subject, 'ALIS FWD');
+  eq('nothing in the page says "a record"', items.filter(i => i.subject === 'a record').length, 0);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
