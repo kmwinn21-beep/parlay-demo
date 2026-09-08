@@ -2461,4 +2461,58 @@ export const migrations: string[] = [
   // have no hard cap, and NULL means "no limit" rather than "nobody" — the card
   // shows a dash rather than 0 of 0.
   `ALTER TABLE social_events ADD COLUMN guest_limit INTEGER`,
+
+  // ── Conference activity feed ───────────────────────────────────────────────
+  //
+  // The feed is a UNION across the tables below. Three of them could not say
+  // WHEN something happened or WHO did it, which is the whole substance of a
+  // feed item, so the fix is here rather than in the query.
+
+  // When a meeting's outcome was set — not when the meeting was created, and
+  // not the slot it was booked into. A meeting logged now must sort to now, and
+  // a Thursday slot marked held on Wednesday must not sort into the future.
+  // Null for every meeting that predates this column; those simply do not
+  // appear as "held" in the feed.
+  `ALTER TABLE meetings ADD COLUMN outcome_set_at TEXT`,
+
+  // conference_attendees was a bare (conference_id, attendee_id) join table
+  // with no timestamp and no actor, so "added to the conference" was not an
+  // event anyone could render.
+  //
+  // NOTE: no surrogate `id`. SQLite cannot add an AUTOINCREMENT primary key
+  // with ALTER, and the alternative — rebuild, copy, drop, rename — is four
+  // statements in a runner that swallows each one's errors individually
+  // (migrateTenantDb). A failure on statement three would leave the table
+  // dropped. The composite key already identifies a row uniquely and the feed
+  // does not need another handle on it.
+  `ALTER TABLE conference_attendees ADD COLUMN created_at TEXT`,
+  `ALTER TABLE conference_attendees ADD COLUMN created_by TEXT`,
+  // Backfill from the attendee's own creation date. Wrong for anyone added to a
+  // second conference later, but closer than null, and null is what it stays
+  // when the attendee row is gone.
+  `UPDATE conference_attendees
+     SET created_at = (SELECT a.created_at FROM attendees a WHERE a.id = conference_attendees.attendee_id)
+     WHERE created_at IS NULL`,
+
+  // social_event_rsvps.updated_at cannot stand in for "the RSVP changed": the
+  // guest-ranking route bumps it too, so a rank edit would surface in the feed
+  // as somebody accepting an invitation. A separate stamp, written only when
+  // rsvp_status itself changes.
+  `ALTER TABLE social_event_rsvps ADD COLUMN rsvp_set_at TEXT`,
+  `ALTER TABLE social_event_rsvps ADD COLUMN rsvp_by TEXT`,
+
+  // created_at indexes. The In Progress scope is carried by the conference
+  // filter, but All spans 90 days across every conference and, without these,
+  // every branch of the union is a full scan plus a filesort — the query that
+  // degrades first as history accumulates.
+  `CREATE INDEX IF NOT EXISTS idx_feed_meetings_created ON meetings(created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_feed_meetings_outcome_set ON meetings(outcome_set_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_feed_touchpoints_created ON attendee_touchpoints(created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_feed_notes_created ON entity_notes(created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_feed_pinned_created ON pinned_notes(created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_feed_vendor_rel_created ON vendor_relationships(created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_feed_attendees_created ON attendees(created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_feed_conf_attendees_created ON conference_attendees(created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_feed_social_events_created ON social_events(created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_feed_rsvps_set ON social_event_rsvps(rsvp_set_at)`,
 ];

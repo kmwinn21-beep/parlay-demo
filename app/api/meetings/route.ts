@@ -252,7 +252,9 @@ export async function PATCH(request: NextRequest) {
       ? String(preMeeting.rows[0].outcome) : null;
 
     await db.execute({
-      sql: 'UPDATE meetings SET outcome = ? WHERE id = ?',
+      // outcome_set_at is what the activity feed sorts "meeting held" by —
+      // created_at is when the slot was booked, which is a different day.
+      sql: "UPDATE meetings SET outcome = ?, outcome_set_at = datetime('now') WHERE id = ?",
       args: [outcome, id],
     });
 

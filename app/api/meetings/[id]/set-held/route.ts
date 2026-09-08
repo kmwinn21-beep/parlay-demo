@@ -31,7 +31,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (currentOutcome === heldValue) return NextResponse.json({ skipped: true, reason: 'already_held' });
 
     // Update meeting outcome
-    await db.execute({ sql: 'UPDATE meetings SET outcome = ? WHERE id = ?', args: [heldValue, meetingId] });
+    await db.execute({ sql: "UPDATE meetings SET outcome = ?, outcome_set_at = datetime('now') WHERE id = ?", args: [heldValue, meetingId] });
 
     // Sync conference_attendee_details.action
     const { attendee_id, conference_id } = mtg;
