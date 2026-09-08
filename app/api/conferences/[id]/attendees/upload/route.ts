@@ -1102,7 +1102,7 @@ export async function POST(
 
     // Batch-insert conference_attendees
     await batchInsert(db, attendeeIdsToLink, (aid) => ({
-      sql: 'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)',
+      sql: `INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id, created_at) VALUES (?, ?, datetime('now'))`,
       args: [conferenceId, aid],
     }));
     // Real attendees just landed — clear any company-only stand-ins they make

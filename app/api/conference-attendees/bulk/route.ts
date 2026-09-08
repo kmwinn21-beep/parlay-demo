@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     for (const confId of conference_ids) {
       for (const attId of uniqueIds) {
         stmts.push({
-          sql: 'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)',
+          sql: `INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id, created_at) VALUES (?, ?, datetime('now'))`,
           args: [confId, attId],
         });
       }

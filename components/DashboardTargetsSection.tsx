@@ -399,25 +399,28 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
           aria-expanded={!isMobile || expanded}
           className={`text-lg font-semibold text-brand-primary font-serif flex items-center gap-2 text-left group flex-shrink-0 ${isMobile ? '' : 'cursor-default'}`}
         >
-          <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-100 flex-shrink-0">
-            <svg
-              className="w-5 h-5 text-red-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <circle cx="12" cy="12" r="4" />
-              <line x1="12" y1="2" x2="12" y2="6" />
-              <line x1="12" y1="18" x2="12" y2="22" />
-              <line x1="2" y1="12" x2="6" y2="12" />
-              <line x1="18" y1="12" x2="22" y2="12" />
-            </svg>
-          </span>
-          Targets
+          {/* A bare 20px icon, not a 32px tinted circle. The circle pushed
+              "Targets" 12px further right than the F of "Floor Notes" above
+              it, which is visible as a stagger down a phone. Every dashboard
+              header now leads with w-5 h-5 and gap-2, so the first letters
+              share a left edge. */}
+          <svg
+            className="w-5 h-5 text-red-500 flex-shrink-0"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <circle cx="12" cy="12" r="4" />
+            <line x1="12" y1="2" x2="12" y2="6" />
+            <line x1="12" y1="18" x2="12" y2="22" />
+            <line x1="2" y1="12" x2="6" y2="12" />
+            <line x1="18" y1="12" x2="22" y2="12" />
+          </svg>
+          <span>Targets</span>
           <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200 lg:hidden ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>

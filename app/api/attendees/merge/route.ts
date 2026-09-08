@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       // Move conference associations to master
       for (const ca of dupConferencesResult.rows) {
         statements.push({
-          sql: 'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)',
+          sql: `INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id, created_at) VALUES (?, ?, datetime('now'))`,
           args: [ca.conference_id as number, master_id],
         });
       }

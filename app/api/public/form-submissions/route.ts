@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
       companyId: resolvedCompanyId,
     });
     await db.execute({
-      sql: `INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)`,
+      sql: `INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id, created_at) VALUES (?, ?, datetime('now'))`,
       args: [conference_id, resolvedAttendeeId],
     }).catch(() => {});
 

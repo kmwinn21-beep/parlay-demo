@@ -990,7 +990,7 @@ export async function POST(request: NextRequest) {
 
         // ── Step 7: Batch-insert conference_attendees ──
         await batchInsert(db, attendeeIdsToLink, (aid) => ({
-          sql: 'INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id) VALUES (?, ?)',
+          sql: `INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id, created_at) VALUES (?, ?, datetime('now'))`,
           args: [conferenceId, aid],
         }));
         if (bgJobId) await db.execute({ sql: 'UPDATE upload_jobs SET processed_rows=? WHERE id=?', args: [Math.round(valid.length * 0.95), bgJobId] }).catch(() => {});

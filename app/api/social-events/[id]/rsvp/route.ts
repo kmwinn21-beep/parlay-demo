@@ -4,6 +4,33 @@ import { getCurrentRepConfigId } from '@/lib/currentRep';
 import { getSessionUser } from '@/lib/auth';
 import { validateConferenceStage } from '@/lib/validate-conference-stage';
 
+/**
+ * The display name to record against an RSVP change, for the activity feed.
+ *
+ * Free text rather than an id, matching what social_events.entered_by already
+ * stores — see the vocabulary list in lib/feed/actors.ts. Falls back to the
+ * email, and then to nothing, which the feed renders as a system actor rather
+ * than as a blank name.
+ */
+async function resolveActorName(
+  db: Awaited<ReturnType<typeof getDb>>,
+  user: { id: number; email: string } | null,
+): Promise<string | null> {
+  if (!user) return null;
+  try {
+    const r = await db.execute({
+      sql: `SELECT COALESCE(co.value, u.display_name, u.email) AS name
+            FROM users u LEFT JOIN config_options co ON co.id = u.config_id
+            WHERE u.id = ?`,
+      args: [user.id],
+    });
+    const name = r.rows[0] ? String(r.rows[0].name ?? '').trim() : '';
+    return name || user.email || null;
+  } catch {
+    return user.email || null;
+  }
+}
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -46,11 +73,16 @@ export async function PUT(
 
     // Upsert RSVP
     await db.execute({
-      sql: `INSERT INTO social_event_rsvps (social_event_id, attendee_id, rsvp_status, updated_at)
-            VALUES (?, ?, ?, datetime('now'))
+      // rsvp_set_at is separate from updated_at on purpose: the guest-ranking
+      // route bumps updated_at too, and the activity feed would otherwise read
+      // a rank edit as somebody accepting an invitation. rsvp_by records who
+      // marked it — the RSVP is about the attendee, not the person logging it.
+      sql: `INSERT INTO social_event_rsvps (social_event_id, attendee_id, rsvp_status, updated_at, rsvp_set_at, rsvp_by)
+            VALUES (?, ?, ?, datetime('now'), datetime('now'), ?)
             ON CONFLICT (social_event_id, attendee_id)
-            DO UPDATE SET rsvp_status = excluded.rsvp_status, updated_at = excluded.updated_at`,
-      args: [id, attendee_id, rsvp_status],
+            DO UPDATE SET rsvp_status = excluded.rsvp_status, updated_at = excluded.updated_at,
+                          rsvp_set_at = excluded.rsvp_set_at, rsvp_by = excluded.rsvp_by`,
+      args: [id, attendee_id, rsvp_status, await resolveActorName(db, user)],
     });
 
     // Auto-create a "Post-Event" follow-up when "attended" is newly marked.
