@@ -10,6 +10,8 @@ import { useConfigColors } from '@/lib/useConfigColors';
 import { getConfig } from '@/lib/configCache';
 import { parseRepIds, getRepInitials } from '@/lib/useUserOptions';
 import { useUser } from '@/components/UserContext';
+import { RepMultiSelect } from '@/components/RepMultiSelect';
+import { companiesAssignedTo, attendeesAtCompanies, type RepRef } from '@/lib/guestFilters';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
 import { CustomColumnCell } from './CustomColumnCell';
 import { CardActionMenu, CardField, CardGuestListButton, CardNotesButton, SocialEventCardBody } from './SocialEventCardParts';
@@ -635,6 +637,8 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
           onConfirm={ids => onSaveGuestList(ids.map(Number).filter(n => !isNaN(n)))}
           onClose={() => setEditingGuests(false)}
           icpCompanyTypes={icpCompanyTypes}
+          companies={companies}
+          userOptionsFull={userOptionsFull}
           rankOf={rankOf}
           onRankChange={onRankChange}
         />
@@ -645,12 +649,16 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
 }
 
 /* ─── Build Guest List modal ─── */
-function GuestListModal({ attendees, selected, onConfirm, onClose, icpCompanyTypes, rankOf, onRankChange }: {
+function GuestListModal({ attendees, selected, onConfirm, onClose, icpCompanyTypes, companies, userOptionsFull, rankOf, onRankChange }: {
   attendees: Attendee[];
   selected: string[];
   onConfirm: (ids: string[]) => void;
   onClose: () => void;
   icpCompanyTypes: string[];
+  /** Carries `assigned_user`, which is what the account filters read. */
+  companies: CompanyOption[];
+  /** config_options, category 'user' — the options the rep dropdown offers. */
+  userOptionsFull: Array<{ id: number; value: string }>;
   /**
    * Optional: the modal is also opened from the Add Social Event form, where
    * the event does not exist yet and there is nothing to rank against. Without
@@ -659,12 +667,41 @@ function GuestListModal({ attendees, selected, onConfirm, onClose, icpCompanyTyp
   rankOf?: (attendeeId: number) => GuestRank;
   onRankChange?: (attendeeId: number, next: GuestRank) => void;
 }) {
+  const { user } = useUser();
   const [draft, setDraft] = useState<string[]>(selected);
   const [search, setSearch] = useState('');
+  const [myAccountsOnly, setMyAccountsOnly] = useState(false);
+  const [repFilterIds, setRepFilterIds] = useState<number[]>([]);
+
+  // The signed-in user as a rep, which is how companies record an assignment.
+  // Null when their login has no rep profile — there is nothing to match on, so
+  // the button is disabled rather than filtering to nothing and looking broken.
+  const me: RepRef | null = user?.configId != null
+    ? { id: user.configId, value: user.displayName ?? '' }
+    : null;
+
+  /**
+   * The two filters UNION rather than intersect.
+   *
+   * Both answer the same question — whose accounts is this person at — so
+   * ticking My Accounts and then picking a colleague reads as "mine and
+   * theirs". Intersecting would mean companies assigned to both of us at once,
+   * which is a rarer question and produces an empty list often enough to look
+   * like a bug.
+   */
+  const filterReps: RepRef[] = [
+    ...(myAccountsOnly && me ? [me] : []),
+    ...repFilterIds
+      .map(id => userOptionsFull.find(u => u.id === id))
+      .filter((u): u is { id: number; value: string } => !!u),
+  ];
+  const accountFiltered = filterReps.length > 0
+    ? attendeesAtCompanies(attendees, companiesAssignedTo(companies, filterReps))
+    : attendees;
 
   // ICP company types sort to the top of the pick list.
   const icpTypeSet = new Set(icpCompanyTypes);
-  const sorted = [...attendees].sort((a, b) => {
+  const sorted = [...accountFiltered].sort((a, b) => {
     const aOp = a.company_type && icpTypeSet.has(a.company_type) ? 0 : 1;
     const bOp = b.company_type && icpTypeSet.has(b.company_type) ? 0 : 1;
     if (aOp !== bOp) return aOp - bOp;
@@ -725,8 +762,33 @@ function GuestListModal({ attendees, selected, onConfirm, onClose, icpCompanyTyp
             onChange={e => setSearch(e.target.value)}
             placeholder="Search by name, company, or title..."
             className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-secondary"
-            autoFocus
           />
+          {/* Account filters. Both narrow the pool to attendees whose COMPANY
+              is assigned to somebody, so they sit together under the search. */}
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              type="button"
+              disabled={!me}
+              onClick={() => setMyAccountsOnly(v => !v)}
+              title={me ? undefined : 'Your login has no rep profile, so no companies are assigned to you.'}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg border whitespace-nowrap transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                myAccountsOnly
+                  ? 'bg-brand-secondary border-brand-secondary text-white'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              My Accounts
+            </button>
+            <div className="flex-1 min-w-0">
+              <RepMultiSelect
+                options={userOptionsFull}
+                selectedIds={repFilterIds}
+                onChange={setRepFilterIds}
+                placeholder="Filter by rep..."
+                triggerClass="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white text-left flex items-center justify-between gap-1"
+              />
+            </div>
+          </div>
         </div>
 
         {/* Table */}
@@ -797,7 +859,7 @@ function GuestListModal({ attendees, selected, onConfirm, onClose, icpCompanyTyp
           <div className="flex gap-2">
             <button type="button" onClick={onClose} className="btn-secondary text-sm">Cancel</button>
             <button type="button" onClick={() => { onConfirm(draft); onClose(); }} className="btn-primary text-sm">
-              Save Guest List
+              Save
             </button>
           </div>
         </div>
@@ -1344,6 +1406,8 @@ export function SocialEventsTable({
           onConfirm={ids => setFormData(p => ({ ...p, prospect_attendees: ids }))}
           onClose={() => setShowGuestListModal(false)}
           icpCompanyTypes={icpCompanyTypes}
+          companies={companies}
+          userOptionsFull={userOptionsFull}
         />
       )}
 
