@@ -215,8 +215,14 @@ console.log('\n— the dashboard grid —');
   eq('the feed spans both rows in the third column',
     /lg:row-span-2 lg:row-start-1 lg:col-start-3/.test(page), true);
   eq('floor notes keeps its span', /lg:col-span-2 lg:row-start-1/.test(page), true);
-  eq('  and now has an explicit height, since Touchpoints no longer sets one',
-    /lg:row-start-1 h-\[489px\]/.test(page), true);
+  // Desktop only. On a phone the card collapses to its header — the body
+  // unmounts — and an unconditional height held the container open at 489px
+  // around nothing, which read as a broken empty box.
+  eq('  and an explicit height on DESKTOP, since Touchpoints no longer sets one',
+    /lg:h-\[489px\]/.test(page), true);
+  eq('  which is not forced on mobile', /lg:row-start-1 h-\[489px\]/.test(page), false);
+  eq('  where it is a cap, so an expanded card still scrolls inside it',
+    /max-h-\[489px\] lg:max-h-none/.test(page), true);
   eq('targets keeps its own Suspense boundary as a grid child',
     /<Suspense fallback=\{<div className="lg:col-span-2 lg:row-start-2">/.test(page), true);
 

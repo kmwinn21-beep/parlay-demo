@@ -334,9 +334,14 @@ export default function DashboardPage() {
           on come first, and the feed is something you scroll to. */}
       <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-rows-[auto_auto] gap-6 items-stretch">
         {/* Floor Notes. It used to take its height from the Touchpoints card
-            beside it; with that gone it needs an explicit one, chosen to match
-            what it rendered at before. */}
-        <div className="lg:col-span-2 lg:row-start-1 h-[489px] flex flex-col min-h-0 lg:block lg:relative">
+            beside it; with that gone it needs an explicit one on DESKTOP,
+            chosen to match what it rendered at before.
+            Desktop only, deliberately. On a phone the card collapses to its
+            header — the body unmounts — and a fixed height held the container
+            open at 489px around nothing, which read as a broken empty box. The
+            mobile cap is a max-height, so an expanded card still scrolls inside
+            the same bound while a collapsed one shrinks to fit. */}
+        <div className="lg:col-span-2 lg:row-start-1 max-h-[489px] lg:max-h-none lg:h-[489px] flex flex-col min-h-0 lg:block lg:relative">
           <QuickNotesSection className="lg:absolute lg:inset-0" />
         </div>
 
