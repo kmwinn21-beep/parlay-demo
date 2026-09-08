@@ -25,6 +25,16 @@
  *
  * `all` reaches back 90 days across every conference.
  *
+ * ── One rule, applied uniformly ──────────────────────────────────────────────
+ *
+ * An item belongs to the scope its CONFERENCE's stage belongs to. Planning goes
+ * to `upcoming`, in_progress to `active`, and everything — including the two
+ * stages neither names, and anything with no conference at all — to `all`.
+ *
+ * Every branch below therefore filters on `conference_id IN (…)` when scoped.
+ * A branch that reached a conference scope some other way was the one that
+ * leaked, so there are no other ways.
+ *
  * ── Never throws ─────────────────────────────────────────────────────────────
  *
  * A feed is furniture. Every branch is individually catchable and a failure
@@ -282,33 +292,33 @@ function buildBranches(opts: {
   });
 
   // ── Vendor relationships ───────────────────────────────────────────────────
-  // No conference column, and deliberately not given one: a vendor relationship
-  // is a company fact. Under in_progress it is included when either company has
-  // an attendee at a conference that is running — a competitor turning up at a
-  // target is the highest-value thing in the stream, and dropping it because
-  // the table has no conference_id would be the wrong trade.
-  const vendorScope = scoped
-    ? `AND EXISTS (
-         SELECT 1 FROM attendees va
-         JOIN conference_attendees vca ON vca.attendee_id = va.id
-         WHERE va.company_id IN (vr.company_id, vr.related_company_id)
-           AND vca.conference_id IN (${inConf}))`
-    : '';
-  branches.push({
-    kind: 'vendor_relationship',
-    sql: `SELECT 'vendor_relationship' AS kind, vr.created_at AS occurred_at,
-                 'rep_config' AS actor_source, CAST(vr.rep_id AS TEXT) AS actor_id,
-                 NULL AS conference_id, NULL AS conference_name,
-                 rc.name AS subject,
-                 vr.vendor_type AS detail1, c.name AS detail2,
-                 vr.relationship_status AS pill1, rc.company_type AS pill2,
-                 NULL AS body, 'company' AS entity_kind, vr.company_id AS entity_id, 0 AS pinned
-          FROM vendor_relationships vr
-          JOIN companies c ON c.id = vr.company_id
-          JOIN companies rc ON rc.id = vr.related_company_id
-          WHERE ${window('vr.created_at')} ${vendorScope}`,
-    args: [...windowArgs(), ...(scoped ? conferenceIds : [])],
-  });
+  //
+  // ALL ONLY. A vendor relationship is a company fact with no conference column,
+  // so under the rule every other branch follows — an item belongs to the scope
+  // its conference's stage belongs to — it belongs to neither conference scope.
+  //
+  // An earlier version reached it into the active scope through "either company
+  // has an attendee at a running conference". That was the one branch not
+  // filtered on conference_id, and it was the leak: relationships logged against
+  // no conference at all surfaced under Active. One rule applied uniformly is
+  // worth more here than one clever exception.
+  if (!scoped) {
+    branches.push({
+      kind: 'vendor_relationship',
+      sql: `SELECT 'vendor_relationship' AS kind, vr.created_at AS occurred_at,
+                   'rep_config' AS actor_source, CAST(vr.rep_id AS TEXT) AS actor_id,
+                   NULL AS conference_id, NULL AS conference_name,
+                   rc.name AS subject,
+                   vr.vendor_type AS detail1, c.name AS detail2,
+                   vr.relationship_status AS pill1, rc.company_type AS pill2,
+                   NULL AS body, 'company' AS entity_kind, vr.company_id AS entity_id, 0 AS pinned
+            FROM vendor_relationships vr
+            JOIN companies c ON c.id = vr.company_id
+            JOIN companies rc ON rc.id = vr.related_company_id
+            WHERE ${window('vr.created_at')}`,
+      args: [...windowArgs()],
+    });
+  }
 
   // ── People ─────────────────────────────────────────────────────────────────
   // Added to a conference, not created in the database: the same person joining
