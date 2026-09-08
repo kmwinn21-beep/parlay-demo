@@ -130,7 +130,7 @@ console.log('\n— the in-progress set —');
 
 console.log('\n— every kind appears —');
 {
-  const r = await feed('in_progress');
+  const r = await feed('active');
   const seen = new Set(kindsOf(r));
   const missing = FEED_KINDS.filter(k => !seen.has(k));
   // A union arm reading the wrong column returns nothing and the query still
@@ -140,7 +140,7 @@ console.log('\n— every kind appears —');
 
 console.log('\n— newest first —');
 {
-  const r = await feed('in_progress');
+  const r = await feed('active');
   const times = r.items.map(i => i.occurredAt);
   eq('strictly reverse chronological', times, [...times].sort().reverse());
   // The meeting was CREATED five days ago and marked held an hour ago. It sorts
@@ -150,7 +150,7 @@ console.log('\n— newest first —');
 
 console.log('\n— each kind gets the right colour and shape —');
 {
-  const r = await feed('in_progress');
+  const r = await feed('active');
   const byKind = Object.fromEntries(r.items.map(i => [i.kind, i]));
 
   eq('meetings are blue', [byKind.meeting_held.colour, byKind.meeting_scheduled.colour],
@@ -172,7 +172,7 @@ console.log('\n— each kind gets the right colour and shape —');
 
 console.log('\n— a note card shows its text, and only a note card —');
 {
-  const r = await feed('in_progress');
+  const r = await feed('active');
   const byKind = Object.fromEntries(r.items.map(i => [i.kind, i]));
   // A note card that does not show its text is a card saying a note exists.
   eq('the note carries its body', byKind.note.body, 'They want a pilot in two communities first.');
@@ -185,7 +185,7 @@ console.log('\n— a note card shows its text, and only a note card —');
 
 console.log('\n— the conference pill —');
 {
-  const r = await feed('in_progress');
+  const r = await feed('active');
   const byKind = Object.fromEntries(r.items.map(i => [i.kind, i]));
   eq('an id-backed pill is named and linkable',
     [byKind.meeting_held.conference.id, byKind.meeting_held.conference.name], [RUNNING, 'ALIS FWD']);
@@ -200,7 +200,7 @@ console.log('\n— the conference pill —');
 
 console.log('\n— the actor —');
 {
-  const r = await feed('in_progress');
+  const r = await feed('active');
   const byKind = Object.fromEntries(r.items.map(i => [i.kind, i]));
   eq('a config_options id resolves', byKind.meeting_held.actor.name, 'Kevin Winn');
   eq('a users.id resolves', byKind.note.actor.name, 'Sarah Chen');
@@ -213,7 +213,7 @@ console.log('\n— an unattributable row is the system actor, not a broken card 
 {
   await db.execute(`INSERT INTO conference_attendees (conference_id, attendee_id, created_at)
     VALUES (${RUNNING}, 2, '${ts(10 * HOUR)}')`);
-  const r = await feed('in_progress');
+  const r = await feed('active');
   const orphan = r.items.find(i => i.kind === 'attendee_added' && i.subject === 'Philip Gisi');
   eq('a row with no actor renders as the system actor', orphan.actor.system, true);
   eq('  named, not blank', orphan.actor.name, 'Parlay');
@@ -236,7 +236,7 @@ console.log('\n— in progress vs all —');
   await db.execute(`INSERT INTO attendee_touchpoints (id, attendee_id, conference_id, option_id, logged_by, created_at)
     VALUES (2, 1, ${ENDED}, 901, '900', '${ts(35 * DAY)}')`);
 
-  const scoped = await feed('in_progress');
+  const scoped = await feed('active');
   const all = await feed('all');
 
   const scopedConfs = new Set(scoped.items.map(i => i.conference?.id ?? null));
@@ -254,7 +254,7 @@ console.log('\n— in progress vs all —');
   await db.execute(`INSERT INTO pinned_notes (id, note_id, entity_type, entity_id, pinned_by,
       conference_name, attendee_name, created_at)
     VALUES (2, 1, 'attendee', 1, 'Marcus Silva', 'OHCA Annual', 'Robyn Yerger', '${ts(11 * HOUR)}')`);
-  const scoped = await feed('in_progress');
+  const scoped = await feed('active');
   eq('a pin naming an ended conference is dropped from in progress',
     scoped.items.filter(i => i.kind === 'note_pinned' && i.conference?.name === 'OHCA Annual').length, 0);
   const all = await feed('all');
@@ -275,14 +275,14 @@ console.log('\n— in progress vs all —');
 {
   // The vendor-relationship join: no conference column, included under
   // in_progress because one of its companies has an attendee at a running show.
-  const scoped = await feed('in_progress');
+  const scoped = await feed('active');
   eq('a vendor relationship reaches in progress via its companies\' attendees',
     scoped.items.some(i => i.kind === 'vendor_relationship'), true);
 
   await db.execute(`INSERT INTO companies (id, name) VALUES (3, 'Unrelated Co'), (4, 'Also Unrelated')`);
   await db.execute(`INSERT INTO vendor_relationships (id, company_id, related_company_id, rep_id, created_at)
     VALUES (2, 3, 4, 900, '${ts(13 * HOUR)}')`);
-  const after = await feed('in_progress');
+  const after = await feed('active');
   eq('  and one whose companies are at no running show is excluded',
     after.items.filter(i => i.kind === 'vendor_relationship' && i.subject === 'Also Unrelated').length, 0);
   const all = await feed('all');
@@ -297,11 +297,11 @@ console.log('\n— nothing running —');
   await db.execute(`UPDATE conferences SET stage_override = NULL WHERE id = ${OVERRIDDEN}`);
   await db.execute(`UPDATE conferences SET start_date = '2026-01-01', end_date = '2026-01-02' WHERE id = ${RUNNING}`);
 
-  const scoped = await feed('in_progress');
-  eq('in progress returns nothing', scoped.items.length, 0);
+  const scoped = await feed('active');
+  eq('active returns nothing', scoped.items.length, 0);
   // The empty state has to tell "no show is running" apart from "a show is
   // running and nobody did anything", and they read very differently.
-  eq('  and says why — no conference is in progress', scoped.inProgressConferenceIds, []);
+  eq('  and says why — no conference is in progress', scoped.activeConferenceIds, []);
   const all = await feed('all');
   eq('  while all still has plenty', all.items.length > 5, true);
 
@@ -327,7 +327,7 @@ console.log(`\n— the ${ALL_SCOPE_DAYS}-day boundary —`);
 
   // in_progress is NOT windowed — a long conference can run past 90 days and
   // its activity belongs to it regardless of age.
-  const scoped = await feed('in_progress');
+  const scoped = await feed('active');
   eq('the window does not apply to in progress',
     scoped.items.every(i => i.occurredAt >= ts(ALL_SCOPE_DAYS * DAY)), true);
 }
@@ -374,7 +374,7 @@ console.log('\n— RSVPs —');
   // than a response to an invitation.
   await db.execute(`INSERT INTO social_event_rsvps (social_event_id, attendee_id, rsvp_status, rsvp_set_at, rsvp_by)
     VALUES (1, 2, 'maybe', '${ts(14 * HOUR)}', 'Kevin Winn')`);
-  const r = await feed('in_progress');
+  const r = await feed('active');
   const rsvps = r.items.filter(i => i.kind === 'rsvp');
   // Capitalised: the pill is a rendered decision, not the raw stored token.
   // See "an RSVP reports a decision" below for the multi-value cases.
@@ -386,10 +386,10 @@ console.log('\n— RSVPs —');
 {
   // The reason rsvp_set_at exists rather than reusing updated_at: the guest
   // ranking route bumps updated_at, and a rank edit is not an RSVP.
-  const before = (await feed('in_progress')).items.filter(i => i.kind === 'rsvp').length;
+  const before = (await feed('active')).items.filter(i => i.kind === 'rsvp').length;
   await db.execute(`UPDATE social_event_rsvps SET team_rank = 3, updated_at = datetime('now')
     WHERE social_event_id = 1 AND attendee_id = 1`);
-  const after = (await feed('in_progress')).items.filter(i => i.kind === 'rsvp').length;
+  const after = (await feed('active')).items.filter(i => i.kind === 'rsvp').length;
   eq('changing a guest rank does not appear as an RSVP', after, before);
 }
 
@@ -397,7 +397,7 @@ console.log('\n— RSVPs —');
 
 console.log('\n— cards link to the record —');
 {
-  const r = await feed('in_progress');
+  const r = await feed('active');
   const byKind = Object.fromEntries(r.items.map(i => [i.kind, i]));
   eq('a meeting opens the attendee', byKind.meeting_held.href, '/attendees/1');
   eq('a touchpoint opens the attendee', byKind.touchpoint.href, '/attendees/1');
@@ -417,7 +417,7 @@ console.log('\n— a meeting booked by more than one rep —');
   await db.execute(`INSERT INTO meetings (id, attendee_id, conference_id, meeting_date, meeting_time,
       scheduled_by, created_at)
     VALUES (20, 1, ${RUNNING}, '2026-06-16', '14:00', '900,902', '${ts(20 * HOUR)}')`);
-  const item = (await feed('in_progress')).items.find(i => i.id.includes('meeting_scheduled') && i.occurredAt === ts(20 * HOUR));
+  const item = (await feed('active')).items.find(i => i.id.includes('meeting_scheduled') && i.occurredAt === ts(20 * HOUR));
   eq('a two-rep meeting names the first and counts the rest', item.actor.name, 'Kevin Winn +1');
   eq('  and is not "Unknown user"', item.actor.unresolved, false);
   // Same person leading means the same avatar, whether or not they had help.
@@ -428,7 +428,7 @@ console.log('\n— a meeting booked by more than one rep —');
   await db.execute(`INSERT INTO meetings (id, attendee_id, conference_id, meeting_date, meeting_time,
       scheduled_by, created_at)
     VALUES (21, 1, ${RUNNING}, '2026-06-16', '15:00', 'Harry Dunn', '${ts(21 * HOUR)}')`);
-  const item = (await feed('in_progress')).items.find(i => i.occurredAt === ts(21 * HOUR));
+  const item = (await feed('active')).items.find(i => i.occurredAt === ts(21 * HOUR));
   eq('a legacy name resolves to itself', item.actor.name, 'Harry Dunn');
   eq('  without being flagged unresolved', item.actor.unresolved, false);
 }
@@ -447,7 +447,7 @@ console.log('\n— a meeting booked by more than one rep —');
   await db.execute(`INSERT INTO meetings (id, attendee_id, conference_id, meeting_date, meeting_time,
       scheduled_by, created_at)
     VALUES (22, 1, ${RUNNING}, '2026-06-16', '16:00', '900,900,900', '${ts(26 * HOUR)}')`);
-  const item = (await feed('in_progress')).items.find(i => i.occurredAt === ts(26 * HOUR));
+  const item = (await feed('active')).items.find(i => i.occurredAt === ts(26 * HOUR));
   eq('a repeated rep id is one person, not three', item.actor.name, 'Kevin Winn');
 }
 {
@@ -456,7 +456,7 @@ console.log('\n— a meeting booked by more than one rep —');
   await db.execute(`INSERT INTO meetings (id, attendee_id, conference_id, meeting_date, meeting_time,
       scheduled_by, created_at)
     VALUES (23, 1, ${RUNNING}, '2026-06-16', '17:00', '900,902,900', '${ts(27 * HOUR)}')`);
-  const item = (await feed('in_progress')).items.find(i => i.occurredAt === ts(27 * HOUR));
+  const item = (await feed('active')).items.find(i => i.occurredAt === ts(27 * HOUR));
   eq('  while two distinct reps still read as two', item.actor.name, 'Kevin Winn +1');
 }
 
@@ -468,7 +468,7 @@ console.log('\n— a note whose author predates author_user_id —');
   // for notes a person wrote.
   await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id, rep, attendee_name, created_at)
     VALUES (40, 'attendee', 1, 'An older note with no author id.', ${RUNNING}, 'Parlay User', 'Robyn Yerger', '${ts(28 * HOUR)}')`);
-  const item = (await feed('in_progress')).items.find(i => i.occurredAt === ts(28 * HOUR));
+  const item = (await feed('active')).items.find(i => i.occurredAt === ts(28 * HOUR));
   eq('the rep name is used', item.actor.name, 'Parlay User');
   eq('  and it is not the system actor', item.actor.system, false);
   eq('  nor flagged unresolved', item.actor.unresolved, false);
@@ -478,7 +478,7 @@ console.log('\n— a note whose author predates author_user_id —');
   // system actor rather than a blank.
   await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id, attendee_name, created_at)
     VALUES (41, 'attendee', 1, 'No author at all.', ${RUNNING}, 'Robyn Yerger', '${ts(29 * HOUR)}')`);
-  const item = (await feed('in_progress')).items.find(i => i.occurredAt === ts(29 * HOUR));
+  const item = (await feed('active')).items.find(i => i.occurredAt === ts(29 * HOUR));
   eq('no author and no rep is the system actor', item.actor.system, true);
   eq('  named Parlay, deliberately', item.actor.name, 'Parlay');
 }
@@ -487,7 +487,7 @@ console.log('\n— a note whose author predates author_user_id —');
   // does not become an actor called "".
   await db.execute(`INSERT INTO social_events (id, conference_id, event_name, event_type, event_date, invite_only, created_at)
     VALUES (50, ${RUNNING}, 'An event nobody signed', 'Dinner', '2026-06-16', 'No', '${ts(30 * HOUR)}')`);
-  const item = (await feed('in_progress')).items.find(i => i.occurredAt === ts(30 * HOUR));
+  const item = (await feed('active')).items.find(i => i.occurredAt === ts(30 * HOUR));
   eq('a social event with no entered_by is the system actor', item.actor.system, true);
   eq('  and never a blank name', item.actor.name.length > 0, true);
 }
@@ -508,9 +508,9 @@ console.log('\n— a conference is in progress on its LAST day —');
 }
 {
   // The same boundary, through the feed's own scope.
-  const onLastDay = await fetchFeed(db, { scope: 'in_progress', nowMs: Date.parse('2026-06-17T18:00:00Z'), limit: 100 });
+  const onLastDay = await fetchFeed(db, { scope: 'active', nowMs: Date.parse('2026-06-17T18:00:00Z'), limit: 100 });
   eq('the feed still scopes to a conference on its closing day',
-    onLastDay.inProgressConferenceIds.includes(RUNNING), true);
+    onLastDay.activeConferenceIds.includes(RUNNING), true);
 }
 
 console.log('\n— an RSVP reports a decision, not the stored string —');
@@ -520,7 +520,7 @@ console.log('\n— an RSVP reports a decision, not the stored string —');
   await db.execute(`UPDATE social_event_rsvps SET rsvp_status = 'maybe,no', rsvp_set_at = '${ts(22 * HOUR)}'
     WHERE social_event_id = 1 AND attendee_id = 2`);
   await db.execute(`UPDATE social_event_rsvps SET rsvp_status = 'maybe,yes' WHERE social_event_id = 1 AND attendee_id = 1`);
-  const rsvps = (await feed('in_progress')).items.filter(i => i.kind === 'rsvp');
+  const rsvps = (await feed('active')).items.filter(i => i.kind === 'rsvp');
   const all = rsvps.flatMap(i => i.pills);
   eq('a stored "maybe,yes" shows Yes', all.includes('Yes'), true);
   eq('a stored "maybe,no" shows No', all.includes('No'), true);
@@ -538,13 +538,96 @@ console.log('\n— a note names the record it is on —');
     VALUES (31, 'company', 1, 'A company note.', ${RUNNING}, 10, '${ts(24 * HOUR)}')`);
   await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id, author_user_id, created_at)
     VALUES (32, 'conference', ${RUNNING}, 'A conference note.', ${RUNNING}, 10, '${ts(25 * HOUR)}')`);
-  const items = (await feed('in_progress')).items;
+  const items = (await feed('active')).items;
   const byTs = t => items.find(i => i.occurredAt === ts(t));
   eq('an attendee note names the attendee', byTs(23 * HOUR).subject, 'Robyn Yerger');
   eq('  and their company in the subtitle', byTs(23 * HOUR).detail2, 'Arrow Senior Living');
   eq('a company note names the company', byTs(24 * HOUR).subject, 'Arrow Senior Living');
   eq('a conference note names the conference', byTs(25 * HOUR).subject, 'ALIS FWD');
   eq('nothing in the page says "a record"', items.filter(i => i.subject === 'a record').length, 0);
+}
+
+console.log('\n— the Upcoming scope —');
+{
+  // FUTURE starts in November and has no activity yet; give it some. Prep for a
+  // show months out is exactly what this view is for, so it is NOT windowed.
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id, author_user_id, attendee_name, created_at)
+    VALUES (60, 'attendee', 1, 'Prep note for a show that has not started.', ${FUTURE}, 10, 'Robyn Yerger', '${ts(2 * DAY)}')`);
+  await db.execute(`INSERT INTO meetings (id, attendee_id, conference_id, meeting_date, meeting_time, scheduled_by, created_at)
+    VALUES (60, 1, ${FUTURE}, '2026-11-02', '10:00', '900', '${ts(3 * DAY)}')`);
+
+  const upcoming = await feed('upcoming');
+  eq('shows activity for a conference that has not started',
+    upcoming.items.every(i => i.conference?.id === FUTURE || i.conference == null), true);
+  eq('  including its prep note', upcoming.items.some(i => i.occurredAt === ts(2 * DAY)), true);
+  // The over-inclusive half: a running conference must NOT leak into Upcoming.
+  eq('  and nothing from the running conference',
+    upcoming.items.filter(i => i.conference?.id === RUNNING).length, 0);
+  eq('  nor the ended one', upcoming.items.filter(i => i.conference?.id === ENDED).length, 0);
+
+  const active = await feed('active');
+  eq('while Active excludes the future conference',
+    active.items.filter(i => i.conference?.id === FUTURE).length, 0);
+  eq('  and the two scopes are genuinely different sets',
+    upcoming.items.length > 0 && active.items.length > 0
+      && upcoming.items[0].id !== active.items[0].id, true);
+}
+{
+  // Both counts come back whatever scope was asked for: `active` decides
+  // whether the client polls, and it must not be blanked by viewing Upcoming.
+  const upcoming = await feed('upcoming');
+  eq('the active count is reported even from the Upcoming scope',
+    upcoming.activeConferenceIds.length > 0, true);
+  const active = await feed('active');
+  eq('  and the upcoming count from the Active scope',
+    active.upcomingConferenceIds.includes(FUTURE), true);
+}
+{
+  // Upcoming is not date-windowed. A note far older than the 90 days that `all`
+  // allows still belongs to a conference that has not happened.
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id, author_user_id, attendee_name, created_at)
+    VALUES (61, 'attendee', 1, 'Very early prep.', ${FUTURE}, 10, 'Robyn Yerger', '${ts(200 * DAY)}')`);
+  const upcoming = await feed('upcoming');
+  eq('an old prep note is still upcoming activity',
+    upcoming.items.some(i => i.occurredAt === ts(200 * DAY)), true);
+  const all = await feed('all');
+  eq('  while All still refuses it, being 200 days old',
+    all.items.some(i => i.occurredAt === ts(200 * DAY)), false);
+}
+{
+  // No conference in planning at all — the empty state has to tell that apart
+  // from "a show is coming and nobody has prepped".
+  await db.execute(`UPDATE conferences SET start_date = '2026-01-01', end_date = '2026-01-02' WHERE id = ${FUTURE}`);
+  const upcoming = await feed('upcoming');
+  eq('with nothing in planning, Upcoming returns nothing', upcoming.items.length, 0);
+  eq('  and says so', upcoming.upcomingConferenceIds, []);
+  await db.execute(`UPDATE conferences SET start_date = '2026-11-01', end_date = '2026-11-03' WHERE id = ${FUTURE}`);
+}
+
+console.log('\n— a user is named by their rep profile —');
+{
+  // users.display_name is often unset, and falling to the email printed
+  // "kwinn@useparlay.app" on a card where every other surface says "Parlay
+  // User" — the same person under two names in one list.
+  await db.execute(`INSERT INTO config_options (id, category, value) VALUES (910, 'user', 'Parlay User')`);
+  await db.execute(`INSERT INTO users (id, email, password_hash, role, email_verified, config_id)
+    VALUES (11, 'kwinn@useparlay.app', 'x', 'user', 1, 910)`);
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id, author_user_id, attendee_name, created_at)
+    VALUES (70, 'attendee', 1, 'A note by a user with no display_name.', ${RUNNING}, 11, 'Robyn Yerger', '${ts(31 * HOUR)}')`);
+  const item = (await feed('active')).items.find(i => i.occurredAt === ts(31 * HOUR));
+  eq('the rep profile wins over the email', item.actor.name, 'Parlay User');
+  eq('  and no card shows an email address',
+    (await feed('active')).items.some(i => i.actor.name.includes('@')), false);
+}
+{
+  // With no rep profile, display_name is next, and the email only last —
+  // a name is still better than nothing.
+  await db.execute(`INSERT INTO users (id, email, password_hash, role, email_verified, display_name)
+    VALUES (12, 'noprofile@t.test', 'x', 'user', 1, 'No Profile')`);
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id, author_user_id, attendee_name, created_at)
+    VALUES (71, 'attendee', 1, 'By someone with no rep profile.', ${RUNNING}, 12, 'Robyn Yerger', '${ts(32 * HOUR)}')`);
+  const item = (await feed('active')).items.find(i => i.occurredAt === ts(32 * HOUR));
+  eq('display_name is the fallback when there is no rep profile', item.actor.name, 'No Profile');
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

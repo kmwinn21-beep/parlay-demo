@@ -12,7 +12,9 @@
  *   attendee_touchpoints.logged_by                            (same)
  *   vendor_relationships.rep_id                               (same)
  *   entity_notes.author_user_id  `users.id`, but NULL on older rows, which
- *                                carry the author's name in `rep` instead
+ *                                carry the author's name in `rep` instead. A
+ *                                users row is named by its REP PROFILE, not by
+ *                                display_name or email — see the query below.
  *   pinned_notes.pinned_by       free text — a display name, as typed
  *   social_events.entered_by     free text — a display name from a <select>
  *   conference_attendees.created_by   free text (new; see db-migrations)
@@ -159,8 +161,15 @@ export async function resolveActors(
       : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
     userIds.size > 0
       ? client.execute({
-          sql: `SELECT id, COALESCE(display_name, email) AS name FROM users
-                WHERE id IN (${Array.from(userIds).map(() => '?').join(',')})`,
+          // The rep profile FIRST. `users.display_name` is often unset, and
+          // falling to the email printed "kwinn@useparlay.app" on a card where
+          // every other surface in the app says "Parlay User" — the same person
+          // appearing under two names in one list. config_options is where that
+          // display name lives, reached through users.config_id.
+          sql: `SELECT u.id, COALESCE(co.value, u.display_name, u.email) AS name
+                FROM users u
+                LEFT JOIN config_options co ON co.id = u.config_id AND co.category = 'user'
+                WHERE u.id IN (${Array.from(userIds).map(() => '?').join(',')})`,
           args: Array.from(userIds),
         }).catch(() => ({ rows: [] as Record<string, unknown>[] }))
       : Promise.resolve({ rows: [] as Record<string, unknown>[] }),

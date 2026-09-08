@@ -15,7 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { startPolling, stopPolling } from '@/lib/pollingManager';
 import {
-  matchesFilter, rendersBody,
+  FEED_SCOPES, matchesFilter, rendersBody,
   type FeedColour, type FeedFilter, type FeedItem, type FeedKind, type FeedScope,
 } from '@/lib/feed/types';
 
@@ -380,7 +380,10 @@ function ChipRail({ filter, onSelect }: {
 interface FeedResponse {
   items: FeedItem[];
   hasMore: boolean;
-  inProgressCount: number;
+  /** Conferences running right now. Decides polling, whatever scope is shown. */
+  activeCount: number;
+  /** Conferences still in planning. */
+  upcomingCount: number;
 }
 
 const PAGE = 30;
@@ -398,7 +401,7 @@ const POLL_BG_MS = 120_000;
 const SEEN_KEY = 'parlay.feed.lastSeenAt';
 
 export function DashboardFeed({ className = '' }: { className?: string }) {
-  const [scope, setScope] = useState<FeedScope>('in_progress');
+  const [scope, setScope] = useState<FeedScope>('active');
   const [filter, setFilter] = useState<FeedFilter>('all');
   const [data, setData] = useState<FeedResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -429,7 +432,7 @@ export function DashboardFeed({ className = '' }: { className?: string }) {
     } catch {
       // A feed is furniture. Keep whatever is on screen rather than blanking it
       // because one poll failed.
-      if (!opts.silent) setData(d => d ?? { items: [], hasMore: false, inProgressCount: 0 });
+      if (!opts.silent) setData(d => d ?? { items: [], hasMore: false, activeCount: 0, upcomingCount: 0 });
     } finally {
       if (!opts.silent) setLoading(false);
       // A spin too fast to see reads as a button that did nothing, so it is
@@ -442,7 +445,7 @@ export function DashboardFeed({ className = '' }: { className?: string }) {
 
   // Poll only while something is running. An account between shows polls
   // nothing at all — there is no source of new items to discover.
-  const shouldPoll = (data?.inProgressCount ?? 0) > 0;
+  const shouldPoll = (data?.activeCount ?? 0) > 0;
   useEffect(() => {
     if (!shouldPoll) { stopPolling('dashboard-feed'); return; }
     startPolling('dashboard-feed', () => { void load({ silent: true }); }, POLL_FG_MS, POLL_BG_MS);
@@ -518,13 +521,16 @@ export function DashboardFeed({ className = '' }: { className?: string }) {
           </button>
         )}
 
-        <div className="ml-auto inline-flex items-center gap-1 bg-gray-100 rounded-lg p-1 flex-shrink-0">
-          {([['in_progress', 'In progress'], ['all', 'All']] as const).map(([key, label]) => (
+        {/* Three options now, so the padding is tighter than the two-way
+            version was — the header still has to hold a title, a count and a
+            refresh button in a ~290px column. */}
+        <div className="ml-auto inline-flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5 flex-shrink-0">
+          {FEED_SCOPES.map(({ key, label }) => (
             <button
               key={key}
               type="button"
               onClick={() => setScope(key)}
-              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+              className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap ${
                 scope === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -567,7 +573,8 @@ export function DashboardFeed({ className = '' }: { className?: string }) {
           <FeedEmptyState
             scope={scope}
             filter={filter}
-            inProgressCount={data?.inProgressCount ?? 0}
+            activeCount={data?.activeCount ?? 0}
+            upcomingCount={data?.upcomingCount ?? 0}
             loadedCount={data?.items.length ?? 0}
             onSwitchToAll={() => setScope('all')}
             onClearFilter={() => setFilter('all')}
@@ -616,10 +623,11 @@ export function DashboardFeed({ className = '' }: { className?: string }) {
  * time. It must not read as broken, so it names the reason and points at the
  * control that fixes it.
  */
-function FeedEmptyState({ scope, filter, inProgressCount, loadedCount, onSwitchToAll, onClearFilter }: {
+function FeedEmptyState({ scope, filter, activeCount, upcomingCount, loadedCount, onSwitchToAll, onClearFilter }: {
   scope: FeedScope;
   filter: FeedFilter;
-  inProgressCount: number;
+  activeCount: number;
+  upcomingCount: number;
   loadedCount: number;
   onSwitchToAll: () => void;
   onClearFilter: () => void;
@@ -638,7 +646,7 @@ function FeedEmptyState({ scope, filter, inProgressCount, loadedCount, onSwitchT
     );
   }
 
-  if (scope === 'in_progress' && inProgressCount === 0) {
+  if (scope === 'active' && activeCount === 0) {
     return (
       <div className="text-center py-10 px-4">
         <p className="text-sm text-gray-500">No conferences in progress. Switch to All to see recent activity.</p>
@@ -649,10 +657,31 @@ function FeedEmptyState({ scope, filter, inProgressCount, loadedCount, onSwitchT
     );
   }
 
-  if (scope === 'in_progress') {
+  if (scope === 'upcoming' && upcomingCount === 0) {
+    return (
+      <div className="text-center py-10 px-4">
+        <p className="text-sm text-gray-500">No upcoming conferences. Switch to All to see recent activity.</p>
+        <button type="button" onClick={onSwitchToAll} className="text-xs text-brand-secondary font-medium hover:underline mt-2">
+          Switch to All
+        </button>
+      </div>
+    );
+  }
+
+  // A conference exists at this stage; nobody has done anything on it yet. That
+  // is a different sentence from "there is no conference", and reading one when
+  // the other is true is what makes a feed look broken.
+  if (scope === 'active') {
     return (
       <div className="text-center py-10 px-4">
         <p className="text-sm text-gray-500">Nothing logged at the conference yet.</p>
+      </div>
+    );
+  }
+  if (scope === 'upcoming') {
+    return (
+      <div className="text-center py-10 px-4">
+        <p className="text-sm text-gray-500">No prep logged for the upcoming conferences yet.</p>
       </div>
     );
   }

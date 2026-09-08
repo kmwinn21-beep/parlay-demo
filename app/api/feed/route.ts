@@ -22,7 +22,13 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
-  const scope: FeedScope = searchParams.get('scope') === 'all' ? 'all' : 'in_progress';
+  const requested = searchParams.get('scope');
+  // `active` is the default: what is happening right now is the question the
+  // dashboard is usually answering. An unrecognised value falls back to it
+  // rather than erroring — a feed is furniture.
+  const scope: FeedScope = requested === 'all' ? 'all'
+    : requested === 'upcoming' ? 'upcoming'
+    : 'active';
   const limitParam = Number(searchParams.get('limit'));
   const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 100) : 30;
   const before = searchParams.get('before');
@@ -33,9 +39,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       items: result.items,
       hasMore: result.hasMore,
-      // The empty state has to tell "no show is running" apart from "a show is
-      // running and nobody did anything", and those read very differently.
-      inProgressCount: result.inProgressConferenceIds.length,
+      // The empty states have to tell "no show at this stage" apart from "a
+      // show is at this stage and nobody did anything", and those read very
+      // differently. activeCount also decides whether the client polls.
+      activeCount: result.activeConferenceIds.length,
+      upcomingCount: result.upcomingConferenceIds.length,
     });
   } catch (err) {
     // fetchFeed does not throw; this catches a database that is unreachable.

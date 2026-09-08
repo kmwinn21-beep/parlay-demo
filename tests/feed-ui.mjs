@@ -37,8 +37,10 @@ console.log('\n— polling —');
   // An account between shows must poll NOTHING. There is no source of new items
   // to discover, and a dashboard left open overnight should cost zero requests.
   const effect = feed.slice(feed.indexOf('const shouldPoll'), feed.indexOf('const items = useMemo'));
-  eq('polling is derived from the in-progress count',
-    /const shouldPoll = \(data\?\.inProgressCount \?\? 0\) > 0/.test(effect), true);
+  // Keyed on the ACTIVE count, not on the scope being viewed: something is
+  // happening live only when a show is running, whichever view is on screen.
+  eq('polling is derived from the active-conference count',
+    /const shouldPoll = \(data\?\.activeCount \?\? 0\) > 0/.test(effect), true);
   eq('  and startPolling is behind that guard', /if \(!shouldPoll\)[\s\S]*?return[\s\S]*?startPolling\(/.test(effect), true);
   eq('  which stops any existing timer on the way out', effect.includes("stopPolling('dashboard-feed')"), true);
   eq('  and unmounting stops it too', /return \(\) => stopPolling\('dashboard-feed'\)/.test(effect), true);
@@ -61,6 +63,14 @@ console.log('\n— the empty states —');
   eq('the no-conferences message is exactly as specified',
     feed.includes('No conferences in progress. Switch to All to see recent activity.'), true);
   eq('  and offers the control it names', feed.includes('Switch to All'), true);
+  eq('the upcoming equivalent points at the same place',
+    feed.includes('No upcoming conferences. Switch to All to see recent activity.'), true);
+  // Four different nothings now. "No conference at this stage" and "a
+  // conference exists and nobody has done anything" are different sentences,
+  // and reading one when the other is true is what makes a feed look broken.
+  eq('  and each stage has its own has-a-conference wording',
+    [feed.includes('Nothing logged at the conference yet.'),
+     feed.includes('No prep logged for the upcoming conferences yet.')], [true, true]);
 
   // Three different nothings. Collapsing them into one would tell somebody
   // between shows that their data is missing.
@@ -73,6 +83,18 @@ console.log('\n— the empty states —');
 }
 
 // ── The stream navigates normally ────────────────────────────────────────────
+
+console.log('\n— the scope toggle —');
+{
+  const { FEED_SCOPES } = await import('@/lib/feed/types');
+  eq('three options, in order', FEED_SCOPES.map(s => s.key), ['upcoming', 'active', 'all']);
+  eq('  labelled Upcoming | Active | All', FEED_SCOPES.map(s => s.label), ['Upcoming', 'Active', 'All']);
+  // The toggle is built from the shared list rather than a literal in the JSX,
+  // so a scope added to the type cannot go missing from the control.
+  eq('the toggle renders from that list', /FEED_SCOPES\.map\(\(\{ key, label \}\)/.test(feed), true);
+  eq('  and no longer hardcodes the old two', /'in_progress', 'In progress'/.test(feed), false);
+  eq('Active is the default view', /useState<FeedScope>\('active'\)/.test(feed), true);
+}
 
 console.log('\n— the stream scrolls —');
 {

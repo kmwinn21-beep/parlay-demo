@@ -13,11 +13,15 @@
  *
  * ── Scope ────────────────────────────────────────────────────────────────────
  *
- * `in_progress` filters to conferences whose COMPUTED stage is in_progress.
- * Computed, not `start_date <= today AND end_date >= today`: `stage_override`
- * can force a stage, and inlining the dates would silently ignore it. Historical
+ * `active` filters to conferences whose COMPUTED stage is in_progress, and
+ * `upcoming` to those still in planning. Computed, not
+ * `start_date <= today AND end_date >= today`: `stage_override` can force a
+ * stage, and inlining the dates would silently ignore it. Historical
  * conferences are excluded before the call because computeConferenceStage
  * throws on them.
+ *
+ * Neither is windowed by date. Prep for a show six months out is exactly what
+ * `upcoming` is for, and a long conference can run past any window.
  *
  * `all` reaches back 90 days across every conference.
  *
@@ -32,7 +36,8 @@ import type { Client } from '@libsql/client';
 import { computeConferenceStage } from '@/lib/conference-stage';
 import { resolveActors, actorFor, type ActorRef } from '@/lib/feed/actors';
 import {
-  ALL_SCOPE_DAYS, COLOUR_BY_KIND, type FeedItem, type FeedKind, type FeedScope,
+  ALL_SCOPE_DAYS, COLOUR_BY_KIND, isConferenceScoped,
+  type FeedItem, type FeedKind, type FeedScope,
 } from '@/lib/feed/types';
 
 export interface FeedOptions {
@@ -47,8 +52,16 @@ export interface FeedOptions {
 
 export interface FeedResult {
   items: FeedItem[];
-  /** Conferences whose computed stage is in_progress, for the empty state. */
-  inProgressConferenceIds: number[];
+  /**
+   * Conferences whose computed stage is in_progress.
+   *
+   * Reported whatever scope was asked for, because it is what decides whether
+   * the client polls: something is happening live only when a show is running,
+   * regardless of which view is on screen.
+   */
+  activeConferenceIds: number[];
+  /** Conferences still in planning — the empty state for `upcoming` needs it. */
+  upcomingConferenceIds: number[];
   /** True when there is at least one more item older than the last returned. */
   hasMore: boolean;
 }
@@ -64,12 +77,16 @@ function sqlTimestamp(ms: number): string {
 }
 
 /**
- * The conferences that are in progress right now.
+ * The conferences at a given lifecycle stage right now.
  *
- * Exported because the empty state needs to distinguish "nothing happened at
+ * Exported because the empty states need to distinguish "nothing happened at
  * the show" from "there is no show", and those read very differently.
  */
-export async function inProgressConferences(client: Client, nowMs: number): Promise<ConferenceRow[]> {
+export async function conferencesAtStage(
+  client: Client,
+  nowMs: number,
+  wanted: 'in_progress' | 'planning',
+): Promise<ConferenceRow[]> {
   const rows = await client.execute({
     sql: `SELECT id, name, start_date, end_date, post_conference_days, stage_override, is_historical
           FROM conferences
@@ -87,7 +104,7 @@ export async function inProgressConferences(client: Client, nowMs: number): Prom
         stage_override: r.stage_override != null ? String(r.stage_override) : null,
         is_historical: 0,
       }, nowMs);
-      if (stage === 'in_progress') out.push({ id: Number(r.id), name: String(r.name ?? '') });
+      if (stage === wanted) out.push({ id: Number(r.id), name: String(r.name ?? '') });
     } catch {
       // computeConferenceStage throws on a historical conference. The WHERE
       // above already excludes them; this is the belt for a row whose flag is
@@ -95,6 +112,11 @@ export async function inProgressConferences(client: Client, nowMs: number): Prom
     }
   }
   return out;
+}
+
+/** The conferences running right now. Kept as a name because it reads better. */
+export function inProgressConferences(client: Client, nowMs: number): Promise<ConferenceRow[]> {
+  return conferencesAtStage(client, nowMs, 'in_progress');
 }
 
 /**
@@ -122,7 +144,8 @@ function buildBranches(opts: {
 }): Branch[] {
   const { scope, conferenceIds, since, before } = opts;
   const inConf = conferenceIds.length > 0 ? conferenceIds.map(() => '?').join(',') : 'NULL';
-  const scoped = scope === 'in_progress';
+  // Both conference-bound scopes filter the same way; only the id list differs.
+  const scoped = scope !== 'all';
 
   /** The time window, applied per branch so each one uses its own index. */
   const window = (col: string) => {
@@ -403,25 +426,37 @@ export async function fetchFeed(client: Client, opts: FeedOptions): Promise<Feed
   const limit = Math.max(1, Math.min(opts.limit ?? 25, 200));
   const before = opts.before ?? null;
 
-  const conferences = await inProgressConferences(client, nowMs);
-  const inProgressConferenceIds = conferences.map(c => c.id);
+  // Both lists are resolved whatever the scope: `active` decides polling and
+  // `upcoming` decides its own empty state, and one extra pass over a few dozen
+  // conference rows is cheaper than a second round trip to find out.
+  const [active, upcoming] = await Promise.all([
+    conferencesAtStage(client, nowMs, 'in_progress'),
+    conferencesAtStage(client, nowMs, 'planning'),
+  ]);
+  const activeConferenceIds = active.map(c => c.id);
+  const upcomingConferenceIds = upcoming.map(c => c.id);
 
-  // Nothing is running, so the in_progress scope has nothing to show. Returned
+  const scopeIds = opts.scope === 'active' ? activeConferenceIds
+    : opts.scope === 'upcoming' ? upcomingConferenceIds
+    : [];
+
+  // No conference at this stage, so the scope has nothing to show. Returned
   // rather than queried: `conference_id IN (NULL)` matches nothing anyway, and
-  // the empty state needs to know the difference between these two cases.
-  if (opts.scope === 'in_progress' && inProgressConferenceIds.length === 0) {
-    return { items: [], inProgressConferenceIds, hasMore: false };
+  // the empty states need to know the difference between these two cases.
+  if (isConferenceScoped(opts.scope) && scopeIds.length === 0) {
+    return { items: [], activeConferenceIds, upcomingConferenceIds, hasMore: false };
   }
 
-  // in_progress reaches as far back as the running conferences do; all reaches
-  // exactly 90 days. Both are a floor on every branch so each uses its index.
+  // The conference scopes reach as far back as their conferences do — prep for
+  // a show six months out belongs to it. Only `all` is windowed, and that
+  // floor is applied per branch so each one uses its index.
   const since = opts.scope === 'all'
     ? sqlTimestamp(nowMs - ALL_SCOPE_DAYS * 86_400_000)
     : '0000-01-01 00:00:00';
 
   const branches = buildBranches({
     scope: opts.scope,
-    conferenceIds: inProgressConferenceIds,
+    conferenceIds: scopeIds,
     since,
     before,
   });
@@ -494,12 +529,12 @@ export async function fetchFeed(client: Client, opts: FeedOptions): Promise<Feed
   // A pinned note whose conference name matched nothing is still in the page
   // under in_progress, because the branch could not be filtered in SQL. Drop it
   // here, where the names have been resolved to ids.
-  const filtered = opts.scope === 'in_progress'
+  const filtered = isConferenceScoped(opts.scope)
     ? items.filter(it => it.kind !== 'note_pinned'
-        || (it.conference?.id != null && inProgressConferenceIds.includes(it.conference.id)))
+        || (it.conference?.id != null && scopeIds.includes(it.conference.id)))
     : items;
 
-  return { items: filtered, inProgressConferenceIds, hasMore };
+  return { items: filtered, activeConferenceIds, upcomingConferenceIds, hasMore };
 }
 
 /** Names for every conference referenced by a page, by id. */

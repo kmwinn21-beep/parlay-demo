@@ -59,8 +59,30 @@ export function rendersBody(kind: FeedKind): boolean {
   return kind === 'note' || kind === 'note_pinned';
 }
 
-/** Which scope the stream is showing. */
-export type FeedScope = 'in_progress' | 'all';
+/**
+ * Which conferences the stream is drawn from.
+ *
+ *   upcoming  conferences that have not started — the prep work
+ *   active    conferences running right now
+ *   all       every conference, but only the last 90 days
+ *
+ * `active` was called `in_progress`, after the conference stage it maps to. The
+ * label is what people read on a three-way toggle and "In progress" was the
+ * long one; the stage it filters by is still `in_progress`.
+ */
+export type FeedScope = 'upcoming' | 'active' | 'all';
+
+/** Every scope, in the order the toggle shows them. */
+export const FEED_SCOPES: ReadonlyArray<{ key: FeedScope; label: string }> = [
+  { key: 'upcoming', label: 'Upcoming' },
+  { key: 'active', label: 'Active' },
+  { key: 'all', label: 'All' },
+];
+
+/** True for the scopes that filter to a set of conferences rather than a date. */
+export function isConferenceScoped(scope: FeedScope): boolean {
+  return scope === 'upcoming' || scope === 'active';
+}
 
 /** How far back `all` reaches. */
 export const ALL_SCOPE_DAYS = 90;
