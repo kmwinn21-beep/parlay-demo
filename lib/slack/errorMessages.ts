@@ -58,3 +58,48 @@ export function slackErrorMessage(code: string | null | undefined): string | nul
   if (!code) return null;
   return SLACK_ERROR_MESSAGES[code] ?? 'Slack could not be connected. Try again from this page.';
 }
+
+/**
+ * What Slack's own API errors mean, for the "send a test message" button.
+ *
+ * Separate from the table above because these are a different vocabulary: those
+ * are codes THIS app puts in a redirect, these are strings SLACK returns from
+ * chat.postMessage and conversations.open. The button exists to be diagnostic,
+ * so the raw code is shown alongside the sentence rather than replaced by it —
+ * a code is what a Slack support page or a search is keyed on.
+ */
+export const SLACK_API_ERROR_MESSAGES: Record<string, string> = {
+  token_revoked:
+    'Slack no longer has this app installed. An administrator needs to reconnect the workspace in Admin Settings.',
+  account_inactive:
+    'The Slack workspace is inactive, or the app has been removed from it. Reconnect the workspace in Admin Settings.',
+  invalid_auth:
+    'Slack rejected the stored token. Reconnect the workspace in Admin Settings.',
+  missing_scope:
+    'The installed Slack token is missing a permission this needs. This happens when the Slack app\'s scopes are changed after installation — reconnect the workspace to re-consent.',
+  user_not_found:
+    'Slack does not recognise your linked account in this workspace. If you changed Slack accounts, disconnect and reconnect yours from My Account.',
+  user_disabled:
+    'Your Slack account is deactivated in this workspace.',
+  cannot_dm_bot:
+    'The linked account is a bot, which cannot be sent a direct message.',
+  ratelimited:
+    'Slack is rate limiting this workspace. Wait a moment and try again.',
+  unknown_error:
+    'Slack refused the message without saying why. Try again, and check the app is still installed in your workspace.',
+};
+
+/**
+ * A sentence for a Slack API error, always naming the raw code too.
+ *
+ * The code is deliberately not hidden. Whoever presses the test button is
+ * diagnosing something, and `missing_scope` is the searchable half.
+ */
+export function slackApiErrorMessage(raw: string): string {
+  // Rate limits arrive as `ratelimited:30`, carrying Slack's retry-after.
+  const [code, retryAfter] = raw.split(':');
+  const base = SLACK_API_ERROR_MESSAGES[code]
+    ?? `Slack refused the message. Try again, and check the app is still installed in your workspace.`;
+  const wait = code === 'ratelimited' && retryAfter ? ` Slack asked us to wait ${retryAfter}s.` : '';
+  return `${base}${wait} (Slack said: ${code})`;
+}

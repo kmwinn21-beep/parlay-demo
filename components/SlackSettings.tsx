@@ -94,27 +94,80 @@ function Banner({ tone, children }: { tone: 'error' | 'success' | 'warning'; chi
   return <div className={`p-3 rounded-lg border text-xs font-medium ${styles}`}>{children}</div>;
 }
 
+/**
+ * The "send a test message" control, shared by both cards.
+ *
+ * Reports the outcome inline rather than only as a toast: this is a diagnostic,
+ * the answer is often two sentences long, and a toast that disappears while you
+ * are reading it is the wrong shape for something you press when confused.
+ *
+ * `onResult` lets the caller refresh — a test that discovers a revoked
+ * workspace has just changed what the card should say.
+ */
+function TestMessageButton({ onResult }: { onResult?: () => void }) {
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const send = async () => {
+    setSending(true);
+    setResult(null);
+    try {
+      const res = await fetch('/api/slack/test', { method: 'POST' });
+      const data = await res.json().catch(() => ({})) as { error?: string; slackUserId?: string };
+      if (res.ok) {
+        setResult({ ok: true, text: `Sent. Check the Apps section of your Slack sidebar — bot messages do not appear in your normal DM list.` });
+      } else {
+        setResult({ ok: false, text: data.error ?? 'The test message could not be sent.' });
+      }
+    } catch {
+      setResult({ ok: false, text: 'Network error — the request did not reach the server.' });
+    } finally {
+      setSending(false);
+      onResult?.();
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <button type="button" onClick={send} disabled={sending} className="btn-secondary text-xs">
+        {sending ? 'Sending…' : 'Send a test message'}
+      </button>
+      {result && (
+        <Banner tone={result.ok ? 'success' : 'error'}>{result.text}</Banner>
+      )}
+    </div>
+  );
+}
+
 function useSlackStatus() {
   const [status, setStatus] = useState<SlackStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = () => {
-    setLoading(true);
+  /**
+   * `showLoading` false is a background refresh.
+   *
+   * The first load needs a placeholder; a refresh after an action does not, and
+   * must not have one — the loading branch replaces the whole card, which
+   * unmounts the test-message button and takes its result banner with it. Which
+   * is to say: pressing the button would clear its own answer.
+   */
+  const load = (showLoading = true) => {
+    if (showLoading) setLoading(true);
     fetch('/api/slack/status')
       .then(r => (r.ok ? r.json() : null))
       .then((data: SlackStatus | null) => setStatus(data))
       .catch(() => setStatus(null))
-      .finally(() => setLoading(false));
+      .finally(() => { if (showLoading) setLoading(false); });
   };
 
-  useEffect(load, []);
-  return { status, loading, reload: load };
+  useEffect(() => { load(); }, []);
+  return { status, loading, reload: load, refresh: () => load(false) };
 }
 
 // ─── Admin Settings ──────────────────────────────────────────────────────────
 
 export function SlackAdminSection() {
-  const { status, loading, reload } = useSlackStatus();
+  const { status, loading, reload, refresh } = useSlackStatus();
   const { error, connected } = useCallbackResult();
   const [disconnecting, setDisconnecting] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -227,15 +280,29 @@ export function SlackAdminSection() {
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-4">
-                <a href="/api/slack/install" className={`text-sm ${revoked ? 'btn-primary' : 'btn-secondary'}`}>Reconnect</a>
-                <button
-                  type="button"
-                  onClick={() => setConfirming(true)}
-                  className="text-sm text-red-600 font-medium hover:underline"
-                >
-                  Disconnect
-                </button>
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <a href="/api/slack/install" className={`text-sm ${revoked ? 'btn-primary' : 'btn-secondary'}`}>Reconnect</a>
+                  <button
+                    type="button"
+                    onClick={() => setConfirming(true)}
+                    className="text-sm text-red-600 font-medium hover:underline"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+
+                {/* Only offered when there is a link to send to. Without one the
+                    button could only ever report its own precondition back. */}
+                {status.link && (
+                  <div className="border-t border-gray-100 pt-4">
+                    <p className="text-xs text-gray-500 mb-2">
+                      Sends a direct message to your own linked Slack account. Checks the
+                      connection itself, not your per-event notification toggles.
+                    </p>
+                    <TestMessageButton onResult={refresh} />
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -258,7 +325,7 @@ export function SlackAdminSection() {
 // ─── My Account ──────────────────────────────────────────────────────────────
 
 export function SlackAccountSection() {
-  const { status, loading, reload } = useSlackStatus();
+  const { status, loading, reload, refresh } = useSlackStatus();
   const { error, connected } = useCallbackResult();
   const [disconnecting, setDisconnecting] = useState(false);
 
@@ -343,7 +410,8 @@ export function SlackAccountSection() {
           workspace first, in Admin Settings — then you can link your own Slack account here.
         </p>
       ) : status.link ? (
-        <div className="flex items-center justify-between gap-4">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-medium text-gray-800 flex items-center gap-2">
               Connected
@@ -363,6 +431,10 @@ export function SlackAccountSection() {
           >
             {disconnecting ? 'Disconnecting…' : 'Disconnect'}
           </button>
+          </div>
+          <div className="border-t border-gray-100 pt-3">
+            <TestMessageButton onResult={refresh} />
+          </div>
         </div>
       ) : (
         <div className="flex items-center justify-between gap-4">
