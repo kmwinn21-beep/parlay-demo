@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     const result = await db.execute({
       sql: `SELECT id, conference_id, entered_by, internal_attendees, event_name, event_type, host,
-                   venue_name, location, company_hosted, event_date, event_time, invite_only, prospect_attendees, notes, created_at
+                   venue_name, location, company_hosted, event_date, event_time, invite_only, prospect_attendees, notes, guest_limit, created_at
             FROM social_events
             WHERE conference_id = ?
             ORDER BY event_date ASC, event_time ASC`,
@@ -24,16 +24,21 @@ export async function GET(request: NextRequest) {
     });
 
     const eventIds = result.rows.map(r => Number(r.id));
-    const rsvpsByEventId: Record<number, Array<{ attendee_id: number; rsvp_status: string }>> = {};
+    const rsvpsByEventId: Record<number, Array<{ attendee_id: number; rsvp_status: string; rep_rank: number | null; team_rank: number | null }>> = {};
     if (eventIds.length > 0) {
       const rsvpResult = await db.execute({
-        sql: `SELECT social_event_id, attendee_id, rsvp_status FROM social_event_rsvps WHERE social_event_id IN (${eventIds.map(() => '?').join(',')})`,
+        sql: `SELECT social_event_id, attendee_id, rsvp_status, rep_rank, team_rank FROM social_event_rsvps WHERE social_event_id IN (${eventIds.map(() => '?').join(',')})`,
         args: eventIds,
       });
       for (const r of rsvpResult.rows) {
         const eid = Number(r.social_event_id);
         if (!rsvpsByEventId[eid]) rsvpsByEventId[eid] = [];
-        rsvpsByEventId[eid].push({ attendee_id: Number(r.attendee_id), rsvp_status: String(r.rsvp_status) });
+        rsvpsByEventId[eid].push({
+          attendee_id: Number(r.attendee_id),
+          rsvp_status: String(r.rsvp_status),
+          rep_rank: r.rep_rank != null ? Number(r.rep_rank) : null,
+          team_rank: r.team_rank != null ? Number(r.team_rank) : null,
+        });
       }
     }
 
@@ -47,6 +52,7 @@ export async function GET(request: NextRequest) {
         event_type: r.event_type ? String(r.event_type) : null,
         host: r.host ? String(r.host) : null,
         venue_name: r.venue_name ? String(r.venue_name) : null,
+        guest_limit: r.guest_limit != null ? Number(r.guest_limit) : null,
         location: r.location ? String(r.location) : null,
         company_hosted: Number(r.company_hosted ?? 0) === 1,
         event_date: r.event_date ? String(r.event_date) : null,
@@ -77,6 +83,7 @@ export async function POST(request: NextRequest) {
       event_type,
       host,
       venue_name,
+      guest_limit,
       location,
       company_hosted,
       event_date,
@@ -91,9 +98,9 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await db.execute({
-      sql: `INSERT INTO social_events (conference_id, entered_by, internal_attendees, event_name, event_type, host, venue_name, location, company_hosted, event_date, event_time, invite_only, prospect_attendees, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING id, conference_id, entered_by, internal_attendees, event_name, event_type, host, venue_name, location, company_hosted, event_date, event_time, invite_only, prospect_attendees, notes, created_at`,
+      sql: `INSERT INTO social_events (conference_id, entered_by, internal_attendees, event_name, event_type, host, venue_name, location, company_hosted, event_date, event_time, invite_only, prospect_attendees, notes, guest_limit)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING id, conference_id, entered_by, internal_attendees, event_name, event_type, host, venue_name, location, company_hosted, event_date, event_time, invite_only, prospect_attendees, notes, guest_limit, created_at`,
       args: [
         conference_id,
         entered_by || null,
@@ -109,6 +116,8 @@ export async function POST(request: NextRequest) {
         invite_only || 'No',
         prospect_attendees || null,
         notes || null,
+        // Optional and numeric. An empty field is "no limit", not zero.
+        Number.isFinite(Number(guest_limit)) && Number(guest_limit) > 0 ? Math.floor(Number(guest_limit)) : null,
       ],
     });
 

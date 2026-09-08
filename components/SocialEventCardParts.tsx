@@ -178,7 +178,7 @@ export function InternalRepPills({ internalAttendees }: { internalAttendees: str
  */
 export function SocialEventCardBody({
   eventName, eventType, host, venueName, location, eventDate, eventTime,
-  companyHosted, inviteOnly, internalAttendees, invitedCount,
+  companyHosted, inviteOnly, internalAttendees, invitedCount, openSeats,
   isExpanded, onToggle, actions, extraFields,
 }: {
   eventName: string | null;
@@ -190,6 +190,14 @@ export function SocialEventCardBody({
   eventTime: string | null;
   companyHosted: boolean;
   inviteOnly: string | null;
+  /**
+   * Seats left against the cap, or null when the event has no Guest Limit.
+   *
+   * Passed in rather than computed here: the count of "yes" RSVPs lives with
+   * the optimistic RSVP state, so this component would otherwise need the whole
+   * rsvp map to render one number.
+   */
+  openSeats?: { remaining: number; limit: number } | null;
   internalAttendees: string | null;
   invitedCount: number;
   /** Omit to drop the chevron — surfaces whose list opens in a drawer do. */
@@ -245,12 +253,28 @@ export function SocialEventCardBody({
             <span className="flex-shrink-0"><CardField label="Host">{host || <span className="text-gray-400">—</span>}</CardField></span>
             <span className="flex-shrink-0"><CardField label="# Invited">{invitedCount > 0 ? invitedCount : <span className="text-gray-400">—</span>}</CardField></span>
             <span className="flex-shrink-0"><CardField label="Invite Only">{inviteOnly === 'Yes' ? 'Yes' : 'No'}</CardField></span>
+            {openSeats && (
+              <span className="flex-shrink-0"><CardField label="Open Seats">
+                <span className={openSeats.remaining <= 0 ? 'text-red-600 font-semibold' : undefined}>
+                  {openSeats.remaining} / {openSeats.limit}
+                </span>
+              </CardField></span>
+            )}
           </ScrollRow>
           <div className="hidden sm:contents">
             <CardField label="Type">{eventType || <span className="text-gray-400">—</span>}</CardField>
             <CardField label="Host">{host || <span className="text-gray-400">—</span>}</CardField>
             <CardField label="# Invited">{invitedCount > 0 ? invitedCount : <span className="text-gray-400">—</span>}</CardField>
             <CardField label="Invite Only">{inviteOnly === 'Yes' ? 'Yes' : 'No'}</CardField>
+            {openSeats && (
+              <CardField label="Open Seats">
+                {/* Red at zero and below. An overbooked event is the thing you
+                    want to notice on the card, not on arrival. */}
+                <span className={openSeats.remaining <= 0 ? 'text-red-600 font-semibold' : undefined}>
+                  {openSeats.remaining} / {openSeats.limit}
+                </span>
+              </CardField>
+            )}
           </div>
           <CardField label="Internal Attendees"><InternalRepPills internalAttendees={internalAttendees} /></CardField>
           {extraFields}

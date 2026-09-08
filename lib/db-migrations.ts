@@ -2442,4 +2442,23 @@ export const migrations: string[] = [
   // stamped row keeps the links, keeps the audit trail, and gives the settings
   // screen something true to say.
   `ALTER TABLE slack_workspaces ADD COLUMN revoked_at TEXT`,
+  // Guest-list ranking, 1 (highest) to 25 (lowest), NULL for unranked.
+  //
+  // On the RSVP row rather than the attendee: a rank answers "how much does this
+  // guest matter at THIS event", so the same person can be a priority at the
+  // hosted dinner and unranked at a breakfast. The pair is already the guest
+  // list's natural key.
+  //
+  // Both are shared values, not per-viewer. Rep and Team name two different
+  // judgements, not two different people's copies of one — anyone editing either
+  // changes it for everyone looking at that event.
+  //
+  // No uniqueness constraint. Two guests may both be Team Rank 1; enforcing
+  // otherwise turns every edit into a reshuffle of everybody below it.
+  `ALTER TABLE social_event_rsvps ADD COLUMN rep_rank INTEGER`,
+  `ALTER TABLE social_event_rsvps ADD COLUMN team_rank INTEGER`,
+  // How many guests the venue or the budget will take. Optional: most events
+  // have no hard cap, and NULL means "no limit" rather than "nobody" — the card
+  // shows a dash rather than 0 of 0.
+  `ALTER TABLE social_events ADD COLUMN guest_limit INTEGER`,
 ];
