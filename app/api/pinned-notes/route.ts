@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { getConfigIdByEmail, notifyCompanyAssignees, notifyForAttendee } from '@/lib/notifications';
+import { resolveNamesByEmail, displayNameFor } from '@/lib/displayNames';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -39,6 +40,13 @@ export async function GET(request: NextRequest) {
       args: [entityType, entityId],
     });
 
+    // `pinned_by` is typed as a display name but every caller writes
+    // `user.email`, so the pill rendered "KE" — the first two letters of
+    // "kevin@…" — beside a note card reading "KW". Resolved here, once for the
+    // whole page, rather than in the component: the browser has no way to turn
+    // an address into a rep profile.
+    const names = await resolveNamesByEmail(db, result.rows.map(r => String(r.pinned_by ?? '')));
+
     return NextResponse.json(
       result.rows.map((r) => ({
         id: Number(r.id),
@@ -46,6 +54,8 @@ export async function GET(request: NextRequest) {
         entity_type: String(r.entity_type),
         entity_id: Number(r.entity_id),
         pinned_by: String(r.pinned_by),
+        /** The person, named as the rest of the app names them. */
+        pinned_by_name: displayNameFor(String(r.pinned_by ?? ''), names) || String(r.pinned_by ?? ''),
         conference_name: r.conference_name != null ? String(r.conference_name) : null,
         attendee_name: r.attendee_name != null ? String(r.attendee_name) : null,
         attendee_id: r.attendee_id != null ? Number(r.attendee_id) : null,

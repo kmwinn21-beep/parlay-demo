@@ -43,6 +43,7 @@
  */
 
 import type { Client } from '@libsql/client';
+import { looksLikeEmail, resolveNamesByEmail } from '@/lib/displayNames';
 
 /** Which vocabulary an identifier belongs to. */
 export type ActorSource =
@@ -95,21 +96,7 @@ function isNumericId(value: string): boolean {
   return value !== '' && !Number.isNaN(Number(value));
 }
 
-/**
- * True for a free-text actor that is really an email address.
- *
- * Two columns typed as "a display name" are in practice always an email —
- * `pinned_notes.pinned_by`, which every caller fills from `user.email`, and
- * `upload_jobs.created_by_email`. Rendering them verbatim put
- * "kevin@teton.ai" on a card sitting directly above "Kevin Winn" on another
- * card about the same note. Deliberately narrow: one @, something either side,
- * and a dot in the domain. A name with an @ in it is not a thing, but a name
- * is what this column is documented to hold, so anything that is not clearly
- * an address is left alone.
- */
-function looksLikeEmail(value: string): boolean {
-  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
-}
+
 
 /**
  * One display string for a list of resolved parts.
@@ -200,26 +187,12 @@ export async function resolveActors(
           args: Array.from(userIds),
         }).catch(() => ({ rows: [] as Record<string, unknown>[] }))
       : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
-    emails.size > 0
-      ? client.execute({
-          // Same COALESCE as the `user` branch above, and for the same reason:
-          // the rep profile is the name every other surface in the app shows.
-          sql: `SELECT LOWER(u.email) AS email, COALESCE(co.value, u.display_name, u.email) AS name
-                FROM users u
-                LEFT JOIN config_options co ON co.id = u.config_id AND co.category = 'user'
-                WHERE LOWER(u.email) IN (${Array.from(emails).map(() => '?').join(',')})`,
-          args: Array.from(emails),
-        }).catch(() => ({ rows: [] as Record<string, unknown>[] }))
-      : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
+    // Shared with the pinned-notes reader, which has the same column problem —
+    // see lib/displayNames.ts.
+    resolveNamesByEmail(client, emails),
   ]);
 
-  const nameByEmail = new Map<string, string>();
-  for (const row of emailRows.rows) {
-    const r = row as Record<string, unknown>;
-    const email = String(r.email ?? '').trim().toLowerCase();
-    const name = String(r.name ?? '').trim();
-    if (email && name) nameByEmail.set(email, name);
-  }
+  const nameByEmail = emailRows;
 
   for (const row of repRows.rows) {
     const name = String((row as Record<string, unknown>).value ?? '').trim();

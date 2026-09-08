@@ -66,6 +66,36 @@ export function getRepInitials(name: string): string {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
+/**
+ * Initials for a stored actor, which may be a name or may be an email.
+ *
+ * Several columns are documented as display names and filled with addresses —
+ * `pinned_notes.pinned_by` always, and `entity_notes.rep` whenever the author
+ * has no rep profile. Two surfaces each grew their own version of this and
+ * disagreed: one showed "KW" for Kevin Winn while the other showed "KE", the
+ * first two letters of "kevin@…", because a single-word local part has no
+ * surname to take a second initial from.
+ *
+ * The rule is first initial and last initial. For an address that means
+ * splitting the local part on the separators people actually put in one, and
+ * for `kevin@…`, which has no separator, it means ONE letter — there is no
+ * surname in that string, and inventing a second letter from the first name is
+ * what produced the wrong pill.
+ *
+ * Prefer resolving the address to a real name before calling this; see
+ * lib/displayNames.ts. This is the fallback for when that finds nobody.
+ */
+export function getPersonInitials(nameOrEmail: string | null | undefined): string {
+  const value = String(nameOrEmail ?? '').trim();
+  if (!value) return '';
+  if (!value.includes('@')) return getRepInitials(value);
+
+  const parts = value.split('@')[0].split(/[._-]/).filter(Boolean);
+  if (parts.length === 0) return '';
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+}
+
 /** Resolve stored rep IDs to an array of initials strings */
 export function resolveRepInitials(stored: string | null | undefined, opts: UserOption[]): string[] {
   if (!stored) return [];

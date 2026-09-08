@@ -7,7 +7,7 @@ import { formatStatusLabel, getBadgeClass, getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useUser } from '@/components/UserContext';
 import { MentionTextarea } from '@/components/MentionTextarea';
-import { useUserOptions, getRepInitials } from '@/lib/useUserOptions';
+import { useUserOptions, getRepInitials, getPersonInitials } from '@/lib/useUserOptions';
 import type { EntityNote } from '@/components/NotesSection';
 
 interface Comment {
@@ -272,14 +272,11 @@ export function NoteCard({
     .map(id => userOptionsWithIds.find(u => u.id === id)?.value)
     .filter(Boolean) as string[];
 
-  const repInitials = (() => {
-    if (!note.rep) return null;
-    if (note.rep.includes('@')) {
-      const u = note.rep.split('@')[0];
-      return ((u[0] || '') + (u[1] || '')).toUpperCase() || null;
-    }
-    return note.rep.split(/\s+/).filter(Boolean).map(p => p.charAt(0).toUpperCase()).join('') || null;
-  })();
+  // `rep` is usually a display name, but /api/notes falls back to the email
+  // when the author has no rep profile — and the old inline version took the
+  // first TWO letters of the local part, which is the "KE" the pinned pill was
+  // showing. One helper now, shared with PinnedNotesSection.
+  const repInitials = getPersonInitials(note.rep) || null;
 
   return (
     <div className={`rounded-xl border p-4 hover:shadow-sm transition-all ${letsTalk ? 'border-amber-300 bg-amber-50/30' : 'border-gray-100 hover:border-gray-200'}`}>
