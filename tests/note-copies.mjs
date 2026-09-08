@@ -1,5 +1,5 @@
 /**
- * One note, several rows — recognising the set, and deleting it on purpose.
+ * One note, several rows — recognising the set, then editing and deleting it.
  *
  *   node --experimental-strip-types --import ./tests/register-ts.mjs \
  *        tests/note-copies.mjs
@@ -7,13 +7,18 @@
  * A note attached to a conference, a company and an attendee at once is three
  * POSTs to /api/notes and three `entity_notes` rows with nothing linking them.
  * Deleting one left the others standing, so the note reappeared the moment you
- * opened a different record.
+ * opened a different record; editing one left the others saying the old thing.
  *
  * The set therefore has to be inferred, and the cost of inferring it wrongly is
  * asymmetric: a false negative offers a delete that misses a copy, a false
  * positive DESTROYS SOMEBODY ELSE'S NOTE. Most of what is asserted below is the
  * second kind — the cases where rows look like copies and must not be treated
  * as one.
+ *
+ * The two verbs default differently and the tests hold them to it: a delete
+ * asks, an edit syncs. The edit section also asserts the property that makes
+ * syncing non-optional — copies are recognised BY THEIR TEXT, so a half-edited
+ * set stops being a set and can never be reassembled.
  *
  * Exits non-zero on the first failing expectation, so it can gate a build.
  */
@@ -46,6 +51,7 @@ await seedFreshDb(db);
 const { signToken } = await import('@/lib/auth');
 const { findNoteCopies, COPY_WINDOW_SECONDS } = await import('@/lib/notes/copies');
 const deleteNote = (await import('@/app/api/notes/[id]/route')).DELETE;
+const patchNote = (await import('@/app/api/notes/[id]/route')).PATCH;
 const copiesGET = (await import('@/app/api/notes/[id]/copies/route')).GET;
 
 // No accountId: getDb(undefined) is the master client, which is the one seeded
@@ -58,6 +64,22 @@ async function req(url, method = 'GET') {
 const del = async (id, scope) =>
   deleteNote(await req(`https://p.test/api/notes/${id}${scope ? `?scope=${scope}` : ''}`, 'DELETE'),
     { params: { id: String(id) } });
+const patch = async (id, content, scope) =>
+  patchNote(
+    new NextRequest(`https://p.test/api/notes/${id}${scope ? `?scope=${scope}` : ''}`, {
+      method: 'PATCH',
+      headers: { cookie: `auth_token=${await signToken(USER)}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    }),
+    { params: { id: String(id) } },
+  );
+const contentsOf = async (ids) => {
+  const r = await db.execute({
+    sql: `SELECT id, content FROM entity_notes WHERE id IN (${ids.map(() => '?').join(',')}) ORDER BY id`,
+    args: ids,
+  });
+  return r.rows.map(x => String(x.content));
+};
 const copiesOf = async (id) =>
   copiesGET(await req(`https://p.test/api/notes/${id}/copies`), { params: { id: String(id) } });
 
@@ -275,6 +297,57 @@ console.log('\n— delete from all records —');
 {
   const res = await del('not-a-number');
   eq('a non-numeric id is refused', res.status, 400);
+}
+
+// ── Editing ──────────────────────────────────────────────────────────────────
+
+console.log('\n— an edit reaches every copy —');
+{
+  await writeCopySet([110, 111, 112], 'Wants a pilot in two communities.', { t: 1100 });
+  const res = await patch(112, 'Wants a pilot in THREE communities.');
+  eq('the edit reports what it touched', (await res.json()).updated, 3);
+  eq('  and all three rows carry the new text',
+    await contentsOf([110, 111, 112]),
+    ['Wants a pilot in THREE communities.', 'Wants a pilot in THREE communities.',
+     'Wants a pilot in THREE communities.']);
+}
+{
+  // The property that makes syncing non-optional. The copies are recognised BY
+  // THEIR TEXT, so a half-edited set stops being a set — and the feed, which
+  // collapses copies on the same rule, would draw three cards again.
+  const stillASet = await findNoteCopies(db, 112);
+  eq('the set survives its own edit', stillASet.copies.map(c => c.id).sort(), [110, 111]);
+}
+{
+  await writeCopySet([120, 121, 122], 'Only this one changes.', { t: 1200 });
+  const res = await patch(122, 'Changed here alone.', 'one');
+  eq('scope=one edits a single row', (await res.json()).updated, 1);
+  eq('  leaving the other two as they were',
+    await contentsOf([120, 121, 122]),
+    ['Only this one changes.', 'Only this one changes.', 'Changed here alone.']);
+}
+{
+  // The safety half, again: a lookalike on a different person is not a copy and
+  // must not be rewritten.
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id, author_user_id, rep, created_at)
+    VALUES (130, 'attendee', 1, 'Identical wording.', 1, 1, 'Kevin Winn', '${at(1300)}')`);
+  await db.execute(`INSERT INTO entity_notes (id, entity_type, entity_id, content, conference_id, author_user_id, rep, created_at)
+    VALUES (131, 'attendee', 2, 'Identical wording.', 1, 1, 'Kevin Winn', '${at(1301)}')`);
+  await patch(130, 'Rewritten.');
+  eq('editing does not rewrite a lookalike on another person',
+    await contentsOf([130, 131]), ['Rewritten.', 'Identical wording.']);
+}
+{
+  const res = await patch(999999, 'Nothing to edit.');
+  eq('editing a note that does not exist is a 404', res.status, 404);
+}
+{
+  const res = await patch('not-a-number', 'Nope.');
+  eq('a non-numeric id is refused', res.status, 400);
+}
+{
+  const res = await patch(110, '');
+  eq('empty content is refused', res.status, 400);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
