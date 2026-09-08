@@ -81,7 +81,14 @@ console.log('\n— the stream scrolls —');
   eq('ordinary vertical scroll', feed.includes('overflow-y-auto'), true);
   eq('  no hidden scrollbar', /scrollbar-width|scrollbar-hide|overflow-hidden/.test(
     feed.slice(feed.indexOf('The stream.'), feed.indexOf('</div>', feed.indexOf('The stream.')))), false);
-  eq('  and no chevron pager', /chevron|pageUp|pageDown/i.test(feed), false);
+  // Scoped to the STREAM. The file does contain chevrons now — they page the
+  // filter rail, which is a different control with a different justification.
+  // The first version of this asserted against the whole file and failed the
+  // moment the rail arrived, which was the assertion being imprecise rather
+  // than the code being wrong.
+  const stream = feed.slice(feed.indexOf('{/* The stream.'), feed.indexOf('function FeedEmptyState'));
+  eq('  the stream block is not empty', stream.length > 200, true);
+  eq('  and has no chevron pager', /chevron|pageUp|pageDown/i.test(stream), false);
   eq('show earlier activity ends the loaded set', feed.includes('Show earlier activity'), true);
   eq('day headers stick to the top of the scroll region', /sticky top-0[\s\S]{0,200}dayLabel/.test(feed), true);
 }
@@ -121,6 +128,42 @@ console.log('\n— the card —');
 }
 
 // ── The layout ───────────────────────────────────────────────────────────────
+
+console.log('\n— the filter rail —');
+{
+  const rail = feed.slice(feed.indexOf('function ChipRail'), feed.indexOf('/* ─── The panel ─── */'));
+  eq('the rail exists', rail.length > 200, true);
+  // Five chips need ~360px in a ~290px column. Wrapping cost a second line of
+  // chrome above a stream whose whole value is vertical space.
+  eq('one row, scrolling — not wrapping', [rail.includes('overflow-x-auto'), rail.includes('flex-wrap')], [true, false]);
+  eq('  with the scrollbar hidden, since the chevrons are the control', rail.includes('scrollbar-hide'), true);
+  eq('  and the chips never wrap individually', rail.includes('whitespace-nowrap'), true);
+
+  // Chevrons only when there is something to reach, and dimmed rather than
+  // hidden at each end so the rail does not change width as you page it.
+  eq('chevrons are conditional on overflow', /\{overflows && chevron\(-1, atStart\)\}/.test(rail), true);
+  eq('  and on the other side too', /\{overflows && chevron\(1, atEnd\)\}/.test(rail), true);
+  eq('  disabled at the ends, not removed', /disabled \? 'text-gray-200'/.test(rail), true);
+  // The column is a grid cell, so its width changes without the window changing.
+  eq('overflow is re-measured on resize of the element', rail.includes('ResizeObserver'), true);
+  eq('  and while scrolling', rail.includes('onScroll={measure}'), true);
+}
+
+console.log('\n— the refresh button —');
+{
+  const header = feed.slice(feed.indexOf('{/* Header */}'), feed.indexOf('<ChipRail'));
+  eq('sits in the header row', header.includes('aria-label="Refresh the feed"'), true);
+  eq('  after the scope toggle', header.indexOf('In progress') < header.indexOf('Refresh the feed'), true);
+  eq('  and is labelled for a screen reader, not just a title', header.includes('aria-label'), true);
+
+  // A manual refresh must not blank the stream: losing what you were reading
+  // because you pressed refresh is the wrong trade.
+  eq('it refreshes silently, keeping the stream on screen',
+    /load\(\{ silent: true, spin: true \}\)/.test(header), true);
+  eq('  spinning its own icon rather than the skeleton',
+    /refreshing \? 'animate-spin' : ''/.test(feed), true);
+  eq('  with refreshing separate from loading', /const \[refreshing, setRefreshing\]/.test(feed), true);
+}
 
 console.log('\n— the dashboard grid —');
 {

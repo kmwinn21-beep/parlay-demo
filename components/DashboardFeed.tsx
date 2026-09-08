@@ -239,6 +239,100 @@ function FeedCard({ item, nowMs }: { item: FeedItem; nowMs: number }) {
   );
 }
 
+/* ─── Filter chips ─── */
+
+/**
+ * The five type filters on one row, scrolling under a chevron pair.
+ *
+ * The feed column is about 290px and the chips need roughly 360, so they
+ * wrapped to a second line — a second line of chrome above a stream whose whole
+ * value is vertical space. This scrolls them instead, matching the Admin
+ * Settings tab bar rather than inventing a control.
+ *
+ * The chevrons appear only when there is something to scroll to, and dim rather
+ * than vanish at each end, so the rail does not change width as you page along
+ * it. On a wide screen they are absent entirely.
+ */
+function ChipRail({ filter, onSelect }: {
+  filter: FeedFilter;
+  onSelect: (f: FeedFilter) => void;
+}) {
+  const railRef = useRef<HTMLDivElement>(null);
+  const [overflows, setOverflows] = useState(false);
+  const [atStart, setAtStart] = useState(true);
+  const [atEnd, setAtEnd] = useState(false);
+
+  const measure = useCallback(() => {
+    const el = railRef.current;
+    if (!el) return;
+    const scrollable = el.scrollWidth - el.clientWidth;
+    setOverflows(scrollable > 1);
+    setAtStart(el.scrollLeft <= 1);
+    setAtEnd(el.scrollLeft >= scrollable - 1);
+  }, []);
+
+  useEffect(() => {
+    measure();
+    const el = railRef.current;
+    if (!el) return;
+    // The column is a grid cell whose width changes with the viewport, so this
+    // watches the element rather than the window.
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [measure]);
+
+  const nudge = (dir: -1 | 1) => {
+    railRef.current?.scrollBy({ left: dir * 110, behavior: 'smooth' });
+  };
+
+  const chevron = (dir: -1 | 1, disabled: boolean) => (
+    <button
+      type="button"
+      onClick={() => nudge(dir)}
+      disabled={disabled}
+      aria-label={dir === -1 ? 'Scroll filters left' : 'Scroll filters right'}
+      className={`flex-shrink-0 p-0.5 rounded transition-colors ${
+        disabled ? 'text-gray-200' : 'text-gray-400 hover:text-gray-700'
+      }`}
+    >
+      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d={dir === -1 ? 'M15 19l-7-7 7-7' : 'M9 5l7 7-7 7'} />
+      </svg>
+    </button>
+  );
+
+  return (
+    <div className="flex items-center gap-0.5 mt-3 flex-shrink-0">
+      {overflows && chevron(-1, atStart)}
+      <div
+        ref={railRef}
+        onScroll={measure}
+        className="flex-1 min-w-0 overflow-x-auto scrollbar-hide"
+      >
+        <div className="flex items-center gap-1.5 w-max">
+          {CHIPS.map(chip => (
+            <button
+              key={chip.key}
+              type="button"
+              onClick={() => onSelect(chip.key)}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap transition-colors ${
+                filter === chip.key
+                  ? 'bg-brand-primary text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {chip.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {overflows && chevron(1, atEnd)}
+    </div>
+  );
+}
+
 /* ─── The panel ─── */
 
 interface FeedResponse {
@@ -267,6 +361,12 @@ export function DashboardFeed({ className = '' }: { className?: string }) {
   const [data, setData] = useState<FeedResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  /**
+   * Distinct from `loading`: a manual refresh spins the icon and leaves the
+   * stream on screen, where the first load replaces it with a skeleton. Losing
+   * what you were reading because you pressed refresh is the wrong trade.
+   */
+  const [refreshing, setRefreshing] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [lastSeen, setLastSeen] = useState<string | null>(null);
   const scopeRef = useRef(scope);
@@ -276,8 +376,9 @@ export function DashboardFeed({ className = '' }: { className?: string }) {
     try { setLastSeen(window.localStorage.getItem(SEEN_KEY)); } catch { /* private mode */ }
   }, []);
 
-  const load = useCallback(async (opts: { silent?: boolean } = {}) => {
+  const load = useCallback(async (opts: { silent?: boolean; spin?: boolean } = {}) => {
     if (!opts.silent) setLoading(true);
+    if (opts.spin) setRefreshing(true);
     try {
       const res = await fetch(`/api/feed?scope=${scopeRef.current}&limit=${PAGE}`, { cache: 'no-store' });
       if (!res.ok) throw new Error();
@@ -289,6 +390,9 @@ export function DashboardFeed({ className = '' }: { className?: string }) {
       if (!opts.silent) setData(d => d ?? { items: [], hasMore: false, inProgressCount: 0 });
     } finally {
       if (!opts.silent) setLoading(false);
+      // A spin too fast to see reads as a button that did nothing, so it is
+      // held briefly rather than cut the instant the response lands.
+      if (opts.spin) setTimeout(() => setRefreshing(false), 400);
     }
   }, []);
 
@@ -386,25 +490,29 @@ export function DashboardFeed({ className = '' }: { className?: string }) {
             </button>
           ))}
         </div>
+
+        {/* Refresh. The stream polls itself, but only while a conference is
+            running — between shows this is the only way to pull new items, and
+            during one it answers "is this actually live?" without waiting 45s. */}
+        <button
+          type="button"
+          onClick={() => { void load({ silent: true, spin: true }); }}
+          disabled={refreshing}
+          title="Refresh the feed"
+          aria-label="Refresh the feed"
+          className="flex-shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:hover:bg-transparent transition-colors"
+        >
+          <svg className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
       </div>
 
-      {/* Type filters — client-side over what is already loaded. */}
-      <div className="flex flex-wrap items-center gap-1.5 mt-3 flex-shrink-0">
-        {CHIPS.map(chip => (
-          <button
-            key={chip.key}
-            type="button"
-            onClick={() => setFilter(chip.key)}
-            className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${
-              filter === chip.key
-                ? 'bg-brand-primary text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            {chip.label}
-          </button>
-        ))}
-      </div>
+      {/* Type filters — one row, client-side over what is already loaded.
+          Five chips do not fit a ~290px column, and wrapping them cost a second
+          line of chrome above a stream that wants the height. Scrolls instead,
+          with the same chevron pair the Admin Settings tab bar uses. */}
+      <ChipRail filter={filter} onSelect={setFilter} />
 
       {/* The stream. Ordinary vertical scroll — the wheel behaves the way a
           list is expected to, and variable-height cards make paging erratic. */}
