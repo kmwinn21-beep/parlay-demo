@@ -2515,4 +2515,24 @@ export const migrations: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_feed_conf_attendees_created ON conference_attendees(created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_feed_social_events_created ON social_events(created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_feed_rsvps_set ON social_event_rsvps(rsvp_set_at)`,
+
+  // How an attendee came to be on a conference: 'initial_upload' for the bulk
+  // that first populated an empty list, 'upload' for a later file, 'manual' for
+  // a person adding one.
+  //
+  // The feed needs the distinction. Uploading a 530-row list produced 530
+  // "Added X to the attendee list" cards, which is one event reported five
+  // hundred times; the list upload is the thing that happened. A later upload
+  // that brings in ten new people IS ten events, because somebody will want to
+  // see who turned up late.
+  `ALTER TABLE conference_attendees ADD COLUMN source TEXT`,
+  // Existing rows cannot be told apart: created_at was itself backfilled from
+  // the attendee's own creation date, so it does not line up with any upload
+  // window. Every row on a conference that has ever had an upload is therefore
+  // treated as part of that bulk. It is the honest reading of data that predates
+  // the column, and it is what stops the feed opening on five hundred cards.
+  `UPDATE conference_attendees SET source = 'initial_upload'
+     WHERE source IS NULL
+       AND EXISTS (SELECT 1 FROM upload_jobs uj WHERE uj.conference_id = conference_attendees.conference_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_feed_upload_jobs ON upload_jobs(conference_id, created_at)`,
 ];

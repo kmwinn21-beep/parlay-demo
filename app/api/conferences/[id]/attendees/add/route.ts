@@ -63,7 +63,7 @@ export async function POST(
       }
       const row = { ...picked.rows[0] };
       await db.execute({
-        sql: `INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id, created_at) VALUES (?, ?, datetime('now'))`,
+        sql: `INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id, created_at, source) VALUES (?, ?, datetime('now'), 'manual')`,
         args: [params.id, attendee_id],
       });
       const coId = row.company_id as number | null;
@@ -159,7 +159,7 @@ export async function POST(
 
     // Tag attendee with this conference (ignore if already tagged)
     await db.execute({
-      sql: `INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id, created_at) VALUES (?, ?, datetime('now'))`,
+      sql: `INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id, created_at, source) VALUES (?, ?, datetime('now'), 'manual')`,
       args: [params.id, attendeeId],
     });
 
