@@ -15,9 +15,12 @@
  *                                carry the author's name in `rep` instead. A
  *                                users row is named by its REP PROFILE, not by
  *                                display_name or email — see the query below.
- *   pinned_notes.pinned_by       free text — a display name, as typed
+ *   pinned_notes.pinned_by       free text — a display name, as typed, EXCEPT
+ *                                that every current caller passes the signed-in
+ *                                user's EMAIL. See the email lookup below.
  *   social_events.entered_by     free text — a display name from a <select>
  *   conference_attendees.created_by   free text (new; see db-migrations)
+ *   upload_jobs.created_by_email free text — an email, as the name says
  *   attendees (added)            nothing at all — a system actor
  *
  * Four shapes, one avatar. Resolving them at each call site would mean getting
@@ -93,6 +96,22 @@ function isNumericId(value: string): boolean {
 }
 
 /**
+ * True for a free-text actor that is really an email address.
+ *
+ * Two columns typed as "a display name" are in practice always an email —
+ * `pinned_notes.pinned_by`, which every caller fills from `user.email`, and
+ * `upload_jobs.created_by_email`. Rendering them verbatim put
+ * "kevin@teton.ai" on a card sitting directly above "Kevin Winn" on another
+ * card about the same note. Deliberately narrow: one @, something either side,
+ * and a dot in the domain. A name with an @ in it is not a thing, but a name
+ * is what this column is documented to hold, so anything that is not clearly
+ * an address is left alone.
+ */
+function looksLikeEmail(value: string): boolean {
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
+}
+
+/**
  * One display string for a list of resolved parts.
  *
  * Two reps booked a meeting together; the card has room for one name. The first
@@ -126,16 +145,24 @@ export async function resolveActors(
 
   const repIds = new Set<string>();
   const userIds = new Set<string>();
+  const emails = new Set<string>();
 
   for (const ref of refs) {
     const key = actorKey(ref);
     if (key === 'system' || out.has(key)) continue;
 
     if (ref.source === 'text') {
+      const name = String(ref.id).trim();
+      // An email is a name nobody chose. Held back for the lookup below; if it
+      // matches no user it falls through to itself, which is still better than
+      // "Unknown user" — the address at least says who.
+      if (looksLikeEmail(name)) {
+        emails.add(name.toLowerCase());
+        continue;
+      }
       // Already a name. It resolves to itself, and seeds its own avatar, which
       // is what makes a free-text actor look like the same person as the same
       // name arriving through a different column.
-      const name = String(ref.id).trim();
       out.set(key, { name, avatarSeed: name, system: false, unresolved: false });
       continue;
     }
@@ -150,8 +177,8 @@ export async function resolveActors(
     if (ref.source === 'user') userIds.add(String(ref.id).trim());
   }
 
-  // Two queries at most, whatever the page size.
-  const [repRows, userRows] = await Promise.all([
+  // Three queries at most, whatever the page size.
+  const [repRows, userRows, emailRows] = await Promise.all([
     repIds.size > 0
       ? client.execute({
           sql: `SELECT id, value FROM config_options
@@ -173,7 +200,26 @@ export async function resolveActors(
           args: Array.from(userIds),
         }).catch(() => ({ rows: [] as Record<string, unknown>[] }))
       : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
+    emails.size > 0
+      ? client.execute({
+          // Same COALESCE as the `user` branch above, and for the same reason:
+          // the rep profile is the name every other surface in the app shows.
+          sql: `SELECT LOWER(u.email) AS email, COALESCE(co.value, u.display_name, u.email) AS name
+                FROM users u
+                LEFT JOIN config_options co ON co.id = u.config_id AND co.category = 'user'
+                WHERE LOWER(u.email) IN (${Array.from(emails).map(() => '?').join(',')})`,
+          args: Array.from(emails),
+        }).catch(() => ({ rows: [] as Record<string, unknown>[] }))
+      : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
   ]);
+
+  const nameByEmail = new Map<string, string>();
+  for (const row of emailRows.rows) {
+    const r = row as Record<string, unknown>;
+    const email = String(r.email ?? '').trim().toLowerCase();
+    const name = String(r.name ?? '').trim();
+    if (email && name) nameByEmail.set(email, name);
+  }
 
   for (const row of repRows.rows) {
     const name = String((row as Record<string, unknown>).value ?? '').trim();
@@ -215,6 +261,19 @@ export async function resolveActors(
       // "Kevin Winn +1" get the same avatar — it is the same person leading.
       out.set(key, { name, avatarSeed: names[0], system: false, unresolved: false });
     }
+  }
+
+  // The email-shaped free-text actors held back above. A match becomes the rep
+  // profile name and — importantly — seeds its avatar from that name, so the
+  // pin card and the note card of one action show one person, not two.
+  for (const ref of refs) {
+    if (ref.source !== 'text') continue;
+    const key = actorKey(ref);
+    if (key === 'system' || out.has(key)) continue;
+    const raw = String(ref.id).trim();
+    if (!looksLikeEmail(raw)) continue;
+    const name = nameByEmail.get(raw.toLowerCase()) ?? raw;
+    out.set(key, { name, avatarSeed: name, system: false, unresolved: false });
   }
 
   // Anything still missing: a deleted rep profile, a removed user, an id that
