@@ -9,6 +9,7 @@ import { useUserOptions } from '@/lib/useUserOptions';
 import { NoteCard } from '@/components/NoteCard';
 import { announceNoteSaved } from '@/lib/suggestions/announce';
 import { FadeCollapse } from '@/components/CollapseAnimation';
+import type { NoteCopy } from '@/lib/notes/copies';
 
 export interface EntityNote {
   id: number;
@@ -84,6 +85,8 @@ export function NotesSection({
   const [pinOnSubmit, setPinOnSubmit] = useState(false);
 
   const [pinModalNoteId, setPinModalNoteId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; copies: NoteCopy[] } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [pinConference, setPinConference] = useState('');
   const [pinAttendeeId, setPinAttendeeId] = useState('');
   const { user } = useUser();
@@ -313,16 +316,52 @@ export function NotesSection({
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Delete this note? This cannot be undone.')) return;
+  /**
+   * Delete, once the scope is known.
+   *
+   * `all` reaches the copies of this note stored against the other records it
+   * was written to; the default reaches this row alone.
+   */
+  const runDelete = async (id: number, scope: 'one' | 'all') => {
+    setDeleting(true);
     try {
-      const res = await fetch(`/api/notes/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/notes/${id}${scope === 'all' ? '?scope=all' : ''}`, { method: 'DELETE' });
       if (!res.ok) throw new Error();
+      const data = await res.json().catch(() => ({ deleted: 1 }));
       setNotes(prev => prev.filter(n => n.id !== id));
-      toast.success('Note deleted.');
+      setDeleteTarget(null);
+      toast.success(scope === 'all' && Number(data.deleted) > 1
+        ? `Note deleted from ${data.deleted} records.`
+        : 'Note deleted.');
     } catch {
       toast.error('Failed to delete note.');
+    } finally {
+      setDeleting(false);
     }
+  };
+
+  /**
+   * The same note can live on the attendee, the company and the conference —
+   * /api/notes writes one row per record. Deleting one used to leave the others
+   * standing, so the note came back the moment you looked at a different page.
+   * Ask which is meant, but only when there is actually something to ask about.
+   */
+  const handleDelete = async (id: number) => {
+    let copies: NoteCopy[] = [];
+    try {
+      const res = await fetch(`/api/notes/${id}/copies`);
+      if (res.ok) copies = (await res.json()).copies ?? [];
+    } catch {
+      // Falls through to the plain confirmation — the behaviour that existed
+      // before this dialog did. A lookup that failed is not a reason to block
+      // the delete.
+    }
+    if (copies.length === 0) {
+      if (!confirm('Delete this note? This cannot be undone.')) return;
+      await runDelete(id, 'one');
+      return;
+    }
+    setDeleteTarget({ id, copies });
   };
 
   const handlePinClick = (noteId: number) => {
@@ -534,6 +573,64 @@ export function NotesSection({
         );
         return fadeCollapse ? <FadeCollapse rows={2}>{list}</FadeCollapse> : list;
       })()}
+
+      {/* Delete scope modal — only ever shown when copies actually exist. */}
+      {deleteTarget !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onClick={() => { if (!deleting) setDeleteTarget(null); }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl border border-brand-highlight p-6 w-full max-w-md mx-4"
+            onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-note-scope-title"
+          >
+            <h3 id="delete-note-scope-title" className="text-lg font-semibold text-brand-primary font-serif mb-2">
+              Delete Note
+            </h3>
+            <p className="text-sm text-gray-600">
+              This note is also saved on {deleteTarget.copies.length === 1 ? 'another record' : `${deleteTarget.copies.length} other records`}:
+            </p>
+            <ul className="mt-2 mb-4 space-y-1">
+              {deleteTarget.copies.map(copy => (
+                <li key={copy.id} className="text-sm text-gray-800 flex items-baseline gap-2">
+                  <span className="text-xs uppercase tracking-wide text-gray-500 shrink-0">{copy.entityType}</span>
+                  <span className="font-medium">{copy.label}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-gray-500 mb-5">This cannot be undone.</p>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => runDelete(deleteTarget.id, 'all')}
+                className="btn-primary text-sm w-full disabled:opacity-60"
+              >
+                Delete from all {deleteTarget.copies.length + 1} records
+              </button>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => runDelete(deleteTarget.id, 'one')}
+                className="btn-secondary text-sm w-full disabled:opacity-60"
+              >
+                Delete only from this record
+              </button>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => setDeleteTarget(null)}
+                className="text-sm text-gray-500 hover:text-gray-700 py-1 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Pin modal */}
       {pinModalNoteId !== null && (

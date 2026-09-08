@@ -45,6 +45,7 @@
 import type { Client } from '@libsql/client';
 import { computeConferenceStage } from '@/lib/conference-stage';
 import { resolveActors, actorFor, type ActorRef } from '@/lib/feed/actors';
+import { specificityCase, withinCopyWindow } from '@/lib/notes/copies';
 import {
   ALL_SCOPE_DAYS, COLOUR_BY_KIND, isConferenceScoped,
   type FeedItem, type FeedKind, type FeedScope,
@@ -150,17 +151,15 @@ const PROJECTION = `
  * ── One note is three rows ───────────────────────────────────────────────────
  *
  * Writing a note against a conference, a company and an attendee at once posts
- * three times to /api/notes and stores THREE `entity_notes` rows — see the
- * comment on `skipExtraction` in app/api/notes/route.ts, which says so and
- * already works around it for suggestion extraction. Pinning that note then
- * writes up to two more rows in `pinned_notes`, one per pinnable copy.
+ * three times to /api/notes and stores THREE `entity_notes` rows. Pinning that
+ * note then writes up to two more rows in `pinned_notes`, one per pinnable
+ * copy. What makes rows copies of each other is defined once, in
+ * lib/notes/copies.ts, because the delete flow needs the same answer.
  *
- * There is no column linking the copies. They are recognised by what they
- * share: the same text, by the same author, within seconds of each other. A row
- * is dropped when a STRICTLY more specific sibling exists — the attendee copy
- * beats the company copy beats the conference copy — because the specific one
- * is the card worth reading: it names a person and links to them, where the
- * conference copy names a show that is already the card's pill.
+ * Here a row is dropped when a STRICTLY more specific sibling exists — the
+ * attendee copy beats the company copy beats the conference copy — because the
+ * specific one is the card worth reading: it names a person and links to them,
+ * where the conference copy names a show that is already the card's pill.
  *
  * Strictly is the whole safety argument, and it is load-bearing rather than
  * stylistic. Two genuinely separate notes with identical text — "Great chat"
@@ -168,18 +167,7 @@ const PROJECTION = `
  * TIE on specificity and neither suppresses the other. Only a real copy set,
  * which spans different entity types by construction, has an ordering at all.
  */
-const COPY_WINDOW_SECONDS = 10;
-
-/** Most specific first. Lower wins; the copies of one note never tie. */
-function specificity(alias: string): string {
-  return `(CASE ${alias}.entity_type
-             WHEN 'attendee' THEN 1 WHEN 'company' THEN 2 WHEN 'conference' THEN 3 ELSE 4 END)`;
-}
-
-/** Two timestamps within `COPY_WINDOW_SECONDS` of one another. */
-function withinCopyWindow(a: string, b: string): string {
-  return `ABS(strftime('%s', ${a}) - strftime('%s', ${b})) <= ${COPY_WINDOW_SECONDS}`;
-}
+const specificity = specificityCase;
 
 function buildBranches(opts: {
   scope: FeedScope;
