@@ -216,3 +216,26 @@ h1, h2, h3 {
   from { opacity: 0; transform: translateX(16px); }
   to { opacity: 1; transform: translateX(0); }
 }
+
+/* ── The mobile header sits on the brand fill ────────────────────────────────
+ *
+ * Below lg the header is brand-primary rather than white, so every icon in it
+ * has to invert. Done here rather than on each button because the icons come
+ * from several components — NotificationBell, OutstandingFollowUps and the
+ * dropdowns — and colouring them at each call site would mean getting the same
+ * thing right in six files and missing the seventh.
+ *
+ * Every icon draws with `currentColor`, so setting `color` covers both the
+ * stroked and the filled ones. Specificity (0,1,1) beats the `text-*` utility
+ * (0,1,0) the markup already carries, so no !important is needed.
+ *
+ * Deliberately excluded: the unread badge and the upload pill, which are
+ * coloured surfaces of their own and still need to read as alerts.
+ */
+@media (max-width: 1023px) {
+  .header-mobile-dark svg { color: #fff; }
+  .header-mobile-dark > button:hover,
+  .header-mobile-dark button:hover { background-color: rgb(255 255 255 / 0.12); }
+  .header-mobile-dark .bg-red-500 svg,
+  .header-mobile-dark .bg-red-600 svg { color: #fff; }
+}

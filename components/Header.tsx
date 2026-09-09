@@ -188,22 +188,26 @@ export function Header() {
   };
 
   return (
-    <header className="relative bg-white border-b border-gray-200 px-4 lg:px-6 py-3 flex items-center justify-between flex-shrink-0">
-      <div>
+    <header className="header-mobile-dark relative bg-brand-primary lg:bg-white border-b border-transparent lg:border-gray-200 rounded-b-3xl lg:rounded-none px-4 lg:px-6 py-3 flex items-center justify-between flex-shrink-0">
+      {/* `contents` on phones: the letter mark becomes a direct flex child of the
+          header, so the row's space-between distributes it and every icon with
+          one equal gap. Restored to a block from sm up, where the app name sits
+          beneath the mark and would otherwise be scattered into the icon row. */}
+      <div className="contents sm:block">
         <h1 className="hidden lg:block text-xl font-semibold text-brand-primary font-serif">{title}</h1>
         {/* Always the Parlay brand mark on mobile, regardless of any tenant favicon
             configured in Brand settings (that customization only applies elsewhere). */}
         <Link href="/" className="lg:hidden block w-8 h-8">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/favicon.png"
+            src="/WhiteLetterMarkParlay.png"
             alt="Parlay — go to Dashboard"
             className="h-8 w-8 object-contain"
           />
         </Link>
-        <p className="text-xs text-gray-500 hidden sm:block">{appName}</p>
+        <p className="text-xs text-white/70 lg:text-gray-500 hidden sm:block">{appName}</p>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="contents sm:flex sm:items-center sm:gap-2">
         {/* Hamburger — mobile only, shown when floating nav is hidden */}
         {navHidden && (
           <button
