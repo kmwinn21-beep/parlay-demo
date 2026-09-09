@@ -54,6 +54,29 @@ export async function generateMetadata(): Promise<Metadata> {
     title: appName,
     description: `Track and manage conference attendees — ${appName}.`,
     ...(faviconUrl ? { icons: { icon: faviconUrl } } : {}),
+    /**
+     * Let the page paint under the iOS status bar.
+     *
+     * Added to the Home Screen, iOS ignores theme-color for the status bar —
+     * that meta only tints Safari's own chrome in a tab. Standalone, the bar
+     * comes from this, and with nothing set it defaults to an opaque light
+     * strip: the white band above a navy header.
+     *
+     * `black-translucent` is the only value that makes it transparent so our
+     * own fill shows through. It also means the viewport now starts at the
+     * physical top of the screen, so the header pads itself by
+     * env(safe-area-inset-top) — see globals.css. Without that padding the
+     * icon row would sit behind the clock.
+     *
+     * `capable` goes with it: iOS honours the status bar style only for a web
+     * app, and while a manifest with display:standalone is enough to launch
+     * as one on iOS 16.4+, the style meta is still read from here.
+     */
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: 'black-translucent',
+      title: appName,
+    },
   };
 }
 

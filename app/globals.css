@@ -238,4 +238,57 @@ h1, h2, h3 {
  */
 @media (max-width: 1023px) {
   .header-mobile-dark .header-bar-icon { color: #fff; }
+
+  /* Selected — a menu is open, or the page is the one this button leads to.
+   *
+   * The control fills with the page colour and its icon takes the header's own
+   * fill, so the selection reads as a cut-out of the bar. brand-primary through
+   * the CSS variable, not a literal, so it follows an account that has
+   * customised Primary #1 — the header it has to match is painted from the same
+   * variable.
+   *
+   * Driven by each control's own open state, never by :hover. On iOS a tap
+   * leaves :hover stuck, which is what produced the light box with an
+   * invisible white icon in the first place; building the selected style on
+   * that would mean the icon disappears wherever the hover does NOT stick.
+   */
+  .header-mobile-dark .header-bar-btn-active { background-color: rgb(249 250 251); }
+  .header-mobile-dark .header-bar-btn-active .header-bar-icon {
+    color: rgb(var(--brand-primary-rgb));
+  }
+
+  /* Sized for a thumb, not for a cursor.
+   *
+   * 20px glyphs in 36px targets left the controls looking lost once the bar
+   * grew to 60px of content, and 36px is under the 44px minimum both Apple and
+   * WCAG ask for. The target grows WITH the glyph — enlarging only the glyph
+   * would keep the same undersized hit area and just make the gap look odd.
+   *
+   * Opt-in by class for the same reason the colours are: the dropdown panels
+   * render inside the header, and a descendant rule on width would resize
+   * every icon in them too.
+   *
+   * Add New and Go To are not listed — they size from padding, so they grow
+   * with their glyph on their own.
+   */
+  .header-mobile-dark .header-bar-icon { width: 28px; height: 28px; }
+  .header-mobile-dark .header-bar-btn { width: 44px; height: 44px; }
+  .header-mobile-dark .header-bar-mark { width: 40px; height: 40px; }
+
+  /* Room for the status bar the header now paints under.
+   *
+   * apple-mobile-web-app-status-bar-style is black-translucent, so standalone
+   * on iOS the viewport starts at the physical top of the screen and the clock
+   * and battery sit OVER the page. The header grows by exactly the inset so
+   * its 60px content row still begins below them, and the fill runs to the top
+   * of the screen behind them — which is the point.
+   *
+   * env() is 0 where there is no inset — a browser tab, an older phone, any
+   * desktop — so this is identical to the plain 85px there. Written as calc
+   * against the same 12px and 85px the utilities set, so the two cannot drift.
+   */
+  .header-mobile-dark {
+    padding-top: calc(0.75rem + env(safe-area-inset-top));
+    min-height: calc(85px + env(safe-area-inset-top));
+  }
 }

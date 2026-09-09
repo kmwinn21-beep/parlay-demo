@@ -159,7 +159,7 @@ export function NotificationBell() {
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="relative flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 transition-colors"
+        className={`header-bar-btn relative flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 transition-colors ${open ? 'header-bar-btn-active' : ''}`}
         title="Notifications"
         aria-label="Notifications"
         aria-expanded={open}
