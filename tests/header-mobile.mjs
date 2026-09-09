@@ -201,6 +201,30 @@ console.log('\n— the taller bar —');
     /\.header-mobile-dark\s+(svg|button)\s*\{[^}]*width/.test(cssNoComments), false);
 }
 
+console.log('\n— the header paints under the status bar —');
+{
+  const layout = readFileSync('app/layout.tsx', 'utf8');
+
+  // Standalone on iOS, theme-color does NOT drive the status bar — that meta
+  // only tints Safari's chrome in a tab. Unset, the bar defaults to an opaque
+  // light strip above the fill, which is the white band this removes.
+  eq('the status bar is translucent',
+    /statusBarStyle:\s*'black-translucent'/.test(layout), true);
+  eq('  and the app declares itself capable', /capable:\s*true/.test(layout), true);
+  // Required for the viewport to extend into the inset at all.
+  eq('the viewport covers the display', /viewportFit:\s*'cover'/.test(layout), true);
+
+  // Translucent means the clock and battery sit OVER the page, so the header
+  // has to pad itself clear of them or the icon row hides behind them.
+  eq('the header pads by the safe-area inset',
+    /padding-top:\s*calc\(0\.75rem \+ env\(safe-area-inset-top\)\)/.test(cssNoComments), true);
+  eq('  and grows its min-height to match',
+    /min-height:\s*calc\(85px \+ env\(safe-area-inset-top\)\)/.test(cssNoComments), true);
+  // Measured in Chromium: with no inset the header is 85px with a 60px content
+  // row, unchanged; with a 59px inset it is 144px and the row is still 60px.
+  // env() is 0 wherever there is no inset, so the two cases share one rule.
+}
+
 console.log('\n— the status bar matches the header —');
 {
   // The strip above the header is not styled by the header. On iOS it comes
