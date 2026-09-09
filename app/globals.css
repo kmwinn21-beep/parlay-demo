@@ -292,3 +292,40 @@ h1, h2, h3 {
     min-height: calc(85px + env(safe-area-inset-top));
   }
 }
+
+/* ── Overlays under the translucent status bar ───────────────────────────────
+ *
+ * apple-mobile-web-app-status-bar-style is black-translucent, so the viewport
+ * starts at the physical top of the screen. Anything fixed at top:0 therefore
+ * runs under the clock and battery — which is right for the header, and wrong
+ * for a drawer whose close button ends up behind them.
+ *
+ * Three shapes share `fixed inset-0` and only one of them is broken, so the
+ * selector says which:
+ *
+ *   :not(:empty)          a backdrop is a self-closing div with an onClick and
+ *                         nothing inside. It SHOULD reach the top edge, or the
+ *                         dimming stops short of the status bar.
+ *   :not(.items-center)   a centred dialog is already clear of the bar, and it
+ *   :not(.justify-center) carries its own p-4 that this would otherwise
+ *                         replace with 0 on every device without an inset.
+ *
+ * What is left is the full-screen panels — 29 of them at the time of writing,
+ * none of which sets padding on this element, so there is nothing to clobber.
+ *
+ * Not scoped to a breakpoint on purpose: env() is 0 wherever there is no
+ * inset, and a tablet in landscape has one at well over 1023px.
+ */
+.fixed.inset-0:not(:empty):not(.items-center):not(.justify-center) {
+  padding-top: env(safe-area-inset-top);
+}
+
+/**
+ * The same clearance for an overlay that is not `inset-0`.
+ *
+ * Opt-in, because a top-anchored drawer that is not full-viewport has no
+ * shape a selector can recognise without guessing.
+ */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top);
+}
