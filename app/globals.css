@@ -289,7 +289,7 @@ h1, h2, h3 {
    */
   .header-mobile-dark {
     padding-top: calc(0.75rem + env(safe-area-inset-top));
-    min-height: calc(85px + env(safe-area-inset-top));
+    min-height: var(--mobile-header-h);
   }
 }
 
@@ -329,3 +329,40 @@ h1, h2, h3 {
 .safe-area-top {
   padding-top: env(safe-area-inset-top);
 }
+
+/**
+ * How tall the mobile header is, in one place.
+ *
+ * 85px of bar — a 60px content row plus its 24px of padding and 1px border —
+ * and then the status bar it now paints under. The header sets its own
+ * min-height from this, and the drawers below sit against it, so the two
+ * cannot drift apart the way the header and theme-color did.
+ */
+:root {
+  --mobile-header-h: calc(85px + env(safe-area-inset-top));
+}
+
+/**
+ * Bottom-sheet drawers stop at the header, not at the top of the screen.
+ *
+ * They were sized `h-[90vh]` from the bottom edge, which was fine until
+ * viewport-fit:cover made `vh` include the status bar — 90vh then reaches past
+ * the header and over the clock, and the drawer's own close button ends up
+ * under it.
+ *
+ * Anchoring the top instead of setting a height fixes the cause rather than
+ * the symptom: the sheet spans from the header's bottom edge to the bottom of
+ * the screen, whatever the inset turns out to be. `height: auto` is what lets
+ * top and bottom decide it, overriding the h-[90vh] the markup still carries
+ * for its sm+ layout.
+ *
+ * Below sm only. From 640px these become right-hand drawers with sm:inset-y-0
+ * and a header that is not the mobile one.
+ */
+@media (max-width: 639px) {
+  .drawer-mobile-responsive.fixed.bottom-0.left-0.right-0 {
+    top: var(--mobile-header-h);
+    height: auto;
+  }
+}
+

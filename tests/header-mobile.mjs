@@ -218,8 +218,10 @@ console.log('\n— the header paints under the status bar —');
   // has to pad itself clear of them or the icon row hides behind them.
   eq('the header pads by the safe-area inset',
     /padding-top:\s*calc\(0\.75rem \+ env\(safe-area-inset-top\)\)/.test(cssNoComments), true);
+  // Via the shared variable, which is where that calc now lives — the drawers
+  // sit against the same number.
   eq('  and grows its min-height to match',
-    /min-height:\s*calc\(85px \+ env\(safe-area-inset-top\)\)/.test(cssNoComments), true);
+    /min-height:\s*var\(--mobile-header-h\)/.test(cssNoComments), true);
   // Measured in Chromium: with no inset the header is 85px with a 60px content
   // row, unchanged; with a 59px inset it is 144px and the row is still 60px.
   // env() is 0 wherever there is no inset, so the two cases share one rule.
@@ -290,6 +292,40 @@ console.log('\n— full-screen modals clear it too —');
   // min-width query at 6839+.
   eq('the arbitrary value keeps the base padding rather than replacing it',
     readFileSync('components/PreConferenceReview.tsx', 'utf8').includes('px-6 py-4 pt-[calc(1rem_+_env('), true);
+}
+
+console.log('\n— bottom sheets stop at the header —');
+{
+  // They were sized h-[90vh] from the bottom edge, which was fine until
+  // viewport-fit:cover made `vh` include the status bar: 90vh then reaches
+  // past the header and over the clock.
+  eq('the sheet anchors its top to the header height',
+    /\.drawer-mobile-responsive\.fixed\.bottom-0\.left-0\.right-0 \{\s*top: var\(--mobile-header-h\);/
+      .test(cssNoComments), true);
+  // Anchoring top AND bottom is only a span if the height stops fighting it —
+  // the markup still carries h-[90vh] for its sm+ layout.
+  eq('  and lets top and bottom decide the height',
+    /\.drawer-mobile-responsive\.fixed\.bottom-0\.left-0\.right-0 \{[^}]*height: auto;/
+      .test(cssNoComments), true);
+
+  // One definition of the header's height, used by the header AND by what sits
+  // under it — the drift that put theme-color in a different navy from the
+  // header is the reason this is a variable rather than a repeated calc.
+  eq('the header height is declared once',
+    /--mobile-header-h: calc\(85px \+ env\(safe-area-inset-top\)\);/.test(cssNoComments), true);
+  eq('  and the header itself reads it',
+    /\.header-mobile-dark \{[^}]*min-height: var\(--mobile-header-h\);/.test(cssNoComments), true);
+  eq('  with no second hardcoded copy of that height',
+    (cssNoComments.match(/calc\(85px \+ env\(safe-area-inset-top\)\)/g) ?? []).length, 1);
+
+  // Below sm only: from 640px these are right-hand drawers with sm:inset-y-0,
+  // and the mobile header is not what they sit under.
+  const idx = cssNoComments.indexOf('.drawer-mobile-responsive.fixed.bottom-0');
+  eq('the sheet rule is scoped below sm',
+    cssNoComments.slice(0, idx).trimEnd().endsWith('@media (max-width: 639px) {'), true);
+
+  // Measured in Chromium at 430px: header bottom 85, drawer top 85 — flush —
+  // spanning 85 to 932. At 900px it is a full-height side drawer, top 0.
 }
 
 console.log('\n— the status bar matches the header —');
