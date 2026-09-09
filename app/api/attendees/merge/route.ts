@@ -27,17 +27,23 @@ export async function POST(request: NextRequest) {
 
       // Get all conference associations from the duplicate
       const dupConferencesResult = await db.execute({
-        sql: 'SELECT conference_id FROM conference_attendees WHERE attendee_id = ?',
+        sql: 'SELECT conference_id, source FROM conference_attendees WHERE attendee_id = ?',
         args: [dupId],
       });
 
       const statements: Array<{ sql: string; args: (string | number | null)[] }> = [];
 
-      // Move conference associations to master
+      // Move conference associations to master.
+      //
+      // `source` is carried across rather than left NULL: the membership is the
+      // same membership, and how the person got onto that conference did not
+      // change because two duplicate records were merged. A NULL here would
+      // make a bulk-imported row look like an individual add and put a card in
+      // the feed for it.
       for (const ca of dupConferencesResult.rows) {
         statements.push({
-          sql: `INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id, created_at) VALUES (?, ?, datetime('now'))`,
-          args: [ca.conference_id as number, master_id],
+          sql: `INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id, created_at, source) VALUES (?, ?, datetime('now'), ?)`,
+          args: [ca.conference_id as number, master_id, (ca.source as string | null) ?? 'initial_upload'],
         });
       }
 
