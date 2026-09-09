@@ -32,6 +32,9 @@ const eq = (label, got, want) => {
 
 const header = readFileSync('components/Header.tsx', 'utf8');
 const css = readFileSync('app/globals.css', 'utf8');
+// Prose in this stylesheet names the very selectors under test, and matching a
+// comment has produced a false result here twice. Assertions read this copy.
+const cssNoComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 // The <header> tag itself, not the whole file — several nested elements carry
 // similar utilities and a file-wide search would match one of those instead.
@@ -109,9 +112,8 @@ console.log('\n— a selected control stays legible —');
   // Comments stripped first: the block above this rule explains why hover is
   // the wrong hook, and matching that prose failed the assertion for the wrong
   // reason.
-  const cssCode = css.replace(/\/\*[\s\S]*?\*\//g, '');
   eq('  and the selected rule does not depend on :hover',
-    /:hover[^{]*header-bar-btn-active|header-bar-btn-active[^{]*:hover/.test(cssCode), false);
+    /:hover[^{]*header-bar-btn-active|header-bar-btn-active[^{]*:hover/.test(cssNoComments), false);
 }
 
 console.log('\n— one equal gap across the row —');
@@ -177,6 +179,26 @@ console.log('\n— the taller bar —');
   // already fills when selected.
   eq('the dropdown chevrons are desktop-only',
     (header.match(/header-bar-icon hidden lg:block w-3\.5/g) ?? []).length, 2);
+
+  // Sized for a thumb. 44px is the floor Apple and WCAG both name, and the
+  // target grows with the glyph — enlarging only the glyph would leave the
+  // same undersized hit area.
+  eq('icons are 28px on phones',
+    /\.header-mobile-dark \.header-bar-icon \{ width: 28px; height: 28px; \}/.test(css), true);
+  eq('  in 44px targets',
+    /\.header-mobile-dark \.header-bar-btn \{ width: 44px; height: 44px; \}/.test(css), true);
+  eq('  with a 40px mark',
+    /\.header-mobile-dark \.header-bar-mark \{ width: 40px; height: 40px; \}/.test(css), true);
+  // Opt-in by class, like the colours, because the dropdown panels render
+  // inside the header and a descendant width rule would resize them too.
+  eq('the fixed-size triggers name themselves',
+    (header.match(/header-bar-btn[^-]/g) ?? []).length, 2);
+  eq('  including the bell',
+    readFileSync('components/NotificationBell.tsx', 'utf8').includes('header-bar-btn '), true);
+  eq('  and the follow-ups triangle',
+    readFileSync('components/OutstandingFollowUps.tsx', 'utf8').includes('header-bar-btn '), true);
+  eq('no blanket width rule over the header',
+    /\.header-mobile-dark\s+(svg|button)\s*\{[^}]*width/.test(cssNoComments), false);
 }
 
 console.log('\n— the status bar matches the header —');

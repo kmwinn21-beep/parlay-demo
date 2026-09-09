@@ -213,13 +213,13 @@ export function Header() {
             if (rect) setNavAnchor({ x: rect.left, y: rect.top, width: rect.width, height: rect.height });
             setNavOpen(v => !v);
           }}
-          className={`lg:hidden order-last sm:order-none flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 transition-colors ${navOpen ? 'header-bar-btn-active' : ''}`}
+          className={`header-bar-btn lg:hidden order-last sm:order-none flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 transition-colors ${navOpen ? 'header-bar-btn-active' : ''}`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={navOpen ? '/favicon.png' : '/WhiteLetterMarkParlay.png'}
             alt="Parlay"
-            className="h-8 w-8 object-contain"
+            className="header-bar-mark h-8 w-8 object-contain"
           />
         </button>
         <p className="text-xs text-white/70 lg:text-gray-500 hidden sm:block">{appName}</p>
@@ -469,7 +469,7 @@ export function Header() {
         <button
           type="button"
           onClick={() => setMobileSearchOpen(true)}
-          className="lg:hidden order-first sm:order-none flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 transition-colors"
+          className="header-bar-btn lg:hidden order-first sm:order-none flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 transition-colors"
           title="Search"
         >
           <svg className="header-bar-icon w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">

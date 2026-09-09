@@ -256,4 +256,22 @@ h1, h2, h3 {
   .header-mobile-dark .header-bar-btn-active .header-bar-icon {
     color: rgb(var(--brand-primary-rgb));
   }
+
+  /* Sized for a thumb, not for a cursor.
+   *
+   * 20px glyphs in 36px targets left the controls looking lost once the bar
+   * grew to 60px of content, and 36px is under the 44px minimum both Apple and
+   * WCAG ask for. The target grows WITH the glyph — enlarging only the glyph
+   * would keep the same undersized hit area and just make the gap look odd.
+   *
+   * Opt-in by class for the same reason the colours are: the dropdown panels
+   * render inside the header, and a descendant rule on width would resize
+   * every icon in them too.
+   *
+   * Add New and Go To are not listed — they size from padding, so they grow
+   * with their glyph on their own.
+   */
+  .header-mobile-dark .header-bar-icon { width: 28px; height: 28px; }
+  .header-mobile-dark .header-bar-btn { width: 44px; height: 44px; }
+  .header-mobile-dark .header-bar-mark { width: 40px; height: 40px; }
 }
