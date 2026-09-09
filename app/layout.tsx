@@ -134,7 +134,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#0B3C62" />
+        {/* Matches the mobile header fill (brand-primary's default,
+            #223A5E) so the iOS status bar and the browser chrome do not
+            sit in a different navy from the header directly beneath
+            them. Static, unlike the header: the manifest is one file for
+            every tenant, so an account that customises Primary #1 will
+            see this default rather than its own colour. */}
+        <meta name="theme-color" content="#223A5E" />
         <FontStyles />
         <BrandStyles />
       </head>

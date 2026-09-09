@@ -86,5 +86,28 @@ console.log('\n— the mark —');
     header.includes('text-white/70 lg:text-gray-500'), true);
 }
 
+console.log('\n— the status bar matches the header —');
+{
+  // The strip above the header is not styled by the header. On iOS it comes
+  // from theme-color and the manifest, which are two hardcoded values in two
+  // files — so they drift from the header silently, which is exactly what
+  // happened: they stayed #0B3C62 when the header became brand-primary.
+  const FILL = '#223A5E';   // brand-primary's default, in lib/brand.ts
+  const { BRAND_COLOR_DEFAULTS } = await import('@/lib/brand');
+  eq('the fill under test is still the brand default',
+    BRAND_COLOR_DEFAULTS.brand_dark_blue, FILL);
+
+  const layout = readFileSync('app/layout.tsx', 'utf8');
+  const meta = /<meta name="theme-color" content="(#[0-9A-Fa-f]{6})"/.exec(layout);
+  eq('the theme-color meta was found', meta != null, true);
+  eq('  and matches the header fill', meta?.[1], FILL);
+
+  const manifest = JSON.parse(readFileSync('public/manifest.json', 'utf8'));
+  eq('the manifest theme matches too', manifest.theme_color, FILL);
+  // The splash background, distinct from the status bar but the same colour
+  // here so the app does not flash a different navy while it loads.
+  eq('  as does the splash background', manifest.background_color, FILL);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);
