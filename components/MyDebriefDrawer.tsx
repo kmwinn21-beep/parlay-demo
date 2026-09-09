@@ -1171,7 +1171,7 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
         {/* Modal box — full-screen on mobile, contained on desktop */}
         <div className="relative w-full h-full sm:h-[85vh] sm:max-w-[1440px] flex flex-col bg-white sm:rounded-xl sm:shadow-2xl overflow-hidden">
           {/* ── Header ── */}
-          <div className="bg-brand-primary flex-shrink-0">
+          <div className="bg-brand-primary pt-[env(safe-area-inset-top)] sm:pt-0 flex-shrink-0">
 
             {/* Top bar */}
             <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-white/20">

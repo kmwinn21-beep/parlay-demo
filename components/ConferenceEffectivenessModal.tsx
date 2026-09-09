@@ -211,7 +211,7 @@ export function ConferenceEffectivenessModalBody() {
         >
 
           {/* Header */}
-          <div className="flex-shrink-0 px-6 py-4" style={{ backgroundColor: HEADER_BG }}>
+          <div className="flex-shrink-0 px-6 py-4 pt-[calc(1rem_+_env(safe-area-inset-top))] sm:pt-4" style={{ backgroundColor: HEADER_BG }}>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold mb-0.5 uppercase tracking-widest" style={{ color: `${HEADER_TEXT}99` }}>Conference Effectiveness</p>

@@ -258,6 +258,40 @@ console.log('\n— overlays clear the status bar too —');
     rule.slice(0, rule.indexOf('}')).includes('@media'), false);
 }
 
+console.log('\n— full-screen modals clear it too —');
+{
+  // The overlay rule above pads the `fixed inset-0` CONTAINER, and that does
+  // nothing for these four: their panel is `absolute inset-0`, and an
+  // absolutely positioned child resolves against its containing block's
+  // PADDING BOX — which includes the padding, so top:0 still means the very
+  // top. Proven in Chromium: with the container padded 59px, an in-flow child
+  // started at y=59 and an absolute inset-0 child at y=0.
+  //
+  // So each of these pads its own header bar, whose children ARE in flow.
+  const MODALS = [
+    'components/PreConferenceReview.tsx',
+    'components/PostConferenceReview.tsx',
+    'components/ConferenceEffectivenessModal.tsx',
+    'components/MyDebriefDrawer.tsx',
+  ];
+  for (const f of MODALS) {
+    const src = readFileSync(f, 'utf8');
+    const name = f.replace('components/', '').replace('.tsx', '');
+    eq(`${name} pads its header by the inset`,
+      /pt-\[calc\(1rem_\+_env\(safe-area-inset-top\)\)\]|pt-\[env\(safe-area-inset-top\)\]/.test(src), true);
+    // Centred from sm up, where there is nothing to clear.
+    eq(`  and resets it from sm`, /sm:pt-(4|0)/.test(src), true);
+  }
+
+  // Tailwind arbitrary values rather than a class of my own, so Tailwind's
+  // utility order settles the tie with py-4 instead of my stylesheet's
+  // position in the cascade. Verified in the compiled CSS: .py-4 at 3899,
+  // .pt-[calc(1rem_+_env(...))] at 4076, and the sm: resets inside the
+  // min-width query at 6839+.
+  eq('the arbitrary value keeps the base padding rather than replacing it',
+    readFileSync('components/PreConferenceReview.tsx', 'utf8').includes('px-6 py-4 pt-[calc(1rem_+_env('), true);
+}
+
 console.log('\n— the status bar matches the header —');
 {
   // The strip above the header is not styled by the header. On iOS it comes

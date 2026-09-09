@@ -605,7 +605,7 @@ export function PreConferenceReviewModal() {
             style={{ '--pcr-header-h': `${headerHeight}px` } as CSSProperties}
           >
             {/* Panel header */}
-            <div ref={headerRef} className="bg-brand-primary px-6 py-4 flex-shrink-0">
+            <div ref={headerRef} className="bg-brand-primary px-6 py-4 pt-[calc(1rem_+_env(safe-area-inset-top))] sm:pt-4 flex-shrink-0">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-xs text-white/60 uppercase tracking-widest font-semibold mb-0.5">Pre-Conference Review</p>
