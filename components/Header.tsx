@@ -15,7 +15,7 @@ import { GlobalSearchModal } from './GlobalSearch';
 import { useChatPanel } from './ChatPanelContext';
 import { MessagingMenu } from './MessagingMenu';
 import { NotificationBell } from './NotificationBell';
-import { useFloatingNavHidden } from './FloatingNavHiddenContext';
+import { useFloatingNav } from './FloatingNavContext';
 import { OutstandingFollowUps } from './OutstandingFollowUps';
 import { useUser } from './UserContext';
 import { useAppName } from '@/lib/useAppName';
@@ -89,7 +89,8 @@ export function Header() {
   const pathname = usePathname();
   const { user } = useUser();
   const appName = useAppName();
-  const { navHidden, setNavHidden } = useFloatingNavHidden();
+  const { open: navOpen, setOpen: setNavOpen, setAnchor: setNavAnchor } = useFloatingNav();
+  const markRef = useRef<HTMLButtonElement>(null);
   const { planCapabilities } = useCapabilities();
   const { panelOpen, setPanelOpen, totalUnread } = useChatPanel();
   const title = getPageTitle(pathname);
@@ -188,7 +189,7 @@ export function Header() {
   };
 
   return (
-    <header className="header-mobile-dark relative bg-brand-primary lg:bg-white border-b border-transparent lg:border-gray-200 rounded-b-3xl lg:rounded-none px-4 lg:px-6 py-3 flex items-center justify-between flex-shrink-0">
+    <header className="header-mobile-dark relative bg-brand-primary lg:bg-white border-b border-transparent lg:border-gray-200 rounded-b-3xl lg:rounded-none min-h-[85px] lg:min-h-0 px-4 lg:px-6 py-3 flex items-center justify-between flex-shrink-0">
       {/* `contents` on phones: the letter mark becomes a direct flex child of the
           header, so the row's space-between distributes it and every icon with
           one equal gap. Restored to a block from sm up, where the app name sits
@@ -197,31 +198,33 @@ export function Header() {
         <h1 className="hidden lg:block text-xl font-semibold text-brand-primary font-serif">{title}</h1>
         {/* Always the Parlay brand mark on mobile, regardless of any tenant favicon
             configured in Brand settings (that customization only applies elsewhere). */}
-        <Link href="/" className="lg:hidden block w-8 h-8">
+        {/* The mark opens the floating nav rather than linking to the
+            dashboard — Dashboard is the menu's first item, so nothing is lost.
+            It publishes its own rectangle so the menu can be laid out around
+            it; FloatingNav has no other way to know where its trigger is. */}
+        <button
+          ref={markRef}
+          type="button"
+          title="Menu"
+          aria-label="Menu"
+          aria-expanded={navOpen}
+          onClick={() => {
+            const rect = markRef.current?.getBoundingClientRect();
+            if (rect) setNavAnchor({ x: rect.left, y: rect.top, width: rect.width, height: rect.height });
+            setNavOpen(v => !v);
+          }}
+          className={`lg:hidden order-last sm:order-none flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 transition-colors ${navOpen ? 'header-bar-btn-active' : ''}`}
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/WhiteLetterMarkParlay.png"
-            alt="Parlay — go to Dashboard"
+            src={navOpen ? '/favicon.png' : '/WhiteLetterMarkParlay.png'}
+            alt="Parlay"
             className="h-8 w-8 object-contain"
           />
-        </Link>
+        </button>
         <p className="text-xs text-white/70 lg:text-gray-500 hidden sm:block">{appName}</p>
       </div>
       <div className="contents sm:flex sm:items-center sm:gap-2">
-        {/* Hamburger — mobile only, shown when floating nav is hidden */}
-        {navHidden && (
-          <button
-            id="header-unhide-nav-btn"
-            type="button"
-            onClick={() => setNavHidden(false)}
-            title="Show navigation menu"
-            className="lg:hidden flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            <svg className="header-bar-icon w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-        )}
         {/* Set Active Conference — desktop only */}
         <div className="hidden lg:block">
           <SetConferenceButton />
@@ -263,7 +266,7 @@ export function Header() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             <span className="text-sm font-medium text-brand-primary hidden lg:block">Add New</span>
-            <svg className={`header-bar-icon w-3.5 h-3.5 text-gray-400 transition-transform ${showAddNew ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className={`header-bar-icon hidden lg:block w-3.5 h-3.5 text-gray-400 transition-transform ${showAddNew ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
@@ -385,7 +388,7 @@ export function Header() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
             <span className="text-sm font-medium text-brand-primary hidden sm:block">Go To</span>
-            <svg className={`header-bar-icon w-3.5 h-3.5 text-gray-400 transition-transform ${showConferences ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className={`header-bar-icon hidden lg:block w-3.5 h-3.5 text-gray-400 transition-transform ${showConferences ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
@@ -466,7 +469,7 @@ export function Header() {
         <button
           type="button"
           onClick={() => setMobileSearchOpen(true)}
-          className="lg:hidden flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 transition-colors"
+          className="lg:hidden order-first sm:order-none flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 transition-colors"
           title="Search"
         >
           <svg className="header-bar-icon w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">

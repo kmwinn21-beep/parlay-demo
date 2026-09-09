@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useBottomNav } from './BottomNavContext';
-import { useFloatingNavHidden } from './FloatingNavHiddenContext';
+import { useFloatingNav } from './FloatingNavContext';
 import { GlobalSearchModal } from './GlobalSearch';
 import { QuickNoteInlineModal } from './QuickNotesSection';
 import { useUnreadNotificationCount } from '@/lib/useUnreadNotificationCount';
@@ -102,13 +102,12 @@ function safeClamp(p: { x: number; y: number }): { x: number; y: number } {
 export function FloatingNav() {
   const pathname = usePathname();
   const { hidden } = useBottomNav();
-  const { navHidden, setNavHidden } = useFloatingNavHidden();
+  const { open, setOpen, anchor } = useFloatingNav();
   const { planCapabilities } = useCapabilities();
   const unreadCount = useUnreadNotificationCount();
   const unreadChatCount = useUnreadChatCount();
   const { setPanelOpen } = useChatPanel();
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  const [open, setOpen] = useState(false);
   const [intelOpen, setIntelOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -299,12 +298,29 @@ export function FloatingNav() {
     }
   }, []);
 
-  if (!pos || hidden || navHidden) return null;
+  // Before any window read. The guard this replaced was `!pos`, which is null
+  // during SSR because it is set in an effect — so `window` was never reached
+  // on the server by accident rather than by design. Said out loud now.
+  if (hidden || typeof window === 'undefined') return null;
 
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const above = pos.y > vh / 2;            // menu goes above FAB
-  const onRight = pos.x + BTN / 2 > vw / 2; // menu right-aligns to FAB
+
+  /**
+   * On a phone the header's Parlay mark IS the button, so the draggable one is
+   * not rendered and the menu is laid out around the mark instead. `lg` is the
+   * same breakpoint the header uses to decide the mark is visible at all, so
+   * the two cannot disagree about which is the trigger.
+   */
+  const anchored = vw < 1024;
+  const menuPos = anchored
+    ? (anchor ? { x: anchor.x + Math.round((anchor.width - BTN) / 2), y: anchor.y } : null)
+    : pos;
+
+  if (!menuPos) return null;
+
+  const above = menuPos.y > vh / 2;            // menu goes above the trigger
+  const onRight = menuPos.x + BTN / 2 > vw / 2; // menu right-aligns to it
 
   // Build menu items: Dashboard→…→Meetings + Search at end
   // Reverse order when rendering above so Dashboard is nearest the FAB
@@ -434,11 +450,11 @@ export function FloatingNav() {
           position: 'fixed',
           zIndex: 60,
           ...(onRight
-            ? { right: vw - pos.x - BTN }
-            : { left: pos.x }),
+            ? { right: vw - menuPos.x - BTN }
+            : { left: menuPos.x }),
           ...(above
-            ? { bottom: vh - pos.y + 10 }
-            : { top: pos.y + BTN + 10 }),
+            ? { bottom: vh - menuPos.y + 10 }
+            : { top: menuPos.y + BTN + 10 }),
           display: 'flex',
           flexDirection: above ? 'column-reverse' : 'column',
           gap: 6,
@@ -513,13 +529,13 @@ export function FloatingNav() {
         })}
       </div>
 
-      {/* Hide / Sign out buttons — appear to the left of FAB when menu is open */}
+      {/* Intelligence / Sign out — to the left of the trigger while open */}
       {open && (
         <div
           style={{
             position: 'fixed',
-            right: vw - pos.x + 8,
-            top: pos.y + Math.round((BTN - 28) / 2),
+            right: vw - menuPos.x + 8,
+            top: menuPos.y + Math.round((BTN - 28) / 2),
             zIndex: 62,
             display: 'flex',
             gap: 12,
@@ -544,13 +560,6 @@ export function FloatingNav() {
             Sign out
           </button>
 
-          <button
-            type="button"
-            onClick={() => { setOpen(false); setNavHidden(true); }}
-            className="text-xs font-medium text-white/75 hover:text-white bg-brand-primary/80 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20 shadow-lg transition-colors"
-          >
-            Hide
-          </button>
 
           {/* Submenu items — anchored to this whole row's own left edge (= Intelligence
               button's left edge), which keeps it clear of the main floating nav menu
@@ -597,13 +606,16 @@ export function FloatingNav() {
         </div>
       )}
 
-      {/* FAB button */}
+      {/* The draggable button — desktop only. On a phone the header's Parlay
+          mark is the trigger, and rendering this as well would put two ways to
+          open the same menu on a small screen. */}
+      {!anchored && (
       <div
         ref={fabRef}
         style={{
           position: 'fixed',
-          left: pos.x,
-          top: pos.y,
+          left: menuPos.x,
+          top: menuPos.y,
           zIndex: 61,
           width: BTN,
           height: BTN,
@@ -652,6 +664,7 @@ export function FloatingNav() {
           </span>
         )}
       </div>
+      )}
     </>
   );
 }

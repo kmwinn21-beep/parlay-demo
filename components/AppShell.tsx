@@ -9,7 +9,7 @@ import { FooterChat } from './FooterChat';
 import { SwipeToDismissSheets } from './SwipeToDismissSheets';
 import { ChatPanelProvider } from './ChatPanelContext';
 import { BottomNavProvider } from './BottomNavContext';
-import { FloatingNavHiddenProvider } from './FloatingNavHiddenContext';
+import { FloatingNavProvider } from './FloatingNavContext';
 import { UserProvider } from './UserContext';
 import { TrialBanner } from './TrialBanner';
 import ImpersonationBanner from './ImpersonationBanner';
@@ -157,7 +157,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   return (
     <>
       <ChatPanelProvider>
-      <FloatingNavHiddenProvider>
+      <FloatingNavProvider>
       <BottomNavProvider>
         <div className="flex h-screen supports-[height:100dvh]:h-dvh overflow-hidden bg-gray-50">
           {/* Sidebar — desktop only */}
@@ -187,7 +187,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         {/* Swipe-down-to-close for every mobile drawer and bottom sheet */}
         <SwipeToDismissSheets />
       </BottomNavProvider>
-      </FloatingNavHiddenProvider>
+      </FloatingNavProvider>
       </ChatPanelProvider>
 
       {/* Onboarding overlays — useSearchParams requires Suspense boundary */}

@@ -19,7 +19,7 @@
  *
  * Exits non-zero on the first failing expectation, so it can gate a build.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 let pass = 0;
 let fail = 0;
@@ -75,7 +75,7 @@ console.log('\n— the icons invert with it, and ONLY the bar icons —');
 
   // Every bar trigger names itself. Miss one and it stays navy on navy.
   const marks = (header.match(/header-bar-icon/g) ?? []).length;
-  eq('every bar trigger in Header.tsx is marked', marks, 7);
+  eq('every bar trigger in Header.tsx is marked', marks, 6);
   eq('  as is the bell', bell.includes('header-bar-icon'), true);
   eq('  and the follow-ups triangle',
     readFileSync('components/OutstandingFollowUps.tsx', 'utf8').includes('header-bar-icon'), true);
@@ -99,7 +99,7 @@ console.log('\n— a selected control stays legible —');
   // is what produced the invisible icon; a selected style built on hover would
   // fail wherever the hover does NOT stick.
   eq('every toggle marks itself selected from its own state',
-    (header.match(/header-bar-btn-active/g) ?? []).length, 3);
+    (header.match(/header-bar-btn-active/g) ?? []).length, 4);
   eq('  including the bell',
     readFileSync('components/NotificationBell.tsx', 'utf8').includes("open ? 'header-bar-btn-active'"), true);
   eq('  and the follow-ups triangle',
@@ -126,12 +126,57 @@ console.log('\n— one equal gap across the row —');
   eq('  and both come back from sm', (header.match(/contents sm:/g) ?? []).length, 2);
 }
 
-console.log('\n— the mark —');
+console.log('\n— the mark opens the nav —');
 {
-  eq('the white letter mark is used', header.includes('src="/WhiteLetterMarkParlay.png"'), true);
-  eq('  and the old dark favicon is gone from the header', header.includes('src="/favicon.png"'), false);
+  // White on the fill, and the colour favicon while selected — the selected
+  // state fills the button with the page colour, and a white mark on that is
+  // the same invisible-icon problem the other controls had.
+  eq('the white letter mark is the resting state',
+    header.includes("navOpen ? '/favicon.png' : '/WhiteLetterMarkParlay.png'"), true);
   eq('the app name is legible on the fill',
     header.includes('text-white/70 lg:text-gray-500'), true);
+
+  // It toggles the floating nav rather than linking to the dashboard, which is
+  // the menu's own first item.
+  eq('the mark is a button, not a link', /<button\s+ref=\{markRef\}/.test(header), true);
+  eq('  that toggles the shared nav state', header.includes('setNavOpen(v => !v)'), true);
+  // FloatingNav lays its menu out around a point and has no other way to learn
+  // where its trigger is.
+  eq('  and publishes its own rectangle as the anchor',
+    header.includes('setNavAnchor({ x: rect.left, y: rect.top'), true);
+
+  // Search leads, the mark trails. Done with `order` because the two sit in
+  // different wrappers that display:contents has already dissolved.
+  eq('the mark sits last in the row', header.includes('order-last sm:order-none'), true);
+  eq('  and search first', header.includes('order-first sm:order-none'), true);
+}
+
+console.log('\n— hide is gone —');
+{
+  const shell = readFileSync('components/AppShell.tsx', 'utf8');
+  const nav = readFileSync('components/FloatingNav.tsx', 'utf8');
+  eq('the hide context is deleted',
+    existsSync('components/FloatingNavHiddenContext.tsx'), false);
+  eq('  and nothing still imports it',
+    /FloatingNavHidden|navHidden/.test(header + shell + nav), false);
+  eq('the Hide pill is gone', />\s*Hide\s*</.test(nav), false);
+  eq('the header hamburger that undid it is gone too',
+    header.includes('header-unhide-nav-btn'), false);
+  // Intelligence and Sign out were kept.
+  eq('Intelligence survives', nav.includes('>\n            Intelligence\n          </button>') || nav.includes('Intelligence'), true);
+  eq('  as does Sign out', nav.includes('Sign out'), true);
+}
+
+console.log('\n— the taller bar —');
+{
+  // 60px of content, measured in dev tools. min-height is border-box, so it
+  // carries the 24px of padding and the 1px border with it.
+  eq('the bar is 85px so its content row is 60', tag.includes('min-h-[85px]'), true);
+  eq('  and unchanged from lg', tag.includes('lg:min-h-0'), true);
+  // The chevrons are a second, smaller state signal next to a control that
+  // already fills when selected.
+  eq('the dropdown chevrons are desktop-only',
+    (header.match(/header-bar-icon hidden lg:block w-3\.5/g) ?? []).length, 2);
 }
 
 console.log('\n— the status bar matches the header —');
