@@ -316,5 +316,50 @@ console.log('\n— the feed is team-wide —');
     /user_id|author_user_id\s*=/.test(readFileSync('lib/feed/query.ts', 'utf8').split('resolveActors')[0]), false);
 }
 
+console.log('\n— a note card opens the note, not the record —');
+{
+  const feed = readFileSync('components/DashboardFeed.tsx', 'utf8');
+
+  // Which element the card becomes is the whole behaviour: a button handles the
+  // click here, a Link hands it to the router.
+  eq('a note with text becomes a button', /opensPopup \? \(\s*<button/.test(feed), true);
+  eq('  and everything else still becomes a Link',
+    /\) : item\.href \? \(\s*<Link href=\{item\.href\}/.test(feed), true);
+  // The exception that keeps the popup honest — an empty popup is worse than
+  // the record it replaced.
+  eq('a note with no stored text keeps its link',
+    feed.includes('const opensPopup = showsBody && !!item.body;'), true);
+
+  const popup = feed.slice(feed.indexOf('function NotePopup'), feed.indexOf('/* ─── Card ─── */'));
+  eq('the popup block was found', popup.length > 500, true);
+  // The card clamps to two lines; the popup must not, or it shows no more than
+  // the card already did.
+  eq('the popup does not clamp the note', /line-clamp/.test(popup), false);
+  // Anchored on the element that renders the note, not on the block: the
+  // comment above it names the class too, so a block-wide search passed with
+  // the class deleted from the markup.
+  const bodyLine = popup.split('\n').find(l => l.includes('{item.body}')) ?? '';
+  eq('the body element was found', bodyLine.length > 0, true);
+  eq('  and keeps the line breaks the author typed',
+    bodyLine.includes('whitespace-pre-wrap'), true);
+  eq('  scrolling a long note rather than growing past the viewport',
+    popup.includes('max-h-[80vh]') && popup.includes('overflow-y-auto'), true);
+  // The record is still reachable — the popup replaces the navigation, it does
+  // not remove the destination.
+  eq('the record is one click away', /Open \{item\.subject\}/.test(popup), true);
+  eq('Escape closes it', popup.includes("e.key === 'Escape'"), true);
+  eq('  as does the backdrop', /onClick=\{onClose\}/.test(popup), true);
+  // The stream is an overflow-y-auto column; a dialog inside it would scroll
+  // away with the feed behind it.
+  eq('it is portalled out of the scrolling column', popup.includes('createPortal('), true);
+
+  // Rendered outside the collapsible body, so folding the section on a phone
+  // cannot take the open note with it.
+  const tail = feed.slice(feed.indexOf('{openNote &&'));
+  eq('the popup sits outside the collapsible body',
+    /\{openNote && <NotePopup/.test(tail), true);
+  eq('  after the body closes', feed.indexOf('{openNote &&') > feed.lastIndexOf('</div>\n      )}'), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);
