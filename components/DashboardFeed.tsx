@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { createPortal } from 'react-dom';
 import { startPolling, stopPolling } from '@/lib/pollingManager';
 import { useMobileCollapse } from '@/lib/useMobileCollapse';
 import {
@@ -182,11 +183,132 @@ function actionSuffix(item: FeedItem): string | null {
   return null;
 }
 
+/* ─── The note popup ─── */
+
+/**
+ * A note, in full.
+ *
+ * The card clamps the text to two lines, which is right for scanning and
+ * useless for reading — and the note is the whole content of the card, so
+ * clicking one to be taken to the attendee page meant leaving the feed to find
+ * the thing that was already in front of you. The record is still one click
+ * away, at the bottom.
+ *
+ * Portalled to the body: the stream is an `overflow-y-auto` column, and a
+ * dialog rendered inside it would scroll with the feed behind it.
+ */
+function NotePopup({ item, onClose }: { item: FeedItem; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/40"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="feed-note-title"
+        onClick={e => e.stopPropagation()}
+        className={`bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-lg max-h-[80vh] flex flex-col ${
+          item.pinned ? 'border-l-4 border-l-amber-400' : ''
+        }`}
+      >
+        <div className="px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <span
+                className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-white text-[10px] font-semibold"
+                style={{ backgroundColor: item.actor.system ? '#9CA3AF' : avatarColour(item.actor.avatarSeed) }}
+              >
+                {item.actor.system ? '◆' : initials(item.actor.avatarSeed)}
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-800 truncate">{item.actor.name}</p>
+                {/* The full timestamp, not "3w" — a note being read in full is
+                    being read for the record, and "3w ago" is not a date. */}
+                <p className="text-[11px] text-gray-400">
+                  {formatDateOnly(item.occurredAt)} at {formatTimeOnly(item.occurredAt.slice(11))}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 flex-shrink-0"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <p id="feed-note-title" className="text-sm text-gray-700 mt-3 leading-snug">
+            {actionPrefix(item)}{' '}
+            <span className="font-semibold text-brand-primary">{item.subject}</span>
+          </p>
+
+          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+            {item.conference && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-[10px] font-medium text-gray-600">
+                <span
+                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: conferenceColour(item.conference.name) }}
+                />
+                {item.conference.name}
+              </span>
+            )}
+            {item.pills.map(p => (
+              <span key={p} className="px-2 py-0.5 rounded-md bg-gray-100 text-[10px] font-medium text-gray-600">{p}</span>
+            ))}
+          </div>
+        </div>
+
+        {/* The note itself. `whitespace-pre-wrap` because notes are typed with
+            line breaks and the card's clamp hid that they existed. */}
+        <div className="px-5 py-4 overflow-y-auto flex-1">
+          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words">{item.body}</p>
+        </div>
+
+        <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-end gap-2 flex-shrink-0">
+          {item.href && (
+            <Link href={item.href} className="btn-secondary text-sm">
+              Open {item.subject}
+            </Link>
+          )}
+          <button type="button" onClick={onClose} className="btn-primary text-sm">Close</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 /* ─── Card ─── */
 
-function FeedCard({ item, nowMs }: { item: FeedItem; nowMs: number }) {
+function FeedCard({ item, nowMs, onOpenNote }: {
+  item: FeedItem;
+  nowMs: number;
+  onOpenNote: (item: FeedItem) => void;
+}) {
   const suffix = actionSuffix(item);
   const showsBody = rendersBody(item.kind);
+  /**
+   * A note card opens the note; everything else navigates.
+   *
+   * A note with no stored text is the exception and keeps its link. The popup
+   * exists to show the note, and one that opens onto nothing is worse than the
+   * record it was hiding — that happens to a pinned note whose underlying row
+   * has been deleted.
+   */
+  const opensPopup = showsBody && !!item.body;
 
   const inner = (
     <div
@@ -283,7 +405,13 @@ function FeedCard({ item, nowMs }: { item: FeedItem; nowMs: number }) {
         className={`absolute left-0 top-4 w-2 h-2 rounded-full ${DOT_CLASS[item.colour]}`}
         aria-hidden
       />
-      {item.href ? <Link href={item.href} className="block">{inner}</Link> : inner}
+      {opensPopup ? (
+        <button type="button" onClick={() => onOpenNote(item)} className="block w-full text-left">
+          {inner}
+        </button>
+      ) : item.href ? (
+        <Link href={item.href} className="block">{inner}</Link>
+      ) : inner}
     </div>
   );
 }
@@ -420,6 +548,8 @@ export function DashboardFeed({ className = '' }: { className?: string }) {
    */
   const [refreshing, setRefreshing] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  /** The note being read in full, if any. Set by clicking a note card. */
+  const [openNote, setOpenNote] = useState<FeedItem | null>(null);
   const [lastSeen, setLastSeen] = useState<string | null>(null);
   // The same fold every other dashboard section uses. Without it the Feed was
   // the one card on a phone that could not be got out of the way, and it is the
@@ -622,7 +752,7 @@ export function DashboardFeed({ className = '' }: { className?: string }) {
                   {dayLabel(row.key, nowMs)}
                 </div>
               ) : (
-                <FeedCard key={row.item.id} item={row.item} nowMs={nowMs} />
+                <FeedCard key={row.item.id} item={row.item} nowMs={nowMs} onOpenNote={setOpenNote} />
               ))}
             </div>
 
@@ -642,6 +772,10 @@ export function DashboardFeed({ className = '' }: { className?: string }) {
         )}
       </div>
       )}
+
+      {/* Outside the collapsible body: a note opened on a phone must not vanish
+          if the section is folded away behind it. */}
+      {openNote && <NotePopup item={openNote} onClose={() => setOpenNote(null)} />}
     </div>
   );
 }
