@@ -16,9 +16,8 @@ import { BatchCardScanModal, makeCard, type ScannedCard, type CardDraft } from '
 import { resolveProductRelevance, type ProductRelevanceResult } from '@/lib/productRelevance';
 import { useCapabilities } from '@/lib/useCapabilities';
 
-const STORAGE_KEY = 'floatingNavPos';
-const BTN = 56; // diameter in px (w-14)
-const PAD = 20; // min distance from viewport edges
+/** The trigger's nominal diameter — the menu is still laid out around it. */
+const BTN = 56;
 
 const INTEL_ITEMS = [
   { href: '/program-planner', label: 'Program Planner' },
@@ -83,22 +82,6 @@ const NAV_ITEMS = [
   },
 ];
 
-function safeDefaultPos(): { x: number; y: number } {
-  if (typeof window === 'undefined') return { x: 0, y: 0 };
-  return {
-    x: window.innerWidth - BTN - PAD,
-    y: window.innerHeight - BTN - PAD - 44, // extra for iOS home indicator
-  };
-}
-
-function safeClamp(p: { x: number; y: number }): { x: number; y: number } {
-  if (typeof window === 'undefined') return p;
-  return {
-    x: Math.max(PAD, Math.min(window.innerWidth - BTN - PAD, p.x)),
-    y: Math.max(PAD, Math.min(window.innerHeight - BTN - PAD, p.y)),
-  };
-}
-
 export function FloatingNav() {
   const pathname = usePathname();
   const { hidden } = useBottomNav();
@@ -107,9 +90,7 @@ export function FloatingNav() {
   const unreadCount = useUnreadNotificationCount();
   const unreadChatCount = useUnreadChatCount();
   const { setPanelOpen } = useChatPanel();
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [intelOpen, setIntelOpen] = useState(false);
-  const [dragging, setDragging] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showQuickNote, setShowQuickNote] = useState(false);
   const [badgeFileKey, setBadgeFileKey] = useState(0);
@@ -121,84 +102,10 @@ export function FloatingNav() {
   const [badgeScanRelevance, setBadgeScanRelevance] = useState<Record<string, ProductRelevanceResult[]>>({});
   const floatingBadgeRef = useRef<HTMLInputElement>(null);
 
-  const fabRef = useRef<HTMLDivElement>(null);
-  const ds = useRef({
-    on: false,
-    drag: false,
-    sx: 0, sy: 0,   // pointer start
-    bx: 0, by: 0,   // button start
-    timer: null as ReturnType<typeof setTimeout> | null,
-  });
-
-  // Load saved position (client-only)
-  useEffect(() => {
-    let saved: { x: number; y: number } | null = null;
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) saved = JSON.parse(raw) as { x: number; y: number };
-    } catch {}
-    if (saved && saved.x >= 0 && saved.y >= 0) {
-      setPos(safeClamp(saved));
-    } else {
-      setPos(safeDefaultPos());
-    }
-  }, []);
-
   // Close menu on route change
-  useEffect(() => { setOpen(false); setIntelOpen(false); }, [pathname]);
+  useEffect(() => { setOpen(false); setIntelOpen(false); }, [pathname, setOpen]);
   // Close the Intelligence submenu whenever the main menu closes
   useEffect(() => { if (!open) setIntelOpen(false); }, [open]);
-
-  /* ── Pointer handlers ── */
-  const onDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    e.preventDefault();
-    const d = ds.current;
-    d.on = true; d.drag = false;
-    d.sx = e.clientX; d.sy = e.clientY;
-    d.bx = pos?.x ?? 0; d.by = pos?.y ?? 0;
-    // Long-press threshold: 400 ms → enter drag mode
-    d.timer = setTimeout(() => {
-      d.drag = true;
-      setDragging(true);
-      setOpen(false);
-    }, 400);
-    fabRef.current?.setPointerCapture(e.pointerId);
-  }, [pos]);
-
-  const onMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    const d = ds.current;
-    if (!d.on) return;
-    const dx = e.clientX - d.sx, dy = e.clientY - d.sy;
-    // Finger moved >8px before long-press fired → treat as scroll, cancel drag
-    if (!d.drag && Math.hypot(dx, dy) > 8) {
-      if (d.timer) { clearTimeout(d.timer); d.timer = null; }
-      d.on = false;
-      return;
-    }
-    if (d.drag) setPos(safeClamp({ x: d.bx + dx, y: d.by + dy }));
-  }, []);
-
-  const onUp = useCallback(() => {
-    const d = ds.current;
-    if (!d.on) return;
-    d.on = false;
-    if (d.timer) { clearTimeout(d.timer); d.timer = null; }
-    if (d.drag) {
-      d.drag = false;
-      setDragging(false);
-      // Persist position
-      setPos(prev => {
-        if (prev) {
-          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(prev)); } catch {}
-        }
-        return prev;
-      });
-    } else {
-      // Short tap → toggle menu
-      setOpen(v => !v);
-    }
-  }, []);
 
   const handleFloatingBadgeFile = useCallback(async (file: File) => {
     try {
@@ -307,15 +214,19 @@ export function FloatingNav() {
   const vh = window.innerHeight;
 
   /**
-   * On a phone the header's Parlay mark IS the button, so the draggable one is
-   * not rendered and the menu is laid out around the mark instead. `lg` is the
-   * same breakpoint the header uses to decide the mark is visible at all, so
-   * the two cannot disagree about which is the trigger.
+   * The menu is laid out around the header's Parlay mark, which publishes its
+   * rectangle through FloatingNavContext. There is no other trigger: this
+   * component is mounted inside a `lg:hidden` wrapper in AppShell, so it has
+   * only ever existed on phones, and the draggable button it used to render
+   * was replaced by the mark.
+   *
+   * Null until the mark has been tapped once, which is also what keeps this
+   * from rendering at desktop widths — the mark is display:none there and
+   * never publishes.
    */
-  const anchored = vw < 1024;
-  const menuPos = anchored
-    ? (anchor ? { x: anchor.x + Math.round((anchor.width - BTN) / 2), y: anchor.y } : null)
-    : pos;
+  const menuPos = anchor
+    ? { x: anchor.x + Math.round((anchor.width - BTN) / 2), y: anchor.y }
+    : null;
 
   if (!menuPos) return null;
 
@@ -323,7 +234,7 @@ export function FloatingNav() {
   const onRight = menuPos.x + BTN / 2 > vw / 2; // menu right-aligns to it
 
   // Build menu items: Dashboard→…→Meetings + Search at end
-  // Reverse order when rendering above so Dashboard is nearest the FAB
+  // Reverse order when rendering above so Dashboard is nearest the trigger
   const items = [
     ...NAV_ITEMS.map(n => ({
       key: n.href,
@@ -387,7 +298,7 @@ export function FloatingNav() {
     return true;
   });
 
-  // When above, reverse so stagger goes from FAB outward (Dashboard closest, Search farthest)
+  // When above, reverse so stagger goes from the trigger outward (Dashboard closest, Search farthest)
   const ordered = above ? [...filteredItems].reverse() : filteredItems;
 
   const n = ordered.length;
@@ -467,8 +378,8 @@ export function FloatingNav() {
             ? 'bg-brand-highlight text-brand-primary border-yellow-500/40 font-semibold'
             : 'bg-brand-primary/90 text-blue-100 border-blue-700/40 hover:bg-brand-secondary/90';
 
-          // Opening: stagger from FAB outward (i=0 nearest FAB → fires first)
-          // Closing: reverse stagger so items fold back toward FAB last
+          // Opening: stagger from the trigger outward (i=0 nearest it → fires first)
+          // Closing: reverse stagger so items fold back toward the trigger last
           const openDelay = i * 42;
           const closeDelay = (n - 1 - i) * 28;
 
@@ -563,7 +474,7 @@ export function FloatingNav() {
 
           {/* Submenu items — anchored to this whole row's own left edge (= Intelligence
               button's left edge), which keeps it clear of the main floating nav menu
-              (anchored near the FAB, to the right) without running off the left edge
+              (anchored near the header mark, to the right) without running off the left edge
               of narrow mobile viewports. Always in DOM so closing can animate out,
               same as the main menu. */}
           <div
@@ -606,65 +517,7 @@ export function FloatingNav() {
         </div>
       )}
 
-      {/* The draggable button — desktop only. On a phone the header's Parlay
-          mark is the trigger, and rendering this as well would put two ways to
-          open the same menu on a small screen. */}
-      {!anchored && (
-      <div
-        ref={fabRef}
-        style={{
-          position: 'fixed',
-          left: menuPos.x,
-          top: menuPos.y,
-          zIndex: 61,
-          width: BTN,
-          height: BTN,
-          touchAction: 'none',
-          userSelect: 'none',
-          WebkitUserSelect: 'none',
-        } as React.CSSProperties}
-        onPointerDown={onDown}
-        onPointerMove={onMove}
-        onPointerUp={onUp}
-        onPointerCancel={onUp}
-        className={[
-          'rounded-full flex items-center justify-center select-none',
-          'bg-brand-primary/85 backdrop-blur-sm',
-          'border border-blue-700/50 shadow-2xl',
-          'transition-all duration-200',
-          dragging
-            ? 'scale-110 shadow-black/40'
-            : open
-              ? 'ring-2 ring-brand-highlight ring-offset-1 ring-offset-transparent scale-95'
-              : 'active:scale-90',
-        ].join(' ')}
-        role="button"
-        aria-label="Navigation menu"
-        aria-expanded={open}
-      >
-        {/* Hamburger ↔ X morph via rotation */}
-        <div style={{ transition: 'transform 0.25s cubic-bezier(0.34,1.56,0.64,1)', transform: open ? 'rotate(135deg)' : 'rotate(0deg)' }}>
-          {open ? (
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          ) : (
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          )}
-        </div>
-        {/* Unread badge on FAB — shows total of notifications + chat messages */}
-        {!open && (unreadCount + unreadChatCount) > 0 && (
-          <span
-            className="absolute min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none pointer-events-none"
-            style={{ position: 'absolute', top: -4, right: -4 }}
-          >
-            {(unreadCount + unreadChatCount) > 99 ? '99+' : unreadCount + unreadChatCount}
-          </span>
-        )}
-      </div>
-      )}
+
     </>
   );
 }
