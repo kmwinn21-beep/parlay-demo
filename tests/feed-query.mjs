@@ -691,6 +691,53 @@ console.log('\n— a list upload is one event, not five hundred —');
     items.filter(i => i.kind === 'attendee_list_uploaded').length, 1);
 }
 
+console.log('\n— a list imported with no upload job is still bulk —');
+{
+  // The case the first backfill missed, and the one the user hit. Creating a
+  // conference with a list imports it synchronously below 5,000 rows and
+  // records NO upload_jobs row, so a migration keyed on "has a job" left every
+  // row NULL and the feed showed one card per attendee — actor "Parlay",
+  // because created_by was never set either.
+  //
+  // Seeded with source NULL, exactly as those rows sit in the database today.
+  await db.execute(`INSERT INTO conferences (id, name, location, start_date, end_date)
+    VALUES (20, 'K-Care', 'Louisville, KY', '2026-06-14', '2026-06-17')`);
+  const legacy = [500, 501, 502, 503];
+  for (const id of legacy) {
+    await db.execute(`INSERT INTO attendees (id, first_name, last_name, company_id, created_at)
+      VALUES (${id}, 'Legacy', 'Import${id}', 1, '${ts(21 * DAY)}')`);
+    await db.execute(`INSERT INTO conference_attendees (conference_id, attendee_id, created_at)
+      VALUES (20, ${id}, '${ts(21 * DAY)}')`);
+  }
+  const before = (await feed('all')).items
+    .filter(i => i.kind === 'attendee_added' && i.subject.startsWith('Legacy '));
+  eq('before the backfill, every row is its own card', before.length, 4);
+  eq('  attributed to nobody, because created_by was never set',
+    before.every(i => i.actor.name === 'Parlay'), true);
+  eq('  and there is no upload card to replace them with',
+    (await feed('all')).items.filter(i => i.kind === 'attendee_list_uploaded'
+      && i.conference?.id === 20).length, 0);
+
+  // The migration, run as db-migrations.ts runs it.
+  await db.execute(`UPDATE conference_attendees SET source = 'initial_upload' WHERE source IS NULL`);
+
+  const after = (await feed('all')).items
+    .filter(i => i.kind === 'attendee_added' && i.subject.startsWith('Legacy '));
+  eq('afterwards the pile is gone', after.length, 0);
+}
+{
+  // The half that must survive the blanket backfill: a row written by today's
+  // code carries a source, so it is untouched by a NULL-only update.
+  await db.execute(`INSERT INTO attendees (id, first_name, last_name, company_id, created_at)
+    VALUES (510, 'Hand', 'Added', 1, '${ts(20 * DAY)}')`);
+  await db.execute(`INSERT INTO conference_attendees (conference_id, attendee_id, created_at, created_by, source)
+    VALUES (20, 510, '${ts(20 * DAY)}', 'Kevin Winn', 'manual')`);
+  await db.execute(`UPDATE conference_attendees SET source = 'initial_upload' WHERE source IS NULL`);
+  const items = (await feed('all')).items;
+  eq('a manual add written since the column exists survives it',
+    items.some(i => i.kind === 'attendee_added' && i.subject === 'Hand Added'), true);
+}
+
 console.log('\n— a person added by hand still gets a card —');
 {
   // The manual row seeded at the top. This is the half that must survive:
@@ -855,6 +902,49 @@ console.log('\n— pinning that note is one card, under a name —');
   const seeded = (await feed('active')).items.find(i => i.kind === 'note_pinned'
     && i.occurredAt === ts(5 * HOUR));
   eq('a pinned_by that really is a name is left alone', seeded.actor.name, 'Marcus Silva');
+}
+
+console.log('\n— the backfill actually reaches an existing database —');
+{
+  // Asserting the UPDATE works is not the same as asserting it RUNS. An
+  // already-migrated tenant is at v(n) and skips everything below it, so a
+  // statement appended to the array has to be picked up by the version gate or
+  // it never executes anywhere except a fresh database that has no legacy rows
+  // to fix. That failure is silent, which is the whole subject of
+  // TENANT_DB_AUDIT.md.
+  const { createClient } = await import('@libsql/client');
+  const { migrations } = await import('@/lib/db-migrations');
+  const { migrateTenantDb } = await import('@/lib/db');
+
+  const tenant = createClient({ url: `file:${join(dir, 'legacy-tenant.db')}` });
+  await seedFreshDb(tenant);
+
+  // Wind the tenant back to the version before this migration and give it the
+  // rows a real account has: linked, with no source.
+  await tenant.execute({ sql: `UPDATE _schema_version SET version = ?`, args: [migrations.length - 1] });
+  await tenant.execute(`INSERT INTO conferences (id, name, location, start_date, end_date)
+    VALUES (30, 'Legacy Conf', 'Nowhere', '2026-06-14', '2026-06-17')`);
+  await tenant.execute(`INSERT INTO attendees (id, first_name, last_name) VALUES (600, 'Old', 'Row')`);
+  await tenant.execute(`INSERT INTO conference_attendees (conference_id, attendee_id, created_at)
+    VALUES (30, 600, '${ts(21 * DAY)}')`);
+  // And a row today's code wrote, which the migration must NOT touch —
+  // overwriting it would erase a real add and silence a card that belongs in
+  // the feed.
+  await tenant.execute(`INSERT INTO attendees (id, first_name, last_name) VALUES (601, 'New', 'Row')`);
+  await tenant.execute(`INSERT INTO conference_attendees (conference_id, attendee_id, created_at, created_by, source)
+    VALUES (30, 601, '${ts(20 * DAY)}', 'Kevin Winn', 'manual')`);
+
+  const before = await tenant.execute(`SELECT source FROM conference_attendees WHERE attendee_id = 600`);
+  eq('the row starts with no source', before.rows[0].source, null);
+
+  await migrateTenantDb(tenant);
+
+  const after = await tenant.execute(`SELECT source FROM conference_attendees WHERE attendee_id = 600`);
+  eq('migrating an existing tenant backfills it', after.rows[0].source, 'initial_upload');
+  const kept = await tenant.execute(`SELECT source FROM conference_attendees WHERE attendee_id = 601`);
+  eq('  without flattening a row that already had a source', kept.rows[0].source, 'manual');
+  const version = await tenant.execute(`SELECT version FROM _schema_version LIMIT 1`);
+  eq('  and the version moves on', Number(version.rows[0].version), migrations.length);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

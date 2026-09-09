@@ -989,8 +989,14 @@ export async function POST(request: NextRequest) {
         if (bgJobId) await db.execute({ sql: 'UPDATE upload_jobs SET processed_rows=? WHERE id=?', args: [Math.round(valid.length * 0.7), bgJobId] }).catch(() => {});
 
         // ── Step 7: Batch-insert conference_attendees ──
+        // 'initial_upload': this IS the bulk that first populates the list —
+        // the conference is being created around it. Without it the rows were
+        // NULL, and the feed reported a five-hundred-row import as five hundred
+        // "Added X to the attendee list" cards. Note this path records an
+        // upload_jobs row only above BACKGROUND_THRESHOLD, so the source column
+        // is the only thing marking a smaller import as bulk.
         await batchInsert(db, attendeeIdsToLink, (aid) => ({
-          sql: `INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id, created_at) VALUES (?, ?, datetime('now'))`,
+          sql: `INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id, created_at, source) VALUES (?, ?, datetime('now'), 'initial_upload')`,
           args: [conferenceId, aid],
         }));
         if (bgJobId) await db.execute({ sql: 'UPDATE upload_jobs SET processed_rows=? WHERE id=?', args: [Math.round(valid.length * 0.95), bgJobId] }).catch(() => {});

@@ -2535,4 +2535,26 @@ export const migrations: string[] = [
      WHERE source IS NULL
        AND EXISTS (SELECT 1 FROM upload_jobs uj WHERE uj.conference_id = conference_attendees.conference_id)`,
   `CREATE INDEX IF NOT EXISTS idx_feed_upload_jobs ON upload_jobs(conference_id, created_at)`,
+
+  // The backfill above reached far too few rows, and the feed still opened on a
+  // wall of "Added X to the attendee list".
+  //
+  // It required an upload_jobs row for the conference. Most conferences have
+  // none: creating a conference with a list imports it SYNCHRONOUSLY below
+  // BACKGROUND_THRESHOLD, which is 5,000 rows, and records no job at all. A
+  // list of a few hundred people — the normal case — therefore left every row
+  // with source NULL and no job to match on, so the condition found nothing
+  // and each attendee kept its own card.
+  //
+  // Every writer now sets source explicitly; the two that did not (creating a
+  // conference, and merging duplicate attendees) are fixed alongside this
+  // migration. So NULL now means exactly one thing — a row written before the
+  // column existed — and those rows are the bulk that first populated a list.
+  //
+  // Same trade as the first backfill, and worth restating: an attendee added by
+  // hand before the column existed is swept up too. There is nothing in the
+  // data that distinguishes them — created_at was itself backfilled from the
+  // attendee's own creation date — and burying real activity under hundreds of
+  // import rows is the worse of the two errors.
+  `UPDATE conference_attendees SET source = 'initial_upload' WHERE source IS NULL`,
 ];
