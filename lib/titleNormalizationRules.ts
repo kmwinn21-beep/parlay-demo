@@ -2,6 +2,7 @@ import type { Client } from '@libsql/client';
 import { db, dbReady } from '@/lib/db';
 import { buildTitleMetadata, conservativeTitleSimilarity, normalizeTitleKey, type BuyerRoleKey, type TitleMatchConfidence, type TitleMatchMetadata, type TitleNormalizationRuleLike } from '@/lib/titleNormalization';
 import { classifySeniority } from '@/lib/parsers';
+import { accountIdForClient } from '@/lib/getDb';
 
 interface ProductMeta {
   functions: Record<string, 'high' | 'med' | 'ignore'>;
@@ -32,6 +33,28 @@ function parseMeta(s: string | null | undefined): ProductMeta {
 // VP+function entries must precede generic C-Suite so "VP of Finance" ≠ CFO.
 // Director+function entries must precede the generic Director fallback.
 const titleResolutionCache = new Map<string, TitleMatchMetadata>();
+
+/**
+ * The cache key — and why the account is in it.
+ *
+ * This cache is module-level, so one warm worker serves every account it
+ * happens to handle. The key used to be `titleKey:organizationId`, and
+ * organizationId is null on every current caller — so the key for "VP of
+ * Operations" was identical for all tenants while the VALUE was resolved from
+ * that tenant's own title_normalization_rules and config_options.
+ *
+ * One account's confirmed mapping was therefore served to the next account to
+ * ask for the same title on the same worker. The same class of bug as the ones
+ * in TENANT_DB_AUDIT.md: not a wrong query, a right query whose answer was
+ * cached somewhere that outlived the tenant.
+ *
+ * Keyed by the account the client belongs to, via the WeakMap getDb registers.
+ * A client with no account is the master database, which is its own scope.
+ */
+function resolutionCacheKey(tenantDb: Client, title: string, organizationId: number | null): string {
+  const account = accountIdForClient(tenantDb) ?? 'master';
+  return `${account}:${normalizeTitleKey(title)}:${organizationId ?? 'null'}`;
+}
 
 // Tracks which DB clients have already had the schema ensured this worker lifetime.
 // Client objects are cached by getDb(), so the same reference recurs across requests.
@@ -160,6 +183,64 @@ export async function getRuleForTitle(tenantDb: Client, rawTitle: string, organi
     args: [key, organizationId],
   });
   return result.rows[0] ? rowToRule(result.rows[0] as Record<string, unknown>) : null;
+}
+
+/**
+ * The best rule for each of many titles, in ONE query.
+ *
+ * `getRuleForTitle` answers for a single title, and resolving a page of
+ * attendees called it once per title — a hundred round trips for one request,
+ * ten of them in flight at a time. Turso answered with HTTP 429 and the route
+ * 500ed; see the errors on /api/attendees/title-metadata.
+ *
+ * The per-title query ordered by `user_confirmed` first then `updated_at`
+ * descending and took one row. That ranking is reproduced here in JS over the
+ * rows for every key, because SQLite has no portable per-group LIMIT and the
+ * row count is small — a key usually has one rule.
+ *
+ * Chunked because the IN list is a bind variable per key and SQLite's limit is
+ * 999 by default. The route caps its input at 500 ids, so this is at most three
+ * queries where it used to be five hundred.
+ */
+export async function getRulesForTitleKeys(
+  tenantDb: Client,
+  keys: string[],
+  organizationId: number | null = null,
+): Promise<Map<string, TitleNormalizationRuleLike>> {
+  const out = new Map<string, TitleNormalizationRuleLike>();
+  const unique = Array.from(new Set(keys.filter(Boolean)));
+  if (unique.length === 0) return out;
+  await ensureTitleNormalizationSchema(tenantDb);
+
+  /** Lower sorts first, matching the ORDER BY this replaces. */
+  const rank = (row: Record<string, unknown>) => (row.source === 'user_confirmed' ? 0 : 1);
+  const updatedAt = (row: Record<string, unknown>) => String(row.updated_at ?? '');
+  const best = new Map<string, Record<string, unknown>>();
+
+  const CHUNK = 200;
+  for (let i = 0; i < unique.length; i += CHUNK) {
+    const slice = unique.slice(i, i + CHUNK);
+    const result = await tenantDb.execute({
+      sql: `SELECT * FROM title_normalization_rules
+            WHERE raw_title_key IN (${slice.map(() => '?').join(',')})
+              AND COALESCE(organization_id, 0) = COALESCE(?, 0)`,
+      args: [...slice, organizationId],
+    }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
+
+    for (const raw of result.rows as unknown as Record<string, unknown>[]) {
+      const key = String(raw.raw_title_key ?? '');
+      if (!key) continue;
+      const prev = best.get(key);
+      if (!prev
+        || rank(raw) < rank(prev)
+        || (rank(raw) === rank(prev) && updatedAt(raw) > updatedAt(prev))) {
+        best.set(key, raw);
+      }
+    }
+  }
+
+  for (const [key, row] of Array.from(best.entries())) out.set(key, rowToRule(row));
+  return out;
 }
 
 export async function upsertTitleNormalizationRule(tenantDb: Client, input: {
@@ -345,11 +426,16 @@ async function buildResolveContext(tenantDb: Client): Promise<ResolveContext> {
   return { functions, seniorities, configuredTitles, products };
 }
 
-async function resolveAttendeeTitleMetadataUncached(tenantDb: Client, ctx: ResolveContext, rawTitle: string | null | undefined, organizationId: number | null = null): Promise<TitleMatchMetadata> {
+async function resolveAttendeeTitleMetadataUncached(tenantDb: Client, ctx: ResolveContext, rawTitle: string | null | undefined, organizationId: number | null = null, prefetchedRules?: Map<string, TitleNormalizationRuleLike>): Promise<TitleMatchMetadata> {
   const title = String(rawTitle ?? '').trim();
   if (!title) return buildTitleMetadata({ originalTitle: null, matchType: 'none', confidence: 'low', source: 'none' });
 
-  const userRule = await getRuleForTitle(tenantDb, title, organizationId);
+  // When the caller has already fetched every rule in one query, this is a
+  // map lookup rather than a round trip. A present map is authoritative: a
+  // missing key means no rule, not an unknown answer to go and ask for.
+  const userRule = prefetchedRules
+    ? prefetchedRules.get(normalizeTitleKey(title)) ?? null
+    : await getRuleForTitle(tenantDb, title, organizationId);
   if (userRule && userRule.source === 'user_confirmed') {
     return buildTitleMetadata({
       originalTitle: title,
@@ -414,7 +500,7 @@ async function resolveAttendeeTitleMetadataUncached(tenantDb: Client, ctx: Resol
 
 export async function resolveAttendeeTitleMetadata(tenantDb: Client, rawTitle: string | null | undefined, organizationId: number | null = null): Promise<TitleMatchMetadata> {
   const title = String(rawTitle ?? '').trim();
-  const cacheKey = `${normalizeTitleKey(title)}:${organizationId ?? 'null'}`;
+  const cacheKey = resolutionCacheKey(tenantDb, title, organizationId);
   const cached = titleResolutionCache.get(cacheKey);
   if (cached) return cached;
   await ensureTitleNormalizationSchema(tenantDb);
@@ -431,32 +517,39 @@ export async function resolveAttendeeTitleMetadataBatch(
   if (titles.length === 0) return [];
   await ensureTitleNormalizationSchema(tenantDb);
   const ctx = await buildResolveContext(tenantDb);
+
+  // Every rule this batch could need, fetched once per organization scope
+  // rather than once per title. This is the whole fix for the 429s: resolving
+  // is now CPU over a map, so the per-title Promise.all that used to fan out
+  // ten concurrent queries is gone with it.
+  const scopes = new Map<number | null, string[]>();
+  for (const { rawTitle, organizationId = null } of titles) {
+    const key = normalizeTitleKey(String(rawTitle ?? '').trim());
+    if (!key) continue;
+    const bucket = scopes.get(organizationId ?? null);
+    if (bucket) bucket.push(key); else scopes.set(organizationId ?? null, [key]);
+  }
+  const rulesByScope = new Map<number | null, Map<string, TitleNormalizationRuleLike>>();
+  for (const [organizationId, keys] of Array.from(scopes.entries())) {
+    rulesByScope.set(organizationId, await getRulesForTitleKeys(tenantDb, keys, organizationId));
+  }
+
   const results: TitleMatchMetadata[] = [];
-  const CHUNK = 10;
-  for (let i = 0; i < titles.length; i += CHUNK) {
-    const chunk = titles.slice(i, i + CHUNK);
-    const chunkResults = await Promise.all(chunk.map(async ({ rawTitle, organizationId = null }) => {
-      const title = String(rawTitle ?? '').trim();
-      const cacheKey = `${normalizeTitleKey(title)}:${organizationId ?? 'null'}`;
-      const cached = titleResolutionCache.get(cacheKey);
-      if (cached) return cached;
-      const result = await resolveAttendeeTitleMetadataUncached(tenantDb, ctx, rawTitle, organizationId ?? null);
-      titleResolutionCache.set(cacheKey, result);
-      return result;
-    }));
-    results.push(...chunkResults);
+  for (const { rawTitle, organizationId = null } of titles) {
+    const title = String(rawTitle ?? '').trim();
+    const cacheKey = resolutionCacheKey(tenantDb, title, organizationId ?? null);
+    const cached = titleResolutionCache.get(cacheKey);
+    if (cached) { results.push(cached); continue; }
+    const result = await resolveAttendeeTitleMetadataUncached(
+      tenantDb, ctx, rawTitle, organizationId ?? null,
+      rulesByScope.get(organizationId ?? null) ?? new Map(),
+    );
+    titleResolutionCache.set(cacheKey, result);
+    results.push(result);
   }
   return results;
 }
 
-/**
- * Apply a classification to one attendee.
- *
- * The counterpart to applying it across every matching title: unticking that
- * box means "just this person", not "nobody". Before this existed, saving with
- * it unticked recorded the rule and left the attendee it was opened from
- * exactly as it was.
- */
 export async function applyRuleToAttendee(
   tenantDb: Client,
   rule: TitleNormalizationRuleLike,

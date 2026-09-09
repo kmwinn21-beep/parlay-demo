@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { ParsedAttendee } from './db';
+import type { ParsedAttendee } from './db';
 import companyTypeLookup from './company-type-lookup.json';
 import { type ColumnMapping, type SystemFieldKey, SYSTEM_FIELD_LABELS, FIELD_ORDER } from './columnMapping';
 
