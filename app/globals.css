@@ -366,3 +366,28 @@ h1, h2, h3 {
   }
 }
 
+/**
+ * Bottom-sheet MODALS stop at the header too.
+ *
+ * Same cause as the drawers: they cap themselves in `vh`, and viewport-fit:
+ * cover made `vh` include the status bar, so a tall sheet reaches past the
+ * header and puts its title under the clock.
+ *
+ * Capped at the space below the header rather than at a fraction of the
+ * screen, so the top edge lands on the header's bottom edge however deep the
+ * inset is. dvh where it is supported, vh as the fallback declaration.
+ *
+ * This unifies four different caps — 80, 85, 90 and 92vh — into one. The two
+ * larger were the broken ones; the two smaller are allowed a few vh more than
+ * they asked for, and only when their content is tall enough to reach it. The
+ * spread looked like drift rather than intent, and one rule that says "not
+ * past the header" is easier to keep true than fourteen fractions.
+ *
+ * Below sm only: from 640px these are centred dialogs with their own sm: caps.
+ */
+@media (max-width: 639px) {
+  .modal-sheet-mobile {
+    max-height: calc(100vh - var(--mobile-header-h));
+    max-height: calc(100dvh - var(--mobile-header-h));
+  }
+}
