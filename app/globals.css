@@ -238,4 +238,22 @@ h1, h2, h3 {
  */
 @media (max-width: 1023px) {
   .header-mobile-dark .header-bar-icon { color: #fff; }
+
+  /* Selected — a menu is open, or the page is the one this button leads to.
+   *
+   * The control fills with the page colour and its icon takes the header's own
+   * fill, so the selection reads as a cut-out of the bar. brand-primary through
+   * the CSS variable, not a literal, so it follows an account that has
+   * customised Primary #1 — the header it has to match is painted from the same
+   * variable.
+   *
+   * Driven by each control's own open state, never by :hover. On iOS a tap
+   * leaves :hover stuck, which is what produced the light box with an
+   * invisible white icon in the first place; building the selected style on
+   * that would mean the icon disappears wherever the hover does NOT stick.
+   */
+  .header-mobile-dark .header-bar-btn-active { background-color: rgb(249 250 251); }
+  .header-mobile-dark .header-bar-btn-active .header-bar-icon {
+    color: rgb(var(--brand-primary-rgb));
+  }
 }

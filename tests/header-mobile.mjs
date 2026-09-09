@@ -81,6 +81,39 @@ console.log('\n— the icons invert with it, and ONLY the bar icons —');
     readFileSync('components/OutstandingFollowUps.tsx', 'utf8').includes('header-bar-icon'), true);
 }
 
+console.log('\n— a selected control stays legible —');
+{
+  // Tapping a header control leaves it on a light background, and a white icon
+  // on that is invisible — the Add New menu shipped that way. While selected
+  // the icon takes the header's own fill instead.
+  eq('the selected background is defined',
+    /\.header-mobile-dark \.header-bar-btn-active \{ background-color:/.test(css), true);
+  eq('  and the selected icon takes the brand fill',
+    /\.header-mobile-dark \.header-bar-btn-active \.header-bar-icon \{\s*color: rgb\(var\(--brand-primary-rgb\)\);/.test(css), true);
+  // The variable, not a literal: the header it has to match is painted from the
+  // same one, so an account that customised Primary #1 stays consistent.
+  eq('  from the variable rather than a hardcoded hex',
+    /\.header-bar-btn-active \.header-bar-icon \{\s*color: #/.test(css), false);
+
+  // Driven by state, never by :hover. On iOS a tap leaves :hover stuck, which
+  // is what produced the invisible icon; a selected style built on hover would
+  // fail wherever the hover does NOT stick.
+  eq('every toggle marks itself selected from its own state',
+    (header.match(/header-bar-btn-active/g) ?? []).length, 3);
+  eq('  including the bell',
+    readFileSync('components/NotificationBell.tsx', 'utf8').includes("open ? 'header-bar-btn-active'"), true);
+  eq('  and the follow-ups triangle',
+    readFileSync('components/OutstandingFollowUps.tsx', 'utf8').includes("open ? 'header-bar-btn-active'"), true);
+  // The CSS selector must not depend on :hover. (The buttons still carry an
+  // ordinary hover:bg-gray-100 for pointers — that is not what selects them.)
+  // Comments stripped first: the block above this rule explains why hover is
+  // the wrong hook, and matching that prose failed the assertion for the wrong
+  // reason.
+  const cssCode = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  eq('  and the selected rule does not depend on :hover',
+    /:hover[^{]*header-bar-btn-active|header-bar-btn-active[^{]*:hover/.test(cssCode), false);
+}
+
 console.log('\n— one equal gap across the row —');
 {
   // `contents` dissolves the wrapper so its children join the header's flex row.

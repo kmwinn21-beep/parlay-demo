@@ -161,7 +161,7 @@ export function OutstandingFollowUps() {
             }
           }
         }}
-        className="relative flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 transition-colors"
+        className={`relative flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 transition-colors ${open ? 'header-bar-btn-active' : ''}`}
         title="Outstanding Follow Ups"
       >
         <svg className="header-bar-icon w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">

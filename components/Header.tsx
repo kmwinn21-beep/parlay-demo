@@ -256,7 +256,7 @@ export function Header() {
           <button
             type="button"
             onClick={() => setShowAddNew(prev => !prev)}
-            className="flex items-center gap-2 px-2 lg:px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+            className={`flex items-center gap-2 px-2 lg:px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors ${showAddNew ? 'header-bar-btn-active' : ''}`}
             title="Add New"
           >
             <svg className="header-bar-icon w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -378,7 +378,7 @@ export function Header() {
                 });
               }
             }}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors ${showConferences ? 'header-bar-btn-active' : ''}`}
             title="Go to conference"
           >
             <svg className="header-bar-icon w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -480,7 +480,7 @@ export function Header() {
         {user?.role === 'administrator' && (
           <Link
             href="/admin"
-            className={`hidden sm:flex lg:hidden items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors ${pathname === '/admin' ? 'bg-gray-100' : ''}`}
+            className={`hidden sm:flex lg:hidden items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors ${pathname === '/admin' ? 'bg-gray-100 header-bar-btn-active' : ''}`}
             title="Admin Settings"
           >
             <svg className="header-bar-icon w-4 h-4 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
