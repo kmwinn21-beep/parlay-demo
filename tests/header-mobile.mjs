@@ -50,20 +50,35 @@ console.log('\n— the fill is mobile-only —');
   eq('the row still distributes with space-between', tag.includes('justify-between'), true);
 }
 
-console.log('\n— the icons invert with it —');
+console.log('\n— the icons invert with it, and ONLY the bar icons —');
 {
-  const block = css.slice(css.indexOf('.header-mobile-dark'));
   eq('the header carries the hook class', tag.includes('header-mobile-dark'), true);
-  eq('  and the stylesheet defines it', block.length > 0, true);
-  // Scoped to the same breakpoint as the fill. Without the query the desktop
-  // header's icons would turn white on white.
-  const scoped = css.slice(0, css.indexOf('.header-mobile-dark'));
+  eq('the bar icons opt in by class', /\.header-mobile-dark \.header-bar-icon \{ color: #fff; \}/.test(css), true);
+
+  // The regression this replaced: `.header-mobile-dark svg` also matched every
+  // icon inside the dropdown panels, which render inside the header — so the
+  // Add New menu shipped with white icons on a white panel. A descendant rule
+  // over svg must not come back.
+  eq('no blanket rule over every svg in the header',
+    /\.header-mobile-dark\s+svg\s*\{/.test(css), false);
+  // Excluding the panels generically is not possible without flattening them:
+  // NotificationBell's panel alone uses three different icon colours.
+  const bell = readFileSync('components/NotificationBell.tsx', 'utf8');
+  eq('  because panel icons are not all one colour',
+    new Set((bell.match(/text-gray-\d00|text-brand-primary/g) ?? [])).size > 1, true);
+
+  // Scoped to the same breakpoint as the fill, or the desktop header's icons
+  // would turn white on white.
+  const scoped = css.slice(0, css.indexOf('.header-mobile-dark .header-bar-icon'));
   eq('the rule sits inside a max-width query',
-    /@media\s*\(max-width:\s*1023px\)\s*\{\s*$/.test(scoped.trimEnd() + '\n') || scoped.trimEnd().endsWith('@media (max-width: 1023px) {'), true);
-  eq('icons are painted white', /\.header-mobile-dark svg \{ color: #fff; \}/.test(css), true);
-  // Every icon in the header draws with currentColor, so `color` is enough —
-  // and a class-plus-element selector already outranks the text-* utility.
-  eq('  without reaching for !important', /\.header-mobile-dark svg \{[^}]*!important/.test(css), false);
+    scoped.trimEnd().endsWith('@media (max-width: 1023px) {'), true);
+
+  // Every bar trigger names itself. Miss one and it stays navy on navy.
+  const marks = (header.match(/header-bar-icon/g) ?? []).length;
+  eq('every bar trigger in Header.tsx is marked', marks, 7);
+  eq('  as is the bell', bell.includes('header-bar-icon'), true);
+  eq('  and the follow-ups triangle',
+    readFileSync('components/OutstandingFollowUps.tsx', 'utf8').includes('header-bar-icon'), true);
 }
 
 console.log('\n— one equal gap across the row —');

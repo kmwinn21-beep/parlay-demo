@@ -219,23 +219,23 @@ h1, h2, h3 {
 
 /* ── The mobile header sits on the brand fill ────────────────────────────────
  *
- * Below lg the header is brand-primary rather than white, so every icon in it
- * has to invert. Done here rather than on each button because the icons come
- * from several components — NotificationBell, OutstandingFollowUps and the
- * dropdowns — and colouring them at each call site would mean getting the same
- * thing right in six files and missing the seventh.
+ * Below lg the header is brand-primary rather than white, so the icons in the
+ * BAR have to invert. Opt-in by class, one per icon, rather than by a
+ * descendant rule over the header.
  *
- * Every icon draws with `currentColor`, so setting `color` covers both the
- * stroked and the filled ones. Specificity (0,1,1) beats the `text-*` utility
- * (0,1,0) the markup already carries, so no !important is needed.
+ * That distinction is the whole point. `.header-mobile-dark svg` looked
+ * tidier and shipped the Add New menu with invisible icons: the dropdown
+ * panels render inside the header, so a descendant rule reaches every icon in
+ * them too — white on a white panel. Excluding the panels generically is not
+ * possible without flattening them, because their icons are not all one colour
+ * (NotificationBell alone uses brand-primary, gray-300 and gray-400).
  *
- * Deliberately excluded: the unread badge and the upload pill, which are
- * coloured surfaces of their own and still need to read as alerts.
+ * So the bar icons name themselves. An icon that is not marked keeps whatever
+ * its own text-* utility says, which is what every icon inside a panel wants.
+ *
+ * Scoped under .header-mobile-dark for specificity (0,2,0), so it beats the
+ * text-* utility on the element without depending on stylesheet order.
  */
 @media (max-width: 1023px) {
-  .header-mobile-dark svg { color: #fff; }
-  .header-mobile-dark > button:hover,
-  .header-mobile-dark button:hover { background-color: rgb(255 255 255 / 0.12); }
-  .header-mobile-dark .bg-red-500 svg,
-  .header-mobile-dark .bg-red-600 svg { color: #fff; }
+  .header-mobile-dark .header-bar-icon { color: #fff; }
 }
