@@ -225,6 +225,39 @@ console.log('\n— the header paints under the status bar —');
   // env() is 0 wherever there is no inset, so the two cases share one rule.
 }
 
+console.log('\n— overlays clear the status bar too —');
+{
+  // The header is not the only thing fixed at top:0. With a translucent status
+  // bar every full-screen overlay runs under the clock, which is how a drawer
+  // shipped with its close button behind it.
+  eq('full-screen overlays pad by the inset',
+    /\.fixed\.inset-0:not\(:empty\):not\(\.items-center\):not\(\.justify-center\)\s*\{\s*padding-top: env\(safe-area-inset-top\);/
+      .test(cssNoComments), true);
+
+  // A backdrop is an empty self-closing div, and it SHOULD reach the top edge
+  // or the dimming stops short of the bar.
+  eq('  but backdrops are excluded by :not(:empty)',
+    /:not\(:empty\)/.test(cssNoComments), true);
+  // A centred dialog is already clear of the bar and carries its own p-4 that
+  // this rule would otherwise replace with 0 on every device without an inset.
+  eq('  as are centred dialogs',
+    /:not\(\.items-center\):not\(\.justify-center\)/.test(cssNoComments), true);
+
+  // Verified in Chromium against the compiled CSS with the inset restated as a
+  // literal: backdrops 0px, centred modals keep their 16px, panels and bottom
+  // sheets and the opt-in side drawer take the inset.
+  eq('an opt-in class exists for overlays that are not inset-0',
+    /\.safe-area-top \{\s*padding-top: env\(safe-area-inset-top\);/.test(cssNoComments), true);
+  eq('  and the one top-anchored side drawer uses it',
+    readFileSync('components/MeetingNotetaker.tsx', 'utf8').includes('safe-area-top fixed top-0 right-0'), true);
+
+  // Not scoped to a breakpoint: env() is 0 where there is no inset, and a
+  // tablet in landscape has one well above 1023px.
+  const rule = cssNoComments.slice(cssNoComments.indexOf('.fixed.inset-0:not(:empty)'));
+  eq('the overlay rule is not trapped in the mobile media query',
+    rule.slice(0, rule.indexOf('}')).includes('@media'), false);
+}
+
 console.log('\n— the status bar matches the header —');
 {
   // The strip above the header is not styled by the header. On iOS it comes

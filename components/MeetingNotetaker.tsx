@@ -2619,7 +2619,7 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
         <div className="sm:hidden fixed inset-0 z-[60] bg-black/30" onClick={closeRecord} />
       )}
       <div
-        className={`fixed top-0 right-0 h-screen bg-white border-l border-gray-200 shadow-2xl z-[61] flex flex-col overflow-hidden transition-all ease-out ${
+        className={`safe-area-top fixed top-0 right-0 h-screen bg-white border-l border-gray-200 shadow-2xl z-[61] flex flex-col overflow-hidden transition-all ease-out ${
           recordDrawer != null ? 'w-full sm:w-[400px]' : 'w-0'
         }`}
         style={{ transitionDuration: '200ms' }}
