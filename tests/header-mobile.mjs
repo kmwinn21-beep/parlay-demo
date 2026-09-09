@@ -328,6 +328,41 @@ console.log('\n— bottom sheets stop at the header —');
   // spanning 85 to 932. At 900px it is a full-height side drawer, top 0.
 }
 
+console.log('\n— bottom-sheet modals stop at the header —');
+{
+  // Same cause as the drawers: they cap themselves in vh, and viewport-fit:
+  // cover made vh include the status bar, so a tall sheet puts its title
+  // under the clock. Capped at the space BELOW the header instead.
+  eq('the sheet is capped to the space under the header',
+    /\.modal-sheet-mobile \{[^}]*max-height: calc\(100dvh - var\(--mobile-header-h\)\);/
+      .test(cssNoComments), true);
+  eq('  with a vh fallback for browsers without dvh',
+    /\.modal-sheet-mobile \{[^}]*max-height: calc\(100vh - var\(--mobile-header-h\)\);/
+      .test(cssNoComments), true);
+  // The fallback has to come FIRST or it would win over the dvh it replaces.
+  const rule = cssNoComments.slice(cssNoComments.lastIndexOf('.modal-sheet-mobile {'));
+  eq('  declared before it, so dvh wins where supported',
+    rule.indexOf('100vh') < rule.indexOf('100dvh'), true);
+
+  // Below sm only: from 640px these are centred dialogs with their own caps.
+  const idx = cssNoComments.lastIndexOf('.modal-sheet-mobile {');
+  eq('the cap is scoped below sm',
+    cssNoComments.slice(0, idx).trimEnd().endsWith('@media (max-width: 639px) {'), true);
+
+  // Both reported modals still carry their own vh cap for the sm+ layout; the
+  // rule overrides it only on a phone.
+  for (const f of ['components/NewMeetingModal.tsx', 'components/ClosedWonDealModal.tsx']) {
+    const src = readFileSync(f, 'utf8');
+    const name = f.replace('components/', '').replace('.tsx', '');
+    eq(`${name} uses the shared sheet class`, src.includes('modal-sheet-mobile'), true);
+    eq(`  and keeps its sm: cap`, /sm:max-h-\[\d+vh\]/.test(src), true);
+  }
+
+  // Measured in Chromium at 430px with content forced past the cap: header
+  // bottom 85, both sheet tops 85 — flush — 847px tall. At 900px both are
+  // centred at 839px, unchanged.
+}
+
 console.log('\n— the status bar matches the header —');
 {
   // The strip above the header is not styled by the header. On iOS it comes
