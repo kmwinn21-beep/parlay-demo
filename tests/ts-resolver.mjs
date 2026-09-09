@@ -14,6 +14,11 @@
  *   `next/server`  →  `next/server.js`     — a subpath the bundler resolves
  *                                            through conditions Node does not
  *
+ * Plus one attribute: a `.json` import needs `with { type: 'json' }` under
+ * Node's ESM loader, which the bundler does not require and the source does not
+ * write. lib/parsers imports a lookup table that way, so any test reaching it
+ * failed on the JSON rather than on anything it was testing.
+ *
  * The fix belongs in the test runner rather than in the source: writing
  * `./companyFamilies.ts` in the app's own imports would need
  * `allowImportingTsExtensions` turned on for the whole project, changing how
@@ -28,6 +33,13 @@ import { dirname, join } from 'node:path';
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
 export async function resolve(specifier, context, next) {
+  // Supply the import attribute Node wants for JSON, which the app's own
+  // imports do not carry because the bundler does not need it.
+  if (/\.json$/.test(specifier)) {
+    const resolved = await next(specifier, context);
+    return { ...resolved, format: 'json', importAttributes: { type: 'json' } };
+  }
+
   // The alias is rewritten before the first attempt: `@/lib/db` is a bare
   // specifier as far as Node is concerned, and would be reported as a missing
   // package rather than as a path it could not find.
