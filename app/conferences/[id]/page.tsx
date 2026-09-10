@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { attendeeDisplayName, isPlaceholderAttendee } from '@/lib/attendeeDisplay';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { AnalyticsCharts } from '@/components/AnalyticsCharts';
@@ -593,6 +594,15 @@ export default function ConferenceDetailPage() {
   // only appear once "Other (not in list)" says this is somebody new.
   const [addIsNewPerson, setAddIsNewPerson] = useState(false);
   const [addPicked, setAddPicked] = useState<AttendeeSearchRow | null>(null);
+  // Company-only mode: the company is known to be attending, the person is not.
+  // A stand-in attendee carries the company onto the conference — see the
+  // company_only branch of the add route, and lib/placeholderAttendees.ts.
+  const [addCompanyOnly, setAddCompanyOnly] = useState(false);
+  const [addCompanyOnlyName, setAddCompanyOnlyName] = useState('');
+  const [addCompanyOnlyOther, setAddCompanyOnlyOther] = useState(false);
+  // The picker here needs EVERY company, not just this conference's — the
+  // whole point is to add one that isn't on it yet.
+  const [allCompanies, setAllCompanies] = useState<{ id: number; name: string }[]>([]);
   const unitTypeLabel = useUnitTypeLabel();
   const [executiveBriefOpen, setExecutiveBriefOpen] = useState(false);
   const [executiveBriefSnapshot, setExecutiveBriefSnapshot] = useState<ConferenceSnapshot | null>(null);
@@ -1053,6 +1063,22 @@ export default function ConferenceDetailPage() {
     if (showAddForm) loadCompanies();
   }, [showAddForm, loadCompanies]);
 
+  // Company-only mode picks from every company on file, so it needs its own
+  // fetch — loadCompanies above narrows to the ones already at this conference.
+  useEffect(() => {
+    if (!addCompanyOnly || allCompanies.length > 0) return;
+    let cancelled = false;
+    fetch('/api/companies')
+      .then(r => r.json())
+      .then((rows: { id: number; name: string }[]) => {
+        if (!cancelled && Array.isArray(rows)) {
+          setAllCompanies(rows.map(c => ({ id: c.id, name: c.name })));
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [addCompanyOnly, allCompanies.length]);
+
   // Track A onboarding: mark pre-conference review visited when this page loads for track A users
   useEffect(() => {
     if (onboardingTrack !== 'track_a' || !onboardingProgress) return;
@@ -1464,6 +1490,49 @@ export default function ConferenceDetailPage() {
       fetchConference();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to add attendee');
+    } finally {
+      setIsAddingAttendee(false);
+    }
+  };
+
+  /** Clear every mode of the add panel back to how it opens. */
+  const resetAddForm = () => {
+    setShowAddForm(false);
+    setAddIsNewPerson(false);
+    setAddCompanyOther(false);
+    setAddCompanyOnly(false);
+    setAddCompanyOnlyName('');
+    setAddCompanyOnlyOther(false);
+    setAddFormData({ first_name: '', last_name: '', title: '', company: '', email: '', phone: '', linkedin_url: '' });
+  };
+
+  /**
+   * The company is coming but nobody at it is named yet. The route stands in a
+   * placeholder attendee so the company appears on the conference; once a real
+   * attendee is added, the placeholder banner offers to clear it.
+   */
+  const handleAddCompanyOnly = async () => {
+    const name = addCompanyOnlyName.trim();
+    if (!name) {
+      toast.error('Pick or type a company.');
+      return;
+    }
+    setIsAddingAttendee(true);
+    try {
+      const res = await fetch(`/api/conferences/${id}/attendees/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_only: true, company: name }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to add company');
+      }
+      toast.success(`${name} added — attendee not yet known.`);
+      resetAddForm();
+      fetchConference();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add company');
     } finally {
       setIsAddingAttendee(false);
     }
@@ -2164,13 +2233,20 @@ export default function ConferenceDetailPage() {
                 <div className="min-w-0 flex-1">
                   {/* The name opens the drawer, so the icon that
                       used to do that is gone. */}
+                  {/* A company stand-in has no name to show — the company is
+                      already in its own column, so this says what is actually
+                      true of the row. See lib/attendeeDisplay.ts. */}
                   <button
                     type="button"
                     onClick={() => { setQuickViewId(attendee.id); setQuickViewType('attendee'); }}
-                    className="text-brand-secondary hover:underline block truncate text-left w-full"
-                    title={`${attendee.first_name} ${attendee.last_name}`}
+                    className={`hover:underline block truncate text-left w-full ${
+                      isPlaceholderAttendee(attendee)
+                        ? 'text-gray-400 italic'
+                        : 'text-brand-secondary'
+                    }`}
+                    title={attendeeDisplayName(attendee)}
                   >
-                    {attendee.first_name} {attendee.last_name}
+                    {attendeeDisplayName(attendee)}
                   </button>
                   {/* Title reads under the name rather than in a
                       column of its own: it is what qualifies the
@@ -4289,7 +4365,78 @@ export default function ConferenceDetailPage() {
           {/* Add Attendee Inline Form */}
           {showAddForm && (
             <div className="mb-4 p-4 bg-blue-50 border border-brand-secondary rounded-xl">
-              <h3 className="text-sm font-semibold text-brand-primary mb-3">Add Attendee to Conference</h3>
+              <h3 className="text-sm font-semibold text-brand-primary mb-3">
+                {addCompanyOnly ? 'Add Company to Conference' : 'Add Attendee to Conference'}
+              </h3>
+
+              {/* Two ways in. A conference's company list is derived from its
+                  attendees, so a company with nobody named against it has no
+                  way to appear — company-only mode is that way, standing in a
+                  placeholder attendee exactly as a Companies Only upload does. */}
+              <div className="flex items-center gap-1.5 mb-3">
+                {([
+                  [false, 'Attendee'],
+                  [true, 'Company only'],
+                ] as const).map(([mode, label]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => {
+                      setAddCompanyOnly(mode);
+                      setAddIsNewPerson(false);
+                      setAddPicked(null);
+                    }}
+                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                      addCompanyOnly === mode
+                        ? 'bg-brand-secondary text-white border-brand-secondary'
+                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {addCompanyOnly ? (
+                <div className="max-w-md">
+                  <label className="label text-xs">Company *</label>
+                  {addCompanyOnlyOther ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        autoFocus
+                        value={addCompanyOnlyName}
+                        onChange={(e) => setAddCompanyOnlyName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') void handleAddCompanyOnly(); }}
+                        className="input-field flex-1 min-w-0"
+                        placeholder="New company name"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { setAddCompanyOnlyOther(false); setAddCompanyOnlyName(''); }}
+                        title="Back to the company list"
+                        className="flex-shrink-0 p-1.5 text-gray-400 hover:text-gray-600"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <SearchableSelect
+                      options={allCompanies}
+                      value={allCompanies.find(c => c.name === addCompanyOnlyName) ?? null}
+                      onChange={(c) => setAddCompanyOnlyName(c?.name ?? '')}
+                      getLabel={(c) => c.name}
+                      placeholder="Select a company…"
+                      onSelectOther={() => { setAddCompanyOnlyOther(true); setAddCompanyOnlyName(''); }}
+                    />
+                  )}
+                  <p className="mt-2 text-xs text-gray-500">
+                    Listed as attendee unknown. Add the person later and this placeholder can be cleared.
+                  </p>
+                </div>
+              ) : (
+              <>
               {/* Most people being added are already on file from another
                   conference, so the form opens on a search of all of them.
                   The fields only appear once "Other" says this one is new. */}
@@ -4399,8 +4546,18 @@ export default function ConferenceDetailPage() {
                 </div>
               </div>
               )}
+              </>
+              )}
               <div className="flex gap-2 mt-3">
-                {addIsNewPerson && (
+                {addCompanyOnly ? (
+                <button
+                  onClick={handleAddCompanyOnly}
+                  disabled={isAddingAttendee || !addCompanyOnlyName.trim()}
+                  className="btn-primary text-sm disabled:opacity-50"
+                >
+                  {isAddingAttendee ? 'Adding...' : 'Add Company'}
+                </button>
+                ) : addIsNewPerson && (
                 <button
                   onClick={handleAddAttendee}
                   disabled={isAddingAttendee}
@@ -4410,12 +4567,7 @@ export default function ConferenceDetailPage() {
                 </button>
                 )}
                 <button
-                  onClick={() => {
-                    setShowAddForm(false);
-                    setAddIsNewPerson(false);
-                    setAddCompanyOther(false);
-                    setAddFormData({ first_name: '', last_name: '', title: '', company: '', email: '', phone: '', linkedin_url: '' });
-                  }}
+                  onClick={resetAddForm}
                   className="btn-secondary text-sm"
                 >
                   Cancel

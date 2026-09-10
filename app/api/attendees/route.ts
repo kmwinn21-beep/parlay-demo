@@ -26,6 +26,9 @@ export async function GET(request: NextRequest) {
                    a.notes, a.action, a.next_steps, a.next_steps_notes,
                    a.status,
                    a.seniority,
+                   -- A company stand-in renders as "Attendee unknown" rather
+                   -- than its stored "-" name — see lib/attendeeDisplay.ts.
+                   a.is_placeholder,
                    a.created_at,
                    a.updated_at,
                    co.name as company_name, co.company_type, co.wse as company_wse,

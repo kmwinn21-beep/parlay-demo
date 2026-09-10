@@ -415,5 +415,38 @@ console.log('\n— the status bar matches the header —');
   eq('  as does the splash background', manifest.background_color, FILL);
 }
 
+// ── Toasts clear the status bar ──────────────────────────────────────────────
+
+console.log('\n— a toast lands on the header\'s icon row, not under the clock —');
+{
+  // The page starts at the physical top of the screen, so react-hot-toast's
+  // default top: 16px puts a toast under the clock and the Dynamic Island. The
+  // container is offset to where the header's icon row begins instead.
+  //
+  // Measured in Chromium at 390px while this was written: with a 59px inset
+  // the toast top and the icon row top are both 71px; with no inset the toast
+  // stays at the library's 16px. A source file cannot measure that, so what is
+  // checked here is that both sides still derive from the SAME two terms —
+  // if the header's padding changes and the toast's does not, they drift apart
+  // and nobody notices until it is on a phone.
+  const toast = readFileSync('components/Toast.tsx', 'utf8');
+
+  const containerTop = toast.match(/top:\s*'([^']+)'/);
+  eq('the toast container sets its own top', containerTop != null, true);
+  eq('  from the safe-area inset', /env\(safe-area-inset-top/.test(containerTop?.[1] ?? ''), true);
+  eq('  plus the header\'s own 0.75rem of padding',
+    /0\.75rem/.test(containerTop?.[1] ?? ''), true);
+  eq('  and keeps the library default where there is no inset',
+    /max\(\s*16px/.test(containerTop?.[1] ?? ''), true);
+
+  // The other half of the pair. Read from the stripped copy: the prose above
+  // this rule quotes the same values.
+  const headerPad = cssNoComments.match(/\.header-mobile-dark\s*\{[^}]*padding-top:\s*calc\(([^)]*\)?[^;]*);/);
+  eq('the header row still starts at the same offset', headerPad != null, true);
+  eq('  0.75rem plus that inset',
+    /0\.75rem/.test(headerPad?.[1] ?? '') && /env\(safe-area-inset-top/.test(headerPad?.[1] ?? ''),
+    true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);
