@@ -1,12 +1,16 @@
 /**
- * CRM Link as a mapped upload field.
+ * Link columns as mapped upload fields: CRM Link and LinkedIn URL.
  *
  *   node --experimental-strip-types --import ./tests/register-ts.mjs \
- *        tests/crm-link-upload.mjs
+ *        tests/upload-field-mapping.mjs
  *
- * CRM Link is a COMPANY-level column: one link per company record, carried on
- * every attendee row of that company in the file. Three things have to hold for
- * it to survive an upload, and each is a separate section below.
+ * The two sit at different levels, which is most of what there is to get
+ * wrong. CRM Link is COMPANY-level — one link per company record, repeated on
+ * every attendee row of that company in the file — and lands on `companies`.
+ * LinkedIn URL is ATTENDEE-level, one per person, and lands on `attendees`.
+ *
+ * Three things have to hold for either to survive an upload, and each is a
+ * separate section below.
  *
  *   1. The header is recognised — by both parse paths. There are two: the
  *      explicit-mapping path (suggestMapping → the mapping modal → the user's
@@ -22,9 +26,12 @@
  *      writing the column.
  *
  * The header collision in section 1 is the reason this file exists rather than
- * a couple of lines bolted onto an existing test: "CRM URL" and "Salesforce
- * URL" both partial-match the Website alias `url`, so before CRM_LINK_ALIASES
- * was resolved first the CRM column was silently filed as the website.
+ * a couple of lines bolted onto an existing test. Website's alias `url` is
+ * matched as a SUBSTRING, so "CRM URL", "Salesforce URL" and "LinkedIn URL"
+ * all hit it. Both of the specific fields are claimed before Website is looked
+ * up; without that a person's LinkedIn profile was filed as their company's
+ * website — a wrong value, not a missing one, which is the harder kind to
+ * notice on a list of a few thousand rows.
  *
  * Exits non-zero on the first failing expectation, so it can gate a build.
  */
@@ -63,6 +70,8 @@ console.log('\n— the mapping modal offers CRM Link —');
   // presence in both is what puts the field in front of the user.
   eq('CRM Link is an offered field', FIELD_ORDER.includes('crm_link'), true);
   eq('  and has a label to render', SYSTEM_FIELD_LABELS.crm_link?.label, 'CRM Link');
+  eq('LinkedIn URL is an offered field', FIELD_ORDER.includes('linkedin_url'), true);
+  eq('  and has a label to render', SYSTEM_FIELD_LABELS.linkedin_url?.label, 'LinkedIn URL');
 }
 
 console.log('\n— suggestMapping recognises the header —');
@@ -75,7 +84,29 @@ for (const h of ['CRM Link', 'crm_link', 'CRM URL', 'Salesforce URL', 'sfdc_link
     suggestMapping(['Name', 'Company', 'Email']).crm_link, null);
 }
 
+console.log('\n— suggestMapping recognises the LinkedIn header —');
+for (const h of ['LinkedIn URL', 'linkedin_url', 'LinkedIn', 'Linked In',
+                 'LinkedIn Profile', 'LinkedIn Profile URL', 'li_url']) {
+  eq(`"${h}" maps to linkedin_url`, suggestMapping(['Name', 'Company', h]).linkedin_url, h);
+}
+{
+  eq('a file with no such header maps it to null',
+    suggestMapping(['Name', 'Company', 'Email']).linkedin_url, null);
+}
+
 console.log('\n— and does not confuse it with Website —');
+{
+  // The one that bit hardest: a person's profile filed as their company's site.
+  const li = suggestMapping(['Company', 'LinkedIn URL']);
+  eq('a LinkedIn URL alone is not filed as the website',
+    [li.website, li.linkedin_url], [null, 'LinkedIn URL']);
+
+  const all = suggestMapping(['Company', 'Website', 'LinkedIn URL', 'CRM URL']);
+  eq('all three link columns land on their own field',
+    [all.website, all.linkedin_url, all.crm_link],
+    ['Website', 'LinkedIn URL', 'CRM URL']);
+}
+
 {
   // The collision: Website's alias list includes the bare `url`, which
   // partial-matches "crm_url" and "salesforce_url". CRM Link is claimed first
@@ -137,6 +168,34 @@ console.log('\n— the auto-detect parse path carries it too —');
   eq('both columns survive side by side', [a.website, a.crm_link], ['belmont.com', LINK]);
 }
 
+const PROFILE = 'https://www.linkedin.com/in/dana-reyes';
+
+console.log('\n— LinkedIn survives both parse paths —');
+{
+  const headers = ['First Name', 'Last Name', 'Company', 'Website', 'LinkedIn URL'];
+  const row = ['Dana', 'Reyes', 'Belmont Care', 'belmont.com', PROFILE];
+  const [mapped] = await parseFileWithMapping(csv(headers, row), 'l.csv', suggestMapping(headers));
+  eq('mapped path: linkedin_url is parsed', mapped.linkedin_url, PROFILE);
+  eq('  and the website is still the website', mapped.website, 'belmont.com');
+
+  const [auto] = await parseFile(csv(headers, row), 'l.csv');
+  eq('auto-detect path: linkedin_url is parsed', auto.linkedin_url, PROFILE);
+  eq('  and the website is still the website', auto.website, 'belmont.com');
+}
+{
+  // Without a website column at all, the profile must not slide into website.
+  const [auto] = await parseFile(
+    csv(['Full Name', 'Company', 'LinkedIn URL'], ['Dana Reyes', 'Belmont Care', PROFILE]), 'l.csv');
+  eq('with no website column, the profile stays put',
+    [auto.website, auto.linkedin_url], [undefined, PROFILE]);
+}
+{
+  const headers = ['First Name', 'Last Name', 'LinkedIn URL'];
+  const mapping = { ...suggestMapping(headers), linkedin_url: null };
+  const [a] = await parseFileWithMapping(csv(headers, ['Dana', 'Reyes', PROFILE]), 'l.csv', mapping);
+  eq('an explicitly unmapped column is dropped', a.linkedin_url, undefined);
+}
+
 // ── 3. The routes actually write the column ──────────────────────────────────
 
 const { createClient } = await import('@libsql/client');
@@ -158,6 +217,29 @@ const sqlFrom = (file, needle) => {
 const UPLOAD = 'app/api/conferences/[id]/attendees/upload/route.ts';
 const CREATE = 'app/api/conferences/route.ts';
 
+/**
+ * Column names of a route's INSERT, in the order its placeholders expect.
+ * Quoted identifiers ("function") are unwrapped.
+ */
+const insertCols = (sql) =>
+  sql.match(/\(([^)]*)\)/)[1].split(',').map(s => s.trim().replace(/"/g, ''));
+
+/**
+ * Build the args for one of those INSERTs: the field under test gets `value`,
+ * and every other column gets null — except NOT NULL ones, which get a filler.
+ * A column default does not rescue those: the statement names them, so it
+ * passes an explicit NULL and the constraint still fires. Read from the table
+ * rather than listed here, so a new NOT NULL column does not turn into a
+ * mystery crash in this test.
+ */
+async function argsFor(client, table, cols, field, value) {
+  const info = await client.execute(`PRAGMA table_info(${table})`);
+  const required = new Set(info.rows
+    .filter(r => Number(r.notnull) === 1 && Number(r.pk) !== 1)
+    .map(r => String(r.name)));
+  return cols.map(c => (c === field ? value : required.has(c) ? 'x' : null));
+}
+
 console.log('\n— the upload routes insert the column —');
 {
   const client = createClient({ url: `file:${join(dir, 'tenant.db')}` });
@@ -165,17 +247,73 @@ console.log('\n— the upload routes insert the column —');
 
   for (const [name, file] of [['attendee upload', UPLOAD], ['conference create', CREATE]]) {
     const sql = sqlFrom(file, 'INSERT INTO companies');
-    const cols = sql.match(/\(([^)]*)\)/)[1].split(',').map(s => s.trim());
+    const cols = insertCols(sql);
     eq(`${name}: crm_link is in the INSERT`, cols.includes('crm_link'), true);
 
     // Run the route's own statement, with the link in crm_link's position and
-    // a marker in every other column, then read the row back.
-    const args = cols.map((c, i) => (c === 'crm_link' ? LINK : c === 'name' ? `Co ${name}` : null));
-    const res = await client.execute({ sql, args });
+    // nothing meaningful anywhere else, then read the row back.
+    const res = await client.execute({ sql, args: await argsFor(client, 'companies', cols, 'crm_link', LINK) });
     const id = Number(res.rows[0].id);
     const back = await client.execute({ sql: 'SELECT crm_link FROM companies WHERE id = ?', args: [id] });
     eq(`  and the value is stored`, back.rows[0].crm_link, LINK);
   }
+}
+
+console.log('\n— the upload routes insert the LinkedIn column —');
+{
+  const client = createClient({ url: `file:${join(dir, 'attendees.db')}` });
+  await seedFreshDb(client);
+
+  for (const [name, file] of [['attendee upload', UPLOAD], ['conference create', CREATE]]) {
+    const sql = sqlFrom(file, 'INSERT INTO attendees');
+    const cols = insertCols(sql);
+    eq(`${name}: linkedin_url is in the INSERT`, cols.includes('linkedin_url'), true);
+
+    const res = await client.execute({ sql, args: await argsFor(client, 'attendees', cols, 'linkedin_url', PROFILE) });
+    const back = await client.execute({
+      sql: 'SELECT linkedin_url FROM attendees WHERE id = ?', args: [Number(res.rows[0].id)] });
+    eq('  and the value is stored', back.rows[0].linkedin_url, PROFILE);
+  }
+}
+
+console.log('\n— an existing profile is not overwritten by a blank —');
+{
+  const client = createClient({ url: `file:${join(dir, 'li-coalesce.db')}` });
+  await seedFreshDb(client);
+  await client.execute({
+    sql: 'INSERT INTO attendees (first_name, last_name, linkedin_url) VALUES (?, ?, ?)',
+    args: ['Dana', 'Reyes', PROFILE],
+  });
+
+  // LinkedIn is not offered for conflict resolution — unlike title and email,
+  // which the conflicts route can ask about — so both routes fill it only when
+  // the stored value is blank. A re-upload can add a missing profile but can
+  // never replace one a rep put there by hand.
+  //
+  // COALESCE is the wrong tool for that and was the first thing tried here:
+  // it returns the SUPPLIED value whenever one is given, so it overwrites. The
+  // routes use the same fill-if-blank CASE the products column uses, and this
+  // section runs it to prove the semantics rather than trusting the name.
+  const FILL_IF_BLANK =
+    "linkedin_url = CASE WHEN \\(linkedin_url IS NULL OR linkedin_url = ''\\) THEN \\? ELSE linkedin_url END";
+  eq('attendee upload fills linkedin_url only when blank',
+    new RegExp(FILL_IF_BLANK).test(readFileSync(UPLOAD, 'utf-8')), true);
+  eq('conference create fills linkedin_url only when blank',
+    new RegExp(FILL_IF_BLANK).test(readFileSync(CREATE, 'utf-8')), true);
+
+  const update = `UPDATE attendees SET ${FILL_IF_BLANK.replace(/\\/g, '')} WHERE first_name = ?`;
+  const other = 'https://www.linkedin.com/in/someone-else';
+  await client.execute({ sql: update, args: [other, 'Dana'] });
+  const back = await client.execute({
+    sql: 'SELECT linkedin_url FROM attendees WHERE first_name = ?', args: ['Dana'] });
+  eq('  a stored profile survives a second upload', back.rows[0].linkedin_url, PROFILE);
+
+  await client.execute({
+    sql: 'INSERT INTO attendees (first_name, last_name) VALUES (?, ?)', args: ['Sam', 'Okafor'] });
+  await client.execute({ sql: update, args: [other, 'Sam'] });
+  const filled = await client.execute({
+    sql: 'SELECT linkedin_url FROM attendees WHERE first_name = ?', args: ['Sam'] });
+  eq('  and a blank one gets filled', filled.rows[0].linkedin_url, other);
 }
 
 console.log('\n— an existing link is not overwritten by a blank —');

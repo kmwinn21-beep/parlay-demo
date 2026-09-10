@@ -924,9 +924,9 @@ export async function POST(
     };
 
     const attendeeIdCache = new Map<string, number>();
-    type NewAttendee = { first_name: string; last_name: string; title?: string; company_id: number | null; email?: string; function?: string; product?: string; consent?: string; seniority?: string; is_placeholder?: boolean };
+    type NewAttendee = { first_name: string; last_name: string; title?: string; company_id: number | null; email?: string; linkedin_url?: string; function?: string; product?: string; consent?: string; seniority?: string; is_placeholder?: boolean };
     const newAttendees: NewAttendee[] = [];
-    type ExistingAttendeeUpdate = { id: number; company_id: number | null; title: string | null; email: string | null; function?: string; product?: string; consent?: string };
+    type ExistingAttendeeUpdate = { id: number; company_id: number | null; title: string | null; email: string | null; linkedin_url: string | null; function?: string; product?: string; consent?: string };
     const existingAttendeeUpdates: ExistingAttendeeUpdate[] = [];
     const seen = new Set<string>();
 
@@ -950,12 +950,13 @@ export async function POST(
         const rawProduct = p.product?.trim() || undefined;
         const autoProduct = !rawProduct ? computeAutoProducts(undefined, p.title?.trim(), functionVal) : null;
         const consentVal = p.consent?.trim() ? normalizeConsentValue(p.consent.trim()) : undefined;
-        const hasUpdate = (companyId && companyId > 0) || p.title?.trim() || p.email?.trim() || functionVal || rawProduct || autoProduct || consentVal;
+        const hasUpdate = (companyId && companyId > 0) || p.title?.trim() || p.email?.trim() || p.linkedin_url?.trim() || functionVal || rawProduct || autoProduct || consentVal;
         if (hasUpdate) existingAttendeeUpdates.push({
           id: hit.match.id,
           company_id: companyId && companyId > 0 ? companyId : null,
           title: p.title?.trim() || null,
           email: p.email?.trim() || null,
+          linkedin_url: p.linkedin_url?.trim() || null,
           function: functionVal,
           product: rawProduct ?? autoProduct ?? undefined,
           consent: consentVal,
@@ -975,6 +976,7 @@ export async function POST(
           title: p.title?.trim() || undefined,
           company_id: companyId && companyId > 0 ? companyId : null,
           email: p.email?.trim() || undefined,
+          linkedin_url: p.linkedin_url?.trim() || undefined,
           function: functionVal,
           product: rawProduct ?? autoProduct ?? undefined,
           consent: consentVal,
@@ -1007,12 +1009,13 @@ export async function POST(
         const rawProduct = p.product?.trim() || undefined;
         const autoProduct = !rawProduct ? computeAutoProducts(undefined, p.title?.trim(), functionVal) : null;
         const consentVal = p.consent?.trim() ? normalizeConsentValue(p.consent.trim()) : undefined;
-        const hasUpdate = (companyId && companyId > 0) || p.title?.trim() || p.email?.trim() || functionVal || rawProduct || autoProduct || consentVal;
+        const hasUpdate = (companyId && companyId > 0) || p.title?.trim() || p.email?.trim() || p.linkedin_url?.trim() || functionVal || rawProduct || autoProduct || consentVal;
         if (hasUpdate) existingAttendeeUpdates.push({
           id: existingId,
           company_id: companyId && companyId > 0 ? companyId : null,
           title: p.title?.trim() || null,
           email: p.email?.trim() || null,
+          linkedin_url: p.linkedin_url?.trim() || null,
           function: functionVal,
           product: rawProduct ?? autoProduct ?? undefined,
           consent: consentVal,
@@ -1044,6 +1047,16 @@ export async function POST(
         if (emailR === 'ignore') { /* skip */ }
         else if (emailR === 'accept' && u.email) { setClauses.push('email = ?'); setArgs.push(u.email); }
         else if (u.email) { setClauses.push('email = COALESCE(?, email)'); setArgs.push(u.email); }
+
+        // linkedin_url: fill-if-blank, like products. COALESCE would not do
+        // here — it returns the supplied value whenever one is given, which
+        // overwrites. Title and email can afford that because the conflicts
+        // route asks the user first; LinkedIn is never offered for resolution,
+        // so a re-upload must not quietly replace a profile a rep set by hand.
+        if (u.linkedin_url) {
+          setClauses.push("linkedin_url = CASE WHEN (linkedin_url IS NULL OR linkedin_url = '') THEN ? ELSE linkedin_url END");
+          setArgs.push(u.linkedin_url);
+        }
 
         // function
         if (u.function !== undefined) {
@@ -1086,8 +1099,8 @@ export async function POST(
     // Batch-insert new attendees
     if (newAttendees.length > 0) {
       const results = await batchInsert(db, newAttendees, (a) => ({
-        sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email, "function", products, consent, seniority, is_placeholder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
-        args: [a.first_name, a.last_name, a.title ?? null, a.company_id, a.email ?? null, a.function ?? null, a.product ?? null, a.consent ?? 'Consent Not Recorded', a.seniority ?? null, a.is_placeholder ? 1 : 0],
+        sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email, linkedin_url, "function", products, consent, seniority, is_placeholder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+        args: [a.first_name, a.last_name, a.title ?? null, a.company_id, a.email ?? null, a.linkedin_url ?? null, a.function ?? null, a.product ?? null, a.consent ?? 'Consent Not Recorded', a.seniority ?? null, a.is_placeholder ? 1 : 0],
       }));
       for (let i = 0; i < newAttendees.length; i++) {
         const key = `${newAttendees[i].first_name} ${newAttendees[i].last_name}`.toLowerCase();

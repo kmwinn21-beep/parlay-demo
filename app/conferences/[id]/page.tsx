@@ -3,7 +3,6 @@
 import { Fragment, useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { AnalyticsCharts } from '@/components/AnalyticsCharts';
 import { invalidateConfsCache } from '@/components/Header';
@@ -2204,7 +2203,18 @@ export default function ConferenceDetailPage() {
               {attendee.company_name ? (
                 <div>
                   {attendee.company_id ? (
-                    <Link href={`/companies/${attendee.company_id}`} className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug">{attendee.company_name}</Link>
+                    /* Opens the company in the quick-view drawer, the same way
+                       the attendee name opens the attendee — and the same way
+                       MobileAttendeeCard's onOpenCompany already behaved. The
+                       drawer carries a "Go to Company Record →" link for
+                       anyone who did want to leave the conference. */
+                    <button
+                      type="button"
+                      onClick={() => { setQuickViewId(attendee.company_id!); setQuickViewType('company'); }}
+                      className="text-xs text-brand-secondary hover:underline break-words whitespace-normal leading-snug text-left"
+                    >
+                      {attendee.company_name}
+                    </button>
                   ) : (
                     <span className="text-xs text-gray-800 break-words whitespace-normal leading-snug">{attendee.company_name}</span>
                   )}
