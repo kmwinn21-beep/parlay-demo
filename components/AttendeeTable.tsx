@@ -26,6 +26,7 @@ import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
 import { shouldWarnForTitleMetadata, type TitleMatchMetadata } from '@/lib/titleNormalization';
 import { ClassifyTitleModal } from './ClassifyTitleModal';
 import { BulkClassifyTitlesModal } from './BulkClassifyTitlesModal';
+import { attendeeDisplayName, isPlaceholderAttendee } from '@/lib/attendeeDisplay';
 
 const COMPETITOR_TYPE_DEFS: Record<string, string> = {
   'Direct': 'Offers the same core product or service to the same buyer profile.',
@@ -44,6 +45,8 @@ interface Attendee {
   company_type?: string;
   company_competitor_type?: string;
   company_id?: number;
+  /** A company stand-in: the company is attending, the person is unknown. */
+  is_placeholder?: number | boolean;
   company_wse?: number;
   company_icp?: string;
   company_services?: string;
@@ -859,8 +862,10 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                       </svg>
                     </button>
-                    <Link href={`/attendees/${attendee.id}`} className="font-semibold text-brand-secondary hover:underline text-sm truncate">
-                      {attendee.first_name} {attendee.last_name}
+                    <Link href={`/attendees/${attendee.id}`} className={`font-semibold hover:underline text-sm truncate ${
+                      isPlaceholderAttendee(attendee) ? 'text-gray-400 italic' : 'text-brand-secondary'
+                    }`}>
+                      {attendeeDisplayName(attendee)}
                     </Link>
                     {Number(attendee.notes_count) > 0 && (
                       <NotesPopover attendeeId={attendee.id} notesCount={Number(attendee.notes_count)} />
@@ -993,8 +998,10 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                 </svg>
                               </button>
-                              <Link href={`/attendees/${attendee.id}`} className="text-sm text-brand-secondary hover:underline break-words whitespace-normal leading-snug">
-                                {attendee.first_name} {attendee.last_name}
+                              <Link href={`/attendees/${attendee.id}`} className={`text-sm hover:underline break-words whitespace-normal leading-snug ${
+                                isPlaceholderAttendee(attendee) ? 'text-gray-400 italic' : 'text-brand-secondary'
+                              }`}>
+                                {attendeeDisplayName(attendee)}
                               </Link>
                             </div>
                           </td>

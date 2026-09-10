@@ -15,10 +15,16 @@ export async function POST(
   const db = await getDb(user?.accountId);
   try {
     const body = await request.json();
-    const { attendee_id, first_name, last_name, title, company, email, phone, linkedin_url, website, company_type } = body as {
+    const { attendee_id, first_name, last_name, title, company, email, phone, linkedin_url, website, company_type, company_only } = body as {
       /** Set when the caller picked a specific person off the search rather
        *  than typing a new one — then there is nothing to match or create. */
       attendee_id?: number;
+      /**
+       * The company is known to be attending but nobody at it is yet. A
+       * stand-in attendee carries the company onto the conference, the same
+       * way a Companies Only upload does — see the company_only branch below.
+       */
+      company_only?: boolean;
       first_name: string;
       last_name: string;
       title?: string;
@@ -31,7 +37,10 @@ export async function POST(
       company_type?: string;
     };
 
-    if (!attendee_id && (!first_name || !last_name)) {
+    if (company_only && !company?.trim()) {
+      return NextResponse.json({ error: 'company is required' }, { status: 400 });
+    }
+    if (!attendee_id && !company_only && (!first_name || !last_name)) {
       return NextResponse.json({ error: 'first_name and last_name are required' }, { status: 400 });
     }
 
@@ -84,6 +93,97 @@ export async function POST(
         });
       }
       return NextResponse.json(row, { status: 201 });
+    }
+
+    // ── Company only: the company is coming, the person is not yet known ─────
+    //
+    // A conference's company list is derived from its attendees, so a company
+    // with nobody named against it cannot appear. A stand-in attendee holds
+    // the place — exactly what a Companies Only upload creates in bulk, and
+    // deliberately the same shape so the rest of the system needs no new
+    // concept: the placeholder banner, the stale calculation on the conference
+    // page and sweepConflictedPlaceholders all already know what this is.
+    if (company_only) {
+      const coName = company!.trim();
+
+      const coResult = await db.execute({
+        sql: 'SELECT id, name FROM companies WHERE LOWER(name) = LOWER(?)',
+        args: [coName],
+      });
+      let companyId: number;
+      let companyName: string;
+      if (coResult.rows.length > 0) {
+        companyId = Number(coResult.rows[0].id);
+        companyName = String(coResult.rows[0].name);
+      } else {
+        const newCo = await db.execute({
+          sql: 'INSERT INTO companies (name, company_type, website) VALUES (?, ?, ?) RETURNING id, name',
+          args: [coName, company_type || null, website?.trim() || null],
+        });
+        companyId = Number(newCo.rows[0].id);
+        companyName = String(newCo.rows[0].name);
+      }
+
+      // Already represented by a real person here? Then a stand-in would be
+      // stale the moment it was written, and the sweep would take it back out.
+      // Say so rather than churn the row.
+      const realHere = await db.execute({
+        sql: `SELECT a.id FROM attendees a
+                JOIN conference_attendees ca ON ca.attendee_id = a.id AND ca.conference_id = ?
+               WHERE a.company_id = ? AND COALESCE(a.is_placeholder, 0) = 0
+               LIMIT 1`,
+        args: [params.id, companyId],
+      });
+      if (realHere.rows.length > 0) {
+        return NextResponse.json(
+          { error: `${companyName} is already on this conference through a named attendee.` },
+          { status: 409 },
+        );
+      }
+
+      // One stand-in row per company, shared across conferences — the same row
+      // a Companies Only upload would have reused, since it dedupes on name.
+      const existing = await db.execute({
+        sql: `SELECT id FROM attendees
+               WHERE company_id = ? AND COALESCE(is_placeholder, 0) = 1 LIMIT 1`,
+        args: [companyId],
+      });
+      const standInId = existing.rows.length > 0
+        ? Number(existing.rows[0].id)
+        : Number((await db.execute({
+            // "-" and the company name: the convention lib/parsers.ts uses, so
+            // one company's stand-in stays distinct from another's.
+            sql: `INSERT INTO attendees (first_name, last_name, company_id, is_placeholder)
+                  VALUES ('-', ?, ?, 1) RETURNING id`,
+            args: [companyName, companyId],
+          })).rows[0].id);
+
+      await db.execute({
+        sql: `INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id, created_at, source) VALUES (?, ?, datetime('now'), 'manual')`,
+        args: [params.id, standInId],
+      });
+
+      const confRow = await db.execute({ sql: 'SELECT name FROM conferences WHERE id = ?', args: [params.id] });
+      const confName = confRow.rows.length > 0 ? String(confRow.rows[0].name) : `Conference #${params.id}`;
+      const changedByConfigId = await getConfigIdByEmail(db, user.email);
+      notifyCompanyAssignees(db, {
+        companyId,
+        companyName,
+        message: `${companyName} added to ${confName} — attendee not yet known`,
+        changedByEmail: user.email,
+        changedByConfigId,
+        type: 'attendee',
+        entityType: 'attendee',
+        entityId: standInId,
+      });
+
+      const full = await db.execute({
+        sql: `SELECT a.*, c.name as company_name, c.company_type
+              FROM attendees a LEFT JOIN companies c ON a.company_id = c.id
+              WHERE a.id = ?`,
+        args: [standInId],
+      });
+      return NextResponse.json({ ...full.rows[0] }, { status: 201 });
     }
 
     // Name match — requires secondary confirmation (email, domain, or company) per matching rules.

@@ -9,6 +9,7 @@ import { EntityStructureIcon } from '@/components/EntityStructureIcon';
 import { getBadgeClass, formatStatusLabel, getPreset } from '@/lib/colors';
 import { effectiveSeniority } from '@/lib/parsers';
 import { parseRepIds, getRepInitials, type UserOption } from '@/lib/useUserOptions';
+import { attendeeDisplayName, isPlaceholderAttendee } from '@/lib/attendeeDisplay';
 
 /** The shape the card reads. Deliberately loose — both callers hand it rows
  *  straight from the conference API. */
@@ -21,6 +22,8 @@ export interface AttendeeCardRow {
   status?: string | null;
   photo_url?: string | null;
   company_id?: number | null;
+  /** A company stand-in: the company is attending, the person is unknown. */
+  is_placeholder?: number | boolean;
   company_name?: string | null;
   company_type?: string | null;
   /** 'Parent' | 'Child' on the attendee's company — drawn inside the type pill. */
@@ -146,9 +149,11 @@ export function MobileAttendeeCard({
               <button
                 type="button"
                 onClick={() => onOpenAttendee(attendee.id)}
-                className="font-semibold text-brand-secondary hover:underline text-sm truncate text-left"
+                className={`font-semibold hover:underline text-sm truncate text-left ${
+                  isPlaceholderAttendee(attendee) ? 'text-gray-400 italic' : 'text-brand-secondary'
+                }`}
               >
-                {attendee.first_name} {attendee.last_name}
+                {attendeeDisplayName(attendee)}
               </button>
             </div>
           </div>
