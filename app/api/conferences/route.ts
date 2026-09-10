@@ -900,9 +900,9 @@ export async function POST(request: NextRequest) {
 
         // Resolve each attendee row (deduplicated by name)
         const attendeeIdCache = new Map<string, number>(); // "first last" lowercase -> id
-        type NewAttendee = { first_name: string; last_name: string; title?: string; company_id: number | null; email?: string; function?: string; product?: string };
+        type NewAttendee = { first_name: string; last_name: string; title?: string; company_id: number | null; email?: string; linkedin_url?: string; function?: string; product?: string };
         const newAttendees: NewAttendee[] = [];
-        type ExistingAttendeeUpdate = { id: number; company_id: number | null; title: string | null; email: string | null; function?: string; product?: string };
+        type ExistingAttendeeUpdate = { id: number; company_id: number | null; title: string | null; email: string | null; linkedin_url: string | null; function?: string; product?: string };
         const existingAttendeeUpdates: ExistingAttendeeUpdate[] = [];
         const seen = new Set<string>();
 
@@ -924,12 +924,13 @@ export async function POST(request: NextRequest) {
               : null;
             const functionVal = p.function?.trim() || undefined;
             const productVal = p.product?.trim() || undefined;
-            const hasUpdate = (companyId && companyId > 0) || p.title?.trim() || p.email?.trim() || functionVal || productVal;
+            const hasUpdate = (companyId && companyId > 0) || p.title?.trim() || p.email?.trim() || p.linkedin_url?.trim() || functionVal || productVal;
             if (hasUpdate) existingAttendeeUpdates.push({
               id: hit.match.id,
               company_id: companyId && companyId > 0 ? companyId : null,
               title: p.title?.trim() || null,
               email: p.email?.trim() || null,
+              linkedin_url: p.linkedin_url?.trim() || null,
               function: functionVal,
               product: productVal,
             });
@@ -947,6 +948,7 @@ export async function POST(request: NextRequest) {
               title: p.title?.trim() || undefined,
               company_id: companyId && companyId > 0 ? companyId : null,
               email: p.email?.trim() || undefined,
+              linkedin_url: p.linkedin_url?.trim() || undefined,
               function: functionVal,
               product: productVal,
             });
@@ -959,12 +961,13 @@ export async function POST(request: NextRequest) {
             sql: `UPDATE attendees SET
               company_id = COALESCE(?, company_id),
               title = COALESCE(?, title),
-              email = COALESCE(?, email)
+              email = COALESCE(?, email),
+              linkedin_url = CASE WHEN (linkedin_url IS NULL OR linkedin_url = '') THEN ? ELSE linkedin_url END
               ${u.function !== undefined ? ', "function" = ?' : ''}
               ${u.product !== undefined ? ', products = CASE WHEN (products IS NULL OR products = \'\') THEN ? ELSE products END' : ''}
               WHERE id = ?`,
             args: [
-              u.company_id, u.title, u.email,
+              u.company_id, u.title, u.email, u.linkedin_url,
               ...(u.function !== undefined ? [u.function] : []),
               ...(u.product !== undefined ? [u.product] : []),
               u.id,
@@ -975,8 +978,8 @@ export async function POST(request: NextRequest) {
         // ── Step 5: Batch-insert new attendees ──
         if (newAttendees.length > 0) {
           const results = await batchInsert(db, newAttendees, (a) => ({
-            sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email, "function", products) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id',
-            args: [a.first_name, a.last_name, a.title ?? null, a.company_id, a.email ?? null, a.function ?? null, a.product ?? null],
+            sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email, linkedin_url, "function", products) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+            args: [a.first_name, a.last_name, a.title ?? null, a.company_id, a.email ?? null, a.linkedin_url ?? null, a.function ?? null, a.product ?? null],
           }));
           for (let i = 0; i < newAttendees.length; i++) {
             const key = `${newAttendees[i].first_name} ${newAttendees[i].last_name}`.toLowerCase();

@@ -5,7 +5,7 @@ export type SystemFieldKey =
   | 'first_name' | 'last_name' | 'full_name' | 'title' | 'company'
   | 'email' | 'website' | 'company_type' | 'assigned_user' | 'state' | 'wse'
   | 'services' | 'icp' | 'industry' | 'function' | 'product' | 'consent'
-  | 'crm_link';
+  | 'crm_link' | 'linkedin_url';
 
 export interface ColumnMapping {
   first_name: string | null;
@@ -14,6 +14,7 @@ export interface ColumnMapping {
   title: string | null;
   company: string | null;
   email: string | null;
+  linkedin_url: string | null;
   website: string | null;
   company_type: string | null;
   assigned_user: string | null;
@@ -46,6 +47,7 @@ export const SYSTEM_FIELD_LABELS: Record<SystemFieldKey, SystemFieldMeta> = {
   title:         { label: 'Job Title',           description: 'Attendee job title or role' },
   company:       { label: 'Company',             description: 'Company or organization name' },
   email:         { label: 'Email',               description: 'Work email address' },
+  linkedin_url:  { label: 'LinkedIn URL',        description: "Link to the attendee's LinkedIn profile" },
   website:       { label: 'Website',             description: 'Company website URL' },
   company_type:  { label: 'Company Type',        description: 'e.g. Operator, Vendor, Capital' },
   assigned_user: { label: 'Assigned Rep',        description: 'Sales rep assigned to this company — matched by name' },
@@ -62,6 +64,6 @@ export const SYSTEM_FIELD_LABELS: Record<SystemFieldKey, SystemFieldMeta> = {
 
 export const FIELD_ORDER: SystemFieldKey[] = [
   'first_name', 'last_name', 'full_name', 'title', 'company',
-  'email', 'website', 'company_type', 'assigned_user', 'state', 'wse', 'services', 'icp',
+  'email', 'linkedin_url', 'website', 'company_type', 'assigned_user', 'state', 'wse', 'services', 'icp',
   'industry', 'function', 'product', 'consent', 'crm_link',
 ];
