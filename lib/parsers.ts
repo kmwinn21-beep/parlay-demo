@@ -6,6 +6,29 @@ import { type ColumnMapping, type SystemFieldKey, SYSTEM_FIELD_LABELS, FIELD_ORD
 export { SYSTEM_FIELD_LABELS, FIELD_ORDER };
 export type { ColumnMapping, SystemFieldKey };
 
+/**
+ * Headers that name the company's record in the CRM.
+ *
+ * Shared by both parse paths — the explicit-mapping suggestion and the
+ * auto-detect one — because several of these ("CRM URL", "Salesforce URL")
+ * also partial-match the Website alias `url`. Website is looked up second,
+ * with the CRM column already removed from the candidates, so the more
+ * specific header wins.
+ */
+const CRM_LINK_ALIASES = [
+  'crm_link', 'crm link', 'crm', 'crm_url', 'crm url', 'crm_record', 'crm record',
+  'salesforce_link', 'salesforce link', 'salesforce_url', 'salesforce url',
+  'sfdc_link', 'sfdc link', 'sfdc_url', 'sfdc url',
+  'hubspot_link', 'hubspot link', 'hubspot_url', 'hubspot url',
+  'account_link', 'account link', 'account_url', 'account url',
+  'record_link', 'record link',
+];
+
+const WEBSITE_ALIASES = [
+  'website', 'web', 'url', 'site', 'web_site', 'web site',
+  'homepage', 'home_page', 'company_website', 'company website',
+];
+
 export async function parseFile(
   buffer: Buffer,
   filename: string
@@ -38,6 +61,8 @@ export function extractRawRows(buffer: Buffer, filename: string): Record<string,
 
 /** Return auto-suggested column mapping based on file headers. */
 export function suggestMapping(headers: string[]): ColumnMapping {
+  const crmLink = findColumn(headers, ...CRM_LINK_ALIASES);
+  const forWebsite = crmLink ? headers.filter(h => h !== crmLink) : headers;
   return {
     first_name:    findColumn(headers, 'first_name', 'firstname', 'first name', 'fname', 'given_name', 'given name'),
     last_name:     findColumn(headers, 'last_name', 'lastname', 'last name', 'lname', 'surname', 'family_name', 'family name'),
@@ -45,7 +70,7 @@ export function suggestMapping(headers: string[]): ColumnMapping {
     title:         findColumn(headers, 'title', 'job_title', 'job title', 'position', 'role', 'designation'),
     company:       findColumn(headers, 'company', 'company_name', 'company name', 'organization', 'org', 'employer', 'firm'),
     email:         findColumn(headers, 'email', 'email_address', 'email address', 'e_mail', 'e-mail'),
-    website:       findColumn(headers, 'website', 'web', 'url', 'site', 'web_site', 'web site', 'homepage', 'home_page', 'company_website', 'company website'),
+    website:       findColumn(forWebsite, ...WEBSITE_ALIASES),
     company_type:  findColumn(headers, 'company_type', 'company type', 'registration_type', 'registration type', 'reg_type', 'reg type', 'attendee_type', 'attendee type', 'type'),
     assigned_user: findColumn(headers, 'assigned_user', 'assigned user', 'salesforce_owner', 'salesforce owner', 'sf_owner', 'sf owner', 'account_owner', 'account owner', 'owner', 'rep', 'sales_rep', 'sales rep', 'account_rep', 'account rep', 'sales_representative', 'sales representative', 'account_manager', 'account manager'),
     state:         findColumn(headers, 'state', 'hq_state', 'hq state', 'headquarters_state', 'headquarters state', 'company_state', 'company state', 'state_province', 'state/province', 'state_or_province', 'st'),
@@ -55,6 +80,7 @@ export function suggestMapping(headers: string[]): ColumnMapping {
     industry:      findColumn(headers, 'industry', 'sector', 'vertical', 'market_segment', 'market segment', 'business_segment', 'business segment', 'industry_vertical', 'industry vertical'),
     function:      findColumn(headers, 'function', 'department', 'dept', 'business_function', 'business function', 'job_function', 'job function', 'functional_area', 'functional area'),
     product:       findColumn(headers, 'product', 'products', 'product_interest', 'product interest', 'product_line', 'product line'),
+    crm_link:      crmLink,
     consent:       findColumn(headers, 'consent', 'opt_in', 'opt in', 'opt_out', 'opt out', 'optin', 'optout', 'email_consent', 'email consent', 'marketing_consent', 'marketing consent', 'communication_preference', 'communication preference', 'contact_permission', 'contact permission', 'gdpr', 'permission'),
   };
 }
@@ -107,6 +133,7 @@ function parseRowsWithMapping(rows: Record<string, unknown>[], mapping: ColumnMa
     if (mapping.company       && row[mapping.company])       attendee.company        = String(row[mapping.company]).trim();
     if (mapping.email         && row[mapping.email])         attendee.email          = String(row[mapping.email]).trim();
     if (mapping.website       && row[mapping.website])       attendee.website        = String(row[mapping.website]).trim();
+    if (mapping.crm_link      && row[mapping.crm_link])      attendee.crm_link       = String(row[mapping.crm_link]).trim();
     if (mapping.company_type  && row[mapping.company_type])  attendee.company_type   = String(row[mapping.company_type]).trim();
     if (mapping.assigned_user && row[mapping.assigned_user]) attendee.assigned_user  = String(row[mapping.assigned_user]).trim();
     if (mapping.state && row[mapping.state]) attendee.state = String(row[mapping.state]).trim();
@@ -161,7 +188,8 @@ function parseRows(rows: Record<string, unknown>[]): ParsedAttendee[] {
   const titleCol = findColumn(headers, 'title', 'job_title', 'job title', 'position', 'role', 'designation');
   const companyCol = findColumn(headers, 'company', 'company_name', 'company name', 'organization', 'org', 'employer', 'firm');
   const emailCol = findColumn(headers, 'email', 'email_address', 'email address', 'e_mail', 'e-mail');
-  const websiteCol = findColumn(headers, 'website', 'web', 'url', 'site', 'web_site', 'web site', 'homepage', 'home_page', 'company_website', 'company website');
+  const crmLinkCol = findColumn(headers, ...CRM_LINK_ALIASES);
+  const websiteCol = findColumn(crmLinkCol ? headers.filter(h => h !== crmLinkCol) : headers, ...WEBSITE_ALIASES);
   const companyTypeCol = findColumn(headers, 'company_type', 'company type', 'registration_type', 'registration type', 'reg_type', 'reg type', 'attendee_type', 'attendee type', 'type');
   const assignedUserCol = findColumn(headers, 'assigned_user', 'assigned user', 'salesforce_owner', 'salesforce owner', 'sf_owner', 'sf owner', 'account_owner', 'account owner', 'owner', 'rep', 'sales_rep', 'sales rep', 'account_rep', 'account rep', 'sales_representative', 'sales representative', 'account_manager', 'account manager');
   const stateCol = findColumn(headers, 'state', 'hq_state', 'hq state', 'headquarters_state', 'headquarters state', 'company_state', 'company state', 'state_province', 'state/province', 'state_or_province', 'st');
@@ -218,6 +246,9 @@ function parseRows(rows: Record<string, unknown>[]): ParsedAttendee[] {
     }
     if (websiteCol && row[websiteCol]) {
       attendee.website = String(row[websiteCol]).trim();
+    }
+    if (crmLinkCol && row[crmLinkCol]) {
+      attendee.crm_link = String(row[crmLinkCol]).trim();
     }
     if (companyTypeCol && row[companyTypeCol]) {
       attendee.company_type = String(row[companyTypeCol]).trim();

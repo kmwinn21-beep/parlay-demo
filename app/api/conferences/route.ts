@@ -665,6 +665,7 @@ export async function POST(request: NextRequest) {
         const companyTypeMap = new Map<string, string>(); // company name -> company_type from file
         const companyAssignedUserMap = new Map<string, string>(); // company name -> assigned_user from file
         const companyWebsiteMap = new Map<string, string>(); // company name -> website from file
+        const companyCrmLinkMap = new Map<string, string>(); // company name -> CRM link from file
         const companyWseMap = new Map<string, number>(); // company name -> wse from file
         const companyServicesMap = new Map<string, string>(); // company name -> services from file
         const companyIcpMap = new Map<string, string>(); // company name -> icp from file
@@ -684,6 +685,9 @@ export async function POST(request: NextRequest) {
             }
             if (p.website?.trim() && !companyWebsiteMap.has(p.company.trim())) {
               companyWebsiteMap.set(p.company.trim(), p.website.trim());
+            }
+            if (p.crm_link?.trim() && !companyCrmLinkMap.has(p.company.trim())) {
+              companyCrmLinkMap.set(p.company.trim(), p.crm_link.trim());
             }
             if (p.wse?.trim() && !companyWseMap.has(p.company.trim())) {
               const wseVal = parseInt(p.wse.trim(), 10);
@@ -786,6 +790,7 @@ export async function POST(request: NextRequest) {
                 company_type = COALESCE(?, company_type),
                 assigned_user = COALESCE(?, assigned_user),
                 website = COALESCE(?, website),
+                crm_link = COALESCE(?, crm_link),
                 wse = COALESCE(?, wse),
                 services = COALESCE(?, services),
                 hq_state = COALESCE(?, hq_state),
@@ -793,7 +798,7 @@ export async function POST(request: NextRequest) {
                 entity_structure = COALESCE(?, entity_structure)
                 WHERE id = ?`,
               args: [
-                companyTypeMap.get(n) || null, assignedUserArg, companyWebsiteMap.get(n) || null, companyWseMap.get(n) ?? null, companyServicesMap.get(n) || null,
+                companyTypeMap.get(n) || null, assignedUserArg, companyWebsiteMap.get(n) || null, companyCrmLinkMap.get(n) || null, companyWseMap.get(n) ?? null, companyServicesMap.get(n) || null,
                 companyHqStateMap.get(n) || null, companyTerritoryIdMap.get(n) ?? null, companyEntityStructureMap.get(n) || null,
                 coId,
               ],
@@ -808,14 +813,15 @@ export async function POST(request: NextRequest) {
             const detectedType = companyTypeMap.get(n) || classifyCompanyType(n, companyTypeOptions);
             const assignedUser = companyAssignedUserMap.get(n) || null;
             const website = companyWebsiteMap.get(n) || null;
+            const crmLink = companyCrmLinkMap.get(n) || null;
             const wse = companyWseMap.get(n) ?? null;
             const services = companyServicesMap.get(n) || null;
             const hqState = companyHqStateMap.get(n) || null;
             const territoryId = companyTerritoryIdMap.get(n) ?? null;
             const entityStructure = companyEntityStructureMap.get(n) || null;
             return {
-              sql: 'INSERT INTO companies (name, company_type, assigned_user, website, wse, services, hq_state, territory_id, entity_structure) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
-              args: [n, detectedType || null, assignedUser, website, wse, services, hqState, territoryId, entityStructure],
+              sql: 'INSERT INTO companies (name, company_type, assigned_user, website, crm_link, wse, services, hq_state, territory_id, entity_structure) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+              args: [n, detectedType || null, assignedUser, website, crmLink, wse, services, hqState, territoryId, entityStructure],
             };
           });
           for (let i = 0; i < newCoNames.length; i++) {
