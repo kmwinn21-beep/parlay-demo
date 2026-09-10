@@ -472,19 +472,23 @@ export function FloatingNav() {
           </button>
 
 
-          {/* Submenu items — anchored to this whole row's own left edge (= Intelligence
-              button's left edge), which keeps it clear of the main floating nav menu
-              (anchored near the header mark, to the right) without running off the left edge
-              of narrow mobile viewports. Always in DOM so closing can animate out,
-              same as the main menu. */}
+          {/* Submenu items — DOWNWARD from the Intelligence pill.
+              They used to stack upward, which was right when the trigger floated
+              near the bottom of the screen. The trigger is now the header mark at
+              the very top, so upward put them off-screen behind the status bar
+              and made them impossible to tap.
+              Anchored to this row's own left edge (= the Intelligence button's),
+              which keeps them clear of the main menu falling on the right and off
+              the left edge of a narrow viewport. Always in DOM so closing can
+              animate out, same as the main menu. */}
           <div
             style={{
               position: 'absolute',
-              bottom: '100%',
+              top: '100%',
               left: 0,
-              marginBottom: 6,
+              marginTop: 6,
               display: 'flex',
-              flexDirection: 'column-reverse',
+              flexDirection: 'column',
               gap: 6,
               pointerEvents: intelOpen ? 'auto' : 'none',
             }}
@@ -500,7 +504,7 @@ export function FloatingNav() {
                       ? `opacity 0.26s cubic-bezier(0.34,1.56,0.64,1) ${openDelay}ms, transform 0.26s cubic-bezier(0.34,1.56,0.64,1) ${openDelay}ms`
                       : `opacity 0.16s cubic-bezier(0.4,0,1,1) ${closeDelay}ms, transform 0.16s cubic-bezier(0.4,0,1,1) ${closeDelay}ms`,
                     opacity: intelOpen ? 1 : 0,
-                    transform: intelOpen ? 'translateY(0) scale(1)' : 'translateY(10px) scale(0.88)',
+                    transform: intelOpen ? 'translateY(0) scale(1)' : 'translateY(-10px) scale(0.88)',
                   }}
                 >
                   <Link

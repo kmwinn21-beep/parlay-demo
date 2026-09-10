@@ -363,6 +363,35 @@ console.log('\n— bottom-sheet modals stop at the header —');
   // centred at 839px, unchanged.
 }
 
+console.log('\n— the Intelligence submenu opens downward —');
+{
+  const nav = readFileSync('components/FloatingNav.tsx', 'utf8');
+  // The block that positions the submenu, not the pill row it sits in.
+  const sub = nav.slice(nav.indexOf('Submenu items'), nav.indexOf('INTEL_ITEMS.map'));
+  eq('the submenu block was found', sub.length > 200, true);
+
+  // It stacked upward from a trigger that used to float near the bottom of the
+  // screen. The trigger is the header mark now, so upward put it off-screen
+  // behind the status bar and out of reach.
+  eq('it hangs below its pill', /top: '100%'/.test(sub), true);
+  eq('  not above it', /bottom: '100%'/.test(sub), false);
+  eq('  and stacks in reading order', /flexDirection: 'column'/.test(sub), true);
+  eq('  not reversed', /flexDirection: 'column-reverse'/.test(sub), false);
+  eq('  with the gap below the pill', /marginTop: 6/.test(sub), true);
+
+  // The entry motion has to match the direction it opens, or the items slide
+  // up into place while the list grows down.
+  eq('the items fall in from above',
+    nav.includes("'translateY(-10px) scale(0.88)'"), true);
+
+  // Anchored left so it clears the main menu, which falls on the right.
+  eq('anchored to the pill row\'s left edge', /left: 0,/.test(sub), true);
+
+  // Measured in Chromium at 430px: pill bottom 64; the three items at 70, 118
+  // and 166, all on screen, all hit-testable, left edge 187 against the main
+  // menu's 268.
+}
+
 console.log('\n— the status bar matches the header —');
 {
   // The strip above the header is not styled by the header. On iOS it comes
