@@ -1184,6 +1184,8 @@ export interface ParsedAttendee {
   function?: string;
   product?: string;
   consent?: string;
+  /** Company-level: the company's record in the CRM. */
+  crm_link?: string;
   /** Stand-in row from a company-only upload — see ColumnMapping.company_only. */
   is_placeholder?: boolean;
 }

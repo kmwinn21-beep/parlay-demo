@@ -81,7 +81,7 @@ export async function POST(
     // Load existing records (read-only — no DB writes in this route)
     const [existingCoRes, existingAtRes] = await Promise.all([
       db.execute({
-        sql: 'SELECT id, name, website, parent_company_id, company_type, wse FROM companies',
+        sql: 'SELECT id, name, website, crm_link, parent_company_id, company_type, wse FROM companies',
         args: [],
       }),
       db.execute({
@@ -93,13 +93,14 @@ export async function POST(
     ]);
 
     type CoRow = {
-      id: number; name: string; website?: string | null;
+      id: number; name: string; website?: string | null; crm_link?: string | null;
       parent_company_id?: number | null; company_type?: string | null; wse?: number | null;
     };
     const existingCompanies: CoRow[] = existingCoRes.rows.map((r) => ({
       id: Number(r.id),
       name: String(r.name ?? ''),
       website: r.website ? String(r.website) : null,
+      crm_link: r.crm_link ? String(r.crm_link) : null,
       parent_company_id: r.parent_company_id ? Number(r.parent_company_id) : null,
       company_type: r.company_type ? String(r.company_type) : null,
       wse: r.wse != null ? Number(r.wse) : null,
@@ -170,6 +171,7 @@ export async function POST(
       const coRows = valid.filter(q => q.company?.trim() === coName);
       const proposedType = coRows.find(q => q.company_type?.trim())?.company_type?.trim() ?? null;
       const proposedWebsite = coRows.find(q => q.website?.trim())?.website?.trim() ?? null;
+      const proposedCrmLink = coRows.find(q => q.crm_link?.trim())?.crm_link?.trim() ?? null;
       const rawWse = coRows.find(q => q.wse?.trim())?.wse?.trim() ?? null;
       const proposedWse = rawWse ? (parseInt(rawWse, 10) || null) : null;
 
@@ -190,6 +192,7 @@ export async function POST(
 
       checkCo('company_type', existing.company_type, proposedType);
       checkCo('website', existing.website, proposedWebsite);
+      checkCo('crm_link', existing.crm_link, proposedCrmLink);
       checkCo('wse', existing.wse, proposedWse);
     }
 

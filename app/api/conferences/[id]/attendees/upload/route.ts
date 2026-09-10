@@ -478,6 +478,8 @@ export async function POST(
       name: string;
       email?: string;
       website?: string;
+      /** Company-level, from the CRM Link column — see lib/columnMapping.ts. */
+      crm_link?: string;
       company_type?: string;
       assigned_user?: string;
       assigned_user_supplied?: boolean;
@@ -508,6 +510,7 @@ export async function POST(
             name: coName,
             email: p.email?.trim(),
             website: p.website?.trim(),
+            crm_link: p.crm_link?.trim(),
             company_type: p.company_type?.trim(),
             assigned_user: resolvedAssigned ?? undefined,
             assigned_user_supplied: Boolean(rawAssigned),
@@ -524,6 +527,7 @@ export async function POST(
           const existing = companyEntries.get(coName)!;
           if (!existing.email && p.email?.trim()) existing.email = p.email.trim();
           if (!existing.website && p.website?.trim()) existing.website = p.website.trim();
+          if (!existing.crm_link && p.crm_link?.trim()) existing.crm_link = p.crm_link.trim();
           if (!existing.company_type && p.company_type?.trim()) existing.company_type = p.company_type.trim();
           if (!existing.hqState && p.state?.trim()) existing.hqState = p.state.trim();
           if (!existing.assigned_user) {
@@ -690,7 +694,7 @@ export async function POST(
     // Update existing matched companies with CSV-provided fields
     const existingToUpdate = Array.from(companyEntries.entries()).filter(([n, entry]) => {
       const id = companyIdCache.get(n);
-      return id !== undefined && id > 0 && (entry.company_type || entry.assigned_user || entry.website || entry.wse || entry.services || entry.hqState || entry.entityStructure || entry.territoryId != null);
+      return id !== undefined && id > 0 && (entry.company_type || entry.assigned_user || entry.website || entry.crm_link || entry.wse || entry.services || entry.hqState || entry.entityStructure || entry.territoryId != null);
     });
     if (existingToUpdate.length > 0) {
       const updateStmts: { sql: string; args: (string | number | null)[] }[] = [];
@@ -715,6 +719,7 @@ export async function POST(
 
         addCoField('company_type', 'company_type', entry.company_type || null);
         addCoField('website', 'website', entry.website || null);
+        addCoField('crm_link', 'crm_link', entry.crm_link || null);
         addCoField('wse', 'wse', entry.wse ?? null);
         addCoField('industry', 'industry', entry.industry || null);
         addCoField('hq_state', 'hq_state', entry.hqState || null);
@@ -788,13 +793,14 @@ export async function POST(
         const assignedUser = entry.assigned_user || null;
         const wse = entry.wse ?? null;
         const services = entry.services || null;
+        const crmLink = entry.crm_link || null;
         const industry = entry.industry || null;
         const hqState = entry.hqState || null;
         const entityStructure = entry.entityStructure || null;
         const territoryId = entry.territoryId ?? null;
         return {
-          sql: 'INSERT INTO companies (name, company_type, website, assigned_user, wse, services, industry, hq_state, entity_structure, territory_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
-          args: [n, detectedType || null, website, assignedUser, wse, services, industry, hqState, entityStructure, territoryId],
+          sql: 'INSERT INTO companies (name, company_type, website, crm_link, assigned_user, wse, services, industry, hq_state, entity_structure, territory_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+          args: [n, detectedType || null, website, crmLink, assignedUser, wse, services, industry, hqState, entityStructure, territoryId],
         };
       });
       for (let i = 0; i < newCoNames.length; i++) {
