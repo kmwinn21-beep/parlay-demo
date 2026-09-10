@@ -4375,7 +4375,7 @@ export default function ConferenceDetailPage() {
                   placeholder attendee exactly as a Companies Only upload does. */}
               <div className="flex items-center gap-1.5 mb-3">
                 {([
-                  [false, 'Person'],
+                  [false, 'Attendee'],
                   [true, 'Company only'],
                 ] as const).map(([mode, label]) => (
                   <button
