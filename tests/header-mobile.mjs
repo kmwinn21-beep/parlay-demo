@@ -20,6 +20,7 @@
  * Exits non-zero on the first failing expectation, so it can gate a build.
  */
 import { existsSync, readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 
 let pass = 0;
 let fail = 0;
@@ -413,6 +414,55 @@ console.log('\n— the status bar matches the header —');
   // The splash background, distinct from the status bar but the same colour
   // here so the app does not flash a different navy while it loads.
   eq('  as does the splash background', manifest.background_color, FILL);
+}
+
+// ── Every mobile drawer clears the status bar ────────────────────────────────
+
+console.log('\n— both drawer shapes stop at the header —');
+{
+  // Drawers come in two shapes and only one was handled. A panel that sets its
+  // own `fixed bottom-0 left-0 right-0` is top-anchored to the header. The
+  // rest — nine `relative` flex children of a `fixed inset-0 flex items-end`
+  // parent, plus a few `inset-x-0` variants — matched nothing, kept their
+  // h-[90vh], and ran over the status bar. On the global search quick view
+  // that put the close button under the clock, with no way to shut it.
+  //
+  // Measured in Chromium at 390px: with a 59px inset the quick view's top edge
+  // moved from 84px to 144px, which is exactly the header's bottom edge; the
+  // same held at 47px and at 0.
+  eq('the anchored shape still anchors to the header',
+    /\.drawer-mobile-responsive\.fixed\.bottom-0\.left-0\.right-0\s*\{[^}]*top:\s*var\(--mobile-header-h\)/
+      .test(cssNoComments), true);
+  eq('  and the rest are capped to the space below it',
+    /\.drawer-mobile-responsive:not\(\.left-0\)\s*\{[^}]*max-height:\s*calc\(100dvh\s*-\s*var\(--mobile-header-h\)\)/
+      .test(cssNoComments), true);
+  eq('  with a vh fallback for browsers without dvh',
+    /\.drawer-mobile-responsive:not\(\.left-0\)\s*\{[^}]*max-height:\s*calc\(100vh\s*-\s*var\(--mobile-header-h\)\)/
+      .test(cssNoComments), true);
+
+  // The two rules partition on `left-0`, so each drawer is handled once. If a
+  // drawer ever carried left-0 without the rest of the anchored shape it would
+  // fall through both — this is the assertion that would catch it.
+  const drawerFiles = execSync(
+    "grep -rl 'drawer-mobile-responsive' --include='*.tsx' components/ app/", { encoding: 'utf8' },
+  ).trim().split('\n').filter(Boolean);
+  let unhandled = 0;
+  for (const f of drawerFiles) {
+    for (const cls of readFileSync(f, 'utf8').matchAll(/drawer-mobile-responsive[^'"`]*/g)) {
+      const s = cls[0];
+      const anchored = /\bfixed\b/.test(s) && /\bbottom-0\b/.test(s) && /\bleft-0\b/.test(s) && /\bright-0\b/.test(s);
+      if (/\bleft-0\b/.test(s) && !anchored) unhandled++;
+    }
+  }
+  eq('no drawer carries left-0 without the full anchored shape', unhandled, 0);
+
+  // The drawer this was reported on.
+  const quickView = readFileSync('components/QuickViewDrawer.tsx', 'utf8');
+  eq('the global search quick view is the capped shape',
+    /drawer-mobile-responsive relative/.test(quickView) && !/drawer-mobile-responsive[^'"`]*\bleft-0\b/.test(quickView),
+    true);
+  eq('  and its parent still bottom-aligns it, so the cap moves its top edge',
+    /fixed inset-0[^'"`]*items-end/.test(quickView), true);
 }
 
 // ── Toasts clear the status bar ──────────────────────────────────────────────
