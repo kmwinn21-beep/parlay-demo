@@ -364,6 +364,31 @@ h1, h2, h3 {
     top: var(--mobile-header-h);
     height: auto;
   }
+
+  /*
+   * The same clearance for the drawers that are NOT positioned themselves.
+   *
+   * The rule above only reaches a panel that sets its own `fixed bottom-0
+   * left-0 right-0`. Nine drawers — the global search quick view among them —
+   * are instead a `relative` flex child of a `fixed inset-0 flex items-end`
+   * parent, and a few more use `inset-x-0` rather than left-0/right-0. None of
+   * those matched, so they kept their `h-[90vh]` and ran over the status bar:
+   * on the quick view that puts its close button under the clock, with no way
+   * to shut it.
+   *
+   * They cannot be top-anchored — they are not positioned — so the height is
+   * capped to the space below the header instead. The parent aligns them to
+   * the bottom edge, so a capped height lands the top edge in the same place
+   * the anchored drawers land theirs.
+   *
+   * Keyed off `left-0`, which is exactly what the rule above requires and
+   * nothing else here carries — so each drawer is handled once, by whichever
+   * rule fits its shape, and adding a drawer of either shape needs no change.
+   */
+  .drawer-mobile-responsive:not(.left-0) {
+    max-height: calc(100vh - var(--mobile-header-h));
+    max-height: calc(100dvh - var(--mobile-header-h));
+  }
 }
 
 /**
