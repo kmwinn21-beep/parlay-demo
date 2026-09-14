@@ -19,6 +19,7 @@ import {
   matchAttendee,
   confirmAttendeeMatch,
   deepNormalizeCompanyName,
+  collapseNewCompanyNames,
   extractDomainFromWebsite,
   identityConflictField,
 } from '@/lib/matching';
@@ -772,19 +773,7 @@ export async function POST(
     // information, where taking whichever appeared first would have named this
     // one "Sage".
     const allNew = Array.from(companyEntries.keys()).filter((n) => companyIdCache.get(n) === -1);
-    const canonicalByKey = new Map<string, string>();
-    for (const n of allNew) {
-      const key = deepNormalizeCompanyName(n) || n.toLowerCase().trim();
-      const current = canonicalByKey.get(key);
-      if (!current || n.trim().length > current.trim().length) canonicalByKey.set(key, n);
-    }
-    const newCoNames = Array.from(canonicalByKey.values());
-    const aliasOf = new Map<string, string>();
-    for (const n of allNew) {
-      const key = deepNormalizeCompanyName(n) || n.toLowerCase().trim();
-      const canonical = canonicalByKey.get(key)!;
-      if (canonical !== n) aliasOf.set(n, canonical);
-    }
+    const { canonical: newCoNames, aliasOf } = collapseNewCompanyNames(allNew);
     if (newCoNames.length > 0) {
       const results = await batchInsert(db, newCoNames, (n) => {
         const entry = companyEntries.get(n)!;

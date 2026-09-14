@@ -222,6 +222,68 @@ export function identityConflictField(normalizedUploadName: string): string {
 }
 
 /**
+ * Collapse spellings of the same company that are all new to this account.
+ *
+ * ── Why this is separate from matchCompany ───────────────────────────────────
+ *
+ * matchCompany compares an uploaded name against companies that ALREADY exist.
+ * It has nothing to say about two names in the same file that are both new:
+ * neither is in the database, so neither matches, and both get created. A list
+ * carrying "Direct Supply", "Direct supply", "Direct Supply Inc." and "Direct
+ * Supply, Inc." produced four company records, which somebody then had to
+ * merge by hand.
+ *
+ * ── The key ──────────────────────────────────────────────────────────────────
+ *
+ * normalizeCompanyName, NOT deepNormalizeCompanyName. The deep one also strips
+ * filler words — group, holdings, management, services, partners, advisors,
+ * consulting, us, international — and on a real 2,647-row conference list that
+ * merged three plainly different firms into one: "Healthcare Services Group",
+ * "US Healthcare" and "Healthcare Management Partners" all reduce to
+ * "healthcare". "Senior Management Advisors" and "Senior Consulting, LLC" both
+ * reduce to "senior".
+ *
+ * A missed merge is a minute of a rep's time and the Merge tool is right
+ * there. A wrong merge files one company's attendees under another, and there
+ * is no unmerge. So the key stops at what cannot be argued with: case, legal
+ * suffixes, `&` vs `and`, stray punctuation and whitespace. On that same list
+ * it collapsed 56 groups — 64 duplicate records — with no wrong merges, where
+ * the deep key found 16 more and got two of them wrong.
+ *
+ * ── The canonical name ───────────────────────────────────────────────────────
+ *
+ * The longest spelling wins: it carries the most information, where taking
+ * whichever appeared first would have named the company "Gardant" rather than
+ * "Gardant Management Solutions". Ties keep the first seen, so the result
+ * depends only on the file's own order.
+ */
+export function collapseNewCompanyNames(names: readonly string[]): {
+  /** One name per real company — what to insert. */
+  canonical: string[];
+  /** Every other spelling, pointing at the canonical one it belongs to. */
+  aliasOf: Map<string, string>;
+} {
+  // An all-punctuation name normalises to nothing; fall back to its own text
+  // so two different such names don't collapse into each other.
+  const keyOf = (n: string) => normalizeCompanyName(n) || n.toLowerCase().trim();
+
+  const canonicalByKey = new Map<string, string>();
+  for (const n of names) {
+    const key = keyOf(n);
+    const current = canonicalByKey.get(key);
+    if (!current || n.trim().length > current.trim().length) canonicalByKey.set(key, n);
+  }
+
+  const aliasOf = new Map<string, string>();
+  for (const n of names) {
+    const canonical = canonicalByKey.get(keyOf(n))!;
+    if (canonical !== n) aliasOf.set(n, canonical);
+  }
+
+  return { canonical: Array.from(canonicalByKey.values()), aliasOf };
+}
+
+/**
  * Multi-stage company matching:
  *  1. Exact match on raw lowercase name
  *  2. Exact match on normalised name (strips LLC, Inc, etc.)

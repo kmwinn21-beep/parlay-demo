@@ -16,6 +16,7 @@ import {
   matchAttendee,
   confirmAttendeeMatch,
   deepNormalizeCompanyName,
+  collapseNewCompanyNames,
   extractDomainFromWebsite,
 } from '@/lib/matching';
 import { computeConferenceStage, type ConferenceStage } from '@/lib/conference-stage';
@@ -807,7 +808,12 @@ export async function POST(request: NextRequest) {
         }
 
         // ── Step 3b: Batch-insert new companies ──
-        const newCoNames = uniqueCompanyNames.filter((n) => companyIdCache.get(n) === -1);
+        // Spellings of the same NEW company are collapsed to one record
+        // before insert — this route used to create one company per distinct
+        // string, so "Direct Supply" and "Direct Supply, Inc." in the same
+        // file became two. See collapseNewCompanyNames.
+        const allNewCoNames = uniqueCompanyNames.filter((n) => companyIdCache.get(n) === -1);
+        const { canonical: newCoNames, aliasOf: coAliasOf } = collapseNewCompanyNames(allNewCoNames);
         if (newCoNames.length > 0) {
           const results = await batchInsert(db, newCoNames, (n) => {
             const detectedType = companyTypeMap.get(n) || classifyCompanyType(n, companyTypeOptions);
@@ -828,6 +834,12 @@ export async function POST(request: NextRequest) {
             const id = Number(results[i]?.rows[0]?.id ?? 0);
             if (id > 0) companyIdCache.set(newCoNames[i], id);
           }
+          // Every other spelling resolves to the record that was written, so
+          // attendees on those rows land on the same company.
+          coAliasOf.forEach((canonical, alias) => {
+            const id = companyIdCache.get(canonical);
+            if (id && id > 0) companyIdCache.set(alias, id);
+          });
         }
         if (bgJobId) await db.execute({ sql: 'UPDATE upload_jobs SET processed_rows=? WHERE id=?', args: [Math.round(valid.length * 0.2), bgJobId] }).catch(() => {});
 
