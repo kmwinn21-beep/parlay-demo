@@ -92,7 +92,7 @@ export function suggestMapping(headers: string[]): ColumnMapping {
     website:       findColumn(forWebsite, ...WEBSITE_ALIASES),
     company_type:  findColumn(headers, 'company_type', 'company type', 'registration_type', 'registration type', 'reg_type', 'reg type', 'attendee_type', 'attendee type', 'type'),
     assigned_user: findColumn(headers, 'assigned_user', 'assigned user', 'salesforce_owner', 'salesforce owner', 'sf_owner', 'sf owner', 'account_owner', 'account owner', 'owner', 'rep', 'sales_rep', 'sales rep', 'account_rep', 'account rep', 'sales_representative', 'sales representative', 'account_manager', 'account manager'),
-    state:         findColumn(headers, 'state', 'hq_state', 'hq state', 'headquarters_state', 'headquarters state', 'company_state', 'company state', 'state_province', 'state/province', 'state_or_province', 'st'),
+    state:         findHqStateColumn(headers),
     wse:           findColumn(headers, 'wse', 'wses', 'units', 'fte', 'ftes', 'employee_count', 'employee count', 'number_of_employees', 'number of employees', '# of employees', 'num_employees', 'num employees', 'employees', 'headcount', 'head_count', 'head count', 'staff_count', 'staff count', 'workforce', 'workforce_size', 'workforce size', 'worksite_employees', 'worksite employees', 'worksite_employee_count', 'worksite employee count', 'total_employees', 'total employees', 'employee_size', 'employee size', 'company_size', 'company size', 'ee_count', 'ee count', 'no_of_employees', 'no of employees', 'number_employees', 'number employees'),
     services:      findColumn(headers, 'services', 'care_settings', 'care settings', 'care_types', 'care types', 'services_provided', 'services provided', 'community_type', 'community type', 'service_type', 'service type', 'service_types', 'service types', 'care_type', 'care type', 'level_of_care', 'level of care', 'levels_of_care', 'levels of care', 'care_level', 'care level', 'care_levels', 'care levels', 'service_offering', 'service offering', 'service_offerings', 'service offerings', 'setting', 'settings', 'care_setting', 'care setting'),
     icp:           findColumn(headers, 'icp', 'ideal_customer_profile', 'ideal customer profile', 'is_icp', 'is icp'),
@@ -178,6 +178,65 @@ function parseRowsWithMapping(rows: Record<string, unknown>[], mapping: ColumnMa
   return attendees;
 }
 
+/**
+ * Which column is the company's HEADQUARTERS state.
+ *
+ * ── Why this field gets its own resolver ─────────────────────────────────────
+ *
+ * It is not just another label. hq_state is the last tier of rep assignment:
+ * when nothing else matches, the company is handed to whichever rep owns the
+ * territory covering that state. So a wrong value here does not sit quietly in
+ * a column — it puts an account on somebody's name.
+ *
+ * Alias matching is substring-based, and on this field that was wrong three
+ * ways at once. Measured on a real 2,647-row conference list:
+ *
+ *   • `st` matched "First Name" (f-i-r-**st**-name), so a file with no state
+ *     column at all mapped HQ State to the attendee's first name.
+ *   • `state` matched "Real Estate" — e-**state** — which in this industry is
+ *     not a hypothetical column.
+ *   • "Work State/Prov." matched, so an ATTENDEE's own work address became the
+ *     COMPANY's headquarters. Berkadia ended up filed in Alabama because one
+ *     of its people sits there, and 618 of 1,109 companies were handed a rep
+ *     by territory off the back of it — with an empty master account list and
+ *     no rep column in the file.
+ *
+ * ── The rule ─────────────────────────────────────────────────────────────────
+ *
+ * Tokens, not substrings: a header qualifies only if one of its words IS a
+ * state word. "Real Estate" has no such token; "State/Province" does.
+ *
+ * Then scope decides. A header that names the company wins outright. A header
+ * that names a person or an address type is refused outright — it is somebody's
+ * desk, not the company's headquarters. Anything else (a bare "State") is
+ * taken at face value.
+ *
+ * Refused is not lost: the field still appears in the mapping modal, so anyone
+ * who really does mean that column can point at it themselves. What is gone is
+ * the silent guess.
+ */
+const STATE_TOKENS = ['prov', 'province'];
+const COMPANY_SCOPE_TOKENS = ['company', 'hq', 'headquarters', 'corporate'];
+const PERSON_SCOPE_TOKENS = [
+  'work', 'attendee', 'contact', 'personal', 'home', 'mailing', 'billing',
+  'shipping', 'delegate', 'registrant', 'speaker', 'exhibitor',
+];
+
+function findHqStateColumn(headers: string[]): string | null {
+  const candidates = headers
+    .map((header) => ({ header, tokens: normalizeHeader(header).split('_').filter(Boolean) }))
+    // `startsWith` rather than equality so "state_province" and "stateprov"
+    // still qualify; `st` only as a whole token, never as a fragment.
+    .filter(({ tokens }) => tokens.some(
+      (t) => t.startsWith('state') || t === 'st' || STATE_TOKENS.includes(t)));
+
+  const companyScoped = candidates.find(c => c.tokens.some(t => COMPANY_SCOPE_TOKENS.includes(t)));
+  if (companyScoped) return companyScoped.header;
+
+  const unscoped = candidates.find(c => !c.tokens.some(t => PERSON_SCOPE_TOKENS.includes(t)));
+  return unscoped?.header ?? null;
+}
+
 function normalizeHeader(header: string): string {
   return header.toLowerCase().trim().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
 }
@@ -215,7 +274,7 @@ function parseRows(rows: Record<string, unknown>[]): ParsedAttendee[] {
   const websiteCol = findColumn(headers.filter(h => !claimedCols.has(h)), ...WEBSITE_ALIASES);
   const companyTypeCol = findColumn(headers, 'company_type', 'company type', 'registration_type', 'registration type', 'reg_type', 'reg type', 'attendee_type', 'attendee type', 'type');
   const assignedUserCol = findColumn(headers, 'assigned_user', 'assigned user', 'salesforce_owner', 'salesforce owner', 'sf_owner', 'sf owner', 'account_owner', 'account owner', 'owner', 'rep', 'sales_rep', 'sales rep', 'account_rep', 'account rep', 'sales_representative', 'sales representative', 'account_manager', 'account manager');
-  const stateCol = findColumn(headers, 'state', 'hq_state', 'hq state', 'headquarters_state', 'headquarters state', 'company_state', 'company state', 'state_province', 'state/province', 'state_or_province', 'st');
+  const stateCol = findHqStateColumn(headers);
   const wseCol = findColumn(headers, 'wse', 'wses', 'units', 'fte', 'ftes', 'employee_count', 'employee count', 'number_of_employees', 'number of employees', '# of employees', 'num_employees', 'num employees', 'employees', 'headcount', 'head_count', 'head count', 'staff_count', 'staff count', 'workforce', 'workforce_size', 'workforce size', 'worksite_employees', 'worksite employees', 'worksite_employee_count', 'worksite employee count', 'total_employees', 'total employees', 'employee_size', 'employee size', 'company_size', 'company size', 'ee_count', 'ee count', 'no_of_employees', 'no of employees', 'number_employees', 'number employees');
   const servicesCol = findColumn(headers, 'services', 'care_settings', 'care settings', 'care_types', 'care types', 'services_provided', 'services provided', 'community_type', 'community type', 'service_type', 'service type', 'service_types', 'service types', 'care_type', 'care type', 'level_of_care', 'level of care', 'levels_of_care', 'levels of care', 'care_level', 'care level', 'care_levels', 'care levels', 'service_offering', 'service offering', 'service_offerings', 'service offerings', 'setting', 'settings', 'care_setting', 'care setting');
   const icpCol = findColumn(headers, 'icp', 'ideal_customer_profile', 'ideal customer profile', 'is_icp', 'is icp');
