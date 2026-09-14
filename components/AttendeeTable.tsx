@@ -27,6 +27,7 @@ import { shouldWarnForTitleMetadata, type TitleMatchMetadata } from '@/lib/title
 import { ClassifyTitleModal } from './ClassifyTitleModal';
 import { BulkClassifyTitlesModal } from './BulkClassifyTitlesModal';
 import { attendeeDisplayName, isPlaceholderAttendee } from '@/lib/attendeeDisplay';
+import { BULK_CLEAR, BULK_CLEAR_LABEL, bulkFieldValue } from '@/lib/bulkEdit';
 
 const COMPETITOR_TYPE_DEFS: Record<string, string> = {
   'Direct': 'Offers the same core product or service to the same buyer profile.',
@@ -385,24 +386,34 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
 
   const handleMassEdit = async () => {
     const fields: Record<string, string | number | null> = {};
-    if (massEditFields.status) fields.status = massEditFields.status;
-    if (massEditFields.seniority) fields.seniority = massEditFields.seniority;
-    if (massEditFields.company_id) fields.company_id = parseInt(massEditFields.company_id);
+    // undefined leaves the field out of the payload entirely; null is sent and
+    // empties it. See lib/bulkEdit.ts — the routes already read it that way.
+    const status = bulkFieldValue(massEditFields.status);
+    const seniority = bulkFieldValue(massEditFields.seniority);
+    const companyId = bulkFieldValue(massEditFields.company_id);
+    if (status !== undefined) fields.status = status;
+    if (seniority !== undefined) fields.seniority = seniority;
+    if (companyId !== undefined) fields.company_id = companyId === null ? null : parseInt(companyId);
     if (massEditFields.consent) fields.consent = massEditFields.consent;
     if (Object.keys(fields).length === 0) { toast.error('Select at least one field to change.'); return; }
     setIsApplying(true);
     // Optimistic update — reflect changes immediately
     const snapshot = localAttendees;
-    const newCompanyId = massEditFields.company_id ? parseInt(massEditFields.company_id) : undefined;
-    const newCompanyName = newCompanyId != null
-      ? companies.find(c => c.id === newCompanyId)?.name
-      : undefined;
+    // Mirror the same three states locally, so a clear shows as empty rather
+    // than sitting unchanged until the refetch lands.
+    const newCompanyId = companyId === undefined ? undefined
+      : companyId === null ? null : parseInt(companyId);
     setLocalAttendees(prev => prev.map(a => {
       if (!selectedIds.has(a.id)) return a;
       const updated = { ...a };
-      if (massEditFields.status) updated.status = massEditFields.status;
-      if (massEditFields.seniority) updated.seniority = massEditFields.seniority;
-      if (newCompanyId != null) { updated.company_id = newCompanyId; updated.company_name = newCompanyName; }
+      if (status !== undefined) updated.status = status ?? '';
+      if (seniority !== undefined) updated.seniority = seniority ?? undefined;
+      if (newCompanyId !== undefined) {
+        updated.company_id = newCompanyId ?? undefined;
+        updated.company_name = newCompanyId == null
+          ? undefined
+          : companies.find(c => c.id === newCompanyId)?.name;
+      }
       return updated;
     }));
     setShowMassEdit(false); setMassEditFields({});
@@ -758,6 +769,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
               <label className="label text-xs">Status</label>
               <select value={massEditFields.status || ''} onChange={e => setMassEditFields(p => ({ ...p, status: e.target.value }))} className="input-field w-40 text-sm">
                 <option value="">— no change —</option>
+                <option value={BULK_CLEAR}>{BULK_CLEAR_LABEL}</option>
                 {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
@@ -765,6 +777,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
               <label className="label text-xs">Seniority</label>
               <select value={massEditFields.seniority || ''} onChange={e => setMassEditFields(p => ({ ...p, seniority: e.target.value }))} className="input-field w-48 text-sm">
                 <option value="">— no change —</option>
+                <option value={BULK_CLEAR}>{BULK_CLEAR_LABEL}</option>
                 {seniorityConfigOptions.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
@@ -772,6 +785,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
               <label className="label text-xs">Company</label>
               <select value={massEditFields.company_id || ''} onChange={e => setMassEditFields(p => ({ ...p, company_id: e.target.value }))} className="input-field w-48 text-sm">
                 <option value="">— no change —</option>
+                <option value={BULK_CLEAR}>{BULK_CLEAR_LABEL}</option>
                 {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>

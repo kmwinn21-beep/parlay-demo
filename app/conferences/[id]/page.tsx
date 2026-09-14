@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { attendeeDisplayName, isPlaceholderAttendee } from '@/lib/attendeeDisplay';
+import { BULK_CLEAR, BULK_CLEAR_LABEL, bulkFieldValue } from '@/lib/bulkEdit';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { AnalyticsCharts } from '@/components/AnalyticsCharts';
@@ -1391,10 +1392,16 @@ export default function ConferenceDetailPage() {
     if (selectedAttendeeIds.size === 0 || !conference) return;
     const ids = Array.from(selectedAttendeeIds);
     const fields: Record<string, string | number | null> = {};
-    if (attendeeEditFields.status) fields.status = attendeeEditFields.status;
-    if (attendeeEditFields.seniority) fields.seniority = attendeeEditFields.seniority;
-    if (attendeeEditFields.function) fields.function = attendeeEditFields.function;
-    if (attendeeEditFields.company_id) fields.company_id = parseInt(attendeeEditFields.company_id);
+    // undefined leaves the field out of the payload; null is sent and empties
+    // it. See lib/bulkEdit.ts — the route already reads it that way.
+    const status = bulkFieldValue(attendeeEditFields.status);
+    const seniority = bulkFieldValue(attendeeEditFields.seniority);
+    const fn = bulkFieldValue(attendeeEditFields.function);
+    const companyId = bulkFieldValue(attendeeEditFields.company_id);
+    if (status !== undefined) fields.status = status;
+    if (seniority !== undefined) fields.seniority = seniority;
+    if (fn !== undefined) fields.function = fn;
+    if (companyId !== undefined) fields.company_id = companyId === null ? null : parseInt(companyId);
     if (attendeeEditFields.consent) fields.consent = attendeeEditFields.consent;
     if (Object.keys(fields).length === 0) return;
 
@@ -1406,12 +1413,17 @@ export default function ConferenceDetailPage() {
         attendees: prev.attendees.map(a => {
           if (!selectedAttendeeIds.has(a.id)) return a;
           const updated = { ...a };
-          if (fields.status != null) updated.status = String(fields.status);
-          if (fields.seniority != null) updated.seniority = String(fields.seniority);
+          // `!= null` would have skipped a cleared field, leaving the row
+          // looking unchanged until the next refetch. Presence in `fields` is
+          // what says the field was touched.
+          if ('status' in fields) updated.status = fields.status == null ? '' : String(fields.status);
+          if ('seniority' in fields) updated.seniority = fields.seniority == null ? undefined : String(fields.seniority);
           if ('function' in fields) updated.function = fields.function == null ? undefined : String(fields.function);
-          if (fields.company_id != null) {
-            updated.company_id = Number(fields.company_id);
-            updated.company_name = conferenceCompanies.find(c => c.id === Number(fields.company_id))?.name;
+          if ('company_id' in fields) {
+            updated.company_id = fields.company_id == null ? undefined : Number(fields.company_id);
+            updated.company_name = fields.company_id == null
+              ? undefined
+              : conferenceCompanies.find(c => c.id === Number(fields.company_id))?.name;
           }
           return updated;
         }),
@@ -2336,6 +2348,7 @@ export default function ConferenceDetailPage() {
                     autoFocus
                   >
                     <option value="">Auto-detect</option>
+                    <option value={BULK_CLEAR}>{BULK_CLEAR_LABEL}</option>
                     {seniorityFilterOptions.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </InlineEditRow>
@@ -4230,6 +4243,7 @@ export default function ConferenceDetailPage() {
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Status</p>
                   <select value={attendeeEditFields.status || ''} onChange={e => setAttendeeEditFields(p => ({ ...p, status: e.target.value }))} className="input-field w-36 text-sm">
                     <option value="">— no change —</option>
+                    <option value={BULK_CLEAR}>{BULK_CLEAR_LABEL}</option>
                     {(allConfigOptions.status ?? []).map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
@@ -4244,6 +4258,7 @@ export default function ConferenceDetailPage() {
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Function</p>
                   <select value={attendeeEditFields.function ?? ''} onChange={e => setAttendeeEditFields(p => ({ ...p, function: e.target.value }))} className="input-field w-40 text-sm">
                     <option value="">— no change —</option>
+                    <option value={BULK_CLEAR}>{BULK_CLEAR_LABEL}</option>
                     {(allConfigOptions.function ?? []).map(f => <option key={f} value={f}>{f}</option>)}
                   </select>
                 </div>
@@ -4251,6 +4266,7 @@ export default function ConferenceDetailPage() {
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Company</p>
                   <select value={attendeeEditFields.company_id || ''} onChange={e => setAttendeeEditFields(p => ({ ...p, company_id: e.target.value }))} className="input-field w-48 text-sm">
                     <option value="">— no change —</option>
+                    <option value={BULK_CLEAR}>{BULK_CLEAR_LABEL}</option>
                     {conferenceCompanies.map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
                   </select>
                 </div>

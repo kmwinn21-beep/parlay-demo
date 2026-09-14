@@ -33,6 +33,7 @@ import { BulkAssignOutreachModal } from './BulkAssignOutreachModal';
 import { BulkVendorRelationshipModal } from './BulkVendorRelationshipModal';
 import { RowActionsKebab } from './RowActionsKebab';
 import { useSectionConfig } from '@/lib/useSectionConfig';
+import { BULK_CLEAR, BULK_CLEAR_LABEL, bulkFieldValue } from '@/lib/bulkEdit';
 
 interface Company {
   id: number;
@@ -609,10 +610,19 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
 
   const handleMassEdit = async () => {
     const fields: Record<string, string | null> = {};
-    if (massEditFields.status) fields.status = massEditFields.status;
-    if (massEditFields.company_type) fields.company_type = massEditFields.company_type;
+    // undefined leaves the field out of the payload; null is sent and empties
+    // it. See lib/bulkEdit.ts — the route already reads it that way.
+    const status = bulkFieldValue(massEditFields.status);
+    const companyType = bulkFieldValue(massEditFields.company_type);
+    if (status !== undefined) fields.status = status;
+    if (companyType !== undefined) fields.company_type = companyType;
+    // The two multi-selects need no sentinel: they are untouched while absent,
+    // and deselecting everything leaves an empty value that already means
+    // "none". SF Owner has always cleared this way; Services was the odd one
+    // out, skipped whenever the selection was empty, so it could be set but
+    // never emptied.
     if (massEditFields.assigned_user !== undefined) fields.assigned_user = massEditFields.assigned_user || null;
-    if (massEditFields.services && massEditFields.services.length > 0) fields.services = massEditFields.services.join(',');
+    if (massEditFields.services !== undefined) fields.services = massEditFields.services.join(',') || null;
     if (Object.keys(fields).length === 0) { toast.error('Select at least one field to change.'); return; }
     setIsApplying(true);
     // Optimistic update — reflect changes immediately
@@ -1856,6 +1866,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
               <label className="label text-xs">Status</label>
               <select value={massEditFields.status || ''} onChange={e => setMassEditFields(p => ({ ...p, status: e.target.value }))} className="input-field w-40 text-sm">
                 <option value="">— no change —</option>
+                <option value={BULK_CLEAR}>{BULK_CLEAR_LABEL}</option>
                 {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
@@ -1863,6 +1874,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
               <label className="label text-xs">Company Type</label>
               <select value={massEditFields.company_type || ''} onChange={e => setMassEditFields(p => ({ ...p, company_type: e.target.value }))} className="input-field w-48 text-sm">
                 <option value="">— no change —</option>
+                <option value={BULK_CLEAR}>{BULK_CLEAR_LABEL}</option>
                 {companyTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
