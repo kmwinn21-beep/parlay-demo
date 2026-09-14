@@ -85,3 +85,53 @@ export function evaluateIcpRules(
   if (hasRules && !checkRules(companyValues, rules)) return falseValue;
   return trueValue;
 }
+
+/**
+ * The company types that Admin > ICP Parameters names, if it names any.
+ *
+ * Read from the icp_rules row whose category is 'company_type' — the same
+ * source the Companies table and the social-events RSVP filter already use, so
+ * "an ICP company type" means one thing across the app.
+ *
+ * ── What it is for ───────────────────────────────────────────────────────────
+ *
+ * Rep assignment on upload has a last-resort tier: a company with no rep in
+ * the file and no match in the master account list is handed to whoever owns
+ * the territory covering its HQ state. On a conference list that reaches
+ * everybody — lenders, law firms, product vendors — and fills the assigned-rep
+ * column with accounts nobody is working. Gating that tier on these types
+ * keeps it to the companies the account actually sells to.
+ *
+ * An empty result means the question was never configured, and callers treat
+ * that as "no opinion" rather than "nothing qualifies" — an account that has
+ * not set up ICP keeps the behaviour it had.
+ */
+export function icpCompanyTypes(config: IcpConfig): string[] {
+  const rule = config.rules.find(r => r.category === 'company_type');
+  if (!rule) return [];
+  return rule.conditions.map(c => c.option_value).filter(Boolean);
+}
+
+/**
+ * Whether the territory tier may assign a rep to a company of this type.
+ *
+ * Deliberately permissive in one direction and strict in the other: with no
+ * ICP types configured everything passes, and with them configured a company
+ * whose type is blank or unrecognised does NOT — an unknown type is exactly
+ * the case this is meant to keep out of the rep column.
+ *
+ * Only the territory tier consults this. A master-account domain or name match
+ * is an explicit statement that the account cares about that company, whatever
+ * its type, and is left alone.
+ */
+export function territoryFallbackAllowed(
+  companyType: string | null | undefined,
+  icpTypes: readonly string[],
+): boolean {
+  if (icpTypes.length === 0) return true;
+  const t = (companyType ?? '').trim();
+  if (!t) return false;
+  // A company can carry several comma-separated types; any ICP one qualifies.
+  const own = t.split(',').map(s => s.trim()).filter(Boolean);
+  return own.some(x => icpTypes.some(i => i.toLowerCase() === x.toLowerCase()));
+}

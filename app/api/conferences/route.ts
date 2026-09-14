@@ -8,7 +8,7 @@ import { trackEvent } from '@/lib/trackEvent';
 import { waitUntil } from '@vercel/functions';
 import { sendNotificationEmail } from '@/lib/email';
 import { parseFile, parseFileWithMapping, classifyCompanyType, matchConfigOption, type ColumnMapping } from '@/lib/parsers';
-import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
+import { getIcpConfig, evaluateIcpRules, icpCompanyTypes, territoryFallbackAllowed } from '@/lib/icpRules';
 import {
   buildCompanyMatcher,
   buildAttendeeMatcher,
@@ -16,6 +16,7 @@ import {
   matchAttendee,
   confirmAttendeeMatch,
   deepNormalizeCompanyName,
+  collapseNewCompanyNames,
   extractDomainFromWebsite,
 } from '@/lib/matching';
 import { computeConferenceStage, type ConferenceStage } from '@/lib/conference-stage';
@@ -456,7 +457,7 @@ export async function POST(request: NextRequest) {
         const run = async (bgJobId?: string): Promise<number> => {
         // ── Step 1: Load ALL existing companies and attendees in two queries ──
         const [existingCoRes, existingAtRes, userRows, usersWithConfig] = await Promise.all([
-          db.execute({ sql: 'SELECT id, name, website, parent_company_id, assigned_user, hq_state, wse, services, entity_structure, territory_id FROM companies', args: [] }),
+          db.execute({ sql: 'SELECT id, name, website, parent_company_id, company_type, assigned_user, hq_state, wse, services, entity_structure, territory_id FROM companies', args: [] }),
           db.execute({
             sql: `SELECT a.id, a.first_name, a.last_name, a.email,
                          c.name AS company_name, c.website AS company_website
@@ -600,6 +601,9 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // See the same block in the attendee-list upload route.
+        const icpTypes = icpCompanyTypes(icpConfig);
+
         const territoryByState = new Map<string, number>();
         const territories = await db.execute({ sql: `SELECT state_codes, assigned_user_ids FROM sales_territories`, args: [] });
         for (const terr of territories.rows) {
@@ -617,7 +621,8 @@ export async function POST(request: NextRequest) {
           assignedRepId: number | null;
           assignedRepName: string | null;
         }
-        const resolveMasterAccountRep = (companyNameNormalized: string, domain: string | null, hqState: string | null): MasterRepResolution => {
+        // territoryAllowed gates the last tier only — see territoryFallbackAllowed.
+        const resolveMasterAccountRep = (companyNameNormalized: string, domain: string | null, hqState: string | null, territoryAllowed: boolean): MasterRepResolution => {
           if (domain) {
             const domainMatch = masterByDomain.get(domain.toLowerCase());
             if (domainMatch && domainMatch.assignedRepId !== null) {
@@ -628,7 +633,7 @@ export async function POST(request: NextRequest) {
           if (nameMatch != null && nameMatch.assignedRepId !== null) {
             return { assignedRepId: nameMatch.assignedRepId, assignedRepName: nameMatch.assignedRepName };
           }
-          if (hqState) {
+          if (hqState && territoryAllowed) {
             const terrRepId = territoryByState.get(hqState.toUpperCase());
             if (terrRepId !== undefined) {
               return { assignedRepId: terrRepId, assignedRepName: configIdToDisplayName.get(terrRepId) ?? null };
@@ -645,12 +650,13 @@ export async function POST(request: NextRequest) {
         };
 
         // ── Step 2: Build company lookup (exact + normalised + fuzzy) ──
-        type CoRow = { id: number; name: string; website?: string | null; parent_company_id?: number | null; assigned_user?: string | null; hq_state?: string | null; wse?: number | null; services?: string | null; entity_structure?: string | null; territory_id?: number | null };
+        type CoRow = { id: number; name: string; website?: string | null; parent_company_id?: number | null; company_type?: string | null; assigned_user?: string | null; hq_state?: string | null; wse?: number | null; services?: string | null; entity_structure?: string | null; territory_id?: number | null };
         const existingCompanies: CoRow[] = existingCoRes.rows.map((r) => ({
           id: Number(r.id),
           name: String(r.name ?? ''),
           website: r.website ? String(r.website) : null,
           parent_company_id: r.parent_company_id ? Number(r.parent_company_id) : null,
+          company_type: r.company_type ? String(r.company_type) : null,
           assigned_user: r.assigned_user ? String(r.assigned_user) : null,
           hq_state: r.hq_state ? String(r.hq_state) : null,
           wse: r.wse ? Number(r.wse) : null,
@@ -732,7 +738,16 @@ export async function POST(request: NextRequest) {
             const hasAssignedUser = companyAssignedUserMap.has(coName)
               || (existingCompany?.assigned_user ? existingCompany.assigned_user.split(',').map(s => parseInt(s.trim(), 10)).some(n => !isNaN(n) && n > 0) : false);
             if (!hasAssignedUser) {
-              const resolution = resolveMasterAccountRep(normalizedName, companyDomain, hqState);
+              // The type this company will be filed under — from the file, from
+              // the record it matched, or classified from its name.
+              const effectiveType = companyTypeMap.get(coName)
+                || existingCompany?.company_type
+                || classifyCompanyType(coName, companyTypeOptions)
+                || null;
+              const resolution = resolveMasterAccountRep(
+                normalizedName, companyDomain, hqState,
+                territoryFallbackAllowed(effectiveType, icpTypes),
+              );
               if (resolution.assignedRepId !== null) companyAssignedUserMap.set(coName, String(resolution.assignedRepId));
             }
 
@@ -807,7 +822,12 @@ export async function POST(request: NextRequest) {
         }
 
         // ── Step 3b: Batch-insert new companies ──
-        const newCoNames = uniqueCompanyNames.filter((n) => companyIdCache.get(n) === -1);
+        // Spellings of the same NEW company are collapsed to one record
+        // before insert — this route used to create one company per distinct
+        // string, so "Direct Supply" and "Direct Supply, Inc." in the same
+        // file became two. See collapseNewCompanyNames.
+        const allNewCoNames = uniqueCompanyNames.filter((n) => companyIdCache.get(n) === -1);
+        const { canonical: newCoNames, aliasOf: coAliasOf } = collapseNewCompanyNames(allNewCoNames);
         if (newCoNames.length > 0) {
           const results = await batchInsert(db, newCoNames, (n) => {
             const detectedType = companyTypeMap.get(n) || classifyCompanyType(n, companyTypeOptions);
@@ -828,6 +848,12 @@ export async function POST(request: NextRequest) {
             const id = Number(results[i]?.rows[0]?.id ?? 0);
             if (id > 0) companyIdCache.set(newCoNames[i], id);
           }
+          // Every other spelling resolves to the record that was written, so
+          // attendees on those rows land on the same company.
+          coAliasOf.forEach((canonical, alias) => {
+            const id = companyIdCache.get(canonical);
+            if (id && id > 0) companyIdCache.set(alias, id);
+          });
         }
         if (bgJobId) await db.execute({ sql: 'UPDATE upload_jobs SET processed_rows=? WHERE id=?', args: [Math.round(valid.length * 0.2), bgJobId] }).catch(() => {});
 
