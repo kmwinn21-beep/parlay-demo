@@ -9,6 +9,7 @@ import { waitUntil } from '@vercel/functions';
 import { sendNotificationEmail } from '@/lib/email';
 import { parseFile, parseFileWithMapping, classifyCompanyType, matchConfigOption, type ColumnMapping } from '@/lib/parsers';
 import { getIcpConfig, evaluateIcpRules, icpCompanyTypes, territoryFallbackAllowed } from '@/lib/icpRules';
+import { loadCompanyNameDecisions } from '@/lib/companyNameDecisions';
 import {
   buildCompanyMatcher,
   buildAttendeeMatcher,
@@ -671,6 +672,10 @@ export async function POST(request: NextRequest) {
         const companyTypeMap = new Map<string, string>(); // company name -> company_type from file
         const companyAssignedUserMap = new Map<string, string>(); // company name -> assigned_user from file
         const companyWebsiteMap = new Map<string, string>(); // company name -> website from file
+        // One email per company, purely so matchCompany's domain stage has
+        // something to work with. Without it that stage is skipped and more
+        // names fall through to the fuzzy guess below.
+        const companyEmailMap = new Map<string, string>(); // company name -> an email from file
         const companyCrmLinkMap = new Map<string, string>(); // company name -> CRM link from file
         const companyWseMap = new Map<string, number>(); // company name -> wse from file
         const companyServicesMap = new Map<string, string>(); // company name -> services from file
@@ -692,6 +697,9 @@ export async function POST(request: NextRequest) {
             if (p.website?.trim() && !companyWebsiteMap.has(p.company.trim())) {
               companyWebsiteMap.set(p.company.trim(), p.website.trim());
             }
+            if (p.email?.trim() && !companyEmailMap.has(p.company.trim())) {
+              companyEmailMap.set(p.company.trim(), p.email.trim());
+            }
             if (p.crm_link?.trim() && !companyCrmLinkMap.has(p.company.trim())) {
               companyCrmLinkMap.set(p.company.trim(), p.crm_link.trim());
             }
@@ -712,9 +720,25 @@ export async function POST(request: NextRequest) {
         });
         const uniqueCompanyNames = Array.from(companyNameSet);
 
+        // Only an equality of some kind may bind on its own — the same rule the
+        // attendee-list upload route states and follows. A fuzzy hit is a
+        // guess: "Aspire Senior Living" scores 0.347 against "Jaybird Senior
+        // Living" purely on the shared "Senior Living" tail, a hair under the
+        // 0.35 threshold, and binding it filed four Aspire people under
+        // Jaybird. This route has no conflict step to ask in, so an unanswered
+        // guess becomes a new company — the recoverable outcome.
+        //
+        // Decisions are passed so a pairing somebody already confirmed still
+        // binds (stage 'confirmed' outranks everything) and one they rejected
+        // is skipped rather than re-proposed.
+        const nameDecisions = await loadCompanyNameDecisions(db);
         for (const coName of uniqueCompanyNames) {
-          const hit = matchCompany(coName, existingCompanies, companyMatcher);
-          if (hit) {
+          const hit = matchCompany(
+            coName, existingCompanies, companyMatcher,
+            companyEmailMap.get(coName), companyWebsiteMap.get(coName),
+            nameDecisions,
+          );
+          if (hit && hit.stage !== 'fuzzy') {
             companyIdCache.set(coName, hit.match.id);
           } else {
             companyIdCache.set(coName, -1); // new company
