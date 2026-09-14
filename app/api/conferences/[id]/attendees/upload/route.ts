@@ -10,7 +10,7 @@ import { getDb } from '@/lib/getDb';
 import { createNotifications, getConfigIdByEmail } from '@/lib/notifications';
 import type { Client } from '@libsql/client';
 import { parseFile, parseFileWithMapping, classifyCompanyType, classifySeniority, classifyFunction, matchConfigOption, type ColumnMapping } from '@/lib/parsers';
-import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
+import { getIcpConfig, evaluateIcpRules, icpCompanyTypes, territoryFallbackAllowed } from '@/lib/icpRules';
 import { computeAttendeeProductSignals } from '@/lib/computeAttendeeProductSignals';
 import {
   buildCompanyMatcher,
@@ -225,6 +225,12 @@ export async function POST(
       }
     }
 
+    // The company types Admin > ICP Parameters names, if any. Gates the
+    // territory tier below so a conference list's lenders, law firms and
+    // product vendors don't fill the assigned-rep column. Empty means the
+    // question was never configured, and the gate stands down.
+    const icpTypes = icpCompanyTypes(icpConfig);
+
     // ── Territory fallback lookup ─────────────────────────────────────
     // Maps a 2-letter state code to a single rep id when that territory has
     // exactly one assigned rep. Multi-rep (or zero-rep) territories are
@@ -303,6 +309,14 @@ export async function POST(
       companyNameNormalized: string,
       domain: string | null,
       hqState: string | null,
+      /**
+       * Whether the territory tier may fire for this company. A domain or name
+       * match against the master account list is an explicit statement that
+       * this account cares about the company, so those tiers ignore it; the
+       * territory tier is a guess from a state code and is the one that fills
+       * the rep column with companies nobody is working.
+       */
+      territoryAllowed: boolean,
     ): MasterRepResolution => {
       if (domain) {
         const domainMatch = masterByDomain.get(domain.toLowerCase());
@@ -316,7 +330,7 @@ export async function POST(
         return { assignedRepId: nameMatch.assignedRepId, assignedRepName: nameMatch.assignedRepName, source: 'master_name' };
       }
 
-      if (hqState) {
+      if (hqState && territoryAllowed) {
         const terrRepId = territoryByState.get(hqState.toUpperCase());
         if (terrRepId !== undefined) {
           return { assignedRepId: terrRepId, assignedRepName: configIdToDisplayName.get(terrRepId) ?? null, source: 'territory' };
@@ -605,7 +619,16 @@ export async function POST(
 
         const shouldUseFallback = !entry.assigned_user_supplied || entry.has_unresolved_assigned_user;
         if (shouldUseFallback) {
-          const resolution = resolveMasterAccountRep(normalizedName, companyDomain, hqState);
+          // The type this company will be filed under — from the file, from the
+          // record it matched, or classified from its name, in that order.
+          const effectiveType = entry.company_type
+            || existingCompany?.company_type
+            || classifyCompanyType(entry.name, companyTypeOptions)
+            || null;
+          const resolution = resolveMasterAccountRep(
+            normalizedName, companyDomain, hqState,
+            territoryFallbackAllowed(effectiveType, icpTypes),
+          );
           if (resolution.assignedRepId !== null) {
             entry.assigned_user = String(resolution.assignedRepId);
             entry.assigned_user_source = resolution.source as CompanyEntry['assigned_user_source'];

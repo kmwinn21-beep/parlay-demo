@@ -1,7 +1,7 @@
 import { db, dbReady } from './db';
 import type { Client } from '@libsql/client';
 export type { IcpRuleCondition, IcpRule, IcpUnitTypeOperator, IcpUnitTypeReq, IcpConfig } from './icpRulesEval';
-export { evaluateIcpRules } from './icpRulesEval';
+export { evaluateIcpRules, icpCompanyTypes, territoryFallbackAllowed } from './icpRulesEval';
 import type { IcpRule, IcpRuleCondition, IcpUnitTypeOperator, IcpConfig } from './icpRulesEval';
 
 export async function getIcpConfig(client?: Client): Promise<IcpConfig> {
