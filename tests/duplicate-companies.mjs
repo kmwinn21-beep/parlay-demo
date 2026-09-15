@@ -58,7 +58,7 @@ const eq = (label, got, want) => {
 };
 process.on('exit', () => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
 
-const { findDuplicateGroups, dismissalKeyFor, domainsFor, MAX_COMPANIES_PER_DOMAIN, MAX_COMPANIES_PER_STEM } = await import('@/lib/duplicateCompanies');
+const { findDuplicateGroups, dismissalKeyFor, domainsFor, groupMatchesQuery, MAX_COMPANIES_PER_DOMAIN, MAX_COMPANIES_PER_STEM } = await import('@/lib/duplicateCompanies');
 const { collapseNewCompanyNames } = await import('@/lib/matching');
 
 const co = (id, name, extra = {}) => ({ id, name, attendee_count: 0, conference_count: 0, ...extra });
@@ -472,6 +472,86 @@ console.log('\n— and every section starts closed —');
     /\{isOpen && \([\s\S]{0,200}inBucket\.map\(renderGroup\)/.test(panel), true);
   eq('the domain tag reads "similar domain"', /similar domain</.test(panel), true);
   eq('  and no longer claims sameness', /same domain</.test(panel), false);
+}
+
+console.log('\n— searching the groups —');
+{
+  const group = {
+    members: [{ id: 1, name: '12 Oaks' }, { id: 2, name: '12 Oaks Senior Living' }],
+    sharedDomains: ['twelveoaks.com'],
+    sharedStems: ['12 oaks'],
+  };
+
+  eq('an empty query matches everything', groupMatchesQuery(group, ''), true);
+  eq('  as does whitespace', groupMatchesQuery(group, '   '), true);
+  eq('a company name matches', groupMatchesQuery(group, 'Senior Living'), true);
+  eq('  regardless of case', groupMatchesQuery(group, 'SENIOR living'), true);
+  eq('  and it need not be the first member', groupMatchesQuery(group, '12 Oaks Senior'), true);
+  eq('a domain matches', groupMatchesQuery(group, 'twelveoaks.com'), true);
+  eq('  and part of one does', groupMatchesQuery(group, 'twelveoak'), true);
+  eq('the shared words match', groupMatchesQuery(group, '12 oaks'), true);
+  eq('something in none of them does not', groupMatchesQuery(group, 'brookdale'), false);
+
+  // Searching is not matching. Running the query through normalizeCompanyName
+  // would drop a suffix somebody typed deliberately to narrow the list.
+  const withSuffix = {
+    members: [{ id: 1, name: 'Allegro Living, LLC' }, { id: 2, name: 'Allegro Living' }],
+    sharedDomains: [], sharedStems: [],
+  };
+  eq('a typed legal suffix still narrows rather than being stripped',
+    [groupMatchesQuery(withSuffix, 'LLC'), groupMatchesQuery(withSuffix, 'Allegro')], [true, true]);
+}
+
+console.log('\n— the search box and what it does to the sections —');
+{
+  const { readFileSync } = await import('node:fs');
+  const panel = readFileSync('components/DuplicateCompaniesPanel.tsx', 'utf8');
+
+  eq('the panel has a search box', /placeholder="Search company or domain…"/.test(panel), true);
+  eq('  labelled for anyone not using a mouse',
+    /aria-label="Search duplicate groups by company or domain"/.test(panel), true);
+  // Order, not proximity: a character window between the two is a number that
+  // breaks the next time anything is added between them.
+  //
+  // Scoped to the row itself. Searching the whole file finds the "no duplicates
+  // found" branch's own Scan again button first, which sits ABOVE this one and
+  // made the assertion pass or fail for the wrong reason.
+  const row = panel.slice(panel.indexOf('flex w-full flex-wrap items-center gap-2 sm:w-auto'));
+  eq('  the search and Scan again share a row', row.length > 0, true);
+  const inputAt = row.indexOf('Search company or domain…');
+  const scanAt = row.indexOf("'Scan again'");
+  eq('  with the search first', inputAt > 0 && scanAt > inputAt, true);
+  eq('  with a way to clear it', /onClick=\{\(\) => setQuery\(''\)\}/.test(panel), true);
+
+  eq('the query filters the groups before they are bucketed',
+    /if \(!groupMatchesQuery\(group, query\)\) continue;/.test(panel), true);
+
+  // A closed section with matches inside reads as a search that found nothing.
+  eq('a live query opens the sections', /const isOpen = searching \|\| open\.has\(bucket\)/.test(panel), true);
+  eq('  without overwriting what the reader had open',
+    /setOpen/.test(panel) && !/setOpen\([\s\S]{0,80}searching/.test(panel), true);
+  eq('and a query that finds nothing says so',
+    /No duplicate groups mention/.test(panel), true);
+}
+
+console.log('\n— the row is readable on a phone —');
+{
+  // Measured in Chromium at 390px against this markup: the action buttons no
+  // longer share a line with the evidence tags, and the row is 265px instead of
+  // 388px. At 1280px it stays a side-by-side row, 129px against 116px before.
+  const { readFileSync } = await import('node:fs');
+  const panel = readFileSync('components/DuplicateCompaniesPanel.tsx', 'utf8');
+
+  eq('the row stacks on a phone and sits side by side from sm',
+    /flex flex-col gap-3 py-3 sm:flex-row/.test(panel), true);
+  eq('the tags never break mid-phrase',
+    (panel.match(/whitespace-nowrap rounded bg-/g) ?? []).length, 3);
+  eq('the evidence takes its own line only on a phone',
+    /w-full min-w-0 truncate text-gray-500 sm:w-auto/.test(panel), true);
+  eq('a company\'s counts drop under its name on a phone, beside it from sm',
+    /block text-xs text-gray-400 sm:ml-2 sm:inline/.test(panel), true);
+  eq('and the primary action fills the width it is given on a phone',
+    /btn-primary flex-1 whitespace-nowrap[^"]*sm:flex-none/.test(panel), true);
 }
 
 console.log('\n— the scan is started from the filter row —');

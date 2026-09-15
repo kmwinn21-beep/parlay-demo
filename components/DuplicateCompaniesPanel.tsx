@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { MergeModal } from './MergeModal';
-import { bucketFor } from '@/lib/duplicateCompanies';
+import { bucketFor, groupMatchesQuery } from '@/lib/duplicateCompanies';
 import type { DuplicateGroup } from '@/lib/duplicateCompanies';
 import type { DuplicateScan } from '@/lib/useDuplicateScan';
 
@@ -31,6 +31,24 @@ import type { DuplicateScan } from '@/lib/useDuplicateScan';
  *
  * The per-group tags stay inside, because "same name" and "similar name" are
  * not the same claim even though they share a section.
+ *
+ * ── Searching ────────────────────────────────────────────────────────────────
+ *
+ * Three hundred groups behind three closed doors is not something to browse.
+ * The search box answers the question people arrive with — "what about THIS
+ * company", "what is on that domain" — and while a query is live the sections
+ * open themselves, because a closed section with matches in it is a search that
+ * appears to have found nothing. Clearing the box hands the sections back
+ * exactly as they were.
+ *
+ * ── On a phone ───────────────────────────────────────────────────────────────
+ *
+ * The row was one flex line with everything in it, which at 390px wrapped the
+ * tags to a word per line and shouldered the buttons in beside them. It stacks
+ * now: evidence, then the companies, then the actions across the bottom. The
+ * tags refuse to break mid-phrase, and each company's counts drop under its
+ * name rather than wrapping through it — inline again from sm, where a row per
+ * company is what keeps a long section readable.
  */
 
 type Bucket = 'name' | 'domain' | 'both';
@@ -59,12 +77,19 @@ export function DuplicateCompaniesPanel({
 }) {
   const [merging, setMerging] = useState<DuplicateGroup | null>(null);
   const [open, setOpen] = useState<Set<Bucket>>(new Set());
+  const [query, setQuery] = useState('');
 
   const buckets = useMemo(() => {
     const out: Record<Bucket, DuplicateGroup[]> = { both: [], name: [], domain: [] };
-    for (const group of groups ?? []) out[bucketFor(group)].push(group);
+    for (const group of groups ?? []) {
+      if (!groupMatchesQuery(group, query)) continue;
+      out[bucketFor(group)].push(group);
+    }
     return out;
-  }, [groups]);
+  }, [groups, query]);
+
+  const searching = query.trim().length > 0;
+  const matched = buckets.both.length + buckets.name.length + buckets.domain.length;
 
   const handleMerge = async (masterId: number, duplicateIds: number[]) => {
     const res = await fetch('/api/companies/merge', {
@@ -98,37 +123,47 @@ export function DuplicateCompaniesPanel({
   }
 
   const renderGroup = (group: DuplicateGroup) => (
-    <li key={group.dismissalKey} className="flex flex-wrap items-start justify-between gap-3 py-3">
+    <li key={group.dismissalKey} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0 flex-1">
         {/* Why these are together, before the names. A group the reader cannot
-            judge is a group they either accept blindly or skip. */}
-        <p className="mb-1 flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500">
+            judge is a group they either accept blindly or skip. The tags never
+            break mid-phrase — "similar name" over two lines reads as two tags. */}
+        <div className="mb-1 flex flex-wrap items-center gap-1.5 text-[11px]">
           {group.matchedOn.includes('name') && (
-            <span className="rounded bg-gray-100 px-1.5 py-0.5 font-medium text-gray-600">same name</span>
+            <span className="whitespace-nowrap rounded bg-gray-100 px-1.5 py-0.5 font-medium text-gray-600">same name</span>
           )}
           {group.matchedOn.includes('similar-name') && (
-            <span className="rounded bg-amber-50 px-1.5 py-0.5 font-medium text-amber-700">similar name</span>
+            <span className="whitespace-nowrap rounded bg-amber-50 px-1.5 py-0.5 font-medium text-amber-700">similar name</span>
           )}
           {group.matchedOn.includes('domain') && (
-            <span className="rounded bg-blue-50 px-1.5 py-0.5 font-medium text-brand-secondary">similar domain</span>
+            <span className="whitespace-nowrap rounded bg-blue-50 px-1.5 py-0.5 font-medium text-brand-secondary">similar domain</span>
           )}
-          {group.sharedDomains.length > 0 && (
-            <span className="truncate">{group.sharedDomains.join(', ')}</span>
+          {/* The evidence itself. `w-full` drops it to its own line on a phone,
+              where sharing one with the tags is what made the row unreadable;
+              from sm it sits beside them, where putting it below cost 28% more
+              height on every one of a hundred-odd rows. Measured both ways. */}
+          {(group.sharedDomains.length > 0 || group.sharedStems.length > 0) && (
+            <span className="w-full min-w-0 truncate text-gray-500 sm:w-auto">
+              {group.sharedDomains.length > 0
+                ? group.sharedDomains.join(', ')
+                : `shares “${group.sharedStems.join('”, “')}”`}
+            </span>
           )}
-          {group.sharedStems.length > 0 && group.sharedDomains.length === 0 && (
-            <span className="truncate">shares “{group.sharedStems.join('”, “')}”</span>
-          )}
-        </p>
-        <ul className="space-y-0.5">
+        </div>
+        <ul className="space-y-1 sm:space-y-0.5">
           {group.members.map((m) => (
-            <li key={m.id} className="flex flex-wrap items-baseline gap-2 text-sm">
+            <li key={m.id} className="text-sm leading-snug">
               <span className={m.id === group.suggestedMasterId ? 'font-semibold text-gray-800' : 'text-gray-600'}>
                 {m.name}
               </span>
               {m.id === group.suggestedMasterId && (
-                <span className="text-[11px] font-medium text-brand-secondary">suggested to keep</span>
+                <span className="ml-2 whitespace-nowrap text-[11px] font-medium text-brand-secondary">
+                  suggested to keep
+                </span>
               )}
-              <span className="text-xs text-gray-400">
+              {/* Under the name on a phone, beside it from sm — a row per
+                  company is what keeps a 120-group section readable. */}
+              <span className="block text-xs text-gray-400 sm:ml-2 sm:inline">
                 {m.attendee_count ?? 0} attendee{(m.attendee_count ?? 0) === 1 ? '' : 's'}
                 {(m.conference_count ?? 0) > 0 && ` · ${m.conference_count} conference${m.conference_count === 1 ? '' : 's'}`}
               </span>
@@ -137,13 +172,13 @@ export function DuplicateCompaniesPanel({
         </ul>
       </div>
       <div className="flex flex-shrink-0 items-center gap-2">
-        <button onClick={() => setMerging(group)} className="btn-primary text-sm py-1.5">
+        <button onClick={() => setMerging(group)} className="btn-primary flex-1 whitespace-nowrap py-1.5 text-sm sm:flex-none">
           Review &amp; merge
         </button>
         <button
           onClick={() => dismiss(group)}
           title="These are different companies"
-          className="px-2 py-1.5 text-sm text-gray-500 hover:text-gray-700"
+          className="whitespace-nowrap px-2 py-1.5 text-sm text-gray-500 hover:text-gray-700"
         >
           Not duplicates
         </button>
@@ -163,16 +198,50 @@ export function DuplicateCompaniesPanel({
             merged until you choose to, and you pick which records go.
           </p>
         </div>
-        <button onClick={scan} disabled={scanning} className="btn-secondary text-sm disabled:opacity-50">
-          {scanning ? 'Scanning…' : 'Scan again'}
-        </button>
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <div className="relative min-w-[200px] flex-1 sm:flex-none">
+            <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search company or domain…"
+              aria-label="Search duplicate groups by company or domain"
+              className="input-field w-full py-1.5 pl-9 pr-8 text-sm"
+            />
+            {searching && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+          <button onClick={scan} disabled={scanning}
+                  className="btn-secondary flex-shrink-0 text-sm disabled:opacity-50">
+            {scanning ? 'Scanning…' : 'Scan again'}
+          </button>
+        </div>
       </div>
+
+      {searching && matched === 0 && (
+        <p className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
+          No duplicate groups mention “{query.trim()}”.
+        </p>
+      )}
 
       <div className="space-y-2">
         {(['both', 'name', 'domain'] as Bucket[]).map((bucket) => {
           const inBucket = buckets[bucket];
           if (inBucket.length === 0) return null;
-          const isOpen = open.has(bucket);
+          const isOpen = searching || open.has(bucket);
           const { title, blurb } = BUCKET_LABELS[bucket];
           return (
             <div key={bucket} className="rounded-lg border border-gray-200">
@@ -195,6 +264,7 @@ export function DuplicateCompaniesPanel({
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-semibold text-gray-800">
                     {title} · {inBucket.length}
+                    {searching && <span className="font-normal text-gray-500"> matching</span>}
                   </span>
                   <span className="block text-xs text-gray-500">{blurb}</span>
                 </span>

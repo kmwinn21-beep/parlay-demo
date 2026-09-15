@@ -163,6 +163,31 @@ export function dismissalKeyFor(key: string, ids: number[]): string {
  * question back rather than inheriting an answer given about two.
  */
 /**
+ * Does this group answer a search?
+ *
+ * A scan of a real account returns hundreds of groups across three sections,
+ * and the question people actually arrive with is "what about THIS company" —
+ * or "what is on that domain". So the query is matched against everything a
+ * reader can see on the row: every member's name, the domains that connected
+ * them, and the words they share.
+ *
+ * Substring, case-insensitive, and NOT normalized. Searching is not matching:
+ * somebody typing "12 oaks" wants the rows they can see, and running the query
+ * through normalizeCompanyName would silently drop a legal suffix they had
+ * deliberately typed to narrow it down.
+ */
+export function groupMatchesQuery(
+  group: Pick<DuplicateGroup, 'members' | 'sharedDomains' | 'sharedStems'>,
+  query: string,
+): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return group.members.some(m => m.name.toLowerCase().includes(q))
+    || group.sharedDomains.some(d => d.toLowerCase().includes(q))
+    || group.sharedStems.some(t => t.toLowerCase().includes(q));
+}
+
+/**
  * Which section of the review panel a group belongs in.
  *
  * Lives here rather than in the panel so the split is testable without a
