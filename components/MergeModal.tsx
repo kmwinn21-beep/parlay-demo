@@ -35,6 +35,12 @@ interface MergeModalProps {
   title: string;
   description: string;
   searchType: 'company' | 'attendee';
+  /**
+   * Pre-select a record to keep. The duplicate scanner has an opinion — the
+   * one with the most attendees, then the longest name — and starting on it
+   * saves a click without taking the choice away.
+   */
+  defaultMasterId?: number;
 }
 
 export function MergeModal({
@@ -45,6 +51,7 @@ export function MergeModal({
   title,
   description,
   searchType,
+  defaultMasterId,
 }: MergeModalProps) {
   useHideBottomNav(isOpen);
   const [masterId, setMasterId] = useState<number | null>(null);
@@ -62,8 +69,12 @@ export function MergeModal({
       setSearchQuery('');
       setSearchResults([]);
       setPreview(null);
+      return;
     }
-  }, [isOpen]);
+    // Only as an opening position — once the modal is up, the choice is the
+    // person's, so this does not run again while it stays open.
+    if (defaultMasterId != null) setMasterId(defaultMasterId);
+  }, [isOpen, defaultMasterId]);
 
   useEffect(() => {
     if (searchQuery.length < 2) {

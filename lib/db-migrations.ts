@@ -2557,4 +2557,21 @@ export const migrations: string[] = [
   // attendee's own creation date — and burying real activity under hundreds of
   // import rows is the worse of the two errors.
   `UPDATE conference_attendees SET source = 'initial_upload' WHERE source IS NULL`,
+
+  // ── Duplicate company groups somebody has looked at and said no to ─────────
+  //
+  // The scanner groups companies that share a normalized name. Most such
+  // groups are duplicates, but not all: "Smith Company" and "Smith Corp" both
+  // reduce to "smith" and may be two firms. Saying so once has to stick, or
+  // the panel becomes a list people scroll past.
+  //
+  // The key carries the membership, not just the name — see dismissalKeyFor —
+  // so dismissing a pair does not silently answer for a trio that turns up
+  // later with a third spelling.
+  `CREATE TABLE IF NOT EXISTS company_duplicate_dismissals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dismissal_key TEXT NOT NULL UNIQUE,
+      dismissed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
 ];

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { CompanyTable } from '@/components/CompanyTable';
+import { DuplicateCompaniesPanel } from '@/components/DuplicateCompaniesPanel';
 import { BackButton } from '@/components/BackButton';
 import { KebabMenu } from '@/components/KebabMenu';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
@@ -303,6 +304,8 @@ export default function CompaniesPage() {
           </form>
         </div>
       )}
+
+      <DuplicateCompaniesPanel onMerged={fetchCompanies} />
 
       {/* Companies Table */}
       <div className="card">

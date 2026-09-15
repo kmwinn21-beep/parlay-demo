@@ -921,7 +921,16 @@ console.log('\n— the backfill actually reaches an existing database —');
 
   // Wind the tenant back to the version before this migration and give it the
   // rows a real account has: linked, with no source.
-  await tenant.execute({ sql: `UPDATE _schema_version SET version = ?`, args: [migrations.length - 1] });
+  //
+  // The migration is found by what it says, not by where it sits. This used to
+  // be `migrations.length - 1` — "the last one" — which was true until another
+  // migration was appended after it, and then the wind-back landed AFTER the
+  // backfill and the test failed for a reason that had nothing to do with the
+  // feed.
+  const backfillIndex = migrations.findIndex(m =>
+    /UPDATE conference_attendees SET source = 'initial_upload' WHERE source IS NULL/.test(m));
+  eq('the source backfill is still in the migration list', backfillIndex >= 0, true);
+  await tenant.execute({ sql: `UPDATE _schema_version SET version = ?`, args: [backfillIndex] });
   await tenant.execute(`INSERT INTO conferences (id, name, location, start_date, end_date)
     VALUES (30, 'Legacy Conf', 'Nowhere', '2026-06-14', '2026-06-17')`);
   await tenant.execute(`INSERT INTO attendees (id, first_name, last_name) VALUES (600, 'Old', 'Row')`);
