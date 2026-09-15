@@ -803,6 +803,29 @@ export default function ConferenceDetailPage() {
   }, [activeTab, visibleConferenceTabs]);
 
   const tabBarRef = useRef<HTMLDivElement>(null);
+  const pageRootRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Publish the tab row's measured height as --conf-tabbar-h.
+   *
+   * The bulk action bars pin to its bottom edge (see .bulk-actions-sticky), and
+   * that row is not a fixed height — it wraps on a narrow window and its
+   * labels carry counts that change. Measuring it beats a constant that drifts.
+   */
+  useEffect(() => {
+    const bar = tabBarRef.current;
+    const root = pageRootRef.current;
+    if (!bar || !root) return;
+    const apply = () => root.style.setProperty(
+      '--conf-tabbar-h', `${Math.round(bar.getBoundingClientRect().height)}px`);
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(bar);
+    return () => ro.disconnect();
+    // The observer handles every height CHANGE — a wrapped row, a count
+    // appearing in a label — so this only needs to re-run when the element
+    // itself arrives, which is when the conference finishes loading.
+  }, [conference?.id]);
 
   /** True while the tab row is pinned to the top of the scrolling column. */
   const tabsArePinned = () => {
@@ -3018,7 +3041,7 @@ export default function ConferenceDetailPage() {
   );
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div ref={pageRootRef} className="max-w-6xl mx-auto space-y-6">
       <BackButton />
       {/* Column mapping modal */}
       {columnMappingData && pendingUploadFile && (
@@ -4151,9 +4174,11 @@ export default function ConferenceDetailPage() {
           </div>
 
           {/* Bulk actions — their own labelled row under the search and
-              filters, so selecting rows doesn't reflow the toolbar above. */}
+              filters, so selecting rows doesn't reflow the toolbar above, and
+              pinned under the tab row so selecting a name at the bottom of a
+              2,645-row list doesn't mean scrolling back up to act on it. */}
           {selectedAttendeeIds.size >= 1 && (
-            <div className="mb-4">
+            <div className="mb-4 bulk-actions-sticky">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Bulk Actions</p>
               <div className="flex items-center gap-3 flex-wrap">
                 <button
@@ -4748,6 +4773,7 @@ export default function ConferenceDetailPage() {
               conferenceAttendees={conference?.attendees}
               conferenceLabel={conference ? `${conference.name}${conference.start_date ? ` ${new Date(conference.start_date).getUTCFullYear()}` : ''}` : undefined}
               conferenceId={conference?.id}
+              stickyBulkActions
             />
           )}
         </div>
