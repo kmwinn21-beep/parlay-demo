@@ -1,4 +1,7 @@
-import { normalizeCompanyName, extractDomainFromEmail, extractDomainFromWebsite } from './matching';
+import {
+  normalizeCompanyName, extractDomainFromEmail, extractDomainFromWebsite,
+  MIN_FUZZY_NAME_LENGTH,
+} from './matching';
 
 /**
  * Companies that are the same company, under a different spelling or a
@@ -17,6 +20,20 @@ import { normalizeCompanyName, extractDomainFromEmail, extractDomainFromWebsite 
  * Management Partners" all to "healthcare". Those are three companies. On that
  * list the name signal alone found 56 groups covering 64 redundant records,
  * with no wrong grouping among them.
+ *
+ * SIMILAR NAME — one company's whole name is the leading words of another's.
+ * "12 Oaks" and "12 Oaks Senior Living" are one company, and the exact key
+ * above will never say so: nothing it strips turns one into the other. Same for
+ * "Gardant" / "Gardant Management Solutions" and "Colliers" / "Colliers
+ * International". This was left out at first as too loose, and a real account
+ * showed that judgement was wrong — the misses were obvious to anyone reading
+ * the list.
+ *
+ * It is the weakest of the three and labelled as such, because a short stem is
+ * a stem of many things. Two guards: the stem must be at least
+ * MIN_FUZZY_NAME_LENGTH characters — the same floor the fuzzy matcher uses,
+ * and for the same reason, that "ABC" is a prefix of everything — and it must
+ * land on a WORD boundary, so "Care" does not pull in "Careington".
  *
  * DOMAIN — the company's own website, and the email domains of its attendees.
  * This is the signal names cannot give: "T20 Holdings LLC" and "Twenty20 Group"
@@ -52,6 +69,14 @@ import { normalizeCompanyName, extractDomainFromEmail, extractDomainFromWebsite 
 export const MAX_COMPANIES_PER_DOMAIN = 10;
 
 /**
+ * Beyond this, a shared stem is a common word rather than a company.
+ *
+ * Same judgement as the domain cap, and the same caveat: a number chosen where
+ * an over-grouping would be obviously wrong, not one read off data.
+ */
+export const MAX_COMPANIES_PER_STEM = 6;
+
+/**
  * Domains that identify a person, a platform or a mailbox — never a company.
  *
  * Only for the website side. Email already refuses free providers inside
@@ -63,7 +88,7 @@ const NON_COMPANY_DOMAINS = new Set([
   'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'icloud.com',
 ]);
 
-export type DuplicateSignal = 'name' | 'domain';
+export type DuplicateSignal = 'name' | 'similar-name' | 'domain';
 
 export interface DuplicateCandidate {
   id: number;
@@ -88,6 +113,8 @@ export interface DuplicateGroup {
   matchedOn: DuplicateSignal[];
   /** The domains that connected them, when one did. */
   sharedDomains: string[];
+  /** The leading words they share, when that is what connected them. */
+  sharedStems: string[];
 }
 
 /** Every domain a company can be identified by, website and attendees alike. */
@@ -149,20 +176,44 @@ export function findDuplicateGroups(
     buckets.get(key)!.push(id);
   };
 
+  const nameKeyOf = new Map<number, string>();
   for (const company of companies) {
     // A name that normalizes away entirely keeps its own text, so two such
     // names don't collapse into each other.
     const nameKey = normalizeCompanyName(company.name) || company.name.toLowerCase().trim();
-    if (nameKey) push(`name:${nameKey}`, company.id);
+    if (nameKey) {
+      push(`name:${nameKey}`, company.id);
+      nameKeyOf.set(company.id, nameKey);
+    }
     for (const domain of domainsFor(company)) push(`domain:${domain}`, company.id);
+  }
+
+  // A company whose whole name is the leading words of another's. Only where a
+  // company actually carries the stem as its entire name — this never invents a
+  // stem, it joins a longer name to a shorter record that already exists.
+  const exactNames = new Map<string, number[]>();
+  for (const [id, key] of Array.from(nameKeyOf.entries())) {
+    if (!exactNames.has(key)) exactNames.set(key, []);
+    exactNames.get(key)!.push(id);
+  }
+  for (const [id, key] of Array.from(nameKeyOf.entries())) {
+    const tokens = key.split(' ').filter(Boolean);
+    for (let i = 1; i < tokens.length; i++) {
+      const stem = tokens.slice(0, i).join(' ');
+      if (stem.length < MIN_FUZZY_NAME_LENGTH) continue;
+      const shorter = exactNames.get(stem);
+      if (!shorter) continue;
+      push(`similar:${stem}`, id);
+      for (const shortId of shorter) push(`similar:${stem}`, shortId);
+    }
   }
 
   // A domain on too many records is telling us about the data, not the
   // companies — drop it rather than proposing a merge nobody would accept.
   for (const [key, ids] of Array.from(buckets.entries())) {
-    if (key.startsWith('domain:') && new Set(ids).size > MAX_COMPANIES_PER_DOMAIN) {
-      buckets.delete(key);
-    }
+    const distinct = new Set(ids).size;
+    if (key.startsWith('domain:') && distinct > MAX_COMPANIES_PER_DOMAIN) buckets.delete(key);
+    if (key.startsWith('similar:') && distinct > MAX_COMPANIES_PER_STEM) buckets.delete(key);
   }
 
   // Union-find over the companies each signal connects.
@@ -209,12 +260,14 @@ export function findDuplicateGroups(
     const memberIds = new Set(members.map(m => m.id));
     const signalKeys: string[] = [];
     const sharedDomains: string[] = [];
+    const sharedStems: string[] = [];
     let byName = false;
     for (const [key, bucketIds] of Array.from(buckets.entries())) {
       const inGroup = Array.from(new Set(bucketIds)).filter(id => memberIds.has(id));
       if (inGroup.length < 2) continue;
       signalKeys.push(key);
       if (key.startsWith('name:')) byName = true;
+      else if (key.startsWith('similar:')) sharedStems.push(key.slice('similar:'.length));
       else sharedDomains.push(key.slice('domain:'.length));
     }
 
@@ -226,6 +279,7 @@ export function findDuplicateGroups(
 
     const matchedOn: DuplicateSignal[] = [];
     if (byName) matchedOn.push('name');
+    if (sharedStems.length > 0) matchedOn.push('similar-name');
     if (sharedDomains.length > 0) matchedOn.push('domain');
 
     groups.push({
@@ -235,6 +289,7 @@ export function findDuplicateGroups(
       suggestedMasterId: suggestMaster(members),
       matchedOn,
       sharedDomains: sharedDomains.sort(),
+      sharedStems: sharedStems.sort(),
     });
   }
 

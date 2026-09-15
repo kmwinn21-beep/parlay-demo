@@ -85,8 +85,8 @@ export function DuplicateCompaniesPanel({ onMerged }: { onMerged: () => void }) 
           <h2 className="text-base font-semibold text-brand-primary font-serif">Duplicate companies</h2>
           <p className="text-sm text-gray-500">
             Find companies that are the same company under a different spelling — Inc., LLC,
-            a stray comma, a difference in case — or under a different name entirely,
-            sharing a website or work email domain.
+            a stray comma, a difference in case — one name being the start of another,
+            or a different name entirely sharing a website or work email domain.
           </p>
         </div>
         <button onClick={scan} disabled={scanning} className="btn-secondary text-sm disabled:opacity-50">
@@ -119,7 +119,7 @@ export function DuplicateCompaniesPanel({ onMerged }: { onMerged: () => void }) 
           </h2>
           <p className="text-sm text-gray-500">
             {redundant} record{redundant === 1 ? '' : 's'} could be merged away. Nothing is
-            merged until you choose to.
+            merged until you choose to, and you pick which records go.
           </p>
         </div>
         <button onClick={scan} disabled={scanning} className="btn-secondary text-sm disabled:opacity-50">
@@ -139,6 +139,11 @@ export function DuplicateCompaniesPanel({ onMerged }: { onMerged: () => void }) 
                     same name
                   </span>
                 )}
+                {group.matchedOn.includes('similar-name') && (
+                  <span className="rounded bg-amber-50 px-1.5 py-0.5 font-medium text-amber-700">
+                    similar name
+                  </span>
+                )}
                 {group.matchedOn.includes('domain') && (
                   <span className="rounded bg-blue-50 px-1.5 py-0.5 font-medium text-brand-secondary">
                     same domain
@@ -146,6 +151,9 @@ export function DuplicateCompaniesPanel({ onMerged }: { onMerged: () => void }) 
                 )}
                 {group.sharedDomains.length > 0 && (
                   <span className="truncate">{group.sharedDomains.join(', ')}</span>
+                )}
+                {group.sharedStems.length > 0 && group.sharedDomains.length === 0 && (
+                  <span className="truncate">shares “{group.sharedStems.join('”, “')}”</span>
                 )}
               </p>
               <ul className="space-y-0.5">

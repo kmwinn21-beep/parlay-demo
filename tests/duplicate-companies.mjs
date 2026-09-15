@@ -58,7 +58,7 @@ const eq = (label, got, want) => {
 };
 process.on('exit', () => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
 
-const { findDuplicateGroups, dismissalKeyFor, domainsFor, MAX_COMPANIES_PER_DOMAIN } = await import('@/lib/duplicateCompanies');
+const { findDuplicateGroups, dismissalKeyFor, domainsFor, MAX_COMPANIES_PER_DOMAIN, MAX_COMPANIES_PER_STEM } = await import('@/lib/duplicateCompanies');
 const { collapseNewCompanyNames } = await import('@/lib/matching');
 
 const co = (id, name, extra = {}) => ({ id, name, attendee_count: 0, conference_count: 0, ...extra });
@@ -94,8 +94,6 @@ console.log('\n— and different companies are not —');
   eq('two unrelated names', findDuplicateGroups([co(1, 'Brookdale'), co(2, 'Atria')]).length, 0);
   eq('a lone company is not a duplicate of itself',
     findDuplicateGroups([co(1, 'Belmont Care')]).length, 0);
-  eq('an abbreviation is not assumed to be the same company',
-    findDuplicateGroups([co(1, 'Sonida'), co(2, 'Sonida Senior Living')]).length, 0);
 
   // The line this key deliberately does not cross.
   eq('three different healthcare firms stay three', findDuplicateGroups([
@@ -108,26 +106,68 @@ console.log('\n— and different companies are not —');
   ]).length, 0);
 }
 
-console.log('\n— the scanner and the upload agree —');
+console.log('\n— one name being the start of another —');
 {
-  // The assertion that keeps them honest. Whatever an upload would collapse
-  // into one company, the scanner must group — otherwise cleaning up here is
-  // undone by the next import.
+  // The miss that prompted this signal, found on a real account: the exact key
+  // will never connect these, because nothing it strips turns one into the
+  // other. An earlier version of this file asserted the opposite for
+  // "Sonida" / "Sonida Senior Living" — a judgement that the account's own data
+  // showed was too conservative.
+  const groups = findDuplicateGroups([co(1, '12 Oaks'), co(2, '12 Oaks Senior Living')]);
+  eq('12 Oaks and 12 Oaks Senior Living are grouped', groups.length, 1);
+  eq('  labelled as the weaker signal it is', groups[0]?.matchedOn ?? null, ['similar-name']);
+  eq('  naming the words they share', groups[0]?.sharedStems ?? null, ['12 oaks']);
+
+  eq('a one-word stem counts too', findDuplicateGroups([
+    co(1, 'Gardant'), co(2, 'Gardant Management Solutions')]).length, 1);
+  eq('  and so does the case that was wrongly excluded before', findDuplicateGroups([
+    co(1, 'Sonida'), co(2, 'Sonida Senior Living')]).length, 1);
+}
+
+console.log('\n— but a stem has to be worth something —');
+{
+  // MIN_FUZZY_NAME_LENGTH is the floor, for the reason it exists: three
+  // characters are a prefix of everything.
+  eq('a three-letter stem connects nothing', findDuplicateGroups([
+    co(1, 'ABC'), co(2, 'ABC Senior Living')]).length, 0);
+  // Word boundary, not character prefix.
+  eq('a stem must end on a word', findDuplicateGroups([
+    co(1, 'Career'), co(2, 'Careington Health')]).length, 0);
+  // And the stem must be somebody's whole name — this never invents one.
+  eq('two long names sharing a start are not grouped by it', findDuplicateGroups([
+    co(1, 'Belmont Senior Living'), co(2, 'Belmont Senior Care')]).length, 0);
+
+  const many = Array.from({ length: MAX_COMPANIES_PER_STEM + 1 }, (_, i) =>
+    co(i + 2, `Senior Living ${i}`));
+  eq('a stem on too many records is a common word, not a company',
+    findDuplicateGroups([co(1, 'Senior Living'), ...many]).length, 0);
+}
+
+console.log('\n— the scanner still finds everything the upload would collapse —');
+{
+  // Held one way round only. The scanner now groups MORE than the upload
+  // collapses — that is the point of the similar-name and domain signals — but
+  // it must never group LESS, or a cleanup done here is undone by the next
+  // import.
   const spellings = [
     'Direct Supply', 'Direct supply', 'Direct Supply, Inc.',
     'Allegro Living', 'Allegro Living, LLC',
     'Brookdale Senior Living',
     'Hanson Bridgett', 'Hanson Bridgett LLP',
   ];
-  const collapsed = collapseNewCompanyNames(spellings);
-  const uploadGroups = collapsed.canonical.length;
-
+  const { aliasOf } = collapseNewCompanyNames(spellings);
   const scanned = findDuplicateGroups(spellings.map((n, i) => co(i + 1, n)));
-  const scannedRecordsAfterMerging = spellings.length - scanned.reduce((n, g) => n + g.members.length - 1, 0);
+  const groupOf = new Map();
+  for (const g of scanned) for (const m of g.members) groupOf.set(m.name, g.key);
 
-  eq('the upload would create this many companies', uploadGroups, 4);
-  eq('  and merging every group the scanner found leaves the same number',
-    scannedRecordsAfterMerging, uploadGroups);
+  // Every alias the upload would fold into a canonical name must be in the same
+  // scanner group as that name.
+  const split = Array.from(aliasOf.entries())
+    .filter(([alias, canonical]) => groupOf.get(alias) === undefined
+      || groupOf.get(alias) !== groupOf.get(canonical))
+    .map(([alias, canonical]) => `${alias} / ${canonical}`);
+  eq('the upload folds some of these together', aliasOf.size > 0, true);
+  eq('  and the scanner groups every one of those pairs', split, []);
 }
 
 // ── The domain signal ────────────────────────────────────────────────────────
@@ -353,6 +393,33 @@ console.log('\n— end to end, against a real database —');
     body: JSON.stringify({}),
   }));
   eq('a dismissal with no key is refused', bad.status, 400);
+}
+
+console.log('\n— a group is a proposal you can take apart —');
+{
+  // A three-record group can be two companies and a mistake. Merging used to be
+  // all-or-nothing, so acting on the two that ARE the same meant taking the
+  // third with them. The modal now decides from what is still ticked.
+  const { readFileSync } = await import('node:fs');
+  const modal = readFileSync('components/MergeModal.tsx', 'utf8');
+
+  eq('everything offered starts selected',
+    /setIncludedIds\(new Set\(items\.map\(\(i\) => i\.id\)\)\)/.test(modal), true);
+  eq('  and the record being kept is not asked about',
+    /masterId !== item\.id && \(/.test(modal), true);
+
+  // The three places that must agree on WHAT is being merged: the preview, the
+  // button's enabled state, and the request. All read includedIds.
+  const filters = modal.match(/id !== masterId && includedIds\.has\(id\)/g) ?? [];
+  eq('the preview and the merge request use the same selection', filters.length, 2);
+  eq('  as does whether the button is enabled',
+    /i\.id !== masterId && includedIds\.has\(i\.id\)/.test(modal), true);
+  eq('unticking everything disables it rather than merging nothing',
+    /const canMerge = masterId !== null && duplicateCount > 0/.test(modal), true);
+  eq('  and the request refuses an empty selection',
+    /if \(duplicateIds\.length === 0\) return;/.test(modal), true);
+  eq('the button says how many are going',
+    /Merge \$\{duplicateCount\} record/.test(modal), true);
 }
 
 console.log('\n— the panel proposes, it does not merge —');

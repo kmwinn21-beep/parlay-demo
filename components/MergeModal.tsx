@@ -62,6 +62,16 @@ export function MergeModal({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [preview, setPreview] = useState<MergePreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  /**
+   * Which of the offered records actually get merged.
+   *
+   * The duplicate scanner proposes a group, and a group is a guess: three
+   * records sharing a domain can be two companies and a mistake. Merging was
+   * all-or-nothing, so the only way to act on the two that ARE the same was to
+   * take the third with them. Everything offered starts selected, because most
+   * groups are right; unticking one leaves it alone.
+   */
+  const [includedIds, setIncludedIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (!isOpen) {
@@ -71,10 +81,11 @@ export function MergeModal({
       setPreview(null);
       return;
     }
+    setIncludedIds(new Set(items.map((i) => i.id)));
     // Only as an opening position — once the modal is up, the choice is the
     // person's, so this does not run again while it stays open.
     if (defaultMasterId != null) setMasterId(defaultMasterId);
-  }, [isOpen, defaultMasterId]);
+  }, [isOpen, defaultMasterId, items]);
 
   useEffect(() => {
     if (searchQuery.length < 2) {
@@ -113,7 +124,9 @@ export function MergeModal({
    */
   useEffect(() => {
     if (!isOpen || masterId === null) { setPreview(null); return; }
-    const duplicateIds = items.map((i) => i.id).filter((id) => id !== masterId);
+    const duplicateIds = items
+      .map((i) => i.id)
+      .filter((id) => id !== masterId && includedIds.has(id));
     if (duplicateIds.length === 0) { setPreview(null); return; }
 
     let cancelled = false;
@@ -128,13 +141,16 @@ export function MergeModal({
       .catch(() => { if (!cancelled) setPreview(null); })
       .finally(() => { if (!cancelled) setPreviewLoading(false); });
     return () => { cancelled = true; };
-  }, [isOpen, masterId, items, searchType]);
+  }, [isOpen, masterId, items, searchType, includedIds]);
 
   if (!isOpen) return null;
 
   const handleMerge = async () => {
     if (!masterId) return;
-    const duplicateIds = items.map((i) => i.id).filter((id) => id !== masterId);
+    const duplicateIds = items
+      .map((i) => i.id)
+      .filter((id) => id !== masterId && includedIds.has(id));
+    if (duplicateIds.length === 0) return;
     setIsLoading(true);
     try {
       await onMerge(masterId, duplicateIds);
@@ -151,7 +167,11 @@ export function MergeModal({
   // Valid only when at least one duplicate exists: master from search means all items are duplicates;
   // master from items means the remaining items are duplicates (requires items.length >= 2).
   const masterIsFromSearch = masterId !== null && !items.some((i) => i.id === masterId);
-  const canMerge = masterId !== null && (masterIsFromSearch || items.filter((i) => i.id !== masterId).length > 0);
+  // Only the records still ticked count. Unticking everything is a valid state
+  // — it means "none of these" — and it disables the button rather than
+  // merging nothing.
+  const duplicateCount = items.filter((i) => i.id !== masterId && includedIds.has(i.id)).length;
+  const canMerge = masterId !== null && duplicateCount > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -190,13 +210,35 @@ export function MergeModal({
                   onChange={() => setMasterId(item.id)}
                   className="mt-0.5 accent-brand-secondary"
                 />
-                {item.detail ?? (
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">{item.label}</p>
-                    {item.sublabel && (
-                      <p className="text-xs text-gray-500">{item.sublabel}</p>
-                    )}
-                  </div>
+                <div className="min-w-0 flex-1">
+                  {item.detail ?? (
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">{item.label}</p>
+                      {item.sublabel && (
+                        <p className="text-xs text-gray-500">{item.sublabel}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {/* Include this one in the merge. The record being kept is not
+                    offered a choice — it is the one everything moves to. */}
+                {masterId !== item.id && (
+                  <span
+                    className="flex flex-shrink-0 items-center gap-1.5 text-xs text-gray-500"
+                    onClick={(e) => e.preventDefault()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={includedIds.has(item.id)}
+                      onChange={(e) => setIncludedIds((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(item.id); else next.delete(item.id);
+                        return next;
+                      })}
+                      className="accent-brand-secondary"
+                    />
+                    merge
+                  </span>
                 )}
               </label>
             ))}
@@ -271,7 +313,9 @@ export function MergeModal({
           {masterId && !canMerge && (
             <div className="mb-5 p-3 bg-gray-50 rounded-lg border border-gray-200">
               <p className="text-xs text-gray-500">
-                Search above to find a record to merge this into, or select an additional {searchType === 'company' ? 'company' : 'attendee'} from the table first.
+                {items.some((i) => i.id !== masterId)
+                  ? 'Tick at least one record to merge into the one you are keeping.'
+                  : `Search above to find a record to merge this into, or select an additional ${searchType === 'company' ? 'company' : 'attendee'} from the table first.`}
               </p>
             </div>
           )}
@@ -345,7 +389,11 @@ export function MergeModal({
               disabled={!canMerge || isLoading}
               className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLoading ? 'Merging...' : 'Merge Records'}
+              {isLoading
+                ? 'Merging...'
+                : duplicateCount > 0
+                  ? `Merge ${duplicateCount} record${duplicateCount === 1 ? '' : 's'}`
+                  : 'Merge Records'}
             </button>
           </div>
         </div>
