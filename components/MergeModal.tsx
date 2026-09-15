@@ -63,6 +63,18 @@ export function MergeModal({
   const [preview, setPreview] = useState<MergePreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   /**
+   * The selection the preview describes.
+   *
+   * The preview is a real merge run inside a transaction and rolled back, which
+   * is what makes it trustworthy and also what makes it expensive. It used to
+   * fire on every change, so ticking a box in a five-company group meant waiting
+   * on a round trip before the next tick registered. It is asked for now — and
+   * this records WHICH selection the answer belongs to, so changing the
+   * selection retires the answer instead of leaving a stale one on screen
+   * looking current.
+   */
+  const [previewOf, setPreviewOf] = useState<string | null>(null);
+  /**
    * Which of the offered records actually get merged.
    *
    * The duplicate scanner proposes a group, and a group is a guess: three
@@ -72,6 +84,8 @@ export function MergeModal({
    * groups are right; unticking one leaves it alone.
    */
   const [includedIds, setIncludedIds] = useState<Set<number>>(new Set());
+  /** Which records are on offer, as a value rather than an array identity. */
+  const itemIdsKey = items.map((i) => i.id).join(',');
 
   useEffect(() => {
     if (!isOpen) {
@@ -85,7 +99,12 @@ export function MergeModal({
     // Only as an opening position — once the modal is up, the choice is the
     // person's, so this does not run again while it stays open.
     if (defaultMasterId != null) setMasterId(defaultMasterId);
-  }, [isOpen, defaultMasterId, items]);
+    // Keyed on WHICH records are offered, not on the array that carries them.
+    // The panel builds a fresh `items` array on every one of its renders, and
+    // keying on that identity meant any re-render above this component silently
+    // reset the reader's ticks back to all-on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, defaultMasterId, itemIdsKey]);
 
   useEffect(() => {
     if (searchQuery.length < 2) {
@@ -114,42 +133,44 @@ export function MergeModal({
     };
   }, [searchQuery, items, searchType]);
 
-  /**
-   * Ask the merge what it would do, as soon as there is a merge to describe.
-   *
-   * The same endpoint, with `preview: true` — it runs the real reassignment and
-   * the real delete inside a transaction and rolls back. A separately computed
-   * summary would be a second implementation of the merge and would drift from
-   * it; this one cannot.
-   */
-  useEffect(() => {
-    if (!isOpen || masterId === null) { setPreview(null); return; }
-    const duplicateIds = items
-      .map((i) => i.id)
-      .filter((id) => id !== masterId && includedIds.has(id));
-    if (duplicateIds.length === 0) { setPreview(null); return; }
-
-    let cancelled = false;
-    setPreviewLoading(true);
-    fetch(`/api/${searchType === 'company' ? 'companies' : 'attendees'}/merge`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ master_id: masterId, duplicate_ids: duplicateIds, preview: true }),
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: MergePreview | null) => { if (!cancelled) setPreview(data); })
-      .catch(() => { if (!cancelled) setPreview(null); })
-      .finally(() => { if (!cancelled) setPreviewLoading(false); });
-    return () => { cancelled = true; };
-  }, [isOpen, masterId, items, searchType, includedIds]);
-
   if (!isOpen) return null;
+
+  const duplicateIds = items
+    .map((i) => i.id)
+    .filter((id) => id !== masterId && includedIds.has(id));
+  /** Identifies a selection, so a preview can be tied to the one it describes. */
+  const selectionKey = `${masterId ?? ''}:${duplicateIds.slice().sort((a, b) => a - b).join(',')}`;
+  const previewIsCurrent = preview !== null && previewOf === selectionKey;
+
+  /**
+   * Run the merge in a transaction and roll it back, to report what it would do.
+   *
+   * On demand rather than on every change: it is a real merge, and firing it on
+   * each tick made the checkboxes feel like they were on a leash.
+   */
+  const checkWhatWouldMove = async () => {
+    if (masterId === null || duplicateIds.length === 0) return;
+    const forSelection = selectionKey;
+    setPreviewLoading(true);
+    try {
+      const res = await fetch(`/api/${searchType === 'company' ? 'companies' : 'attendees'}/merge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ master_id: masterId, duplicate_ids: duplicateIds, preview: true }),
+      });
+      const data: MergePreview | null = res.ok ? await res.json() : null;
+      setPreview(data);
+      setPreviewOf(data ? forSelection : null);
+    } catch {
+      setPreview(null);
+      setPreviewOf(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   const handleMerge = async () => {
     if (!masterId) return;
-    const duplicateIds = items
-      .map((i) => i.id)
-      .filter((id) => id !== masterId && includedIds.has(id));
     if (duplicateIds.length === 0) return;
     setIsLoading(true);
     try {
@@ -170,12 +191,15 @@ export function MergeModal({
   // Only the records still ticked count. Unticking everything is a valid state
   // — it means "none of these" — and it disables the button rather than
   // merging nothing.
-  const duplicateCount = items.filter((i) => i.id !== masterId && includedIds.has(i.id)).length;
+  const duplicateCount = duplicateIds.length;
   const canMerge = masterId !== null && duplicateCount > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="relative bg-white rounded-xl shadow-2xl border border-brand-highlight max-w-md w-full mx-4 flex flex-col max-h-[90vh]">
+    /* A bottom sheet on a phone, a centred dialog from sm. `items-end` is what
+       anchors it to the bottom edge; the height it is allowed comes from
+       .sheet-to-header-top, which stops it where the header's icons begin. */
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center">
+      <div className="modal-sheet-mobile sheet-to-header-top relative flex w-full flex-col rounded-t-2xl border border-brand-highlight bg-white shadow-2xl sm:mx-4 sm:max-h-[90vh] sm:max-w-md sm:rounded-xl">
         {/* Fixed header */}
         <div className="flex-shrink-0 p-6 pb-0">
           <div className="flex items-center justify-between mb-4">
@@ -193,40 +217,47 @@ export function MergeModal({
         <div className="flex-1 overflow-y-auto px-6 min-h-0">
           <div className="space-y-3 mb-4">
             <p className="text-sm font-medium text-gray-700">Select the master record to keep:</p>
+            {/* Two controls, two labels, and NOT one label around both.
+                A label forwards a click to its labelled control — the first
+                labelable element inside it, which was the radio — so the merge
+                checkbox lived inside a label that answered for something else.
+                The preventDefault added to stop that took the checkbox's own
+                toggle with it: measured in Chromium, tapping "merge" fired
+                nothing at all and the box never changed. That is what read as
+                lag. Each control owns its own label now. */}
             {items.map((item) => (
-              <label
+              <div
                 key={item.id}
-                className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                className={`flex items-start gap-3 p-3 rounded-lg border-2 transition-all ${
                   masterId === item.id
                     ? 'border-brand-secondary bg-blue-50'
                     : 'border-gray-200 hover:border-gray-300'
                 }`}
               >
-                <input
-                  type="radio"
-                  name="master"
-                  value={item.id}
-                  checked={masterId === item.id}
-                  onChange={() => setMasterId(item.id)}
-                  className="mt-0.5 accent-brand-secondary"
-                />
-                <div className="min-w-0 flex-1">
-                  {item.detail ?? (
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">{item.label}</p>
-                      {item.sublabel && (
-                        <p className="text-xs text-gray-500">{item.sublabel}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
+                  <input
+                    type="radio"
+                    name="master"
+                    value={item.id}
+                    checked={masterId === item.id}
+                    onChange={() => setMasterId(item.id)}
+                    className="mt-0.5 accent-brand-secondary"
+                  />
+                  <div className="min-w-0 flex-1">
+                    {item.detail ?? (
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">{item.label}</p>
+                        {item.sublabel && (
+                          <p className="text-xs text-gray-500">{item.sublabel}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </label>
                 {/* Include this one in the merge. The record being kept is not
                     offered a choice — it is the one everything moves to. */}
                 {masterId !== item.id && (
-                  <span
-                    className="flex flex-shrink-0 items-center gap-1.5 text-xs text-gray-500"
-                    onClick={(e) => e.preventDefault()}
-                  >
+                  <label className="flex flex-shrink-0 cursor-pointer items-center gap-1.5 text-xs text-gray-500">
                     <input
                       type="checkbox"
                       checked={includedIds.has(item.id)}
@@ -238,9 +269,9 @@ export function MergeModal({
                       className="accent-brand-secondary"
                     />
                     merge
-                  </span>
+                  </label>
                 )}
-              </label>
+              </div>
             ))}
           </div>
 
@@ -327,17 +358,35 @@ export function MergeModal({
               from the merge itself, run and rolled back. */}
           {canMerge && (
             <div className="mb-5 rounded-lg border border-yellow-200 bg-yellow-50 p-3">
-              {previewLoading && !preview && (
-                <p className="text-xs text-yellow-800">Checking what would move…</p>
+              {/* Asked for, not volunteered. Until it is, the warning below says
+                  what every merge does; the button replaces it with the counts
+                  for THIS selection. Changing the selection retires the answer
+                  rather than leaving one on screen that describes something
+                  else. */}
+              {!previewIsCurrent && (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-yellow-900">
+                    <strong>{duplicateCount} record{duplicateCount === 1 ? '' : 's'}</strong> will be
+                    merged into the one you are keeping, and then deleted. This cannot be undone.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={checkWhatWouldMove}
+                    disabled={previewLoading}
+                    className="flex-shrink-0 rounded-lg border border-yellow-300 bg-white px-2.5 py-1 text-xs font-semibold text-yellow-900 hover:bg-yellow-100 disabled:opacity-50"
+                  >
+                    {previewLoading ? 'Checking…' : 'Check what would move'}
+                  </button>
+                </div>
               )}
 
-              {preview?.blocked && (
+              {previewIsCurrent && preview?.blocked && (
                 <p className="text-xs text-red-700">
                   <strong>This merge cannot complete.</strong> {preview.blocked}
                 </p>
               )}
 
-              {preview && !preview.blocked && (
+              {previewIsCurrent && preview && !preview.blocked && (
                 <>
                   <p className="text-xs text-yellow-900">
                     <strong>
@@ -368,12 +417,7 @@ export function MergeModal({
                 </>
               )}
 
-              {!preview && !previewLoading && (
-                <p className="text-xs text-yellow-800">
-                  <strong>Warning:</strong> the records you do not keep will be deleted, and
-                  everything attached to them moves to the one you do. This cannot be undone.
-                </p>
-              )}
+
             </div>
           )}
         </div>
@@ -387,10 +431,19 @@ export function MergeModal({
             <button
               onClick={handleMerge}
               disabled={!canMerge || isLoading}
-              className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-primary flex flex-1 items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
+              {/* A merge of a large group reassigns sixteen tables' worth of
+                  rows and then deletes; on a phone that is long enough for a
+                  still button to read as a button that did not work. */}
+              {isLoading && (
+                <svg className="h-4 w-4 flex-shrink-0 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              )}
               {isLoading
-                ? 'Merging...'
+                ? 'Merging…'
                 : duplicateCount > 0
                   ? `Merge ${duplicateCount} record${duplicateCount === 1 ? '' : 's'}`
                   : 'Merge Records'}

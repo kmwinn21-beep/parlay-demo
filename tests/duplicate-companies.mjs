@@ -408,12 +408,15 @@ console.log('\n— a group is a proposal you can take apart —');
   eq('  and the record being kept is not asked about',
     /masterId !== item\.id && \(/.test(modal), true);
 
-  // The three places that must agree on WHAT is being merged: the preview, the
-  // button's enabled state, and the request. All read includedIds.
+  // The preview, the button's enabled state and the request must agree on WHAT
+  // is being merged. They used to compute it separately from the same source,
+  // which was checked by counting the copies; there is one definition now, and
+  // agreement is structural rather than asserted.
   const filters = modal.match(/id !== masterId && includedIds\.has\(id\)/g) ?? [];
-  eq('the preview and the merge request use the same selection', filters.length, 2);
-  eq('  as does whether the button is enabled',
-    /i\.id !== masterId && includedIds\.has\(i\.id\)/.test(modal), true);
+  eq('the selection is worked out once', filters.length, 1);
+  eq('  and the count comes from it', /const duplicateCount = duplicateIds\.length/.test(modal), true);
+  eq('  as does the request', /duplicate_ids: duplicateIds/.test(modal), true);
+  eq('  and the preview', /duplicate_ids: duplicateIds, preview: true/.test(modal), true);
   eq('unticking everything disables it rather than merging nothing',
     /const canMerge = masterId !== null && duplicateCount > 0/.test(modal), true);
   eq('  and the request refuses an empty selection',
@@ -552,6 +555,113 @@ console.log('\n— the row is readable on a phone —');
     /block text-xs text-gray-400 sm:ml-2 sm:inline/.test(panel), true);
   eq('and the primary action fills the width it is given on a phone',
     /btn-primary flex-1 whitespace-nowrap[^"]*sm:flex-none/.test(panel), true);
+}
+
+console.log('\n— the merge sheet on a phone —');
+{
+  const { readFileSync } = await import('node:fs');
+  const modal = readFileSync('components/MergeModal.tsx', 'utf8');
+  const css = readFileSync('app/globals.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+
+  eq('it rises from the bottom edge on a phone',
+    /fixed inset-0 z-50 flex items-end justify-center[^"]*sm:items-center/.test(modal), true);
+  eq('  with the same animation the other sheets use',
+    /modal-sheet-mobile/.test(modal), true);
+  eq('  rounded at the top like a drawer, a dialog again from sm',
+    /rounded-t-2xl[^"]*sm:rounded-xl/.test(modal), true);
+
+  // It is allowed MORE height than the other drawers: they stop at the
+  // header's bottom edge, this stops where its icons begin.
+  const sheetCap = css.match(/\.modal-sheet-mobile\.sheet-to-header-top\s*\{([^}]*)\}/)?.[1] ?? '';
+  eq('the sheet has its own cap', sheetCap !== '', true);
+  eq('  measured from the top of the icon row, not the header\'s bottom',
+    /env\(safe-area-inset-top\)\s*\+\s*0\.75rem/.test(sheetCap), true);
+  eq('  and not from --mobile-header-h, which is where the drawers stop',
+    /--mobile-header-h/.test(sheetCap), false);
+
+  // The header's own padding uses the same two terms. If one moves and the
+  // other does not, the sheet's top edge drifts off the icon row.
+  const header = css.match(/\.header-mobile-dark\s*\{([^}]*)\}/)?.[1] ?? '';
+  eq('the header still starts its icons at the same offset',
+    /0\.75rem/.test(header) && /env\(safe-area-inset-top\)/.test(header), true);
+
+  eq('  with a dvh reading as well as vh', /100dvh/.test(sheetCap), true);
+}
+
+console.log('\n— the preview is asked for, not volunteered —');
+{
+  const { readFileSync } = await import('node:fs');
+  const modal = readFileSync('components/MergeModal.tsx', 'utf8');
+
+  // It is a real merge run and rolled back. Firing it on every tick put a round
+  // trip between the reader and their own checkbox.
+  eq('nothing fetches a preview from an effect',
+    /useEffect\([\s\S]{0,400}preview: true/.test(modal), false);
+  eq('  it has a button', /onClick=\{checkWhatWouldMove\}/.test(modal), true);
+  eq('  and that is the only thing that asks for one',
+    (modal.match(/preview: true/g) ?? []).length, 1);
+
+  // A preview belongs to the selection it described.
+  eq('the answer is tied to the selection it describes',
+    /setPreviewOf\(data \? forSelection : null\)/.test(modal), true);
+  eq('  and only shown while that selection stands',
+    /const previewIsCurrent = preview !== null && previewOf === selectionKey/.test(modal), true);
+  eq('  so changing the ticks puts the button back',
+    /\{!previewIsCurrent && \(/.test(modal), true);
+  eq('the selection key does not depend on tick order',
+    /duplicateIds\.slice\(\)\.sort\(\(a, b\) => a - b\)\.join\(','\)/.test(modal), true);
+
+  // Whatever the preview says, the irreversibility is stated either way.
+  eq('the warning stands with or without a preview',
+    (modal.match(/cannot be undone/g) ?? []).length >= 2, true);
+}
+
+console.log('\n— the merge checkbox is a control, not a decoration —');
+{
+  const { readFileSync } = await import('node:fs');
+  const modal = readFileSync('components/MergeModal.tsx', 'utf8');
+
+  // It sat inside the SAME <label> as the radio that picks the record to keep.
+  // A label forwards a click to its labelled control — the first labelable
+  // element in it — so the checkbox was inside a label answering for the radio,
+  // and the preventDefault added to stop that took the checkbox's own toggle
+  // with it. Measured in Chromium: tapping "merge" fired nothing at all. The
+  // box never changed, which is what read as lag.
+  eq('the row is no longer one label around both controls',
+    /<label\s+key=\{item\.id\}/.test(modal), false);
+  eq('  the picker has its own label', /<label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">/.test(modal), true);
+  eq('  and so does the checkbox', /<label className="flex flex-shrink-0 cursor-pointer items-center gap-1\.5/.test(modal), true);
+  eq('  with nothing cancelling its click', /onClick=\{\(e\) => e\.preventDefault\(\)\}/.test(modal), false);
+}
+
+console.log('\n— a parent re-render does not undo the ticks —');
+{
+  const { readFileSync } = await import('node:fs');
+  const modal = readFileSync('components/MergeModal.tsx', 'utf8');
+
+  // The panel builds a fresh `items` array on every one of its renders. Keying
+  // the reset on that identity meant any re-render above this component put
+  // every tick back on, silently.
+  eq('the reset is keyed on which records are offered',
+    /const itemIdsKey = items\.map\(\(i\) => i\.id\)\.join\(','\)/.test(modal), true);
+  eq('  not on the array carrying them',
+    /\}, \[isOpen, defaultMasterId, itemIdsKey\]\)/.test(modal), true);
+  eq('  so `items` is not a dependency of the reset',
+    /\}, \[isOpen, defaultMasterId, items\]\)/.test(modal), false);
+}
+
+console.log('\n— the merge button shows it is working —');
+{
+  const { readFileSync } = await import('node:fs');
+  const modal = readFileSync('components/MergeModal.tsx', 'utf8');
+
+  // A merge of a large group reassigns sixteen tables' worth of rows and then
+  // deletes. On a phone a still button reads as one that did not work.
+  eq('there is a spinner', /animate-spin/.test(modal), true);
+  eq('  shown only while merging', /\{isLoading && \([\s\S]{0,200}animate-spin/.test(modal), true);
+  eq('  beside the word, not instead of it', /isLoading\s*\?\s*'Merging…'/.test(modal), true);
+  eq('  and hidden from anything reading the button aloud',
+    /animate-spin[\s\S]{0,120}aria-hidden="true"/.test(modal), true);
 }
 
 console.log('\n— the scan is started from the filter row —');

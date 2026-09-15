@@ -456,3 +456,25 @@ h1, h2, h3 {
   margin-right: -1.5rem;
   padding: 0.5rem 1.5rem;
 }
+
+/**
+ * A bottom sheet that stops at the top of the header's icon row.
+ *
+ * The plain .modal-sheet-mobile cap stops at the header's BOTTOM edge, which is
+ * right for a sheet that is mostly a form. The merge sheet is a list of
+ * companies, a search box, a preview and two buttons, and at 390px that list is
+ * what gets squeezed — so this one is allowed the header's own height as well,
+ * stopping where the icons begin rather than below them.
+ *
+ * The offset is the same arithmetic .header-mobile-dark uses for its padding —
+ * the status-bar inset plus 0.75rem — so the sheet's top edge and the icon row's
+ * top edge are the same line by construction rather than by coincidence.
+ *
+ * Below sm only. From 640px this is a centred dialog with its own cap.
+ */
+@media (max-width: 639px) {
+  .modal-sheet-mobile.sheet-to-header-top {
+    max-height: calc(100vh - (env(safe-area-inset-top) + 0.75rem));
+    max-height: calc(100dvh - (env(safe-area-inset-top) + 0.75rem));
+  }
+}
