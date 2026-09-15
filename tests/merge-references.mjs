@@ -595,9 +595,16 @@ console.log('\n— the modal asks, it does not do —');
   // is nothing to assert about that at run time — by the time it is observable
   // the records are gone — so it is pinned at the source.
   const modal = readFileSync('components/MergeModal.tsx', 'utf8');
-  const mergeFetches = modal.match(/fetch\(`\/api\/\$\{[^`]*\}\/merge`[\s\S]{0,400}?\)\)/g) ?? [];
-  eq('the modal makes exactly one request to the merge endpoint', mergeFetches.length, 1);
-  eq('  and it is a preview', /preview:\s*true/.test(mergeFetches[0] ?? ''), true);
+
+  // Matched by where each call STARTS and reading forward, rather than by a
+  // pattern for how it ends — an earlier version keyed on the closing `))` of
+  // a promise chain and broke the day the call became an await, reporting a
+  // missing request when the request was there and correct.
+  const starts = Array.from(modal.matchAll(/fetch\(`\/api\/\$\{[^`]*\}\/merge`/g));
+  eq('the modal makes exactly one request to the merge endpoint', starts.length, 1);
+  const call = modal.slice(starts[0]?.index ?? 0, (starts[0]?.index ?? 0) + 500);
+  eq('  and it is a preview', /preview:\s*true/.test(call), true);
+  eq('  the only one in the file', (modal.match(/preview:\s*true/g) ?? []).length, 1);
   // The real merge goes through the caller's handler, not from in here.
   eq('the merge itself is the caller\'s to perform', /await onMerge\(masterId, duplicateIds\)/.test(modal), true);
 }

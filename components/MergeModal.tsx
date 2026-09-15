@@ -63,6 +63,18 @@ export function MergeModal({
   const [preview, setPreview] = useState<MergePreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   /**
+   * The selection the preview describes.
+   *
+   * The preview is a real merge run inside a transaction and rolled back, which
+   * is what makes it trustworthy and also what makes it expensive. It used to
+   * fire on every change, so ticking a box in a five-company group meant waiting
+   * on a round trip before the next tick registered. It is asked for now — and
+   * this records WHICH selection the answer belongs to, so changing the
+   * selection retires the answer instead of leaving a stale one on screen
+   * looking current.
+   */
+  const [previewOf, setPreviewOf] = useState<string | null>(null);
+  /**
    * Which of the offered records actually get merged.
    *
    * The duplicate scanner proposes a group, and a group is a guess: three
@@ -114,42 +126,44 @@ export function MergeModal({
     };
   }, [searchQuery, items, searchType]);
 
-  /**
-   * Ask the merge what it would do, as soon as there is a merge to describe.
-   *
-   * The same endpoint, with `preview: true` — it runs the real reassignment and
-   * the real delete inside a transaction and rolls back. A separately computed
-   * summary would be a second implementation of the merge and would drift from
-   * it; this one cannot.
-   */
-  useEffect(() => {
-    if (!isOpen || masterId === null) { setPreview(null); return; }
-    const duplicateIds = items
-      .map((i) => i.id)
-      .filter((id) => id !== masterId && includedIds.has(id));
-    if (duplicateIds.length === 0) { setPreview(null); return; }
-
-    let cancelled = false;
-    setPreviewLoading(true);
-    fetch(`/api/${searchType === 'company' ? 'companies' : 'attendees'}/merge`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ master_id: masterId, duplicate_ids: duplicateIds, preview: true }),
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: MergePreview | null) => { if (!cancelled) setPreview(data); })
-      .catch(() => { if (!cancelled) setPreview(null); })
-      .finally(() => { if (!cancelled) setPreviewLoading(false); });
-    return () => { cancelled = true; };
-  }, [isOpen, masterId, items, searchType, includedIds]);
-
   if (!isOpen) return null;
+
+  const duplicateIds = items
+    .map((i) => i.id)
+    .filter((id) => id !== masterId && includedIds.has(id));
+  /** Identifies a selection, so a preview can be tied to the one it describes. */
+  const selectionKey = `${masterId ?? ''}:${duplicateIds.slice().sort((a, b) => a - b).join(',')}`;
+  const previewIsCurrent = preview !== null && previewOf === selectionKey;
+
+  /**
+   * Run the merge in a transaction and roll it back, to report what it would do.
+   *
+   * On demand rather than on every change: it is a real merge, and firing it on
+   * each tick made the checkboxes feel like they were on a leash.
+   */
+  const checkWhatWouldMove = async () => {
+    if (masterId === null || duplicateIds.length === 0) return;
+    const forSelection = selectionKey;
+    setPreviewLoading(true);
+    try {
+      const res = await fetch(`/api/${searchType === 'company' ? 'companies' : 'attendees'}/merge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ master_id: masterId, duplicate_ids: duplicateIds, preview: true }),
+      });
+      const data: MergePreview | null = res.ok ? await res.json() : null;
+      setPreview(data);
+      setPreviewOf(data ? forSelection : null);
+    } catch {
+      setPreview(null);
+      setPreviewOf(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   const handleMerge = async () => {
     if (!masterId) return;
-    const duplicateIds = items
-      .map((i) => i.id)
-      .filter((id) => id !== masterId && includedIds.has(id));
     if (duplicateIds.length === 0) return;
     setIsLoading(true);
     try {
@@ -170,12 +184,15 @@ export function MergeModal({
   // Only the records still ticked count. Unticking everything is a valid state
   // — it means "none of these" — and it disables the button rather than
   // merging nothing.
-  const duplicateCount = items.filter((i) => i.id !== masterId && includedIds.has(i.id)).length;
+  const duplicateCount = duplicateIds.length;
   const canMerge = masterId !== null && duplicateCount > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="relative bg-white rounded-xl shadow-2xl border border-brand-highlight max-w-md w-full mx-4 flex flex-col max-h-[90vh]">
+    /* A bottom sheet on a phone, a centred dialog from sm. `items-end` is what
+       anchors it to the bottom edge; the height it is allowed comes from
+       .sheet-to-header-top, which stops it where the header's icons begin. */
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center">
+      <div className="modal-sheet-mobile sheet-to-header-top relative flex w-full flex-col rounded-t-2xl border border-brand-highlight bg-white shadow-2xl sm:mx-4 sm:max-h-[90vh] sm:max-w-md sm:rounded-xl">
         {/* Fixed header */}
         <div className="flex-shrink-0 p-6 pb-0">
           <div className="flex items-center justify-between mb-4">
@@ -327,17 +344,35 @@ export function MergeModal({
               from the merge itself, run and rolled back. */}
           {canMerge && (
             <div className="mb-5 rounded-lg border border-yellow-200 bg-yellow-50 p-3">
-              {previewLoading && !preview && (
-                <p className="text-xs text-yellow-800">Checking what would move…</p>
+              {/* Asked for, not volunteered. Until it is, the warning below says
+                  what every merge does; the button replaces it with the counts
+                  for THIS selection. Changing the selection retires the answer
+                  rather than leaving one on screen that describes something
+                  else. */}
+              {!previewIsCurrent && (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-yellow-900">
+                    <strong>{duplicateCount} record{duplicateCount === 1 ? '' : 's'}</strong> will be
+                    merged into the one you are keeping, and then deleted. This cannot be undone.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={checkWhatWouldMove}
+                    disabled={previewLoading}
+                    className="flex-shrink-0 rounded-lg border border-yellow-300 bg-white px-2.5 py-1 text-xs font-semibold text-yellow-900 hover:bg-yellow-100 disabled:opacity-50"
+                  >
+                    {previewLoading ? 'Checking…' : 'Check what would move'}
+                  </button>
+                </div>
               )}
 
-              {preview?.blocked && (
+              {previewIsCurrent && preview?.blocked && (
                 <p className="text-xs text-red-700">
                   <strong>This merge cannot complete.</strong> {preview.blocked}
                 </p>
               )}
 
-              {preview && !preview.blocked && (
+              {previewIsCurrent && preview && !preview.blocked && (
                 <>
                   <p className="text-xs text-yellow-900">
                     <strong>
@@ -368,12 +403,7 @@ export function MergeModal({
                 </>
               )}
 
-              {!preview && !previewLoading && (
-                <p className="text-xs text-yellow-800">
-                  <strong>Warning:</strong> the records you do not keep will be deleted, and
-                  everything attached to them moves to the one you do. This cannot be undone.
-                </p>
-              )}
+
             </div>
           )}
         </div>
