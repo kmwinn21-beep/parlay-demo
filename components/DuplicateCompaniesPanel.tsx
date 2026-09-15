@@ -14,6 +14,11 @@ import type { DuplicateGroup } from '@/lib/duplicateCompanies';
  * the account and offers them for merging — one group at a time, through the
  * same modal the Merge button uses, which now says what it would move first.
  *
+ * Each group says WHY it is a group: a shared name, or a shared domain, or
+ * both. The evidence is the point. "T20 Holdings LLC" and "Twenty20 Group" look
+ * like nothing to each other until the row says both use twenty20.com, and a
+ * reader who cannot see that has only the system's word for it.
+ *
  * ── Why it stays shut until asked ────────────────────────────────────────────
  *
  * The scan reads every company and groups them in JavaScript. That is cheap at
@@ -80,7 +85,8 @@ export function DuplicateCompaniesPanel({ onMerged }: { onMerged: () => void }) 
           <h2 className="text-base font-semibold text-brand-primary font-serif">Duplicate companies</h2>
           <p className="text-sm text-gray-500">
             Find companies that are the same company under a different spelling — Inc., LLC,
-            a stray comma, a difference in case.
+            a stray comma, a difference in case — or under a different name entirely,
+            sharing a website or work email domain.
           </p>
         </div>
         <button onClick={scan} disabled={scanning} className="btn-secondary text-sm disabled:opacity-50">
@@ -125,6 +131,23 @@ export function DuplicateCompaniesPanel({ onMerged }: { onMerged: () => void }) 
         {groups.map((group) => (
           <li key={group.dismissalKey} className="flex flex-wrap items-start justify-between gap-3 py-3">
             <div className="min-w-0 flex-1">
+              {/* Why these are together, before the names. A group the reader
+                  cannot judge is a group they either accept blindly or skip. */}
+              <p className="mb-1 flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500">
+                {group.matchedOn.includes('name') && (
+                  <span className="rounded bg-gray-100 px-1.5 py-0.5 font-medium text-gray-600">
+                    same name
+                  </span>
+                )}
+                {group.matchedOn.includes('domain') && (
+                  <span className="rounded bg-blue-50 px-1.5 py-0.5 font-medium text-brand-secondary">
+                    same domain
+                  </span>
+                )}
+                {group.sharedDomains.length > 0 && (
+                  <span className="truncate">{group.sharedDomains.join(', ')}</span>
+                )}
+              </p>
               <ul className="space-y-0.5">
                 {group.members.map((m) => (
                   <li key={m.id} className="flex flex-wrap items-baseline gap-2 text-sm">

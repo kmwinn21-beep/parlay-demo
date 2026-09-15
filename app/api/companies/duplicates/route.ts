@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   const db = await getDb(authResult?.accountId);
 
   try {
-    const [companiesResult, dismissedResult] = await Promise.all([
+    const [companiesResult, emailsResult, dismissedResult] = await Promise.all([
       db.execute({
         sql: `SELECT c.id, c.name, c.company_type, c.website,
                      COUNT(DISTINCT a.id) AS attendee_count,
@@ -33,9 +33,25 @@ export async function GET(request: NextRequest) {
                ORDER BY c.name`,
         args: [],
       }),
+      // Attendee emails give the domain signal its reach: two records with
+      // nothing in common by name are one company if the people at both use
+      // the same work domain. Fetched as raw addresses because the domain
+      // rules — free providers, social links — live in JavaScript.
+      db.execute({
+        sql: `SELECT company_id, email FROM attendees
+               WHERE company_id IS NOT NULL AND email IS NOT NULL AND email <> ''`,
+        args: [],
+      }),
       db.execute({ sql: 'SELECT dismissal_key FROM company_duplicate_dismissals', args: [] })
         .catch(() => ({ rows: [] as Record<string, unknown>[] })),
     ]);
+
+    const emailsByCompany = new Map<number, string[]>();
+    for (const r of emailsResult.rows) {
+      const id = Number(r.company_id);
+      if (!emailsByCompany.has(id)) emailsByCompany.set(id, []);
+      emailsByCompany.get(id)!.push(String(r.email));
+    }
 
     const companies = companiesResult.rows.map((r) => ({
       id: Number(r.id),
@@ -44,6 +60,7 @@ export async function GET(request: NextRequest) {
       website: r.website ? String(r.website) : null,
       attendee_count: Number(r.attendee_count ?? 0),
       conference_count: Number(r.conference_count ?? 0),
+      attendee_emails: emailsByCompany.get(Number(r.id)) ?? [],
     }));
     const dismissed = new Set(dismissedResult.rows.map((r) => String(r.dismissal_key)));
 

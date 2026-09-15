@@ -16,6 +16,19 @@
  * would be worth trusting. There is an assertion below that holds them
  * together: whatever the upload would collapse, the scanner must group.
  *
+ * ── The domain signal ────────────────────────────────────────────────────────
+ *
+ * Names cannot connect "T20 Holdings LLC" to "Twenty20 Group". A shared work
+ * domain can, and is close to proof — which is why most of the assertions about
+ * it below are about what it must REFUSE to connect. Two companies each with a
+ * gmail attendee are not related; a linkedin.com in a website field is
+ * somebody's profile.
+ *
+ * One number in it could not be measured: MAX_COMPANIES_PER_DOMAIN. The real
+ * conference list this was built against has no email or website column at all,
+ * so the cap is a judgement about where a shared domain stops being evidence,
+ * not a figure read off data. The test pins the behaviour, not the value.
+ *
  * ── And it stops where that one stops ────────────────────────────────────────
  *
  * Not deepNormalizeCompanyName. On a real 2,647-row list that reduced
@@ -45,11 +58,13 @@ const eq = (label, got, want) => {
 };
 process.on('exit', () => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
 
-const { findDuplicateGroups, dismissalKeyFor } = await import('@/lib/duplicateCompanies');
+const { findDuplicateGroups, dismissalKeyFor, domainsFor, MAX_COMPANIES_PER_DOMAIN } = await import('@/lib/duplicateCompanies');
 const { collapseNewCompanyNames } = await import('@/lib/matching');
 
 const co = (id, name, extra = {}) => ({ id, name, attendee_count: 0, conference_count: 0, ...extra });
-const names = (g) => g.members.map(m => m.name);
+// Tolerant of an absent group: when a grouping assertion fails, the ones
+// after it should still report rather than the run dying on a TypeError.
+const names = (g) => (g?.members ?? []).map(m => m.name);
 
 // ── Grouping ─────────────────────────────────────────────────────────────────
 
@@ -62,6 +77,7 @@ console.log('\n— spellings of one company are grouped —');
   eq('one group', groups.length, 1);
   eq('  with all four in it', names(groups[0]).length, 4);
   eq('  keyed on the shared normalized name', groups[0].key, 'direct supply');
+  eq('  and reported as a name match', groups[0]?.matchedOn ?? null, ['name']);
 }
 {
   const only = (list) => findDuplicateGroups(list).length;
@@ -112,6 +128,84 @@ console.log('\n— the scanner and the upload agree —');
   eq('the upload would create this many companies', uploadGroups, 4);
   eq('  and merging every group the scanner found leaves the same number',
     scannedRecordsAfterMerging, uploadGroups);
+}
+
+// ── The domain signal ────────────────────────────────────────────────────────
+
+console.log('\n— a shared domain connects what names cannot —');
+{
+  const groups = findDuplicateGroups([
+    co(1, 'T20 Holdings LLC', { website: 'https://www.twenty20.com/about' }),
+    co(2, 'Twenty20 Group', { attendee_emails: ['nia@twenty20.com'] }),
+    co(3, 'Belmont Care', { website: 'belmont.com' }),
+  ]);
+  eq('the two are grouped', groups.length, 1);
+  eq('  despite sharing nothing in their names',
+    names(groups[0]), ['T20 Holdings LLC', 'Twenty20 Group']);
+  eq('  and the group says why', groups[0]?.matchedOn ?? null, ['domain']);
+  eq('  naming the domain that did it', groups[0]?.sharedDomains ?? null, ['twenty20.com']);
+}
+{
+  eq('a website matches an attendee\'s work email', findDuplicateGroups([
+    co(1, 'Belmont Care', { website: 'https://belmont.com' }),
+    co(2, 'Belmont Senior Living', { attendee_emails: ['dana@belmont.com'] }),
+  ]).length, 1);
+  eq('  and www and a path make no difference', domainsFor(
+    { id: 1, name: 'x', website: 'https://www.belmont.com/careers?ref=1' }), ['belmont.com']);
+}
+
+console.log('\n— but a domain that identifies nobody connects nobody —');
+{
+  const free = findDuplicateGroups([
+    co(1, 'Belmont Care', { attendee_emails: ['dana@gmail.com'] }),
+    co(2, 'Twenty20 Group', { attendee_emails: ['sam@gmail.com'] }),
+  ]);
+  eq('two gmail attendees are not one company', free.length, 0);
+
+  const social = findDuplicateGroups([
+    co(1, 'Belmont Care', { website: 'https://www.linkedin.com/company/belmont' }),
+    co(2, 'Twenty20 Group', { website: 'linkedin.com/company/twenty20' }),
+  ]);
+  eq('nor are two LinkedIn links', social.length, 0);
+
+  const freeSite = findDuplicateGroups([
+    co(1, 'Belmont Care', { website: 'gmail.com' }),
+    co(2, 'Twenty20 Group', { website: 'https://gmail.com' }),
+  ]);
+  eq('nor a free provider typed into a website field', freeSite.length, 0);
+  eq('  which nothing else was checking', domainsFor(
+    { id: 1, name: 'x', website: 'https://gmail.com' }), []);
+}
+{
+  // The cap. A domain on a handful of records is a duplicate; a domain on
+  // dozens is a shared host or a pasted column.
+  const many = Array.from({ length: MAX_COMPANIES_PER_DOMAIN + 1 }, (_, i) =>
+    co(i + 1, `Company ${i}`, { website: 'sharedhost.com' }));
+  eq('a domain on too many records is not evidence', findDuplicateGroups(many).length, 0);
+
+  const few = Array.from({ length: MAX_COMPANIES_PER_DOMAIN }, (_, i) =>
+    co(i + 1, `Company ${i}`, { website: 'sharedhost.com' }));
+  eq('  while one just inside the cap still is', findDuplicateGroups(few).length, 1);
+}
+
+console.log('\n— the two signals make one group, not two —');
+{
+  const groups = findDuplicateGroups([
+    co(1, 'Belmont Care', { website: 'belmont.com' }),
+    co(2, 'Belmont Care, LLC', { attendee_emails: ['dana@belmont.com'] }),
+  ]);
+  eq('a pair matching on both is asked about once', groups.length, 1);
+  eq('  and both reasons are given', groups[0]?.matchedOn ?? null, ['name', 'domain']);
+}
+{
+  // A chain: A~B by name, B~C by domain. One company, three records.
+  const groups = findDuplicateGroups([
+    co(1, 'Belmont Care'),
+    co(2, 'Belmont Care, LLC', { website: 'belmont.com' }),
+    co(3, 'BC Senior Holdings', { attendee_emails: ['sam@belmont.com'] }),
+  ]);
+  eq('a chain across signals is one group', groups.length, 1);
+  eq('  with all three in it', groups[0]?.members.length ?? 0, 3);
 }
 
 // ── Which record to keep ─────────────────────────────────────────────────────
@@ -223,6 +317,35 @@ console.log('\n— end to end, against a real database —');
   eq('  and the group is gone on the next scan', second.body.groups.length, 0);
   eq('  with the companies all still there', Number((await tenant.execute(
     'SELECT COUNT(*) AS n FROM companies')).rows[0].n), 4);
+
+  // The domain signal end to end. The route has to pull attendee emails and
+  // hand them to the scanner — wiring that the unit tests above cannot see.
+  await tenant.execute({ sql: 'INSERT INTO companies (name, website) VALUES (?, ?)',
+    args: ['T20 Holdings LLC', 'https://www.twenty20.com/about'] });
+  await tenant.execute({ sql: 'INSERT INTO companies (name) VALUES (?)', args: ['Twenty20 Group'] });
+  await tenant.execute({
+    sql: `INSERT INTO attendees (first_name, last_name, email, company_id)
+          VALUES ('Nia', 'Hall', 'nia@twenty20.com',
+                  (SELECT id FROM companies WHERE name = 'Twenty20 Group'))`,
+  });
+  // And a pair that must NOT be connected: both have a free-provider attendee.
+  for (const n of ['Unrelated One', 'Unrelated Two']) {
+    await tenant.execute({ sql: 'INSERT INTO companies (name) VALUES (?)', args: [n] });
+    await tenant.execute({
+      sql: `INSERT INTO attendees (first_name, last_name, email, company_id)
+            VALUES ('A', 'B', ?, (SELECT id FROM companies WHERE name = ?))`,
+      args: [`someone@gmail.com`, n],
+    });
+  }
+
+  const withDomains = await get();
+  const domainGroup = withDomains.body.groups.find(g => g.matchedOn.includes('domain'));
+  eq('the route finds a domain match', domainGroup != null, true);
+  eq('  across two differently-named records',
+    (domainGroup?.members ?? []).map(m => m.name).sort(), ['T20 Holdings LLC', 'Twenty20 Group']);
+  eq('  naming the shared domain', domainGroup?.sharedDomains ?? null, ['twenty20.com']);
+  eq('  and the gmail pair is not grouped',
+    withDomains.body.groups.some(g => g.members.some(m => m.name.startsWith('Unrelated'))), false);
 
   const bad = await route.POST(new NextRequest('https://parlay.test/d', {
     method: 'POST',
