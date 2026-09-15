@@ -1,6 +1,14 @@
 import type { Client } from '@libsql/client';
 
 /**
+ * Anything that can run a statement — a client or an open transaction.
+ *
+ * The preview runs the real merge inside a transaction it rolls back, so the
+ * same functions have to accept both. See previewMerge.
+ */
+type Executor = Pick<Client, 'execute'>;
+
+/**
  * Moving everything that points at a record, before the record is deleted.
  *
  * ── What went wrong without this ─────────────────────────────────────────────
@@ -77,7 +85,7 @@ interface Ref { table: string; column: string }
  * Exported for the test, which asserts the discovery still sees each of the
  * conventions above rather than trusting a count.
  */
-export async function findReferences(db: Client, entity: MergeEntity): Promise<Ref[]> {
+export async function findReferences(db: Executor, entity: MergeEntity): Promise<Ref[]> {
   const target = ENTITY_TABLE[entity];
   const suffix = `${entity}_id`;
 
@@ -121,7 +129,7 @@ export async function findReferences(db: Client, entity: MergeEntity): Promise<R
  * delete or orphaned, so it is removed deliberately and counted.
  */
 export async function reassignReferences(
-  db: Client,
+  db: Executor,
   entity: MergeEntity,
   fromId: number,
   toId: number,
@@ -206,4 +214,118 @@ export async function reassignReferences(
   }
 
   return report;
+}
+
+/* ─── What a merge would do, before it does it ──────────────────────────────── */
+
+/**
+ * Table names in the words the people merging use.
+ *
+ * Only the ones a person would recognise. Anything unlisted falls back to its
+ * table name with the underscores knocked out, which is honest — better a row
+ * reading "attendee product signals" than a silent omission that makes the
+ * preview look smaller than the merge.
+ */
+const TABLE_LABELS: Record<string, string> = {
+  attendees: 'Attendees',
+  companies: 'Child companies',
+  closed_deals: 'Closed deals',
+  conference_attendees: 'Conference links',
+  conference_attendee_details: 'Conference details',
+  conference_company_intel: 'Conference intel',
+  conference_targets: 'Targets',
+  contact_conference_history: 'Contact history',
+  entity_notes: 'Notes',
+  follow_ups: 'Follow-ups',
+  form_submissions: 'Form submissions',
+  internal_relationships: 'Internal relationships',
+  meetings: 'Meetings',
+  notifications: 'Notifications',
+  outreach_activity: 'Outreach activity',
+  outreach_assignments: 'Outreach assignments',
+  outreach_notes: 'Outreach notes',
+  pinned_notes: 'Pinned notes',
+  attendee_touchpoints: 'Touchpoints',
+  social_event_rsvps: 'Social RSVPs',
+  vendor_relationships: 'Vendor relationships',
+  company_priority_marks: 'Priority marks',
+  company_user_statuses: 'Status marks',
+};
+
+const labelFor = (table: string) =>
+  TABLE_LABELS[table] ?? table.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+
+export interface MergePreview {
+  /** Records that would move to the survivor, largest group first. */
+  moving: Array<{ label: string; rows: number }>;
+  /** Records the survivor already has an equivalent of, which would combine. */
+  combining: Array<{ label: string; rows: number }>;
+  /** Total rows that would move — the headline number. */
+  totalMoving: number;
+  /** Set when the dry run could not complete; the merge would fail the same way. */
+  blocked?: string;
+}
+
+/**
+ * What a merge would move, worked out by doing it and rolling back.
+ *
+ * ── Why a dry run rather than a count ────────────────────────────────────────
+ *
+ * A preview computed separately from the merge is a second implementation of
+ * the merge, and the two drift. This one opens a write transaction, runs the
+ * REAL reassignment and the REAL delete, reads what happened, and rolls the
+ * whole thing back — so the numbers cannot disagree with what the button does,
+ * and a merge that would fail on a constraint fails here first, where it can be
+ * reported instead of half-applied.
+ *
+ * Verified in Chromium-free isolation before this was built on: a rolled-back
+ * transaction restores the row count exactly, and foreign-key cascades fire
+ * inside it the way they would for real.
+ */
+export async function previewMerge(
+  db: Client,
+  entity: MergeEntity,
+  fromIds: number[],
+  toId: number,
+): Promise<MergePreview> {
+  const target = ENTITY_TABLE[entity];
+  const moved = new Map<string, number>();
+  const collapsed = new Map<string, number>();
+  let blocked: string | undefined;
+
+  const tx = await db.transaction('write');
+  try {
+    for (const fromId of fromIds) {
+      if (fromId === toId) continue;
+      const report = await reassignReferences(tx, entity, fromId, toId);
+      for (const [key, n] of Object.entries(report.moved)) {
+        const table = key.split('.')[0];
+        moved.set(table, (moved.get(table) ?? 0) + n);
+      }
+      for (const [key, n] of Object.entries(report.collapsed)) {
+        const table = key.split('.')[0];
+        collapsed.set(table, (collapsed.get(table) ?? 0) + n);
+      }
+      // The delete is part of the dry run on purpose: it is what would cascade,
+      // and what would raise a constraint error.
+      await tx.execute({ sql: `DELETE FROM "${target}" WHERE id = ?`, args: [fromId] });
+    }
+  } catch (err) {
+    blocked = err instanceof Error ? err.message : String(err);
+  } finally {
+    // Nothing here is kept. Rollback can only fail if the transaction is
+    // already closed, which is not a reason to fail the preview.
+    await tx.rollback().catch(() => {});
+  }
+
+  const rank = (m: Map<string, number>) => Array.from(m.entries())
+    .map(([table, rows]) => ({ label: labelFor(table), rows }))
+    .sort((a, b) => b.rows - a.rows || a.label.localeCompare(b.label));
+
+  return {
+    moving: rank(moved),
+    combining: rank(collapsed),
+    totalMoving: Array.from(moved.values()).reduce((a, b) => a + b, 0),
+    ...(blocked ? { blocked } : {}),
+  };
 }

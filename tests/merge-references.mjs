@@ -28,7 +28,7 @@
  *
  * Exits non-zero on the first failing expectation, so it can gate a build.
  */
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -50,7 +50,7 @@ process.on('exit', () => { try { rmSync(dir, { recursive: true, force: true }); 
 
 const { createClient } = await import('@libsql/client');
 const { seedFreshDb } = await import('@/lib/db');
-const { findReferences, reassignReferences } = await import('@/lib/mergeReferences');
+const { findReferences, reassignReferences, previewMerge } = await import('@/lib/mergeReferences');
 
 let seq = 0;
 async function freshDb() {
@@ -385,6 +385,221 @@ console.log('\n— a company does not become its own parent —');
   eq('the survivor has no parent rather than itself', (await db.execute({
     sql: 'SELECT parent_company_id FROM companies WHERE id = ?', args: [master],
   })).rows[0].parent_company_id, null);
+}
+
+// ── The preview ──────────────────────────────────────────────────────────────
+
+console.log('\n— the preview says what the merge then does —');
+{
+  // The only assertion that really matters here: run the preview, run the
+  // merge, and compare. A preview computed separately from the merge is a
+  // second implementation of it, and would drift; this one is the merge,
+  // rolled back.
+  const db = await freshDb();
+  const mk = async (n) => Number((await db.execute({
+    sql: 'INSERT INTO companies (name) VALUES (?) RETURNING id', args: [n] })).rows[0].id);
+  const master = await mk('Belmont Care');
+  const dup = await mk('Belmont Care, LLC');
+
+  await db.execute({
+    sql: `INSERT INTO closed_deals (company_id, deal_name, amount, close_date)
+          VALUES (?, 'Q3', 1000, '2026-09-30')`, args: [dup] });
+  for (const body of ['a', 'b', 'c']) {
+    await db.execute({
+      sql: `INSERT INTO entity_notes (entity_type, entity_id, content) VALUES ('company', ?, ?)`,
+      args: [dup, body] });
+  }
+  for (const n of ['Dana', 'Sam']) {
+    await db.execute({
+      sql: `INSERT INTO attendees (first_name, last_name, company_id) VALUES (?, 'X', ?)`,
+      args: [n, dup] });
+  }
+
+  const preview = await previewMerge(db, 'company', [dup], master);
+
+  eq('the preview counts every record that would move', preview.totalMoving, 6);
+  eq('  named in the words people use', preview.moving, [
+    { label: 'Notes', rows: 3 },
+    { label: 'Attendees', rows: 2 },
+    { label: 'Closed deals', rows: 1 },
+  ]);
+  eq('  and nothing is reported as blocked', preview.blocked, undefined);
+
+  // The preview must not have changed anything.
+  eq('the duplicate is still there afterwards', Number((await db.execute({
+    sql: 'SELECT COUNT(*) AS n FROM companies WHERE id = ?', args: [dup] })).rows[0].n), 1);
+  eq('  and its records are untouched', Number((await db.execute({
+    sql: 'SELECT COUNT(*) AS n FROM attendees WHERE company_id = ?', args: [dup] })).rows[0].n), 2);
+
+  // Now do it for real and compare.
+  const report = await reassignReferences(db, 'company', dup, master);
+  await db.execute({ sql: 'DELETE FROM companies WHERE id = ?', args: [dup] });
+  const actuallyMoved = Object.values(report.moved).reduce((a, b) => a + b, 0);
+
+  eq('the merge moves exactly what the preview said', actuallyMoved, preview.totalMoving);
+  eq('  and they are on the survivor', [
+    Number((await db.execute({ sql: 'SELECT COUNT(*) AS n FROM attendees WHERE company_id = ?', args: [master] })).rows[0].n),
+    Number((await db.execute({ sql: 'SELECT COUNT(*) AS n FROM closed_deals WHERE company_id = ?', args: [master] })).rows[0].n),
+    Number((await db.execute({ sql: `SELECT COUNT(*) AS n FROM entity_notes WHERE entity_type = 'company' AND entity_id = ?`, args: [master] })).rows[0].n),
+  ], [2, 1, 3]);
+}
+
+console.log('\n— what both already have is reported as combining, not moving —');
+{
+  const db = await freshDb();
+  const mk = async (f) => Number((await db.execute({
+    sql: `INSERT INTO attendees (first_name, last_name) VALUES (?, 'Reyes') RETURNING id`, args: [f] })).rows[0].id);
+  const master = await mk('Dana');
+  const dup = await mk('Dana');
+  const conf = Number((await db.execute({
+    sql: `INSERT INTO conferences (name, start_date, end_date, location)
+          VALUES ('NFC', '2026-09-08', '2026-09-11', 'X') RETURNING id` })).rows[0].id);
+  for (const id of [master, dup]) {
+    await db.execute({
+      sql: `INSERT INTO conference_attendees (conference_id, attendee_id, source) VALUES (?, ?, 'initial_upload')`,
+      args: [conf, id] });
+  }
+
+  const preview = await previewMerge(db, 'attendee', [dup], master);
+  eq('the shared conference link is listed as combining',
+    preview.combining, [{ label: 'Conference links', rows: 1 }]);
+  eq('  and not counted as moving', preview.totalMoving, 0);
+}
+
+console.log('\n— a table nobody labelled is still named, not omitted —');
+{
+  // The label map only covers tables a person would recognise. Anything else
+  // falls back to its own name, tidied — better a row reading "weird extra
+  // things" than a silent omission that makes the preview smaller than the
+  // merge.
+  const db = await freshDb();
+  const mk = async (n) => Number((await db.execute({
+    sql: 'INSERT INTO companies (name) VALUES (?) RETURNING id', args: [n] })).rows[0].id);
+  const master = await mk('Keep');
+  const dup = await mk('Drop');
+  await db.execute(`CREATE TABLE weird_extra_things (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, company_id INTEGER NOT NULL)`);
+  await db.execute({ sql: 'INSERT INTO weird_extra_things (company_id) VALUES (?)', args: [dup] });
+
+  const preview = await previewMerge(db, 'company', [dup], master);
+  eq('an unlabelled table is reported under a readable name',
+    preview.moving, [{ label: 'Weird extra things', rows: 1 }]);
+}
+
+console.log('\n— a merge that cannot complete says so instead of half-running —');
+{
+  const db = await freshDb();
+  const mk = async (n) => Number((await db.execute({
+    sql: 'INSERT INTO companies (name) VALUES (?) RETURNING id', args: [n] })).rows[0].id);
+  const master = await mk('Keep');
+  const dup = await mk('Drop');
+  // A table the reassignment cannot move: the reference column is part of a
+  // unique index the survivor already occupies AND the row cannot be dropped,
+  // because a trigger refuses it. Simulated with a trigger so the case does not
+  // depend on a particular table staying shaped a particular way.
+  await db.execute(`CREATE TABLE stubborn (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER NOT NULL REFERENCES companies(id)
+  )`);
+  await db.execute(`CREATE TRIGGER stubborn_no_move BEFORE UPDATE ON stubborn
+    BEGIN SELECT RAISE(ABORT, 'stubborn rows cannot be moved'); END`);
+  await db.execute({ sql: 'INSERT INTO stubborn (company_id) VALUES (?)', args: [dup] });
+
+  const preview = await previewMerge(db, 'company', [dup], master);
+  eq('the preview reports the blockage', /stubborn rows cannot be moved/.test(preview.blocked ?? ''), true);
+  eq('  and changed nothing', Number((await db.execute({
+    sql: 'SELECT COUNT(*) AS n FROM companies WHERE id = ?', args: [dup] })).rows[0].n), 1);
+}
+{
+  // The dry run performs the DELETE too, not just the reassignment — that is
+  // the half that would fail if something the discovery never found still
+  // pointed at the record. Proven with a trigger that refuses the delete,
+  // since nothing in the real schema can do this once the reassignment has run.
+  const db = await freshDb();
+  const mk = async (n) => Number((await db.execute({
+    sql: 'INSERT INTO companies (name) VALUES (?) RETURNING id', args: [n] })).rows[0].id);
+  const master = await mk('Keep');
+  const dup = await mk('Undeletable');
+  await db.execute(`CREATE TRIGGER no_delete BEFORE DELETE ON companies
+    WHEN OLD.name = 'Undeletable'
+    BEGIN SELECT RAISE(ABORT, 'this record cannot be deleted'); END`);
+
+  const preview = await previewMerge(db, 'company', [dup], master);
+  eq('a delete-time failure is caught by the preview',
+    /this record cannot be deleted/.test(preview.blocked ?? ''), true);
+}
+
+console.log('\n— and the route honours the flag it is sent —');
+{
+  // The other half of the same catastrophe: the modal marks the request as a
+  // preview and the route performs a merge anyway. Driven end to end, because
+  // calling previewMerge directly would never notice.
+  const { NextRequest } = await import('next/server');
+  const { db, dbReady, seedFreshDb: seedMaster } = await import('@/lib/db');
+  const { signToken } = await import('@/lib/auth');
+  await dbReady;
+  await seedMaster(db);
+
+  const ACCOUNT = 'acct-merge-preview';
+  const url = `file:${join(dir, 'route-tenant.db')}`;
+  const tenant = createClient({ url });
+  await seedFreshDb(tenant);
+  await db.execute({
+    sql: `INSERT INTO accounts (id, company_name, admin_email, turso_db_url, turso_auth_token)
+          VALUES (?, 'Merge Co', 'a@merge.test', ?, '')`,
+    args: [ACCOUNT, url],
+  });
+  const user = { id: 1100, email: 'rep@merge.test', role: 'administrator', emailVerified: true, accountId: ACCOUNT };
+  const cookie = `auth_token=${await signToken(user)}`;
+
+  const mk = async (n) => Number((await tenant.execute({
+    sql: 'INSERT INTO companies (name) VALUES (?) RETURNING id', args: [n] })).rows[0].id);
+  const master = await mk('Belmont Care');
+  const dup = await mk('Belmont Care, LLC');
+  await tenant.execute({
+    sql: `INSERT INTO attendees (first_name, last_name, company_id) VALUES ('Dana', 'Reyes', ?)`,
+    args: [dup] });
+
+  const POST = (await import('@/app/api/companies/merge/route')).POST;
+  const call = async (payload) => {
+    const res = await POST(new NextRequest('https://parlay.test/m', {
+      method: 'POST',
+      headers: { cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }));
+    return { status: res.status, body: await res.json() };
+  };
+  const companyCount = async () => Number((await tenant.execute(
+    'SELECT COUNT(*) AS n FROM companies')).rows[0].n);
+
+  const before = await companyCount();
+  const previewed = await call({ master_id: master, duplicate_ids: [dup], preview: true });
+
+  eq('a preview request succeeds', previewed.status, 200);
+  eq('  and describes the move', previewed.body.moving, [{ label: 'Attendees', rows: 1 }]);
+  eq('  WITHOUT merging anything', await companyCount(), before);
+  eq('  the duplicate is still there', Number((await tenant.execute({
+    sql: 'SELECT COUNT(*) AS n FROM companies WHERE id = ?', args: [dup] })).rows[0].n), 1);
+
+  const merged = await call({ master_id: master, duplicate_ids: [dup] });
+  eq('and the same request without the flag does merge', merged.status, 200);
+  eq('  leaving one company', await companyCount(), before - 1);
+  eq('  with the attendee on it', Number((await tenant.execute({
+    sql: 'SELECT COUNT(*) AS n FROM attendees WHERE company_id = ?', args: [master] })).rows[0].n), 1);
+}
+
+console.log('\n— the modal asks, it does not do —');
+{
+  // The one failure mode with no recovery: the preview request losing its flag
+  // and becoming a real merge, fired the moment somebody picks a master. There
+  // is nothing to assert about that at run time — by the time it is observable
+  // the records are gone — so it is pinned at the source.
+  const modal = readFileSync('components/MergeModal.tsx', 'utf8');
+  const mergeFetches = modal.match(/fetch\(`\/api\/\$\{[^`]*\}\/merge`[\s\S]{0,400}?\)\)/g) ?? [];
+  eq('the modal makes exactly one request to the merge endpoint', mergeFetches.length, 1);
+  eq('  and it is a preview', /preview:\s*true/.test(mergeFetches[0] ?? ''), true);
+  // The real merge goes through the caller's handler, not from in here.
+  eq('the merge itself is the caller\'s to perform', /await onMerge\(masterId, duplicateIds\)/.test(modal), true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

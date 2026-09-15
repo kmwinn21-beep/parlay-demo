@@ -13,6 +13,14 @@ interface MergeItem {
   detail?: React.ReactNode;
 }
 
+/** What the merge says it would do, asked of the merge itself. */
+interface MergePreview {
+  moving: Array<{ label: string; rows: number }>;
+  combining: Array<{ label: string; rows: number }>;
+  totalMoving: number;
+  blocked?: string;
+}
+
 interface SearchResult {
   id: number;
   name: string;
@@ -45,12 +53,15 @@ export function MergeModal({
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [preview, setPreview] = useState<MergePreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
       setMasterId(null);
       setSearchQuery('');
       setSearchResults([]);
+      setPreview(null);
     }
   }, [isOpen]);
 
@@ -80,6 +91,33 @@ export function MergeModal({
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [searchQuery, items, searchType]);
+
+  /**
+   * Ask the merge what it would do, as soon as there is a merge to describe.
+   *
+   * The same endpoint, with `preview: true` — it runs the real reassignment and
+   * the real delete inside a transaction and rolls back. A separately computed
+   * summary would be a second implementation of the merge and would drift from
+   * it; this one cannot.
+   */
+  useEffect(() => {
+    if (!isOpen || masterId === null) { setPreview(null); return; }
+    const duplicateIds = items.map((i) => i.id).filter((id) => id !== masterId);
+    if (duplicateIds.length === 0) { setPreview(null); return; }
+
+    let cancelled = false;
+    setPreviewLoading(true);
+    fetch(`/api/${searchType === 'company' ? 'companies' : 'attendees'}/merge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ master_id: masterId, duplicate_ids: duplicateIds, preview: true }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: MergePreview | null) => { if (!cancelled) setPreview(data); })
+      .catch(() => { if (!cancelled) setPreview(null); })
+      .finally(() => { if (!cancelled) setPreviewLoading(false); });
+    return () => { cancelled = true; };
+  }, [isOpen, masterId, items, searchType]);
 
   if (!isOpen) return null;
 
@@ -226,11 +264,61 @@ export function MergeModal({
               </p>
             </div>
           )}
+          {/* What the merge would actually do.
+              The warning this replaced said "all associated data (conferences,
+              attendees) will be moved" — which named two of the sixteen places
+              a company is referenced, and was not true of the rest until the
+              merge was fixed. Counting beats reassuring: these numbers come
+              from the merge itself, run and rolled back. */}
           {canMerge && (
-            <div className="mb-5 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-              <p className="text-xs text-yellow-800">
-                <strong>Warning:</strong> The non-selected records will be deleted. All associated data (conferences, attendees) will be moved to the master record.
-              </p>
+            <div className="mb-5 rounded-lg border border-yellow-200 bg-yellow-50 p-3">
+              {previewLoading && !preview && (
+                <p className="text-xs text-yellow-800">Checking what would move…</p>
+              )}
+
+              {preview?.blocked && (
+                <p className="text-xs text-red-700">
+                  <strong>This merge cannot complete.</strong> {preview.blocked}
+                </p>
+              )}
+
+              {preview && !preview.blocked && (
+                <>
+                  <p className="text-xs text-yellow-900">
+                    <strong>
+                      {preview.totalMoving === 0
+                        ? 'Nothing to move.'
+                        : `${preview.totalMoving} record${preview.totalMoving === 1 ? '' : 's'} will move to the record you keep.`}
+                    </strong>{' '}
+                    The others are deleted. This cannot be undone.
+                  </p>
+
+                  {preview.moving.length > 0 && (
+                    <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-0.5">
+                      {preview.moving.map((m) => (
+                        <li key={m.label} className="flex justify-between gap-2 text-xs text-yellow-900">
+                          <span className="truncate">{m.label}</span>
+                          <span className="font-semibold tabular-nums">{m.rows}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {preview.combining.length > 0 && (
+                    <p className="mt-2 text-xs text-yellow-800">
+                      Already on both, so combined rather than duplicated:{' '}
+                      {preview.combining.map((c) => `${c.label} (${c.rows})`).join(', ')}.
+                    </p>
+                  )}
+                </>
+              )}
+
+              {!preview && !previewLoading && (
+                <p className="text-xs text-yellow-800">
+                  <strong>Warning:</strong> the records you do not keep will be deleted, and
+                  everything attached to them moves to the one you do. This cannot be undone.
+                </p>
+              )}
             </div>
           )}
         </div>

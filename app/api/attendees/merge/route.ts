@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
-import { reassignReferences } from '@/lib/mergeReferences';
+import { reassignReferences, previewMerge } from '@/lib/mergeReferences';
 
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
   const db = await getDb(authResult?.accountId);
   try {
     const body = await request.json();
-    const { master_id, duplicate_ids } = body as { master_id: number; duplicate_ids: number[] };
+    const { master_id, duplicate_ids, preview } = body as { master_id: number; duplicate_ids: number[]; preview?: boolean };
 
     if (!master_id || !duplicate_ids || duplicate_ids.length === 0) {
       return NextResponse.json({ error: 'master_id and duplicate_ids are required' }, { status: 400 });
@@ -21,6 +21,13 @@ export async function POST(request: NextRequest) {
     });
     if (masterResult.rows.length === 0) {
       return NextResponse.json({ error: 'Master attendee not found' }, { status: 404 });
+    }
+
+    // Same request, same validation, same code — but rolled back. Asking the
+    // merge itself what it would do is the only way the preview cannot drift
+    // from it. See previewMerge.
+    if (preview) {
+      return NextResponse.json(await previewMerge(db, 'attendee', duplicate_ids, master_id));
     }
 
     for (const dupId of duplicate_ids) {
