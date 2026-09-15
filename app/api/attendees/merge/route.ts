@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { reassignReferences } from '@/lib/mergeReferences';
 
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -25,35 +26,24 @@ export async function POST(request: NextRequest) {
     for (const dupId of duplicate_ids) {
       if (dupId === master_id) continue;
 
-      // Get all conference associations from the duplicate
-      const dupConferencesResult = await db.execute({
-        sql: 'SELECT conference_id, source FROM conference_attendees WHERE attendee_id = ?',
-        args: [dupId],
-      });
-
-      const statements: Array<{ sql: string; args: (string | number | null)[] }> = [];
-
-      // Move conference associations to master.
+      // Everything pointing at the duplicate moves to the master FIRST.
       //
-      // `source` is carried across rather than left NULL: the membership is the
-      // same membership, and how the person got onto that conference did not
-      // change because two duplicate records were merged. A NULL here would
-      // make a bulk-imported row look like an individual add and put a card in
-      // the feed for it.
-      for (const ca of dupConferencesResult.rows) {
-        statements.push({
-          sql: `INSERT OR IGNORE INTO conference_attendees (conference_id, attendee_id, created_at, source) VALUES (?, ?, datetime('now'), ?)`,
-          args: [ca.conference_id as number, master_id, (ca.source as string | null) ?? 'initial_upload'],
-        });
-      }
+      // This used to move only the conference links, so the delete below
+      // cascaded away the duplicate's meetings, follow-ups, conference targets,
+      // per-conference details, product signals, outreach assignments and
+      // social RSVPs, and orphaned its touchpoints and notes. It could also
+      // simply fail: contact_conference_history and form_submissions reference
+      // attendees ON DELETE NO ACTION, so deleting an attendee that had either
+      // raised a constraint error.
+      //
+      // conference_attendees is carried by the same pass. Its UNIQUE
+      // (conference_id, attendee_id) is what makes a link the master already
+      // has collapse rather than duplicate — the membership is the same
+      // membership, and `source` stays on whichever row survives, so a
+      // bulk-imported row is not turned into an individual add.
+      await reassignReferences(db, 'attendee', dupId, master_id);
 
-      // Delete the duplicate attendee's conference associations and the duplicate itself
-      statements.push({ sql: 'DELETE FROM conference_attendees WHERE attendee_id = ?', args: [dupId] });
-      statements.push({ sql: 'DELETE FROM attendees WHERE id = ?', args: [dupId] });
-
-      if (statements.length > 0) {
-        await db.batch(statements, 'write');
-      }
+      await db.execute({ sql: 'DELETE FROM attendees WHERE id = ?', args: [dupId] });
     }
 
     const mergedResult = await db.execute({

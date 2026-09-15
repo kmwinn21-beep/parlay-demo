@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { reassignReferences } from '@/lib/mergeReferences';
 
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -25,17 +26,17 @@ export async function POST(request: NextRequest) {
     for (const dupId of duplicate_ids) {
       if (dupId === master_id) continue;
 
-      await db.batch(
-        [
-          // Reassign all attendees from duplicate to master
-          { sql: 'UPDATE attendees SET company_id = ? WHERE company_id = ?', args: [master_id, dupId] },
-          // Reassign child companies from duplicate to master
-          { sql: 'UPDATE companies SET parent_company_id = ? WHERE parent_company_id = ?', args: [master_id, dupId] },
-          // Delete the duplicate company
-          { sql: 'DELETE FROM companies WHERE id = ?', args: [dupId] },
-        ],
-        'write'
-      );
+      // Everything pointing at the duplicate moves to the master FIRST. This
+      // used to be two hand-written UPDATEs — attendees and child companies —
+      // and the delete below then cascaded away the nine other tables that
+      // reference a company: closed deals, outreach notes and activity and
+      // assignments, priority marks, user statuses, conference intel, internal
+      // relationships. Merging was silently destructive. See
+      // lib/mergeReferences.ts, which reads the references off the schema so a
+      // table added later is carried without anyone remembering to.
+      await reassignReferences(db, 'company', dupId, master_id);
+
+      await db.execute({ sql: 'DELETE FROM companies WHERE id = ?', args: [dupId] });
     }
 
     const mergedResult = await db.execute({
