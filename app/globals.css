@@ -416,3 +416,42 @@ h1, h2, h3 {
     max-height: calc(100dvh - var(--mobile-header-h));
   }
 }
+
+/**
+ * A bulk action bar pins under the conference tab row.
+ *
+ * Selecting rows at the bottom of a 1,101-company list meant scrolling all the
+ * way back up to reach the actions. The bar now follows, landing on the tab
+ * row's bottom edge.
+ *
+ * ── The offset ───────────────────────────────────────────────────────────────
+ *
+ * --conf-tabbar-h is published by the conference page from the tab row's
+ * measured height, so the two meet exactly however that row wraps. The 0px
+ * fallback is what any other page gets: no tab row, so pin to the top of the
+ * scrolling column.
+ *
+ * ── The z-index ──────────────────────────────────────────────────────────────
+ *
+ * 35, which is not arbitrary. The tables freeze their first column with
+ * `sticky left-0 z-30` header cells, and those stick only HORIZONTALLY — they
+ * ride up through this bar's position as the page scrolls. Measured in
+ * Chromium: at z-10 and at z-30 the header cell is what elementFromPoint
+ * reports on top of the bar; 35 is the first value that wins. It still sits
+ * under the report menu at z-40 and the drawers and modals at z-50.
+ *
+ * ── The negative margin ──────────────────────────────────────────────────────
+ *
+ * Both bars live inside `.card`, which is p-6. Pulling out by that and padding
+ * it back lets the bar's own background cover the full width of the card, so
+ * rows don't show through beside it while it is pinned.
+ */
+.bulk-actions-sticky {
+  position: sticky;
+  top: var(--conf-tabbar-h, 0px);
+  z-index: 35;
+  background: #fff;
+  margin-left: -1.5rem;
+  margin-right: -1.5rem;
+  padding: 0.5rem 1.5rem;
+}

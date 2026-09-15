@@ -118,6 +118,13 @@ interface CompanyTableProps {
   // When provided (also Conference Details' Companies tab), enables the bulk
   // "Assign Outreach" action, scoped to this conference.
   conferenceId?: number;
+  /**
+   * Pin the bulk action bar under the conference tab row while rows are
+   * selected, so acting on a selection made at the bottom of the list does not
+   * mean scrolling back to the top. Opt-in: the standalone Companies page has
+   * no tab row to pin under, and would pin the bar to the top of the column.
+   */
+  stickyBulkActions?: boolean;
 }
 
 /** Bulk-action button — a thin outline, no fill; colour is what varies. */
@@ -154,7 +161,7 @@ function fmtDate(dateStr?: string): string {
   } catch { return '—'; }
 }
 
-export function CompanyTable({ companies, onRefresh, tableName = 'companies', rowAction, onDecoupleSelected, conferenceAttendees, conferenceLabel, conferenceId }: CompanyTableProps) {
+export function CompanyTable({ companies, onRefresh, tableName = 'companies', rowAction, onDecoupleSelected, conferenceAttendees, conferenceLabel, conferenceId, stickyBulkActions = false }: CompanyTableProps) {
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions('company_table');
   /**
@@ -1647,7 +1654,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
           instead of nine competing buttons; colour still carries the two
           destructive ones. */}
       {selectedIds.size >= 1 && (
-        <div className="mb-4">
+        <div className={`mb-4${stickyBulkActions ? ' bulk-actions-sticky' : ''}`}>
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Bulk Actions</p>
           <ScrollRow gapClass="gap-1" step={200}>
             <button onClick={() => { setShowMassEdit(v => !v); setMassEditFields({}); }} className={BULK_BTN}>
