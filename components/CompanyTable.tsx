@@ -118,6 +118,14 @@ interface CompanyTableProps {
   // When provided (also Conference Details' Companies tab), enables the bulk
   // "Assign Outreach" action, scoped to this conference.
   conferenceId?: number;
+  /**
+   * Rendered immediately before the Filters button, in the same row.
+   *
+   * The Companies page puts its duplicate scan here — somebody working the list
+   * comes across it where they are already looking, rather than in a banner
+   * above the table that reads as an advert until it is needed.
+   */
+  beforeFiltersButton?: React.ReactNode;
 }
 
 /** Bulk-action button — a thin outline, no fill; colour is what varies. */
@@ -154,7 +162,7 @@ function fmtDate(dateStr?: string): string {
   } catch { return '—'; }
 }
 
-export function CompanyTable({ companies, onRefresh, tableName = 'companies', rowAction, onDecoupleSelected, conferenceAttendees, conferenceLabel, conferenceId }: CompanyTableProps) {
+export function CompanyTable({ companies, onRefresh, tableName = 'companies', rowAction, onDecoupleSelected, conferenceAttendees, conferenceLabel, conferenceId, beforeFiltersButton }: CompanyTableProps) {
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions('company_table');
   /**
@@ -800,6 +808,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
           {type === 'Customer' ? 'Customers' : type === 'Competitor' ? 'Competitors' : type}
         </button>
       ))}
+      {beforeFiltersButton}
       <button
         type="button"
         onClick={() => setFiltersOpen(o => !o)}

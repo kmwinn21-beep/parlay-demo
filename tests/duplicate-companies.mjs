@@ -436,5 +436,59 @@ console.log('\n— the panel proposes, it does not merge —');
     /onClick=\{\(\) => setMerging\(group\)\}/.test(panel), true);
 }
 
+console.log('\n— the results are split by what found them —');
+{
+  const { bucketFor } = await import('@/lib/duplicateCompanies');
+  const g = (matchedOn) => ({ matchedOn });
+
+  eq('an exact-name group is a name match', bucketFor(g(['name'])), 'name');
+  eq('  and so is a stem match', bucketFor(g(['similar-name'])), 'name');
+  eq('  even though the two are different claims',
+    bucketFor(g(['name'])) === bucketFor(g(['similar-name'])), true);
+  eq('a domain-only group is its own kind', bucketFor(g(['domain'])), 'domain');
+  eq('and a group with both is neither of those',
+    [bucketFor(g(['name', 'domain'])), bucketFor(g(['similar-name', 'domain']))], ['both', 'both']);
+
+  // Every group lands somewhere: a section that quietly dropped a kind of
+  // match would make the panel smaller than the scan.
+  const buckets = new Set([
+    ['name'], ['similar-name'], ['domain'],
+    ['name', 'domain'], ['similar-name', 'domain'], ['name', 'similar-name'],
+    ['name', 'similar-name', 'domain'],
+  ].map(m => bucketFor(g(m))));
+  eq('every combination of signals has a home', Array.from(buckets).sort(),
+    ['both', 'domain', 'name']);
+}
+
+console.log('\n— and every section starts closed —');
+{
+  const { readFileSync } = await import('node:fs');
+  const panel = readFileSync('components/DuplicateCompaniesPanel.tsx', 'utf8');
+  eq('nothing is open until it is opened',
+    /useState<Set<Bucket>>\(new Set\(\)\)/.test(panel), true);
+  eq('  and the open state is per section, not one at a time',
+    /const \[open, setOpen\] = useState<Set<Bucket>>/.test(panel), true);
+  eq('a section renders its groups only when open',
+    /\{isOpen && \([\s\S]{0,200}inBucket\.map\(renderGroup\)/.test(panel), true);
+  eq('the domain tag reads "similar domain"', /similar domain</.test(panel), true);
+  eq('  and no longer claims sameness', /same domain</.test(panel), false);
+}
+
+console.log('\n— the scan is started from the filter row —');
+{
+  const { readFileSync } = await import('node:fs');
+  const page = readFileSync('app/companies/page.tsx', 'utf8');
+  const table = readFileSync('components/CompanyTable.tsx', 'utf8');
+
+  eq('the table takes something to render before Filters',
+    /beforeFiltersButton\?: React\.ReactNode/.test(table), true);
+  eq('  and renders it immediately before that button',
+    /\{beforeFiltersButton\}\s*<button[\s\S]{0,120}setFiltersOpen/.test(table), true);
+  eq('the page puts the scan there', /beforeFiltersButton=\{\(/.test(page), true);
+  eq('  wired to the same scan the panel reruns',
+    /onClick=\{duplicateScan\.scan\}/.test(page), true);
+  eq('  with the state owned above both', /const duplicateScan = useDuplicateScan\(\)/.test(page), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

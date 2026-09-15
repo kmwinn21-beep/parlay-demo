@@ -162,6 +162,23 @@ export function dismissalKeyFor(key: string, ids: number[]): string {
  * their membership is unchanged: a third record arriving later brings the
  * question back rather than inheriting an answer given about two.
  */
+/**
+ * Which section of the review panel a group belongs in.
+ *
+ * Lives here rather than in the panel so the split is testable without a
+ * browser, and so "what kind of match is this" has one answer.
+ *
+ * A group carrying BOTH kinds of evidence is its own case, not a name match
+ * that happens to have a domain — it is the strongest thing the scan produces
+ * and reads differently.
+ */
+export function bucketFor(group: { matchedOn: readonly DuplicateSignal[] }): 'name' | 'domain' | 'both' {
+  const byName = group.matchedOn.includes('name') || group.matchedOn.includes('similar-name');
+  const byDomain = group.matchedOn.includes('domain');
+  if (byName && byDomain) return 'both';
+  return byDomain ? 'domain' : 'name';
+}
+
 export function findDuplicateGroups(
   companies: readonly DuplicateCandidate[],
   dismissed: ReadonlySet<string> = new Set(),
