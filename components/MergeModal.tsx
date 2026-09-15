@@ -84,6 +84,8 @@ export function MergeModal({
    * groups are right; unticking one leaves it alone.
    */
   const [includedIds, setIncludedIds] = useState<Set<number>>(new Set());
+  /** Which records are on offer, as a value rather than an array identity. */
+  const itemIdsKey = items.map((i) => i.id).join(',');
 
   useEffect(() => {
     if (!isOpen) {
@@ -97,7 +99,12 @@ export function MergeModal({
     // Only as an opening position — once the modal is up, the choice is the
     // person's, so this does not run again while it stays open.
     if (defaultMasterId != null) setMasterId(defaultMasterId);
-  }, [isOpen, defaultMasterId, items]);
+    // Keyed on WHICH records are offered, not on the array that carries them.
+    // The panel builds a fresh `items` array on every one of its renders, and
+    // keying on that identity meant any re-render above this component silently
+    // reset the reader's ticks back to all-on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, defaultMasterId, itemIdsKey]);
 
   useEffect(() => {
     if (searchQuery.length < 2) {
@@ -210,40 +217,47 @@ export function MergeModal({
         <div className="flex-1 overflow-y-auto px-6 min-h-0">
           <div className="space-y-3 mb-4">
             <p className="text-sm font-medium text-gray-700">Select the master record to keep:</p>
+            {/* Two controls, two labels, and NOT one label around both.
+                A label forwards a click to its labelled control — the first
+                labelable element inside it, which was the radio — so the merge
+                checkbox lived inside a label that answered for something else.
+                The preventDefault added to stop that took the checkbox's own
+                toggle with it: measured in Chromium, tapping "merge" fired
+                nothing at all and the box never changed. That is what read as
+                lag. Each control owns its own label now. */}
             {items.map((item) => (
-              <label
+              <div
                 key={item.id}
-                className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                className={`flex items-start gap-3 p-3 rounded-lg border-2 transition-all ${
                   masterId === item.id
                     ? 'border-brand-secondary bg-blue-50'
                     : 'border-gray-200 hover:border-gray-300'
                 }`}
               >
-                <input
-                  type="radio"
-                  name="master"
-                  value={item.id}
-                  checked={masterId === item.id}
-                  onChange={() => setMasterId(item.id)}
-                  className="mt-0.5 accent-brand-secondary"
-                />
-                <div className="min-w-0 flex-1">
-                  {item.detail ?? (
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">{item.label}</p>
-                      {item.sublabel && (
-                        <p className="text-xs text-gray-500">{item.sublabel}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
+                  <input
+                    type="radio"
+                    name="master"
+                    value={item.id}
+                    checked={masterId === item.id}
+                    onChange={() => setMasterId(item.id)}
+                    className="mt-0.5 accent-brand-secondary"
+                  />
+                  <div className="min-w-0 flex-1">
+                    {item.detail ?? (
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">{item.label}</p>
+                        {item.sublabel && (
+                          <p className="text-xs text-gray-500">{item.sublabel}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </label>
                 {/* Include this one in the merge. The record being kept is not
                     offered a choice — it is the one everything moves to. */}
                 {masterId !== item.id && (
-                  <span
-                    className="flex flex-shrink-0 items-center gap-1.5 text-xs text-gray-500"
-                    onClick={(e) => e.preventDefault()}
-                  >
+                  <label className="flex flex-shrink-0 cursor-pointer items-center gap-1.5 text-xs text-gray-500">
                     <input
                       type="checkbox"
                       checked={includedIds.has(item.id)}
@@ -255,9 +269,9 @@ export function MergeModal({
                       className="accent-brand-secondary"
                     />
                     merge
-                  </span>
+                  </label>
                 )}
-              </label>
+              </div>
             ))}
           </div>
 
@@ -417,10 +431,19 @@ export function MergeModal({
             <button
               onClick={handleMerge}
               disabled={!canMerge || isLoading}
-              className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-primary flex flex-1 items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
+              {/* A merge of a large group reassigns sixteen tables' worth of
+                  rows and then deletes; on a phone that is long enough for a
+                  still button to read as a button that did not work. */}
+              {isLoading && (
+                <svg className="h-4 w-4 flex-shrink-0 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              )}
               {isLoading
-                ? 'Merging...'
+                ? 'Merging…'
                 : duplicateCount > 0
                   ? `Merge ${duplicateCount} record${duplicateCount === 1 ? '' : 's'}`
                   : 'Merge Records'}

@@ -616,6 +616,54 @@ console.log('\n— the preview is asked for, not volunteered —');
     (modal.match(/cannot be undone/g) ?? []).length >= 2, true);
 }
 
+console.log('\n— the merge checkbox is a control, not a decoration —');
+{
+  const { readFileSync } = await import('node:fs');
+  const modal = readFileSync('components/MergeModal.tsx', 'utf8');
+
+  // It sat inside the SAME <label> as the radio that picks the record to keep.
+  // A label forwards a click to its labelled control — the first labelable
+  // element in it — so the checkbox was inside a label answering for the radio,
+  // and the preventDefault added to stop that took the checkbox's own toggle
+  // with it. Measured in Chromium: tapping "merge" fired nothing at all. The
+  // box never changed, which is what read as lag.
+  eq('the row is no longer one label around both controls',
+    /<label\s+key=\{item\.id\}/.test(modal), false);
+  eq('  the picker has its own label', /<label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">/.test(modal), true);
+  eq('  and so does the checkbox', /<label className="flex flex-shrink-0 cursor-pointer items-center gap-1\.5/.test(modal), true);
+  eq('  with nothing cancelling its click', /onClick=\{\(e\) => e\.preventDefault\(\)\}/.test(modal), false);
+}
+
+console.log('\n— a parent re-render does not undo the ticks —');
+{
+  const { readFileSync } = await import('node:fs');
+  const modal = readFileSync('components/MergeModal.tsx', 'utf8');
+
+  // The panel builds a fresh `items` array on every one of its renders. Keying
+  // the reset on that identity meant any re-render above this component put
+  // every tick back on, silently.
+  eq('the reset is keyed on which records are offered',
+    /const itemIdsKey = items\.map\(\(i\) => i\.id\)\.join\(','\)/.test(modal), true);
+  eq('  not on the array carrying them',
+    /\}, \[isOpen, defaultMasterId, itemIdsKey\]\)/.test(modal), true);
+  eq('  so `items` is not a dependency of the reset',
+    /\}, \[isOpen, defaultMasterId, items\]\)/.test(modal), false);
+}
+
+console.log('\n— the merge button shows it is working —');
+{
+  const { readFileSync } = await import('node:fs');
+  const modal = readFileSync('components/MergeModal.tsx', 'utf8');
+
+  // A merge of a large group reassigns sixteen tables' worth of rows and then
+  // deletes. On a phone a still button reads as one that did not work.
+  eq('there is a spinner', /animate-spin/.test(modal), true);
+  eq('  shown only while merging', /\{isLoading && \([\s\S]{0,200}animate-spin/.test(modal), true);
+  eq('  beside the word, not instead of it', /isLoading\s*\?\s*'Merging…'/.test(modal), true);
+  eq('  and hidden from anything reading the button aloud',
+    /animate-spin[\s\S]{0,120}aria-hidden="true"/.test(modal), true);
+}
+
 console.log('\n— the scan is started from the filter row —');
 {
   const { readFileSync } = await import('node:fs');
