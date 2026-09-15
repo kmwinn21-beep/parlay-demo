@@ -21,12 +21,19 @@ export async function GET(request: NextRequest) {
   const db = await getDb(authResult?.accountId);
 
   try {
-    const [companiesResult, emailsResult, dismissedResult] = await Promise.all([
+    const [companiesResult, emailsResult, structureResult, dismissedResult] = await Promise.all([
       db.execute({
+        // parent_company_id and its name come along because a family is not a
+        // duplicate: merging a parent into its own child destroys a hierarchy
+        // the account built, and the merge has no undo.
         sql: `SELECT c.id, c.name, c.company_type, c.website,
+                     c.parent_company_id, c.entity_structure,
+                     p.name AS parent_company_name,
                      COUNT(DISTINCT a.id) AS attendee_count,
-                     COUNT(DISTINCT ca.conference_id) AS conference_count
+                     COUNT(DISTINCT ca.conference_id) AS conference_count,
+                     (SELECT COUNT(*) FROM companies k WHERE k.parent_company_id = c.id) AS child_count
                 FROM companies c
+                LEFT JOIN companies p ON p.id = c.parent_company_id
                 LEFT JOIN attendees a ON a.company_id = c.id
                 LEFT JOIN conference_attendees ca ON ca.attendee_id = a.id
                GROUP BY c.id
@@ -42,6 +49,13 @@ export async function GET(request: NextRequest) {
                WHERE company_id IS NOT NULL AND email IS NOT NULL AND email <> ''`,
         args: [],
       }),
+      // What this account calls a child. Position decides, as everywhere else:
+      // the second Entity Structure option is the child one. Only used for
+      // records carrying a designation with no parent link behind it.
+      db.execute({
+        sql: `SELECT value FROM config_options WHERE category = 'entity_structure' ORDER BY sort_order, id`,
+        args: [],
+      }).catch(() => ({ rows: [] as Record<string, unknown>[] })),
       db.execute({ sql: 'SELECT dismissal_key FROM company_duplicate_dismissals', args: [] })
         .catch(() => ({ rows: [] as Record<string, unknown>[] })),
     ]);
@@ -61,12 +75,21 @@ export async function GET(request: NextRequest) {
       attendee_count: Number(r.attendee_count ?? 0),
       conference_count: Number(r.conference_count ?? 0),
       attendee_emails: emailsByCompany.get(Number(r.id)) ?? [],
+      parent_company_id: r.parent_company_id != null ? Number(r.parent_company_id) : null,
+      parent_company_name: r.parent_company_name ? String(r.parent_company_name) : null,
+      child_count: Number(r.child_count ?? 0),
+      entity_structure: r.entity_structure ? String(r.entity_structure) : null,
     }));
+    const childDesignation = structureResult.rows[1]
+      ? String(structureResult.rows[1].value)
+      : null;
     const dismissed = new Set(dismissedResult.rows.map((r) => String(r.dismissal_key)));
 
     const groups = findDuplicateGroups(companies, dismissed);
     return NextResponse.json({
       groups,
+      /** What this account calls a child, so the panel can label one. */
+      childDesignation,
       /** Records that would go away if every group were merged as suggested. */
       redundantRecords: groups.reduce((n, g) => n + g.members.length - 1, 0),
       scanned: companies.length,

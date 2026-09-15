@@ -11,6 +11,14 @@ interface MergeItem {
    *  Shown instead of label/sublabel, which read identically when two records
    *  share a name. */
   detail?: React.ReactNode;
+  /**
+   * Something the chooser needs to know about this record before picking.
+   *
+   * "Child of Acme Holdings", for instance: a family is not a duplicate, and
+   * seeing that in the list outside but not here is exactly where the mistake
+   * gets made.
+   */
+  note?: string;
 }
 
 /** What the merge says it would do, asked of the merge itself. */
@@ -41,6 +49,14 @@ interface MergeModalProps {
    * saves a click without taking the choice away.
    */
   defaultMasterId?: number;
+  /**
+   * A reason to stop and look, shown above the list.
+   *
+   * Used when the records offered are already a family: merging a parent into
+   * its own child collapses a hierarchy somebody built, and there is no undo.
+   * It is a warning rather than a block — sometimes the family IS the mistake.
+   */
+  warning?: string;
 }
 
 export function MergeModal({
@@ -52,6 +68,7 @@ export function MergeModal({
   description,
   searchType,
   defaultMasterId,
+  warning,
 }: MergeModalProps) {
   useHideBottomNav(isOpen);
   const [masterId, setMasterId] = useState<number | null>(null);
@@ -215,6 +232,13 @@ export function MergeModal({
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto px-6 min-h-0">
+          {warning && (
+            <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
+              <p className="text-xs leading-snug text-amber-900">
+                <strong>These are already a family.</strong> {warning}
+              </p>
+            </div>
+          )}
           <div className="space-y-3 mb-4">
             <p className="text-sm font-medium text-gray-700">Select the master record to keep:</p>
             {/* Two controls, two labels, and NOT one label around both.
@@ -249,6 +273,11 @@ export function MergeModal({
                         <p className="text-sm font-medium text-gray-800">{item.label}</p>
                         {item.sublabel && (
                           <p className="text-xs text-gray-500">{item.sublabel}</p>
+                        )}
+                        {item.note && (
+                          <p className="mt-0.5 inline-block rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
+                            {item.note}
+                          </p>
                         )}
                       </div>
                     )}

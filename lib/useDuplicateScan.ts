@@ -17,6 +17,8 @@ export function useDuplicateScan() {
   /** Null until a scan has run — which is not the same as "none found". */
   const [groups, setGroups] = useState<DuplicateGroup[] | null>(null);
   const [redundant, setRedundant] = useState(0);
+  /** What this account calls a child — its Entity Structure wording. */
+  const [childDesignation, setChildDesignation] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
 
   const scan = useCallback(async () => {
@@ -27,6 +29,7 @@ export function useDuplicateScan() {
       const data = await res.json();
       setGroups(data.groups ?? []);
       setRedundant(data.redundantRecords ?? 0);
+      setChildDesignation(data.childDesignation ?? null);
     } catch {
       toast.error('Could not scan for duplicates.');
       setGroups(null);
@@ -53,7 +56,7 @@ export function useDuplicateScan() {
     }
   }, []);
 
-  return { groups, redundant, scanning, scan, dismiss };
+  return { groups, redundant, scanning, scan, dismiss, childDesignation };
 }
 
 export type DuplicateScan = ReturnType<typeof useDuplicateScan>;
