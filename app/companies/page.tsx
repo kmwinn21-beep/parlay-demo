@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { CompanyTable } from '@/components/CompanyTable';
+import { DuplicateCompaniesPanel } from '@/components/DuplicateCompaniesPanel';
+import { useDuplicateScan } from '@/lib/useDuplicateScan';
 import { BackButton } from '@/components/BackButton';
 import { KebabMenu } from '@/components/KebabMenu';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
@@ -37,6 +39,9 @@ interface AddCompanyForm {
 
 export default function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
+  // The scan is started from the table's filter row and shown above it, so its
+  // state lives here, above both.
+  const duplicateScan = useDuplicateScan();
   const [isLoading, setIsLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [refreshingFamilies, setRefreshingFamilies] = useState(false);
@@ -304,9 +309,28 @@ export default function CompaniesPage() {
         </div>
       )}
 
+      <DuplicateCompaniesPanel scan={duplicateScan} onMerged={fetchCompanies} />
+
       {/* Companies Table */}
       <div className="card">
-        <CompanyTable companies={companies} onRefresh={fetchCompanies} />
+        <CompanyTable
+          companies={companies}
+          onRefresh={fetchCompanies}
+          beforeFiltersButton={(
+            <button
+              type="button"
+              onClick={duplicateScan.scan}
+              disabled={duplicateScan.scanning}
+              title="Find companies that are the same company under a different spelling, one name being the start of another, or a shared website or work email domain"
+              className="flex-shrink-0 whitespace-nowrap flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 transition-colors hover:border-gray-400 disabled:opacity-50"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+              {duplicateScan.scanning ? 'Scanning…' : 'Scan for duplicates'}
+            </button>
+          )}
+        />
       </div>
     </div>
   );

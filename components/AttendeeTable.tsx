@@ -639,9 +639,11 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
       </div>
 
       {/* Bulk actions — their own labelled row under the search and filters,
-          so selecting rows doesn't reflow the toolbar above. */}
+          so selecting rows doesn't reflow the toolbar above, and pinned to the
+          top of the column so a selection made at the bottom of the list can be
+          acted on without scrolling back up. */}
       {selectedIds.size >= 1 && (
-        <div className="mb-4">
+        <div className="mb-4 bulk-actions-sticky">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Bulk Actions</p>
           <div className="flex items-center gap-3 flex-wrap">
             <button onClick={() => { setShowMassEdit(v => !v); setMassEditFields({}); }} className="btn-secondary flex items-center gap-2 text-sm">

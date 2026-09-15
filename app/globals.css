@@ -418,37 +418,38 @@ h1, h2, h3 {
 }
 
 /**
- * A bulk action bar pins under the conference tab row.
+ * A bulk action bar follows the list it acts on.
  *
- * Selecting rows at the bottom of a 1,101-company list meant scrolling all the
- * way back up to reach the actions. The bar now follows, landing on the tab
- * row's bottom edge.
+ * Selecting rows at the bottom of a 2,645-attendee or 1,101-company list meant
+ * scrolling all the way back up to reach the actions. The bar now pins instead.
  *
  * ── The offset ───────────────────────────────────────────────────────────────
  *
- * --conf-tabbar-h is published by the conference page from the tab row's
- * measured height, so the two meet exactly however that row wraps. The 0px
- * fallback is what any other page gets: no tab row, so pin to the top of the
- * scrolling column.
+ * Where it stops depends on what is above it. The conference page has a tab row
+ * pinned at the top of the column, so it publishes that row's measured height
+ * as --bulk-actions-top and the bar lands on its bottom edge. The Companies and
+ * Attendees pages have nothing pinned, so they leave the variable unset and the
+ * 0 fallback puts the bar at the top of the scrolling column.
  *
  * ── The z-index ──────────────────────────────────────────────────────────────
  *
- * 35, which is not arbitrary. The tables freeze their first column with
- * `sticky left-0 z-30` header cells, and those stick only HORIZONTALLY — they
- * ride up through this bar's position as the page scrolls. Measured in
- * Chromium: at z-10 and at z-30 the header cell is what elementFromPoint
- * reports on top of the bar; 35 is the first value that wins. It still sits
- * under the report menu at z-40 and the drawers and modals at z-50.
+ * 35, which is not a round number picked for headroom. All three tables freeze
+ * their first column with `sticky left-0 z-30` header cells, and those stick
+ * only HORIZONTALLY — they ride up through this bar's position as the page
+ * scrolls. Measured in Chromium with elementFromPoint at the bar's centre: at
+ * z-10 AND at z-30 the header cell is what comes back on top; 35 is the first
+ * value that wins. It still sits under the conference report menu at z-40 and
+ * the drawers and modals at z-50.
  *
  * ── The negative margin ──────────────────────────────────────────────────────
  *
- * Both bars live inside `.card`, which is p-6. Pulling out by that and padding
- * it back lets the bar's own background cover the full width of the card, so
- * rows don't show through beside it while it is pinned.
+ * Every one of these bars lives inside `.card`, which is p-6. Pulling out by
+ * that and padding it back lets the bar's own background cover the full width
+ * of the card, so rows don't show through beside it while it is pinned.
  */
 .bulk-actions-sticky {
   position: sticky;
-  top: var(--conf-tabbar-h, 0px);
+  top: var(--bulk-actions-top, 0px);
   z-index: 35;
   background: #fff;
   margin-left: -1.5rem;

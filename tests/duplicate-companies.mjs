@@ -1,0 +1,574 @@
+/**
+ * Finding the duplicates already sitting in an account.
+ *
+ *   node --experimental-strip-types --import ./tests/register-ts.mjs \
+ *        tests/duplicate-companies.mjs
+ *
+ * The upload learned to collapse "Direct Supply", "Direct supply", "Direct
+ * Supply Inc." and "Direct Supply, Inc." into one record. This finds the ones
+ * that got in before it did, and offers them — it never merges anything.
+ *
+ * ── The key is shared on purpose ─────────────────────────────────────────────
+ *
+ * The scanner groups by normalizeCompanyName, which is the same key
+ * collapseNewCompanyNames uses when an upload creates companies. If the two
+ * disagreed, a merge done here would be undone by the next import, and neither
+ * would be worth trusting. There is an assertion below that holds them
+ * together: whatever the upload would collapse, the scanner must group.
+ *
+ * ── The domain signal ────────────────────────────────────────────────────────
+ *
+ * Names cannot connect "T20 Holdings LLC" to "Twenty20 Group". A shared work
+ * domain can, and is close to proof — which is why most of the assertions about
+ * it below are about what it must REFUSE to connect. Two companies each with a
+ * gmail attendee are not related; a linkedin.com in a website field is
+ * somebody's profile.
+ *
+ * One number in it could not be measured: MAX_COMPANIES_PER_DOMAIN. The real
+ * conference list this was built against has no email or website column at all,
+ * so the cap is a judgement about where a shared domain stops being evidence,
+ * not a figure read off data. The test pins the behaviour, not the value.
+ *
+ * ── And it stops where that one stops ────────────────────────────────────────
+ *
+ * Not deepNormalizeCompanyName. On a real 2,647-row list that reduced
+ * "Healthcare Services Group", "US Healthcare" and "Healthcare Management
+ * Partners" all to "healthcare" — three companies, one group. A missed
+ * duplicate costs a minute; a wrong merge has no undo.
+ *
+ * Exits non-zero on the first failing expectation, so it can gate a build.
+ */
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+const dir = mkdtempSync(join(tmpdir(), 'parlay-dupes-'));
+process.env.TURSO_DATABASE_URL = `file:${join(dir, 'master.db')}`;
+process.env.TURSO_AUTH_TOKEN = '';
+process.env.JWT_SECRET = 'test-secret-at-least-thirty-two-characters-long';
+delete process.env.CLERK_SECRET_KEY;
+
+let pass = 0;
+let fail = 0;
+const eq = (label, got, want) => {
+  const g = JSON.stringify(got);
+  const w = JSON.stringify(want);
+  if (g === w) { pass++; console.log(`  ok   ${label}`); }
+  else { fail++; console.log(`  FAIL ${label}\n       got  ${g}\n       want ${w}`); }
+};
+process.on('exit', () => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
+
+const { findDuplicateGroups, dismissalKeyFor, domainsFor, groupMatchesQuery, MAX_COMPANIES_PER_DOMAIN, MAX_COMPANIES_PER_STEM } = await import('@/lib/duplicateCompanies');
+const { collapseNewCompanyNames } = await import('@/lib/matching');
+
+const co = (id, name, extra = {}) => ({ id, name, attendee_count: 0, conference_count: 0, ...extra });
+// Tolerant of an absent group: when a grouping assertion fails, the ones
+// after it should still report rather than the run dying on a TypeError.
+const names = (g) => (g?.members ?? []).map(m => m.name);
+
+// ── Grouping ─────────────────────────────────────────────────────────────────
+
+console.log('\n— spellings of one company are grouped —');
+{
+  const groups = findDuplicateGroups([
+    co(1, 'Direct Supply'), co(2, 'Direct supply'),
+    co(3, 'Direct Supply Inc.'), co(4, 'Direct Supply, Inc.'),
+  ]);
+  eq('one group', groups.length, 1);
+  eq('  with all four in it', names(groups[0]).length, 4);
+  eq('  keyed on the shared normalized name', groups[0].key, 'direct supply');
+  eq('  and reported as a name match', groups[0]?.matchedOn ?? null, ['name']);
+}
+{
+  const only = (list) => findDuplicateGroups(list).length;
+  eq('a legal suffix alone', only([co(1, 'Allegro Living'), co(2, 'Allegro Living, LLC')]), 1);
+  eq('case alone', only([co(1, 'Ziegler'), co(2, 'ziegler'), co(3, 'ZIegler')]), 1);
+  eq('an ampersand spelled out',
+    only([co(1, 'Forum Architecture & Interior Design'), co(2, 'Forum Architecture and Interior Design')]), 1);
+  eq('a stray comma before Inc',
+    only([co(1, 'Omega Healthcare Investors'), co(2, 'Omega Healthcare Investors, Inc')]), 1);
+}
+
+console.log('\n— and different companies are not —');
+{
+  eq('two unrelated names', findDuplicateGroups([co(1, 'Brookdale'), co(2, 'Atria')]).length, 0);
+  eq('a lone company is not a duplicate of itself',
+    findDuplicateGroups([co(1, 'Belmont Care')]).length, 0);
+
+  // The line this key deliberately does not cross.
+  eq('three different healthcare firms stay three', findDuplicateGroups([
+    co(1, 'Healthcare Services Group'),
+    co(2, 'US Healthcare'),
+    co(3, 'Healthcare Management Partners'),
+  ]).length, 0);
+  eq('  and "Senior Consulting" is not "Senior Management Advisors"', findDuplicateGroups([
+    co(1, 'Senior Management Advisors'), co(2, 'Senior Consulting, LLC'),
+  ]).length, 0);
+}
+
+console.log('\n— one name being the start of another —');
+{
+  // The miss that prompted this signal, found on a real account: the exact key
+  // will never connect these, because nothing it strips turns one into the
+  // other. An earlier version of this file asserted the opposite for
+  // "Sonida" / "Sonida Senior Living" — a judgement that the account's own data
+  // showed was too conservative.
+  const groups = findDuplicateGroups([co(1, '12 Oaks'), co(2, '12 Oaks Senior Living')]);
+  eq('12 Oaks and 12 Oaks Senior Living are grouped', groups.length, 1);
+  eq('  labelled as the weaker signal it is', groups[0]?.matchedOn ?? null, ['similar-name']);
+  eq('  naming the words they share', groups[0]?.sharedStems ?? null, ['12 oaks']);
+
+  eq('a one-word stem counts too', findDuplicateGroups([
+    co(1, 'Gardant'), co(2, 'Gardant Management Solutions')]).length, 1);
+  eq('  and so does the case that was wrongly excluded before', findDuplicateGroups([
+    co(1, 'Sonida'), co(2, 'Sonida Senior Living')]).length, 1);
+}
+
+console.log('\n— but a stem has to be worth something —');
+{
+  // MIN_FUZZY_NAME_LENGTH is the floor, for the reason it exists: three
+  // characters are a prefix of everything.
+  eq('a three-letter stem connects nothing', findDuplicateGroups([
+    co(1, 'ABC'), co(2, 'ABC Senior Living')]).length, 0);
+  // Word boundary, not character prefix.
+  eq('a stem must end on a word', findDuplicateGroups([
+    co(1, 'Career'), co(2, 'Careington Health')]).length, 0);
+  // And the stem must be somebody's whole name — this never invents one.
+  eq('two long names sharing a start are not grouped by it', findDuplicateGroups([
+    co(1, 'Belmont Senior Living'), co(2, 'Belmont Senior Care')]).length, 0);
+
+  const many = Array.from({ length: MAX_COMPANIES_PER_STEM + 1 }, (_, i) =>
+    co(i + 2, `Senior Living ${i}`));
+  eq('a stem on too many records is a common word, not a company',
+    findDuplicateGroups([co(1, 'Senior Living'), ...many]).length, 0);
+}
+
+console.log('\n— the scanner still finds everything the upload would collapse —');
+{
+  // Held one way round only. The scanner now groups MORE than the upload
+  // collapses — that is the point of the similar-name and domain signals — but
+  // it must never group LESS, or a cleanup done here is undone by the next
+  // import.
+  const spellings = [
+    'Direct Supply', 'Direct supply', 'Direct Supply, Inc.',
+    'Allegro Living', 'Allegro Living, LLC',
+    'Brookdale Senior Living',
+    'Hanson Bridgett', 'Hanson Bridgett LLP',
+  ];
+  const { aliasOf } = collapseNewCompanyNames(spellings);
+  const scanned = findDuplicateGroups(spellings.map((n, i) => co(i + 1, n)));
+  const groupOf = new Map();
+  for (const g of scanned) for (const m of g.members) groupOf.set(m.name, g.key);
+
+  // Every alias the upload would fold into a canonical name must be in the same
+  // scanner group as that name.
+  const split = Array.from(aliasOf.entries())
+    .filter(([alias, canonical]) => groupOf.get(alias) === undefined
+      || groupOf.get(alias) !== groupOf.get(canonical))
+    .map(([alias, canonical]) => `${alias} / ${canonical}`);
+  eq('the upload folds some of these together', aliasOf.size > 0, true);
+  eq('  and the scanner groups every one of those pairs', split, []);
+}
+
+// ── The domain signal ────────────────────────────────────────────────────────
+
+console.log('\n— a shared domain connects what names cannot —');
+{
+  const groups = findDuplicateGroups([
+    co(1, 'T20 Holdings LLC', { website: 'https://www.twenty20.com/about' }),
+    co(2, 'Twenty20 Group', { attendee_emails: ['nia@twenty20.com'] }),
+    co(3, 'Belmont Care', { website: 'belmont.com' }),
+  ]);
+  eq('the two are grouped', groups.length, 1);
+  eq('  despite sharing nothing in their names',
+    names(groups[0]), ['T20 Holdings LLC', 'Twenty20 Group']);
+  eq('  and the group says why', groups[0]?.matchedOn ?? null, ['domain']);
+  eq('  naming the domain that did it', groups[0]?.sharedDomains ?? null, ['twenty20.com']);
+}
+{
+  eq('a website matches an attendee\'s work email', findDuplicateGroups([
+    co(1, 'Belmont Care', { website: 'https://belmont.com' }),
+    co(2, 'Belmont Senior Living', { attendee_emails: ['dana@belmont.com'] }),
+  ]).length, 1);
+  eq('  and www and a path make no difference', domainsFor(
+    { id: 1, name: 'x', website: 'https://www.belmont.com/careers?ref=1' }), ['belmont.com']);
+}
+
+console.log('\n— but a domain that identifies nobody connects nobody —');
+{
+  const free = findDuplicateGroups([
+    co(1, 'Belmont Care', { attendee_emails: ['dana@gmail.com'] }),
+    co(2, 'Twenty20 Group', { attendee_emails: ['sam@gmail.com'] }),
+  ]);
+  eq('two gmail attendees are not one company', free.length, 0);
+
+  const social = findDuplicateGroups([
+    co(1, 'Belmont Care', { website: 'https://www.linkedin.com/company/belmont' }),
+    co(2, 'Twenty20 Group', { website: 'linkedin.com/company/twenty20' }),
+  ]);
+  eq('nor are two LinkedIn links', social.length, 0);
+
+  const freeSite = findDuplicateGroups([
+    co(1, 'Belmont Care', { website: 'gmail.com' }),
+    co(2, 'Twenty20 Group', { website: 'https://gmail.com' }),
+  ]);
+  eq('nor a free provider typed into a website field', freeSite.length, 0);
+  eq('  which nothing else was checking', domainsFor(
+    { id: 1, name: 'x', website: 'https://gmail.com' }), []);
+}
+{
+  // The cap. A domain on a handful of records is a duplicate; a domain on
+  // dozens is a shared host or a pasted column.
+  const many = Array.from({ length: MAX_COMPANIES_PER_DOMAIN + 1 }, (_, i) =>
+    co(i + 1, `Company ${i}`, { website: 'sharedhost.com' }));
+  eq('a domain on too many records is not evidence', findDuplicateGroups(many).length, 0);
+
+  const few = Array.from({ length: MAX_COMPANIES_PER_DOMAIN }, (_, i) =>
+    co(i + 1, `Company ${i}`, { website: 'sharedhost.com' }));
+  eq('  while one just inside the cap still is', findDuplicateGroups(few).length, 1);
+}
+
+console.log('\n— the two signals make one group, not two —');
+{
+  const groups = findDuplicateGroups([
+    co(1, 'Belmont Care', { website: 'belmont.com' }),
+    co(2, 'Belmont Care, LLC', { attendee_emails: ['dana@belmont.com'] }),
+  ]);
+  eq('a pair matching on both is asked about once', groups.length, 1);
+  eq('  and both reasons are given', groups[0]?.matchedOn ?? null, ['name', 'domain']);
+}
+{
+  // A chain: A~B by name, B~C by domain. One company, three records.
+  const groups = findDuplicateGroups([
+    co(1, 'Belmont Care'),
+    co(2, 'Belmont Care, LLC', { website: 'belmont.com' }),
+    co(3, 'BC Senior Holdings', { attendee_emails: ['sam@belmont.com'] }),
+  ]);
+  eq('a chain across signals is one group', groups.length, 1);
+  eq('  with all three in it', groups[0]?.members.length ?? 0, 3);
+}
+
+// ── Which record to keep ─────────────────────────────────────────────────────
+
+console.log('\n— the suggestion goes to the record being worked —');
+{
+  const g = findDuplicateGroups([
+    co(1, 'Gardant', { attendee_count: 1 }),
+    co(2, 'Gardant, LLC', { attendee_count: 9 }),
+  ])[0];
+  eq('most attendees wins', g.suggestedMasterId, 2);
+}
+{
+  const g = findDuplicateGroups([
+    co(1, 'Gardant', { attendee_count: 3 }),
+    co(2, 'Gardant Inc', { attendee_count: 3 }),
+  ])[0];
+  eq('on a tie, the longer name — it carries more', g.suggestedMasterId, 2);
+}
+{
+  const a = findDuplicateGroups([co(7, 'Marsh'), co(3, 'MARSH')])[0];
+  const b = findDuplicateGroups([co(3, 'MARSH'), co(7, 'Marsh')])[0];
+  eq('and the answer does not depend on row order',
+    [a.suggestedMasterId, b.suggestedMasterId], [3, 3]);
+}
+
+// ── Dismissal ────────────────────────────────────────────────────────────────
+
+console.log('\n— saying "not duplicates" sticks, but only for that set —');
+{
+  const list = [co(1, 'Smith Company'), co(2, 'Smith Corp')];
+  const group = findDuplicateGroups(list)[0];
+  eq('two firms that normalize alike are offered', group != null, true);
+
+  const dismissed = new Set([group.dismissalKey]);
+  eq('  and once dismissed, stop being offered',
+    findDuplicateGroups(list, dismissed).length, 0);
+
+  // A third spelling is a different question, and gets asked.
+  const wider = [...list, co(3, 'Smith Co.')];
+  eq('  but a third member brings the question back',
+    findDuplicateGroups(wider, dismissed).length, 1);
+  eq('    because the key carries the membership',
+    dismissalKeyFor('smith', [1, 2]) === dismissalKeyFor('smith', [1, 2, 3]), false);
+  eq('    and does not depend on the order ids arrive in',
+    dismissalKeyFor('smith', [2, 1]), dismissalKeyFor('smith', [1, 2]));
+}
+
+// ── The route ────────────────────────────────────────────────────────────────
+
+const { createClient } = await import('@libsql/client');
+const { NextRequest } = await import('next/server');
+const { db, dbReady, seedFreshDb } = await import('@/lib/db');
+const { signToken } = await import('@/lib/auth');
+await dbReady;
+await seedFreshDb(db);
+
+console.log('\n— end to end, against a real database —');
+{
+  const ACCOUNT = 'acct-dupes';
+  const url = `file:${join(dir, 'tenant.db')}`;
+  const tenant = createClient({ url });
+  await seedFreshDb(tenant);
+  await db.execute({
+    sql: `INSERT INTO accounts (id, company_name, admin_email, turso_db_url, turso_auth_token)
+          VALUES (?, 'Dupe Co', 'a@dupe.test', ?, '')`,
+    args: [ACCOUNT, url],
+  });
+  const user = { id: 1200, email: 'rep@dupe.test', role: 'administrator', emailVerified: true, accountId: ACCOUNT };
+  const cookie = `auth_token=${await signToken(user)}`;
+
+  for (const n of ['Direct Supply', 'Direct Supply, Inc.', 'Brookdale Senior Living', 'Atria']) {
+    await tenant.execute({ sql: 'INSERT INTO companies (name) VALUES (?)', args: [n] });
+  }
+  // Give one of the pair an attendee, so the suggestion has something to go on.
+  await tenant.execute({
+    sql: `INSERT INTO attendees (first_name, last_name, company_id)
+          VALUES ('Dana', 'Reyes', (SELECT id FROM companies WHERE name = 'Direct Supply, Inc.'))`,
+  });
+
+  const route = await import('@/app/api/companies/duplicates/route');
+  const get = async () => {
+    const res = await route.GET(new NextRequest('https://parlay.test/d', { headers: { cookie } }));
+    return { status: res.status, body: await res.json() };
+  };
+
+  const first = await get();
+  eq('the scan succeeds', first.status, 200);
+  eq('  finding the one real pair', first.body.groups.length, 1);
+  eq('  and counting what could go', first.body.redundantRecords, 1);
+  eq('  it suggests keeping the one with an attendee',
+    first.body.groups[0].members.find(m => m.id === first.body.groups[0].suggestedMasterId).name,
+    'Direct Supply, Inc.');
+  eq('  the scan changed nothing', Number((await tenant.execute(
+    'SELECT COUNT(*) AS n FROM companies')).rows[0].n), 4);
+
+  // Deliberately no `users` row for this session in the tenant: a dismissal
+  // must not depend on one. The attribution degrades to NULL; the answer sticks.
+  const dismissRes = await route.POST(new NextRequest('https://parlay.test/d', {
+    method: 'POST',
+    headers: { cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dismissal_key: first.body.groups[0].dismissalKey }),
+  }));
+  eq('a dismissal is accepted', dismissRes.status, 200);
+  eq('  even with no user row to attribute it to', Number((await tenant.execute(
+    'SELECT COUNT(*) AS n FROM company_duplicate_dismissals WHERE dismissed_by_user_id IS NULL')).rows[0].n), 1);
+
+  const second = await get();
+  eq('  and the group is gone on the next scan', second.body.groups.length, 0);
+  eq('  with the companies all still there', Number((await tenant.execute(
+    'SELECT COUNT(*) AS n FROM companies')).rows[0].n), 4);
+
+  // The domain signal end to end. The route has to pull attendee emails and
+  // hand them to the scanner — wiring that the unit tests above cannot see.
+  await tenant.execute({ sql: 'INSERT INTO companies (name, website) VALUES (?, ?)',
+    args: ['T20 Holdings LLC', 'https://www.twenty20.com/about'] });
+  await tenant.execute({ sql: 'INSERT INTO companies (name) VALUES (?)', args: ['Twenty20 Group'] });
+  await tenant.execute({
+    sql: `INSERT INTO attendees (first_name, last_name, email, company_id)
+          VALUES ('Nia', 'Hall', 'nia@twenty20.com',
+                  (SELECT id FROM companies WHERE name = 'Twenty20 Group'))`,
+  });
+  // And a pair that must NOT be connected: both have a free-provider attendee.
+  for (const n of ['Unrelated One', 'Unrelated Two']) {
+    await tenant.execute({ sql: 'INSERT INTO companies (name) VALUES (?)', args: [n] });
+    await tenant.execute({
+      sql: `INSERT INTO attendees (first_name, last_name, email, company_id)
+            VALUES ('A', 'B', ?, (SELECT id FROM companies WHERE name = ?))`,
+      args: [`someone@gmail.com`, n],
+    });
+  }
+
+  const withDomains = await get();
+  const domainGroup = withDomains.body.groups.find(g => g.matchedOn.includes('domain'));
+  eq('the route finds a domain match', domainGroup != null, true);
+  eq('  across two differently-named records',
+    (domainGroup?.members ?? []).map(m => m.name).sort(), ['T20 Holdings LLC', 'Twenty20 Group']);
+  eq('  naming the shared domain', domainGroup?.sharedDomains ?? null, ['twenty20.com']);
+  eq('  and the gmail pair is not grouped',
+    withDomains.body.groups.some(g => g.members.some(m => m.name.startsWith('Unrelated'))), false);
+
+  const bad = await route.POST(new NextRequest('https://parlay.test/d', {
+    method: 'POST',
+    headers: { cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  }));
+  eq('a dismissal with no key is refused', bad.status, 400);
+}
+
+console.log('\n— a group is a proposal you can take apart —');
+{
+  // A three-record group can be two companies and a mistake. Merging used to be
+  // all-or-nothing, so acting on the two that ARE the same meant taking the
+  // third with them. The modal now decides from what is still ticked.
+  const { readFileSync } = await import('node:fs');
+  const modal = readFileSync('components/MergeModal.tsx', 'utf8');
+
+  eq('everything offered starts selected',
+    /setIncludedIds\(new Set\(items\.map\(\(i\) => i\.id\)\)\)/.test(modal), true);
+  eq('  and the record being kept is not asked about',
+    /masterId !== item\.id && \(/.test(modal), true);
+
+  // The three places that must agree on WHAT is being merged: the preview, the
+  // button's enabled state, and the request. All read includedIds.
+  const filters = modal.match(/id !== masterId && includedIds\.has\(id\)/g) ?? [];
+  eq('the preview and the merge request use the same selection', filters.length, 2);
+  eq('  as does whether the button is enabled',
+    /i\.id !== masterId && includedIds\.has\(i\.id\)/.test(modal), true);
+  eq('unticking everything disables it rather than merging nothing',
+    /const canMerge = masterId !== null && duplicateCount > 0/.test(modal), true);
+  eq('  and the request refuses an empty selection',
+    /if \(duplicateIds\.length === 0\) return;/.test(modal), true);
+  eq('the button says how many are going',
+    /Merge \$\{duplicateCount\} record/.test(modal), true);
+}
+
+console.log('\n— the panel proposes, it does not merge —');
+{
+  const { readFileSync } = await import('node:fs');
+  const panel = readFileSync('components/DuplicateCompaniesPanel.tsx', 'utf8');
+  // The scan endpoint must never be the merge endpoint, and the merge must be
+  // something a person pressed — not something the scan does on their behalf.
+  eq('the merge runs from the modal\'s callback only',
+    /const handleMerge = async \(masterId: number, duplicateIds: number\[\]\)/.test(panel), true);
+  eq('  which is only reachable through the modal',
+    /onMerge=\{handleMerge\}/.test(panel), true);
+  eq('  and the modal only opens from a button',
+    /onClick=\{\(\) => setMerging\(group\)\}/.test(panel), true);
+}
+
+console.log('\n— the results are split by what found them —');
+{
+  const { bucketFor } = await import('@/lib/duplicateCompanies');
+  const g = (matchedOn) => ({ matchedOn });
+
+  eq('an exact-name group is a name match', bucketFor(g(['name'])), 'name');
+  eq('  and so is a stem match', bucketFor(g(['similar-name'])), 'name');
+  eq('  even though the two are different claims',
+    bucketFor(g(['name'])) === bucketFor(g(['similar-name'])), true);
+  eq('a domain-only group is its own kind', bucketFor(g(['domain'])), 'domain');
+  eq('and a group with both is neither of those',
+    [bucketFor(g(['name', 'domain'])), bucketFor(g(['similar-name', 'domain']))], ['both', 'both']);
+
+  // Every group lands somewhere: a section that quietly dropped a kind of
+  // match would make the panel smaller than the scan.
+  const buckets = new Set([
+    ['name'], ['similar-name'], ['domain'],
+    ['name', 'domain'], ['similar-name', 'domain'], ['name', 'similar-name'],
+    ['name', 'similar-name', 'domain'],
+  ].map(m => bucketFor(g(m))));
+  eq('every combination of signals has a home', Array.from(buckets).sort(),
+    ['both', 'domain', 'name']);
+}
+
+console.log('\n— and every section starts closed —');
+{
+  const { readFileSync } = await import('node:fs');
+  const panel = readFileSync('components/DuplicateCompaniesPanel.tsx', 'utf8');
+  eq('nothing is open until it is opened',
+    /useState<Set<Bucket>>\(new Set\(\)\)/.test(panel), true);
+  eq('  and the open state is per section, not one at a time',
+    /const \[open, setOpen\] = useState<Set<Bucket>>/.test(panel), true);
+  eq('a section renders its groups only when open',
+    /\{isOpen && \([\s\S]{0,200}inBucket\.map\(renderGroup\)/.test(panel), true);
+  eq('the domain tag reads "similar domain"', /similar domain</.test(panel), true);
+  eq('  and no longer claims sameness', /same domain</.test(panel), false);
+}
+
+console.log('\n— searching the groups —');
+{
+  const group = {
+    members: [{ id: 1, name: '12 Oaks' }, { id: 2, name: '12 Oaks Senior Living' }],
+    sharedDomains: ['twelveoaks.com'],
+    sharedStems: ['12 oaks'],
+  };
+
+  eq('an empty query matches everything', groupMatchesQuery(group, ''), true);
+  eq('  as does whitespace', groupMatchesQuery(group, '   '), true);
+  eq('a company name matches', groupMatchesQuery(group, 'Senior Living'), true);
+  eq('  regardless of case', groupMatchesQuery(group, 'SENIOR living'), true);
+  eq('  and it need not be the first member', groupMatchesQuery(group, '12 Oaks Senior'), true);
+  eq('a domain matches', groupMatchesQuery(group, 'twelveoaks.com'), true);
+  eq('  and part of one does', groupMatchesQuery(group, 'twelveoak'), true);
+  eq('the shared words match', groupMatchesQuery(group, '12 oaks'), true);
+  eq('something in none of them does not', groupMatchesQuery(group, 'brookdale'), false);
+
+  // Searching is not matching. Running the query through normalizeCompanyName
+  // would drop a suffix somebody typed deliberately to narrow the list.
+  const withSuffix = {
+    members: [{ id: 1, name: 'Allegro Living, LLC' }, { id: 2, name: 'Allegro Living' }],
+    sharedDomains: [], sharedStems: [],
+  };
+  eq('a typed legal suffix still narrows rather than being stripped',
+    [groupMatchesQuery(withSuffix, 'LLC'), groupMatchesQuery(withSuffix, 'Allegro')], [true, true]);
+}
+
+console.log('\n— the search box and what it does to the sections —');
+{
+  const { readFileSync } = await import('node:fs');
+  const panel = readFileSync('components/DuplicateCompaniesPanel.tsx', 'utf8');
+
+  eq('the panel has a search box', /placeholder="Search company or domain…"/.test(panel), true);
+  eq('  labelled for anyone not using a mouse',
+    /aria-label="Search duplicate groups by company or domain"/.test(panel), true);
+  // Order, not proximity: a character window between the two is a number that
+  // breaks the next time anything is added between them.
+  //
+  // Scoped to the row itself. Searching the whole file finds the "no duplicates
+  // found" branch's own Scan again button first, which sits ABOVE this one and
+  // made the assertion pass or fail for the wrong reason.
+  const row = panel.slice(panel.indexOf('flex w-full flex-wrap items-center gap-2 sm:w-auto'));
+  eq('  the search and Scan again share a row', row.length > 0, true);
+  const inputAt = row.indexOf('Search company or domain…');
+  const scanAt = row.indexOf("'Scan again'");
+  eq('  with the search first', inputAt > 0 && scanAt > inputAt, true);
+  eq('  with a way to clear it', /onClick=\{\(\) => setQuery\(''\)\}/.test(panel), true);
+
+  eq('the query filters the groups before they are bucketed',
+    /if \(!groupMatchesQuery\(group, query\)\) continue;/.test(panel), true);
+
+  // A closed section with matches inside reads as a search that found nothing.
+  eq('a live query opens the sections', /const isOpen = searching \|\| open\.has\(bucket\)/.test(panel), true);
+  eq('  without overwriting what the reader had open',
+    /setOpen/.test(panel) && !/setOpen\([\s\S]{0,80}searching/.test(panel), true);
+  eq('and a query that finds nothing says so',
+    /No duplicate groups mention/.test(panel), true);
+}
+
+console.log('\n— the row is readable on a phone —');
+{
+  // Measured in Chromium at 390px against this markup: the action buttons no
+  // longer share a line with the evidence tags, and the row is 265px instead of
+  // 388px. At 1280px it stays a side-by-side row, 129px against 116px before.
+  const { readFileSync } = await import('node:fs');
+  const panel = readFileSync('components/DuplicateCompaniesPanel.tsx', 'utf8');
+
+  eq('the row stacks on a phone and sits side by side from sm',
+    /flex flex-col gap-3 py-3 sm:flex-row/.test(panel), true);
+  eq('the tags never break mid-phrase',
+    (panel.match(/whitespace-nowrap rounded bg-/g) ?? []).length, 3);
+  eq('the evidence takes its own line only on a phone',
+    /w-full min-w-0 truncate text-gray-500 sm:w-auto/.test(panel), true);
+  eq('a company\'s counts drop under its name on a phone, beside it from sm',
+    /block text-xs text-gray-400 sm:ml-2 sm:inline/.test(panel), true);
+  eq('and the primary action fills the width it is given on a phone',
+    /btn-primary flex-1 whitespace-nowrap[^"]*sm:flex-none/.test(panel), true);
+}
+
+console.log('\n— the scan is started from the filter row —');
+{
+  const { readFileSync } = await import('node:fs');
+  const page = readFileSync('app/companies/page.tsx', 'utf8');
+  const table = readFileSync('components/CompanyTable.tsx', 'utf8');
+
+  eq('the table takes something to render before Filters',
+    /beforeFiltersButton\?: React\.ReactNode/.test(table), true);
+  eq('  and renders it immediately before that button',
+    /\{beforeFiltersButton\}\s*<button[\s\S]{0,120}setFiltersOpen/.test(table), true);
+  eq('the page puts the scan there', /beforeFiltersButton=\{\(/.test(page), true);
+  eq('  wired to the same scan the panel reruns',
+    /onClick=\{duplicateScan\.scan\}/.test(page), true);
+  eq('  with the state owned above both', /const duplicateScan = useDuplicateScan\(\)/.test(page), true);
+}
+
+console.log(`\n${pass} passed, ${fail} failed\n`);
+process.exit(fail === 0 ? 0 : 1);

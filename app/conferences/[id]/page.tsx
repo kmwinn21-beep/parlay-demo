@@ -806,7 +806,7 @@ export default function ConferenceDetailPage() {
   const pageRootRef = useRef<HTMLDivElement>(null);
 
   /**
-   * Publish the tab row's measured height as --conf-tabbar-h.
+   * Publish the tab row's measured height as --bulk-actions-top.
    *
    * The bulk action bars pin to its bottom edge (see .bulk-actions-sticky), and
    * that row is not a fixed height — it wraps on a narrow window and its
@@ -817,7 +817,7 @@ export default function ConferenceDetailPage() {
     const root = pageRootRef.current;
     if (!bar || !root) return;
     const apply = () => root.style.setProperty(
-      '--conf-tabbar-h', `${Math.round(bar.getBoundingClientRect().height)}px`);
+      '--bulk-actions-top', `${Math.round(bar.getBoundingClientRect().height)}px`);
     apply();
     const ro = new ResizeObserver(apply);
     ro.observe(bar);
@@ -4773,7 +4773,6 @@ export default function ConferenceDetailPage() {
               conferenceAttendees={conference?.attendees}
               conferenceLabel={conference ? `${conference.name}${conference.start_date ? ` ${new Date(conference.start_date).getUTCFullYear()}` : ''}` : undefined}
               conferenceId={conference?.id}
-              stickyBulkActions
             />
           )}
         </div>
