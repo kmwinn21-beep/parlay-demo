@@ -649,33 +649,51 @@ console.log('\n— the row is readable on a phone —');
   eq('and the primary action fills the width it is given on a phone',
     /btn-primary flex-1 whitespace-nowrap[^"]*sm:flex-none/.test(panel), true);
 
-  // Measured in Chromium against the stylesheet `npm run build` compiled from
-  // this panel. "Bldg of Latitude Healthcare Management, Inc." beside the name
-  // ran off the right edge of a 390px screen with no way to read the rest. On
-  // its own line it stays inside the container; in a 300px container the line
-  // holds 342px of content and scrolls to 42px, with a 0px scrollbar gutter.
-  const badgeLine = panel.match(/className="(mt-0\.5 block[^"]*)"/)?.[1] ?? '';
-  eq('the badges get their own line on a phone', /\bblock\b/.test(badgeLine), true);
-  eq('  and go back beside the name from sm', /\bsm:inline\b/.test(badgeLine), true);
-  eq('  staying on one line rather than wrapping', /\bwhitespace-nowrap\b/.test(badgeLine), true);
-  eq('  what overflows it can be scrolled to', /\boverflow-x-auto\b/.test(badgeLine), true);
-  eq('  without a scrollbar under every company',
-    /\bscrollbar-hide\b/.test(badgeLine), true);
-  eq('  and nothing clipping it once it is inline again',
-    /\bsm:overflow-visible\b/.test(badgeLine), true);
-  // scrollbar-hide has to hide it in both engines, or the phone shows a trough.
-  const css = readFileSync('app/globals.css', 'utf8');
-  eq('scrollbar-hide hides it in webkit and in gecko',
-    [/\.scrollbar-hide::-webkit-scrollbar/.test(css), /\.scrollbar-hide\s*\{[^}]*scrollbar-width:\s*none/.test(css)],
-    [true, true]);
-  // An empty line under every name would be 2px of nothing per company.
-  eq('the line is not rendered when there are no badges',
-    /\{\(m\.id === group\.suggestedMasterId[\s\S]{0,160}\(m\.child_count \?\? 0\) > 0\) && \(\s*<span className="mt-0\.5 block/.test(panel), true);
-  // The first badge on the line starts at the left margin; only beside the
-  // name does it need clearing from it.
-  eq('the badge line is not indented on a phone',
-    /suggested to keep/.test(panel)
-      && /whitespace-nowrap text-\[11px\] font-medium text-brand-secondary sm:ml-2/.test(panel), true);
+  // What ran off a 390px screen was the proper noun on the end of the pill —
+  // "Bldg of Latitude Healthcare Management, Inc." There is nowhere to wrap a
+  // name like that to, so it is gone from the row entirely: the pill alone
+  // sits hard right on the company's own line, and the name column shrinks to
+  // let it. Measured in Chromium against the compiled stylesheet.
+  const memberRow = panel.match(/<li key=\{m\.id\}[\s\S]*?\n {12}<\/li>/)?.[0] ?? '';
+  eq('the company row has a row to align against',
+    /<li key=\{m\.id\} className="flex items-start gap-2/.test(memberRow), true);
+  eq('  with the name column giving way to the pill',
+    /<span className="min-w-0 flex-1">/.test(memberRow), true);
+  eq('  and the pill never squeezed by it',
+    (memberRow.match(/flex-shrink-0 whitespace-nowrap rounded bg-/g) ?? []).length, 2);
+  eq('nothing trails the pill any more',
+    /of \{m\.parent_company_name\}|of \{m\.child_count\}/.test(memberRow), false);
+  // Losing it from the row must not lose it altogether — it is the reason the
+  // pill is a warning rather than a decoration.
+  eq('  whose it is survives on the pill itself',
+    /title=\{m\.parent_company_name[\s\S]{0,120}\$\{childLabel\} of \$\{m\.parent_company_name\}/.test(memberRow), true);
+  eq('  and the parent pill says how many',
+    /title=\{`\$\{parentLabel\} of \$\{m\.child_count\}`\}/.test(memberRow), true);
+}
+
+console.log('\n— a name in the results opens the company —');
+{
+  const { readFileSync } = await import('node:fs');
+  const panel = readFileSync('components/DuplicateCompaniesPanel.tsx', 'utf8');
+
+  // Judging whether two records are the same company means looking at one of
+  // them. The drawer is the app's existing answer to that — it portals, so it
+  // is not trapped inside the panel, and it works on a phone and a desktop
+  // alike. Reusing it is what makes "in both mobile and desktop" true.
+  eq('the panel uses the drawer the tables already use',
+    /import \{ QuickViewDrawer, type QuickViewTarget \} from '\.\/QuickViewDrawer'/.test(panel), true);
+  eq('  and it renders inside a portal, not in the panel\'s own box',
+    /createPortal/.test(readFileSync('components/QuickViewDrawer.tsx', 'utf8')), true);
+  eq('the name is a button, not text',
+    /<button\s+type="button"\s+onClick=\{\(\) => setQuickView\(\{ type: 'company', id: m\.id, name: m\.name \}\)\}/.test(panel), true);
+  eq('  that looks like something you can press',
+    /text-left text-brand-secondary hover:underline/.test(panel), true);
+  eq('  and still shows which record is being kept',
+    /m\.id === group\.suggestedMasterId \? 'font-semibold' : ''/.test(panel), true);
+  eq('the drawer is rendered when there is something to show',
+    /\{quickView && \(\s*<QuickViewDrawer target=\{quickView\} onClose=\{\(\) => setQuickView\(null\)\} \/>/.test(panel), true);
+  eq('  and closing it puts the scan results back',
+    /onClose=\{\(\) => setQuickView\(null\)\}/.test(panel), true);
 }
 
 console.log('\n— the merge sheet on a phone —');
@@ -755,8 +773,10 @@ console.log('\n— the warning follows into the sheet —');
   const panelCode = panel.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
   eq('  with nothing hardcoding the canonical words into a pill',
     /child company|parent of \{m\.child_count\}|child of \$\{m\.parent_company_name\}/.test(panelCode), false);
-  eq('whose it is sits beside the pill, not inside it',
-    /of \{m\.parent_company_name\}/.test(panel), true);
+  // Whose it is used to sit beside the pill as visible text. It is on the
+  // pill's title now — off the row, where it cannot run off a phone — and the
+  // row's own section checks that. What matters here is that the pill is still
+  // the account's word and nothing more.
   eq('  and the labels fall back only when nothing is configured',
     /const childLabel = childDesignation \|\| 'Child'/.test(panel), true);
   eq('the group-level warning is shown above the names',
