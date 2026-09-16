@@ -456,8 +456,23 @@ console.log('\n— end to end, against a real database —');
     '12 Oaks');
   eq('  with the parent counting its children',
     (familyGroup?.members ?? []).find(m => m.name === '12 Oaks')?.child_count, 1);
-  eq('the account\'s word for a child is sent too',
-    withFamily.body.childDesignation, 'Child');
+  eq('the account\'s words for a family are sent too',
+    [withFamily.body.childDesignation, withFamily.body.parentDesignation], ['Child', 'Parent']);
+
+  // An account that renames them gets its own words, without touching this
+  // code. Position decides which is which — the rule resolveEntityDesignation
+  // owns — so the rows are renamed in place rather than re-inserted.
+  await tenant.execute({
+    sql: `UPDATE config_options SET value = 'Portfolio'
+           WHERE category = 'entity_structure' AND value = 'Parent'`,
+  });
+  await tenant.execute({
+    sql: `UPDATE config_options SET value = 'Community'
+           WHERE category = 'entity_structure' AND value = 'Child'`,
+  });
+  const renamed = await get();
+  eq('renaming them in admin renames the pills',
+    [renamed.body.childDesignation, renamed.body.parentDesignation], ['Community', 'Portfolio']);
 
   const bad = await route.POST(new NextRequest('https://parlay.test/d', {
     method: 'POST',
@@ -700,8 +715,20 @@ console.log('\n— the warning follows into the sheet —');
 
   // Seeing "child of X" in the list but not while choosing is exactly where the
   // mistake gets made, so both travel with the group into the sheet.
-  eq('the panel marks a child on its row', /child of \$\{m\.parent_company_name\}/.test(panel), true);
-  eq('  and a parent by how many it has', /parent of \{m\.child_count\}/.test(panel), true);
+  // The pill says it in the account's own words — "Community", not "child
+  // company" — so a renamed pair reads correctly everywhere it appears.
+  eq('the child pill is the account\'s word for it', /\{childLabel\}\n?\s*<\/span>/.test(panel), true);
+  eq('  and the parent pill likewise', /\{parentLabel\}\n?\s*<\/span>/.test(panel), true);
+  // Against the code, not the prose that explains it — the docstring above the
+  // pills says the words "child company" precisely to say it no longer renders
+  // them, and a comment is not something a user can read.
+  const panelCode = panel.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  eq('  with nothing hardcoding the canonical words into a pill',
+    /child company|parent of \{m\.child_count\}|child of \$\{m\.parent_company_name\}/.test(panelCode), false);
+  eq('whose it is sits beside the pill, not inside it',
+    /of \{m\.parent_company_name\}/.test(panel), true);
+  eq('  and the labels fall back only when nothing is configured',
+    /const childLabel = childDesignation \|\| 'Child'/.test(panel), true);
   eq('the group-level warning is shown above the names',
     /Already a family\./.test(panel), true);
 

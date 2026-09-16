@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { findDuplicateGroups } from '@/lib/duplicateCompanies';
+import { resolveEntityDesignation } from '@/lib/entityStructureLabels';
 
 /**
  * Companies that look like the same company under a different spelling.
@@ -49,9 +50,9 @@ export async function GET(request: NextRequest) {
                WHERE company_id IS NOT NULL AND email IS NOT NULL AND email <> ''`,
         args: [],
       }),
-      // What this account calls a child. Position decides, as everywhere else:
-      // the second Entity Structure option is the child one. Only used for
-      // records carrying a designation with no parent link behind it.
+      // What this account calls a parent and a child. Position decides — see
+      // resolveEntityDesignation, which owns that rule — so an account that
+      // calls them "Portfolio" and "Community" gets its own words on the pills.
       db.execute({
         sql: `SELECT value FROM config_options WHERE category = 'entity_structure' ORDER BY sort_order, id`,
         args: [],
@@ -80,16 +81,17 @@ export async function GET(request: NextRequest) {
       child_count: Number(r.child_count ?? 0),
       entity_structure: r.entity_structure ? String(r.entity_structure) : null,
     }));
-    const childDesignation = structureResult.rows[1]
-      ? String(structureResult.rows[1].value)
-      : null;
+    const structureOptions = structureResult.rows.map(r => String(r.value));
+    const childDesignation = resolveEntityDesignation(structureOptions, 'Child');
+    const parentDesignation = resolveEntityDesignation(structureOptions, 'Parent');
     const dismissed = new Set(dismissedResult.rows.map((r) => String(r.dismissal_key)));
 
     const groups = findDuplicateGroups(companies, dismissed);
     return NextResponse.json({
       groups,
-      /** What this account calls a child, so the panel can label one. */
+      /** This account's own words for the two ends of a family. */
       childDesignation,
+      parentDesignation,
       /** Records that would go away if every group were merged as suggested. */
       redundantRecords: groups.reduce((n, g) => n + g.members.length - 1, 0),
       scanned: companies.length,
