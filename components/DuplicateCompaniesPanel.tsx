@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { MergeModal } from './MergeModal';
+import { QuickViewDrawer, type QuickViewTarget } from './QuickViewDrawer';
 import { bucketFor, groupMatchesQuery, isChildCompany } from '@/lib/duplicateCompanies';
 import type { DuplicateGroup } from '@/lib/duplicateCompanies';
 import type { DuplicateScan } from '@/lib/useDuplicateScan';
@@ -92,6 +93,8 @@ export function DuplicateCompaniesPanel({
   const [merging, setMerging] = useState<DuplicateGroup | null>(null);
   const [open, setOpen] = useState<Set<Bucket>>(new Set());
   const [query, setQuery] = useState('');
+  /** The company being looked at, if any — the same drawer the tables open. */
+  const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
 
   const buckets = useMemo(() => {
     const out: Record<Bucket, DuplicateGroup[]> = { both: [], name: [], domain: [] };
@@ -178,68 +181,57 @@ export function DuplicateCompaniesPanel({
           </p>
         )}
         <ul className="space-y-1 sm:space-y-0.5">
+          {/* Name on the left, family pill hard right on the same line. The
+              pill is one word and the left column shrinks, so nothing has to
+              run off the edge of a phone to make room for it. */}
           {group.members.map((m) => (
-            <li key={m.id} className="text-sm leading-snug">
-              <span className={m.id === group.suggestedMasterId ? 'font-semibold text-gray-800' : 'text-gray-600'}>
-                {m.name}
-              </span>
-              {/* The badges get their own line on a phone. "Community of
-                  Latitude Healthcare Management, Inc." is longer than a 390px
-                  screen and there is nowhere to wrap it to — the pill is one
-                  word and the parent's name is a proper noun — so the line
-                  scrolls sideways instead of running off the container. No
-                  scrollbar: a 2px trough under every company in a 120-group
-                  list is noise. From sm it goes back beside the name. */}
-              {(m.id === group.suggestedMasterId
-                || isChildCompany(m, childDesignation)
-                || (m.child_count ?? 0) > 0) && (
-              <span className="mt-0.5 block overflow-x-auto whitespace-nowrap scrollbar-hide sm:mt-0 sm:inline sm:overflow-visible">
+            <li key={m.id} className="flex items-start gap-2 text-sm leading-snug">
+              <span className="min-w-0 flex-1">
+                {/* Deciding whether two records are the same company means
+                    looking at one of them. The drawer does that without losing
+                    the scan results underneath, on a phone and on a desktop. */}
+                <button
+                  type="button"
+                  onClick={() => setQuickView({ type: 'company', id: m.id, name: m.name })}
+                  className={`text-left text-brand-secondary hover:underline ${
+                    m.id === group.suggestedMasterId ? 'font-semibold' : ''
+                  }`}
+                >
+                  {m.name}
+                </button>
                 {m.id === group.suggestedMasterId && (
-                  <span className="whitespace-nowrap text-[11px] font-medium text-brand-secondary sm:ml-2">
+                  <span className="ml-2 whitespace-nowrap text-[11px] font-medium text-brand-secondary">
                     suggested to keep
                   </span>
                 )}
-                {isChildCompany(m, childDesignation) && (
-                  <>
-                    <span
-                      className={`whitespace-nowrap rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 sm:ml-2 ${
-                        m.id === group.suggestedMasterId ? 'ml-2' : ''
-                      }`}
-                      title={m.parent_company_name
-                        ? `${childLabel} of ${m.parent_company_name}`
-                        : childLabel}
-                    >
-                      {childLabel}
-                    </span>
-                    {/* Whose, beside the pill rather than inside it — the pill is
-                        the account's word for the relationship, not a sentence. */}
-                    {m.parent_company_name && (
-                      <span className="ml-1 whitespace-nowrap text-[11px] text-gray-500">
-                        of {m.parent_company_name}
-                      </span>
-                    )}
-                  </>
-                )}
-                {!isChildCompany(m, childDesignation) && (m.child_count ?? 0) > 0 && (
-                  <>
-                    <span className={`whitespace-nowrap rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-600 sm:ml-2 ${
-                      m.id === group.suggestedMasterId ? 'ml-2' : ''
-                    }`}>
-                      {parentLabel}
-                    </span>
-                    <span className="ml-1 whitespace-nowrap text-[11px] text-gray-500">
-                      of {m.child_count}
-                    </span>
-                  </>
-                )}
+                {/* Under the name on a phone, beside it from sm — a row per
+                    company is what keeps a 120-group section readable. */}
+                <span className="block text-xs text-gray-400 sm:ml-2 sm:inline">
+                  {m.attendee_count ?? 0} attendee{(m.attendee_count ?? 0) === 1 ? '' : 's'}
+                  {(m.conference_count ?? 0) > 0 && ` · ${m.conference_count} conference${m.conference_count === 1 ? '' : 's'}`}
+                </span>
               </span>
+              {/* Just the account's word for the relationship. Whose it is was
+                  a proper noun on the end of a pill, which is what ran off the
+                  screen; it is on the title instead, where it costs no width. */}
+              {isChildCompany(m, childDesignation) && (
+                <span
+                  className="mt-px flex-shrink-0 whitespace-nowrap rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700"
+                  title={m.parent_company_name
+                    ? `${childLabel} of ${m.parent_company_name}`
+                    : childLabel}
+                >
+                  {childLabel}
+                </span>
               )}
-              {/* Under the name on a phone, beside it from sm — a row per
-                  company is what keeps a 120-group section readable. */}
-              <span className="block text-xs text-gray-400 sm:ml-2 sm:inline">
-                {m.attendee_count ?? 0} attendee{(m.attendee_count ?? 0) === 1 ? '' : 's'}
-                {(m.conference_count ?? 0) > 0 && ` · ${m.conference_count} conference${m.conference_count === 1 ? '' : 's'}`}
-              </span>
+              {!isChildCompany(m, childDesignation) && (m.child_count ?? 0) > 0 && (
+                <span
+                  className="mt-px flex-shrink-0 whitespace-nowrap rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-600"
+                  title={`${parentLabel} of ${m.child_count}`}
+                >
+                  {parentLabel}
+                </span>
+              )}
             </li>
           ))}
         </ul>
@@ -376,6 +368,10 @@ export function DuplicateCompaniesPanel({
           searchType="company"
           defaultMasterId={merging.suggestedMasterId}
         />
+      )}
+
+      {quickView && (
+        <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
       )}
     </div>
   );
