@@ -58,7 +58,7 @@ const eq = (label, got, want) => {
 };
 process.on('exit', () => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
 
-const { findDuplicateGroups, dismissalKeyFor, domainsFor, groupMatchesQuery, MAX_COMPANIES_PER_DOMAIN, MAX_COMPANIES_PER_STEM } = await import('@/lib/duplicateCompanies');
+const { findDuplicateGroups, dismissalKeyFor, domainsFor, groupMatchesQuery, isChildCompany, MAX_COMPANIES_PER_DOMAIN, MAX_COMPANIES_PER_STEM } = await import('@/lib/duplicateCompanies');
 const { collapseNewCompanyNames } = await import('@/lib/matching');
 
 const co = (id, name, extra = {}) => ({ id, name, attendee_count: 0, conference_count: 0, ...extra });
@@ -248,6 +248,56 @@ console.log('\n— the two signals make one group, not two —');
   eq('  with all three in it', groups[0]?.members.length ?? 0, 3);
 }
 
+// ── Families are not duplicates ──────────────────────────────────────────────
+
+console.log('\n— a parent and its own child are flagged, not hidden —');
+{
+  // The case that prompted this: "12 Oaks" and "12 Oaks Senior Living" match on
+  // a shared stem, and may be one company twice — or a hierarchy somebody built.
+  const groups = findDuplicateGroups([
+    co(1, '12 Oaks'),
+    co(2, '12 Oaks Senior Living', { parent_company_id: 1 }),
+  ]);
+  eq('they are still offered', groups.length, 1);
+  eq('  and the relationship is stated',
+    (groups[0]?.familyLinks ?? []).map(l => `${l.childName}<${l.parentName}`),
+    ['12 Oaks Senior Living<12 Oaks']);
+}
+{
+  // Ordinary duplicates carry nothing, so the warning means something when it
+  // does appear.
+  const groups = findDuplicateGroups([co(1, 'Direct Supply'), co(2, 'Direct Supply, Inc.')]);
+  eq('an ordinary group carries no family warning', groups[0]?.familyLinks ?? null, []);
+}
+{
+  // A member whose parent is NOT in this group is a child of something else.
+  // Worth labelling on the row, but it is not this group's hierarchy to break.
+  const groups = findDuplicateGroups([
+    co(1, 'Belmont Care', { parent_company_id: 99 }),
+    co(2, 'Belmont Care, LLC'),
+  ]);
+  eq('a parent outside the group is not a link within it', groups[0]?.familyLinks ?? null, []);
+}
+
+console.log('\n— what counts as a child —');
+{
+  eq('a parent link makes one', isChildCompany({ id: 1, name: 'x', parent_company_id: 7 }), true);
+  eq('  whatever the designation says', isChildCompany(
+    { id: 1, name: 'x', parent_company_id: 7, entity_structure: 'Parent' }, 'Child'), true);
+  eq('no link and no designation is not one',
+    isChildCompany({ id: 1, name: 'x', parent_company_id: null }), false);
+
+  // An imported Entity Structure value speaks only where there is no link.
+  eq('a designation alone counts', isChildCompany(
+    { id: 1, name: 'x', entity_structure: 'Child' }, 'Child'), true);
+  eq('  matched against what THIS account calls a child', isChildCompany(
+    { id: 1, name: 'x', entity_structure: 'Subsidiary' }, 'Subsidiary'), true);
+  eq('  and ignored when the account has no such wording', isChildCompany(
+    { id: 1, name: 'x', entity_structure: 'Child' }, null), false);
+  eq('  case and padding do not matter', isChildCompany(
+    { id: 1, name: 'x', entity_structure: '  child ' }, 'Child'), true);
+}
+
 // ── Which record to keep ─────────────────────────────────────────────────────
 
 console.log('\n— the suggestion goes to the record being worked —');
@@ -386,6 +436,43 @@ console.log('\n— end to end, against a real database —');
   eq('  naming the shared domain', domainGroup?.sharedDomains ?? null, ['twenty20.com']);
   eq('  and the gmail pair is not grouped',
     withDomains.body.groups.some(g => g.members.some(m => m.name.startsWith('Unrelated'))), false);
+
+  // A real parent and child, offered together. The route has to carry the link
+  // and the account's own wording for it — neither is visible to the unit tests.
+  await tenant.execute({ sql: `INSERT INTO companies (name) VALUES ('12 Oaks')` });
+  await tenant.execute({
+    sql: `INSERT INTO companies (name, parent_company_id)
+          VALUES ('12 Oaks Senior Living', (SELECT id FROM companies WHERE name = '12 Oaks'))`,
+  });
+
+  const withFamily = await get();
+  const familyGroup = withFamily.body.groups.find(g => (g.familyLinks ?? []).length > 0);
+  eq('the route reports the family link', familyGroup != null, true);
+  eq('  naming the child and the parent',
+    (familyGroup?.familyLinks ?? []).map(l => `${l.childName} < ${l.parentName}`),
+    ['12 Oaks Senior Living < 12 Oaks']);
+  eq('  and the child carries its parent\'s name for the row',
+    (familyGroup?.members ?? []).find(m => m.name === '12 Oaks Senior Living')?.parent_company_name,
+    '12 Oaks');
+  eq('  with the parent counting its children',
+    (familyGroup?.members ?? []).find(m => m.name === '12 Oaks')?.child_count, 1);
+  eq('the account\'s words for a family are sent too',
+    [withFamily.body.childDesignation, withFamily.body.parentDesignation], ['Child', 'Parent']);
+
+  // An account that renames them gets its own words, without touching this
+  // code. Position decides which is which — the rule resolveEntityDesignation
+  // owns — so the rows are renamed in place rather than re-inserted.
+  await tenant.execute({
+    sql: `UPDATE config_options SET value = 'Portfolio'
+           WHERE category = 'entity_structure' AND value = 'Parent'`,
+  });
+  await tenant.execute({
+    sql: `UPDATE config_options SET value = 'Community'
+           WHERE category = 'entity_structure' AND value = 'Child'`,
+  });
+  const renamed = await get();
+  eq('renaming them in admin renames the pills',
+    [renamed.body.childDesignation, renamed.body.parentDesignation], ['Community', 'Portfolio']);
 
   const bad = await route.POST(new NextRequest('https://parlay.test/d', {
     method: 'POST',
@@ -547,8 +634,12 @@ console.log('\n— the row is readable on a phone —');
 
   eq('the row stacks on a phone and sits side by side from sm',
     /flex flex-col gap-3 py-3 sm:flex-row/.test(panel), true);
-  eq('the tags never break mid-phrase',
-    (panel.match(/whitespace-nowrap rounded bg-/g) ?? []).length, 3);
+  // Every pill in the row, not a count of them — a number here fails the day a
+  // pill is added, which says nothing about whether any of them wrap.
+  const pills = panel.match(/className="[^"]*rounded bg-[^"]*px-1\.5 py-0\.5[^"]*"/g) ?? [];
+  eq('there are pills to check', pills.length > 0, true);
+  eq('and none of them breaks mid-phrase',
+    pills.filter(p => !p.includes('whitespace-nowrap')), []);
   eq('the evidence takes its own line only on a phone',
     /w-full min-w-0 truncate text-gray-500 sm:w-auto/.test(panel), true);
   eq('a company\'s counts drop under its name on a phone, beside it from sm',
@@ -614,6 +705,41 @@ console.log('\n— the preview is asked for, not volunteered —');
   // Whatever the preview says, the irreversibility is stated either way.
   eq('the warning stands with or without a preview',
     (modal.match(/cannot be undone/g) ?? []).length >= 2, true);
+}
+
+console.log('\n— the warning follows into the sheet —');
+{
+  const { readFileSync } = await import('node:fs');
+  const panel = readFileSync('components/DuplicateCompaniesPanel.tsx', 'utf8');
+  const modal = readFileSync('components/MergeModal.tsx', 'utf8');
+
+  // Seeing "child of X" in the list but not while choosing is exactly where the
+  // mistake gets made, so both travel with the group into the sheet.
+  // The pill says it in the account's own words — "Community", not "child
+  // company" — so a renamed pair reads correctly everywhere it appears.
+  eq('the child pill is the account\'s word for it', /\{childLabel\}\n?\s*<\/span>/.test(panel), true);
+  eq('  and the parent pill likewise', /\{parentLabel\}\n?\s*<\/span>/.test(panel), true);
+  // Against the code, not the prose that explains it — the docstring above the
+  // pills says the words "child company" precisely to say it no longer renders
+  // them, and a comment is not something a user can read.
+  const panelCode = panel.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  eq('  with nothing hardcoding the canonical words into a pill',
+    /child company|parent of \{m\.child_count\}|child of \$\{m\.parent_company_name\}/.test(panelCode), false);
+  eq('whose it is sits beside the pill, not inside it',
+    /of \{m\.parent_company_name\}/.test(panel), true);
+  eq('  and the labels fall back only when nothing is configured',
+    /const childLabel = childDesignation \|\| 'Child'/.test(panel), true);
+  eq('the group-level warning is shown above the names',
+    /Already a family\./.test(panel), true);
+
+  eq('each record can carry a note into the sheet', /note\?: string;/.test(modal), true);
+  eq('  and the panel sets it from the family', /note: isChildCompany\(m, childDesignation\)/.test(panel), true);
+  eq('the sheet takes a warning', /warning\?: string;/.test(modal), true);
+  eq('  and shows it above the list', /These are already a family\./.test(modal), true);
+  eq('  passed only when there is one', /warning=\{merging\.familyLinks\.length > 0/.test(panel), true);
+
+  // It warns; it does not block. Sometimes the family IS the mistake.
+  eq('nothing is disabled by it', /disabled=\{[^}]*warning/.test(modal), false);
 }
 
 console.log('\n— the merge checkbox is a control, not a decoration —');

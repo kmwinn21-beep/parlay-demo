@@ -57,6 +57,23 @@ import {
  * all — so it is set where an over-grouping would be obviously wrong rather
  * than plausibly right, and left easy to change.
  *
+ * ── Families are not duplicates ──────────────────────────────────────────────
+ *
+ * "12 Oaks" and "12 Oaks Senior Living" match on a shared stem, and may be one
+ * company recorded twice — or a parent and its child, deliberately kept apart.
+ * Merging the second case destroys a hierarchy somebody built, and the merge
+ * has no undo.
+ *
+ * So the scan says which members are already in a family. Position comes from
+ * the LINKS, as it does everywhere else in this codebase: a company is a child
+ * because something is its parent, not because a column says so. The imported
+ * Entity Structure designation is carried too, for accounts whose master list
+ * names it without a link to back it up, but it never overrides a link.
+ *
+ * The strongest case is a parent and its own child inside ONE group. That is
+ * not a near-miss to be read carefully; it is a relationship the account
+ * already stated, and the group says so above the names.
+ *
  * ── What this is NOT ─────────────────────────────────────────────────────────
  *
  * A proposal, not a decision. Nothing here merges anything. Even an exact
@@ -99,6 +116,14 @@ export interface DuplicateCandidate {
   website?: string | null;
   /** Email addresses of this company's attendees, for the domain signal. */
   attendee_emails?: string[];
+  /** Set when this company is a child of another — the authoritative signal. */
+  parent_company_id?: number | null;
+  /** That parent's name, for saying whose child it is. */
+  parent_company_name?: string | null;
+  /** How many companies name this one as their parent. */
+  child_count?: number;
+  /** The account's own Parent/Child designation, where one was imported. */
+  entity_structure?: string | null;
 }
 
 export interface DuplicateGroup {
@@ -115,6 +140,25 @@ export interface DuplicateGroup {
   sharedDomains: string[];
   /** The leading words they share, when that is what connected them. */
   sharedStems: string[];
+  /**
+   * Members of this group that are a parent and a child OF EACH OTHER.
+   *
+   * Empty for almost every group. When it is not, merging would collapse a
+   * hierarchy the account built on purpose.
+   */
+  familyLinks: Array<{ childId: number; childName: string; parentId: number; parentName: string }>;
+}
+
+/** Whether a company is already filed as somebody's child. */
+export function isChildCompany(
+  company: DuplicateCandidate,
+  childDesignation?: string | null,
+): boolean {
+  if (company.parent_company_id != null) return true;
+  // A designation with no link behind it — an imported Entity Structure value.
+  // Never allowed to contradict a link, only to speak where there is none.
+  return Boolean(childDesignation)
+    && (company.entity_structure ?? '').trim().toLowerCase() === childDesignation!.trim().toLowerCase();
 }
 
 /** Every domain a company can be identified by, website and attendees alike. */
@@ -319,6 +363,19 @@ export function findDuplicateGroups(
     const dismissalKey = dismissalKeyFor(key, ids);
     if (dismissed.has(dismissalKey)) continue;
 
+    // A parent and its own child, both in this group. Read off the links, so
+    // it states a relationship rather than guessing at one.
+    const familyLinks: DuplicateGroup['familyLinks'] = [];
+    for (const member of members) {
+      if (member.parent_company_id == null) continue;
+      const parent = members.find(other => other.id === member.parent_company_id);
+      if (!parent) continue;
+      familyLinks.push({
+        childId: member.id, childName: member.name,
+        parentId: parent.id, parentName: parent.name,
+      });
+    }
+
     const matchedOn: DuplicateSignal[] = [];
     if (byName) matchedOn.push('name');
     if (sharedStems.length > 0) matchedOn.push('similar-name');
@@ -332,6 +389,7 @@ export function findDuplicateGroups(
       matchedOn,
       sharedDomains: sharedDomains.sort(),
       sharedStems: sharedStems.sort(),
+      familyLinks,
     });
   }
 

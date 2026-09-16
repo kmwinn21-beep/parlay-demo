@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { MergeModal } from './MergeModal';
-import { bucketFor, groupMatchesQuery } from '@/lib/duplicateCompanies';
+import { bucketFor, groupMatchesQuery, isChildCompany } from '@/lib/duplicateCompanies';
 import type { DuplicateGroup } from '@/lib/duplicateCompanies';
 import type { DuplicateScan } from '@/lib/useDuplicateScan';
 
@@ -31,6 +31,20 @@ import type { DuplicateScan } from '@/lib/useDuplicateScan';
  *
  * The per-group tags stay inside, because "same name" and "similar name" are
  * not the same claim even though they share a section.
+ *
+ * ── Families are not duplicates ──────────────────────────────────────────────
+ *
+ * "12 Oaks" and "12 Oaks Senior Living" may be one company recorded twice, or a
+ * parent and its child kept apart on purpose. A row says which of its members
+ * are already somebody's child and whose, and when a parent and its own child
+ * are BOTH in the group it says so above the names — that one is not a close
+ * call to read carefully, it is a relationship the account already stated.
+ *
+ * The pills say it in the account's OWN words. An account that calls the two
+ * ends of a family "Portfolio" and "Community" reads "Community of 12 Oaks"
+ * here, not "child company" — the wording is configured in one place and every
+ * screen that names the relationship should use it. resolveEntityDesignation
+ * owns the rule; this just shows the answer.
  *
  * ── Searching ────────────────────────────────────────────────────────────────
  *
@@ -69,7 +83,7 @@ const BUCKET_LABELS: Record<Bucket, { title: string; blurb: string }> = {
 };
 
 export function DuplicateCompaniesPanel({
-  scan: { groups, redundant, scanning, scan, dismiss },
+  scan: { groups, redundant, scanning, scan, dismiss, childDesignation, parentDesignation },
   onMerged,
 }: {
   scan: DuplicateScan;
@@ -87,6 +101,12 @@ export function DuplicateCompaniesPanel({
     }
     return out;
   }, [groups, query]);
+
+  // Fall back to the canonical words only when the account has configured
+  // none — resolveEntityDesignation already does that server-side, so this is
+  // for the moment before the first scan answers.
+  const childLabel = childDesignation || 'Child';
+  const parentLabel = parentDesignation || 'Parent';
 
   const searching = query.trim().length > 0;
   const matched = buckets.both.length + buckets.name.length + buckets.domain.length;
@@ -150,6 +170,13 @@ export function DuplicateCompaniesPanel({
             </span>
           )}
         </div>
+        {group.familyLinks.length > 0 && (
+          <p className="mb-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] leading-snug text-amber-800">
+            <strong>Already a family.</strong>{' '}
+            {group.familyLinks.map(l => `${l.childName} is a child of ${l.parentName}`).join('; ')}.
+            Merging would collapse that.
+          </p>
+        )}
         <ul className="space-y-1 sm:space-y-0.5">
           {group.members.map((m) => (
             <li key={m.id} className="text-sm leading-snug">
@@ -160,6 +187,35 @@ export function DuplicateCompaniesPanel({
                 <span className="ml-2 whitespace-nowrap text-[11px] font-medium text-brand-secondary">
                   suggested to keep
                 </span>
+              )}
+              {isChildCompany(m, childDesignation) && (
+                <>
+                  <span
+                    className="ml-2 whitespace-nowrap rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700"
+                    title={m.parent_company_name
+                      ? `${childLabel} of ${m.parent_company_name}`
+                      : childLabel}
+                  >
+                    {childLabel}
+                  </span>
+                  {/* Whose, beside the pill rather than inside it — the pill is
+                      the account's word for the relationship, not a sentence. */}
+                  {m.parent_company_name && (
+                    <span className="ml-1 whitespace-nowrap text-[11px] text-gray-500">
+                      of {m.parent_company_name}
+                    </span>
+                  )}
+                </>
+              )}
+              {!isChildCompany(m, childDesignation) && (m.child_count ?? 0) > 0 && (
+                <>
+                  <span className="ml-2 whitespace-nowrap rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-600">
+                    {parentLabel}
+                  </span>
+                  <span className="ml-1 whitespace-nowrap text-[11px] text-gray-500">
+                    of {m.child_count}
+                  </span>
+                </>
               )}
               {/* Under the name on a phone, beside it from sm — a row per
                   company is what keeps a 120-group section readable. */}
@@ -289,7 +345,15 @@ export function DuplicateCompaniesPanel({
             label: m.name,
             sublabel: `${m.attendee_count ?? 0} attendee${(m.attendee_count ?? 0) === 1 ? '' : 's'}`
               + ((m.conference_count ?? 0) > 0 ? ` · ${m.conference_count} conference${m.conference_count === 1 ? '' : 's'}` : ''),
+            // The warning has to follow into the sheet. Seeing "child of X" in
+            // the list and not while choosing is where the mistake gets made.
+            note: isChildCompany(m, childDesignation)
+              ? (m.parent_company_name ? `${childLabel} of ${m.parent_company_name}` : childLabel)
+              : (m.child_count ?? 0) > 0 ? `${parentLabel} of ${m.child_count}` : undefined,
           }))}
+          warning={merging.familyLinks.length > 0
+            ? `${merging.familyLinks.map(l => `${l.childName} is a child of ${l.parentName}`).join('; ')}. Merging would collapse that.`
+            : undefined}
           title="Merge duplicate companies"
           description="Pick the record to keep. Everything attached to the others moves to it, and they are deleted."
           searchType="company"
