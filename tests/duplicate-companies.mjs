@@ -636,8 +636,10 @@ console.log('\n— the row is readable on a phone —');
     /flex flex-col gap-3 py-3 sm:flex-row/.test(panel), true);
   // Every pill in the row, not a count of them — a number here fails the day a
   // pill is added, which says nothing about whether any of them wrap.
-  const pills = panel.match(/className="[^"]*rounded bg-[^"]*px-1\.5 py-0\.5[^"]*"/g) ?? [];
-  eq('there are pills to check', pills.length > 0, true);
+  // Both quoting styles: a pill whose classes are computed is still a pill, and
+  // matching only the double-quoted ones would quietly stop checking it.
+  const pills = panel.match(/className=[{"`]*[^"`]*rounded bg-[^"`]*px-1\.5 py-0\.5[^"`]*/g) ?? [];
+  eq('there are pills to check', pills.length >= 4, true);
   eq('and none of them breaks mid-phrase',
     pills.filter(p => !p.includes('whitespace-nowrap')), []);
   eq('the evidence takes its own line only on a phone',
@@ -646,6 +648,34 @@ console.log('\n— the row is readable on a phone —');
     /block text-xs text-gray-400 sm:ml-2 sm:inline/.test(panel), true);
   eq('and the primary action fills the width it is given on a phone',
     /btn-primary flex-1 whitespace-nowrap[^"]*sm:flex-none/.test(panel), true);
+
+  // Measured in Chromium against the stylesheet `npm run build` compiled from
+  // this panel. "Bldg of Latitude Healthcare Management, Inc." beside the name
+  // ran off the right edge of a 390px screen with no way to read the rest. On
+  // its own line it stays inside the container; in a 300px container the line
+  // holds 342px of content and scrolls to 42px, with a 0px scrollbar gutter.
+  const badgeLine = panel.match(/className="(mt-0\.5 block[^"]*)"/)?.[1] ?? '';
+  eq('the badges get their own line on a phone', /\bblock\b/.test(badgeLine), true);
+  eq('  and go back beside the name from sm', /\bsm:inline\b/.test(badgeLine), true);
+  eq('  staying on one line rather than wrapping', /\bwhitespace-nowrap\b/.test(badgeLine), true);
+  eq('  what overflows it can be scrolled to', /\boverflow-x-auto\b/.test(badgeLine), true);
+  eq('  without a scrollbar under every company',
+    /\bscrollbar-hide\b/.test(badgeLine), true);
+  eq('  and nothing clipping it once it is inline again',
+    /\bsm:overflow-visible\b/.test(badgeLine), true);
+  // scrollbar-hide has to hide it in both engines, or the phone shows a trough.
+  const css = readFileSync('app/globals.css', 'utf8');
+  eq('scrollbar-hide hides it in webkit and in gecko',
+    [/\.scrollbar-hide::-webkit-scrollbar/.test(css), /\.scrollbar-hide\s*\{[^}]*scrollbar-width:\s*none/.test(css)],
+    [true, true]);
+  // An empty line under every name would be 2px of nothing per company.
+  eq('the line is not rendered when there are no badges',
+    /\{\(m\.id === group\.suggestedMasterId[\s\S]{0,160}\(m\.child_count \?\? 0\) > 0\) && \(\s*<span className="mt-0\.5 block/.test(panel), true);
+  // The first badge on the line starts at the left margin; only beside the
+  // name does it need clearing from it.
+  eq('the badge line is not indented on a phone',
+    /suggested to keep/.test(panel)
+      && /whitespace-nowrap text-\[11px\] font-medium text-brand-secondary sm:ml-2/.test(panel), true);
 }
 
 console.log('\n— the merge sheet on a phone —');

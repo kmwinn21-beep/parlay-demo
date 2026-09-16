@@ -183,39 +183,56 @@ export function DuplicateCompaniesPanel({
               <span className={m.id === group.suggestedMasterId ? 'font-semibold text-gray-800' : 'text-gray-600'}>
                 {m.name}
               </span>
-              {m.id === group.suggestedMasterId && (
-                <span className="ml-2 whitespace-nowrap text-[11px] font-medium text-brand-secondary">
-                  suggested to keep
-                </span>
-              )}
-              {isChildCompany(m, childDesignation) && (
-                <>
-                  <span
-                    className="ml-2 whitespace-nowrap rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700"
-                    title={m.parent_company_name
-                      ? `${childLabel} of ${m.parent_company_name}`
-                      : childLabel}
-                  >
-                    {childLabel}
+              {/* The badges get their own line on a phone. "Community of
+                  Latitude Healthcare Management, Inc." is longer than a 390px
+                  screen and there is nowhere to wrap it to — the pill is one
+                  word and the parent's name is a proper noun — so the line
+                  scrolls sideways instead of running off the container. No
+                  scrollbar: a 2px trough under every company in a 120-group
+                  list is noise. From sm it goes back beside the name. */}
+              {(m.id === group.suggestedMasterId
+                || isChildCompany(m, childDesignation)
+                || (m.child_count ?? 0) > 0) && (
+              <span className="mt-0.5 block overflow-x-auto whitespace-nowrap scrollbar-hide sm:mt-0 sm:inline sm:overflow-visible">
+                {m.id === group.suggestedMasterId && (
+                  <span className="whitespace-nowrap text-[11px] font-medium text-brand-secondary sm:ml-2">
+                    suggested to keep
                   </span>
-                  {/* Whose, beside the pill rather than inside it — the pill is
-                      the account's word for the relationship, not a sentence. */}
-                  {m.parent_company_name && (
-                    <span className="ml-1 whitespace-nowrap text-[11px] text-gray-500">
-                      of {m.parent_company_name}
+                )}
+                {isChildCompany(m, childDesignation) && (
+                  <>
+                    <span
+                      className={`whitespace-nowrap rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 sm:ml-2 ${
+                        m.id === group.suggestedMasterId ? 'ml-2' : ''
+                      }`}
+                      title={m.parent_company_name
+                        ? `${childLabel} of ${m.parent_company_name}`
+                        : childLabel}
+                    >
+                      {childLabel}
                     </span>
-                  )}
-                </>
-              )}
-              {!isChildCompany(m, childDesignation) && (m.child_count ?? 0) > 0 && (
-                <>
-                  <span className="ml-2 whitespace-nowrap rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-600">
-                    {parentLabel}
-                  </span>
-                  <span className="ml-1 whitespace-nowrap text-[11px] text-gray-500">
-                    of {m.child_count}
-                  </span>
-                </>
+                    {/* Whose, beside the pill rather than inside it — the pill is
+                        the account's word for the relationship, not a sentence. */}
+                    {m.parent_company_name && (
+                      <span className="ml-1 whitespace-nowrap text-[11px] text-gray-500">
+                        of {m.parent_company_name}
+                      </span>
+                    )}
+                  </>
+                )}
+                {!isChildCompany(m, childDesignation) && (m.child_count ?? 0) > 0 && (
+                  <>
+                    <span className={`whitespace-nowrap rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-600 sm:ml-2 ${
+                      m.id === group.suggestedMasterId ? 'ml-2' : ''
+                    }`}>
+                      {parentLabel}
+                    </span>
+                    <span className="ml-1 whitespace-nowrap text-[11px] text-gray-500">
+                      of {m.child_count}
+                    </span>
+                  </>
+                )}
+              </span>
               )}
               {/* Under the name on a phone, beside it from sm — a row per
                   company is what keeps a 120-group section readable. */}
