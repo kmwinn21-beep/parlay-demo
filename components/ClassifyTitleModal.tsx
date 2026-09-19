@@ -59,8 +59,12 @@ export function ClassifyTitleModal({ rawTitle, attendeeId, meta, functionOptions
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4">
-      <div className="w-full max-w-lg rounded-xl bg-white shadow-xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[92vh] flex flex-col">
+    /* A bottom sheet on a phone, the centred dialog it already was from sm.
+       `items-end` is what makes it rise from the bottom edge rather than the
+       middle, and `modal-sheet-mobile` caps it at the header's bottom edge and
+       supplies the same slide-up the drawers use. */
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4">
+      <div className="modal-sheet-mobile flex w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-h-[92vh] sm:max-w-lg sm:rounded-xl">
         <div className="flex items-start justify-between border-b border-gray-100 px-5 py-4">
           <div>
             <h2 className="text-lg font-semibold text-brand-primary font-serif">Classify Attendee Title</h2>

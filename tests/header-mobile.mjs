@@ -352,11 +352,23 @@ console.log('\n— bottom-sheet modals stop at the header —');
 
   // Both reported modals still carry their own vh cap for the sm+ layout; the
   // rule overrides it only on a phone.
-  for (const f of ['components/NewMeetingModal.tsx', 'components/ClosedWonDealModal.tsx']) {
-    const src = readFileSync(f, 'utf8');
+  for (const f of ['components/NewMeetingModal.tsx', 'components/ClosedWonDealModal.tsx',
+                   'components/ClassifyTitleModal.tsx']) {
+    // Against the code, not the comment explaining it: a comment naming the
+    // class it applies would satisfy this check while the class was gone.
+    const src = readFileSync(f, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     const name = f.replace('components/', '').replace('.tsx', '');
     eq(`${name} uses the shared sheet class`, src.includes('modal-sheet-mobile'), true);
     eq(`  and keeps its sm: cap`, /sm:max-h-\[\d+vh\]/.test(src), true);
+    // A sheet that rises from the middle of the screen is a modal that happens
+    // to be capped. `items-end` is the difference.
+    eq(`  and rises from the bottom edge on a phone`,
+      /flex items-end [^"]*sm:items-center|items-end justify-center[^"]*sm:items-center/.test(src), true);
+    // Its own mobile cap would fight the shared one — whichever is smaller
+    // wins, so a stray calc() here silently undoes the header alignment.
+    eq(`  with no cap of its own left below sm`,
+      /(?<!sm:)max-h-\[calc\(100dvh/.test(src), false);
   }
 
   // Measured in Chromium at 430px with content forced past the cap: header
