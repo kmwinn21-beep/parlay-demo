@@ -21,6 +21,7 @@ import { useUpgradeModal } from '@/lib/UpgradeModalContext';
 import { UpgradeQueryTrigger } from './UpgradeQueryTrigger';
 import { ActiveConferenceProvider } from '@/components/ActiveConferenceContext';
 import { SuggestionPrompt } from '@/components/SuggestionPrompt';
+import { ActivityDetectedPrompt } from '@/components/ActivityDetectedPrompt';
 import { MeetingNotesDrawerProvider, useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 import { MeetingNotesDrawer } from '@/components/MeetingNotesDrawer';
 import { ClosedDealDraftProvider, useClosedDealDraft } from '@/lib/ClosedDealDraftContext';
@@ -258,6 +259,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Mounted once for the whole app: every note-writing flow announces
             itself with an event, so none of them has to know this exists. */}
         <SuggestionPrompt />
+        <ActivityDetectedPrompt />
       </SidebarCollapseProvider>
       </ConferenceReviewModalsProvider>
       </ClosedDealDraftProvider>

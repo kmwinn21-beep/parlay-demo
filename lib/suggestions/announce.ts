@@ -1,7 +1,41 @@
 'use client';
 
+/**
+ * What a note just saved was about, for anything that wants to read it.
+ *
+ * `entityType` and `entityId` are what the vendor prompt has always needed:
+ * enough to go and ask the server what it extracted. Everything below them is
+ * OPTIONAL and was added for the activity chooser, which reads the note itself
+ * in the browser and so needs the text and the records it was filed against.
+ *
+ * Optional on purpose. Ten flows call this, they were all written before any
+ * of these fields existed, and a required field would have broken every one of
+ * them — a listener that gets nothing simply has nothing to offer, which is
+ * the same as the behaviour before it was added.
+ */
+export interface NoteSavedContext {
+  /** The note as written. Without it the activity chooser stays silent. */
+  text?: string | null;
+  conferenceId?: number | null;
+  conferenceName?: string | null;
+  companyId?: number | null;
+  companyName?: string | null;
+  attendeeId?: number | null;
+  attendeeName?: string | null;
+  /**
+   * The note's own record of what wrote it. A note posted BY the touchpoint
+   * form or the meeting log describes exactly what the scanner looks for, so
+   * passing these through is what stops the chooser offering to log something
+   * that was just logged. See shouldScanNote in ./activityScan.
+   */
+  touchpointType?: string | null;
+  noteType?: string | null;
+  meetingId?: number | null;
+  tag?: string | null;
+}
+
 /** What the prompt needs to know to go looking. */
-export interface NoteSavedDetail {
+export interface NoteSavedDetail extends NoteSavedContext {
   entityType: 'attendee' | 'company' | 'conference' | string;
   entityId: number;
 }
@@ -19,9 +53,13 @@ export const NOTE_SAVED_EVENT = 'parlay:note-saved';
  * Extraction runs after the response, so nothing is ready yet; the listener
  * waits for it.
  */
-export function announceNoteSaved(entityType: string, entityId: number | null | undefined) {
+export function announceNoteSaved(
+  entityType: string,
+  entityId: number | null | undefined,
+  context?: NoteSavedContext,
+) {
   if (typeof window === 'undefined' || !entityId) return;
   window.dispatchEvent(new CustomEvent<NoteSavedDetail>(NOTE_SAVED_EVENT, {
-    detail: { entityType, entityId: Number(entityId) },
+    detail: { ...context, entityType, entityId: Number(entityId) },
   }));
 }

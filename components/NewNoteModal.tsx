@@ -299,7 +299,15 @@ export function NewNoteModal({
       }
 
       toast.success('Note saved.');
-      announceNoteSaved(selAttendee ? 'attendee' : 'company', selAttendee?.id ?? selCompany?.id);
+      announceNoteSaved(selAttendee ? 'attendee' : 'company', selAttendee?.id ?? selCompany?.id, {
+        text: content,
+        conferenceId: selConf?.id ?? null,
+        conferenceName: selConf?.name ?? null,
+        companyId: selCompany?.id ?? null,
+        companyName: selCompany?.name ?? null,
+        attendeeId: selAttendee?.id ?? null,
+        attendeeName: selAttendee ? `${selAttendee.first_name} ${selAttendee.last_name}` : null,
+      });
       handleClose();
     } catch {
       toast.error('Failed to save note.');
