@@ -12,7 +12,6 @@ import { MeetingsTab } from './post-conference/MeetingsTab';
 import { FollowUpsTab } from './post-conference/FollowUpsTab';
 import { RelationshipShiftsTab } from './post-conference/RelationshipShiftsTab';
 import { EventsTouchpointsTab } from './post-conference/EventsTouchpointsTab';
-import { ActionItemsTab } from './post-conference/ActionItemsTab';
 import { CompanyRollupTab } from './post-conference/CompanyRollupTab';
 import type { SocialEventRow, SocialEventGuest } from './PreConferenceReview';
 export type { SocialEventRow, SocialEventGuest };
@@ -100,6 +99,12 @@ export interface CompanyRollupRow {
   icp: 'Yes' | 'No' | null;
   company_type: string | null;
   target_tier: string | null;
+  /** Raw `companies.assigned_user` — config_options ids, or plain names on
+      rows written before ids were stored. Matched with companiesAssignedTo,
+      which understands both. */
+  assigned_user: string | null;
+  /** The same thing resolved to display names, for showing on the card. */
+  assigned_user_names: string[];
   health_score: number;
   health_before: number;
   health_delta: number;
@@ -155,7 +160,7 @@ export interface PostConferenceData {
 const GREEN = '#34D399';
 const GREEN_DARK = '#064e3b';
 const GREEN_ACTIVE = '#059669';
-const TAB_ORDER = ['summary', 'company_rollup', 'contacts', 'meetings', 'follow_ups', 'relationship_shifts', 'events_touchpoints', 'action_items'];
+const TAB_ORDER = ['summary', 'company_rollup', 'contacts', 'meetings', 'follow_ups', 'relationship_shifts', 'events_touchpoints'];
 
 // ── Stat pill in header ────────────────────────────────────────────────────────
 function StatPill({ label, value }: { label: string; value: number | string }) {
@@ -386,7 +391,6 @@ export function PostConferenceReviewModal() {
                 {effectiveTab === 'follow_ups' && <FollowUpsTab followUps={data.followUps} />}
                 {effectiveTab === 'relationship_shifts' && <RelationshipShiftsTab relationshipShifts={data.relationshipShifts} />}
                 {effectiveTab === 'events_touchpoints' && <EventsTouchpointsTab socialEvents={data.socialEvents} touchpoints={data.touchpoints} />}
-                {effectiveTab === 'action_items' && <ActionItemsTab actionItems={data.actionItems} />}
               </div>
             </>
           )}

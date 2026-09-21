@@ -61,7 +61,6 @@ export const SECTION_DEFS: Record<string, SectionDef[]> = {
     { key: 'follow_ups', label: 'Follow-ups' },
     { key: 'relationship_shifts', label: 'Relationship Shifts' },
     { key: 'events_touchpoints', label: 'Events & Touchpoints' },
-    { key: 'action_items', label: 'Action Items' },
   ],
   effectiveness_modal: [
     { key: 'summary',     label: 'Summary' },

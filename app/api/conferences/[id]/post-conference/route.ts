@@ -13,7 +13,11 @@ interface ContactRow {
   attendee_id: number; first_name: string; last_name: string;
   title: string | null; company_id: number | null; company_name: string | null;
   company_type: string | null; seniority: string | null; icp: string | null;
-  assigned_user_names: string[]; firstSeenConference: string | null;
+  assigned_user_names: string[];
+  /** Raw `companies.assigned_user`, kept beside the resolved names so the
+      client can match on ids the way companiesAssignedTo does. */
+  company_assigned_user: string | null;
+  firstSeenConference: string | null;
   priorConferenceCount: number; lastEngagementType: string | null;
   healthScore: number; healthDelta: number;
   meetingHeld: boolean; hasNotes: boolean;
@@ -797,6 +801,7 @@ export async function GET(
       seniority: resolveSeniority(a.seniority, a.title),
       icp: a.icp ? String(a.icp) : null,
       assigned_user_names: resolveIds(a.company_assigned_user),
+      company_assigned_user: a.company_assigned_user ? String(a.company_assigned_user) : null,
       firstSeenConference: firstSeen,
       priorConferenceCount: priorConfs.length,
       lastEngagementType: lastActionVal,
@@ -1193,6 +1198,11 @@ export async function GET(
     icp: 'Yes' | 'No' | null;
     company_type: string | null;
     target_tier: string | null;
+    /** Raw `companies.assigned_user` — ids, or names on rows written before
+        ids were stored. Sent as-is so the client can match either, the way
+        companiesAssignedTo already does everywhere else. */
+    assigned_user: string | null;
+    assigned_user_names: string[];
     health_score: number;
     health_before: number;
     health_delta: number;
@@ -1323,6 +1333,8 @@ export async function GET(
       icp: icp as 'Yes' | 'No' | null,
       company_type: contacts[0].company_type,
       target_tier: bestTier,
+      assigned_user: contacts[0].company_assigned_user,
+      assigned_user_names: contacts[0].assigned_user_names,
       health_score,
       health_before,
       health_delta,

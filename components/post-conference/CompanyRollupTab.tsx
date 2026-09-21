@@ -1,9 +1,12 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
+import { RepMultiSelect } from '@/components/RepMultiSelect';
+import { useUser } from '@/components/UserContext';
+import { useUserOptions } from '@/lib/useUserOptions';
+import { companiesAssignedTo } from '@/lib/guestFilters';
 import type { CompanyRollupRow } from '../PostConferenceReview';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -94,22 +97,8 @@ function fuRatePct(created: number, completed: number): number | null {
   return Math.round((completed / created) * 100);
 }
 
-function FuRateDisplay({ created, completed, showBar = false }: { created: number; completed: number; showBar?: boolean }) {
-  const pct = fuRatePct(created, completed);
-  if (pct === null) return <span className="text-gray-400">—</span>;
-  const color = pct >= 60 ? '#059669' : pct >= 30 ? '#f59e0b' : '#ef4444';
-  if (!showBar) {
-    return <span className="text-xs font-medium" style={{ color }}>{pct}%</span>;
-  }
-  return (
-    <div className="flex items-center gap-1.5">
-      <div className="w-16 bg-gray-100 rounded-full h-1.5 overflow-hidden flex-shrink-0">
-        <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
-      </div>
-      <span className="text-xs font-medium tabular-nums" style={{ color }}>{pct}%</span>
-    </div>
-  );
-}
+// Follow-up rate no longer appears on a card — not in the activity grid and
+// not beside a rep. `fuRatePct` stays because the sort still ranks by it.
 
 function CompanyAvatar({ name, companyType }: { name: string; companyType: string | null }) {
   const initials = name.trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('');
@@ -148,55 +137,81 @@ function EngagementBadge({ type }: { type: string }) {
 
 // ── Company card ──────────────────────────────────────────────────────────────
 
+/**
+ * A labelled group on the card's second row.
+ *
+ * The pills used to share the name's line and be pushed right, which is where
+ * a long company name squeezed them and where none of them said what they
+ * were. Each group carries its own eyebrow instead, and Health's covers the
+ * bar and its delta together — they are one reading, not two.
+ */
+function PillGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</span>
+      <div className="flex items-center gap-1.5">{children}</div>
+    </div>
+  );
+}
+
+/** The rep the account belongs to, beside the chevron. */
+function AssignedRep({ names }: { names: string[] }) {
+  if (names.length === 0) return null;
+  const rest = names.length > 1 ? ` +${names.length - 1}` : '';
+  return (
+    <span className="flex items-center gap-1.5 min-w-0 text-xs text-gray-500" title={names.join(', ')}>
+      <svg className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+      </svg>
+      <span className="truncate">{names[0]}{rest}</span>
+    </span>
+  );
+}
+
 function CompanyCard({
   row,
   avgCostPerUnit,
   conferenceId,
   conferenceName,
+  open,
+  onToggle,
+  dimmed,
 }: {
   row: CompanyRollupRow;
   avgCostPerUnit: number;
   conferenceId: number;
   conferenceName: string;
+  open: boolean;
+  onToggle: () => void;
+  /** Another card is the one being read. Step back without disappearing. */
+  dimmed: boolean;
 }) {
-  const [open, setOpen] = useState(false);
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
-  const router = useRouter();
 
   const noActivity = row.meetings_held === 0 && row.touchpoints === 0 && row.notes_logged === 0 && row.follow_ups_created === 0;
   const pipelineTotal = computePipeline(row.units, avgCostPerUnit);
 
   return (
     <>
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-        {/* Header row — always visible, click to expand */}
+      <div className={`rounded-xl border bg-white overflow-hidden transition-all ${
+        open ? 'border-brand-primary/40 shadow-md' : 'border-gray-200'
+      } ${dimmed ? 'opacity-40' : ''}`}>
+        {/* Header — always visible, click to expand */}
         <button
           type="button"
-          onClick={() => setOpen(o => !o)}
-          className="w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors text-left"
+          onClick={onToggle}
+          className="w-full px-4 py-3 flex flex-col gap-3 hover:bg-gray-50 transition-colors text-left"
         >
-          {/* Avatar */}
-          <CompanyAvatar name={row.company_name} companyType={row.company_type} />
-
-          {/* Name + subtitle */}
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">{row.company_name}</p>
-            {row.industry && (
-              <p className="text-xs text-gray-400 truncate">{row.industry}</p>
-            )}
-          </div>
-
-          {/* Right-side badges */}
-          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
-            {row.icp === 'Yes' && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">ICP</span>
-            )}
-            {row.target_tier && tierPill(row.target_tier)}
-            <HealthBar score={row.health_score} />
-            <DeltaChip delta={row.health_delta} />
-            {noActivity && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">No activity</span>
-            )}
+          {/* Row 1: who it is, whose it is */}
+          <div className="flex items-center gap-3 w-full">
+            <CompanyAvatar name={row.company_name} companyType={row.company_type} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900 truncate">{row.company_name}</p>
+              {row.industry && (
+                <p className="text-xs text-gray-400 truncate">{row.industry}</p>
+              )}
+            </div>
+            <AssignedRep names={row.assigned_user_names} />
             <svg
               className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
               fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -204,13 +219,32 @@ function CompanyCard({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </div>
+
+          {/* Row 2: what it is, left-aligned under the name */}
+          <div className="flex flex-wrap items-start gap-x-5 gap-y-2">
+            <PillGroup label="Health">
+              <HealthBar score={row.health_score} />
+              <DeltaChip delta={row.health_delta} />
+            </PillGroup>
+            {row.target_tier && <PillGroup label="Target tier">{tierPill(row.target_tier)}</PillGroup>}
+            {row.icp === 'Yes' && (
+              <PillGroup label="ICP">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">ICP</span>
+              </PillGroup>
+            )}
+            {noActivity && (
+              <PillGroup label="Activity">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">No activity</span>
+              </PillGroup>
+            )}
+          </div>
         </button>
 
         {/* Expanded body */}
         {open && (
           <div className="border-t border-gray-100 divide-y divide-gray-50">
             {/* 1. Activity grid */}
-            <div className="px-4 py-3 grid grid-cols-5 gap-2">
+            <div className="px-4 py-3 grid grid-cols-4 gap-2">
               {[
                 { label: 'Meetings held', value: row.meetings_held, colored: row.meetings_held > 0 },
                 { label: 'Touchpoints', value: row.touchpoints, colored: row.touchpoints > 0 },
@@ -222,12 +256,6 @@ function CompanyCard({
                   <span className="text-xs text-gray-400 text-center leading-tight">{label}</span>
                 </div>
               ))}
-              <div className="flex flex-col items-center gap-0.5">
-                <div className="text-lg font-bold">
-                  <FuRateDisplay created={row.follow_ups_created} completed={row.follow_ups_completed} />
-                </div>
-                <span className="text-xs text-gray-400 text-center leading-tight">Follow-up rate</span>
-              </div>
             </div>
 
             {/* 2. Pipeline influence */}
@@ -281,7 +309,6 @@ function CompanyCard({
                           <span className="text-xs text-gray-400 ml-1.5">{parts.join(' · ')}</span>
                         )}
                       </div>
-                      <FuRateDisplay created={rep.follow_ups_created} completed={rep.follow_ups_completed} showBar />
                     </div>
                   );
                 })}
@@ -341,7 +368,7 @@ function CompanyCard({
 
 // ── Main tab ──────────────────────────────────────────────────────────────────
 
-type FilterKey = 'all' | 'icp' | 'no_followup' | 'had_meeting' | 'no_activity';
+type FilterKey = 'all' | 'mine' | 'icp' | 'open_followup' | 'had_meeting' | 'no_activity';
 type SortKey = 'pipeline' | 'health_delta' | 'tier' | 'fu_rate' | 'name';
 
 interface Props {
@@ -353,17 +380,55 @@ interface Props {
 
 export function CompanyRollupTab({ companyRollup, avgCostPerUnit, conferenceId, conferenceName }: Props) {
   const [filter, setFilter] = useState<FilterKey>('all');
-  const [sort, setSort] = useState<SortKey>('pipeline');
+  // Relationship health leads, so the grid opens on the companies that moved
+  // during the conference rather than on the largest accounts regardless.
+  const [sort, setSort] = useState<SortKey>('health_delta');
+  const [selectedRepIds, setSelectedRepIds] = useState<number[]>([]);
+  /** Only one card is open at a time — the others dim behind it. */
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  const { user: currentUser } = useUser();
+  const userOptions = useUserOptions();
+
+  /** Me, as companiesAssignedTo wants a rep: an id and a name, either matching. */
+  const me = useMemo(
+    () => (currentUser?.configId || currentUser?.repName)
+      ? [{ id: currentUser.configId ?? 0, value: currentUser.repName ?? '' }]
+      : [],
+    [currentUser],
+  );
+
+  const mineIds = useMemo(() => companiesAssignedTo(
+    companyRollup.map(r => ({ id: r.company_id, assigned_user: r.assigned_user })), me,
+  ), [companyRollup, me]);
+
+  const selectedRepCompanyIds = useMemo(() => {
+    if (selectedRepIds.length === 0) return null; // nothing picked is not a filter
+    const reps = userOptions.filter(o => selectedRepIds.includes(o.id));
+    return companiesAssignedTo(
+      companyRollup.map(r => ({ id: r.company_id, assigned_user: r.assigned_user })), reps,
+    );
+  }, [companyRollup, selectedRepIds, userOptions]);
 
   const filtered = useMemo(() => {
     return companyRollup.filter(row => {
+      // The rep dropdown narrows whatever the chips selected — the two are
+      // separate questions, so they stack rather than replace each other.
+      if (selectedRepCompanyIds && !selectedRepCompanyIds.has(row.company_id)) return false;
+      if (filter === 'mine') return mineIds.has(row.company_id);
       if (filter === 'icp') return row.icp === 'Yes';
-      if (filter === 'no_followup') return row.follow_ups_created === 0;
+      // Open, not absent: a follow-up that exists and is not done yet.
+      if (filter === 'open_followup') return row.follow_ups_created > row.follow_ups_completed;
       if (filter === 'had_meeting') return row.meetings_held > 0;
       if (filter === 'no_activity') return row.meetings_held === 0 && row.touchpoints === 0 && row.notes_logged === 0 && row.follow_ups_created === 0;
       return true;
     });
-  }, [companyRollup, filter]);
+  }, [companyRollup, filter, mineIds, selectedRepCompanyIds]);
+
+  // A card that has been filtered out cannot stay expanded behind the change.
+  useEffect(() => {
+    if (expandedId != null && !filtered.some(r => r.company_id === expandedId)) setExpandedId(null);
+  }, [filtered, expandedId]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -408,8 +473,9 @@ export function CompanyRollupTab({ companyRollup, avgCostPerUnit, conferenceId, 
 
   const FILTERS: { key: FilterKey; label: string }[] = [
     { key: 'all', label: 'All companies' },
+    { key: 'mine', label: 'My Accounts' },
     { key: 'icp', label: 'ICP only' },
-    { key: 'no_followup', label: 'No follow-up' },
+    { key: 'open_followup', label: 'Open Follow-Ups' },
     { key: 'had_meeting', label: 'Had meeting' },
     { key: 'no_activity', label: 'No activity' },
   ];
@@ -445,6 +511,17 @@ export function CompanyRollupTab({ companyRollup, avgCostPerUnit, conferenceId, 
               {f.label}
             </button>
           ))}
+          {/* Narrow to particular reps. The list is the User category in admin
+              config options, not the reps this conference happens to have —
+              picking somebody with nothing here should say so by showing an
+              empty grid, not by being absent from the menu. */}
+          <RepMultiSelect
+            options={userOptions}
+            selectedIds={selectedRepIds}
+            onChange={setSelectedRepIds}
+            placeholder="All reps"
+            triggerClass="px-3 py-1.5 rounded-full text-xs font-medium border border-gray-200 bg-white text-gray-600 hover:border-gray-300 flex items-center gap-1.5 min-w-[7rem]"
+          />
         </div>
 
         {/* Sort */}
@@ -455,8 +532,8 @@ export function CompanyRollupTab({ companyRollup, avgCostPerUnit, conferenceId, 
             onChange={e => setSort(e.target.value as SortKey)}
             className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-brand-primary"
           >
+            <option value="health_delta">Relationship Health</option>
             <option value="pipeline">Pipeline influence</option>
-            <option value="health_delta">Health delta</option>
             <option value="tier">Target tier</option>
             <option value="fu_rate">Follow-up rate (worst first)</option>
             <option value="name">Company name (A–Z)</option>
@@ -480,12 +557,20 @@ export function CompanyRollupTab({ companyRollup, avgCostPerUnit, conferenceId, 
       {sorted.length === 0 ? (
         <div className="py-12 text-center">
           <p className="text-sm text-gray-500">No companies match this filter.</p>
-          <button type="button" onClick={() => setFilter('all')} className="mt-2 text-xs text-brand-primary hover:underline">
+          <button
+            type="button"
+            onClick={() => { setFilter('all'); setSelectedRepIds([]); }}
+            className="mt-2 text-xs text-brand-primary hover:underline"
+          >
             Clear filters
           </button>
         </div>
       ) : (
-        <div className="space-y-2">
+        /* Two columns from lg, one below it. `items-start` is what stops an
+           expanded card stretching the one beside it: grid items fill their
+           row's height by default, so without it opening a card on the left
+           would grow the collapsed card on the right to match. */
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
           {sorted.map(row => (
             <CompanyCard
               key={row.company_id}
@@ -493,6 +578,9 @@ export function CompanyRollupTab({ companyRollup, avgCostPerUnit, conferenceId, 
               avgCostPerUnit={avgCostPerUnit}
               conferenceId={conferenceId}
               conferenceName={conferenceName}
+              open={expandedId === row.company_id}
+              onToggle={() => setExpandedId(id => id === row.company_id ? null : row.company_id)}
+              dimmed={expandedId != null && expandedId !== row.company_id}
             />
           ))}
         </div>
