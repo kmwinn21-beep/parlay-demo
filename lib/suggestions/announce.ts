@@ -16,6 +16,16 @@
 export interface NoteSavedContext {
   /** The note as written. Without it the activity chooser stays silent. */
   text?: string | null;
+  /**
+   * The row this became, when the flow that saved it kept the response.
+   *
+   * Scopes a deferred suggestion to its note, the way an extracted one is —
+   * the unique index is (COALESCE(source_note_id, 0), dedupe_key). Without it
+   * a suggestion lands in the 0 bucket, where two notes saying the same thing
+   * about the same company collapse into one card. That is a reasonable answer
+   * rather than a wrong one, which is why this stays optional.
+   */
+  noteId?: number | null;
   conferenceId?: number | null;
   conferenceName?: string | null;
   companyId?: number | null;

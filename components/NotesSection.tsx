@@ -310,6 +310,7 @@ export function NotesSection({
       toast.success('Note saved.');
       announceNoteSaved(entityType, entityId, {
         text: content,
+        noteId: newNote?.id ?? null,
         conferenceId: selConf?.id ?? (entityType === 'conference' ? entityId : null),
         conferenceName: conferenceName !== 'General Note' ? conferenceName : null,
         // On a company record the company IS the record; elsewhere it is

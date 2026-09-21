@@ -14,6 +14,7 @@ import { MeetingsTable, type Meeting, type EditFormData } from '@/components/Mee
 import { NotesSection, type EntityNote } from '@/components/NotesSection';
 import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 import { PinnedNotesSection, type PinnedNote } from '@/components/PinnedNotesSection';
+import { SuggestedUpdatesSection } from '@/components/SuggestedUpdatesSection';
 import { BackButton } from '@/components/BackButton';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { parseRepIds } from '@/lib/useUserOptions';
@@ -1343,6 +1344,15 @@ export default function AttendeeDetailPage() {
               </div>
             )}
           </div>
+
+          {/* What a note said that is not recorded yet. Above the record's own
+              sections because it is work waiting to be done rather than part
+              of the record, and it disappears once nothing is pending.
+
+              The lookup falls through to this attendee's employer, so what
+              shows here is what shows on the company — one decision in two
+              places rather than the same coffee logged twice. */}
+          <SuggestedUpdatesSection entityType="attendee" entityId={Number(id)} />
 
           {/* Pinned Notes */}
           <PinnedNotesSection pinnedNotes={pinnedNotes} onUnpin={handleUnpinNote} />

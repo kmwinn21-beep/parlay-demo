@@ -124,5 +124,125 @@ console.log('\n— saving the same note twice is one suggestion —');
     /\d+:/.test(a.replace('logged_activity:company:7:', '')), false);
 }
 
+console.log('\n— Save for Later writes the row the popup never had —');
+{
+  const { readFileSync } = await import('node:fs');
+  const chooser = readFileSync('components/ActivityDetectedPrompt.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  eq('there is a fourth answer', />\s*\{saving \? 'Saving…' : 'Save for Later'\}\s*</.test(chooser), true);
+  // The vendor prompt's "Review later" drops a row the extractor already
+  // wrote. Nothing has been written here, so this has to create it.
+  eq('  and it POSTs rather than just closing',
+    /const res = await fetch\('\/api\/suggestions', \{\s*method: 'POST',/.test(chooser), true);
+  eq('  naming the target the registry gates on',
+    /target_key: 'logged_activity',/.test(chooser), true);
+  // A save that failed must not be reported as one — the question stays open
+  // rather than disappearing with nothing written behind it.
+  eq('  and a non-ok response is treated as a failure',
+    /if \(!res\.ok\) throw new Error\(\);/.test(chooser), true);
+  eq('  filed against the company, which is where the section reads from',
+    /entity_type: 'company',\s*entity_id: companyId,/.test(chooser), true);
+  eq('  scoped to the note when the flow knew its id',
+    /source_note_id: note\?\.noteId \?\? null,/.test(chooser), true);
+  eq('  carrying the sentence, so it can be judged cold days later',
+    /quote: sentenceAround\(/.test(chooser), true);
+  eq('  and the ids the form needs to reopen where the note was',
+    /company_id: companyId,\s*attendee_id: attendeeId,\s*conference_id: conferenceId,/.test(chooser), true);
+
+  // With no company there is nowhere for Suggested Updates to show it.
+  eq('the button is not offered when there is no record to file it against',
+    /\{companyId != null && \(/.test(chooser), true);
+  eq('a failed save says so rather than closing quietly',
+    /Could not save that\. Nothing was logged\./.test(chooser), true);
+  eq('  and the question stays open',
+    /catch \{\s*toast\.error\('Could not save that\. Nothing was logged\.'\);/.test(chooser), true);
+}
+
+console.log('\n— the deferred card asks the same question —');
+{
+  const { readFileSync } = await import('node:fs');
+  const section = readFileSync('components/SuggestedUpdatesSection.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  eq('an activity group is one whose targets open a form',
+    /group\.members\.every\(m => getTarget\(m\.target_key\)\?\.write === 'open_form'\)/.test(section), true);
+  eq('  and an empty group is not one', /group\.members\.length > 0/.test(section), true);
+  eq('it offers Meeting and Touchpoint, the same question as the popup',
+    [/onClick=\{\(\) => openForm\('meeting', group\)\}/.test(section),
+     /onClick=\{\(\) => openForm\('touchpoint', group\)\}/.test(section)], [true, true]);
+  // The branch itself, not a character window between two strings — the gap
+  // between them is whatever the formatting happens to be.
+  const activityBranch = section.slice(
+    section.indexOf('isActivity(group) ? ('), section.indexOf(') : ('));
+  eq('  and Disregard, which dismisses the stored row rather than just hiding it',
+    /review\(group, 'dismiss'\)/.test(activityBranch) && /Disregard/.test(activityBranch), true);
+  eq('  where Disregard is the only way out that writes nothing new',
+    (activityBranch.match(/review\(group, 'accept'\)/g) ?? []).length, 0);
+  eq('  with no fourth button, because it is already saved',
+    /Save for Later/.test(section), false);
+  eq('a vendor group keeps Accept and Dismiss',
+    /onClick=\{\(\) => review\(group, 'accept'\)\}/.test(section), true);
+  // An activity card is already saved and has nothing to edit, so the old
+  // blurb was wrong on both counts for half of what the section now shows.
+  eq('the blurb is true of both kinds',
+    /Nothing is added to the record until you confirm it/.test(section), true);
+  eq('  and no longer claims nothing is saved',
+    /Nothing is saved until you accept it/.test(section), false);
+
+  eq('the meeting form opens on Log here too', /defaultMode="log"/.test(section), true);
+  eq('  reopened where the note was',
+    /prefillCompanyId=\{num\(logging\.payload\.company_id\)\}/.test(section), true);
+  // The rule that makes deferring safe to press.
+  eq('the suggestion is answered only when the form saves',
+    /onSuccess=\{\(\) => void onLogged\(logging\.group\)\}/.test(section)
+      && /onLogged=\{\(\) => void onLogged\(logging\.group\)\}/.test(section), true);
+  eq('  and closing without saving leaves it pending',
+    /onClose=\{\(\) => setLogging\(null\)\}/.test(section), true);
+  // Opening the form is not answering the question. Pressing Meeting and then
+  // closing without saving must leave the card exactly where it was, which is
+  // what makes Save for Later safe to press.
+  const openFormBody = section.slice(
+    section.indexOf('const openForm ='), section.indexOf('const onLogged ='));
+  eq('opening a form does not answer the suggestion',
+    /review\(/.test(openFormBody), false);
+  eq('  it only records which form is open',
+    /setLogging\(\{ kind, group, payload: group\.members\[0\]\?\.payload \?\? \{\} \}\)/.test(openFormBody), true);
+  eq('  with the modal left mounted, so its follow-on step survives',
+    /const onLogged = async \(group: SuggestionGroup\) => \{\s*await review\(group, 'accept'\);\s*\};/.test(section), true);
+
+  // A touchpoint close is not a touchpoint save; the wrapper had no way to
+  // say which until onLogged was forwarded.
+  const card = readFileSync('components/DashboardActionCard.tsx', 'utf8');
+  eq('the touchpoint modal can report a real save',
+    /onLogged\?: \(\) => void;\n\}\) \{/.test(card), true);
+}
+
+console.log('\n— a read-only field is context, not a text box —');
+{
+  const { readFileSync } = await import('node:fs');
+  const card = readFileSync('components/SuggestionGroupCard.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  eq('the card branches on it', /group\.fields\.map\(f => f\.readOnly \?/.test(card), true);
+  eq('  showing the label and the value', /\{f\.label\}:<\/span>\{' '\}/.test(card), true);
+  eq('  and nothing at all when there is no value',
+    /String\(group\.draft\[f\.key\] \?\? ''\)\.trim\(\) \?/.test(card), true);
+}
+
+console.log('\n— the attendee record has the section at all —');
+{
+  const { readFileSync } = await import('node:fs');
+  const page = readFileSync('app/attendees/[id]/page.tsx', 'utf8');
+  eq('it is mounted', /<SuggestedUpdatesSection entityType="attendee" entityId=\{Number\(id\)\} \/>/.test(page), true);
+  eq('  and imported', /import \{ SuggestedUpdatesSection \}/.test(page), true);
+  // The GET resolves an attendee to their employer, so one row shows in both
+  // places — which is why the chooser files exactly one.
+  const route = readFileSync('app/api/suggestions/route.ts', 'utf8');
+  eq('an attendee lookup falls through to the company',
+    /if \(entityType === 'attendee'\) \{[\s\S]{0,200}lookupType = 'company'/.test(route), true);
+  const company = readFileSync('app/companies/[id]/page.tsx', 'utf8');
+  eq('  and the company record still has its own', /entityType="company"/.test(company), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

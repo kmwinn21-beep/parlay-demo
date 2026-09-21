@@ -78,7 +78,18 @@ export function SuggestionGroupCard({ group, index, options, companies, onChange
 
       {open && (
       <div className="space-y-2">
-        {group.fields.map(f => (
+        {group.fields.map(f => f.readOnly ? (
+          /* Context, not a choice. An activity suggestion has nothing to edit
+             — the editing happens in the form it opens — but it still has to
+             say what was read and who it was about. Rendering it through
+             SuggestionFieldInput would put a text box round a fact. */
+          String(group.draft[f.key] ?? '').trim() ? (
+            <p key={f.key} className="text-xs text-gray-600">
+              <span className="font-medium text-gray-500">{f.label}:</span>{' '}
+              {String(group.draft[f.key])}
+            </p>
+          ) : null
+        ) : (
           <div key={f.key} className="space-y-2">
             <SuggestionFieldInput
               field={f}
