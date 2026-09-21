@@ -17,8 +17,13 @@ export type SuggestionEntity = 'company' | 'attendee';
  * How accepting a suggestion writes.
  * - `create_child` inserts a row in a related table.
  * - `set_field` overwrites a column on the entity itself.
+ * - `open_form` writes nothing here. The record needs facts the note does not
+ *   contain — a meeting has a date, a time and an outcome — so accepting opens
+ *   the form that asks for them, and the row is only marked accepted once that
+ *   form has actually saved. Writing a meeting straight from a note would
+ *   manufacture a record with a guessed date that nobody confirmed.
  */
-export type SuggestionWrite = 'create_child' | 'set_field';
+export type SuggestionWrite = 'create_child' | 'set_field' | 'open_form';
 
 export interface SuggestionField {
   key: string;
@@ -66,6 +71,12 @@ export interface SuggestionField {
    * allowed to use.
    */
   optionHints?: Record<string, string[]>;
+  /**
+   * Context to show, not a value to choose. A suggestion that an activity
+   * happened has nothing editable on it — the editing happens in the form it
+   * opens — but it still has to say what it read and who it was about.
+   */
+  readOnly?: boolean;
 }
 
 export interface SuggestionTarget {
@@ -81,6 +92,18 @@ export interface SuggestionTarget {
   fields: SuggestionField[];
   /** One line, handed to the model, describing what to look for. */
   prompt: string;
+  /**
+   * Raised by the browser, never by the extractor.
+   *
+   * The registry has two jobs: it says what the model is asked to look for,
+   * and it says what a stored suggestion is allowed to be. Those were the same
+   * list until now. A target the deterministic scanner raises belongs in the
+   * second list only — putting it in the first would have Haiku hunting for
+   * meetings as well, which costs tokens, duplicates a local function that is
+   * already better at it, and changes what the vendor extraction returns. The
+   * two features stay independent precisely because this flag exists.
+   */
+  clientProposed?: boolean;
 }
 
 export const SUGGESTION_TARGETS: SuggestionTarget[] = [
@@ -139,7 +162,32 @@ export const SUGGESTION_TARGETS: SuggestionTarget[] = [
       + 'says so, e.g. calling it an EHR, a consultant, or a reseller. Not what the '
       + 'company being written about is; what a vendor it names is.',
   },
+  {
+    key: 'logged_activity',
+    label: 'Log a Meeting or Touchpoint',
+    entity: 'company',
+    // Nothing is written from here. The chooser's two forms do the writing.
+    write: 'open_form',
+    clientProposed: true,
+    fields: [
+      // Required, and therefore what dedupeKey identifies this by: the same
+      // note saved twice produces the same phrase and so the same row.
+      { key: 'phrase', label: 'Detected', readOnly: true, required: true },
+      { key: 'attendee_name', label: 'Attendee', readOnly: true },
+      { key: 'company_name', label: 'Company', readOnly: true },
+      { key: 'conference_name', label: 'Conference', readOnly: true },
+    ],
+    // Never sent anywhere — this target is not put to the model. Kept as prose
+    // so the registry still reads as one list describing one set of things.
+    prompt:
+      'Raised in the browser by lib/suggestions/activityScan, not by extraction: '
+      + 'a note describing an interaction that already happened, deferred by the '
+      + 'person who wrote it rather than answered on the spot.',
+  },
 ];
+
+/** The targets the model is asked about — everything the extractor proposes. */
+export const EXTRACTED_TARGETS: SuggestionTarget[] = SUGGESTION_TARGETS.filter(t => !t.clientProposed);
 
 export function getTarget(key: string): SuggestionTarget | undefined {
   return SUGGESTION_TARGETS.find(t => t.key === key);

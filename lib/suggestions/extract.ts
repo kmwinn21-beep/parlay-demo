@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { Client } from '@libsql/client';
-import { SUGGESTION_TARGETS, dedupeKey, type SuggestionTarget } from './registry';
+import { EXTRACTED_TARGETS, dedupeKey, type SuggestionTarget } from './registry';
 
 /** Small and fast — this runs on every qualifying note. */
 const MODEL = 'claude-haiku-4-5-20251001';
@@ -157,7 +157,10 @@ export async function extractFromNote(db: Client, ctx: ExtractionContext): Promi
   if (!process.env.ANTHROPIC_API_KEY) return empty;
   if (!ctx.content.trim() || !ctx.companyId) return empty;
 
-  const targets = SUGGESTION_TARGETS;
+  // Not every target in the registry is the model's business — see
+  // clientProposed. Asking it about one the browser already decided would
+  // change what comes back for the ones it IS being asked about.
+  const targets = EXTRACTED_TARGETS;
   const categories = new Set<string>();
   for (const t of targets) for (const f of t.fields) if (f.optionCategory) categories.add(f.optionCategory);
   const options = new Map<string, string[]>();

@@ -169,7 +169,13 @@ export async function PATCH(request: NextRequest) {
     const payload = (body.payload ?? JSON.parse(String(row.payload ?? '{}'))) as Record<string, unknown>;
     const entityId = Number(row.entity_id);
 
-    if (action === 'accept') {
+    // `open_form` targets have no write to perform here: the form the client
+    // opened did it, through its own endpoint, with the facts the note never
+    // held. Accepting one is bookkeeping — it records that the question was
+    // answered, so the card stops being offered. The client is expected to
+    // send this only once that form has saved; a row marked accepted with
+    // nothing behind it costs a suggestion, not a record.
+    if (action === 'accept' && target.write !== 'open_form') {
       const applied = await applyTarget(db, target, entityId, payload, user.email);
       if (!applied.ok) return NextResponse.json({ error: applied.error }, { status: 400 });
     }
