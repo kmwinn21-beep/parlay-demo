@@ -268,6 +268,86 @@ console.log('\n— the one file both features share —');
   delete globalThis.window;
 }
 
+console.log('\n— real notes, as they are actually written —');
+{
+  // Ten real floor notes, with names and companies replaced but every
+  // grammatical construction kept exactly: the openers are what the scanner
+  // reads and the rest is customer intelligence that does not belong in a
+  // fixture. Measured against the originals before anonymising; the result is
+  // the same because nothing here keys on a name.
+  //
+  // Six of these fired before they were used for tuning. The four that did not
+  // are marked, and each one bought a specific addition.
+  const REAL = [
+    ['Spoke with Alex Warren @ Brightwell. Heard us mentioned in executive meetings but is detached from the conversation. Sat at his breakout session.', 'Spoke with'],
+    ['Spoke with Leland Rice at QSLM\n\n- very interested to see us in their community. Limited bandwidth, switching from yardi to August.\n\n- considering AL if adoption is 80%+\n\n- get with their REIT to discuss a plan of action moving forward', 'Spoke with'],
+    // MISSED before tuning: a chat as a noun, with a qualifier in front.
+    ['Quick chat to remind him of our existence.\n\nTwo of them tag teaming to get something going with one of his operators', 'Quick chat'],
+    // MISSED before tuning: "met" with a duration rather than a person.
+    ['Met for 20 minutes: EHR: Yardi (hates it) transitioning to August in phases\nExpanding into AL if they see 80% adoption rates.\nDiscussed care plan alignment and not having a great way to look at it.', 'Met for'],
+    // MISSED before tuning: no interaction verb at all, just the slot of time.
+    ['1v1 time. Was disconnected from sales process, but heard our name brought up in executive meetings', '1v1'],
+    ['Met with Henri. They want to pilot on the two communities managed for them', 'Met with'],
+    ['Had dinner, really bonded. Introduced us to their COO. Good to proceed, asked to circle back if we have any roadblocks', 'Had dinner'],
+    ['Two of his IT colleagues came by and did a five-minute speed demo. Very quiet guy, but he was really keen on the fall clips. I asked him if he would like me to follow up to schedule a demo. He said yes.', 'came by'],
+    ['Kory came by, part of a larger group to do a speed demo. He remembered us. He did come back again with his new CEO.\n\nWe need to follow up with him to see what the next steps are.', 'came by'],
+    // MISSED before tuning: "met <name> for coffee" fits neither pattern.
+    ['Met Priya for coffee at her hotel and talked for about a half hour. She remembers the demo.\n\nShe wants to set a meeting and do another demo with her CTO.\n\nwe need to follow up and get another demo scheduled.', 'Met Priya'],
+  ];
+  let fired = 0;
+  for (const [text, want] of REAL) {
+    const got = hit(text);
+    if (got) fired++;
+    eq(`"${text.replace(/\s+/g, ' ').slice(0, 40)}…"`, got, want);
+  }
+  eq('every real note is read as an interaction', fired, REAL.length);
+
+  // The other half, and the half that decides whether this is tolerable to
+  // use: the forward-looking sentences out of those same notes. A dialog that
+  // appears when nothing happened costs a dismissal every single time.
+  const QUIET = [
+    'get with their REIT to discuss a plan of action moving forward',
+    'Limited bandwidth, switching from yardi to August. Considering AL if adoption is 80%+',
+    'EHR: Yardi (hates it) transitioning to August in phases.',
+    'Pre-go live is important, wants a vendor thats going to be around for the long haul.',
+    'I asked him if he would like me to follow up to schedule a demo. He said yes.',
+    'We need to follow up with him to see what the next steps are.',
+    'they are going to try to pilot us in a couple of buildings',
+    'She wants to set a meeting and do another demo with her and her CTO',
+    'we need to follow up and get another demo scheduled',
+    'Want to grab coffee with her tomorrow',
+    'Scheduled for coffee on Thursday',
+    'Asked her for lunch next week',
+    'Need to set up a 1v1 with their CIO',
+    'Hoping to get connected with their VP',
+    'Planning a quick chat with him at the next show',
+    'Never met with Kevin, he was in sessions all day',
+    "Didn't get a 1v1 with him",
+    'They use Yardi for billing and are evaluating PointClickCare',
+    'Piloting SafelyYou across all memory care',
+  ];
+  eq('and none of their forward-looking halves is one',
+    QUIET.filter(t => hit(t) !== null), []);
+
+  // "met" is a common word outside an interaction, and the pattern tier asks
+  // for a preposition or a capitalised name rather than accepting it bare.
+  eq('a target that was met is not a meeting',
+    [hit('Revenue met expectations this quarter'), hit('They met the criteria for the pilot')],
+    [null, null]);
+  eq('  nor is a cadence', hit('Their team meeting cadence is monthly'), null);
+
+  // A global RegExp carries lastIndex between calls, and these live at module
+  // scope. One note per save means the scanner is called over and over in a
+  // session, so the second reading of the same words must equal the first.
+  const twice = 'Met Priya for coffee at her hotel';
+  eq('reading the same note twice gives the same answer',
+    [hit(twice), hit(twice), hit(twice)], ['Met Priya', 'Met Priya', 'Met Priya']);
+  // And a note read after a longer one must not start where that one stopped.
+  const long = 'Spoke with Alex. ' + 'filler words here. '.repeat(20) + 'Met Priya for coffee';
+  eq('  and a short note after a long one is read from its start',
+    [hit(long), hit('Met Priya for coffee')], ['Spoke with', 'Met Priya']);
+}
+
 console.log('\n— the chooser asks rather than guesses —');
 {
   const { readFileSync } = await import('node:fs');
