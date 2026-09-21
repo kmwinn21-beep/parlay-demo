@@ -130,7 +130,9 @@ console.log('\n— Save for Later writes the row the popup never had —');
   const chooser = readFileSync('components/ActivityDetectedPrompt.tsx', 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-  eq('there is a fourth answer', />\s*\{saving \? 'Saving…' : 'Save for Later'\}\s*</.test(chooser), true);
+  eq('there is a fourth answer', />\s*\{saving \? 'Saving…' : 'Review later'\}\s*</.test(chooser), true);
+  eq('  named as the vendor prompt names the same idea',
+    /Save for Later/.test(chooser), false);
   // The vendor prompt's "Review later" drops a row the extractor already
   // wrote. Nothing has been written here, so this has to create it.
   eq('  and it POSTs rather than just closing',
@@ -242,6 +244,45 @@ console.log('\n— the attendee record has the section at all —');
     /if \(entityType === 'attendee'\) \{[\s\S]{0,200}lookupType = 'company'/.test(route), true);
   const company = readFileSync('app/companies/[id]/page.tsx', 'utf8');
   eq('  and the company record still has its own', /entityType="company"/.test(company), true);
+}
+
+console.log('\n— deferring it does not immediately re-ask —');
+{
+  // The bug this closes: pressing Review later stored the row, the vendor
+  // prompt polled, found it as a fresh suggestion, and asked again with
+  // different words — Confirm / Review later / Ignore over the top of a
+  // question that had just been answered.
+  const { readFileSync } = await import('node:fs');
+  const prompt = readFileSync('components/SuggestionPrompt.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  eq('the vendor prompt shows only what the extractor found',
+    /!getTarget\(r\.target_key\)\?\.clientProposed/.test(prompt), true);
+  eq('  applied where it picks up fresh rows',
+    /const fresh = rows\.filter\(r =>\s*!seen\.current\.has\(r\.id\) && !getTarget\(r\.target_key\)\?\.clientProposed\);/.test(prompt), true);
+
+  // Reproduced against the real predicate, with the real registry.
+  const rows = [
+    { id: 1, target_key: 'vendor_relationship' },
+    { id: 2, target_key: 'logged_activity' },
+    { id: 3, target_key: 'company_sub_types' },
+  ];
+  const seen = new Set();
+  const fresh = rows.filter(r => !seen.has(r.id) && !getTarget(r.target_key)?.clientProposed);
+  eq('a deferred activity is not offered again by the prompt',
+    fresh.map(r => r.id), [1, 3]);
+  eq('  while the vendor suggestions from the same note still are',
+    fresh.every(r => getTarget(r.target_key).clientProposed !== true), true);
+  // An unknown key must not be silently swallowed — that would hide a target
+  // added later that nobody remembered to classify.
+  const unknown = [{ id: 4, target_key: 'something_new' }]
+    .filter(r => !getTarget(r.target_key)?.clientProposed);
+  eq('an unrecognised target is still shown rather than dropped', unknown.length, 1);
+
+  // The record is where it went, and that section shows it.
+  const section = readFileSync('components/SuggestedUpdatesSection.tsx', 'utf8');
+  eq('the record section does not filter it out',
+    /clientProposed/.test(section), false);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

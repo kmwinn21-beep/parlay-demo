@@ -8,6 +8,7 @@ import { groupSuggestions, payloadFor, type SuggestionGroup } from '@/lib/sugges
 import { useSuggestionCatalog } from '@/lib/suggestions/useSuggestionCatalog';
 import { NOTE_SAVED_EVENT, type NoteSavedDetail } from '@/lib/suggestions/announce';
 import { useActivityFlowOpen } from '@/lib/suggestions/activityFlow';
+import { getTarget } from '@/lib/suggestions/registry';
 
 interface Suggestion {
   id: number;
@@ -111,7 +112,13 @@ export function SuggestionPrompt() {
           );
           if (!res.ok) continue;
           const rows: Suggestion[] = await res.json();
-          const fresh = rows.filter(r => !seen.current.has(r.id));
+          // This prompt is what the EXTRACTOR found. A client-proposed
+          // suggestion is already on screen as its own chooser, or — worse —
+          // was deliberately deferred there a moment ago, and showing it here
+          // asks the same question again with different words. It is on the
+          // record, which is where deferring said to put it.
+          const fresh = rows.filter(r =>
+            !seen.current.has(r.id) && !getTarget(r.target_key)?.clientProposed);
           if (fresh.length > 0) {
             fresh.forEach(r => seen.current.add(r.id));
             setSuggestions(fresh);

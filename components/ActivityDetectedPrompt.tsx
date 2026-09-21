@@ -117,6 +117,9 @@ export function ActivityDetectedPrompt() {
   /**
    * Put the question on the record and answer it another time.
    *
+   * Named to match the vendor prompt's button, which does the same thing from
+   * the reader's side even though the work underneath is different.
+   *
    * The vendor prompt's "Review later" only stops showing a row the extractor
    * had already written. Nothing has been written here, so this is the button
    * that writes it — same words, different work.
@@ -223,7 +226,7 @@ export function ActivityDetectedPrompt() {
                   disabled={saving}
                   className="btn-secondary flex-1 whitespace-nowrap py-2 text-sm disabled:opacity-50"
                 >
-                  {saving ? 'Saving…' : 'Save for Later'}
+                  {saving ? 'Saving…' : 'Review later'}
                 </button>
               )}
               <button
