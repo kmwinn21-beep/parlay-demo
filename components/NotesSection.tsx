@@ -308,7 +308,17 @@ export function NotesSection({
       setPinOnSubmit(false);
       setIsAdding(false);
       toast.success('Note saved.');
-      announceNoteSaved(entityType, entityId);
+      announceNoteSaved(entityType, entityId, {
+        text: content,
+        conferenceId: selConf?.id ?? (entityType === 'conference' ? entityId : null),
+        conferenceName: conferenceName !== 'General Note' ? conferenceName : null,
+        // On a company record the company IS the record; elsewhere it is
+        // whichever one the note was filed against.
+        companyId: entityType === 'company' ? entityId : selCompany?.id ?? null,
+        companyName: companyLabel || null,
+        attendeeId: entityType === 'attendee' ? entityId : selAttendee?.id ?? null,
+        attendeeName: attendeeLabel || null,
+      });
     } catch {
       toast.error('Failed to save note.');
     } finally {

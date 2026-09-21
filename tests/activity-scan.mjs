@@ -243,7 +243,130 @@ console.log('\n— the one file both features share —');
   announceNoteSaved('company', '12');
   eq('an id arriving as a string is still a number',
     events[1].detail, { entityType: 'company', entityId: 12 });
+
+  // The added context has to arrive, or the chooser has nothing to read. This
+  // is the whole reason the event was widened.
+  announceNoteSaved('attendee', 31, {
+    text: 'Met with Kevin', conferenceId: 8, companyId: 12, attendeeId: 31,
+    conferenceName: 'NextGen Summit', companyName: 'Mission Health',
+    attendeeName: 'Kevin Winn', touchpointType: null, noteType: null,
+    meetingId: null, tag: null,
+  });
+  eq('the note\'s text reaches the listener', events[2].detail.text, 'Met with Kevin');
+  eq('  along with the records it was filed against',
+    [events[2].detail.companyId, events[2].detail.attendeeId, events[2].detail.conferenceId],
+    [12, 31, 8]);
+  eq('  and their names, for the chooser to show',
+    [events[2].detail.companyName, events[2].detail.attendeeName, events[2].detail.conferenceName],
+    ['Mission Health', 'Kevin Winn', 'NextGen Summit']);
+  eq('  and what wrote the note, for the loop guard',
+    Object.keys(events[2].detail).includes('touchpointType'), true);
+  // Context must never be able to overwrite who the note was about.
+  announceNoteSaved('attendee', 31, { entityType: 'company', entityId: 999 });
+  eq('context cannot overwrite the entity it was filed against',
+    [events[3].detail.entityType, events[3].detail.entityId], ['attendee', 31]);
   delete globalThis.window;
+}
+
+console.log('\n— the chooser asks rather than guesses —');
+{
+  const { readFileSync } = await import('node:fs');
+  const raw = readFileSync('components/ActivityDetectedPrompt.tsx', 'utf8');
+  const src = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  eq('there are three answers, not two and a guess',
+    [/>\s*Meeting\s*</.test(src), />\s*Touchpoint\s*</.test(src), />\s*Disregard\s*</.test(src)],
+    [true, true, true]);
+  eq('  and Disregard just closes it, writing nothing',
+    /onClick=\{\(\) => setPending\(null\)\}/.test(src), true);
+  eq('the disclaimer is amber', /border-amber-200 bg-amber-50/.test(src), true);
+  eq('  and quotes the words it keyed on, so the reading can be judged',
+    /Detected .\{pending\.hit\.phrase\}/.test(src), true);
+  eq('  and says nothing has been logged yet', /Nothing has been\s*\n?\s*logged/.test(src), true);
+
+  eq('a note with no text is left alone', /if \(!text\) return;/.test(src), true);
+  eq('  and so is one the activity itself wrote',
+    /if \(!shouldScanNote\(\{/.test(src), true);
+  eq('  and a note already answered is not asked twice',
+    /if \(answered\.current\.has\(key\)\) return;/.test(src), true);
+
+  eq('the meeting form opens on Log, because the note is past tense',
+    /defaultMode="log"/.test(src), true);
+  eq('  prefilled from the note',
+    /prefillCompanyId=\{target\.companyId[\s\S]{0,120}prefillAttendeeId=\{target\.attendeeId[\s\S]{0,120}defaultConferenceId=\{target\.conferenceId/.test(src), true);
+  eq('the touchpoint form is prefilled the same way',
+    /defaultCompanyId=\{target\.companyId\}[\s\S]{0,120}defaultAttendeeId=\{target\.attendeeId\}[\s\S]{0,120}defaultConferenceId=\{target\.conferenceId\}/.test(src), true);
+  // The record the note was filed against is the fallback when the note did
+  // not name one — a note on a company page is about that company.
+  eq('the record the note sits on fills in what the note did not name',
+    /note\?\.entityType === 'company' \? note\.entityId : null/.test(src)
+      && /note\?\.entityType === 'attendee' \? note\.entityId : null/.test(src), true);
+}
+
+console.log('\n— the two prompts do not stack —');
+{
+  const { readFileSync } = await import('node:fs');
+  const prompt = readFileSync('components/SuggestionPrompt.tsx', 'utf8');
+  // Comments stripped: the block below asserts the ABSENCE of things whose
+  // names appear in the prose explaining why they are absent.
+  const chooser = readFileSync('components/ActivityDetectedPrompt.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const shell = readFileSync('components/AppShell.tsx', 'utf8');
+
+  eq('the vendor prompt holds while the chooser is up',
+    /groups\.length === 0 \|\| activityFlowOpen\) return null;/.test(prompt), true);
+  eq('  and it holds rather than discarding what it found',
+    /setSuggestions\(\[\]\)/.test(prompt.slice(prompt.indexOf('activityFlowOpen'))) === false
+      || /const activityFlowOpen = useActivityFlowOpen\(\)/.test(prompt), true);
+  eq('the chooser raises the flag while anything of its own is open',
+    /const showing = pending !== null \|\| opened !== null;/.test(chooser), true);
+  eq('  and lowers it on unmount, so a crash cannot wedge it',
+    /return \(\) => setActivityFlowOpen\(false\);/.test(chooser), true);
+  eq('both are mounted once, for the whole app',
+    /<SuggestionPrompt \/>[\s\S]{0,60}<ActivityDetectedPrompt \/>/.test(shell), true);
+  // The chooser sits above the vendor prompt's z-[95]/[96] so that if both
+  // ever do render, the one being answered is the one on top.
+  eq('the chooser sits above the vendor prompt', /z-\[150\]/.test(chooser), true);
+  // Measured in Chromium at 390x780: the sheet spans 491..780 — flush with the
+  // bottom, nothing clipped — with the last button's base 20px above it. The
+  // home indicator sits in that 20px on a notched phone, so the inset is added
+  // to the padding rather than replacing it the way .pb-safe would.
+  eq('the last button clears the home indicator',
+    /pb-\[calc\(1\.25rem\+env\(safe-area-inset-bottom\)\)\]/.test(chooser), true);
+  eq('  without shrinking the padding where there is no indicator',
+    /\bpb-safe\b/.test(chooser), false);
+}
+
+console.log('\n— the meeting form can be opened on Log —');
+{
+  const { readFileSync } = await import('node:fs');
+  const modal = readFileSync('components/NewMeetingModal.tsx', 'utf8');
+  eq('the mode is a prop', /defaultMode\?: 'schedule' \| 'log';/.test(modal), true);
+  eq('  that seeds the toggle', /useState<'schedule' \| 'log'>\(defaultMode\)/.test(modal), true);
+  eq('  and still defaults to scheduling for every existing caller',
+    /defaultMode = 'schedule',/.test(modal), true);
+}
+
+console.log('\n— the note-writing flows pass what they know —');
+{
+  const { readFileSync } = await import('node:fs');
+  for (const f of ['components/NotesSection.tsx', 'components/NewNoteModal.tsx', 'components/QuickNotesSection.tsx']) {
+    const src = readFileSync(f, 'utf8');
+    const name = f.replace('components/', '').replace('.tsx', '');
+    // Some flows build the context into a named object just above the call,
+    // so the window opens before it rather than only after.
+    const at = src.indexOf('announceNoteSaved(', src.indexOf('} from'));
+    const call = src.slice(Math.max(0, at - 500), at + 700);
+    eq(`${name} sends the note's text`, /text:/.test(call), true);
+    // Shorthand counts: `companyId,` is the same field as `companyId: x`.
+    const sends = (k) => new RegExp(`\\b${k}\\s*[:,]`).test(call);
+    eq(`  and the records it was filed against`,
+      [sends('companyId'), sends('attendeeId'), sends('conferenceId')], [true, true, true]);
+  }
+  // Untouched callers must keep working — the context is optional.
+  const untouched = readFileSync('components/AssignFollowUpModal.tsx', 'utf8');
+  eq('a flow that was never taught about this still compiles and stays quiet',
+    /announceNoteSaved\('attendee', Number\(attendeeId\)\);/.test(untouched), true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

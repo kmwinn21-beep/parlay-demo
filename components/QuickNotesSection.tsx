@@ -510,8 +510,18 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
       toast.success(wantsFollowUp ? 'Note assigned and follow-up created.' : 'Note assigned successfully.');
       // Whatever else the note said is read after this, never before: the note
       // is the thing that must land, and suggestions are upside.
-      announceNoteSaved('attendee', attendeeId);
-      if (!attendeeId) announceNoteSaved('company', companyId);
+      const noteContext = {
+        text: note.content ?? '',
+        conferenceId: selConference?.id ?? null,
+        conferenceName: selConference?.name ?? null,
+        companyId,
+        companyName,
+        attendeeId,
+        attendeeName,
+        tag: note.tag ?? null,
+      };
+      announceNoteSaved('attendee', attendeeId, noteContext);
+      if (!attendeeId) announceNoteSaved('company', companyId, noteContext);
       onAssigned(note.id);
     } catch (err) {
       const which = err instanceof Error ? err.message : '';

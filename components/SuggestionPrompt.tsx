@@ -7,6 +7,7 @@ import { SuggestionGroupCard } from '@/components/SuggestionGroupCard';
 import { groupSuggestions, payloadFor, type SuggestionGroup } from '@/lib/suggestions/group';
 import { useSuggestionCatalog } from '@/lib/suggestions/useSuggestionCatalog';
 import { NOTE_SAVED_EVENT, type NoteSavedDetail } from '@/lib/suggestions/announce';
+import { useActivityFlowOpen } from '@/lib/suggestions/activityFlow';
 
 interface Suggestion {
   id: number;
@@ -83,6 +84,12 @@ export function SuggestionPrompt() {
   const seen = useRef<Set<number>>(new Set());
   const polling = useRef(false);
   const { options, companies, load: loadCatalog } = useSuggestionCatalog(false);
+  // One note can raise both a vendor suggestion and an activity. The chooser
+  // read the note locally and is already on screen; this arrives seconds later
+  // off the back of the extractor, so it waits rather than stacking a second
+  // dialog and a second backdrop over the top of one being answered. Nothing is
+  // lost by waiting — the suggestions sit in state until it is clear.
+  const activityFlowOpen = useActivityFlowOpen();
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -178,7 +185,7 @@ export function SuggestionPrompt() {
     suggestions.map(s => (s.source_note_content ?? '').trim()).filter(Boolean),
   ));
 
-  if (!mounted || groups.length === 0) return null;
+  if (!mounted || groups.length === 0 || activityFlowOpen) return null;
 
   return createPortal(
     <>

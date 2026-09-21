@@ -234,6 +234,13 @@ interface NewMeetingModalProps {
   onSuccess?: (meeting: Meeting) => void;
   availableConferences?: Array<{ id: number; name: string; start_date: string; end_date?: string }>;
   defaultConferenceId?: number;
+  /**
+   * Which half of the toggle to open on. Scheduling is the common case and
+   * stays the default; 'log' is for openers that already know the meeting
+   * happened — the activity chooser opens it that way because the note it read
+   * was written in the past tense.
+   */
+  defaultMode?: 'schedule' | 'log';
 }
 
 
@@ -301,6 +308,7 @@ export function NewMeetingModal({
   onSuccess,
   availableConferences,
   defaultConferenceId,
+  defaultMode = 'schedule',
 }: NewMeetingModalProps) {
   useHideBottomNav(isOpen);
   const { user } = useUser();
@@ -354,7 +362,7 @@ export function NewMeetingModal({
 
   // Schedule books a meeting that hasn't happened; Log records one that has,
   // which means an outcome and the follow-up that comes out of it.
-  const [mode, setMode] = useState<'schedule' | 'log'>('schedule');
+  const [mode, setMode] = useState<'schedule' | 'log'>(defaultMode);
   const [logOutcome, setLogOutcome] = useState('');
   const [outcomeOptions, setOutcomeOptions] = useState<string[]>([]);
   const [followUpDraft, setFollowUpDraft] = useState<FollowUpDraft>(EMPTY_FOLLOW_UP_DRAFT);
