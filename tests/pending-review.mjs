@@ -293,14 +293,18 @@ console.log('\n— out of the queue, into the company —');
   // itself rather than a character window between the two, which is whatever
   // the formatting happens to be.
   const linkRow = section.slice(
-    section.lastIndexOf('<div className="flex items-center justify-between gap-2 pt-1">'),
-    section.indexOf('</div>\n              )}'));
+    section.indexOf('<div className="flex items-center justify-between gap-2 pb-1">'),
+    section.indexOf('{company.groups.map'));
   eq('the two links share one row', /justify-between/.test(linkRow), true);
   eq('  with Quick View first and Go to Record after it',
     linkRow.indexOf('Quick View') < linkRow.indexOf('Go to Record'), true);
   // Only where a company is open — there is nothing to look at otherwise.
   eq('they appear only under an expanded company',
     section.indexOf('Quick View') > section.indexOf('{isOpen && ('), true);
+  // Above the suggestions, not below: the list grows with the company, so at
+  // the bottom they drifted further away the more there was to read.
+  eq('  and above the suggestions, so they do not move as the list grows',
+    section.indexOf('Quick View') < section.indexOf('{company.groups.map'), true);
 }
 
 console.log('\n— the queue is a section like the others —');

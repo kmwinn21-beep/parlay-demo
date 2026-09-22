@@ -211,6 +211,33 @@ export function PendingReviewSection({ className = '', onCount }: {
 
               {isOpen && (
                 <div className="border-t border-gray-100 p-2 space-y-2 bg-gray-50/50">
+                  {/* Two ways out of the queue and into the company: a look
+                      without losing your place, and a move that gives it up.
+                      Opposite ends because they are opposite intentions.
+
+                      Above the suggestions rather than below them: the list
+                      grows with the company, so at the bottom they moved
+                      further away the more there was to read, and on a long
+                      one they were below the fold entirely. */}
+                  <div className="flex items-center justify-between gap-2 pb-1">
+                    <button
+                      type="button"
+                      onClick={() => setQuickView({ type: 'company', id: company.id, name: company.name })}
+                      className="flex items-center gap-1.5 text-xs font-medium text-brand-secondary hover:underline"
+                    >
+                      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      Quick View
+                    </button>
+                    <Link
+                      href={`/companies/${company.id}`}
+                      className="text-xs font-medium text-brand-secondary hover:underline whitespace-nowrap"
+                    >
+                      Go to Record →
+                    </Link>
+                  </div>
                   {company.groups.map((group, i) => (
                     <SuggestionGroupCard
                       key={group.key}
@@ -233,28 +260,6 @@ export function PendingReviewSection({ className = '', onCount }: {
                     </SuggestionGroupCard>
                   ))}
 
-                  {/* Two ways out of the queue and into the company: a look
-                      without losing your place, and a move that gives it up.
-                      Opposite ends because they are opposite intentions. */}
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setQuickView({ type: 'company', id: company.id, name: company.name })}
-                      className="flex items-center gap-1.5 text-xs font-medium text-brand-secondary hover:underline"
-                    >
-                      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                      </svg>
-                      Quick View
-                    </button>
-                    <Link
-                      href={`/companies/${company.id}`}
-                      className="text-xs font-medium text-brand-secondary hover:underline whitespace-nowrap"
-                    >
-                      Go to Record →
-                    </Link>
-                  </div>
                 </div>
               )}
             </div>
