@@ -256,9 +256,14 @@ console.log('\n— the feed folds on a phone, like every other section —');
   // exactly the bug Floor Notes had.
   eq('the page gives the feed no mobile height', /lg:col-start-3 h-\[600px\]/.test(page), false);
   // The cap is on the CARD, because the stream is a flex child that needs a
-  // bounded parent to scroll against.
+  // bounded parent to scroll against. It lives in the right column now, which
+  // divides its height between the feed and the Pending Review queue — the
+  // cap and the mobile behaviour are unchanged, only their address is.
+  const column = readFileSync('components/DashboardRightColumn.tsx', 'utf8');
   eq('  and caps the card instead, so the stream still scrolls',
-    /max-h-\[70vh\] lg:max-h-none lg:h-full/.test(page), true);
+    /max-h-\[70vh\] lg:max-h-none/.test(column), true);
+  eq('  with the full column height still available to it',
+    /lg:h-full/.test(column), true);
 }
 
 console.log('\n— the dashboard grid —');

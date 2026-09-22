@@ -164,60 +164,67 @@ console.log('\n— Save for Later writes the row the popup never had —');
 console.log('\n— the deferred card asks the same question —');
 {
   const { readFileSync } = await import('node:fs');
+  // The decisions live in one module now. Two surfaces offer them — the queue
+  // on a record and the queue on the dashboard — and what a card's buttons DO
+  // must not differ between them, so it is asserted where it lives rather than
+  // once per surface.
+  const shared = readFileSync('components/SuggestionReview.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   const section = readFileSync('components/SuggestedUpdatesSection.tsx', 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
   eq('an activity group is one whose targets open a form',
-    /group\.members\.every\(m => getTarget\(m\.target_key\)\?\.write === 'open_form'\)/.test(section), true);
-  eq('  and an empty group is not one', /group\.members\.length > 0/.test(section), true);
+    /group\.members\.every\(m => getTarget\(m\.target_key\)\?\.write === 'open_form'\)/.test(shared), true);
+  eq('  and an empty group is not one', /group\.members\.length > 0/.test(shared), true);
   eq('it offers Meeting and Touchpoint, the same question as the popup',
-    [/onClick=\{\(\) => openForm\('meeting', group\)\}/.test(section),
-     /onClick=\{\(\) => openForm\('touchpoint', group\)\}/.test(section)], [true, true]);
-  // The branch itself, not a character window between two strings — the gap
-  // between them is whatever the formatting happens to be.
-  const activityBranch = section.slice(
-    section.indexOf('isActivity(group) ? ('), section.indexOf(') : ('));
+    [/onClick=\{\(\) => openForm\('meeting', group\)\}/.test(shared),
+     /onClick=\{\(\) => openForm\('touchpoint', group\)\}/.test(shared)], [true, true]);
+  const activityBranch = shared.slice(
+    shared.indexOf('if (isActivityGroup(group)) {'), shared.indexOf('return (\n    <>\n      <button'));
   eq('  and Disregard, which dismisses the stored row rather than just hiding it',
-    /review\(group, 'dismiss'\)/.test(activityBranch) && /Disregard/.test(activityBranch), true);
+    /review\(group, 'dismiss', draft\)/.test(activityBranch) && /Disregard/.test(activityBranch), true);
   eq('  where Disregard is the only way out that writes nothing new',
-    (activityBranch.match(/review\(group, 'accept'\)/g) ?? []).length, 0);
+    (activityBranch.match(/review\(group, 'accept'/g) ?? []).length, 0);
   eq('  with no fourth button, because it is already saved',
-    /Save for Later/.test(section), false);
+    /Save for Later|Review later/.test(shared), false);
   eq('a vendor group keeps Accept and Dismiss',
-    /onClick=\{\(\) => review\(group, 'accept'\)\}/.test(section), true);
-  // An activity card is already saved and has nothing to edit, so the old
-  // blurb was wrong on both counts for half of what the section now shows.
-  eq('the blurb is true of both kinds',
-    /Nothing is added to the record until you confirm it/.test(section), true);
-  eq('  and no longer claims nothing is saved',
-    /Nothing is saved until you accept it/.test(section), false);
+    /onClick=\{\(\) => void review\(group, 'accept', draft\)\}/.test(shared), true);
 
-  eq('the meeting form opens on Log here too', /defaultMode="log"/.test(section), true);
+  eq('the meeting form opens on Log here too', /defaultMode="log"/.test(shared), true);
   eq('  reopened where the note was',
-    /prefillCompanyId=\{num\(logging\.payload\.company_id\)\}/.test(section), true);
+    /prefillCompanyId=\{num\(logging\.payload\.company_id\)\}/.test(shared), true);
   // The rule that makes deferring safe to press.
   eq('the suggestion is answered only when the form saves',
-    /onSuccess=\{\(\) => void onLogged\(logging\.group\)\}/.test(section)
-      && /onLogged=\{\(\) => void onLogged\(logging\.group\)\}/.test(section), true);
+    /onSuccess=\{\(\) => onLogged\(logging\.group\)\}/.test(shared)
+      && /onLogged=\{\(\) => onLogged\(logging\.group\)\}/.test(shared), true);
   eq('  and closing without saving leaves it pending',
-    /onClose=\{\(\) => setLogging\(null\)\}/.test(section), true);
-  // Opening the form is not answering the question. Pressing Meeting and then
-  // closing without saving must leave the card exactly where it was, which is
-  // what makes Save for Later safe to press.
-  const openFormBody = section.slice(
-    section.indexOf('const openForm ='), section.indexOf('const onLogged ='));
+    /onClose=\{\(\) => setLogging\(null\)\}/.test(shared), true);
+  eq('  with the modal left mounted, so its follow-on step survives',
+    /const onLogged = useCallback\(\(group: SuggestionGroup\) => \{ void review\(group, 'accept'\); \}/.test(shared), true);
+  // Opening the form is not answering the question.
+  const openFormBody = shared.slice(
+    shared.indexOf('const openForm = useCallback'), shared.indexOf('const onLogged ='));
   eq('opening a form does not answer the suggestion',
     /review\(/.test(openFormBody), false);
   eq('  it only records which form is open',
     /setLogging\(\{ kind, group, payload: group\.members\[0\]\?\.payload \?\? \{\} \}\)/.test(openFormBody), true);
-  eq('  with the modal left mounted, so its follow-on step survives',
-    /const onLogged = async \(group: SuggestionGroup\) => \{\s*await review\(group, 'accept'\);\s*\};/.test(section), true);
 
   // A touchpoint close is not a touchpoint save; the wrapper had no way to
   // say which until onLogged was forwarded.
   const card = readFileSync('components/DashboardActionCard.tsx', 'utf8');
   eq('the touchpoint modal can report a real save',
     /onLogged\?: \(\) => void;\n\}\) \{/.test(card), true);
+
+  // The record queue supplies layout only, and takes its decisions from there.
+  eq('the record queue uses the shared actions rather than its own',
+    /<SuggestionActions/.test(section), true);
+  eq('  and renders the shared modals', /\{modals\}/.test(section), true);
+  eq('  with no copy of the decision logic left behind',
+    /open_form|NewMeetingModal|TouchpointQuickModal/.test(section), false);
+  eq('the blurb is true of both kinds',
+    /Nothing is added to the record until you confirm it/.test(section), true);
+  eq('  and no longer claims nothing is saved',
+    /Nothing is saved until you accept it/.test(section), false);
 }
 
 console.log('\n— a read-only field is context, not a text box —');

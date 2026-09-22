@@ -535,7 +535,17 @@ const POLL_BG_MS = 120_000;
 /** Where "new since you last looked" is remembered. Per browser, by design. */
 const SEEN_KEY = 'parlay.feed.lastSeenAt';
 
-export function DashboardFeed({ className = '' }: { className?: string }) {
+export function DashboardFeed({ className = '', footer }: {
+  className?: string;
+  /**
+   * Rendered at the bottom of the card, below the stream and outside it.
+   *
+   * A slot rather than a prop that knows what goes in it: the feed should not
+   * have to know that something else on the dashboard wants its space, only
+   * that its host may want to put a control under it.
+   */
+  footer?: React.ReactNode;
+}) {
   const [scope, setScope] = useState<FeedScope>('active');
   const [filter, setFilter] = useState<FeedFilter>('all');
   const [data, setData] = useState<FeedResponse | null>(null);
@@ -772,6 +782,8 @@ export function DashboardFeed({ className = '' }: { className?: string }) {
         )}
       </div>
       )}
+
+      {footer && <div className="flex-shrink-0 pt-2">{footer}</div>}
 
       {/* Outside the collapsible body: a note opened on a phone must not vanish
           if the section is folded away behind it. */}

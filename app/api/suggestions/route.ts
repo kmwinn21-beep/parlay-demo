@@ -5,6 +5,7 @@ import { getTarget, dedupeKey, type SuggestionTarget } from '@/lib/suggestions/r
 import { getConfigIdByEmail } from '@/lib/notifications';
 import { resolveNoteCompany } from '@/lib/suggestions/noteContext';
 import { NEW_COMPANY_TYPE_KEY } from '@/lib/suggestions/group';
+import { companiesAssignedTo } from '@/lib/guestFilters';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +31,79 @@ interface SuggestionRow {
   created_at: string | null;
   /** The note this was read from, so a reviewer can check the quote in context. */
   source_note_content: string | null;
+  /** Only on the account-wide listing, for grouping under a company header. */
+  company_name?: string | null;
+}
+
+/**
+ * Everything still waiting on the signed-in user, across every company.
+ *
+ * The per-record listing below answers "what is pending HERE". This answers
+ * "what is pending at all", which is what a dashboard queue needs — and it is
+ * a different question rather than the same one run repeatedly, because the
+ * caller does not know which companies to ask about.
+ *
+ * Narrowed to the caller's own accounts, deliberately. The extractor proposes
+ * on every note anyone writes, so the unnarrowed list is the whole account's
+ * backlog and reads as somebody else's work.
+ */
+async function pendingForUser(
+  db: Awaited<ReturnType<typeof getDb>>,
+  email: string,
+): Promise<SuggestionRow[]> {
+  const res = await db.execute({
+    sql: `SELECT rs.id, rs.source_note_id, rs.target_key, rs.entity_type, rs.entity_id,
+                 rs.payload, rs.quote, rs.confidence, rs.status, rs.created_at,
+                 en.content AS source_note_content,
+                 co.name AS company_name, co.assigned_user AS company_assigned_user
+          FROM record_suggestions rs
+          LEFT JOIN entity_notes en ON en.id = rs.source_note_id
+          LEFT JOIN companies co ON co.id = rs.entity_id AND rs.entity_type = 'company'
+          WHERE rs.status = 'pending'
+          ORDER BY rs.created_at DESC, rs.id DESC
+          LIMIT ?`,
+    // A guard, not a page: a queue nobody can finish is not a queue, and the
+    // number here is far above what one person accumulates in practice.
+    args: [500],
+  });
+
+  // Who the caller is, in the two shapes companies.assigned_user can hold.
+  const configId = await getConfigIdByEmail(db, email);
+  let repName = '';
+  if (configId != null) {
+    const nameRow = await db.execute({
+      sql: 'SELECT value FROM config_options WHERE id = ?',
+      args: [configId],
+    }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
+    repName = nameRow.rows[0]?.value != null ? String(nameRow.rows[0].value) : '';
+  }
+  // No identity, no accounts — an empty queue rather than everybody's.
+  if (configId == null && !repName) return [];
+
+  // The same matcher the pick-lists use, so an assignment written before ids
+  // were stored is still the caller's account here.
+  const companies = res.rows.map(r => ({
+    id: Number(r.entity_id),
+    assigned_user: r.company_assigned_user != null ? String(r.company_assigned_user) : null,
+  }));
+  const mine = companiesAssignedTo(companies, [{ id: configId ?? 0, value: repName }]);
+
+  return res.rows
+    .filter(r => mine.has(Number(r.entity_id)))
+    .map(r => ({
+      id: Number(r.id),
+      source_note_id: r.source_note_id != null ? Number(r.source_note_id) : null,
+      target_key: String(r.target_key),
+      entity_type: String(r.entity_type),
+      entity_id: Number(r.entity_id),
+      payload: JSON.parse(String(r.payload ?? '{}')),
+      quote: r.quote != null ? String(r.quote) : null,
+      confidence: String(r.confidence ?? 'medium'),
+      status: String(r.status),
+      created_at: r.created_at != null ? String(r.created_at) : null,
+      source_note_content: r.source_note_content != null ? String(r.source_note_content) : null,
+      company_name: r.company_name != null ? String(r.company_name) : null,
+    }));
 }
 
 /** Pending suggestions for one record. */
@@ -42,6 +116,13 @@ export async function GET(request: NextRequest) {
     const entityType = searchParams.get('entity_type');
     const entityId = searchParams.get('entity_id');
     const status = searchParams.get('status') ?? 'pending';
+
+    // The dashboard queue: everything pending on the caller's accounts, with
+    // no record to scope it to.
+    if (searchParams.get('scope') === 'mine') {
+      return NextResponse.json(await pendingForUser(db, auth.email));
+    }
+
     if (!entityType || !entityId) {
       return NextResponse.json({ error: 'entity_type and entity_id are required' }, { status: 400 });
     }

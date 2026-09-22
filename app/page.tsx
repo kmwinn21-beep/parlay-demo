@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { dbReady } from '@/lib/db';
 import { getDb } from '@/lib/getDb';
 import { QuickNotesSection } from '@/components/QuickNotesSection';
-import { DashboardFeed } from '@/components/DashboardFeed';
+import { DashboardRightColumn } from '@/components/DashboardRightColumn';
 import { getServerSessionUser } from '@/lib/auth';
 import { DashboardConferenceBanner, type BannerData } from '@/components/DashboardConferenceBanner';
 import type { DashboardConference } from '@/components/RecentSection';
@@ -362,7 +362,7 @@ export default function DashboardPage() {
             parent to scroll against — a max-height on an auto-height wrapper
             would not give it one. */}
         <div className="lg:row-span-2 lg:row-start-1 lg:col-start-3 lg:h-auto lg:relative">
-          <DashboardFeed className="max-h-[70vh] lg:max-h-none lg:h-full lg:absolute lg:inset-0" />
+          <DashboardRightColumn />
         </div>
       </div>
     </div>
