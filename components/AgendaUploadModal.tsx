@@ -22,11 +22,26 @@ async function fileToBase64(file: File): Promise<string> {
   });
 }
 
-export function AgendaUploadModal({ onClose }: { onClose: () => void }) {
+export function AgendaUploadModal({ onClose, conferenceId, onUploaded }: {
+  onClose: () => void;
+  /**
+   * Opened from inside a conference, so the picker has nothing to ask.
+   *
+   * Without this the modal opens on "choose a conference" when the reader is
+   * already looking at one, which is a question with one right answer and no
+   * reason to be asked.
+   */
+  conferenceId?: number;
+  /**
+   * The agenda changed. Given by a caller that is already showing it and wants
+   * to reload rather than be navigated somewhere it already is.
+   */
+  onUploaded?: () => void;
+}) {
   const router = useRouter();
   const [conferences, setConferences] = useState<Conference[]>([]);
   const [loadingConfs, setLoadingConfs] = useState(true);
-  const [selectedConfId, setSelectedConfId] = useState<number | null>(null);
+  const [selectedConfId, setSelectedConfId] = useState<number | null>(conferenceId ?? null);
   const [step, setStep] = useState<Step>('select');
   const [error, setError] = useState<string | null>(null);
   const [count, setCount] = useState(0);
@@ -89,14 +104,16 @@ export function AgendaUploadModal({ onClose }: { onClose: () => void }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image_base64, media_type }),
       });
-      const data = await res.json() as { count?: number; error?: string };
+      const data = await res.json() as { count?: number; days?: string[]; error?: string };
       if (!res.ok) {
         setError(data.error ?? 'Failed to scan agenda.');
         setStep('select');
         return;
       }
       setCount(data.count ?? 0);
+      setDayLabels(data.days ?? []);
       setStep('success');
+      onUploaded?.();
     } catch {
       setError('Failed to upload file. Please try again.');
       setStep('select');
@@ -148,6 +165,7 @@ export function AgendaUploadModal({ onClose }: { onClose: () => void }) {
       setCount(total);
       setDayLabels(labels);
       setStep('success');
+      onUploaded?.();
     } catch {
       setError('Failed to connect. Please try again.');
       setStep('select');
@@ -211,8 +229,10 @@ export function AgendaUploadModal({ onClose }: { onClose: () => void }) {
             </div>
           ) : (
             <>
-              {/* Conference selector */}
-              <div className="mb-5">
+              {/* Conference selector. Hidden when the caller already named
+                  one: asking which conference while somebody is looking at it
+                  is a question with a single right answer. */}
+              <div className={conferenceId ? 'hidden' : 'mb-5'}>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
                   Conference
                 </label>

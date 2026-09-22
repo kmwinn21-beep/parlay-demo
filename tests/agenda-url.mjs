@@ -243,5 +243,59 @@ console.log('\n— a partial import is no longer silent —');
   eq('  gathered across every page', /for \(const d of data\.days \?\? \[\]\) if \(!labels\.includes\(d\)\)/.test(modal), true);
 }
 
+console.log('\n— one door, three places —');
+{
+  const btn = strip('components/UploadAgendaButton.tsx');
+  const tab = strip('components/AgendaTab.tsx');
+  const conf = strip('app/conferences/[id]/page.tsx');
+  const modal = strip('components/AgendaUploadModal.tsx');
+
+  // Measured in Chromium: a 2px dashed rgb(209,213,219) button reading
+  // "Upload Agenda"; clicking it opens the modal with the conference picker
+  // hidden and conference 8 preselected; Scan posts to /conferences/8/agenda
+  // and fires onUploaded.
+  eq('the button is the dashed outline asked for',
+    /border-2 border-dashed border-gray-300/.test(btn), true);
+  eq('  saying Upload Agenda', /label = 'Upload Agenda'/.test(btn), true);
+  eq('  and it opens the modal, holding no upload state of its own',
+    /<AgendaUploadModal/.test(btn) && !/image_base64|method: 'POST'/.test(btn), true);
+
+  // Opened from inside a conference, the picker has one right answer.
+  eq('the modal takes the conference it was opened from',
+    /useState<number \| null>\(conferenceId \?\? null\)/.test(modal), true);
+  eq('  and does not ask again', /className=\{conferenceId \? 'hidden' : 'mb-5'\}/.test(modal), true);
+  eq('  telling the caller when the agenda changed',
+    (modal.match(/onUploaded\?\.\(\);/g) ?? []).length, 2);
+
+  // Both surfaces go through it.
+  eq('the agenda tab uses the shared button',
+    (tab.match(/<UploadAgendaButton/g) ?? []).length, 2);
+  // BOTH of them — the empty state and the header — or the one that was
+  // missed leaves a stale list after an upload.
+  eq('  reloading itself rather than navigating',
+    (tab.match(/onUploaded=\{\(\) => void fetchAgenda\(\)\}/g) ?? []).length, 2);
+  eq('the conference edit form uses it too', /<UploadAgendaButton/.test(conf), true);
+
+  // The versions they used to carry are gone, not merely bypassed — a second
+  // way in is how the three drifted apart in the first place.
+  eq('the tab no longer scans files itself',
+    /image_base64|handleInputChange|cameraRef/.test(tab), false);
+  eq('  nor imports a URL itself', /handleUrl|urlPanelOpen|Import from URL/.test(tab), false);
+  eq('  and its tabbed Upload File \/ From Link panel is gone',
+    /Empty state — tabbed/.test(tab), false);
+  eq('the edit form no longer scans files itself',
+    /handleAgendaFile|agendaFileRef|agendaUploading/.test(conf), false);
+  eq('  nor imports a URL itself', /handleAgendaUrl|agendaUrlPanelOpen/.test(conf), false);
+
+  // What is NOT the same act stays where it was.
+  // The rendered control, not the handler's name: renaming the function
+  // leaves the name in the JSX that calls it.
+  eq('clearing an agenda is still its own control',
+    /onClick=\{\(\) => void handleClear\(\)\}/.test(tab) && />Clear</.test(tab), true);
+  eq('  and the last-uploaded stamp survives', /agendaLastUploadedAt/.test(conf), true);
+  eq('  refreshed when the modal reports a change',
+    /setAgendaLastUploadedAt\(new Date\(\)\.toISOString\(\)\)/.test(conf), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
