@@ -318,12 +318,19 @@ export default function DashboardPage() {
         <StatsSection />
       </Suspense>
 
-      {/* ── Floor Notes + Targets on the left, the Feed spanning both on the
-             right ──────────────────────────────────────────────────────────
-          ONE grid, not two. The Feed occupies the right-hand column of both
-          rows, and a CSS row-span cannot cross two sibling grids — the previous
-          layout had these as separate containers, one of them inside its own
-          Suspense boundary.
+      {/* ── Floor Notes + Targets on the left, the Feed and the queue spanning
+             both rows on the right ────────────────────────────────────────
+          ONE grid, not two. The right column occupies both rows, and a CSS
+          row-span cannot cross two sibling grids — the previous layout had
+          these as separate containers, one of them inside its own Suspense
+          boundary.
+
+          Five columns split 3/2, not three split 2/1. Measured at the app's
+          own max-w-6xl: the right column goes from 368px to 446px, about 21%
+          wider, and the left from 760px to 682px, about 10% narrower. The
+          right column is where the work is now — a queue is acted on, where a
+          target list is scanned — and at 368px the company names in it were
+          close to truncating against their count bubbles.
 
           Targets keeps its Suspense boundary as a grid CHILD rather than a grid
           owner, so it still streams in without blocking the other two cells and
@@ -332,7 +339,7 @@ export default function DashboardPage() {
           Below lg everything stacks in source order: Floor Notes, Targets,
           Feed. The Feed last is deliberate — on a phone the two cards you act
           on come first, and the feed is something you scroll to. */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-rows-[auto_auto] gap-6 items-stretch">
+      <div className="grid grid-cols-1 lg:grid-cols-5 lg:grid-rows-[auto_auto] gap-6 items-stretch">
         {/* Floor Notes. It used to take its height from the Touchpoints card
             beside it; with that gone it needs an explicit one on DESKTOP,
             chosen to match what it rendered at before.
@@ -341,12 +348,12 @@ export default function DashboardPage() {
             open at 489px around nothing, which read as a broken empty box. The
             mobile cap is a max-height, so an expanded card still scrolls inside
             the same bound while a collapsed one shrinks to fit. */}
-        <div className="lg:col-span-2 lg:row-start-1 max-h-[489px] lg:max-h-none lg:h-[489px] flex flex-col min-h-0 lg:block lg:relative">
+        <div className="lg:col-span-3 lg:row-start-1 max-h-[489px] lg:max-h-none lg:h-[489px] flex flex-col min-h-0 lg:block lg:relative">
           <QuickNotesSection className="lg:absolute lg:inset-0" />
         </div>
 
-        <Suspense fallback={<div className="lg:col-span-2 lg:row-start-2"><TargetsSkeleton /></div>}>
-          <div className="lg:col-span-2 lg:row-start-2">
+        <Suspense fallback={<div className="lg:col-span-3 lg:row-start-2"><TargetsSkeleton /></div>}>
+          <div className="lg:col-span-3 lg:row-start-2">
             <TargetsSection />
           </div>
         </Suspense>
@@ -361,7 +368,7 @@ export default function DashboardPage() {
             because the stream inside is a flex child that needs a bounded
             parent to scroll against — a max-height on an auto-height wrapper
             would not give it one. */}
-        <div className="lg:row-span-2 lg:row-start-1 lg:col-start-3 lg:h-auto lg:relative">
+        <div className="lg:row-span-2 lg:row-start-1 lg:col-start-4 lg:col-span-2 lg:h-auto lg:relative">
           <DashboardRightColumn />
         </div>
       </div>
