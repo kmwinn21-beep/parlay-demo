@@ -195,6 +195,38 @@ h1, h2, h3 {
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
+/**
+ * A bar only where there is a mouse to drag it with.
+ *
+ * The dashboard queue scrolls inside a short column, so on a desktop the bar
+ * is the only thing saying there is more below — but it has to be thin, since
+ * the column is narrow and a default bar eats a noticeable slice of it. On a
+ * phone the whole card scrolls with the page and the bar is just a stripe
+ * down the side of the content.
+ *
+ * Hand-written rather than composed from the utilities above, because
+ * `lg:scrollbar-thin` would need Tailwind to have generated the variant and
+ * these are plain classes it knows nothing about.
+ */
+.scrollbar-desktop-thin {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-desktop-thin::-webkit-scrollbar { display: none; }
+
+@media (min-width: 1024px) {
+  .scrollbar-desktop-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(209 213 219) transparent;
+  }
+  .scrollbar-desktop-thin::-webkit-scrollbar { display: block; width: 5px; }
+  .scrollbar-desktop-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-desktop-thin::-webkit-scrollbar-thumb {
+    background-color: rgb(209 213 219);
+    border-radius: 9999px;
+  }
+}
+
 /* Thin, visible scrollbar utility */
 .scrollbar-thin { scrollbar-width: thin; scrollbar-color: rgb(209 213 219) transparent; }
 .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }

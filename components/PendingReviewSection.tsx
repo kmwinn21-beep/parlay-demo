@@ -1,10 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { SuggestionGroupCard } from '@/components/SuggestionGroupCard';
 import { groupSuggestions, type SuggestionGroup } from '@/lib/suggestions/group';
 import { useSuggestionCatalog } from '@/lib/suggestions/useSuggestionCatalog';
 import { useSuggestionReview, SuggestionActions } from '@/components/SuggestionReview';
+import { QuickViewDrawer, type QuickViewTarget } from '@/components/QuickViewDrawer';
 
 interface PendingSuggestion {
   id: number;
@@ -73,6 +75,8 @@ export function PendingReviewSection({ className = '', onCount }: {
   const [rows, setRows] = useState<PendingSuggestion[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [openCompany, setOpenCompany] = useState<number | null>(null);
+  /** The company being looked at without leaving the queue. */
+  const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
   const [edits, setEdits] = useState<Record<string, Record<string, unknown>>>({});
   const { options, companies } = useSuggestionCatalog();
 
@@ -141,7 +145,9 @@ export function PendingReviewSection({ className = '', onCount }: {
         Suggested updates based on your logged notes
       </p>
 
-      <div className="mt-3 space-y-2 overflow-y-auto min-h-0 flex-1">
+      {/* Thin on a desktop, where the bar is the only sign there is more below
+          in a short column; absent on a phone, where the page scrolls anyway. */}
+      <div className="mt-3 space-y-2 overflow-y-auto min-h-0 flex-1 scrollbar-desktop-thin">
         {byCompany.map(company => {
           const isOpen = openCompany === company.id;
           const count = company.groups.reduce((n, g) => n + g.members.length, 0);
@@ -190,6 +196,29 @@ export function PendingReviewSection({ className = '', onCount }: {
                       />
                     </SuggestionGroupCard>
                   ))}
+
+                  {/* Two ways out of the queue and into the company: a look
+                      without losing your place, and a move that gives it up.
+                      Opposite ends because they are opposite intentions. */}
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setQuickView({ type: 'company', id: company.id, name: company.name })}
+                      className="flex items-center gap-1.5 text-xs font-medium text-brand-secondary hover:underline"
+                    >
+                      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      Quick View
+                    </button>
+                    <Link
+                      href={`/companies/${company.id}`}
+                      className="text-xs font-medium text-brand-secondary hover:underline whitespace-nowrap"
+                    >
+                      Go to Record →
+                    </Link>
+                  </div>
                 </div>
               )}
             </div>
@@ -198,6 +227,9 @@ export function PendingReviewSection({ className = '', onCount }: {
       </div>
 
       {modals}
+      {quickView && (
+        <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
+      )}
     </div>
   );
 }

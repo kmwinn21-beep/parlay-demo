@@ -249,5 +249,59 @@ console.log('\n— four answers fit inside the sheet —');
     /sm:flex-row sm:flex-wrap/.test(chooser), true);
 }
 
+console.log('\n— the queue reads in a narrow column —');
+{
+  const { getTarget } = await import('@/lib/suggestions/registry');
+  // One source for every queue: the dashboard, the company record and the
+  // attendee record all render the registry's label as the card header.
+  eq('the headers are short enough for a narrow column',
+    [getTarget('logged_activity').label, getTarget('vendor_relationship').label],
+    ['Meeting / Touchpoint', 'Relationship']);
+  const registry = strip('lib/suggestions/registry.ts');
+  eq('  and the long forms are gone from the card headers',
+    /label: 'Log a Meeting or Touchpoint'|label: 'Vendor \/ Other Relationship'/.test(registry), false);
+  // The record's own SECTION keeps its full name — that is a different thing
+  // in a much wider place.
+  const sections = readFileSync('lib/useSectionConfig.ts', 'utf8');
+  eq('  while the record section keeps its full name',
+    /label: 'Vendor \/ Other Relationships'/.test(sections), true);
+
+  const section = strip('components/PendingReviewSection.tsx');
+  const css = readFileSync('app/globals.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  // Measured in Chromium with the queue overflowing: the computed
+  // scrollbar-width is 'thin' at 1280px and 'none' at 390px. The laid-out
+  // gutter is 0 either way in this environment, which uses overlay bars — the
+  // computed property is the thing that actually differs.
+  eq('the queue scrolls against a bar of its own', /scrollbar-desktop-thin/.test(section), true);
+  eq('  thin, because the column is narrow',
+    /@media \(min-width: 1024px\)[\s\S]{0,400}\.scrollbar-desktop-thin[\s\S]{0,200}width: 5px/.test(css), true);
+  eq('  and absent below that, where the page scrolls instead',
+    /\.scrollbar-desktop-thin \{\s*scrollbar-width: none;/.test(css), true);
+  eq('  in both engines', /\.scrollbar-desktop-thin::-webkit-scrollbar \{ display: none; \}/.test(css), true);
+}
+
+console.log('\n— out of the queue, into the company —');
+{
+  const section = strip('components/PendingReviewSection.tsx');
+  eq('a look that keeps your place', /Quick View/.test(section), true);
+  eq('  through the drawer the tables already use',
+    /import \{ QuickViewDrawer, type QuickViewTarget \}/.test(section)
+      && /setQuickView\(\{ type: 'company', id: company\.id, name: company\.name \}\)/.test(section), true);
+  eq('a move that gives it up', /Go to Record →/.test(section), true);
+  eq('  to that company\'s own record', /href=\{`\/companies\/\$\{company\.id\}`\}/.test(section), true);
+  // Opposite ends, because they are opposite intentions. Asserted on the row
+  // itself rather than a character window between the two, which is whatever
+  // the formatting happens to be.
+  const linkRow = section.slice(
+    section.lastIndexOf('<div className="flex items-center justify-between gap-2 pt-1">'),
+    section.indexOf('</div>\n              )}'));
+  eq('the two links share one row', /justify-between/.test(linkRow), true);
+  eq('  with Quick View first and Go to Record after it',
+    linkRow.indexOf('Quick View') < linkRow.indexOf('Go to Record'), true);
+  // Only where a company is open — there is nothing to look at otherwise.
+  eq('they appear only under an expanded company',
+    section.indexOf('Quick View') > section.indexOf('{isOpen && ('), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

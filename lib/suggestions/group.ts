@@ -23,7 +23,7 @@ export interface SuggestionGroup {
   key: string;
   /** The company this is about, when the suggestions name one. */
   companyName: string | null;
-  /** What accepting would do, e.g. "Vendor / Other Relationship · Sub Type(s)". */
+  /** What accepting would do, e.g. "Relationship · Sub Type(s)". */
   summary: string;
   members: GroupableSuggestion[];
   /** Every field across the members, in registry order, each appearing once. */
