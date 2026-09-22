@@ -55,36 +55,17 @@ console.log('\n— the queue is the caller\'s own accounts —');
   eq('it narrows with the shared matcher rather than its own SQL',
     /companiesAssignedTo\(companies, \[\{ id: configId \?\? 0, value: repName \}\]\)/.test(route), true);
   eq('  and returns nothing at all for a caller it cannot identify',
-    /if \(configId == null && !repName && userId == null\) return \[\];/.test(route), true);
+    /if \(configId == null && !repName\) return \[\];/.test(route), true);
 
-  // The bug this closes: a suggestion read from a note YOU wrote, about a
-  // company nobody has been formally assigned to, showed on the record and not
-  // in the queue. Assignment alone was too narrow — authorship is the more
-  // obvious claim on it, and is what the section's own subtitle promises.
-  eq('a note you wrote puts its suggestion in your queue',
-    /userId != null && r\.note_author_id != null && Number\(r\.note_author_id\) === userId/.test(route), true);
-  eq('  alongside the ones on your accounts, not instead of them',
-    /\|\| mine\.has\(Number\(r\.entity_id\)\)\)/.test(route), true);
-  eq('  with the author carried out of the note',
-    /en\.author_user_id AS note_author_id/.test(route), true);
-  eq('  and the caller\'s id passed in to compare against',
-    /pendingForUser\(db, auth\.email, auth\.id \?\? null\)/.test(route), true);
-
-  // Reproduced: the two rules, and the row that only the new one catches.
-  const ME = 7;
-  const rows2 = [
-    { id: 1, entity_id: 12, note_author_id: ME, assigned: false },  // I wrote it
-    { id: 2, entity_id: 40, note_author_id: 99, assigned: true },   // my account
-    { id: 3, entity_id: 55, note_author_id: 99, assigned: false },  // neither
-    { id: 4, entity_id: 60, note_author_id: null, assigned: true }, // my account, no author
-  ];
-  const inQueue = rows2.filter(r =>
-    (r.note_author_id != null && r.note_author_id === ME) || r.assigned);
-  eq('mine by authorship or by assignment', inQueue.map(r => r.id), [1, 2, 4]);
-  eq('  and a colleague\'s note about a company that is not mine is not',
-    inQueue.some(r => r.id === 3), false);
-  eq('  where assignment alone would have lost the one I wrote',
-    rows2.filter(r => r.assigned).some(r => r.id === 1), false);
+  // Authorship was tried here and taken back out: it pulled in companies
+  // outside the caller's book whenever they happened to write the note, which
+  // stops "my accounts" meaning what it means everywhere else. The cost is
+  // real and worth pinning — a suggestion on an UNASSIGNED company does not
+  // appear, even one read from your own note.
+  eq('who wrote the note does not decide whose queue it is in',
+    /note_author_id/.test(route), false);
+  eq('  and assignment is the only rule',
+    /\.filter\(r => mine\.has\(Number\(r\.entity_id\)\)\)/.test(route), true);
 
   // Reproduced against the real matcher: the rule being relied on.
   const rows = [
@@ -98,7 +79,9 @@ console.log('\n— the queue is the caller\'s own accounts —');
   eq('mine by id, by shared assignment, and by legacy name',
     [...mine].sort((a, b) => a - b), [12, 55, 70]);
   eq('  and somebody else\'s account is not in my queue', mine.has(40), false);
-  eq('  nor an unassigned one', mine.has(60), false);
+  // The consequence of assignment-only, stated where it can be seen: an
+  // unassigned company is absent however the suggestion got there.
+  eq('  nor an unassigned one, whoever wrote the note', mine.has(60), false);
 }
 
 console.log('\n— one card per company, not per note —');

@@ -43,27 +43,26 @@ interface SuggestionRow {
  * a different question rather than the same one run repeatedly, because the
  * caller does not know which companies to ask about.
  *
- * Narrowed to the caller, by two rules rather than one.
+ * Narrowed to the caller's own accounts, deliberately. The extractor proposes
+ * on every note anyone writes, so the unnarrowed list is the whole account's
+ * backlog and reads as somebody else's work.
  *
- * It began as assigned accounts only, which quietly hid the most obvious case
- * there is: a suggestion read from a note YOU wrote, about a company nobody
- * has been formally assigned to. The record showed it and the dashboard did
- * not, which reads as the queue being broken rather than as a filter working.
- *
- * So authorship comes first — you wrote the note, it is your work — and the
- * assignment rule stays beside it, for what a colleague wrote about an account
- * that is yours. Unnarrowed this would be the whole account's backlog, which
- * is the thing worth avoiding.
+ * Assignment, not authorship. Who wrote the note was tried and taken back out:
+ * it pulls in companies outside the caller's book whenever they happened to
+ * write something, which makes the queue's size unpredictable and stops "my
+ * accounts" meaning what it says everywhere else in the app. The consequence
+ * is worth stating plainly — a suggestion about an UNASSIGNED company does not
+ * appear here, even one read from your own note. Assigning the company is what
+ * puts it in the queue.
  */
 async function pendingForUser(
   db: Awaited<ReturnType<typeof getDb>>,
   email: string,
-  userId: number | null,
 ): Promise<SuggestionRow[]> {
   const res = await db.execute({
     sql: `SELECT rs.id, rs.source_note_id, rs.target_key, rs.entity_type, rs.entity_id,
                  rs.payload, rs.quote, rs.confidence, rs.status, rs.created_at,
-                 en.content AS source_note_content, en.author_user_id AS note_author_id,
+                 en.content AS source_note_content,
                  co.name AS company_name, co.assigned_user AS company_assigned_user
           FROM record_suggestions rs
           LEFT JOIN entity_notes en ON en.id = rs.source_note_id
@@ -86,8 +85,8 @@ async function pendingForUser(
     }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
     repName = nameRow.rows[0]?.value != null ? String(nameRow.rows[0].value) : '';
   }
-  // No identity at all — an empty queue rather than everybody's.
-  if (configId == null && !repName && userId == null) return [];
+  // No identity, no accounts — an empty queue rather than everybody's.
+  if (configId == null && !repName) return [];
 
   // The same matcher the pick-lists use, so an assignment written before ids
   // were stored is still the caller's account here.
@@ -98,8 +97,7 @@ async function pendingForUser(
   const mine = companiesAssignedTo(companies, [{ id: configId ?? 0, value: repName }]);
 
   return res.rows
-    .filter(r => (userId != null && r.note_author_id != null && Number(r.note_author_id) === userId)
-      || mine.has(Number(r.entity_id)))
+    .filter(r => mine.has(Number(r.entity_id)))
     .map(r => ({
       id: Number(r.id),
       source_note_id: r.source_note_id != null ? Number(r.source_note_id) : null,
@@ -130,7 +128,7 @@ export async function GET(request: NextRequest) {
     // The dashboard queue: everything pending on the caller's accounts, with
     // no record to scope it to.
     if (searchParams.get('scope') === 'mine') {
-      return NextResponse.json(await pendingForUser(db, auth.email, auth.id ?? null));
+      return NextResponse.json(await pendingForUser(db, auth.email));
     }
 
     if (!entityType || !entityId) {
