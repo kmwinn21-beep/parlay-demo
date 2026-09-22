@@ -13,9 +13,25 @@ const MAX_PDF_BYTES = 20 * 1024 * 1024;
 // Images are sent as base64 too, but are typically small.
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
-const MAX_CONTENT_CHARS = 200_000;
+import {
+  countDistinctDays, countDistinctTimes, pickRicher, htmlToText, cap,
+  type AgendaReading,
+} from '@/lib/agenda/fetchAgendaText';
 
-async function fetchUrlContent(rawUrl: string): Promise<string> {
+/**
+ * Both readers, in parallel, and the one naming more days wins.
+ *
+ * Jina renders the page and returns what a person would SEE, which on a
+ * schedule split across day tabs is one day. The direct fetch strips tags out
+ * of the raw HTML and knows nothing about CSS, so when the other days are in
+ * the DOM but hidden it gets all of them.
+ *
+ * The fallback used to run only when Jina threw or came back under 500
+ * characters. One day of a conference is well over that, so Jina "succeeded"
+ * and the reader better at this exact problem never ran. See the module for
+ * why days are counted rather than length.
+ */
+async function fetchUrlContent(rawUrl: string): Promise<{ text: string; days: number; source: string }> {
   let url: URL;
   try {
     url = new URL(rawUrl);
@@ -26,61 +42,54 @@ async function fetchUrlContent(rawUrl: string): Promise<string> {
     throw new Error('URL must use http or https');
   }
 
-  // Jina Reader is the primary approach — it handles JS-rendered pages, CSS-hidden
-  // day tabs, and returns clean LLM-readable text without nav/footer noise.
-  try {
-    const jinaRes = await fetch(`https://r.jina.ai/${rawUrl}`, {
-      signal: AbortSignal.timeout(25_000),
-      headers: { Accept: 'text/plain', 'X-No-Cache': 'true' },
-    });
-    if (jinaRes.ok) {
-      const jinaText = (await jinaRes.text()).trim();
-      if (jinaText.length >= 500) {
-        return jinaText.length > MAX_CONTENT_CHARS
-          ? jinaText.slice(0, MAX_CONTENT_CHARS) + '\n[Content truncated]'
-          : jinaText;
-      }
+  const readViaReader = async (): Promise<AgendaReading | null> => {
+    try {
+      const res = await fetch(`https://r.jina.ai/${rawUrl}`, {
+        signal: AbortSignal.timeout(25_000),
+        headers: { Accept: 'text/plain', 'X-No-Cache': 'true' },
+      });
+      if (!res.ok) return null;
+      const text = (await res.text()).trim();
+      // Still a floor, but only on this reader's own output: a couple of
+      // hundred characters is a cookie banner, not an agenda.
+      if (text.length < 500) return null;
+      return { source: 'reader', text, days: countDistinctDays(text), times: countDistinctTimes(text) };
+    } catch {
+      return null;
     }
-  } catch { /* fall through to direct fetch */ }
+  };
 
-  // Direct fetch fallback — strip HTML to plain text
-  let text = '';
-  try {
-    const res = await fetch(rawUrl, {
-      signal: AbortSignal.timeout(12_000),
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; AgendaBot/1.0)',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
-    });
-    if (!res.ok) throw new Error(`Page returned ${res.status} ${res.statusText}`);
-    const html = await res.text();
+  const readDirect = async (): Promise<AgendaReading | null> => {
+    try {
+      const res = await fetch(rawUrl, {
+        signal: AbortSignal.timeout(12_000),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; AgendaBot/1.0)',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      });
+      if (!res.ok) return null;
+      const text = htmlToText(await res.text());
+      if (!text) return null;
+      return { source: 'direct', text, days: countDistinctDays(text), times: countDistinctTimes(text) };
+    } catch {
+      return null;
+    }
+  };
 
-    text = html
-      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, '')
-      .replace(/<!--[\s\S]*?-->/g, '')
-      .replace(/<nav\b[^>]*>[\s\S]*?<\/nav>/gi, '')
-      .replace(/<header\b[^>]*>[\s\S]*?<\/header>/gi, '')
-      .replace(/<footer\b[^>]*>[\s\S]*?<\/footer>/gi, '')
-      .replace(/<aside\b[^>]*>[\s\S]*?<\/aside>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/[ \t]+/g, ' ')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-  } catch (err) {
-    if (err instanceof Error && err.message.startsWith('Page returned')) throw err;
+  const [reader, direct] = await Promise.all([readViaReader(), readDirect()]);
+  const chosen = pickRicher(reader, direct);
+  if (!chosen) {
     throw new Error('Failed to fetch page — it may be blocking automated requests');
   }
-
-  if (!text) throw new Error('Could not extract any content from the page');
-
-  if (text.length > MAX_CONTENT_CHARS) {
-    text = text.slice(0, MAX_CONTENT_CHARS) + '\n[Content truncated]';
+  // Worth having in the logs: the two readers disagreeing about how many days
+  // a page has is exactly the symptom this was built for.
+  if (reader && direct && (reader.days !== direct.days || reader.times !== direct.times)) {
+    console.warn('[agenda] %s: reader saw %d day(s)/%d time(s), direct saw %d/%d — using %s',
+      rawUrl, reader.days, reader.times, direct.days, direct.times, chosen.source);
   }
-  return text;
+  return { text: cap(chosen.text), days: chosen.days, source: chosen.source };
 }
 
 interface AgendaItem {
@@ -219,7 +228,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (url) {
       let pageText: string;
       try {
-        pageText = await fetchUrlContent(url);
+        const fetched = await fetchUrlContent(url);
+        pageText = fetched.text;
       } catch (err) {
         return NextResponse.json(
           { error: err instanceof Error ? err.message : 'Failed to fetch URL' },
@@ -412,7 +422,12 @@ Rules:
       });
     }
 
-    return NextResponse.json({ count: insertStatements.length });
+    // The row count alone cannot say a day is missing — Monday-only returns a
+    // perfectly healthy number. The day labels are what makes that visible.
+    return NextResponse.json({
+      count: insertStatements.length,
+      days: days.map(d => String(d?.day_label ?? '').trim()).filter(Boolean),
+    });
   } catch (error) {
     console.error('POST /api/conferences/[id]/agenda error:', error);
     // Surface Anthropic API errors directly so the client can show something useful
