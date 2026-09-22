@@ -285,5 +285,40 @@ console.log('\n— deferring it does not immediately re-ask —');
     /clientProposed/.test(section), false);
 }
 
+console.log('\n— the poll is not spent behind the form —');
+{
+  // The reported bug: choose Touchpoint on the chooser, fill the form in, and
+  // the vendor suggestion from the same note never appears. The poll runs for
+  // twelve seconds from the moment the note is saved, a touchpoint takes
+  // longer than that to fill in, so all ten attempts ran behind the modal and
+  // it gave up before the extractor answered.
+  //
+  // Measured in Chromium with the extractor landing at +14s and the form
+  // closed at +32s: without the pause, 10 polls all issued behind the modal
+  // and the prompt is LOST; with it, 0 polls while the form is open, then 1 on
+  // close and the prompt appears.
+  const { readFileSync } = await import('node:fs');
+  const prompt = readFileSync('components/SuggestionPrompt.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  eq('the poll waits while the activity flow has the screen',
+    /while \(isActivityFlowOpen\(\) && Date\.now\(\) < pauseDeadline\) \{/.test(prompt), true);
+  eq('  reading the flag live, not a value captured when the poll started',
+    /isActivityFlowOpen\(\)/.test(prompt) && /import \{ useActivityFlowOpen, isActivityFlowOpen \}/.test(prompt), true);
+  // The pause must sit BEFORE the fetch, or an attempt is still spent.
+  const loop = prompt.slice(prompt.indexOf('for (let i = 0; i < POLL_ATTEMPTS'));
+  eq('  before the fetch, so no attempt is consumed behind the modal',
+    loop.indexOf('isActivityFlowOpen()') < loop.indexOf('await fetch('), true);
+  // And it must not run forever if a form is left open on a locked phone.
+  eq('the wait has a floor under it', /const pauseDeadline = Date\.now\(\) \+ MAX_PAUSE_MS;/.test(prompt), true);
+  eq('  which is minutes, not the twelve seconds it is protecting',
+    /const MAX_PAUSE_MS = 5 \* 60_000;/.test(prompt), true);
+
+  // The budget itself is unchanged — this changes WHEN it is spent, not how
+  // much of it there is.
+  eq('ten attempts, as before', /const POLL_ATTEMPTS = 10;/.test(prompt), true);
+  eq('  at the same interval', /const POLL_MS = 1200;/.test(prompt), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

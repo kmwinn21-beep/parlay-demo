@@ -7,7 +7,7 @@ import { SuggestionGroupCard } from '@/components/SuggestionGroupCard';
 import { groupSuggestions, payloadFor, type SuggestionGroup } from '@/lib/suggestions/group';
 import { useSuggestionCatalog } from '@/lib/suggestions/useSuggestionCatalog';
 import { NOTE_SAVED_EVENT, type NoteSavedDetail } from '@/lib/suggestions/announce';
-import { useActivityFlowOpen } from '@/lib/suggestions/activityFlow';
+import { useActivityFlowOpen, isActivityFlowOpen } from '@/lib/suggestions/activityFlow';
 import { getTarget } from '@/lib/suggestions/registry';
 
 interface Suggestion {
@@ -22,6 +22,13 @@ interface Suggestion {
 /** How long to wait for the extractor before giving up quietly. */
 const POLL_MS = 1200;
 const POLL_ATTEMPTS = 10;
+/** How often to look up while the activity flow has the screen. */
+const PAUSE_MS = 400;
+/**
+ * A wall-clock floor under the pause, so a form left open on a locked phone
+ * does not leave this looping for the rest of the session.
+ */
+const MAX_PAUSE_MS = 5 * 60_000;
 
 /**
  * The note these came from, collapsed until asked for.
@@ -104,8 +111,25 @@ export function SuggestionPrompt() {
       polling.current = true;
       loadCatalog();
       try {
+        // Twelve seconds of budget, spent when it can be used.
+        //
+        // These attempts used to start burning the moment the note was saved,
+        // which is also the moment the activity chooser appears. Choosing
+        // Touchpoint opens a form that takes far longer than twelve seconds to
+        // fill in, so all ten attempts ran behind that modal, the extractor
+        // answered afterwards, and nothing ever showed it — the suggestion was
+        // only findable by reloading the record. Measured in Chromium with the
+        // extractor landing at +14s and the form closed at +62s: ten polls
+        // issued, all before it landed, nothing shown.
+        //
+        // So the budget pauses while the flow has the screen. An answer is no
+        // use until there is somewhere to put it.
+        const pauseDeadline = Date.now() + MAX_PAUSE_MS;
         for (let i = 0; i < POLL_ATTEMPTS; i++) {
           await new Promise(r => setTimeout(r, POLL_MS));
+          while (isActivityFlowOpen() && Date.now() < pauseDeadline) {
+            await new Promise(r => setTimeout(r, PAUSE_MS));
+          }
           const res = await fetch(
             `/api/suggestions?entity_type=${detail.entityType}&entity_id=${detail.entityId}`,
             { cache: 'no-store' },
