@@ -1049,6 +1049,14 @@ export function TouchpointQuickModal({ onClose, ...defaults }: {
   defaultCompanyId?: number | null;
   defaultAttendeeId?: number | null;
   defaultTouchpointId?: number | null;
+  /**
+   * Fired after the touchpoints actually save, forwarded to the form.
+   *
+   * Distinct from onClose, which also fires on Cancel and on the X. A caller
+   * that needs to know the difference — a suggestion marking itself answered,
+   * say — cannot tell from a close alone.
+   */
+  onLogged?: () => void;
 }) {
   const [step, setStep] = useState<'form' | 'note'>('form');
   return (

@@ -6,6 +6,9 @@ import { SuggestionGroupCard } from '@/components/SuggestionGroupCard';
 import { groupSuggestions, payloadFor, type SuggestionGroup } from '@/lib/suggestions/group';
 import { useSuggestionCatalog } from '@/lib/suggestions/useSuggestionCatalog';
 import { useCollapsibleSection } from '@/lib/sectionExpansion';
+import { NewMeetingModal } from '@/components/NewMeetingModal';
+import { TouchpointQuickModal } from '@/components/DashboardActionCard';
+import { getTarget } from '@/lib/suggestions/registry';
 
 interface Suggestion {
   id: number;
@@ -85,6 +88,40 @@ export function SuggestedUpdatesSection({ entityType, entityId }: {
   const setField = (key: string, field: string, value: unknown) =>
     setEdits(prev => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
 
+  /**
+   * A deferred activity, and the form it is waiting on.
+   *
+   * Held while the modal is open so the suggestion can be marked accepted when
+   * — and only when — that form actually saves. Closing it without saving
+   * leaves the card exactly where it was, which is what makes Save for Later
+   * safe to press twice.
+   */
+  const [logging, setLogging] = useState<
+    { kind: 'meeting' | 'touchpoint'; group: SuggestionGroup; payload: Record<string, unknown> } | null
+  >(null);
+
+  /** The ids the chooser stored alongside the fields, for reopening in place. */
+  const openForm = (kind: 'meeting' | 'touchpoint', group: SuggestionGroup) =>
+    setLogging({ kind, group, payload: group.members[0]?.payload ?? {} });
+
+  /**
+   * The form saved, so the question it was asked about is answered.
+   *
+   * Deliberately does NOT close the modal. Both forms stay mounted after a
+   * successful save to offer a follow-on step — a calendar invite for a
+   * meeting, "Log w/ Note" for a touchpoint — so unmounting here would take
+   * that away. Closing is the modal's own business; this only records that
+   * the suggestion no longer needs asking.
+   */
+  const onLogged = async (group: SuggestionGroup) => {
+    await review(group, 'accept');
+  };
+
+  const num = (v: unknown) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  };
+
   if (!loaded || groups.length === 0) return null;
 
   return (
@@ -105,9 +142,13 @@ export function SuggestedUpdatesSection({ entityType, entityId }: {
 
       {expanded && (
         <div className="mt-3 space-y-3">
+          {/* True of both kinds. An activity card IS already saved — that is
+              what Save for Later did — and has nothing editable on it, so the
+              old wording was wrong on both counts for half of these. What is
+              true either way is that the RECORD is untouched until confirmed. */}
           <p className="text-xs text-gray-400">
-            Read from your notes. Nothing is saved until you accept it, and you can change
-            any value first.
+            Read from your notes. Nothing is added to the record until you confirm it,
+            and anything editable can be changed first.
           </p>
 
           {groups.map((group, i) => (
@@ -120,26 +161,90 @@ export function SuggestedUpdatesSection({ entityType, entityId }: {
               companies={companies}
               onChange={(field, value) => setField(group.key, field, value)}
             >
-              <button
-                type="button"
-                onClick={() => review(group, 'accept')}
-                disabled={busyKey === group.key}
-                className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
-              >
-                {busyKey === group.key ? 'Saving…' : 'Accept'}
-              </button>
-              <button
-                type="button"
-                onClick={() => review(group, 'dismiss')}
-                disabled={busyKey === group.key}
-                className="text-xs text-gray-500 hover:text-gray-700 px-2"
-              >
-                Dismiss
-              </button>
+              {/* A deferred activity asks the same question it asked when the
+                  note was saved — Meeting, Touchpoint or neither — because
+                  deferring a question should present that question later, not
+                  something the reader has to work back to. There is no fourth
+                  button: it is already saved. */}
+              {isActivity(group) ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => openForm('meeting', group)}
+                    disabled={busyKey === group.key}
+                    className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
+                  >
+                    Meeting
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openForm('touchpoint', group)}
+                    disabled={busyKey === group.key}
+                    className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
+                  >
+                    Touchpoint
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => review(group, 'dismiss')}
+                    disabled={busyKey === group.key}
+                    className="text-xs text-gray-500 hover:text-gray-700 px-2"
+                  >
+                    {busyKey === group.key ? 'Saving…' : 'Disregard'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => review(group, 'accept')}
+                    disabled={busyKey === group.key}
+                    className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
+                  >
+                    {busyKey === group.key ? 'Saving…' : 'Accept'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => review(group, 'dismiss')}
+                    disabled={busyKey === group.key}
+                    className="text-xs text-gray-500 hover:text-gray-700 px-2"
+                  >
+                    Dismiss
+                  </button>
+                </>
+              )}
             </SuggestionGroupCard>
           ))}
         </div>
       )}
+
+      {/* Opens on Log, as the chooser does: the note said it had happened. */}
+      {logging?.kind === 'meeting' && (
+        <NewMeetingModal
+          isOpen
+          onClose={() => setLogging(null)}
+          onSuccess={() => void onLogged(logging.group)}
+          defaultMode="log"
+          prefillCompanyId={num(logging.payload.company_id)}
+          prefillAttendeeId={num(logging.payload.attendee_id)}
+          defaultConferenceId={num(logging.payload.conference_id)}
+        />
+      )}
+      {logging?.kind === 'touchpoint' && (
+        <TouchpointQuickModal
+          onClose={() => setLogging(null)}
+          onLogged={() => void onLogged(logging.group)}
+          defaultCompanyId={num(logging.payload.company_id) ?? null}
+          defaultAttendeeId={num(logging.payload.attendee_id) ?? null}
+          defaultConferenceId={num(logging.payload.conference_id) ?? null}
+        />
+      )}
     </div>
   );
+}
+
+/** A group is an activity when every target in it opens a form. */
+function isActivity(group: SuggestionGroup): boolean {
+  return group.members.length > 0
+    && group.members.every(m => getTarget(m.target_key)?.write === 'open_form');
 }

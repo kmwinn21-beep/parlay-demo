@@ -2,11 +2,28 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import toast from 'react-hot-toast';
 import { NewMeetingModal } from '@/components/NewMeetingModal';
 import { TouchpointQuickModal } from '@/components/DashboardActionCard';
 import { scanForActivity, shouldScanNote, type ActivityHit } from '@/lib/suggestions/activityScan';
 import { setActivityFlowOpen } from '@/lib/suggestions/activityFlow';
 import { NOTE_SAVED_EVENT, type NoteSavedDetail } from '@/lib/suggestions/announce';
+
+/**
+ * The sentence a match sits in, for the card to show later.
+ *
+ * A deferred suggestion is read cold, days after the note was written, so the
+ * matched words alone are not enough to judge it — "came by" says nothing
+ * about who or why. The suggestions table has a `quote` column for exactly
+ * this, and the vendor extractor fills it the same way.
+ */
+function sentenceAround(text: string, index: number): string {
+  if (!text) return '';
+  const start = Math.max(0, ...['.', '!', '?', '\n'].map(c => text.lastIndexOf(c, Math.max(0, index - 1)) + 1));
+  const ends = ['.', '!', '?', '\n'].map(c => text.indexOf(c, index)).filter(i => i >= 0);
+  const end = ends.length > 0 ? Math.min(...ends) + 1 : text.length;
+  return text.slice(start, end).trim();
+}
 
 /**
  * "This sounds like something happened — was it a meeting or a touchpoint?"
@@ -97,6 +114,63 @@ export function ActivityDetectedPrompt() {
 
   const closeModal = useCallback(() => setOpened(null), []);
 
+  /**
+   * Put the question on the record and answer it another time.
+   *
+   * Named to match the vendor prompt's button, which does the same thing from
+   * the reader's side even though the work underneath is different.
+   *
+   * The vendor prompt's "Review later" only stops showing a row the extractor
+   * had already written. Nothing has been written here, so this is the button
+   * that writes it — same words, different work.
+   *
+   * Filed against the company, because that is where Suggested Updates reads
+   * from and the attendee lookup falls through to the employer anyway. One row
+   * means one decision: stored per record, the same coffee could be logged
+   * twice.
+   */
+  const [saving, setSaving] = useState(false);
+  const saveForLater = useCallback(async () => {
+    if (!pending || !companyId) return;
+    setSaving(true);
+    try {
+      const res = await fetch('/api/suggestions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          suggestions: [{
+            target_key: 'logged_activity',
+            entity_type: 'company',
+            entity_id: companyId,
+            source_note_id: note?.noteId ?? null,
+            quote: sentenceAround(String(note?.text ?? ''), pending.hit.index),
+            confidence: 'medium',
+            payload: {
+              // The registry's fields, which is what the card shows.
+              phrase: pending.hit.phrase,
+              attendee_name: note?.attendeeName ?? null,
+              company_name: note?.companyName ?? null,
+              conference_name: note?.conferenceName ?? null,
+              // Not fields: what the form needs to open where the note was.
+              // payloadFor strips these when the card is finally reviewed,
+              // which is after they have been used.
+              company_id: companyId,
+              attendee_id: attendeeId,
+              conference_id: conferenceId,
+            },
+          }],
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Saved to the record for later.');
+      setPending(null);
+    } catch {
+      toast.error('Could not save that. Nothing was logged.');
+    } finally {
+      setSaving(false);
+    }
+  }, [pending, note, companyId, attendeeId, conferenceId]);
+
   if (!mounted) return null;
 
   return (
@@ -142,10 +216,24 @@ export function ActivityDetectedPrompt() {
               >
                 Touchpoint
               </button>
+              {/* Only offered when there is a record to file it against. With
+                  no company there is nowhere for Suggested Updates to show it,
+                  and a button that silently does nothing is worse than none. */}
+              {companyId != null && (
+                <button
+                  type="button"
+                  onClick={saveForLater}
+                  disabled={saving}
+                  className="btn-secondary flex-1 whitespace-nowrap py-2 text-sm disabled:opacity-50"
+                >
+                  {saving ? 'Saving…' : 'Review later'}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setPending(null)}
-                className="btn-secondary flex-1 whitespace-nowrap py-2 text-sm"
+                disabled={saving}
+                className="btn-secondary flex-1 whitespace-nowrap py-2 text-sm disabled:opacity-50"
               >
                 Disregard
               </button>
