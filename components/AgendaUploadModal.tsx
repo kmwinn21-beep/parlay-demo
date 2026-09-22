@@ -22,17 +22,44 @@ async function fileToBase64(file: File): Promise<string> {
   });
 }
 
-export function AgendaUploadModal({ onClose }: { onClose: () => void }) {
+export function AgendaUploadModal({ onClose, conferenceId, onUploaded }: {
+  onClose: () => void;
+  /**
+   * Opened from inside a conference, so the picker has nothing to ask.
+   *
+   * Without this the modal opens on "choose a conference" when the reader is
+   * already looking at one, which is a question with one right answer and no
+   * reason to be asked.
+   */
+  conferenceId?: number;
+  /**
+   * The agenda changed. Given by a caller that is already showing it and wants
+   * to reload rather than be navigated somewhere it already is.
+   */
+  onUploaded?: () => void;
+}) {
   const router = useRouter();
   const [conferences, setConferences] = useState<Conference[]>([]);
   const [loadingConfs, setLoadingConfs] = useState(true);
-  const [selectedConfId, setSelectedConfId] = useState<number | null>(null);
+  const [selectedConfId, setSelectedConfId] = useState<number | null>(conferenceId ?? null);
   const [step, setStep] = useState<Step>('select');
   const [error, setError] = useState<string | null>(null);
   const [count, setCount] = useState(0);
   const [mode, setMode] = useState<'file' | 'url'>('file');
-  const [urlInput, setUrlInput] = useState('');
+  /**
+   * One row per page to read, because a schedule is not always one page.
+   *
+   * Sites that tab a conference by day often give each day its own URL, and
+   * some put each track on its own. Pasting them one at a time would not work:
+   * an upload without `append` deletes the agenda first, so the second URL
+   * would wipe the first. The rows are sent in order, the first replacing and
+   * the rest appending, which is the one arrangement that builds rather than
+   * overwrites.
+   */
+  const [urlInputs, setUrlInputs] = useState<string[]>(['']);
   const [urlError, setUrlError] = useState<string | null>(null);
+  /** Which day labels came back, so a page that imported half is visible. */
+  const [dayLabels, setDayLabels] = useState<string[]>([]);
   const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -77,14 +104,16 @@ export function AgendaUploadModal({ onClose }: { onClose: () => void }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image_base64, media_type }),
       });
-      const data = await res.json() as { count?: number; error?: string };
+      const data = await res.json() as { count?: number; days?: string[]; error?: string };
       if (!res.ok) {
         setError(data.error ?? 'Failed to scan agenda.');
         setStep('select');
         return;
       }
       setCount(data.count ?? 0);
+      setDayLabels(data.days ?? []);
       setStep('success');
+      onUploaded?.();
     } catch {
       setError('Failed to upload file. Please try again.');
       setStep('select');
@@ -95,35 +124,61 @@ export function AgendaUploadModal({ onClose }: { onClose: () => void }) {
     if (!selectedConfId) return;
     setUrlError(null);
     setError(null);
-    const trimmed = urlInput.trim();
-    if (!trimmed) { setUrlError('Please enter a URL.'); return; }
-    try {
-      const p = new URL(trimmed);
-      if (p.protocol !== 'http:' && p.protocol !== 'https:') throw new Error();
-    } catch {
-      setUrlError('Please enter a valid http or https URL.');
-      return;
-    }
-    setStep('scanning');
-    try {
-      const res = await fetch(`/api/conferences/${selectedConfId}/agenda`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: trimmed }),
-      });
-      const data = await res.json() as { count?: number; error?: string };
-      if (!res.ok) {
-        setError(data.error ?? 'Failed to import agenda from URL.');
-        setStep('select');
+
+    const urls = urlInputs.map(u => u.trim()).filter(Boolean);
+    if (urls.length === 0) { setUrlError('Please enter a URL.'); return; }
+    for (const u of urls) {
+      try {
+        const p = new URL(u);
+        if (p.protocol !== 'http:' && p.protocol !== 'https:') throw new Error();
+      } catch {
+        setUrlError(`Not a valid http or https URL: ${u}`);
         return;
       }
-      setCount(data.count ?? 0);
+    }
+
+    setStep('scanning');
+    let total = 0;
+    const labels: string[] = [];
+    try {
+      for (let i = 0; i < urls.length; i++) {
+        const res = await fetch(`/api/conferences/${selectedConfId}/agenda`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          // The first replaces what is there; the rest build on it. Without
+          // this every URL after the first would delete the ones before it.
+          body: JSON.stringify({ url: urls[i], append: i > 0 }),
+        });
+        const data = await res.json() as { count?: number; days?: string[]; error?: string };
+        if (!res.ok) {
+          // Partway through is worth saying so: some of it landed, and a bare
+          // failure would have the reader assume none of it did.
+          setError(i === 0
+            ? (data.error ?? 'Failed to import agenda from URL.')
+            : `${data.error ?? 'Failed to import'} — page ${i + 1} of ${urls.length}. The ${total} session${total !== 1 ? 's' : ''} before it were saved.`);
+          setStep('select');
+          return;
+        }
+        total += data.count ?? 0;
+        for (const d of data.days ?? []) if (!labels.includes(d)) labels.push(d);
+      }
+      setCount(total);
+      setDayLabels(labels);
       setStep('success');
+      onUploaded?.();
     } catch {
       setError('Failed to connect. Please try again.');
       setStep('select');
     }
   };
+
+  const setUrlAt = (i: number, value: string) => {
+    setUrlInputs(prev => prev.map((u, n) => (n === i ? value : u)));
+    setUrlError(null);
+  };
+  const addUrlRow = () => setUrlInputs(prev => [...prev, '']);
+  const removeUrlRow = (i: number) => setUrlInputs(prev => prev.filter((_, n) => n !== i));
+  const anyUrl = urlInputs.some(u => u.trim());
 
   const selectedConf = conferences.find(c => c.id === selectedConfId);
 
@@ -162,12 +217,22 @@ export function AgendaUploadModal({ onClose }: { onClose: () => void }) {
                   {count} session{count !== 1 ? 's' : ''} added
                   {selectedConf ? ` to ${selectedConf.name}` : ''}
                 </p>
+                {/* A schedule that imported Monday only returns a perfectly
+                    healthy count. Naming the days is what makes the gap
+                    visible now rather than at the conference. */}
+                {dayLabels.length > 0 && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    {dayLabels.length} day{dayLabels.length !== 1 ? 's' : ''}: {dayLabels.join(', ')}
+                  </p>
+                )}
               </div>
             </div>
           ) : (
             <>
-              {/* Conference selector */}
-              <div className="mb-5">
+              {/* Conference selector. Hidden when the caller already named
+                  one: asking which conference while somebody is looking at it
+                  is a question with a single right answer. */}
+              <div className={conferenceId ? 'hidden' : 'mb-5'}>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
                   Conference
                 </label>
@@ -276,23 +341,53 @@ export function AgendaUploadModal({ onClose }: { onClose: () => void }) {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-gray-700">Paste the URL of the conference agenda page</p>
-                      <p className="text-xs text-gray-400 mt-0.5">Works best when the full schedule is visible in the page HTML</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        If the schedule is split across day tabs, add each day&rsquo;s URL as its own page
+                      </p>
                     </div>
                     <div className="w-full flex flex-col gap-2">
-                      <input
-                        type="url"
-                        className="input-field w-full text-sm"
-                        placeholder="https://example.com/agenda"
-                        value={urlInput}
-                        onChange={e => { setUrlInput(e.target.value); setUrlError(null); }}
-                        onKeyDown={e => { if (e.key === 'Enter') void handleUrl(); }}
-                      />
+                      {urlInputs.map((value, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <input
+                            type="url"
+                            className="input-field w-full text-sm"
+                            placeholder={i === 0 ? 'https://example.com/agenda' : 'https://example.com/agenda?day=2'}
+                            value={value}
+                            onChange={e => setUrlAt(i, e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') void handleUrl(); }}
+                          />
+                          {urlInputs.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeUrlRow(i)}
+                              aria-label={`Remove page ${i + 1}`}
+                              className="flex-shrink-0 p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      {/* The one arrangement that builds rather than
+                          overwrites: the first page replaces, the rest add. */}
+                      <button
+                        type="button"
+                        onClick={addUrlRow}
+                        className="self-start flex items-center gap-1.5 text-xs font-medium text-brand-secondary hover:underline"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add another page
+                      </button>
                       {urlError && (
                         <p className="text-xs text-red-600 text-left">{urlError}</p>
                       )}
                       <button
                         type="button"
-                        disabled={!selectedConfId || loadingConfs || !urlInput.trim()}
+                        disabled={!selectedConfId || loadingConfs || !anyUrl}
                         onClick={() => void handleUrl()}
                         className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-primary text-white rounded-xl text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
                       >
