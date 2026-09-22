@@ -109,7 +109,10 @@ export interface SuggestionTarget {
 export const SUGGESTION_TARGETS: SuggestionTarget[] = [
   {
     key: 'vendor_relationship',
-    label: 'Vendor / Other Relationship',
+    // Short enough to fit a narrow queue column without truncating. The
+    // record's own section is still called Vendor / Other Relationships; this
+    // is the card header, which has far less room.
+    label: 'Relationship',
     entity: 'company',
     write: 'create_child',
     table: 'vendor_relationships',
@@ -164,7 +167,7 @@ export const SUGGESTION_TARGETS: SuggestionTarget[] = [
   },
   {
     key: 'logged_activity',
-    label: 'Log a Meeting or Touchpoint',
+    label: 'Meeting / Touchpoint',
     entity: 'company',
     // Nothing is written from here. The chooser's two forms do the writing.
     write: 'open_form',

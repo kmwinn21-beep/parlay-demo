@@ -1,14 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import toast from 'react-hot-toast';
 import { SuggestionGroupCard } from '@/components/SuggestionGroupCard';
-import { groupSuggestions, payloadFor, type SuggestionGroup } from '@/lib/suggestions/group';
+import { groupSuggestions } from '@/lib/suggestions/group';
 import { useSuggestionCatalog } from '@/lib/suggestions/useSuggestionCatalog';
 import { useCollapsibleSection } from '@/lib/sectionExpansion';
-import { NewMeetingModal } from '@/components/NewMeetingModal';
-import { TouchpointQuickModal } from '@/components/DashboardActionCard';
-import { getTarget } from '@/lib/suggestions/registry';
+import { useSuggestionReview, SuggestionActions } from '@/components/SuggestionReview';
 
 interface Suggestion {
   id: number;
@@ -40,7 +37,6 @@ export function SuggestedUpdatesSection({ entityType, entityId }: {
 }) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [edits, setEdits] = useState<Record<string, Record<string, unknown>>>({});
-  const [busyKey, setBusyKey] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   // Collapsed by default: these are optional, and the count pill says how many
   // are waiting without the block pushing the record's own fields down.
@@ -58,69 +54,17 @@ export function SuggestedUpdatesSection({ entityType, entityId }: {
 
   const groups = useMemo(() => groupSuggestions(suggestions), [suggestions]);
 
-  const review = async (group: SuggestionGroup, action: 'accept' | 'dismiss') => {
-    setBusyKey(group.key);
-    const draft = { ...group.draft, ...(edits[group.key] ?? {}) };
-    try {
-      // One company is one decision, so every member of the group is answered
-      // together — a half-applied group would leave the record inconsistent
-      // with what the reviewer saw.
-      for (const member of group.members) {
-        const res = await fetch('/api/suggestions', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: member.id, action, payload: payloadFor(member, draft) }),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({})) as { error?: string };
-          toast.error(err.error || 'Could not save that.');
-          return;
-        }
-      }
-      toast.success(action === 'accept' ? 'Added to the record.' : 'Dismissed.');
-      const done = new Set(group.members.map(m => m.id));
+  // The decisions themselves live in one place, so the queue on a record and
+  // the queue on the dashboard cannot answer the same card differently.
+  const { busyKey, review, openForm, modals } = useSuggestionReview(
+    useCallback((ids: number[]) => {
+      const done = new Set(ids);
       setSuggestions(prev => prev.filter(s => !done.has(s.id)));
-    } finally {
-      setBusyKey(null);
-    }
-  };
+    }, []),
+  );
 
   const setField = (key: string, field: string, value: unknown) =>
     setEdits(prev => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
-
-  /**
-   * A deferred activity, and the form it is waiting on.
-   *
-   * Held while the modal is open so the suggestion can be marked accepted when
-   * — and only when — that form actually saves. Closing it without saving
-   * leaves the card exactly where it was, which is what makes Save for Later
-   * safe to press twice.
-   */
-  const [logging, setLogging] = useState<
-    { kind: 'meeting' | 'touchpoint'; group: SuggestionGroup; payload: Record<string, unknown> } | null
-  >(null);
-
-  /** The ids the chooser stored alongside the fields, for reopening in place. */
-  const openForm = (kind: 'meeting' | 'touchpoint', group: SuggestionGroup) =>
-    setLogging({ kind, group, payload: group.members[0]?.payload ?? {} });
-
-  /**
-   * The form saved, so the question it was asked about is answered.
-   *
-   * Deliberately does NOT close the modal. Both forms stay mounted after a
-   * successful save to offer a follow-on step — a calendar invite for a
-   * meeting, "Log w/ Note" for a touchpoint — so unmounting here would take
-   * that away. Closing is the modal's own business; this only records that
-   * the suggestion no longer needs asking.
-   */
-  const onLogged = async (group: SuggestionGroup) => {
-    await review(group, 'accept');
-  };
-
-  const num = (v: unknown) => {
-    const n = Number(v);
-    return Number.isFinite(n) && n > 0 ? n : undefined;
-  };
 
   if (!loaded || groups.length === 0) return null;
 
@@ -131,7 +75,7 @@ export function SuggestedUpdatesSection({ entityType, entityId }: {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
         <h2 className="text-base font-semibold text-brand-primary font-serif truncate">
-          Suggested Updates
+          Pending Review
         </h2>
         {/* Amber, matching the cards inside, so the count reads as the same
             thing whether the section is open or shut. */}
@@ -161,90 +105,20 @@ export function SuggestedUpdatesSection({ entityType, entityId }: {
               companies={companies}
               onChange={(field, value) => setField(group.key, field, value)}
             >
-              {/* A deferred activity asks the same question it asked when the
-                  note was saved — Meeting, Touchpoint or neither — because
-                  deferring a question should present that question later, not
-                  something the reader has to work back to. There is no fourth
-                  button: it is already saved. */}
-              {isActivity(group) ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => openForm('meeting', group)}
-                    disabled={busyKey === group.key}
-                    className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
-                  >
-                    Meeting
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openForm('touchpoint', group)}
-                    disabled={busyKey === group.key}
-                    className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
-                  >
-                    Touchpoint
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => review(group, 'dismiss')}
-                    disabled={busyKey === group.key}
-                    className="text-xs text-gray-500 hover:text-gray-700 px-2"
-                  >
-                    {busyKey === group.key ? 'Saving…' : 'Disregard'}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => review(group, 'accept')}
-                    disabled={busyKey === group.key}
-                    className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
-                  >
-                    {busyKey === group.key ? 'Saving…' : 'Accept'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => review(group, 'dismiss')}
-                    disabled={busyKey === group.key}
-                    className="text-xs text-gray-500 hover:text-gray-700 px-2"
-                  >
-                    Dismiss
-                  </button>
-                </>
-              )}
+              <SuggestionActions
+                group={group}
+                review={review}
+                openForm={openForm}
+                busyKey={busyKey}
+                draft={{ ...group.draft, ...(edits[group.key] ?? {}) }}
+              />
             </SuggestionGroupCard>
           ))}
         </div>
       )}
 
-      {/* Opens on Log, as the chooser does: the note said it had happened. */}
-      {logging?.kind === 'meeting' && (
-        <NewMeetingModal
-          isOpen
-          onClose={() => setLogging(null)}
-          onSuccess={() => void onLogged(logging.group)}
-          defaultMode="log"
-          prefillCompanyId={num(logging.payload.company_id)}
-          prefillAttendeeId={num(logging.payload.attendee_id)}
-          defaultConferenceId={num(logging.payload.conference_id)}
-        />
-      )}
-      {logging?.kind === 'touchpoint' && (
-        <TouchpointQuickModal
-          onClose={() => setLogging(null)}
-          onLogged={() => void onLogged(logging.group)}
-          defaultCompanyId={num(logging.payload.company_id) ?? null}
-          defaultAttendeeId={num(logging.payload.attendee_id) ?? null}
-          defaultConferenceId={num(logging.payload.conference_id) ?? null}
-        />
-      )}
+      {modals}
     </div>
   );
 }
 
-/** A group is an activity when every target in it opens a form. */
-function isActivity(group: SuggestionGroup): boolean {
-  return group.members.length > 0
-    && group.members.every(m => getTarget(m.target_key)?.write === 'open_form');
-}

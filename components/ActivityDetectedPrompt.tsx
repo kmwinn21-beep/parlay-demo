@@ -177,7 +177,9 @@ export function ActivityDetectedPrompt() {
     <>
       {pending && createPortal(
         <div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/40 sm:items-center sm:p-4">
-          <div className="modal-sheet-mobile flex w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-md sm:rounded-xl">
+          {/* Wider than the other sheets: four answers in a row need the room,
+              and at max-w-md the last one ran past the card's edge. */}
+          <div className="modal-sheet-mobile flex w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-w-xl sm:rounded-xl">
             <div className="px-5 pt-5">
               {/* Amber, and saying what was read rather than what was decided.
                   A person can only judge whether this is right if they can see
@@ -201,7 +203,7 @@ export function ActivityDetectedPrompt() {
             {/* The inset is ADDED to the padding, not substituted for it:
                 .pb-safe would cut 20px down to 8px on a phone without a home
                 indicator, which is most of them. */}
-            <div className="flex flex-col gap-2 px-5 pt-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:flex-row">
+            <div className="flex flex-col gap-2 px-5 pt-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:flex-row sm:flex-wrap">
               <button
                 type="button"
                 onClick={() => choose('meeting')}

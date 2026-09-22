@@ -256,19 +256,28 @@ console.log('\n— the feed folds on a phone, like every other section —');
   // exactly the bug Floor Notes had.
   eq('the page gives the feed no mobile height', /lg:col-start-3 h-\[600px\]/.test(page), false);
   // The cap is on the CARD, because the stream is a flex child that needs a
-  // bounded parent to scroll against.
+  // bounded parent to scroll against. It lives in the right column now, which
+  // divides its height between the feed and the Pending Review queue — the
+  // cap and the mobile behaviour are unchanged, only their address is.
+  const column = readFileSync('components/DashboardRightColumn.tsx', 'utf8');
   eq('  and caps the card instead, so the stream still scrolls',
-    /max-h-\[70vh\] lg:max-h-none lg:h-full/.test(page), true);
+    /max-h-\[70vh\] lg:max-h-none/.test(column), true);
+  eq('  with the full column height still available to it',
+    /lg:h-full/.test(column), true);
 }
 
 console.log('\n— the dashboard grid —');
 {
   // A CSS row-span cannot cross two sibling grids. The two rows were merged
   // into one so the Feed could span them.
-  eq('one grid, with explicit rows', /lg:grid-cols-3 lg:grid-rows-\[auto_auto\]/.test(page), true);
-  eq('the feed spans both rows in the third column',
-    /lg:row-span-2 lg:row-start-1 lg:col-start-3/.test(page), true);
-  eq('floor notes keeps its span', /lg:col-span-2 lg:row-start-1/.test(page), true);
+  eq('one grid, with explicit rows', /lg:grid-cols-5 lg:grid-rows-\[auto_auto\]/.test(page), true);
+  // Five columns split 3/2. The right column is 446px against 368px before,
+  // about 21% wider; the left 682px against 760px, about 10% narrower.
+  eq('the right column spans both rows, in the last two columns',
+    /lg:row-span-2 lg:row-start-1 lg:col-start-4 lg:col-span-2/.test(page), true);
+  eq('floor notes keeps its span', /lg:col-span-3 lg:row-start-1/.test(page), true);
+  eq('  and the two sides add up to the whole grid',
+    /lg:col-span-3/.test(page) && /lg:col-start-4 lg:col-span-2/.test(page), true);
   // Desktop only. On a phone the card collapses to its header — the body
   // unmounts — and an unconditional height held the container open at 489px
   // around nothing, which read as a broken empty box.
@@ -278,7 +287,7 @@ console.log('\n— the dashboard grid —');
   eq('  where it is a cap, so an expanded card still scrolls inside it',
     /max-h-\[489px\] lg:max-h-none/.test(page), true);
   eq('targets keeps its own Suspense boundary as a grid child',
-    /<Suspense fallback=\{<div className="lg:col-span-2 lg:row-start-2">/.test(page), true);
+    /<Suspense fallback=\{<div className="lg:col-span-3 lg:row-start-2">/.test(page), true);
 
   // The feed is taken out of flow on desktop for the same reason Floor Notes
   // is: a card that sizes to its content drives the row height, and forty items
