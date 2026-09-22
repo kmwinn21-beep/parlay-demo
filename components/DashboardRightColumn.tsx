@@ -17,6 +17,12 @@ import { PendingReviewSection } from '@/components/PendingReviewSection';
  * also what keeps the column's total height fixed: it is still the height of
  * Floor Notes plus Targets, however it is divided.
  *
+ * The division is not a fraction, it is Floor Notes' own height. 489px is what
+ * that card is given in app/page.tsx, so the Feed ends on the same line it
+ * does and the queue starts level with Targets — the two columns read as rows
+ * rather than as two independent stacks. A percentage looked close and drifted
+ * the moment Targets changed height.
+ *
  * Below lg none of this applies. There is no column to divide, both cards
  * stack at their own heights, and the Feed's own mobile cap still governs it.
  */
@@ -36,7 +42,7 @@ export function DashboardRightColumn() {
     <div className="flex flex-col gap-6 lg:absolute lg:inset-0 lg:min-h-0">
       <DashboardFeed
         className={`max-h-[70vh] lg:max-h-none lg:min-h-0 lg:transition-[height] lg:duration-300 lg:ease-out ${
-          sharing ? 'lg:h-[58%]' : 'lg:h-full'
+          sharing ? 'lg:h-[489px]' : 'lg:h-full'
         }`}
         footer={pending !== null && pending > 0 ? (
           <button

@@ -138,7 +138,7 @@ export function PendingReviewSection({ className = '', onCount }: {
         </span>
       </div>
       <p className="mt-0.5 text-xs text-gray-400 flex-shrink-0">
-        Read from your notes, across your accounts. Nothing is added to a record until you confirm it.
+        Suggested updates based on your logged notes
       </p>
 
       <div className="mt-3 space-y-2 overflow-y-auto min-h-0 flex-1">
@@ -173,6 +173,7 @@ export function PendingReviewSection({ className = '', onCount }: {
                     <SuggestionGroupCard
                       key={group.key}
                       index={i + 1}
+                      collapsible
                       group={{ ...group, draft: { ...group.draft, ...(edits[group.key] ?? {}) } }}
                       options={options}
                       companies={companies}

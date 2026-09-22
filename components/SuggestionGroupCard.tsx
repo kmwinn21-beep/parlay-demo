@@ -12,6 +12,31 @@ import { NEW_COMPANY_TYPE_FIELD, type SuggestionGroup } from '@/lib/suggestions/
  * different questions: on the record it is accept or dismiss, straight after a
  * note it is confirm, defer, or ignore.
  */
+/**
+ * How much to trust the reading, at a glance.
+ *
+ * One word rather than "medium confidence", and always shown: hiding it for
+ * the high ones meant its absence had to be read as a fourth state, which
+ * nothing said. Colour carries the same fact so the pill can be skimmed —
+ * text and border in full strength, fill in a wash of it.
+ */
+const CONFIDENCE: Record<string, { label: string; cls: string }> = {
+  low: { label: 'Low', cls: 'bg-red-50 text-red-700 border-red-300' },
+  medium: { label: 'Med', cls: 'bg-amber-50 text-amber-700 border-amber-300' },
+  high: { label: 'High', cls: 'bg-emerald-50 text-emerald-700 border-emerald-300' },
+};
+
+function ConfidencePill({ confidence }: { confidence: string }) {
+  // An unrecognised value is treated as the middle rather than dropped: a
+  // suggestion with no pill would read as one nobody rated.
+  const { label, cls } = CONFIDENCE[String(confidence).toLowerCase()] ?? CONFIDENCE.medium;
+  return (
+    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${cls}`}>
+      {label}
+    </span>
+  );
+}
+
 export function SuggestionGroupCard({ group, index, options, companies, onChange, collapsible = false, children }: {
   group: SuggestionGroup;
   /** 1-based position, shown as a badge so one card is visibly one of several. */
@@ -56,11 +81,7 @@ export function SuggestionGroupCard({ group, index, options, companies, onChange
           </p>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          {group.confidence !== 'high' && (
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-white text-gray-500 border border-gray-200">
-              {group.confidence} confidence
-            </span>
-          )}
+          <ConfidencePill confidence={group.confidence} />
           <span className="w-5 h-5 flex items-center justify-center rounded-full bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-bold">
             {index}
           </span>

@@ -55,7 +55,36 @@ console.log('\n— the queue is the caller\'s own accounts —');
   eq('it narrows with the shared matcher rather than its own SQL',
     /companiesAssignedTo\(companies, \[\{ id: configId \?\? 0, value: repName \}\]\)/.test(route), true);
   eq('  and returns nothing at all for a caller it cannot identify',
-    /if \(configId == null && !repName\) return \[\];/.test(route), true);
+    /if \(configId == null && !repName && userId == null\) return \[\];/.test(route), true);
+
+  // The bug this closes: a suggestion read from a note YOU wrote, about a
+  // company nobody has been formally assigned to, showed on the record and not
+  // in the queue. Assignment alone was too narrow — authorship is the more
+  // obvious claim on it, and is what the section's own subtitle promises.
+  eq('a note you wrote puts its suggestion in your queue',
+    /userId != null && r\.note_author_id != null && Number\(r\.note_author_id\) === userId/.test(route), true);
+  eq('  alongside the ones on your accounts, not instead of them',
+    /\|\| mine\.has\(Number\(r\.entity_id\)\)\)/.test(route), true);
+  eq('  with the author carried out of the note',
+    /en\.author_user_id AS note_author_id/.test(route), true);
+  eq('  and the caller\'s id passed in to compare against',
+    /pendingForUser\(db, auth\.email, auth\.id \?\? null\)/.test(route), true);
+
+  // Reproduced: the two rules, and the row that only the new one catches.
+  const ME = 7;
+  const rows2 = [
+    { id: 1, entity_id: 12, note_author_id: ME, assigned: false },  // I wrote it
+    { id: 2, entity_id: 40, note_author_id: 99, assigned: true },   // my account
+    { id: 3, entity_id: 55, note_author_id: 99, assigned: false },  // neither
+    { id: 4, entity_id: 60, note_author_id: null, assigned: true }, // my account, no author
+  ];
+  const inQueue = rows2.filter(r =>
+    (r.note_author_id != null && r.note_author_id === ME) || r.assigned);
+  eq('mine by authorship or by assignment', inQueue.map(r => r.id), [1, 2, 4]);
+  eq('  and a colleague\'s note about a company that is not mine is not',
+    inQueue.some(r => r.id === 3), false);
+  eq('  where assignment alone would have lost the one I wrote',
+    rows2.filter(r => r.assigned).some(r => r.id === 1), false);
 
   // Reproduced against the real matcher: the rule being relied on.
   const rows = [
@@ -104,6 +133,10 @@ console.log('\n— one card per company, not per note —');
     /company\.groups\.reduce\(\(n, g\) => n \+ g\.members\.length, 0\)/.test(section), true);
   eq('one company is open at a time',
     /setOpenCompany\(prev => prev === company\.id \? null : company\.id\)/.test(section), true);
+  eq('the suggestion cards inside start collapsed, as on a record',
+    /<SuggestionGroupCard\s*\n\s*key=\{group\.key\}\s*\n\s*index=\{i \+ 1\}\s*\n\s*collapsible/.test(section), true);
+  eq('the subtitle says where these came from',
+    /Suggested updates based on your logged notes/.test(section), true);
   eq('the card carries an avatar, a name and a count',
     /<CompanyAvatar name=\{company\.name\} \/>/.test(section)
       && /\{company\.name\}/.test(section) && /\{count\}/.test(section), true);
@@ -148,8 +181,13 @@ console.log('\n— the column divides, and gives the space back —');
   // is 413px and the queue 275px — 413 + 24 gap + 275 = 712. Expanding takes
   // the feed to 712 through an intermediate 651, so it animates rather than
   // jumping, and the queue is not visible. Collapsing restores 413/275.
-  eq('the feed keeps most of the column and gives up the rest',
-    /sharing \? 'lg:h-\[58%\]' : 'lg:h-full'/.test(col), true);
+  // Not a fraction: Floor Notes' own height, so the two bottom edges land on
+  // one line and the queue starts level with Targets. Measured at 1400px with
+  // Floor Notes at 489px — both bottoms at 513, both tops at 537.
+  eq('the feed ends where Floor Notes ends',
+    /sharing \? 'lg:h-\[489px\]' : 'lg:h-full'/.test(col), true);
+  eq('  rather than a percentage that drifts when Targets changes height',
+    /lg:h-\[\d+%\]/.test(col), false);
   eq('  and the change is animated',
     /lg:transition-\[height\] lg:duration-300/.test(col), true);
   eq('expanding hides the queue rather than scrolling past it',
@@ -168,9 +206,15 @@ console.log('\n— the column divides, and gives the space back —');
   eq('  and the feed takes the whole column then',
     /const sharing = pending !== null && pending > 0 && !expanded;/.test(col), true);
 
-  // Below lg there is no column to divide.
-  eq('none of the dividing applies on a phone',
-    (col.match(/lg:h-\[58%\]|lg:h-full|lg:transition/g) ?? []).length >= 3, true);
+  // Below lg there is no column to divide, so every rule that divides it must
+  // be gated. Asserted as "none of them is ungated" rather than by counting
+  // the gated ones, which only held while the class names stayed the same.
+  // Height rules only. `duration-300` also appears ungated on the button's
+  // chevron, which SHOULD animate on a phone — it is not dividing anything.
+  const heightRules = col.match(/(?:lg:)?(?:h-\[489px\]|h-full|transition-\[height\]|max-h-none)/g) ?? [];
+  eq('there are height rules to check', heightRules.length >= 4, true);
+  eq('  and every one of them is gated to lg',
+    heightRules.filter(r => !r.startsWith('lg:')), []);
 
   const feed = strip('components/DashboardFeed.tsx');
   eq('the feed takes a footer without knowing what goes in it',
@@ -179,6 +223,47 @@ console.log('\n— the column divides, and gives the space back —');
     /\{footer && <div className="flex-shrink-0 pt-2">\{footer\}<\/div>\}/.test(feed), true);
   eq('  and the feed knows nothing about the queue',
     /PendingReview/.test(feed), false);
+}
+
+console.log('\n— one name for one thing —');
+{
+  const section = strip('components/SuggestedUpdatesSection.tsx');
+  eq('the record queue is called what the dashboard queue is called',
+    /Pending Review/.test(section), true);
+  eq('  and not two things', /Suggested Updates/.test(section), false);
+}
+
+console.log('\n— confidence reads at a glance —');
+{
+  const card = strip('components/SuggestionGroupCard.tsx');
+  // Measured in Chromium: Low rgb(185,28,28), Med rgb(180,83,9),
+  // High rgb(4,120,87) — red, amber, green.
+  eq('three words, not a sentence',
+    /low: \{ label: 'Low'/.test(card) && /medium: \{ label: 'Med'/.test(card)
+      && /high: \{ label: 'High'/.test(card), true);
+  eq('  coloured red, amber and green',
+    [/low:[^}]*text-red-700/.test(card), /medium:[^}]*text-amber-700/.test(card),
+     /high:[^}]*text-emerald-700/.test(card)], [true, true, true]);
+  eq('  with the fill a wash of the same colour',
+    [/low:[^}]*bg-red-50/.test(card), /medium:[^}]*bg-amber-50/.test(card),
+     /high:[^}]*bg-emerald-50/.test(card)], [true, true, true]);
+  eq('  and a full-strength border', /border-red-300/.test(card) && /border-emerald-300/.test(card), true);
+  // It used to hide itself on high, which made absence a fourth state nothing
+  // explained.
+  eq('the pill is always shown', /confidence !== 'high' &&/.test(card), false);
+  eq('  and an unrated one is not left blank',
+    /\?\? CONFIDENCE\.medium/.test(card), true);
+}
+
+console.log('\n— four answers fit inside the sheet —');
+{
+  const chooser = strip('components/ActivityDetectedPrompt.tsx');
+  // Measured in Chromium: at max-w-md the last button ran past the card's
+  // right edge. At max-w-xl the sheet is 576px and all four sit inside it,
+  // Disregard ending at 968 against an edge at 988.
+  eq('the sheet is wide enough for them', /sm:max-w-xl/.test(chooser), true);
+  eq('  and they wrap rather than overflow if it ever is not',
+    /sm:flex-row sm:flex-wrap/.test(chooser), true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

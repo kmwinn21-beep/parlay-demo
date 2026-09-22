@@ -75,7 +75,7 @@ export function SuggestedUpdatesSection({ entityType, entityId }: {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
         <h2 className="text-base font-semibold text-brand-primary font-serif truncate">
-          Suggested Updates
+          Pending Review
         </h2>
         {/* Amber, matching the cards inside, so the count reads as the same
             thing whether the section is open or shut. */}
