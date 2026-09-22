@@ -45,11 +45,14 @@ export function DashboardRightColumn() {
           sharing ? 'lg:h-[489px]' : 'lg:h-full'
         }`}
         footer={pending !== null && pending > 0 ? (
+          // lg:flex, not flex: below lg there is no column to divide, both
+          // cards fold to their headers, and a control offering to expand one
+          // into space that does not exist is noise.
           <button
             type="button"
             onClick={() => setExpanded(v => !v)}
             aria-expanded={expanded}
-            className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-1.5 text-xs font-medium text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-colors"
+            className="hidden w-full lg:flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-1.5 text-xs font-medium text-gray-600 hover:border-gray-300 hover:bg-gray-50 transition-colors"
           >
             {expanded ? 'Collapse Feed' : 'Expand Feed'}
             <svg

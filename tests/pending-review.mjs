@@ -303,5 +303,52 @@ console.log('\n— out of the queue, into the company —');
     section.indexOf('Quick View') > section.indexOf('{isOpen && ('), true);
 }
 
+console.log('\n— the queue is a section like the others —');
+{
+  const section = strip('components/PendingReviewSection.tsx');
+  const feed = strip('components/DashboardFeed.tsx');
+
+  // Measured in Chromium against both headers: 18px, weight 600, DM Serif
+  // Display, with a 20x20 icon — identical at 1280px and at 390px. It was
+  // text-base and unmarked, which read as a subsection of the Feed above it
+  // rather than a section of its own.
+  const titleClass = /className="text-lg font-semibold text-brand-primary font-serif group-hover:text-brand-secondary transition-colors"/;
+  eq('its title is the one the other sections use', titleClass.test(section), true);
+  eq('  the same one the feed has', titleClass.test(feed), true);
+  eq('  and is no longer the smaller text-base', /text-base font-semibold text-brand-primary/.test(section), false);
+
+  eq('it has an icon, at the size the others are',
+    /className="w-5 h-5 flex-shrink-0 text-brand-secondary"/.test(section), true);
+  eq('  a checklist, which is what a queue is',
+    (section.match(/<rect x="3"/g) ?? []).length, 3);
+  eq('  with its rows beside the boxes', /d="M11 6h10M11 13h10M11 19\.5h10"/.test(section), true);
+  eq('  and hidden from anything reading the header aloud', /viewBox="0 0 24 24" aria-hidden/.test(section), true);
+
+  // Folds away on a phone like the three cards above it.
+  eq('it folds on a phone', /const \{ isMobile, expanded, toggle, showBody \} = useMobileCollapse\(\)/.test(section), true);
+  eq('  using the shared hook rather than its own breakpoint',
+    /import \{ useMobileCollapse \}/.test(section) && /matchMedia/.test(section) === false, true);
+  eq('  with the body behind showBody', (section.match(/\{showBody && \(/g) ?? []).length >= 2, true);
+  eq('  and the subtitle folding with it',
+    /\{showBody && \(\s*<p className="mt-0\.5 text-xs text-gray-400/.test(section), true);
+  eq('  and a chevron that only appears on a phone',
+    /w-4 h-4 text-gray-400 transition-transform duration-200 lg:hidden/.test(section), true);
+  eq('  saying which way it is', /aria-expanded=\{!isMobile \|\| expanded\}/.test(section), true);
+
+  // Measured: at 390px the body is collapsed and tapping the header opens it;
+  // at 1280px the body is shown and the header does not toggle.
+  eq('desktop does not collapse', /cursor-default/.test(section), true);
+}
+
+console.log('\n— Expand Feed is a desktop control —');
+{
+  const col = strip('components/DashboardRightColumn.tsx');
+  // Below lg there is no column to divide: both cards fold to their headers,
+  // so a button offering to expand one into space that does not exist is
+  // noise. Measured: not rendered at 390px, rendered at 1280px.
+  eq('the button is hidden on a phone', /className="hidden w-full lg:flex/.test(col), true);
+  eq('  and shown from lg', /lg:flex items-center justify-center/.test(col), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

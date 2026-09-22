@@ -7,6 +7,7 @@ import { groupSuggestions, type SuggestionGroup } from '@/lib/suggestions/group'
 import { useSuggestionCatalog } from '@/lib/suggestions/useSuggestionCatalog';
 import { useSuggestionReview, SuggestionActions } from '@/components/SuggestionReview';
 import { QuickViewDrawer, type QuickViewTarget } from '@/components/QuickViewDrawer';
+import { useMobileCollapse } from '@/lib/useMobileCollapse';
 
 interface PendingSuggestion {
   id: number;
@@ -79,6 +80,9 @@ export function PendingReviewSection({ className = '', onCount }: {
   const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
   const [edits, setEdits] = useState<Record<string, Record<string, unknown>>>({});
   const { options, companies } = useSuggestionCatalog();
+  // Folds away on a phone like the three cards above it, and never folds on a
+  // desktop, where it is one half of a column rather than a card in a stack.
+  const { isMobile, expanded, toggle, showBody } = useMobileCollapse();
 
   const load = useCallback(async () => {
     try {
@@ -133,20 +137,52 @@ export function PendingReviewSection({ className = '', onCount }: {
 
   return (
     <div className={`card flex flex-col min-h-0 ${className}`}>
+      {/* The same header the three cards above it have: a w-5 icon, gap-2, and
+          the serif title at text-lg. It was smaller and unmarked, which made it
+          read as a subsection of the Feed rather than a section of its own. */}
       <div className="flex items-center gap-2 flex-shrink-0">
-        <h2 className="text-base font-semibold text-brand-primary font-serif truncate">
-          Pending Review
-        </h2>
-        <span className="flex-shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
-          {total}
-        </span>
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={!isMobile || expanded}
+          className={`flex items-center gap-2 text-left group min-w-0 ${isMobile ? '' : 'cursor-default'}`}
+        >
+          {/* A checklist: rows of things waiting to be ticked off, which is
+              what the queue is. */}
+          <svg
+            className="w-5 h-5 flex-shrink-0 text-brand-secondary"
+            fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden
+          >
+            <rect x="3" y="4" width="4" height="4" rx="1" strokeWidth={2} />
+            <rect x="3" y="11" width="4" height="4" rx="1" strokeWidth={2} />
+            <rect x="3" y="18" width="4" height="3" rx="1" strokeWidth={2} />
+            <path strokeLinecap="round" strokeWidth={2} d="M11 6h10M11 13h10M11 19.5h10" />
+          </svg>
+          <span className="text-lg font-semibold text-brand-primary font-serif group-hover:text-brand-secondary transition-colors">
+            Pending Review
+          </span>
+          <span className="flex-shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+            {total}
+          </span>
+          <svg
+            className={`w-4 h-4 text-gray-400 transition-transform duration-200 lg:hidden ${expanded ? 'rotate-180' : ''}`}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
       </div>
+
+      {/* The subtitle belongs to the body, so it folds away with it. */}
+      {showBody && (
       <p className="mt-0.5 text-xs text-gray-400 flex-shrink-0">
         Suggested updates based on your logged notes
       </p>
+      )}
 
       {/* Thin on a desktop, where the bar is the only sign there is more below
           in a short column; absent on a phone, where the page scrolls anyway. */}
+      {showBody && (
       <div className="mt-3 space-y-2 overflow-y-auto min-h-0 flex-1 scrollbar-desktop-thin">
         {byCompany.map(company => {
           const isOpen = openCompany === company.id;
@@ -225,6 +261,7 @@ export function PendingReviewSection({ className = '', onCount }: {
           );
         })}
       </div>
+      )}
 
       {modals}
       {quickView && (
