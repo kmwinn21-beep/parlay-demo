@@ -9,7 +9,7 @@ import { getBadgeClass, getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getRepInitials } from '@/lib/useUserOptions';
 import { ScrollRow } from '@/components/ScrollRow';
-import { VendorRelationshipCard } from '@/components/VendorRelationshipsSection';
+import { VendorRelationshipCard } from '@/components/VendorRelationshipCard';
 import { useUserOptions } from '@/lib/useUserOptions';
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import type { RelationshipRow, VendorRelationshipRow, TargetEntry } from '../PreConferenceReview';

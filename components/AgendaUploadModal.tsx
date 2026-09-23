@@ -77,6 +77,15 @@ export function AgendaUploadModal({ onClose, conferenceId, onUploaded }: {
             : 'past',
         }));
         setConferences(list);
+        // Only guess when nobody has said which conference this is.
+        //
+        // The caller's conferenceId seeds selectedConfId at mount, and this
+        // effect used to overwrite it when the list arrived — so an upload
+        // started from a conference's own agenda tab was parsed onto whichever
+        // conference happened to be running that week. The picker is hidden on
+        // that path, so there was nothing on screen to show the target being
+        // changed underneath.
+        if (conferenceId) return;
         const active = list.find(c => c.status === 'in_progress');
         const first = list[0];
         if (active) setSelectedConfId(active.id);
@@ -84,7 +93,10 @@ export function AgendaUploadModal({ onClose, conferenceId, onUploaded }: {
       })
       .catch(() => {})
       .finally(() => setLoadingConfs(false));
-  }, []);
+    // conferenceId is read above. It does not change for a given mount — the
+    // modal is created fresh each time it opens — but leaving it out of the
+    // deps is how the guard above would quietly stop working.
+  }, [conferenceId]);
 
   const handleFile = async (file: File) => {
     if (!selectedConfId) return;

@@ -2574,4 +2574,57 @@ export const migrations: string[] = [
       dismissed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_at TEXT DEFAULT (datetime('now'))
     )`,
+
+  // ── Staleness on a vendor / other relationship ────────────────────────────
+  //
+  // A relationship goes out of date quietly. Nobody deletes it, because the
+  // history is the point — knowing a company switched vendors is worth more
+  // than knowing who their vendor is today. But a record nobody has confirmed
+  // in eighteen months reads exactly like one confirmed last week.
+  //
+  // Two columns, because staleness and status are different questions:
+  //
+  //   relationship_status  what the relationship IS — Current Vendor,
+  //                        Evaluating, Former Vendor. Already a config list.
+  //   status_as_of         when a person last CONFIRMED that. Not updated_at,
+  //                        which moves when anyone fixes a typo in the notes.
+  //   stale                somebody said so outright, whatever the dates say.
+  //
+  // Folding these into one dropdown loses the state that matters most:
+  // "Current Vendor, and nobody has checked since last spring" is a real and
+  // common thing to be, and a `stale` status would erase the Current Vendor
+  // half of it — the half that was actually observed.
+  `ALTER TABLE vendor_relationships ADD COLUMN status_as_of TEXT`,
+  `ALTER TABLE vendor_relationships ADD COLUMN stale INTEGER DEFAULT 0`,
+
+  // Existing rows are confirmed as of whenever they were last touched. It is
+  // the only evidence there is, and it is roughly right: the alternative is
+  // NULL, which would render every relationship in the account as unconfirmed
+  // on the day this ships.
+  `UPDATE vendor_relationships SET status_as_of = COALESCE(updated_at, created_at) WHERE status_as_of IS NULL`,
+
+  // ── The thread on a relationship ──────────────────────────────────────────
+  //
+  // vendor_relationships.notes is one TEXT column, so "add more context" has
+  // meant overwriting whatever was there. The predecessor table kept a JSON
+  // thread in its notes column and the migration into this table flattened it
+  // to the newest entry — see the company_relationships backfill above. This
+  // is that thread given a table, which is what it wanted in the first place.
+  //
+  // Each entry carries the status at the time it was written, so the answer to
+  // "when did they switch vendors" is a row rather than a sentence somebody
+  // has to read. author_user_id is the session's user — never a name posted by
+  // the client.
+  `CREATE TABLE IF NOT EXISTS relationship_updates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      relationship_id INTEGER NOT NULL REFERENCES vendor_relationships(id) ON DELETE CASCADE,
+      body TEXT NOT NULL,
+      status_before TEXT,
+      status_after TEXT,
+      marked_stale INTEGER DEFAULT 0,
+      author_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+  `CREATE INDEX IF NOT EXISTS idx_relationship_updates_rel
+     ON relationship_updates(relationship_id, created_at)`,
 ];
