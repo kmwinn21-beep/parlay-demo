@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { vendorRelsQuery, loadRelationshipThreads } from '@/lib/relationshipThread';
 
 /** Multi-selects arrive as arrays and are stored comma-separated, like services. */
 function serializeList(value: unknown): string | null {
@@ -15,17 +16,6 @@ function serializeList(value: unknown): string | null {
 function parseList(value: unknown): string[] {
   if (!value) return [];
   return String(value).split(',').map(v => v.trim()).filter(Boolean);
-}
-
-/** One entry in a relationship's thread, as the card renders it. */
-export interface RelationshipUpdate {
-  id: number;
-  body: string;
-  status_before: string[];
-  status_after: string[];
-  marked_stale: boolean;
-  author_name: string;
-  created_at: string;
 }
 
 /**
@@ -58,104 +48,13 @@ export async function GET(request: NextRequest) {
   if (!companyId) return NextResponse.json({ error: 'company_id is required' }, { status: 400 });
 
   try {
-    // Timestamps aliased rather than left to vr.*: companies carries
-    // created_at and updated_at too, and which one a wildcard yields in a join
-    // is the driver's business, not something worth depending on.
-    //
-    // A company that is this one's parent or child is excluded: that link is
-    // what Related Entities is for, and listing it here too showed the same
-    // company twice on the page. Legacy company_relationships rows carried
-    // across into this table are the usual way a pair ends up in both.
-    //
-    // Filtered on read rather than deleted — the row may predate the
-    // parent/child link, and un-nesting the companies should bring it back.
-    const select = (stamps: string, staleness: string) => `
-      SELECT vr.id, vr.company_id, vr.related_company_id, vr.rep_id,
-             vr.relationship_status, vr.strength, vr.vendor_type, vr.notes,
-             ${stamps}, ${staleness},
-             c.name AS related_company_name, c.company_type AS related_company_type
-      FROM vendor_relationships vr
-      LEFT JOIN companies c ON c.id = vr.related_company_id
-      WHERE vr.company_id = ?
-        AND NOT EXISTS (
-          SELECT 1 FROM companies me
-          WHERE me.id = vr.company_id AND me.parent_company_id = vr.related_company_id
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM companies kid
-          WHERE kid.id = vr.related_company_id AND kid.parent_company_id = vr.company_id
-        )
-      ORDER BY c.name`;
+    // The same query the pre-conference views run, so a relationship reads the
+    // same on the company record as it does there. It was written out in both
+    // places, which is how the other copy came to be missing the staleness
+    // columns while its own comment claimed the two matched.
+    const res = await vendorRelsQuery(db, [Number(companyId)]);
 
-    // A tenant whose table predates one of these columns would otherwise fail
-    // the whole query and show no relationships at all — losing the stamp is
-    // the acceptable half of that trade.
-    //
-    // Richest first, each fallback giving up one more column. Listed as pairs
-    // rather than nested catches because staleness arrived after the stamps
-    // and every combination of the two is reachable: a tenant can have
-    // created_at without updated_at, or both without status_as_of.
-    const STAMPS = [
-      'vr.created_at AS vr_created_at, vr.updated_at AS vr_updated_at',
-      // Only updated_at is the newer of the two, so try created_at alone
-      // before giving up on a stamp entirely.
-      'vr.created_at AS vr_created_at, vr.created_at AS vr_updated_at',
-      `'' AS vr_created_at, '' AS vr_updated_at`,
-    ];
-    const STALENESS = [
-      'vr.status_as_of AS vr_status_as_of, vr.stale AS vr_stale',
-      // No staleness columns reads as never-confirmed and not stale, which is
-      // what an account that has not run the migration should see.
-      `NULL AS vr_status_as_of, 0 AS vr_stale`,
-    ];
-
-    let res: Awaited<ReturnType<typeof db.execute>> | null = null;
-    for (const staleness of STALENESS) {
-      for (const stamps of STAMPS) {
-        res = await db.execute({ sql: select(stamps, staleness), args: [companyId] }).catch(() => null);
-        if (res) break;
-      }
-      if (res) break;
-    }
-    if (!res) throw new Error('vendor_relationships select failed on every column combination');
-
-    // The thread for every relationship on this company in one query rather
-    // than one per card. A company with twenty vendors would otherwise be
-    // twenty round trips to render a section that is collapsed by default.
-    //
-    // Joined to users for the author's name: the card shows who wrote each
-    // entry, and the id alone would send the client looking it up.
-    const ids = res.rows.map(r => Number(r.id)).filter(Boolean);
-    const threads = new Map<number, RelationshipUpdate[]>();
-    if (ids.length > 0) {
-      const placeholders = ids.map(() => '?').join(',');
-      const upd = await db.execute({
-        sql: `SELECT ru.id, ru.relationship_id, ru.body, ru.status_before, ru.status_after,
-                     ru.marked_stale, ru.created_at,
-                     COALESCE(NULLIF(u.display_name, ''), u.email) AS author_name
-              FROM relationship_updates ru
-              LEFT JOIN users u ON u.id = ru.author_user_id
-              WHERE ru.relationship_id IN (${placeholders})
-              ORDER BY ru.created_at DESC, ru.id DESC`,
-        args: ids,
-        // A tenant that has not run the migration has no table yet. An empty
-        // thread is the right answer there, not a 500 that hides the cards.
-      }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
-      for (const u of upd.rows) {
-        const key = Number(u.relationship_id);
-        const list = threads.get(key) ?? [];
-        list.push({
-          id: Number(u.id),
-          body: String(u.body ?? ''),
-          status_before: parseList(u.status_before),
-          status_after: parseList(u.status_after),
-          marked_stale: Number(u.marked_stale ?? 0) === 1,
-          author_name: u.author_name ? String(u.author_name) : '',
-          created_at: String(u.created_at ?? ''),
-        });
-        threads.set(key, list);
-      }
-    }
+    const threads = await loadRelationshipThreads(db, res.rows.map(r => Number(r.id)));
 
     return NextResponse.json(res.rows.map(r => ({
       id: Number(r.id),

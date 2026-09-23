@@ -171,10 +171,10 @@ console.log('\n— stale is not a status —');
   // The status pills still render on a stale card: what the relationship was
   // is exactly the thing worth keeping.
   eq('the status is still shown on a stale card',
-    /\{isStale && <StalePill \/>\}\s*\n\s*\{rel\.relationship_status\.map/.test(card), true);
+    /\{isStale && <StalePill \/>\}\s*\n\s*\{shown\.relationship_status\.map/.test(card), true);
   // Freshness is derived, not read off a column, so a relationship nobody has
   // opened still ages.
-  eq('freshness is derived rather than stored', /const freshness = freshnessOf\(rel\);/.test(card), true);
+  eq('freshness is derived rather than stored', /const freshness = freshnessOf\(shown\);/.test(card), true);
 
   const reg = readFileSync('lib/db-migrations.ts', 'utf8');
   eq('no Stale option was added to the status list',
@@ -225,25 +225,25 @@ console.log('\n— what an update does to the row —');
 
 console.log('\n— the thread —');
 {
-  const api = strip('app/api/vendor-relationships/route.ts');
+  const shared = strip('lib/relationshipThread.ts');
   // One query for the whole section. A company with twenty vendors would
   // otherwise be twenty round trips to render a collapsed section.
   eq('the thread loads in one query, not one per card',
-    /WHERE ru\.relationship_id IN \(\$\{placeholders\}\)/.test(api), true);
-  eq('  newest first', /ORDER BY ru\.created_at DESC, ru\.id DESC/.test(api), true);
+    /WHERE ru\.relationship_id IN \(\$\{ids\.map\(\(\) => '\?'\)\.join\(','\)\}\)/.test(shared), true);
+  eq('  newest first', /ORDER BY ru\.created_at DESC, ru\.id DESC/.test(shared), true);
   // users has display_name and email. There is no name column, and the catch
   // around this query would have turned that into a silently empty thread.
   eq('the author name comes from a column that exists',
-    /COALESCE\(NULLIF\(u\.display_name, ''\), u\.email\) AS author_name/.test(api), true);
+    /COALESCE\(NULLIF\(u\.display_name, ''\), u\.email\) AS author_name/.test(shared), true);
   eq('  and a tenant without the table gets an empty thread, not a 500',
-    /catch\(\(\) => \(\{ rows: \[\] as Record<string, unknown>\[\] \}\)\)/.test(api), true);
+    /catch\(\(\) => \(\{ rows: \[\] as Record<string, unknown>\[\] \}\)\)/.test(shared), true);
 
   // Old tenants may lack any combination of the stamp and staleness columns,
   // and a failed select would show no relationships at all.
   eq('every column combination is tried before giving up',
-    /for \(const staleness of STALENESS\)/.test(api) && /for \(const stamps of STAMPS\)/.test(api), true);
+    /for \(const staleness of STALENESS_COLUMNS\)/.test(shared) && /for \(const stamps of STAMPS\)/.test(shared), true);
   eq('  with no staleness columns reading as never-confirmed and not stale',
-    /NULL AS vr_status_as_of, 0 AS vr_stale/.test(api), true);
+    /NULL AS vr_status_as_of, 0 AS vr_stale/.test(shared), true);
 
   const card = strip('components/VendorRelationshipCard.tsx');
   eq('the thread shows who wrote each entry', /\{u\.author_name \|\| 'Unknown'\}/.test(card), true);
@@ -270,10 +270,85 @@ console.log('\n— one card, not four —');
   eq('the section no longer declares a card',
     /function VendorRelationshipCard/.test(strip('components/VendorRelationshipsSection.tsx')), false);
 
-  // Read-only surfaces pass no onUpdate and so show no button, the same way
-  // they already drop the actions menu.
   const card = strip('components/VendorRelationshipCard.tsx');
-  eq('the Update button is opt-in per surface', /\{onUpdate && \(/.test(card), true);
+  // The button needs nothing from the caller, so it is not the caller's to
+  // wire. Asking four surfaces to pass an onUpdate is how it ends up on one.
+  eq('the Update button needs no wiring from the surface',
+    /\{!readOnly && \(/.test(card), true);
+  eq('  and the form state lives in the card', /const \[updating, setUpdating\] = useState\(false\);/.test(card), true);
+  eq('  so no surface passes an onUpdate handler',
+    /onUpdate=\{/.test(readFileSync('components/pre-conference/RelationshipsTab.tsx', 'utf8')
+      + readFileSync('components/VendorRelationshipsSection.tsx', 'utf8')), false);
+
+  // The form loads its own options for the same reason.
+  const form = strip('components/RelationshipUpdateForm.tsx');
+  eq('the form fetches its own status options',
+    /fetch\('\/api\/config\?category=other_relationship_status'\)/.test(form), true);
+
+  // Verified in Chromium at 1280 and 390 wide: the button renders on both, the
+  // stale card shows its pill, and a save appears in the thread with its
+  // author and its transition without any reload.
+  eq('the card applies what was saved without a reload',
+    /updates: \[saved\.update, \.\.\.\(rel\.updates \?\? \[\]\)\]/.test(card), true);
+  eq('  reading everything through that view',
+    /const shown: VendorRelationship = saved/.test(card), true);
+  // The write endpoint hands the entry back for exactly this reason.
+  eq('  and the endpoint returns what it wrote',
+    /RETURNING id, created_at/.test(strip('app/api/vendor-relationships/updates/route.ts')), true);
+  // Flagging did not move the confirmation date, so the card must not show
+  // today's for it.
+  eq('  with no confirmation date when it was flagged',
+    /status_as_of: stale \? '' :/.test(strip('app/api/vendor-relationships/updates/route.ts')), true);
+}
+
+console.log('\n— the keyboard stays down on a phone —');
+{
+  const form = strip('components/RelationshipUpdateForm.tsx');
+  // On a phone the form is a sheet sliding up from the bottom. Focusing the
+  // note throws the keyboard over it before the reader has seen what it is
+  // asking — including the stale toggle, which is the point of the form.
+  eq('focus is desktop-only', /if \(isDesktop === true\) bodyRef\.current\?\.focus\(\);/.test(form), true);
+  // React's autoFocus only applies on mount, and useIsDesktop returns null
+  // until its effect has measured — so autoFocus never fired at all. Confirmed
+  // in Chromium: with autoFocus the active element was the button on both
+  // sizes; with the effect it is the textarea at 1280 and the button at 390.
+  eq('  and not left to autoFocus, which never fires here',
+    /autoFocus/.test(form), false);
+  eq('  keyed to the measurement, so it runs once it lands',
+    /\}, \[isDesktop\]\);/.test(form), true);
+}
+
+console.log('\n— one query, not two —');
+{
+  const shared = strip('lib/relationshipThread.ts');
+  const main = strip('app/api/vendor-relationships/route.ts');
+  const pre = strip('app/api/conferences/[id]/pre-conference/route.ts');
+
+  // The pre-conference route had this query written out again, and its own
+  // comment claimed it matched the company record's. It did not: it was
+  // missing the staleness columns, so every relationship rendered there read
+  // as freshly confirmed with an empty history.
+  eq('the company record calls the shared query', /vendorRelsQuery\(db, \[Number\(companyId\)\]\)/.test(main), true);
+  eq('  the pre-conference route calls it too', /vendorRelsQuery\(db, companyIds\)/.test(pre), true);
+  // Neither should still be assembling the select. Both did, and they had
+  // already diverged.
+  eq('  and neither selects the columns itself',
+    /vr\.relationship_status, vr\.strength, vr\.vendor_type, vr\.notes,/.test(pre + main), false);
+  eq('  with the thread loaded the same way',
+    /loadRelationshipThreads\(db, /.test(pre) && /loadRelationshipThreads\(db, /.test(main), true);
+  eq('the shared query carries the staleness columns',
+    /vr\.status_as_of AS vr_status_as_of, vr\.stale AS vr_stale/.test(shared), true);
+  eq('  and the parent\/child exclusion that is part of the shape',
+    /me\.parent_company_id = vr\.related_company_id/.test(shared), true);
+  eq('  and the pre-conference response exposes them',
+    /stale: Number\(r\.vr_stale \?\? 0\) === 1,/.test(pre), true);
+
+  // The entry shape is declared once too. Two copies is how a card and a
+  // route drift apart a field at a time.
+  eq('the update shape is declared in one place',
+    /export interface RelationshipUpdate/.test(shared), true);
+  eq('  and the card imports rather than redeclares it',
+    /export interface RelationshipUpdate/.test(strip('components/VendorRelationshipCard.tsx')), false);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

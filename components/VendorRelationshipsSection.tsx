@@ -13,7 +13,6 @@ import {
   type CompanyOption, type ConfigOption,
 } from '@/components/VendorRelationshipFields';
 import { VendorRelationshipCard, type VendorRelationship } from '@/components/VendorRelationshipCard';
-import { RelationshipUpdateForm } from '@/components/RelationshipUpdateForm';
 
 /* ─── Section ─────────────────────────────────────────────────────────────── */
 
@@ -32,8 +31,6 @@ export function VendorRelationshipsSection({ companyId, userOptions, currentUser
   const [strengthOptions, setStrengthOptions] = useState<ConfigOption[]>([]);
 
   const [showForm, setShowForm] = useState(false);
-  // Which relationship's thread is being added to, if any.
-  const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -336,22 +333,6 @@ export function VendorRelationshipsSection({ companyId, userOptions, currentUser
             </MobileFormSheet>
           )}
 
-          {updatingId !== null && (
-            (() => {
-              const target = relationships.find(r => r.id === updatingId);
-              // The row can vanish under the form if it is deleted in another
-              // tab between opening and saving.
-              return target ? (
-                <RelationshipUpdateForm
-                  rel={target}
-                  statusOptions={statusOptions}
-                  onClose={() => setUpdatingId(null)}
-                  onSaved={load}
-                />
-              ) : null;
-            })()
-          )}
-
           {relationships.length === 0 && !showForm ? (
             <p className="text-sm text-gray-400 text-center py-3">No related companies yet.</p>
           ) : (
@@ -364,7 +345,7 @@ export function VendorRelationshipsSection({ companyId, userOptions, currentUser
                   colorMaps={colorMaps}
                   onEdit={() => openEdit(rel)}
                   onDelete={() => handleDelete(rel.id)}
-                  onUpdate={() => setUpdatingId(rel.id)}
+                  onUpdated={load}
                 />
               ))}
             </div>

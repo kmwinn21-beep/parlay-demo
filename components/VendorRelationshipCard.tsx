@@ -6,6 +6,11 @@ import { KebabMenu } from '@/components/KebabMenu';
 import { getBadgeClass, getPreset } from '@/lib/colors';
 import { getRepInitials, type UserOption } from '@/lib/useUserOptions';
 import { confirmationLabel, freshnessOf } from '@/lib/relationshipStaleness';
+// The shape the API returns, declared once. A second copy here is how the
+// card and the route drift apart a field at a time.
+import type { RelationshipUpdate } from '@/lib/relationshipThread';
+export type { RelationshipUpdate };
+import { RelationshipUpdateForm, type SavedUpdate } from '@/components/RelationshipUpdateForm';
 
 /**
  * One vendor / other relationship, as a card.
@@ -36,17 +41,6 @@ export interface VendorRelationship {
   stale?: boolean;
   /** Newest first. Absent on surfaces that load without the thread. */
   updates?: RelationshipUpdate[];
-}
-
-/** One entry in the thread, as the API returns it. */
-export interface RelationshipUpdate {
-  id: number;
-  body: string;
-  status_before: string[];
-  status_after: string[];
-  marked_stale: boolean;
-  author_name: string;
-  created_at: string;
 }
 
 /* ─── Card ────────────────────────────────────────────────────────────────── */
@@ -106,22 +100,56 @@ function StatusPill({ value, colorMaps }: { value: string; colorMaps: Record<str
  * building a second one that drifts. Omitting onEdit/onDelete drops the actions
  * menu, which is what a read-only surface wants.
  */
-export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete, onUpdate, defaultExpanded = false }: {
+export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete, onUpdated, readOnly = false, defaultExpanded = false }: {
   rel: VendorRelationship;
   userOptions: UserOption[];
   colorMaps: Record<string, Record<string, string | null>>;
   onEdit?: () => void;
   onDelete?: () => void;
-  /** Opens the update form. Omitted on read-only surfaces, like the actions. */
-  onUpdate?: () => void;
+  /**
+   * The thread changed — reload whatever is showing it.
+   *
+   * Optional, and the Update button shows without it. A surface that cannot
+   * reload should still be able to record what somebody just heard; it simply
+   * shows the new entry the next time it loads.
+   */
+  onUpdated?: () => void;
+  /** Suppresses the Update button. Nothing sets it today. */
+  readOnly?: boolean;
   defaultExpanded?: boolean;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const rep = userOptions.find(u => u.id === rel.rep_id);
+  // The form's open state lives here rather than in each surface. Unlike edit
+  // and delete, updating needs nothing from the caller — so asking every
+  // surface to wire it up is how it ends up wired on one of them.
+  const [updating, setUpdating] = useState(false);
+  /**
+   * What was saved from this card since it loaded.
+   *
+   * The pre-conference views and the relationship map load their data once at
+   * the top of the page and cannot refetch a single relationship, so without
+   * this an update on those surfaces would appear to do nothing at all. The
+   * server is still the source of truth on the next load; this only carries
+   * the card from the save to that point.
+   */
+  const [saved, setSaved] = useState<SavedUpdate | null>(null);
+
+  // Everything below reads through this rather than the prop, so the card is
+  // the same whether the surface reloaded or not.
+  const shown: VendorRelationship = saved
+    ? {
+        ...rel,
+        stale: saved.stale,
+        status_as_of: saved.status_as_of || rel.status_as_of,
+        relationship_status: saved.relationship_status ?? rel.relationship_status,
+        updates: [saved.update, ...(rel.updates ?? [])],
+      }
+    : rel;
+  const rep = userOptions.find(u => u.id === shown.rep_id);
   // Last edit rather than creation: the note is what the stamp is heading, and
   // the note can be rewritten.
-  const stamp = formatStamp(rel.updated_at || rel.created_at);
-  const freshness = freshnessOf(rel);
+  const stamp = formatStamp(shown.updated_at || shown.created_at);
+  const freshness = freshnessOf(shown);
   const isStale = freshness === 'stale';
 
   return (
@@ -136,14 +164,14 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
       <button type="button" onClick={() => setExpanded(v => !v)} className="w-full text-left px-3 py-2.5 hover:bg-gray-50 transition-colors">
         <div className="flex items-start gap-2">
           <div className={`min-w-0 flex-1 ${isStale ? 'opacity-60' : ''}`}>
-            <p className="text-sm font-semibold text-gray-800 truncate">{rel.related_company_name}</p>
+            <p className="text-sm font-semibold text-gray-800 truncate">{shown.related_company_name}</p>
             {/* Second row: what this relationship is, then what the company is. */}
             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
               {isStale && <StalePill />}
-              {rel.relationship_status.map(s => <StatusPill key={s} value={s} colorMaps={colorMaps} />)}
-              {rel.related_company_type && (
-                <span className={`${getBadgeClass(rel.related_company_type, colorMaps.company_type || {})} whitespace-nowrap`}>
-                  {rel.related_company_type}
+              {shown.relationship_status.map(s => <StatusPill key={s} value={s} colorMaps={colorMaps} />)}
+              {shown.related_company_type && (
+                <span className={`${getBadgeClass(shown.related_company_type, colorMaps.company_type || {})} whitespace-nowrap`}>
+                  {shown.related_company_type}
                 </span>
               )}
             </div>
@@ -160,15 +188,15 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
             {/* flex-1 min-w-0: ScrollRow's scroller is w-0 flex-1 inside, so
                 without a width to claim here it collapses to just a chevron. */}
             <ScrollRow className="flex-1 min-w-0" gapClass="gap-1.5">
-              {rel.strength && (
-                <span className={`${getBadgeClass(rel.strength, colorMaps.rep_relationship_type || {})} flex-shrink-0 whitespace-nowrap`}>
-                  {rel.strength}
+              {shown.strength && (
+                <span className={`${getBadgeClass(shown.strength, colorMaps.rep_relationship_type || {})} flex-shrink-0 whitespace-nowrap`}>
+                  {shown.strength}
                 </span>
               )}
-              {rel.vendor_type.map(v => (
+              {shown.vendor_type.map(v => (
                 <span key={v} className={`${getBadgeClass(v, colorMaps.vendor_type || {})} flex-shrink-0 whitespace-nowrap`}>{v}</span>
               ))}
-              {!rel.strength && rel.vendor_type.length === 0 && (
+              {!shown.strength && shown.vendor_type.length === 0 && (
                 <span className="text-xs text-gray-400 flex-shrink-0">No strength or vendor type set</span>
               )}
             </ScrollRow>
@@ -195,16 +223,24 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
             )}
           </div>
 
-          {rel.notes && (
+          {shown.notes && (
             <div>
               {stamp && (
                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">{stamp}</p>
               )}
-              <p className="text-xs text-gray-600 whitespace-pre-wrap">{rel.notes}</p>
+              <p className="text-xs text-gray-600 whitespace-pre-wrap">{shown.notes}</p>
             </div>
           )}
 
-          <RelationshipThread updates={rel.updates ?? []} />
+          {updating && (
+            <RelationshipUpdateForm
+              rel={shown}
+              onClose={() => setUpdating(false)}
+              onSaved={result => { setSaved(result); onUpdated?.(); }}
+            />
+          )}
+
+          <RelationshipThread updates={shown.updates ?? []} />
 
           {/* The confirmation line and the way to move it, on one row.
               Separated from the notes above by a rule because it is about the
@@ -213,12 +249,12 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
             <span className={`text-[11px] ${
               freshness === 'fresh' ? 'text-gray-400' : 'text-gray-500 font-medium'
             }`}>
-              {confirmationLabel(rel)}
+              {confirmationLabel(shown)}
             </span>
-            {onUpdate && (
+            {!readOnly && (
               <button
                 type="button"
-                onClick={onUpdate}
+                onClick={() => setUpdating(true)}
                 className="flex-shrink-0 inline-flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-[11px] font-semibold text-gray-600 hover:border-gray-400 hover:bg-gray-50 hover:text-gray-800 transition-colors"
               >
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">

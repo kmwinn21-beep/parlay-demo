@@ -52,10 +52,11 @@ export async function POST(request: NextRequest) {
     const changed = after !== null && after !== '' && after !== before;
     const stale = mark_stale === true;
 
-    await db.execute({
+    const inserted = await db.execute({
       sql: `INSERT INTO relationship_updates
               (relationship_id, body, status_before, status_after, marked_stale, author_user_id)
-            VALUES (?, ?, ?, ?, ?, ?)`,
+            VALUES (?, ?, ?, ?, ?, ?)
+            RETURNING id, created_at`,
       // authResult.id, not anything out of the body: the thread's value is
       // that each entry is attributable, and an author the client can name is
       // not attribution.
@@ -88,7 +89,35 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ success: true });
+    // The written entry goes back to the caller so the card can show it
+    // without reloading. Most surfaces that render the card — the
+    // pre-conference views, the relationship map — load their data once at the
+    // top of the page and have no way to refetch one relationship, and an
+    // update that appears to do nothing is worse than no button at all.
+    const me = await db.execute({
+      sql: `SELECT COALESCE(NULLIF(display_name, ''), email) AS author_name FROM users WHERE id = ?`,
+      args: [authResult.id],
+    }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
+
+    return NextResponse.json({
+      success: true,
+      update: {
+        id: Number(inserted.rows[0]?.id ?? 0),
+        body: comment,
+        status_before: before ? before.split(',').map(v => v.trim()).filter(Boolean) : [],
+        status_after: changed && after ? after.split(',').map(v => v.trim()).filter(Boolean) : [],
+        marked_stale: stale,
+        author_name: me.rows[0]?.author_name ? String(me.rows[0].author_name) : authResult.email,
+        created_at: String(inserted.rows[0]?.created_at ?? ''),
+      },
+      stale,
+      // Empty when flagged: the row's confirmation date deliberately did not
+      // move, and the card must not show today's date for it.
+      status_as_of: stale ? '' : new Date().toISOString().replace('T', ' ').slice(0, 19),
+      relationship_status: changed && after
+        ? after.split(',').map(v => v.trim()).filter(Boolean)
+        : null,
+    });
   } catch (error) {
     console.error('POST /api/vendor-relationships/updates error:', error);
     return NextResponse.json({ error: 'Failed to save update' }, { status: 500 });
