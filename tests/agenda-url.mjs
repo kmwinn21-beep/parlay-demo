@@ -297,5 +297,45 @@ console.log('\n— one door, three places —');
     /setAgendaLastUploadedAt\(new Date\(\)\.toISOString\(\)\)/.test(conf), true);
 }
 
+console.log('\n— the agenda lands on the conference you were looking at —');
+{
+  const modal = strip('components/AgendaUploadModal.tsx');
+
+  // The bug: conferenceId seeded selectedConfId at mount, and the effect that
+  // loads the conference list then overwrote it when the list arrived. An
+  // upload started from a conference's own agenda tab was parsed onto
+  // whichever conference happened to be running that week — and because the
+  // picker is hidden on that path, nothing on screen showed the target change.
+  //
+  // Verified in Chromium against the real component before this was written:
+  // with the guard removed and the list resolving 120ms after mount, a modal
+  // opened with conferenceId=18 ends up pointing at the in-progress
+  // conference. With it, it stays on 18 and the Add New path still defaults.
+  eq('a caller-supplied conference seeds the picker',
+    /useState<number \| null>\(conferenceId \?\? null\)/.test(modal), true);
+  eq('  and the auto-pick defers to it',
+    /if \(conferenceId\) return;\s*\n\s*const active = list\.find/.test(modal), true);
+  // The guard reads conferenceId, so it has to be in the deps or the closure
+  // goes stale and the guard quietly stops working.
+  eq('  with the guard\'s input in the effect deps', /\}, \[conferenceId\]\);/.test(modal), true);
+
+  // Without a conference named, guessing is still the right thing: the Add New
+  // menu opens the same modal with nothing selected.
+  eq('the Add New path still defaults to the running conference',
+    /const active = list\.find\(c => c\.status === 'in_progress'\);/.test(modal), true);
+  eq('  falling back to the first', /else if \(first\) setSelectedConfId\(first\.id\);/.test(modal), true);
+
+  // Both upload paths post to the selected conference, so the guard covers
+  // files and links alike rather than one of the two.
+  eq('files post to the selected conference',
+    (modal.match(/fetch\(`\/api\/conferences\/\$\{selectedConfId\}\/agenda`/g) ?? []).length, 2);
+
+  // The picker is hidden when the caller named a conference, which is what
+  // made the bug silent. Worth pinning: if it is ever shown again, it must be
+  // showing the right value.
+  eq('the picker is hidden when the conference is already known',
+    /className=\{conferenceId \? 'hidden' : 'mb-5'\}/.test(modal), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
