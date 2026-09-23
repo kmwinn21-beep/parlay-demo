@@ -17,6 +17,17 @@ function parseList(value: unknown): string[] {
   return String(value).split(',').map(v => v.trim()).filter(Boolean);
 }
 
+/** One entry in a relationship's thread, as the card renders it. */
+export interface RelationshipUpdate {
+  id: number;
+  body: string;
+  status_before: string[];
+  status_after: string[];
+  marked_stale: boolean;
+  author_name: string;
+  created_at: string;
+}
+
 /**
  * True when the two companies are already nested one inside the other.
  *
@@ -58,10 +69,10 @@ export async function GET(request: NextRequest) {
     //
     // Filtered on read rather than deleted — the row may predate the
     // parent/child link, and un-nesting the companies should bring it back.
-    const select = (stamps: string) => `
+    const select = (stamps: string, staleness: string) => `
       SELECT vr.id, vr.company_id, vr.related_company_id, vr.rep_id,
              vr.relationship_status, vr.strength, vr.vendor_type, vr.notes,
-             ${stamps},
+             ${stamps}, ${staleness},
              c.name AS related_company_name, c.company_type AS related_company_type
       FROM vendor_relationships vr
       LEFT JOIN companies c ON c.id = vr.related_company_id
@@ -79,18 +90,72 @@ export async function GET(request: NextRequest) {
     // A tenant whose table predates one of these columns would otherwise fail
     // the whole query and show no relationships at all — losing the stamp is
     // the acceptable half of that trade.
-    const res = await db.execute({
-      sql: select('vr.created_at AS vr_created_at, vr.updated_at AS vr_updated_at'),
-      args: [companyId],
-    }).catch(() => db.execute({
+    //
+    // Richest first, each fallback giving up one more column. Listed as pairs
+    // rather than nested catches because staleness arrived after the stamps
+    // and every combination of the two is reachable: a tenant can have
+    // created_at without updated_at, or both without status_as_of.
+    const STAMPS = [
+      'vr.created_at AS vr_created_at, vr.updated_at AS vr_updated_at',
       // Only updated_at is the newer of the two, so try created_at alone
       // before giving up on a stamp entirely.
-      sql: select('vr.created_at AS vr_created_at, vr.created_at AS vr_updated_at'),
-      args: [companyId],
-    })).catch(() => db.execute({
-      sql: select(`'' AS vr_created_at, '' AS vr_updated_at`),
-      args: [companyId],
-    }));
+      'vr.created_at AS vr_created_at, vr.created_at AS vr_updated_at',
+      `'' AS vr_created_at, '' AS vr_updated_at`,
+    ];
+    const STALENESS = [
+      'vr.status_as_of AS vr_status_as_of, vr.stale AS vr_stale',
+      // No staleness columns reads as never-confirmed and not stale, which is
+      // what an account that has not run the migration should see.
+      `NULL AS vr_status_as_of, 0 AS vr_stale`,
+    ];
+
+    let res: Awaited<ReturnType<typeof db.execute>> | null = null;
+    for (const staleness of STALENESS) {
+      for (const stamps of STAMPS) {
+        res = await db.execute({ sql: select(stamps, staleness), args: [companyId] }).catch(() => null);
+        if (res) break;
+      }
+      if (res) break;
+    }
+    if (!res) throw new Error('vendor_relationships select failed on every column combination');
+
+    // The thread for every relationship on this company in one query rather
+    // than one per card. A company with twenty vendors would otherwise be
+    // twenty round trips to render a section that is collapsed by default.
+    //
+    // Joined to users for the author's name: the card shows who wrote each
+    // entry, and the id alone would send the client looking it up.
+    const ids = res.rows.map(r => Number(r.id)).filter(Boolean);
+    const threads = new Map<number, RelationshipUpdate[]>();
+    if (ids.length > 0) {
+      const placeholders = ids.map(() => '?').join(',');
+      const upd = await db.execute({
+        sql: `SELECT ru.id, ru.relationship_id, ru.body, ru.status_before, ru.status_after,
+                     ru.marked_stale, ru.created_at,
+                     COALESCE(NULLIF(u.display_name, ''), u.email) AS author_name
+              FROM relationship_updates ru
+              LEFT JOIN users u ON u.id = ru.author_user_id
+              WHERE ru.relationship_id IN (${placeholders})
+              ORDER BY ru.created_at DESC, ru.id DESC`,
+        args: ids,
+        // A tenant that has not run the migration has no table yet. An empty
+        // thread is the right answer there, not a 500 that hides the cards.
+      }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
+      for (const u of upd.rows) {
+        const key = Number(u.relationship_id);
+        const list = threads.get(key) ?? [];
+        list.push({
+          id: Number(u.id),
+          body: String(u.body ?? ''),
+          status_before: parseList(u.status_before),
+          status_after: parseList(u.status_after),
+          marked_stale: Number(u.marked_stale ?? 0) === 1,
+          author_name: u.author_name ? String(u.author_name) : '',
+          created_at: String(u.created_at ?? ''),
+        });
+        threads.set(key, list);
+      }
+    }
 
     return NextResponse.json(res.rows.map(r => ({
       id: Number(r.id),
@@ -105,6 +170,11 @@ export async function GET(request: NextRequest) {
       notes: r.notes ? String(r.notes) : '',
       created_at: String(r.vr_created_at ?? ''),
       updated_at: String(r.vr_updated_at ?? r.vr_created_at ?? ''),
+      // When a person last said this was true, as opposed to when the row was
+      // last written. Empty means nobody ever has.
+      status_as_of: r.vr_status_as_of ? String(r.vr_status_as_of) : '',
+      stale: Number(r.vr_stale ?? 0) === 1,
+      updates: threads.get(Number(r.id)) ?? [],
     })), { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('GET /api/vendor-relationships error:', error);
