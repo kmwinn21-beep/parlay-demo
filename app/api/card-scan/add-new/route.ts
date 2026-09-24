@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { classifyCompanyType } from '@/lib/parsers';
+import { cleanScannedEmail, cleanScannedPhone } from '@/lib/scannedContact';
 
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -16,7 +17,7 @@ export async function POST(request: NextRequest) {
       company_name?: string; company_id?: number;
       conference_id: number;
     };
-    const { first_name, last_name, title, email, company_name, conference_id } = body;
+    const { first_name, last_name, title, email, phone, company_name, conference_id } = body;
     let { company_id } = body;
 
     if (!first_name || !last_name || !conference_id) {
@@ -41,16 +42,23 @@ export async function POST(request: NextRequest) {
       company_id = Number(compResult.rows[0].id);
     }
 
-    // Create attendee
+    // Create attendee.
+    //
+    // phone was accepted in the body type and then dropped on the floor — it
+    // was never destructured, so a scanned number reached this route and went
+    // no further. Both fields go through the same sanity check the match path
+    // uses, because OCR on a conference floor reads a website as an address
+    // and a booth number as a phone often enough to matter.
     const attResult = await db.execute({
-      sql: `INSERT INTO attendees (first_name, last_name, title, company_id, email)
-            VALUES (?, ?, ?, ?, ?) RETURNING id`,
+      sql: `INSERT INTO attendees (first_name, last_name, title, company_id, email, phone)
+            VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
       args: [
         first_name.trim(),
         last_name.trim(),
         title?.trim() ?? null,
         company_id ?? null,
-        email?.trim() ?? null,
+        cleanScannedEmail(email),
+        cleanScannedPhone(phone),
       ],
     });
     const attendee_id = Number(attResult.rows[0].id);
