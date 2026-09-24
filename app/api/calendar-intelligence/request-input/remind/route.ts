@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { requireCapability } from '@/lib/requireCapability';
 import { sendInputRequestEmail } from '@/lib/email';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +14,7 @@ type Row = Record<string, unknown>;
 // POST /api/calendar-intelligence/request-input/remind
 // Body: { conferenceId: number, recipientEmail: string }
 export async function POST(request: NextRequest) {
-  const authResult = await requireAuth(request);
+  const authResult = await requireCapability(request, 'view_calendar_intelligence');
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult.accountId);
 

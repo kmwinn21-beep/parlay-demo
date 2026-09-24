@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { requireCapability } from '@/lib/requireCapability';
 
 const FIELD_MAP: Record<string, { column: string; boolean?: boolean; number?: boolean }> = {
   eventType: { column: 'event_type' },
@@ -18,7 +18,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; eventId: string }> }
 ) {
-  const authResult = await requireAuth(request);
+  const authResult = await requireCapability(request, 'view_program_planner');
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
 
@@ -54,7 +54,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; eventId: string }> }
 ) {
-  const authResult = await requireAuth(request);
+  const authResult = await requireCapability(request, 'view_program_planner');
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
 

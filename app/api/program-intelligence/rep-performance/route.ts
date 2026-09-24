@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { requireCapability } from '@/lib/requireCapability';
 import { reweight, pct } from '@/lib/effectiveness/salesExecution';
 import type { InValue, Client } from '@libsql/client';
 
@@ -119,7 +119,7 @@ function computeSES(
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requireAuth(req);
+    const auth = await requireCapability(req, 'view_program_intelligence');
     if (auth instanceof NextResponse) return auth;
     const db = await getDb(auth?.accountId);
 

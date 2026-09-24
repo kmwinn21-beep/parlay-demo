@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { requireCapability } from '@/lib/requireCapability';
 import { getInitials, resolveUserDisplayName } from '@/lib/initials';
 import { getConfigIdByEmail, notifyMentionedUsers } from '@/lib/notifications';
 
@@ -15,7 +15,7 @@ const VALID_SECTIONS = new Set([
 // parent GET /logistics route's own `notes` array (one query covers every
 // section plus the new All Notes tab), so this route is POST-only.
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const authResult = await requireAuth(request);
+  const authResult = await requireCapability(request, 'view_program_planner');
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult.accountId);
 

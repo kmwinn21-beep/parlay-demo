@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { requireCapability } from '@/lib/requireCapability';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,7 +8,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ conferenceId: string }> },
 ) {
-  const authResult = await requireAuth(request);
+  const authResult = await requireCapability(request, 'view_program_intelligence');
   if (authResult instanceof NextResponse) return authResult;
   const accountId = authResult.accountId ?? '';
   const db = await getDb(accountId);

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { requireCapability } from '@/lib/requireCapability';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,7 +9,7 @@ type Row = Record<string, unknown>;
 // GET /api/calendar-intelligence/my-input-status
 // Returns the current user's input decisions + pending input requests across all conferences.
 export async function GET(request: NextRequest) {
-  const authResult = await requireAuth(request);
+  const authResult = await requireCapability(request, 'view_calendar_intelligence');
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult.accountId);
 

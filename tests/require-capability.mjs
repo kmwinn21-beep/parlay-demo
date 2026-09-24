@@ -27,7 +27,7 @@ const eq = (label, got, want) => {
   else { fail++; console.log(`  FAIL ${label}\n       got  ${g}\n       want ${w}`); }
 };
 
-const { resolveCapabilities, DEFAULT_ROLE_CAPABILITIES, LOCKED_ADMIN_CAPS, ALL_ROLES } =
+const { resolveCapabilities, DEFAULT_ROLE_CAPABILITIES, LOCKED_ADMIN_CAPS, ALL_ROLES, CAPABILITY_LABELS } =
   await import('@/lib/auth-shared');
 
 const strip = (f) => readFileSync(f, 'utf8')
@@ -142,6 +142,22 @@ console.log('\n— the guard actually refuses —');
   // another. The account asked for is the caller's own.
   eq('the overrides are read from the caller\'s account',
     run({ STUB_ROLE: 'sales_rep', STUB_CAP: 'delete_merge', STUB_ACCOUNT: 'acct_42' }).askedFor, 'acct_42');
+
+  // The three intelligence pages, refused for real rather than asserted.
+  eq('a sales rep is refused Program Intelligence',
+    run({ STUB_ROLE: 'sales_rep', STUB_CAP: 'view_program_intelligence' }).status, 403);
+  eq('  and a manager is not',
+    run({ STUB_ROLE: 'manager', STUB_CAP: 'view_program_intelligence' }).status, 'allowed');
+  eq('a stakeholder is refused Program Planner',
+    run({ STUB_ROLE: 'stakeholder', STUB_CAP: 'view_program_planner' }).status, 403);
+  eq('  and a coordinator is not',
+    run({ STUB_ROLE: 'conference_coordinator', STUB_CAP: 'view_program_planner' }).status, 'allowed');
+  eq('revoking Program Planner refuses the data too',
+    run({ STUB_ROLE: 'manager', STUB_CAP: 'view_program_planner',
+          STUB_STORED: JSON.stringify({ manager: { view_program_planner: false } }) }).status, 403);
+  eq('  and granting Program Intelligence opens it',
+    run({ STUB_ROLE: 'sales_rep', STUB_CAP: 'view_program_intelligence',
+          STUB_STORED: JSON.stringify({ sales_rep: { view_program_intelligence: true } }) }).status, 'allowed');
 
   // Demo mode matches requireAdmin, where every visitor is an administrator
   // and the middleware fakes the writes.
@@ -276,6 +292,114 @@ console.log('\n— system config and user management are guarded —');
   const config = strip('app/api/config/route.ts');
   eq('  and so is reading config options',
     /requireAuth\(request\)/.test(config.slice(config.indexOf('export async function GET('), config.indexOf('export async function GET(') + 300)), true);
+}
+
+console.log('\n— a capability per intelligence page —');
+{
+  // Program Intelligence was gated on view_pre_post_conference ||
+  // view_effectiveness, which is neither of those things. Program Planner had
+  // no gate anywhere — not the sidebar, not the page, not its twenty-one API
+  // routes. Calendar Intelligence already had its own key; it keeps it.
+  eq('both new capabilities are in the matrix',
+    ['view_program_intelligence', 'view_program_planner']
+      .every(k => k in DEFAULT_ROLE_CAPABILITIES.administrator), true);
+  eq('  and are labelled for the admin screen',
+    ['view_program_intelligence', 'view_program_planner']
+      .map(k => CAPABILITY_LABELS[k]),
+    ['View Program Intelligence', 'View Program Planner']);
+  eq('  neither is admin-locked, so both are configurable',
+    LOCKED_ADMIN_CAPS.some(k => k.startsWith('view_program')), false);
+
+  // The defaults reproduce exactly who reached each page before this, so
+  // nobody loses access on deploy. What changes is that it can now be said
+  // otherwise.
+  const pi = Object.fromEntries(ALL_ROLES.map(r => [r, resolveCapabilities(r, {}).view_program_intelligence]));
+  eq('Program Intelligence defaults match the old proxy', pi, {
+    sales_rep: false, manager: true, analyst: true, conference_coordinator: false,
+    user: true, administrator: true, stakeholder: false,
+  });
+  // The old expression, evaluated against the same defaults, for proof rather
+  // than assertion: the new key must agree with it role for role.
+  const oldProxy = Object.fromEntries(ALL_ROLES.map(r => {
+    const c = resolveCapabilities(r, {});
+    return [r, r !== 'stakeholder' && (c.view_pre_post_conference || c.view_effectiveness)];
+  }));
+  eq('  and agree with it role for role', pi, oldProxy);
+
+  const pp = Object.fromEntries(ALL_ROLES.map(r => [r, resolveCapabilities(r, {}).view_program_planner]));
+  eq('Program Planner defaults match who saw the link', pp, {
+    sales_rep: true, manager: true, analyst: true, conference_coordinator: true,
+    user: true, administrator: true, stakeholder: false,
+  });
+
+  // Turning one off must actually turn it off — that is the whole request.
+  eq('revoking Program Planner from a manager sticks',
+    resolveCapabilities('manager', { manager: { view_program_planner: false } }).view_program_planner, false);
+  eq('  and granting Program Intelligence to a sales rep sticks',
+    resolveCapabilities('sales_rep', { sales_rep: { view_program_intelligence: true } }).view_program_intelligence, true);
+}
+
+console.log('\n— the pages and their data both refuse —');
+{
+  const sidebar = strip('components/Sidebar.tsx');
+  eq('the sidebar gates each item on its own capability',
+    /view_program_intelligence/.test(sidebar) && /view_program_planner/.test(sidebar), true);
+  eq('  with the proxy gone',
+    /view_pre_post_conference \|\| user\?\.capabilities\?\.view_effectiveness/.test(sidebar), false);
+  eq('  and the planner no longer shown on role alone',
+    /\{!isStakeholder && \(\s*<Link href=\{programPlannerItem\.href\}/.test(sidebar), false);
+
+  // The variables existing is not the same as the links using them. Each nav
+  // link is sliced out and checked against the gate immediately above it,
+  // because `{hasProgramPlanner && (` becoming `{true && (` leaves every
+  // mention of the capability in the file untouched.
+  for (const [item, gate] of [['programIntelligenceItem', 'hasProgramIntelligence'],
+                              ['programPlannerItem', 'hasProgramPlanner'],
+                              ['calendarIntelligenceItem', 'hasCalendarIntelligence']]) {
+    const at = sidebar.indexOf(`<Link href={${item}.href}`);
+    const before = sidebar.slice(Math.max(0, at - 160), at);
+    eq(`the ${item} link is behind ${gate}`, new RegExp(`\\{${gate} && \\($`).test(before.trimEnd()), true);
+  }
+
+  // Hiding the link is not denying access, so each page checks too.
+  const pages = [
+    ['app/program-intelligence/page.tsx', 'view_program_intelligence', 'Program Intelligence'],
+    ['app/program-planner/page.tsx', 'view_program_planner', 'Program Planner'],
+    ['app/calendar-intelligence/page.tsx', 'view_calendar_intelligence', 'Calendar Intelligence'],
+  ];
+  for (const [file, cap, label] of pages) {
+    const src = strip(file);
+    eq(`${file} checks ${cap}`, new RegExp(`view_program|${cap}`).test(src) && src.includes(cap), true);
+    eq(`  and says so rather than bouncing`,
+      src.includes(`<NoAccessPanel feature="${label}" />`), true);
+  }
+  // The redirect is what made a refusal read as a broken link.
+  eq('calendar intelligence no longer redirects to the dashboard',
+    /router\.replace\('\/'\)/.test(strip('app/calendar-intelligence/page.tsx')), false);
+
+  // And hiding the page while still serving its data is not denying access
+  // either. Every route under each tree, so one added later without a guard
+  // fails here rather than shipping open.
+  const { execSync } = await import('node:child_process');
+  const groups = [
+    ['app/api/program-intelligence', 'view_program_intelligence'],
+    ['app/api/calendar-intelligence', 'view_calendar_intelligence'],
+    ['app/api/program-planner', 'view_program_planner'],
+  ];
+  for (const [dir, cap] of groups) {
+    const files = execSync(`find ${dir} -name route.ts`, { encoding: 'utf8' }).trim().split('\n');
+    const ungated = files.filter(f => !new RegExp(`requireCapability\\(\\w+, '${cap}'\\)`).test(strip(f)));
+    eq(`every route under ${dir} requires ${cap}`, ungated, []);
+    const stillOpen = files.filter(f => /await requireAuth\(/.test(strip(f)));
+    eq('  and none settles for any session', stillOpen, []);
+  }
+  eq('  the three trees together are 36 routes',
+    groups.reduce((n, [dir]) => n + execSync(`find ${dir} -name route.ts`, { encoding: 'utf8' }).trim().split('\n').length, 0), 36);
+
+  // The invited-responder flow is its own route and must stay reachable by
+  // somebody who has no calendar intelligence access at all.
+  eq('responding to an invitation is not gated on the page capability',
+    /view_calendar_intelligence/.test(strip('app/api/input/respond/route.ts')), false);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

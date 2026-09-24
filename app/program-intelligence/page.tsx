@@ -15,6 +15,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { useCapabilities } from '@/lib/useCapabilities';
+import { NoAccessPanel } from '@/components/NoAccessPanel';
 import { useOnboarding } from '@/lib/OnboardingContext';
 import { evaluateBudgetCompleteness } from '@/lib/budgetCompleteness';
 import type { BudgetCompletionStatus } from '@/lib/budgetCompleteness';
@@ -1374,15 +1375,8 @@ export default function ProgramIntelligencePage() {
     );
   }
 
-  if (!capabilities.capabilities.view_effectiveness) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 gap-3 text-center px-6">
-        <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-        </svg>
-        <p className="text-sm text-gray-500">You don&apos;t have access to Program Intelligence.</p>
-      </div>
-    );
+  if (!capabilities.capabilities.view_program_intelligence) {
+    return <NoAccessPanel feature="Program Intelligence" />;
   }
 
   const manyConferences = sortedConferences.length > 6;
