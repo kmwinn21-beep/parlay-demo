@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo, useRef, useEffect, type CSSProperties } from 'react';
+import type { RelationshipUpdate } from '@/lib/relationshipThread';
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { useConferenceReviewModals } from '@/lib/ConferenceReviewModalsContext';
 import { useSidebarCollapse, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_EXPANDED_WIDTH } from './SidebarCollapseContext';
@@ -192,6 +193,10 @@ export interface VendorRelationshipRow {
   notes: string;
   created_at?: string | null;
   updated_at?: string | null;
+  /** When a person last confirmed the status — not when the row was written. */
+  status_as_of?: string | null;
+  stale?: boolean;
+  updates?: RelationshipUpdate[];
 }
 
 export interface TargetEntry {

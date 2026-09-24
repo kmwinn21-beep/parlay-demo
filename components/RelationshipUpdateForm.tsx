@@ -1,10 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { MobileFormSheet } from '@/components/MobileFormSheet';
 import { MultiSelect, type ConfigOption } from '@/components/VendorRelationshipFields';
-import type { VendorRelationship } from '@/components/VendorRelationshipCard';
+import { useIsDesktop } from '@/lib/useIsDesktop';
+import type { VendorRelationship, RelationshipUpdate } from '@/components/VendorRelationshipCard';
+
+/** What the write endpoint hands back, so the card can show it immediately. */
+export interface SavedUpdate {
+  update: RelationshipUpdate;
+  stale: boolean;
+  status_as_of: string;
+  /** The new status, or null when it did not change. */
+  relationship_status: string[] | null;
+}
 
 /**
  * Saying something new about a relationship that already exists.
@@ -26,16 +36,52 @@ import type { VendorRelationship } from '@/components/VendorRelationshipCard';
  * status change (to Former Vendor) and is not stale at all — it is the
  * freshest the record has ever been.
  */
-export function RelationshipUpdateForm({ rel, statusOptions, onClose, onSaved }: {
+export function RelationshipUpdateForm({ rel, onClose, onSaved }: {
   rel: VendorRelationship;
-  statusOptions: ConfigOption[];
   onClose: () => void;
-  onSaved: () => void;
+  /**
+   * The saved entry, as the server wrote it.
+   *
+   * Handed back rather than signalled, because most surfaces that render the
+   * card load their data once at the top of the page and cannot refetch one
+   * relationship. The card applies this itself.
+   */
+  onSaved?: (result: SavedUpdate) => void;
 }) {
+  const isDesktop = useIsDesktop();
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
   const [body, setBody] = useState('');
   const [status, setStatus] = useState<string[]>(rel.relationship_status);
   const [markStale, setMarkStale] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Fetched here rather than passed in. The card renders on four surfaces and
+  // only one of them was already loading these; threading them through the
+  // other three is how the button ends up missing from two of them.
+  const [statusOptions, setStatusOptions] = useState<ConfigOption[]>([]);
+
+  /**
+   * Focus the note, but only on a desktop.
+   *
+   * On a phone this is a sheet sliding up from the bottom, and focusing it
+   * throws the keyboard over the form before the reader has seen what it is
+   * asking — including the stale toggle, which is the point of the thing.
+   *
+   * Done here rather than with React's autoFocus because useIsDesktop measures
+   * in an effect and returns null until it has: autoFocus only applies on
+   * mount, by which time the answer is still null, so it never fired at all.
+   */
+  useEffect(() => {
+    if (isDesktop === true) bodyRef.current?.focus();
+  }, [isDesktop]);
+
+  useEffect(() => {
+    fetch('/api/config?category=other_relationship_status')
+      .then(r => (r.ok ? r.json() : []))
+      .then((d: ConfigOption[]) => setStatusOptions(
+        Array.isArray(d) ? d.map(o => ({ id: o.id, value: o.value })) : [],
+      ))
+      .catch(() => {});
+  }, []);
 
   const save = async () => {
     if (!body.trim()) {
@@ -54,13 +100,13 @@ export function RelationshipUpdateForm({ rel, statusOptions, onClose, onSaved }:
           mark_stale: markStale,
         }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         toast.error(data.error || 'Failed to save update');
         return;
       }
       toast.success(markStale ? 'Flagged as possibly out of date' : 'Relationship confirmed');
-      onSaved();
+      onSaved?.(data as SavedUpdate);
       onClose();
     } finally {
       setSaving(false);
@@ -78,7 +124,7 @@ export function RelationshipUpdateForm({ rel, statusOptions, onClose, onSaved }:
             value={body}
             onChange={e => setBody(e.target.value)}
             rows={4}
-            autoFocus
+            ref={bodyRef}
             placeholder="Heard at the conference that they're evaluating alternatives…"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary/40"
           />

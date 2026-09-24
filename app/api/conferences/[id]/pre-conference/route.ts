@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { vendorRelsQuery, loadRelationshipThreads } from '@/lib/relationshipThread';
 import { getMeetingHeld, isMeetingHeld } from '@/lib/meetingHeld';
 import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
 import { classifySeniority } from '@/lib/parsers';
@@ -175,28 +176,10 @@ export async function GET(
       : Promise.resolve({ rows: [] }),
     // Vendor / other relationships for the same companies. Same shape and the
     // same parent/child exclusion as /api/vendor-relationships, so the cards
-    // read identically here and on the company record.
-    companyIds.length > 0
-      ? db.execute({
-          sql: `SELECT vr.id, vr.company_id, vr.related_company_id, vr.rep_id,
-                       vr.relationship_status, vr.strength, vr.vendor_type, vr.notes,
-                       vr.created_at AS vr_created_at, vr.updated_at AS vr_updated_at,
-                       c.name AS related_company_name, c.company_type AS related_company_type
-                FROM vendor_relationships vr
-                LEFT JOIN companies c ON c.id = vr.related_company_id
-                WHERE vr.company_id IN (${companyIds.map(() => '?').join(',')})
-                  AND NOT EXISTS (
-                    SELECT 1 FROM companies me
-                    WHERE me.id = vr.company_id AND me.parent_company_id = vr.related_company_id
-                  )
-                  AND NOT EXISTS (
-                    SELECT 1 FROM companies kid
-                    WHERE kid.id = vr.related_company_id AND kid.parent_company_id = vr.company_id
-                  )
-                ORDER BY c.name`,
-          args: companyIds,
-        }).catch(() => ({ rows: [] }))
-      : Promise.resolve({ rows: [] }),
+    // read identically here and on the company record — staleness columns
+    // included, without which the shared card shows every relationship here as
+    // freshly confirmed and with an empty history.
+    vendorRelsQuery(db, companyIds),
     companyIds.length > 0
       ? db.execute({
           sql: `SELECT id, entity_id as company_id, content, created_at, rep, attendee_name, conference_name
@@ -842,6 +825,10 @@ export async function GET(
     if (!companyNameById.has(cid) && a.company_name) companyNameById.set(cid, String(a.company_name));
     if (!companyAssignedById.has(cid)) companyAssignedById.set(cid, resolveUserIds(a.company_assigned_user));
   }
+  // Same loader as the company record, so a relationship's history reads the
+  // same wherever the card is rendered.
+  const vendorThreads = await loadRelationshipThreads(db, vendorRelsRes.rows.map(r => Number(r.id)));
+
   const vendorRelationshipsData = vendorRelsRes.rows.map((r) => ({
     id: Number(r.id),
     company_id: Number(r.company_id),
@@ -857,6 +844,9 @@ export async function GET(
     notes: r.notes ? String(r.notes) : '',
     created_at: r.vr_created_at != null ? String(r.vr_created_at) : null,
     updated_at: r.vr_updated_at != null ? String(r.vr_updated_at) : (r.vr_created_at != null ? String(r.vr_created_at) : null),
+    status_as_of: r.vr_status_as_of ? String(r.vr_status_as_of) : '',
+    stale: Number(r.vr_stale ?? 0) === 1,
+    updates: vendorThreads.get(Number(r.id)) ?? [],
   }));
 
   // --- Product ICP: group attendees by product, then by company ---
