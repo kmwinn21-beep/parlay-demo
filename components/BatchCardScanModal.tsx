@@ -332,6 +332,16 @@ function RightCard({ card, onConfirm, onDismissMatch, onShowAddForm, onAddFormCh
             className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-secondary"
           />
         </div>
+        {/* The scanner reads a phone off the card and it is saved now, so it
+            has to be visible and correctable before it is — OCR on a photo
+            taken across a booth gets digits wrong. */}
+        <div>
+          <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Phone</label>
+          <input type="tel" value={card.addDraft.phone}
+            onChange={e => onAddFormChange('phone', e.target.value)}
+            className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-secondary"
+          />
+        </div>
         <div className="flex gap-2 pt-1">
           <button onClick={onInitiateAdd} disabled={saving || !card.addDraft.first_name || !card.addDraft.last_name}
             className="btn-primary text-xs flex-1">
@@ -534,9 +544,20 @@ export function BatchCardScanModal({ conferenceId, initialConferenceId, initialC
       if (type === 'confirm' && matchAttendeeId) {
         const res = await fetch('/api/card-scan/confirm', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ attendee_id: matchAttendeeId, conference_id: activeConfId }),
+          // The card's contact details travel with the match. They fill
+          // whatever the attendee is missing and never replace what is there;
+          // before this they were simply discarded once a match was picked.
+          body: JSON.stringify({
+            attendee_id: matchAttendeeId, conference_id: activeConfId,
+            email: card.draft.email || undefined,
+            phone: card.draft.phone || undefined,
+          }),
         });
         if (!res.ok) { toast.error('Failed to confirm attendee. Please try again.'); return; }
+        // Say what the scan contributed. Silence here reads as the details
+        // having been dropped, which is exactly what used to happen.
+        const { filled = [] } = await res.json().catch(() => ({ filled: [] })) as { filled?: string[] };
+        if (filled.length > 0) toast.success(`Added ${filled.join(' and ')} to their record`);
         attendeeId = matchAttendeeId;
         companyId = matchCompanyId ?? null;
       } else if (type === 'add') {
@@ -545,6 +566,7 @@ export function BatchCardScanModal({ conferenceId, initialConferenceId, initialC
           body: JSON.stringify({
             first_name: card.addDraft.first_name, last_name: card.addDraft.last_name,
             title: card.addDraft.title || undefined, email: card.addDraft.email || undefined,
+            phone: card.addDraft.phone || undefined,
             company_id: card.addDraft.company_id || undefined,
             company_name: !card.addDraft.company_id && card.addDraft.company ? card.addDraft.company : undefined,
             conference_id: activeConfId,
