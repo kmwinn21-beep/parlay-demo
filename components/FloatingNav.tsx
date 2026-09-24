@@ -157,7 +157,7 @@ export function FloatingNav() {
     setShowBatchModal(true);
   }, []);
 
-  const handleFloatingScanAssignLater = useCallback(async (card: BadgeScanCard, secondaryTag?: string) => {
+  const handleFloatingScanAssignLater = useCallback(async (card: BadgeScanCard, secondaryTag?: string, tagLabel?: string) => {
     setScanSavingId(card.localId);
     const relevance = badgeScanRelevance[card.localId] ?? [];
     const productSuggestions = JSON.stringify(
@@ -175,11 +175,9 @@ export function FloatingNav() {
     if (res.ok) {
       const note = await res.json();
       window.dispatchEvent(new CustomEvent('quicknote:saved', { detail: note }));
-      const label = secondaryTag === 'booth-demo' ? 'Demo logged'
-        : secondaryTag === 'booth-meeting' ? 'Meeting logged'
-        : secondaryTag === 'booth-followup' ? 'Follow-up logged'
-        : secondaryTag === 'booth-stop' ? 'Booth stop logged'
-        : 'Saved to Floor Notes';
+      // Named after the touchpoint the rep picked, which is the point of
+      // asking with the account's own list rather than four fixed buttons.
+      const label = tagLabel ? `${tagLabel} logged` : 'Saved to Floor Notes';
       toast.success(`${label} — assign details anytime`);
     } else { toast.error('Failed to save note.'); }
     setScanSavingId(null);

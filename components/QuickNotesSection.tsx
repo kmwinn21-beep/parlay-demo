@@ -5,6 +5,9 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { BatchCardScanModal, makeCard, type ScannedCard, type CardDraft } from './BatchCardScanModal';
+import { BoothInteractionPicker } from './BoothInteractionPicker';
+import { interactionLabel } from '@/lib/boothInteraction';
+import { useTouchpointOptions } from '@/lib/useTouchpointOptions';
 import { compressImage } from './DashboardActionCard';
 import { useUser } from '@/components/UserContext';
 import { SearchableSelect } from '@/components/SearchableSelect';
@@ -748,6 +751,8 @@ function NoteCard({ note, conferences, onDelete, onAssign, onEdit, onConferenceU
   const pillsRef = useRef<HTMLDivElement>(null);
   const isLong = note.content.length > 200;
   const fullTimestamp = fmtDate(note.created_at);
+  // Cached across every card on the page, so a screen of notes is one request.
+  const interaction = interactionLabel(note.secondary_tag, useTouchpointOptions());
   const scrollPills = (dir: -1 | 1) => pillsRef.current?.scrollBy({ left: dir * 120, behavior: 'smooth' });
 
   // Conference picker — replaces the whole header row with a full-width
@@ -855,13 +860,12 @@ function NoteCard({ note, conferences, onDelete, onAssign, onEdit, onConferenceU
                     Badge
                   </span>
                 )}
-                {note.tag === 'card-badge' && note.secondary_tag?.startsWith('booth-') && (
+                {/* The touchpoint the rep chose when they scanned. Notes from
+                    before this was the account's own list carry one of the four
+                    fixed values instead, and interactionLabel reads both. */}
+                {note.tag === 'card-badge' && interaction && (
                   <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-violet-50 border border-violet-200 text-[10px] font-medium text-violet-600 flex-shrink-0">
-                    {note.secondary_tag === 'booth-stop' ? 'Stopped By'
-                      : note.secondary_tag === 'booth-demo' ? 'Demo'
-                      : note.secondary_tag === 'booth-meeting' ? 'Meeting'
-                      : note.secondary_tag === 'booth-followup' ? 'Follow-up Req'
-                      : note.secondary_tag}
+                    {interaction}
                   </span>
                 )}
                 <button
@@ -962,53 +966,13 @@ function NoteCard({ note, conferences, onDelete, onAssign, onEdit, onConferenceU
   );
 }
 
-// ── Booth Interaction Picker ──────────────────────────────────────────────────
-const BOOTH_INTERACTIONS = [
-  { value: 'booth-stop', label: 'Stopped By', icon: '👋' },
-  { value: 'booth-demo', label: 'Demo', icon: '🖥' },
-  { value: 'booth-meeting', label: 'Meeting', icon: '📅' },
-  { value: 'booth-followup', label: 'Follow-up Req', icon: '📋' },
-] as const;
-
-function BoothInteractionPicker({
-  onSelect,
-  savingId,
-}: {
-  onSelect: (value: string) => void;
-  savingId: string | null;
-}) {
-  return (
-    <div className="pt-1">
-      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">What happened?</p>
-      <div className="grid grid-cols-2 gap-1.5">
-        {BOOTH_INTERACTIONS.map(item => (
-          <button
-            key={item.value}
-            type="button"
-            disabled={!!savingId}
-            onClick={() => onSelect(item.value)}
-            className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg border border-gray-200 text-xs font-medium text-gray-700 hover:border-brand-secondary hover:text-brand-secondary hover:bg-blue-50 transition-colors disabled:opacity-50 text-left"
-          >
-            <span className="text-sm">{item.icon}</span>
-            {item.label}
-          </button>
-        ))}
-      </div>
-      <button type="button" disabled={!!savingId} onClick={() => onSelect('skip')}
-        className="w-full mt-1.5 text-xs text-gray-400 hover:text-gray-600 py-1.5 transition-colors disabled:opacity-50">
-        Skip
-      </button>
-    </div>
-  );
-}
-
 // ── Badge Scan Results Modal ──────────────────────────────────────────────────
 function BadgeScanResultsModal({
   cards, onClose, onAssignLater, savingId, productRelevanceMap,
 }: {
   cards: BadgeScanCard[];
   onClose: () => void;
-  onAssignLater: (card: BadgeScanCard, secondaryTag?: string) => Promise<void>;
+  onAssignLater: (card: BadgeScanCard, secondaryTag?: string, tagLabel?: string) => Promise<void>;
   savingId: string | null;
   productRelevanceMap: Record<string, ProductRelevanceResult[]>;
 }) {
@@ -1053,8 +1017,8 @@ function BadgeScanResultsModal({
                 </div>
                 <ProductRelevanceSection results={productRelevanceMap[card.localId] ?? []} />
                 <BoothInteractionPicker
-                  onSelect={(v) => void onAssignLater(card, v === 'skip' ? undefined : v)}
-                  savingId={savingId === card.localId ? savingId : null}
+                  onSelect={(v, label) => void onAssignLater(card, v === 'skip' ? undefined : v, label || undefined)}
+                  disabled={savingId === card.localId}
                 />
               </div>
             );
@@ -1531,7 +1495,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
     setShowBatchModal(true);
   }, []);
 
-  const handleScanAssignLater = useCallback(async (card: BadgeScanCard, secondaryTag?: string) => {
+  const handleScanAssignLater = useCallback(async (card: BadgeScanCard, secondaryTag?: string, tagLabel?: string) => {
     setScanSavingId(card.localId);
     const relevance = badgeScanRelevance[card.localId] ?? [];
     const productSuggestions = JSON.stringify(
@@ -1552,11 +1516,9 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
       const note = await res.json() as QuickNote;
       setNotes(prev => [note, ...prev]);
       expandSection();
-      const label = secondaryTag === 'booth-demo' ? 'Demo logged'
-        : secondaryTag === 'booth-meeting' ? 'Meeting logged'
-        : secondaryTag === 'booth-followup' ? 'Follow-up logged'
-        : secondaryTag === 'booth-stop' ? 'Booth stop logged'
-        : 'Saved for later';
+      // Named after the touchpoint the rep picked, which is the point of
+      // asking with the account's own list rather than four fixed buttons.
+      const label = tagLabel ? `${tagLabel} logged` : 'Saved for later';
       toast.success(`${label} — assign details anytime`);
     } else {
       toast.error('Failed to save.');

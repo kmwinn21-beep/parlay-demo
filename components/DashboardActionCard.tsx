@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
+import { BoothInteractionPicker } from './BoothInteractionPicker';
 import { BatchCardScanModal, makeCard, type ScannedCard, type CardDraft } from './BatchCardScanModal';
 import { useUser } from '@/components/UserContext';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
@@ -316,36 +317,6 @@ function SearchableMultiSelect<T extends { id: number }>({
   );
 }
 
-// ── Booth Interaction Picker ──────────────────────────────────────────────────
-
-const BOOTH_INTERACTIONS = [
-  { value: 'booth-stop', label: 'Stopped By', icon: '👋' },
-  { value: 'booth-demo', label: 'Demo', icon: '🖥' },
-  { value: 'booth-meeting', label: 'Meeting', icon: '📅' },
-  { value: 'booth-followup', label: 'Follow-up Req', icon: '📋' },
-] as const;
-
-function BoothInteractionPicker({ onSelect, disabled }: { onSelect: (value: string) => void; disabled?: boolean }) {
-  return (
-    <div className="pt-1">
-      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">What happened?</p>
-      <div className="grid grid-cols-2 gap-1.5">
-        {BOOTH_INTERACTIONS.map(item => (
-          <button key={item.value} type="button" disabled={disabled} onClick={() => onSelect(item.value)}
-            className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg border border-gray-200 text-xs font-medium text-gray-700 hover:border-brand-secondary hover:text-brand-secondary hover:bg-blue-50 transition-colors disabled:opacity-50 text-left">
-            <span className="text-sm">{item.icon}</span>
-            {item.label}
-          </button>
-        ))}
-      </div>
-      <button type="button" disabled={disabled} onClick={() => onSelect('skip')}
-        className="w-full mt-1.5 text-xs text-gray-400 hover:text-gray-600 py-1.5 transition-colors disabled:opacity-50">
-        Skip
-      </button>
-    </div>
-  );
-}
-
 // ── BadgeScanResultsModal ─────────────────────────────────────────────────────
 
 export function BadgeScanResultsModal({
@@ -354,7 +325,7 @@ export function BadgeScanResultsModal({
   cards: BadgeScanCard[];
   onClose: () => void;
   onAssignNow: (card: BadgeScanCard) => void;
-  onAssignLater: (card: BadgeScanCard, secondaryTag?: string) => Promise<void>;
+  onAssignLater: (card: BadgeScanCard, secondaryTag?: string, tagLabel?: string) => Promise<void>;
   savingId: string | null;
   productRelevanceMap: Record<string, ProductRelevanceResult[]>;
 }) {
@@ -402,7 +373,7 @@ export function BadgeScanResultsModal({
                 </div>
                 <ProductRelevanceSection results={productRelevanceMap[card.localId] ?? []} />
                 <BoothInteractionPicker
-                  onSelect={(v) => void onAssignLater(card, v === 'skip' ? undefined : v)}
+                  onSelect={(v, label) => void onAssignLater(card, v === 'skip' ? undefined : v, label || undefined)}
                   disabled={isSaving || !!user?.demoVisitor}
                 />
               </div>
@@ -1325,7 +1296,7 @@ export function DashboardActionCard() {
     setShowBatchModal(true);
   }, []);
 
-  const handleScanAssignLater = useCallback(async (card: BadgeScanCard, secondaryTag?: string) => {
+  const handleScanAssignLater = useCallback(async (card: BadgeScanCard, secondaryTag?: string, tagLabel?: string) => {
     setScanSavingId(card.localId);
     const relevance = badgeScanRelevance[card.localId] ?? [];
     const productSuggestions = JSON.stringify(
@@ -1343,11 +1314,9 @@ export function DashboardActionCard() {
     if (res.ok) {
       const note = await res.json();
       window.dispatchEvent(new CustomEvent('quicknote:saved', { detail: note }));
-      const label = secondaryTag === 'booth-demo' ? 'Demo logged'
-        : secondaryTag === 'booth-meeting' ? 'Meeting logged'
-        : secondaryTag === 'booth-followup' ? 'Follow-up logged'
-        : secondaryTag === 'booth-stop' ? 'Booth stop logged'
-        : 'Saved to Floor Notes';
+      // Named after the touchpoint the rep picked, which is the point of
+      // asking with the account's own list rather than four fixed buttons.
+      const label = tagLabel ? `${tagLabel} logged` : 'Saved to Floor Notes';
       toast.success(`${label} — assign details anytime`);
     } else { toast.error('Failed to save note.'); }
     setScanSavingId(null);

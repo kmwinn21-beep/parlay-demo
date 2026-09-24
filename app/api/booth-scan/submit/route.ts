@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { trackEvent, trackFeature } from '@/lib/trackEvent';
+import { touchpointIdFromTag } from '@/lib/boothInteraction';
 
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -46,6 +47,11 @@ export async function POST(request: NextRequest) {
     }
 
     const results: Record<string, unknown> = {};
+    // The rep picked one of the account's own touchpoint types. The three
+    // branches below are the four fixed buttons this replaced, kept because
+    // notes scanned before the change are still sitting in the queue waiting
+    // to be assigned and carry those tags.
+    const touchpointId = touchpointIdFromTag(interaction_type);
     const isMeeting = interaction_type === 'booth-demo' || interaction_type === 'booth-meeting';
     const isConvo = interaction_type === 'booth-stop';
     const isFollowup = interaction_type === 'booth-followup';
@@ -53,6 +59,48 @@ export async function POST(request: NextRequest) {
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 10);
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    // ── Touchpoint path (tp:<id>) ─────────────────────────────────────────────
+    //
+    // Every scan takes this route now. The touchpoint is logged as the type the
+    // rep chose, and the follow-up is named after that same type — so a Dinner
+    // produces a Dinner follow-up rather than the one fixed "Booth Stop" every
+    // interaction used to get regardless of what happened.
+    if (touchpointId !== null && attendee_id && conference_id) {
+      const tpOption = await db.execute({
+        sql: "SELECT id, value, auto_follow_up FROM config_options WHERE category = 'touchpoints' AND id = ? LIMIT 1",
+        args: [touchpointId],
+      });
+
+      // Deleted from the account's config between the scan and the assignment.
+      // The note's own text is still saved below; only the touchpoint is lost.
+      if (tpOption.rows.length > 0) {
+        await db.execute({
+          sql: `INSERT INTO attendee_touchpoints (attendee_id, conference_id, option_id) VALUES (?, ?, ?)`,
+          args: [attendee_id, conference_id, touchpointId],
+        });
+        results.touchpoint = 'created';
+
+        const subtextLines: string[] = [];
+        if (productList.length > 0) subtextLines.push(`Discussed: ${productList.join(', ')}`);
+        if (sentiment) subtextLines.push(sentiment);
+        if (schedule_follow_up === true) subtextLines.push('Schedule Follow Up Meeting');
+        const subtextNotes = subtextLines.length > 0 ? subtextLines.join('\n') : null;
+
+        // The touchpoint's own value becomes next_steps, the same way the
+        // attendee detail flow logs one. auto_follow_up on the option forces a
+        // follow-up even when the rep filled nothing in.
+        const tpValue = String(tpOption.rows[0].value);
+        if (Number(tpOption.rows[0].auto_follow_up) === 1 || subtextNotes) {
+          await db.execute({
+            sql: `INSERT INTO follow_ups (attendee_id, conference_id, next_steps, next_steps_notes, assigned_rep, completed)
+                  VALUES (?, ?, ?, ?, ?, 0)`,
+            args: [attendee_id, conference_id, tpValue, subtextNotes ?? tpValue, assignedRep],
+          });
+          results.follow_up = 'created';
+        }
+      }
+    }
 
     // ── Meeting path (booth-demo / booth-meeting) ──────────────────────────────
     if (isMeeting && attendee_id && conference_id) {
