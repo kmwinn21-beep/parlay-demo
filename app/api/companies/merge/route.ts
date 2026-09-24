@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { requireCapability } from '@/lib/requireCapability';
 import { reassignReferences, previewMerge } from '@/lib/mergeReferences';
 
 export async function POST(request: NextRequest) {
-  const authResult = await requireAuth(request);
+  // Merging is destructive — one record absorbs another and the loser is
+  // gone. Governed by the Role Scope matrix, which until now only hid the UI.
+  const authResult = await requireCapability(request, 'delete_merge');
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
   try {

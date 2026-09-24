@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth, requireAdmin, DEFAULT_ROLE_CAPABILITIES, resolveCapabilities, VALID_ROLES, LOCKED_ADMIN_CAPS, type UserRole, type RoleCapabilities } from '@/lib/auth';
+import { requireAuth, DEFAULT_ROLE_CAPABILITIES, resolveCapabilities, VALID_ROLES, LOCKED_ADMIN_CAPS, type UserRole, type RoleCapabilities } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { requireCapability, invalidateRoleCapabilities } from '@/lib/requireCapability';
 
 async function getRawJson(dbClient: Awaited<ReturnType<typeof getDb>>): Promise<string | null> {
   const row = await dbClient.execute({
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const authResult = await requireAdmin(request);
+  const authResult = await requireCapability(request, 'manage_role_scope');
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
 
@@ -50,6 +51,11 @@ export async function PUT(request: NextRequest) {
     sql: `INSERT OR REPLACE INTO site_settings (key, value) VALUES ('role_capabilities', ?)`,
     args: [JSON.stringify(body)],
   });
+  // Route guards read this through a short cache. Without this the change an
+  // administrator just saved would not be enforced for up to half a minute,
+  // which is exactly long enough to test it, see the old behaviour, and
+  // conclude the matrix still does nothing.
+  invalidateRoleCapabilities(authResult?.accountId);
 
   return NextResponse.json({ ok: true });
 }

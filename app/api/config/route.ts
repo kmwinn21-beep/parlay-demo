@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/getDb';
-import { requireAuth, requireAdmin } from '@/lib/auth';
+import { requireAuth } from '@/lib/auth';
+import { requireCapability } from '@/lib/requireCapability';
 import { getCategoryFormKeys } from '@/lib/configOptionForms';
 
 export async function GET(request: NextRequest) {
@@ -107,7 +108,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authResult = await requireAdmin(request);
+  const authResult = await requireCapability(request, 'manage_system_config');
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
   try {
@@ -137,7 +138,7 @@ export async function POST(request: NextRequest) {
 
 // Batch update sort_order for reordering
 export async function PATCH(request: NextRequest) {
-  const authResult = await requireAdmin(request);
+  const authResult = await requireCapability(request, 'manage_system_config');
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
   try {

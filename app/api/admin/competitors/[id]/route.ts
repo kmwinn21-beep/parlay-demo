@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { requireCapability } from '@/lib/requireCapability';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +14,7 @@ function normalizeDomain(raw: string): string {
 }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireAdmin(req);
+  const auth = await requireCapability(req, 'manage_system_config');
   if (auth instanceof NextResponse) return auth;
   const db = await getDb(auth.accountId);
   const id = Number(params.id);
@@ -42,7 +42,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireAdmin(req);
+  const auth = await requireCapability(req, 'manage_system_config');
   if (auth instanceof NextResponse) return auth;
   const db = await getDb(auth.accountId);
   await db.execute({ sql: 'DELETE FROM competitor_settings WHERE id = ?', args: [Number(params.id)] });

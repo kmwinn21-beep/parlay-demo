@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { requireAdmin } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { requireCapability } from '@/lib/requireCapability';
 
 // Built per-request so the account's own configuration can be interpolated in.
 // The uploaded documents and scraped link text are NOT part of this string —
@@ -346,7 +346,7 @@ async function saveUsage(dbClient: Awaited<ReturnType<typeof getDb>>, usage: { c
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await requireAdmin(request);
+  const authResult = await requireCapability(request, 'manage_system_config');
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
   const usage = await getUsage(db);
@@ -358,7 +358,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authResult = await requireAdmin(request);
+  const authResult = await requireCapability(request, 'manage_system_config');
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
 

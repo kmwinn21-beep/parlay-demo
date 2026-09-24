@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { requireCapability } from '@/lib/requireCapability';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { randomBytes } from 'crypto';
 
@@ -26,12 +26,9 @@ function r2Client() {
 }
 
 export async function POST(request: NextRequest) {
-  const authResult = await requireAuth(request);
+  const authResult = await requireCapability(request, 'manage_system_config');
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
-  if (user.role !== 'administrator') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
 
   if (!process.env.R2_ACCOUNT_ID || !process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY || !process.env.R2_BUCKET_NAME) {
     return NextResponse.json({ error: 'Storage not configured' }, { status: 503 });
