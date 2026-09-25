@@ -131,13 +131,23 @@ export async function GET(
         implies_vendor: statuses.some(st => isInverted(st, inverses)),
       });
     }
-    const edges = Array.from(edgeById.values());
+    // At conference scope the map is about this show: a relationship counts
+    // only when the company at the other end is here too.
+    //
+    // This is what the scope toggle means, and it was doing nothing of the
+    // sort — it narrowed which companies were looked up and then drew every
+    // relationship either way, so both settings showed the same spokes.
+    const edges = scope === 'all'
+      ? Array.from(edgeById.values())
+      : Array.from(edgeById.values()).filter(e => atConference.has(e.from) && atConference.has(e.to));
 
-    // The one hop out: companies reached only by being at the far end of a
-    // relationship. Without these a conference map has operators and no
-    // vendors between them.
     const nodeIds = new Set<number>(seedIds);
-    for (const e of edges) { nodeIds.add(e.from); nodeIds.add(e.to); }
+    // At conference scope the nodes are the conference's companies and nothing
+    // else. Widening to the far end of every relationship would put companies
+    // on the map that are not at the show the map is scoped to.
+    if (scope === 'all') {
+      for (const e of edges) { nodeIds.add(e.from); nodeIds.add(e.to); }
+    }
 
     // company_type holds an option id or the value itself depending on when the
     // row was written. Resolved here so the picker can group by type without
@@ -187,7 +197,15 @@ export async function GET(
     const icp = await getIcpCompanyTypes(db).catch(() => ({ values: [] as string[], configured: false }));
 
     return NextResponse.json(
-      { scope, icpTypes: icp.configured ? icp.values : [], ...graph },
+      {
+        scope,
+        icpTypes: icp.configured ? icp.values : [],
+        // Who is actually at this show, whatever the scope. The map filters
+        // its spokes against this rather than inferring it from a count that
+        // is zero for a company nobody from it attended.
+        atConference: Array.from(atConference),
+        ...graph,
+      },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error) {

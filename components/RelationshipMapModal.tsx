@@ -45,6 +45,7 @@ export function RelationshipMapModal({ conferenceId, onClose }: {
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [icpTypes, setIcpTypes] = useState<string[]>([]);
+  const [atConference, setAtConference] = useState<Set<number>>(new Set());
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [rels, setRels] = useState<VendorRelationship[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,11 +56,12 @@ export function RelationshipMapModal({ conferenceId, onClose }: {
     setLoading(true);
     fetch(`/api/conferences/${conferenceId}/relationship-map?scope=${scope}`, { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : null))
-      .then((d: { nodes?: GraphNode[]; edges?: GraphEdge[]; icpTypes?: string[] } | null) => {
+      .then((d: { nodes?: GraphNode[]; edges?: GraphEdge[]; icpTypes?: string[]; atConference?: number[] } | null) => {
         if (cancelled || !d) return;
         setNodes(d.nodes ?? []);
         setEdges(d.edges ?? []);
         setIcpTypes(d.icpTypes ?? []);
+        setAtConference(new Set(d.atConference ?? []));
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -96,27 +98,24 @@ export function RelationshipMapModal({ conferenceId, onClose }: {
 
   const spokes: Spoke[] = useMemo(() => {
     if (!hubNode) return [];
-    return rels.map(rel => {
-      const other = byId.get(rel.related_company_id);
-      const bits: string[] = [];
-      if (other?.units != null) bits.push(`${other.units.toLocaleString()} units`);
-      bits.push(other && other.attendeeCount > 0
-        ? `${other.attendeeCount} attendee${other.attendeeCount === 1 ? '' : 's'}`
-        : 'not at this show');
-      return {
+    return rels
+      // At this conference means what it says: only relationships whose other
+      // end is also at this show. All accounts drops the restriction.
+      .filter(rel => scope === 'all' || atConference.has(rel.related_company_id))
+      .map(rel => ({
         // The relationship's own id. Keying on the company collapsed two
         // relationships with one company into a single React key.
         id: rel.id,
         rel,
-        tone: toneFor(rel.relationship_status, other?.company_types ?? []),
-        footnote: bits.join(' · '),
-      };
-    });
-  }, [hubNode, rels, byId]);
+        tone: toneFor(rel.relationship_status, byId.get(rel.related_company_id)?.company_types ?? []),
+      }));
+  }, [hubNode, rels, byId, scope, atConference]);
 
   // What the hub's badge says, counted the same way the spokes are drawn.
   const hubCount = hubNode
-    ? (rels.length || edges.filter(e => e.from === hubNode.id || e.to === hubNode.id).length)
+    ? (rels.length > 0
+        ? spokes.length
+        : edges.filter(e => e.from === hubNode.id || e.to === hubNode.id).length)
     : 0;
 
   return (

@@ -233,6 +233,21 @@ console.log('\n— the pieces on the page —');
   eq('only connected companies are listed',
     /nodes\.filter\(n => n\.relationshipCount > 0\)/.test(modal), true);
 
+  // The toggle narrowed which companies were looked up and then drew every
+  // relationship either way, so both settings showed the same spokes.
+  // Verified in Chromium: two spokes at conference scope, four on all
+  // accounts, against a fixture where two of the four are off-show.
+  eq('at this conference shows only relationships whose far end is here too',
+    /scope === 'all' \|\| atConference\.has\(rel\.related_company_id\)/.test(modal), true);
+  eq('  reading who is here from the endpoint rather than from a count',
+    /setAtConference\(new Set\(d\.atConference \?\? \[\]\)\)/.test(modal), true);
+  eq('  and the hub badge counts what is drawn',
+    /\? spokes\.length/.test(modal), true);
+
+  // Nothing about who came belongs on a relationship card.
+  eq('a spoke card carries no attendee line',
+    /not at this show/.test(canvas) || /footnote/.test(canvas), false);
+
   // The rows were grey by default, which read as every company being
   // unavailable rather than as none being chosen.
   eq('an unselected company is full-strength brand primary',

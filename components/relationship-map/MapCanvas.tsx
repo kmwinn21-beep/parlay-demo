@@ -17,8 +17,6 @@ export interface Spoke {
   id: number;
   rel: VendorRelationship;
   tone: EdgeTone;
-  /** Units and attendees for the company at the far end. */
-  footnote: string;
 }
 
 export interface Hub {
@@ -250,7 +248,6 @@ export function MapCanvas({ hub, spokes, userOptions, colorMaps, onUpdated }: {
               colorMaps={colorMaps}
               onUpdated={onUpdated}
             />
-            <p className="px-3 pb-1.5 -mt-1 text-[10px] text-gray-400 truncate">{s.footnote}</p>
           </div>
         );
       })}

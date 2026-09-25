@@ -163,10 +163,22 @@ console.log('\n— the endpoint —');
   eq('  always recorded in the stored direction',
     /from: outbound \? subject : other,\s*\n\s*to: outbound \? other : subject,/.test(api), true);
 
-  // The hop is the point: a vendor nobody sent to the show is still what
-  // several operators here have in common.
-  eq('companies reached through a relationship are nodes too',
-    /for \(const e of edges\) \{ nodeIds\.add\(e\.from\); nodeIds\.add\(e\.to\); \}/.test(api), true);
+  // The scope toggle decides what the map is of. At conference scope a
+  // relationship counts only when both ends are at the show, and the nodes
+  // are the show's companies — widening to the far end of every relationship
+  // would put companies on a map scoped to a conference they are not at.
+  eq('at conference scope both ends must be at the conference',
+    /filter\(e => atConference\.has\(e\.from\) && atConference\.has\(e\.to\)\)/.test(api), true);
+  // Two branches read `scope === 'all'` — the seed set and the hop — and an
+  // assertion on one of them passes happily while the other is broken.
+  eq('the seed set is chosen by scope',
+    /if \(scope === 'all'\) \{[\s\S]{0,400}?SELECT company_id AS id FROM vendor_relationships/.test(api), true);
+  eq('  and the hop out happens only on the wider scope',
+    /if \(scope === 'all'\) \{\s*\n\s*for \(const e of edges\) \{ nodeIds\.add\(e\.from\); nodeIds\.add\(e\.to\); \}/.test(api), true);
+  // The client filters its own spokes against this, rather than inferring it
+  // from an attendee count that is zero for a company nobody attended from.
+  eq('who is at the conference is returned whatever the scope',
+    /atConference: Array\.from\(atConference\),/.test(api), true);
 
   // One query for the attendee counts rather than one per company.
   eq('attendee counts are one grouped query',
