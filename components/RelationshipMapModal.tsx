@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EntityPicker } from '@/components/relationship-map/EntityPicker';
 import { MapCanvas, TONE_COLOR, type Spoke } from '@/components/relationship-map/MapCanvas';
-import type { VendorRelationship } from '@/components/VendorRelationshipCard';
+import { VendorRelationshipCard, type VendorRelationship } from '@/components/VendorRelationshipCard';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useUserOptions } from '@/lib/useUserOptions';
 import { toneFor, type PickerCompany } from '@/lib/relationshipPicker';
-import { RelationshipAttendeeCard } from '@/components/pre-conference/RelationshipsTab';
+import { RelationshipAttendeeCard, SectionHead } from '@/components/pre-conference/RelationshipsTab';
 import type { RelationshipRow } from '@/components/PreConferenceReview';
 
 interface GraphNode extends PickerCompany {
@@ -64,6 +64,8 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
    */
   const [internal, setInternal] = useState<RelationshipRow[]>([]);
   const [internalOpen, setInternalOpen] = useState(true);
+  // Mobile shows one panel at a time, the way the pre-conference tab does.
+  const [mobileTab, setMobileTab] = useState<'companies' | 'relationships'>('companies');
 
   useEffect(() => {
     let cancelled = false;
@@ -198,7 +200,94 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 flex gap-3 p-3">
+        {/* ── Mobile layout ──
+            The same two panels the pre-conference relationships tab uses: a
+            list, then the chosen company's relationships, with a toggle
+            between them. No hub and spokes — a canvas you rearrange by
+            dragging is of no use on a phone, and the cards are the content. */}
+        <div className="flex-1 min-h-0 sm:hidden flex flex-col p-3">
+          <div className="flex flex-shrink-0 border-b border-gray-200 mb-3">
+            <button
+              type="button"
+              onClick={() => setMobileTab('companies')}
+              className={`flex-1 py-2 text-sm font-semibold transition-colors ${
+                mobileTab === 'companies'
+                  ? 'text-brand-primary border-b-2 border-brand-primary'
+                  : 'text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              Companies
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileTab('relationships')}
+              className={`flex-1 py-2 text-sm font-semibold truncate transition-colors ${
+                mobileTab === 'relationships'
+                  ? 'text-brand-primary border-b-2 border-brand-primary'
+                  : 'text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              {hubNode ? hubNode.name : 'Relationships'}
+            </button>
+          </div>
+
+          {mobileTab === 'companies' ? (
+            <EntityPicker
+              companies={connected}
+              icpTypes={icpTypes}
+              selectedId={selectedId}
+              onSelect={id => { setSelectedId(id); setMobileTab('relationships'); }}
+              className="flex-1 min-h-0"
+            />
+          ) : (
+            <div className="flex-1 overflow-y-auto pb-4 space-y-6" style={{ scrollbarWidth: 'none' }}>
+              {!hubNode ? (
+                <p className="text-gray-400 text-sm text-center py-12">Select a company to view its relationships.</p>
+              ) : (
+                <>
+                  {internalCards.length > 0 && (
+                    <div>
+                      <SectionHead label="Internal" count={internalCards.length} />
+                      <div className="space-y-3">
+                        {internalCards.map(c => (
+                          <RelationshipAttendeeCard
+                            key={c.key}
+                            attendee={c.attendee}
+                            repNames={c.repNames}
+                            descriptions={c.descriptions}
+                            isTarget={false}
+                            onToggleTarget={() => {}}
+                            readOnly
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <SectionHead label="Vendor / Other Relationships" count={spokes.length} />
+                    {spokes.length === 0 ? (
+                      <p className="text-xs text-gray-400 py-2">No relationships recorded for this company.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {spokes.map(s => (
+                          <VendorRelationshipCard
+                            key={s.id}
+                            rel={s.rel}
+                            userOptions={userOptions}
+                            colorMaps={colorMaps}
+                            onUpdated={() => loadRels(hubNode.id)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 min-h-0 hidden sm:flex gap-3 p-3">
           <EntityPicker
             companies={connected}
             icpTypes={icpTypes}

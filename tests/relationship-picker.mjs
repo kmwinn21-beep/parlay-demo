@@ -331,5 +331,48 @@ console.log('\n— the pieces on the page —');
   eq('the analytics tab still renders the charts', /activeTab === 'analytics'/.test(page), true);
 }
 
+console.log('\n— on a phone —');
+{
+  const modal = strip('components/RelationshipMapModal.tsx');
+  const tab = strip('components/pre-conference/RelationshipsTab.tsx');
+
+  // The same two panels the pre-conference relationships tab uses, rather than
+  // a shrunken version of the canvas.
+  eq('the two layouts are exclusive',
+    /sm:hidden flex flex-col p-3/.test(modal) && /hidden sm:flex gap-3 p-3/.test(modal), true);
+  eq('  with a toggle between a list and the chosen company',
+    /setMobileTab\('companies'\)/.test(modal) && /setMobileTab\('relationships'\)/.test(modal), true);
+  eq('  naming the company on the second tab',
+    /\{hubNode \? hubNode\.name : 'Relationships'\}/.test(modal), true);
+  eq('  and switching to it when one is picked',
+    /setSelectedId\(id\); setMobileTab\('relationships'\);/.test(modal), true);
+
+  // No hub and spokes: a canvas you rearrange by dragging is of no use on a
+  // phone, and the cards are the content.
+  const mobileBlock = modal.slice(modal.indexOf('sm:hidden flex flex-col p-3'), modal.indexOf('hidden sm:flex gap-3 p-3'));
+  eq('the canvas is not rendered on a phone', /<MapCanvas/.test(mobileBlock), false);
+  eq('  the cards are, stacked', /<VendorRelationshipCard/.test(mobileBlock), true);
+  eq('  under the same headings the tab uses',
+    /<SectionHead label="Internal"/.test(mobileBlock), true);
+  eq('  and the picker fills the width',
+    /className="flex-1 min-h-0"/.test(mobileBlock), true);
+  // Which of the two panels is on screen follows the toggle. Without this the
+  // list can be wired to the tab and still never shown.
+  eq('  with the toggle choosing which panel shows',
+    /\{mobileTab === 'companies' \? \(/.test(mobileBlock), true);
+
+  // One SectionHead, shared. Two lines is exactly the size of thing that gets
+  // copied and then drifts.
+  eq('the section heading is shared, not copied',
+    /export function SectionHead/.test(tab) && /SectionHead \}? from '@\/components\/pre-conference\/RelationshipsTab'|RelationshipAttendeeCard, SectionHead \}/.test(modal), true);
+  eq('  and the modal declares none of its own',
+    /function SectionHead/.test(modal), false);
+
+  // The picker was a fixed-width column; on a phone it is the whole screen.
+  const picker = strip('components/relationship-map/EntityPicker.tsx');
+  eq('the picker takes its width from the caller',
+    /className = 'w-72 flex-shrink-0'/.test(picker), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
