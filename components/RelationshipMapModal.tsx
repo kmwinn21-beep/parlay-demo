@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EntityPicker } from '@/components/relationship-map/EntityPicker';
-import { MapCanvas, TONE_COLOR, type SpokeCard } from '@/components/relationship-map/MapCanvas';
-import { statusesFor, type InverseMap } from '@/lib/relationshipDirection';
+import { MapCanvas, TONE_COLOR, type Spoke } from '@/components/relationship-map/MapCanvas';
+import type { VendorRelationship } from '@/components/VendorRelationshipCard';
+import { useConfigColors } from '@/lib/useConfigColors';
+import { useUserOptions } from '@/lib/useUserOptions';
 import { toneFor, type PickerCompany } from '@/lib/relationshipPicker';
 
 interface GraphNode extends PickerCompany {
@@ -15,10 +17,7 @@ interface GraphEdge {
   from: number;
   to: number;
   relationship_status: string[];
-  strength: string | null;
-  vendor_type: string[];
   stale: boolean;
-  implies_vendor: boolean;
 }
 
 /**
@@ -27,18 +26,29 @@ interface GraphEdge {
  * Opened from the Insights tab rather than replacing it: the charts answer
  * "who came", this answers "what are they connected to", and neither is the
  * other's summary.
+ *
+ * The graph endpoint supplies the picker — who is on the map, their counts,
+ * their types. The spokes themselves come from /api/vendor-relationships for
+ * whichever company is selected, because that already returns the full card,
+ * read from that company's side, with its notes, its thread and its Update
+ * button. Rebuilding those here would have been a second card to keep in step
+ * with the one on the company record.
  */
 export function RelationshipMapModal({ conferenceId, onClose }: {
   conferenceId: number;
   onClose: () => void;
 }) {
+  const colorMaps = useConfigColors();
+  const userOptions = useUserOptions();
+
   const [scope, setScope] = useState<'conference' | 'all'>('conference');
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [icpTypes, setIcpTypes] = useState<string[]>([]);
-  const [inverses, setInverses] = useState<InverseMap>({});
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [rels, setRels] = useState<VendorRelationship[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingRels, setLoadingRels] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,63 +66,63 @@ export function RelationshipMapModal({ conferenceId, onClose }: {
     return () => { cancelled = true; };
   }, [conferenceId, scope]);
 
-  // The words for the other end of a status, so a spoke reads from the hub's
-  // side rather than from whoever happened to log the row.
-  useEffect(() => {
-    fetch('/api/config?category=other_relationship_status')
-      .then(r => (r.ok ? r.json() : []))
-      .then((d: { value?: string; inverse_value?: string | null }[]) => {
-        const map: InverseMap = {};
-        for (const o of Array.isArray(d) ? d : []) {
-          if (o.value) map[o.value] = o.inverse_value ?? null;
-        }
-        setInverses(map);
-      })
-      .catch(() => {});
-  }, []);
+  // Only companies something connects to. A picker full of rows that open an
+  // empty canvas is a list of dead ends.
+  const connected = useMemo(() => nodes.filter(n => n.relationshipCount > 0), [nodes]);
 
   const byId = useMemo(() => new Map(nodes.map(n => [n.id, n])), [nodes]);
 
-  // The most connected company, so the map opens on something worth looking at
-  // rather than on whatever sorts first.
+  // The most connected company, so the map opens on something worth looking at.
   useEffect(() => {
-    if (selectedId !== null || nodes.length === 0) return;
-    setSelectedId(nodes.reduce((a, b) => (b.relationshipCount > a.relationshipCount ? b : a)).id);
-  }, [nodes, selectedId]);
+    if (selectedId !== null || connected.length === 0) return;
+    setSelectedId(connected.reduce((a, b) => (b.relationshipCount > a.relationshipCount ? b : a)).id);
+  }, [connected, selectedId]);
+
+  const loadRels = useCallback((companyId: number) => {
+    setLoadingRels(true);
+    fetch(`/api/vendor-relationships?company_id=${companyId}`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : []))
+      .then((d: VendorRelationship[]) => setRels(Array.isArray(d) ? d : []))
+      .catch(() => setRels([]))
+      .finally(() => setLoadingRels(false));
+  }, []);
+
+  useEffect(() => {
+    if (selectedId === null) { setRels([]); return; }
+    loadRels(selectedId);
+  }, [selectedId, loadRels]);
 
   const hubNode = selectedId != null ? byId.get(selectedId) ?? null : null;
 
-  const spokes: SpokeCard[] = useMemo(() => {
+  const spokes: Spoke[] = useMemo(() => {
     if (!hubNode) return [];
-    return edges
-      .filter(e => e.from === hubNode.id || e.to === hubNode.id)
-      .map(e => {
-        const otherId = e.from === hubNode.id ? e.to : e.from;
-        const other = byId.get(otherId);
-        if (!other) return null;
-        // The row is stored from `from`'s side. When the hub is the `to` end
-        // the reader is looking at it from the other side, so the words invert
-        // — the same rule the company record uses.
-        const inbound = e.to === hubNode.id;
-        const shown = statusesFor(e.relationship_status, inbound ? 'inbound' : 'outbound', inverses);
-        return {
-          id: otherId,
-          name: other.name,
-          statusLabel: shown.join(', ') || 'Related',
-          tone: toneFor(shown, other.company_types),
-          units: other.units,
-          attendeeCount: other.attendeeCount,
-          relationshipCount: other.relationshipCount,
-          stale: e.stale,
-        } as SpokeCard;
-      })
-      .filter((s): s is SpokeCard => s !== null);
-  }, [hubNode, edges, byId, inverses]);
+    return rels.map(rel => {
+      const other = byId.get(rel.related_company_id);
+      const bits: string[] = [];
+      if (other?.units != null) bits.push(`${other.units.toLocaleString()} units`);
+      bits.push(other && other.attendeeCount > 0
+        ? `${other.attendeeCount} attendee${other.attendeeCount === 1 ? '' : 's'}`
+        : 'not at this show');
+      return {
+        // The relationship's own id. Keying on the company collapsed two
+        // relationships with one company into a single React key.
+        id: rel.id,
+        rel,
+        tone: toneFor(rel.relationship_status, other?.company_types ?? []),
+        footnote: bits.join(' · '),
+      };
+    });
+  }, [hubNode, rels, byId]);
+
+  // What the hub's badge says, counted the same way the spokes are drawn.
+  const hubCount = hubNode
+    ? (rels.length || edges.filter(e => e.from === hubNode.id || e.to === hubNode.id).length)
+    : 0;
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[85vh] flex flex-col"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl h-[88vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
@@ -143,7 +153,7 @@ export function RelationshipMapModal({ conferenceId, onClose }: {
 
         <div className="flex-1 min-h-0 flex gap-3 p-3">
           <EntityPicker
-            companies={nodes}
+            companies={connected}
             icpTypes={icpTypes}
             selectedId={selectedId}
             onSelect={setSelectedId}
@@ -160,10 +170,14 @@ export function RelationshipMapModal({ conferenceId, onClose }: {
                   id: hubNode.id,
                   name: hubNode.name,
                   types: hubNode.company_types.slice(0, 3),
-                  subtitle: `${hubNode.relationshipCount} relationship${hubNode.relationshipCount === 1 ? '' : 's'}`,
+                  subtitle: loadingRels
+                    ? 'Loading…'
+                    : `${hubCount} relationship${hubCount === 1 ? '' : 's'}`,
                 }}
                 spokes={spokes}
-                onSelectSpoke={setSelectedId}
+                userOptions={userOptions}
+                colorMaps={colorMaps}
+                onUpdated={() => loadRels(hubNode.id)}
               />
             ) : (
               <div className="flex-1 flex items-center justify-center">
@@ -178,7 +192,7 @@ export function RelationshipMapModal({ conferenceId, onClose }: {
                   {label}
                 </span>
               ))}
-              <span className="text-[11px] text-gray-400 ml-auto">Drag cards to rearrange</span>
+              <span className="text-[11px] text-gray-400 ml-auto">Drag the grip on a card to rearrange</span>
             </div>
           </div>
         </div>

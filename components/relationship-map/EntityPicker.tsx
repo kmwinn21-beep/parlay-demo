@@ -115,7 +115,7 @@ export function EntityPicker({ companies, icpTypes, selectedId, onSelect }: {
             <p className="px-1 pb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">
               {group.type}
             </p>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               {group.companies.map(c => {
                 const selected = selectedId === c.id;
                 // Everything else recedes once a company is chosen, so the one
@@ -126,15 +126,18 @@ export function EntityPicker({ companies, icpTypes, selectedId, onSelect }: {
                     key={c.id}
                     type="button"
                     onClick={() => onSelect(c.id)}
-                    className={`w-full text-left rounded-lg border px-2.5 py-2 transition-all ${
+                    className={`w-full text-left rounded-lg border px-3 py-2.5 transition-all ${
                       selected
                         ? 'border-brand-secondary bg-brand-secondary/5'
-                        : 'border-transparent hover:bg-gray-50'
+                        : 'border-gray-100 bg-gray-50 hover:bg-gray-100'
                     } ${dimmed ? 'opacity-40' : ''}`}
                   >
                     <div className="flex items-start gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold text-gray-800 truncate">{c.name}</p>
+                        {/* Full-strength until something else is chosen. The
+                            rows were grey by default, which read as every
+                            company being unavailable. */}
+                        <p className="text-xs font-semibold text-brand-primary truncate">{c.name}</p>
                         {/* ICP groups get the numbers a rep is judging them on;
                             everything else gets the type, which is the thing
                             that distinguishes one vendor row from another. */}

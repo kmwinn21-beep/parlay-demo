@@ -64,11 +64,24 @@ export async function GET(
     // The seed set the relationships are looked up for.
     let seedIds: number[];
     if (scope === 'all') {
+      // Every company a relationship touches, rather than the first N by id.
+      // Seeding from the companies table made "all accounts" a SUBSET of "at
+      // this conference" on any account with more companies than the ceiling:
+      // the seed was an arbitrary slice that could miss the conference's own
+      // companies entirely, so a hub showed fewer relationships on the wider
+      // scope than on the narrower one.
       const allRes = await db.execute({
-        sql: `SELECT id FROM companies ORDER BY id LIMIT ?`,
-        args: [MAX_COMPANIES],
-      });
-      seedIds = allRes.rows.map(r => Number(r.id));
+        sql: `SELECT company_id AS id FROM vendor_relationships
+              UNION
+              SELECT related_company_id AS id FROM vendor_relationships`,
+        args: [],
+      }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
+      // The conference's own companies are always in, so widening the scope
+      // can only ever add.
+      seedIds = Array.from(new Set([
+        ...allRes.rows.map(r => Number(r.id)).filter(Boolean),
+        ...Array.from(atConference),
+      ])).slice(0, MAX_COMPANIES);
     } else {
       seedIds = Array.from(atConference);
     }
@@ -85,20 +98,29 @@ export async function GET(
       loadInverseStatuses(db),
     ]);
 
-    // One edge per stored row. vendorRelsQuery returns each row once per end it
-    // was asked for, so a relationship between two conference companies arrives
-    // twice — the same id, read from each side. Keyed on the row id, and always
-    // recorded in the stored direction so the two halves agree on which end is
-    // the vendor.
-    const edgeById = new Map<number, GraphEdgeInput>();
+    // One edge per company PAIR, not per stored row.
+    //
+    // Two things collapse here. vendorRelsQuery returns each row once per end
+    // it was asked for, so a relationship between two conference companies
+    // arrives twice with the same id. And a pair can carry more than one row —
+    // logged at both ends, or logged twice at one — which the card view
+    // collapses to a single card in collapsePairs.
+    //
+    // Counting rows here while the map drew cards is what had a hub badged
+    // "8 relationships" beside six cards. The key is the unordered pair so the
+    // count is of relationships as the reader sees them.
+    const edgeById = new Map<string, GraphEdgeInput>();
     for (const r of relRows.rows) {
       const id = Number(r.id);
-      if (edgeById.has(id)) continue;
+      const a = Number(r.subject_id);
+      const z = Number(r.related_company_id);
+      const key = a < z ? `${a}:${z}` : `${z}:${a}`;
+      if (edgeById.has(key)) continue;
       const subject = Number(r.subject_id);
       const other = Number(r.related_company_id);
       const outbound = String(r.direction) !== 'inbound';
       const statuses = splitList(r.relationship_status);
-      edgeById.set(id, {
+      edgeById.set(key, {
         id,
         from: outbound ? subject : other,
         to: outbound ? other : subject,

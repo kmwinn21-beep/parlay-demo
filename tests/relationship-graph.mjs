@@ -152,8 +152,12 @@ console.log('\n— the endpoint —');
   // vendorRelsQuery returns each row once per end it was asked for, so a
   // relationship between two conference companies arrives twice with the same
   // id. Drawing both would double every edge on the densest part of the map.
-  eq('each stored relationship becomes one edge',
-    /if \(edgeById\.has\(id\)\) continue;/.test(api), true);
+  // Two things collapse: the same row read from each end, and a pair carrying
+  // more than one row. The card view collapses a pair to one card, so counting
+  // rows here is what badged a hub "8 relationships" beside six cards.
+  eq('one edge per company pair, not per stored row',
+    /const key = a < z \? `\$\{a\}:\$\{z\}` : `\$\{z\}:\$\{a\}`;/.test(api), true);
+  eq('  deduped on that key', /if \(edgeById\.has\(key\)\) continue;/.test(api), true);
   // And both halves have to agree on which end is the vendor, or the same
   // relationship points two ways depending on which company was read first.
   eq('  always recorded in the stored direction',
@@ -171,7 +175,14 @@ console.log('\n— the endpoint —');
   // Both scopes, and a ceiling on the unbounded one.
   eq('the scope toggle is honoured',
     /scope=.*'all' \? 'all' : 'conference'|=== 'all' \? 'all' : 'conference'/.test(api), true);
-  eq('  with the all-accounts scope bounded', /LIMIT \?/.test(api) && /MAX_COMPANIES/.test(api), true);
+  eq('  with the all-accounts scope bounded', /MAX_COMPANIES/.test(api), true);
+  // Seeding from the companies table made "all accounts" a SUBSET of "at this
+  // conference" on any account with more companies than the ceiling: an
+  // arbitrary slice by id could miss the conference's own companies.
+  eq('  and seeded from what has relationships, not the first N by id',
+    /SELECT company_id AS id FROM vendor_relationships/.test(api), true);
+  eq('  with the conference companies always in',
+    /\.\.\.Array\.from\(atConference\),/.test(api), true);
   // SQLite has a bound-parameter ceiling that the all scope plus its hop can
   // pass.
   eq('  and the company lookup chunked', /i \+= CHUNK/.test(api), true);

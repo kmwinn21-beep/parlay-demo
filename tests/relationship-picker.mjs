@@ -196,17 +196,49 @@ console.log('\n— the pieces on the page —');
     /\{c\.relationshipCount\}/.test(picker), true);
 
   // The cards move.
-  eq('spokes are draggable', /onPointerDown=\{e => onPointerDown\(e, s\.id\)\}/.test(canvas), true);
+  // By a grip rather than the card itself: the card has buttons in it, and a
+  // drag starting on Update is either a drag that does not work or a button
+  // that does not.
+  eq('spokes are dragged by a grip', /startDrag\(e, s\.id\)/.test(canvas), true);
+  eq('  and so is the hub', /startDrag\(e, 'hub'\)/.test(canvas), true);
+  // setPointerCapture is dropped when the card re-renders mid-drag, which
+  // stranded the pointer and made a card draggable in one part of the canvas
+  // and not another.
+  eq('  tracked on the window, not the card',
+    /window\.addEventListener\('pointermove', onMove\)/.test(canvas), true);
   eq('  clamped inside the canvas, which does not scroll',
-    /Math\.max\(0, Math\.min\(box\.width - CARD_W/.test(canvas), true);
+    /Math\.max\(0, Math\.min\(box\.width - w,/.test(canvas), true);
+  // One spoke per relationship. Keying on the company collapsed two
+  // relationships with one company into a single React key, which rendered a
+  // duplicate card and left the hub's count disagreeing with what was drawn.
+  eq('a spoke is keyed by its relationship, not its company',
+    /id: rel\.id,/.test(modal), true);
+  eq('  and the canvas keys on that', /key=\{s\.id\}/.test(canvas), true);
+  // The cards fly out of the hub when a company is picked.
+  eq('the spokes animate outward from the hub',
+    /return settled \? placed : \{ x: centre\.x - CARD_W \/ 2, y: centre\.y - CARD_H \/ 2 \};/.test(canvas), true);
+  // The same card the company record shows, collapsed by default.
+  eq('a spoke is the shared relationship card',
+    /<VendorRelationshipCard/.test(canvas), true);
   eq('  and each hub keeps its own arrangement',
     /\[hub\.id\]: \{ \.\.\.\(prev\[hub\.id\] \?\? \{\}\), \[dragging\]/.test(canvas), true);
   // A line must never swallow a drag meant for the card above it.
   eq('the edges do not take pointer events', /pointer-events-none/.test(canvas), true);
 
-  // The spoke reads from the hub's side, the same rule the company record uses.
-  eq('a spoke inverts when the hub is the far end',
-    /const inbound = e\.to === hubNode\.id;/.test(modal), true);
+  // The spokes come from the endpoint that already reads a relationship from
+  // the selected company's side, rather than a second inversion here.
+  eq('spokes are the company record\'s own cards',
+    /fetch\(`\/api\/vendor-relationships\?company_id=\$\{companyId\}`/.test(modal), true);
+  // A picker row that opens an empty canvas is a dead end.
+  eq('only connected companies are listed',
+    /nodes\.filter\(n => n\.relationshipCount > 0\)/.test(modal), true);
+
+  // The rows were grey by default, which read as every company being
+  // unavailable rather than as none being chosen.
+  eq('an unselected company is full-strength brand primary',
+    /text-xs font-semibold text-brand-primary truncate/.test(picker), true);
+  eq('  on the same grey card the attendee list uses',
+    /border-gray-100 bg-gray-50 hover:bg-gray-100/.test(picker), true);
 
   // Opened from the Insights row, not replacing it.
   eq('the Insights row has the map button', /Relationship Map/.test(charts), true);
