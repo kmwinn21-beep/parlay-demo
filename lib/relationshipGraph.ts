@@ -48,6 +48,15 @@ export interface GraphCompany {
   id: number;
   name: string;
   company_type: string | null;
+  /**
+   * company_type resolved to display values.
+   *
+   * The column holds either an option id or the value itself depending on when
+   * the row was written, and may hold several comma-separated. Resolved once
+   * on the server so the picker can group by type without every caller
+   * re-learning that.
+   */
+  company_types: string[];
   /** companies.wse, under whatever label the account calls units. */
   units: number | null;
 }

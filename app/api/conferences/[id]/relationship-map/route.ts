@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { vendorRelsQuery, loadInverseStatuses } from '@/lib/relationshipThread';
 import { isInverted } from '@/lib/relationshipDirection';
+import { getIcpCompanyTypes } from '@/lib/icpCompanyTypes';
 import { buildGraph, pruneIsolated, type GraphCompany, type GraphEdgeInput } from '@/lib/relationshipGraph';
 
 /**
@@ -116,6 +117,18 @@ export async function GET(
     const nodeIds = new Set<number>(seedIds);
     for (const e of edges) { nodeIds.add(e.from); nodeIds.add(e.to); }
 
+    // company_type holds an option id or the value itself depending on when the
+    // row was written. Resolved here so the picker can group by type without
+    // relearning that, and so a renamed option reads correctly everywhere.
+    const typeOpts = await db.execute({
+      sql: `SELECT id, value FROM config_options WHERE category = 'company_type'`,
+      args: [],
+    }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
+    const typeById = new Map<string, string>();
+    for (const r of typeOpts.rows) typeById.set(String(r.id), String(r.value));
+    const resolveTypes = (raw: string | null): string[] =>
+      splitList(raw).map(p => typeById.get(p) ?? p);
+
     const ids = Array.from(nodeIds);
     const companies: GraphCompany[] = [];
     // Chunked: SQLite has a bound-parameter ceiling and the all-accounts scope
@@ -135,10 +148,12 @@ export async function GET(
         args: slice,
       }));
       for (const r of res.rows) {
+        const rawType = r.company_type ? String(r.company_type) : null;
         companies.push({
           id: Number(r.id),
           name: r.name ? String(r.name) : '',
-          company_type: r.company_type ? String(r.company_type) : null,
+          company_type: rawType,
+          company_types: resolveTypes(rawType),
           units: r.wse != null ? Number(r.wse) : null,
         });
       }
@@ -146,8 +161,11 @@ export async function GET(
 
     const graph = pruneIsolated(buildGraph(companies, edges, attendeeCounts), atConference);
 
+    // The account's ICP company types, so the picker can lead with them.
+    const icp = await getIcpCompanyTypes(db).catch(() => ({ values: [] as string[], configured: false }));
+
     return NextResponse.json(
-      { scope, ...graph },
+      { scope, icpTypes: icp.configured ? icp.values : [], ...graph },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error) {
