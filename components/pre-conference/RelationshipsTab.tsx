@@ -191,7 +191,12 @@ function CardDetail({ tp }: { tp: Touchpoint }) {
 
 // ── Relationship Attendee Card ─────────────────────────────────────────────────
 
-function RelationshipAttendeeCard({
+/**
+ * Exported so the relationship map can show the same internal card rather than
+ * building a second one. It is the card the pre-conference review shows, with
+ * the same health ring and the same conference history.
+ */
+export function RelationshipAttendeeCard({
   attendee,
   repNames,
   descriptions,
@@ -226,8 +231,10 @@ function RelationshipAttendeeCard({
   const healthScore = timeline?.healthScore ?? 0;
   const hColor = scoreColor(healthScore);
   const touchpoints = timeline?.touchpoints ?? [];
-  const icp = timeline?.attendee.icp;
-  const attendeeStatus = timeline?.attendee.status;
+  // Optional all the way down: the guard on `timeline` is pointless if the
+  // next step assumes `attendee`, and a 200 without it takes the card out.
+  const icp = timeline?.attendee?.icp;
+  const attendeeStatus = timeline?.attendee?.status;
   const selectedTp = selectedIdx !== null ? touchpoints[selectedIdx] ?? null : null;
   const avatarLetter = (attendee.first_name?.[0] ?? '').toUpperCase();
 
@@ -237,7 +244,7 @@ function RelationshipAttendeeCard({
       <div className="flex items-start gap-3">
         <AttendeeInitialsAvatar
           name={`${attendee.first_name} ${attendee.last_name}`.trim()}
-          photoUrl={timeline?.attendee.photo_url}
+          photoUrl={timeline?.attendee?.photo_url}
           title={attendee.title}
           companyName={attendee.company_name}
           initialsOverride={avatarLetter}

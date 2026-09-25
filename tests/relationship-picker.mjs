@@ -248,6 +248,42 @@ console.log('\n— the pieces on the page —');
   eq('a spoke card carries no attendee line',
     /not at this show/.test(canvas) || /footnote/.test(canvas), false);
 
+  // The scope reads as a place rather than a setting.
+  eq('the toggle names the conference',
+    /conferenceName \? `At \$\{conferenceName\}` : 'At this conference'/.test(modal), true);
+  eq('  and the wider scope is about relationships, not accounts',
+    /'All Relationships'/.test(modal), true);
+  eq('  with the name passed in from the tab',
+    /conferenceName=\{conferenceName\}/.test(strip('components/AnalyticsCharts.tsx')), true);
+  // Verified in Chromium against the built stylesheet: 1360px, up from 1280.
+  eq('the modal is wider', /max-w-\[1360px\]/.test(modal), true);
+
+  // Internal relationships beside the map, using the pre-conference review's
+  // own card. Health behind that card is five cross-conference queries, so a
+  // second one here would have meant duplicating them.
+  eq('the internal column uses the pre-conference card',
+    /<RelationshipAttendeeCard/.test(modal), true);
+  eq('  fed from that endpoint rather than a query of its own',
+    /\/pre-conference`, \{ cache: 'no-store' \}/.test(modal), true);
+  eq('  and read-only, since the map is not where targets are set',
+    /readOnly\s*\n?\s*\/>/.test(modal), true);
+  // An empty column would take width from the map for nothing.
+  eq('the column is absent when there are no internal relationships',
+    /\{internalCards\.length > 0 && \(/.test(modal), true);
+  eq('  and collapses to a strip rather than disappearing',
+    /width: internalOpen \? 320 : 40/.test(modal), true);
+  eq('  with the width animated both ways',
+    /transition-\[width\] duration-300 ease-in-out/.test(modal), true);
+  // Kept mounted so reopening does not refetch every timeline the cards load.
+  eq('  and the cards stay mounted while collapsed',
+    /internalOpen \? '' : 'invisible'/.test(modal), true);
+
+  // The guard on `timeline` was pointless while the next step assumed
+  // `attendee`: a 200 without that key took the whole card out, which is how
+  // the probe found it.
+  eq('the internal card survives a timeline without an attendee',
+    /timeline\?\.attendee\./.test(strip('components/pre-conference/RelationshipsTab.tsx')), false);
+
   // The rows were grey by default, which read as every company being
   // unavailable rather than as none being chosen.
   eq('an unselected company is full-strength brand primary',

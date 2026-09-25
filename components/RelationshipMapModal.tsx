@@ -7,6 +7,8 @@ import type { VendorRelationship } from '@/components/VendorRelationshipCard';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useUserOptions } from '@/lib/useUserOptions';
 import { toneFor, type PickerCompany } from '@/lib/relationshipPicker';
+import { RelationshipAttendeeCard } from '@/components/pre-conference/RelationshipsTab';
+import type { RelationshipRow } from '@/components/PreConferenceReview';
 
 interface GraphNode extends PickerCompany {
   company_type: string | null;
@@ -34,8 +36,10 @@ interface GraphEdge {
  * button. Rebuilding those here would have been a second card to keep in step
  * with the one on the company record.
  */
-export function RelationshipMapModal({ conferenceId, onClose }: {
+export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: {
   conferenceId: number;
+  /** Named on the toggle, so the scope reads as a place rather than a setting. */
+  conferenceName?: string;
   onClose: () => void;
 }) {
   const colorMaps = useConfigColors();
@@ -50,6 +54,27 @@ export function RelationshipMapModal({ conferenceId, onClose }: {
   const [rels, setRels] = useState<VendorRelationship[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingRels, setLoadingRels] = useState(false);
+  /**
+   * The internal relationships for every company at this conference.
+   *
+   * From the pre-conference endpoint rather than a query of my own: that is
+   * where this card already comes from, health ring and all, and the health
+   * behind it is five cross-conference queries that would have had to be
+   * duplicated to build it here.
+   */
+  const [internal, setInternal] = useState<RelationshipRow[]>([]);
+  const [internalOpen, setInternalOpen] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/conferences/${conferenceId}/pre-conference`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: { relationships?: RelationshipRow[] } | null) => {
+        if (!cancelled && d) setInternal(d.relationships ?? []);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [conferenceId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,6 +121,27 @@ export function RelationshipMapModal({ conferenceId, onClose }: {
 
   const hubNode = selectedId != null ? byId.get(selectedId) ?? null : null;
 
+  /**
+   * The internal relationships to show beside the map.
+   *
+   * One card per tagged contact. Every contact here is at this conference
+   * already — the pre-conference route tags them from the conference's own
+   * attendee list — so both scopes show the same cards today. Widening "All
+   * Relationships" to contacts who did not come would mean computing the
+   * health ring outside that route, which is five cross-conference queries.
+   */
+  const internalCards = useMemo(() => {
+    if (!hubNode) return [];
+    return internal
+      .filter(r => r.company_id === hubNode.id)
+      .flatMap(r => r.attendees.map(a => ({
+        key: `${r.id}:${a.id}`,
+        attendee: { ...a, company_name: r.company_name, company_id: r.company_id },
+        repNames: r.rep_names,
+        descriptions: [r.description].filter(Boolean),
+      })));
+  }, [internal, hubNode]);
+
   const spokes: Spoke[] = useMemo(() => {
     if (!hubNode) return [];
     return rels
@@ -121,7 +167,7 @@ export function RelationshipMapModal({ conferenceId, onClose }: {
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl h-[88vh] flex flex-col"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-[1360px] h-[88vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
@@ -140,7 +186,9 @@ export function RelationshipMapModal({ conferenceId, onClose }: {
                     scope === s ? 'bg-brand-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  {s === 'conference' ? 'At this conference' : 'All accounts'}
+                  {s === 'conference'
+                    ? (conferenceName ? `At ${conferenceName}` : 'At this conference')
+                    : 'All Relationships'}
                 </button>
               ))}
             </div>
@@ -194,6 +242,48 @@ export function RelationshipMapModal({ conferenceId, onClose }: {
               <span className="text-[11px] text-gray-400 ml-auto">Drag the grip on a card to rearrange</span>
             </div>
           </div>
+
+          {/* Internal relationships, when the selected company has any.
+              Absent entirely when it does not, rather than an empty column
+              taking width from the map. */}
+          {internalCards.length > 0 && (
+            <div
+              className="flex-shrink-0 flex flex-col min-h-0 overflow-hidden transition-[width] duration-300 ease-in-out"
+              style={{ width: internalOpen ? 320 : 40 }}
+            >
+              <button
+                type="button"
+                onClick={() => setInternalOpen(v => !v)}
+                aria-expanded={internalOpen}
+                title={internalOpen ? 'Collapse internal relationships' : 'Internal relationships'}
+                className="flex items-center gap-1.5 px-2 py-2 text-left text-gray-500 hover:text-brand-secondary transition-colors flex-shrink-0"
+              >
+                <svg className={`w-4 h-4 flex-shrink-0 transition-transform duration-300 ${internalOpen ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                {internalOpen && (
+                  <span className="text-sm font-bold text-brand-primary font-serif whitespace-nowrap">
+                    Attendee Relationships
+                  </span>
+                )}
+              </button>
+              {/* Kept mounted while collapsed so reopening does not refetch
+                  every timeline the cards load for themselves. */}
+              <div className={`flex-1 min-h-0 overflow-y-auto scrollbar-desktop-thin space-y-3 pr-1 ${internalOpen ? '' : 'invisible'}`}>
+                {internalCards.map(c => (
+                  <RelationshipAttendeeCard
+                    key={c.key}
+                    attendee={c.attendee}
+                    repNames={c.repNames}
+                    descriptions={c.descriptions}
+                    isTarget={false}
+                    onToggleTarget={() => {}}
+                    readOnly
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -577,7 +577,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
       </div>
 
       {mapOpen && conferenceId != null && (
-        <RelationshipMapModal conferenceId={conferenceId} onClose={() => setMapOpen(false)} />
+        <RelationshipMapModal conferenceId={conferenceId} conferenceName={conferenceName} onClose={() => setMapOpen(false)} />
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
