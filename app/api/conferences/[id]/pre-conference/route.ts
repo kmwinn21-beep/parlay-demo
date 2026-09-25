@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
-import { vendorRelsQuery, loadRelationshipThreads } from '@/lib/relationshipThread';
+import { vendorRelsQuery, loadRelationshipThreads, loadInverseStatuses, presentRelationships } from '@/lib/relationshipThread';
 import { getMeetingHeld, isMeetingHeld } from '@/lib/meetingHeld';
 import { getIcpConfig, evaluateIcpRules } from '@/lib/icpRules';
 import { classifySeniority } from '@/lib/parsers';
@@ -829,25 +829,17 @@ export async function GET(
   // same wherever the card is rendered.
   const vendorThreads = await loadRelationshipThreads(db, vendorRelsRes.rows.map(r => Number(r.id)));
 
-  const vendorRelationshipsData = vendorRelsRes.rows.map((r) => ({
-    id: Number(r.id),
-    company_id: Number(r.company_id),
-    company_name: companyNameById.get(Number(r.company_id)) ?? '',
-    company_assigned_user_names: companyAssignedById.get(Number(r.company_id)) ?? [],
-    related_company_id: Number(r.related_company_id),
-    related_company_name: r.related_company_name ? String(r.related_company_name) : '',
-    related_company_type: r.related_company_type ? String(r.related_company_type) : null,
-    rep_id: r.rep_id != null ? Number(r.rep_id) : null,
-    relationship_status: splitList(r.relationship_status),
-    strength: r.strength ? String(r.strength) : null,
-    vendor_type: splitList(r.vendor_type),
-    notes: r.notes ? String(r.notes) : '',
-    created_at: r.vr_created_at != null ? String(r.vr_created_at) : null,
-    updated_at: r.vr_updated_at != null ? String(r.vr_updated_at) : (r.vr_created_at != null ? String(r.vr_created_at) : null),
-    status_as_of: r.vr_status_as_of ? String(r.vr_status_as_of) : '',
-    stale: Number(r.vr_stale ?? 0) === 1,
-    updates: vendorThreads.get(Number(r.id)) ?? [],
-  }));
+  // The same presenter the company record uses, so an inbound relationship
+  // reads the same here as it does there. company_name and the assigned users
+  // are the extras this view needs and are keyed on the card's own company_id,
+  // which is the subject of the row rather than wherever it was logged.
+  const vendorInverses = await loadInverseStatuses(db);
+  const vendorRelationshipsData = presentRelationships(vendorRelsRes.rows, vendorThreads, vendorInverses)
+    .map(card => ({
+      ...card,
+      company_name: companyNameById.get(card.company_id) ?? '',
+      company_assigned_user_names: companyAssignedById.get(card.company_id) ?? [],
+    }));
 
   // --- Product ICP: group attendees by product, then by company ---
   const productCompanyMap = new Map<string, Map<number, {

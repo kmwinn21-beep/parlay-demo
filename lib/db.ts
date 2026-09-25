@@ -17,6 +17,7 @@ async function ensureConfigOptionsColumns(client: Client): Promise<void> {
     ['auto_follow_up', 'ALTER TABLE config_options ADD COLUMN auto_follow_up INTEGER NOT NULL DEFAULT 1'],
     ['is_system', 'ALTER TABLE config_options ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0'],
     ['is_primary', 'ALTER TABLE config_options ADD COLUMN is_primary INTEGER NOT NULL DEFAULT 0'],
+    ['inverse_value', 'ALTER TABLE config_options ADD COLUMN inverse_value TEXT'],
   ];
   await Promise.all(
     requiredConfigColumns

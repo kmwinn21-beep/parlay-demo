@@ -273,8 +273,11 @@ console.log('\n— one card, not four —');
   const card = strip('components/VendorRelationshipCard.tsx');
   // The button needs nothing from the caller, so it is not the caller's to
   // wire. Asking four surfaces to pass an onUpdate is how it ends up on one.
+  // Also gated on the row being this record's own: an inbound relationship
+  // lives on the other company's record, and updating it from here would
+  // write to a record the reader is not looking at.
   eq('the Update button needs no wiring from the surface',
-    /\{!readOnly && \(/.test(card), true);
+    /\{!readOnly && !inbound && \(/.test(card), true);
   eq('  and the form state lives in the card', /const \[updating, setUpdating\] = useState\(false\);/.test(card), true);
   eq('  so no surface passes an onUpdate handler',
     /onUpdate=\{/.test(readFileSync('components/pre-conference/RelationshipsTab.tsx', 'utf8')
@@ -340,8 +343,11 @@ console.log('\n— one query, not two —');
     /vr\.status_as_of AS vr_status_as_of, vr\.stale AS vr_stale/.test(shared), true);
   eq('  and the parent\/child exclusion that is part of the shape',
     /me\.parent_company_id = vr\.related_company_id/.test(shared), true);
+  // Both routes go through presentRelationships now, so the staleness fields
+  // are mapped once rather than in each route.
   eq('  and the pre-conference response exposes them',
-    /stale: Number\(r\.vr_stale \?\? 0\) === 1,/.test(pre), true);
+    /presentRelationships\(vendorRelsRes\.rows, vendorThreads, vendorInverses\)/.test(pre)
+    && /stale: Number\(r\.vr_stale \?\? 0\) === 1,/.test(strip('lib/relationshipThread.ts')), true);
 
   // The entry shape is declared once too. Two copies is how a card and a
   // route drift apart a field at a time.
