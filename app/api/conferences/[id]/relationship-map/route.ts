@@ -1,0 +1,215 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
+import { getDb } from '@/lib/getDb';
+import { vendorRelsQuery, loadInverseStatuses } from '@/lib/relationshipThread';
+import { isInverted } from '@/lib/relationshipDirection';
+import { getIcpCompanyTypes } from '@/lib/icpCompanyTypes';
+import { buildGraph, pruneIsolated, type GraphCompany, type GraphEdgeInput } from '@/lib/relationshipGraph';
+
+/**
+ * The relationship map for one conference.
+ *
+ * Two scopes, which the map offers as a toggle:
+ *
+ *   conference  the companies with somebody at this show, plus one hop out to
+ *               whoever they buy from. The hop is the point — a vendor nobody
+ *               sent to the show is still the thing several operators here
+ *               have in common, and leaving it out would draw a map with no
+ *               middle.
+ *   all         every company in the account that a relationship touches.
+ *
+ * Relationships are read through vendorRelsQuery, which returns each row from
+ * both ends. Here only one of the two is kept: the map draws an undirected
+ * line between two nodes and inverts the wording when the reader centres on
+ * one of them, so keeping both halves would be drawing every edge twice.
+ */
+
+/** Ceiling on the "all accounts" scope, so one account cannot hang the page. */
+const MAX_COMPANIES = 2000;
+
+function splitList(raw: unknown): string[] {
+  if (!raw) return [];
+  return String(raw).split(',').map(v => v.trim()).filter(Boolean);
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const db = await getDb(authResult?.accountId);
+
+  const conferenceId = Number((await params).id);
+  if (!conferenceId) return NextResponse.json({ error: 'conference id is required' }, { status: 400 });
+
+  const scope = new URL(request.url).searchParams.get('scope') === 'all' ? 'all' : 'conference';
+
+  try {
+    // Who is here, and how many of them. One query rather than a count per
+    // company: a conference with three hundred companies would otherwise be
+    // three hundred round trips to label the nodes.
+    const hereRes = await db.execute({
+      sql: `SELECT a.company_id AS company_id, COUNT(*) AS n
+            FROM conference_attendees ca
+            JOIN attendees a ON a.id = ca.attendee_id
+            WHERE ca.conference_id = ? AND a.company_id IS NOT NULL
+            GROUP BY a.company_id`,
+      args: [conferenceId],
+    });
+    const attendeeCounts = new Map<number, number>();
+    for (const r of hereRes.rows) attendeeCounts.set(Number(r.company_id), Number(r.n));
+    const atConference = new Set(Array.from(attendeeCounts.keys()));
+
+    // The seed set the relationships are looked up for.
+    let seedIds: number[];
+    if (scope === 'all') {
+      // Every company a relationship touches, rather than the first N by id.
+      // Seeding from the companies table made "all accounts" a SUBSET of "at
+      // this conference" on any account with more companies than the ceiling:
+      // the seed was an arbitrary slice that could miss the conference's own
+      // companies entirely, so a hub showed fewer relationships on the wider
+      // scope than on the narrower one.
+      const allRes = await db.execute({
+        sql: `SELECT company_id AS id FROM vendor_relationships
+              UNION
+              SELECT related_company_id AS id FROM vendor_relationships`,
+        args: [],
+      }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
+      // The conference's own companies are always in, so widening the scope
+      // can only ever add.
+      seedIds = Array.from(new Set([
+        ...allRes.rows.map(r => Number(r.id)).filter(Boolean),
+        ...Array.from(atConference),
+      ])).slice(0, MAX_COMPANIES);
+    } else {
+      seedIds = Array.from(atConference);
+    }
+
+    if (seedIds.length === 0) {
+      return NextResponse.json({ scope, nodes: [], edges: [] }, { headers: { 'Cache-Control': 'no-store' } });
+    }
+
+    const [relRows, inverses] = await Promise.all([
+      vendorRelsQuery(db, seedIds),
+      // Used to tell a purchase from a partnership: a status with different
+      // words at each end has a buyer and a seller, one that reads the same
+      // both ways does not.
+      loadInverseStatuses(db),
+    ]);
+
+    // One edge per company PAIR, not per stored row.
+    //
+    // Two things collapse here. vendorRelsQuery returns each row once per end
+    // it was asked for, so a relationship between two conference companies
+    // arrives twice with the same id. And a pair can carry more than one row —
+    // logged at both ends, or logged twice at one — which the card view
+    // collapses to a single card in collapsePairs.
+    //
+    // Counting rows here while the map drew cards is what had a hub badged
+    // "8 relationships" beside six cards. The key is the unordered pair so the
+    // count is of relationships as the reader sees them.
+    const edgeById = new Map<string, GraphEdgeInput>();
+    for (const r of relRows.rows) {
+      const id = Number(r.id);
+      const a = Number(r.subject_id);
+      const z = Number(r.related_company_id);
+      const key = a < z ? `${a}:${z}` : `${z}:${a}`;
+      if (edgeById.has(key)) continue;
+      const subject = Number(r.subject_id);
+      const other = Number(r.related_company_id);
+      const outbound = String(r.direction) !== 'inbound';
+      const statuses = splitList(r.relationship_status);
+      edgeById.set(key, {
+        id,
+        from: outbound ? subject : other,
+        to: outbound ? other : subject,
+        relationship_status: statuses,
+        strength: r.strength ? String(r.strength) : null,
+        vendor_type: splitList(r.vendor_type),
+        stale: Number(r.vr_stale ?? 0) === 1,
+        implies_vendor: statuses.some(st => isInverted(st, inverses)),
+      });
+    }
+    // At conference scope the map is about this show: a relationship counts
+    // only when the company at the other end is here too.
+    //
+    // This is what the scope toggle means, and it was doing nothing of the
+    // sort — it narrowed which companies were looked up and then drew every
+    // relationship either way, so both settings showed the same spokes.
+    const edges = scope === 'all'
+      ? Array.from(edgeById.values())
+      : Array.from(edgeById.values()).filter(e => atConference.has(e.from) && atConference.has(e.to));
+
+    const nodeIds = new Set<number>(seedIds);
+    // At conference scope the nodes are the conference's companies and nothing
+    // else. Widening to the far end of every relationship would put companies
+    // on the map that are not at the show the map is scoped to.
+    if (scope === 'all') {
+      for (const e of edges) { nodeIds.add(e.from); nodeIds.add(e.to); }
+    }
+
+    // company_type holds an option id or the value itself depending on when the
+    // row was written. Resolved here so the picker can group by type without
+    // relearning that, and so a renamed option reads correctly everywhere.
+    const typeOpts = await db.execute({
+      sql: `SELECT id, value FROM config_options WHERE category = 'company_type'`,
+      args: [],
+    }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
+    const typeById = new Map<string, string>();
+    for (const r of typeOpts.rows) typeById.set(String(r.id), String(r.value));
+    const resolveTypes = (raw: string | null): string[] =>
+      splitList(raw).map(p => typeById.get(p) ?? p);
+
+    const ids = Array.from(nodeIds);
+    const companies: GraphCompany[] = [];
+    // Chunked: SQLite has a bound-parameter ceiling and the all-accounts scope
+    // plus its hop can pass it.
+    const CHUNK = 500;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const slice = ids.slice(i, i + CHUNK);
+      const res = await db.execute({
+        sql: `SELECT id, name, company_type, wse FROM companies
+              WHERE id IN (${slice.map(() => '?').join(',')})`,
+        args: slice,
+      // wse arrived after companies did; losing the unit counts is better than
+      // losing the map.
+      }).catch(() => db.execute({
+        sql: `SELECT id, name, company_type, NULL AS wse FROM companies
+              WHERE id IN (${slice.map(() => '?').join(',')})`,
+        args: slice,
+      }));
+      for (const r of res.rows) {
+        const rawType = r.company_type ? String(r.company_type) : null;
+        companies.push({
+          id: Number(r.id),
+          name: r.name ? String(r.name) : '',
+          company_type: rawType,
+          company_types: resolveTypes(rawType),
+          units: r.wse != null ? Number(r.wse) : null,
+        });
+      }
+    }
+
+    const graph = pruneIsolated(buildGraph(companies, edges, attendeeCounts), atConference);
+
+    // The account's ICP company types, so the picker can lead with them.
+    const icp = await getIcpCompanyTypes(db).catch(() => ({ values: [] as string[], configured: false }));
+
+    return NextResponse.json(
+      {
+        scope,
+        icpTypes: icp.configured ? icp.values : [],
+        // Who is actually at this show, whatever the scope. The map filters
+        // its spokes against this rather than inferring it from a count that
+        // is zero for a company nobody from it attended.
+        atConference: Array.from(atConference),
+        ...graph,
+      },
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
+  } catch (error) {
+    console.error('GET /api/conferences/[id]/relationship-map error:', error);
+    return NextResponse.json({ error: 'Failed to build relationship map' }, { status: 500 });
+  }
+}

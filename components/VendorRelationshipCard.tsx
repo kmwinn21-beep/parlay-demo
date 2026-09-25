@@ -41,6 +41,16 @@ export interface VendorRelationship {
   stale?: boolean;
   /** Newest first. Absent on surfaces that load without the thread. */
   updates?: RelationshipUpdate[];
+  /** 'inbound' means the other company logged this, read from this side. */
+  direction?: 'outbound' | 'inbound';
+  /** Where the row lives, so an inbound card can link back to it. */
+  logged_on_company_id?: number;
+  /** The status as written, when reading it from here changed the words. */
+  as_written?: string[] | null;
+  /** The other company logged the same pair; these are their words for it. */
+  counterpart?: { id: number; statuses: string[] } | null;
+  /** The two ends do not agree once both are read from this side. */
+  conflict?: boolean;
 }
 
 /* ─── Card ────────────────────────────────────────────────────────────────── */
@@ -151,6 +161,11 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
   const stamp = formatStamp(shown.updated_at || shown.created_at);
   const freshness = freshnessOf(shown);
   const isStale = freshness === 'stale';
+  // The other company logged this one. The row belongs to their record — their
+  // rep, their thread, the page that can edit it — so this side reads it and
+  // links back rather than offering controls that would write to a record the
+  // reader is not looking at.
+  const inbound = shown.direction === 'inbound';
 
   return (
     // Stale cards are drained rather than recoloured. The six status colours
@@ -210,7 +225,7 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
             )}
             {/* Sits at the end of this row so it lands directly under the
                 header's chevron, rather than floating at the foot of the card. */}
-            {(onEdit || onDelete) && (
+            {!inbound && (onEdit || onDelete) && (
               <div className="flex-shrink-0">
                 <KebabMenu
                   title="Relationship actions"
@@ -242,6 +257,41 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
 
           <RelationshipThread updates={shown.updates ?? []} />
 
+          {/* Where an inbound row came from, and what it says at its own end.
+              A Customer pill on a page whose row reads Current Vendor is
+              correct but surprising, and saying so is the difference between
+              trusting the card and reporting it as a bug. */}
+          {inbound && (
+            <p className="text-[11px] text-gray-500">
+              Logged on{' '}
+              <a
+                href={`/companies/${shown.logged_on_company_id}`}
+                className="font-medium text-brand-secondary hover:underline"
+              >
+                {shown.related_company_name}
+              </a>
+              {shown.as_written && shown.as_written.length > 0 && (
+                <> as &ldquo;{shown.as_written.join(', ')}&rdquo;</>
+              )}
+              .
+            </p>
+          )}
+
+          {/* Both companies recorded this pair. Saying only the near side
+              would hide that the far side disagrees. */}
+          {shown.counterpart && (
+            <p className={`text-[11px] ${shown.conflict ? 'text-amber-700' : 'text-gray-500'}`}>
+              {shown.related_company_name} also recorded this
+              {/* "Describe it differently" rather than "do not match": each end
+                  calling the other its vendor is a mutual arrangement as often
+                  as it is a mistake, and the card is not in a position to say
+                  which. It points; the rep decides. */}
+              {shown.conflict
+                ? <> as <span className="font-semibold">{shown.counterpart.statuses.join(', ')}</span> — the two ends describe it differently.</>
+                : <>, and the two agree.</>}
+            </p>
+          )}
+
           {/* The confirmation line and the way to move it, on one row.
               Separated from the notes above by a rule because it is about the
               record rather than about the relationship. */}
@@ -251,7 +301,7 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
             }`}>
               {confirmationLabel(shown)}
             </span>
-            {!readOnly && (
+            {!readOnly && !inbound && (
               <button
                 type="button"
                 onClick={() => setUpdating(true)}

@@ -2627,4 +2627,29 @@ export const migrations: string[] = [
     )`,
   `CREATE INDEX IF NOT EXISTS idx_relationship_updates_rel
      ON relationship_updates(relationship_id, created_at)`,
+
+  // ── Reading a relationship from the other company's side ──────────────────
+  //
+  // vendor_relationships is directional: company_id is the record somebody was
+  // on when they logged it, related_company_id the company they picked. The
+  // status is written from the subject's point of view, so "Current Vendor" on
+  // Abshire → Abbott means Abbott is Abshire's vendor.
+  //
+  // Rendering that same row on Abbott's page unchanged would claim the exact
+  // opposite — that Abshire is Abbott's vendor — stated with full confidence
+  // in a competitive-intelligence field. So each status carries the words for
+  // the other end of the same fact.
+  //
+  // NULL means symmetric: Preferred Partner is a preferred partner both ways
+  // round, and so is Active Pilot. Only the three that actually invert get a
+  // value, and an account that adds its own option gets NULL until somebody
+  // fills it in, which reads as symmetric rather than as backwards.
+  `ALTER TABLE config_options ADD COLUMN inverse_value TEXT`,
+  `UPDATE config_options SET inverse_value = 'Customer'
+     WHERE category = 'other_relationship_status' AND value = 'Current Vendor' AND inverse_value IS NULL`,
+  `UPDATE config_options SET inverse_value = 'Former Customer'
+     WHERE category = 'other_relationship_status' AND value = 'Former Vendor' AND inverse_value IS NULL`,
+  // They are evaluating you, which from your side makes them a prospect.
+  `UPDATE config_options SET inverse_value = 'Prospect'
+     WHERE category = 'other_relationship_status' AND value = 'Evaluating' AND inverse_value IS NULL`,
 ];

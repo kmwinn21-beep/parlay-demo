@@ -191,7 +191,30 @@ function CardDetail({ tp }: { tp: Touchpoint }) {
 
 // ── Relationship Attendee Card ─────────────────────────────────────────────────
 
-function RelationshipAttendeeCard({
+/**
+ * The heading over a stack of relationship cards, with its count.
+ *
+ * Module scope and exported so the relationship map's mobile layout uses this
+ * one rather than a copy — it is two lines, which is exactly the size of thing
+ * that gets copied and then drifts.
+ */
+export function SectionHead({ label, count }: { label: string; count: number }) {
+  return (
+    <div className="flex items-center gap-2 mb-3">
+      <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">{label}</p>
+      <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-bold">
+        {count}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Exported so the relationship map can show the same internal card rather than
+ * building a second one. It is the card the pre-conference review shows, with
+ * the same health ring and the same conference history.
+ */
+export function RelationshipAttendeeCard({
   attendee,
   repNames,
   descriptions,
@@ -226,8 +249,10 @@ function RelationshipAttendeeCard({
   const healthScore = timeline?.healthScore ?? 0;
   const hColor = scoreColor(healthScore);
   const touchpoints = timeline?.touchpoints ?? [];
-  const icp = timeline?.attendee.icp;
-  const attendeeStatus = timeline?.attendee.status;
+  // Optional all the way down: the guard on `timeline` is pointless if the
+  // next step assumes `attendee`, and a 200 without it takes the card out.
+  const icp = timeline?.attendee?.icp;
+  const attendeeStatus = timeline?.attendee?.status;
   const selectedTp = selectedIdx !== null ? touchpoints[selectedIdx] ?? null : null;
   const avatarLetter = (attendee.first_name?.[0] ?? '').toUpperCase();
 
@@ -237,7 +262,7 @@ function RelationshipAttendeeCard({
       <div className="flex items-start gap-3">
         <AttendeeInitialsAvatar
           name={`${attendee.first_name} ${attendee.last_name}`.trim()}
-          photoUrl={timeline?.attendee.photo_url}
+          photoUrl={timeline?.attendee?.photo_url}
           title={attendee.title}
           companyName={attendee.company_name}
           initialsOverride={avatarLetter}
@@ -719,17 +744,6 @@ export function RelationshipsTab({
   }
 
   /** Eyebrow header with the count of what follows. */
-  function SectionHead({ label, count }: { label: string; count: number }) {
-    return (
-      <div className="flex items-center gap-2 mb-3">
-        <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">{label}</p>
-        <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-bold">
-          {count}
-        </span>
-      </div>
-    );
-  }
-
   function InternalCards() {
     if (!selectedCompany) return null;
     if (selectedCompany.attendees.length === 0) {

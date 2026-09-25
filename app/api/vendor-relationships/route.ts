@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
-import { vendorRelsQuery, loadRelationshipThreads } from '@/lib/relationshipThread';
+import { vendorRelsQuery, loadRelationshipThreads, loadInverseStatuses, presentRelationships } from '@/lib/relationshipThread';
 
 /** Multi-selects arrive as arrays and are stored comma-separated, like services. */
 function serializeList(value: unknown): string | null {
@@ -54,27 +54,15 @@ export async function GET(request: NextRequest) {
     // columns while its own comment claimed the two matched.
     const res = await vendorRelsQuery(db, [Number(companyId)]);
 
-    const threads = await loadRelationshipThreads(db, res.rows.map(r => Number(r.id)));
+    const [threads, inverses] = await Promise.all([
+      loadRelationshipThreads(db, res.rows.map(r => Number(r.id))),
+      loadInverseStatuses(db),
+    ]);
 
-    return NextResponse.json(res.rows.map(r => ({
-      id: Number(r.id),
-      company_id: Number(r.company_id),
-      related_company_id: Number(r.related_company_id),
-      related_company_name: r.related_company_name ? String(r.related_company_name) : '',
-      related_company_type: r.related_company_type ? String(r.related_company_type) : null,
-      rep_id: r.rep_id != null ? Number(r.rep_id) : null,
-      relationship_status: parseList(r.relationship_status),
-      strength: r.strength ? String(r.strength) : null,
-      vendor_type: parseList(r.vendor_type),
-      notes: r.notes ? String(r.notes) : '',
-      created_at: String(r.vr_created_at ?? ''),
-      updated_at: String(r.vr_updated_at ?? r.vr_created_at ?? ''),
-      // When a person last said this was true, as opposed to when the row was
-      // last written. Empty means nobody ever has.
-      status_as_of: r.vr_status_as_of ? String(r.vr_status_as_of) : '',
-      stale: Number(r.vr_stale ?? 0) === 1,
-      updates: threads.get(Number(r.id)) ?? [],
-    })), { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json(
+      presentRelationships(res.rows, threads, inverses),
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
   } catch (error) {
     console.error('GET /api/vendor-relationships error:', error);
     return NextResponse.json({ error: 'Failed to load relationships' }, { status: 500 });
