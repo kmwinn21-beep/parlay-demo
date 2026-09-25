@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { VendorRelationshipCard, type VendorRelationship } from '@/components/VendorRelationshipCard';
 import type { UserOption } from '@/lib/useUserOptions';
 import type { EdgeTone } from '@/lib/relationshipPicker';
+import { layoutSpokes } from '@/lib/relationshipLayout';
 
 export interface Spoke {
   /**
@@ -100,33 +101,33 @@ export function MapCanvas({ hub, spokes, userOptions, colorMaps, onUpdated }: {
   const centre = { x: hubPos.x + HUB_W / 2, y: hubPos.y + HUB_H / 2 };
 
   /**
-   * Where a card sits before anybody moves it.
+   * Where the cards sit, given where the hub is.
    *
-   * An ellipse around the hub's current position, so moving the hub takes its
-   * unmoved spokes with it rather than leaving them orbiting empty space.
+   * Not a plain ellipse any more. That was drawn around the hub and each card
+   * clamped into the canvas afterwards, which is fine while the hub is in the
+   * middle and falls apart the moment it is dragged towards an edge: half the
+   * ring lands outside, everything out there clamps to the same wall, and four
+   * names stack on one another.
+   *
+   * layoutSpokes sizes the ring to the room on each side of the hub and then
+   * pushes whatever still overlaps apart. Cards the reader has dragged are
+   * passed in as fixed: they are never moved, but they do push the others
+   * away, so nothing is laid out underneath one.
    */
-  const layout = useMemo(() => {
-    const rx = Math.max(150, size.w / 2 - CARD_W / 2 - 16);
-    const ry = Math.max(110, size.h / 2 - CARD_H / 2 - 16);
-    const n = Math.max(1, spokes.length);
-    const out = new Map<number, Pos>();
-    spokes.forEach((s, i) => {
-      const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
-      out.set(s.id, {
-        x: Math.max(0, Math.min(size.w - CARD_W, centre.x + Math.cos(angle) * rx - CARD_W / 2)),
-        y: Math.max(0, Math.min(size.h - CARD_H, centre.y + Math.sin(angle) * ry - CARD_H / 2)),
-      });
-    });
-    return out;
-  }, [spokes, size.w, size.h, centre.x, centre.y]);
+  const layout = useMemo(() => layoutSpokes({
+    ids: spokes.map(s => s.id),
+    hub: { ...hubPos, w: HUB_W, h: HUB_H },
+    card: { w: CARD_W, h: CARD_H },
+    box: { w: size.w, h: size.h },
+    fixed: moved[hub.id] ?? {},
+  }), [spokes, hubPos, size.w, size.h, moved, hub.id]);
 
   const posOf = useCallback((id: number): Pos => {
-    const home = layout.get(id) ?? { x: centre.x, y: centre.y };
-    const placed = moved[hub.id]?.[id] ?? home;
+    const placed = layout[id] ?? { x: centre.x - CARD_W / 2, y: centre.y - CARD_H / 2 };
     // Before the first frame every card sits under the hub, so the transition
     // reads as them coming out of it.
     return settled ? placed : { x: centre.x - CARD_W / 2, y: centre.y - CARD_H / 2 };
-  }, [moved, hub.id, layout, settled, centre.x, centre.y]);
+  }, [layout, settled, centre.x, centre.y]);
 
   /**
    * Drag on the window rather than the container.

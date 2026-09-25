@@ -214,6 +214,13 @@ console.log('\n— the pieces on the page —');
   eq('a spoke is keyed by its relationship, not its company',
     /id: rel\.id,/.test(modal), true);
   eq('  and the canvas keys on that', /key=\{s\.id\}/.test(canvas), true);
+  // Moving the hub re-arranges whatever the reader has not placed, instead of
+  // dragging the whole ring along and clamping it into a wall.
+  eq('the canvas lays spokes out around wherever the hub is',
+    /layoutSpokes\(\{/.test(canvas), true);
+  eq('  passing the cards the reader placed as fixed',
+    /fixed: moved\[hub\.id\] \?\? \{\}/.test(canvas), true);
+
   // The cards fly out of the hub when a company is picked.
   eq('the spokes animate outward from the hub',
     /return settled \? placed : \{ x: centre\.x - CARD_W \/ 2, y: centre\.y - CARD_H \/ 2 \};/.test(canvas), true);
