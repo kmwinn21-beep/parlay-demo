@@ -21,7 +21,6 @@ import { getHex, getBadgeClass, type ColorMap } from '@/lib/colors';
 import { parseRepIds } from '@/lib/useUserOptions';
 import { useUser } from '@/components/UserContext';
 import { NotesPopover } from './NotesPopover';
-import { RelationshipMapModal } from '@/components/RelationshipMapModal';
 
 interface Attendee {
   id: number;
@@ -59,8 +58,6 @@ interface AnalyticsChartsProps {
   conferenceDetails: ConferenceDetail[];
   conferenceName: string;
   actionConfigs: ActionConfig[];
-  /** Opens the relationship map. Omitted where there is no conference. */
-  conferenceId?: number;
 }
 
 function buildSeniorityData(attendees: Attendee[]) {
@@ -266,10 +263,7 @@ function DonutModal({ chart, onClose }: { chart: ExpandedChart; onClose: () => v
   );
 }
 
-export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, actionConfigs, conferenceId }: AnalyticsChartsProps) {
-  // Opened from this row rather than replacing the tab: the charts answer who
-  // came, the map answers what they are connected to.
-  const [mapOpen, setMapOpen] = useState(false);
+export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, actionConfigs }: AnalyticsChartsProps) {
   const colorMaps = useConfigColors();
   const { user: currentUser } = useUser();
 
@@ -556,29 +550,7 @@ export function AnalyticsCharts({ attendees, conferenceDetails, conferenceName, 
         <span className="text-xs text-gray-400 ml-1">
           {filteredAttendees.length} of {attendees.length} attendees
         </span>
-        {conferenceId != null && (
-          <button
-            type="button"
-            onClick={() => setMapOpen(true)}
-            className="flex-shrink-0 whitespace-nowrap ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-xs font-medium text-gray-600 hover:border-brand-secondary hover:text-brand-secondary transition-colors"
-          >
-            {/* Hub and spokes: a centre with four lines out to satellites. */}
-            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="2.5" />
-              <circle cx="12" cy="3.5" r="1.75" />
-              <circle cx="12" cy="20.5" r="1.75" />
-              <circle cx="3.5" cy="12" r="1.75" />
-              <circle cx="20.5" cy="12" r="1.75" />
-              <path strokeLinecap="round" d="M12 5.25v4.25M12 14.5v4.25M5.25 12h4.25M14.5 12h4.25" />
-            </svg>
-            Relationship Map
-          </button>
-        )}
       </div>
-
-      {mapOpen && conferenceId != null && (
-        <RelationshipMapModal conferenceId={conferenceId} conferenceName={conferenceName} onClose={() => setMapOpen(false)} />
-      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <DonutCard

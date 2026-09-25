@@ -73,6 +73,7 @@ import { CrmExportModal } from '@/components/CrmExportModal';
 import { PreConferenceReview } from '@/components/PreConferenceReview';
 import { PostConferenceReview } from '@/components/PostConferenceReview';
 import { BudgetVsActualModal } from '@/components/BudgetVsActualModal';
+import { RelationshipMapModal } from '@/components/RelationshipMapModal';
 import { ConferenceEffectivenessModal } from '@/components/ConferenceEffectivenessModal';
 import { getCached } from '@/lib/configCache';
 import { AgendaTab } from '@/components/AgendaTab';
@@ -582,6 +583,9 @@ export default function ConferenceDetailPage() {
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [conferenceBudgetTotal, setConferenceBudgetTotal] = useState<number | null>(null);
   const [showLogisticsDrawer, setShowLogisticsDrawer] = useState(false);
+  // Beside the other reports rather than inside the Insights tab: it answers a
+  // question about the conference, not about the charts it was buried under.
+  const [showRelationshipMap, setShowRelationshipMap] = useState(false);
   const [showDebrief, setShowDebrief] = useState(false);
   const [activityMapOpen, setActivityMapOpen] = useState(false);
   const [reportMenuOpen, setReportMenuOpen] = useState(false);
@@ -3478,6 +3482,24 @@ export default function ConferenceDetailPage() {
                 conferenceName={conference.name}
                 targetsReadOnly={conferenceStage === 'closed'}
               />
+              <button
+                type="button"
+                onClick={() => setShowRelationshipMap(true)}
+                /* Matches the two it sits between: same padding, same hover,
+                   same nowrap so it does not fold inside the scrolling row. */
+                className="flex items-center gap-1 py-1 px-1 text-sm font-medium text-gray-500 hover:text-brand-accent transition-colors whitespace-nowrap cursor-pointer flex-shrink-0"
+              >
+                {/* Hub and spokes: a centre with four lines out to satellites. */}
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="2.5" />
+                  <circle cx="12" cy="3.5" r="1.75" />
+                  <circle cx="12" cy="20.5" r="1.75" />
+                  <circle cx="3.5" cy="12" r="1.75" />
+                  <circle cx="20.5" cy="12" r="1.75" />
+                  <path strokeLinecap="round" strokeWidth={2} d="M12 5.25v4.25M12 14.5v4.25M5.25 12h4.25M14.5 12h4.25" />
+                </svg>
+                <span>Relationship Map</span>
+              </button>
               <PostConferenceReview
                 conferenceId={conference.id}
                 conferenceName={conference.name}
@@ -4686,7 +4708,7 @@ export default function ConferenceDetailPage() {
 
       {/* Analytics Tab */}
       {activeTab === 'analytics' && (
-        <AnalyticsCharts attendees={conference.attendees} conferenceDetails={conferenceDetails} conferenceName={conference?.name || ''} actionConfigs={actionConfigs} conferenceId={Number(id)} />
+        <AnalyticsCharts attendees={conference.attendees} conferenceDetails={conferenceDetails} conferenceName={conference?.name || ''} actionConfigs={actionConfigs} />
       )}
 
       {/* Notes Tab */}
@@ -5437,6 +5459,14 @@ export default function ConferenceDetailPage() {
             data.line_items.reduce((sum, it) => sum + (Number(String(it.budget ?? '').replace(/[^0-9.]/g, '')) || 0), 0)
           )}
           readOnly={stagePermissions != null && !stagePermissions.canEditBudget}
+        />
+      )}
+
+      {showRelationshipMap && conference && (
+        <RelationshipMapModal
+          conferenceId={conference.id}
+          conferenceName={conference.name}
+          onClose={() => setShowRelationshipMap(false)}
         />
       )}
 

@@ -260,8 +260,6 @@ console.log('\n— the pieces on the page —');
     /conferenceName \? `At \$\{conferenceName\}` : 'At this conference'/.test(modal), true);
   eq('  and the wider scope is about relationships, not accounts',
     /'All Relationships'/.test(modal), true);
-  eq('  with the name passed in from the tab',
-    /conferenceName=\{conferenceName\}/.test(strip('components/AnalyticsCharts.tsx')), true);
   // Verified in Chromium against the built stylesheet: 1360px, up from 1280.
   eq('the modal is wider', /max-w-\[1360px\]/.test(modal), true);
 
@@ -298,13 +296,39 @@ console.log('\n— the pieces on the page —');
   eq('  on the same grey card the attendee list uses',
     /border-gray-100 bg-gray-50 hover:bg-gray-100/.test(picker), true);
 
-  // Opened from the Insights row, not replacing it.
-  eq('the Insights row has the map button', /Relationship Map/.test(charts), true);
+  // Beside the other reports rather than inside the Insights tab: it answers a
+  // question about the conference, not about the charts it was buried under.
+  const page = strip('app/conferences/[id]/page.tsx');
+  eq('the map opens from the conference header', /<span>Relationship Map<\/span>/.test(page), true);
   eq('  with a hub-and-spoke icon beside it',
-    /<circle cx="12" cy="12" r="2\.5" \/>/.test(charts), true);
+    /<circle cx="12" cy="12" r="2\.5" \/>/.test(page), true);
+  // Between Pre-Conference and Activity Debrief, which is where it was asked
+  // for and is not something the button itself can say.
+  eq('  between Pre-Conference and Activity Debrief',
+    page.indexOf('<PreConferenceReview') < page.indexOf('<span>Relationship Map</span>')
+    && page.indexOf('<span>Relationship Map</span>') < page.indexOf('<PostConferenceReview'), true);
+  // Formatted like the two it sits between rather than like the filter chips
+  // it used to live among.
+  eq('  formatted like its neighbours',
+    /py-1 px-1 text-sm font-medium text-gray-500 hover:text-brand-accent transition-colors whitespace-nowrap/.test(page), true);
+
+  // Sliced out of the page rather than matched anywhere in it: every report
+  // on this row takes a conferenceName, so a loose match passes while this
+  // one has lost its own.
+  const mapMount = page.slice(page.indexOf('{showRelationshipMap'), page.indexOf('{showLogisticsDrawer'));
+  eq('the map is actually mounted', /<RelationshipMapModal/.test(mapMount), true);
+  eq('  behind its own open state',
+    /\{showRelationshipMap && conference && \(/.test(mapMount), true);
+  eq('  with the name passed in from the conference page',
+    /conferenceName=\{conference\.name\}/.test(mapMount), true);
+
+  // And gone from the Insights row, along with the prop that only existed for
+  // it — a tab that still fetches for a button it no longer has is the usual
+  // leftover.
+  eq('the Insights row no longer carries it', /Relationship Map/.test(charts), false);
+  eq('  nor the conference id it needed', /conferenceId/.test(charts), false);
   eq('  and the charts are still there', /Company Type Breakdown/.test(charts), true);
-  eq('the analytics tab still renders the charts',
-    /activeTab === 'analytics'/.test(strip('app/conferences/[id]/page.tsx')), true);
+  eq('the analytics tab still renders the charts', /activeTab === 'analytics'/.test(page), true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
