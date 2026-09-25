@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin, VALID_ROLES, type UserRole } from '@/lib/auth';
+import { VALID_ROLES, type UserRole } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { requireCapability } from '@/lib/requireCapability';
 import { sendInviteEmail } from '@/lib/email';
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authResult = await requireAdmin(request);
+  const authResult = await requireCapability(request, 'manage_users');
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
 
@@ -74,7 +75,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const authResult = await requireAdmin(request);
+  const authResult = await requireCapability(request, 'manage_users');
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
   const adminUser = authResult;

@@ -120,7 +120,14 @@ export function DuplicateCompaniesPanel({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ master_id: masterId, duplicate_ids: duplicateIds }),
     });
-    if (!res.ok) { toast.error('Merge failed.'); return; }
+    // The server's reason, not a flat failure. Merging is governed by the Role
+    // Scope matrix now, and "Merge failed." for a refused permission reads as
+    // a bug rather than as an answer.
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      toast.error(err.error || 'Merge failed.');
+      return;
+    }
     toast.success('Merged.');
     setMerging(null);
     await scan();

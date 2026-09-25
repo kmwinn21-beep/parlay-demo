@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { requireCapability } from '@/lib/requireCapability';
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -19,13 +20,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const authResult = await requireAuth(request);
+  const authResult = await requireCapability(request, 'manage_system_config');
   if (authResult instanceof NextResponse) return authResult;
   const user = authResult;
   const db = await getDb(user?.accountId);
-  if (user.role !== 'administrator') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
   try {
     const { key, value } = await request.json() as { key: string; value: string };
     if (!key || value === undefined) {

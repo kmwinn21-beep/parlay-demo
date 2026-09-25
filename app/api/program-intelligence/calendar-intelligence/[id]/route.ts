@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { requireCapability } from '@/lib/requireCapability';
 import { getIcpCompanyTypes, icpCompanyTypeSql, type IcpCompanyTypes } from '@/lib/icpCompanyTypes';
 import type { InValue, Client } from '@libsql/client';
 import { assembleFinalScore, computeCalendarStrategyScores, buildStrategyRationale } from '@/lib/scoring/calendar-intelligence';
@@ -404,7 +404,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const authResult = await requireAuth(request);
+  const authResult = await requireCapability(request, 'view_program_intelligence');
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
 

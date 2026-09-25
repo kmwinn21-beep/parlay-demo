@@ -135,9 +135,15 @@ export function Sidebar() {
   };
 
   const isStakeholder = user?.role === 'stakeholder';
+  // One capability per page, rather than a proxy. Program Intelligence was
+  // gated on view_pre_post_conference || view_effectiveness, which is neither
+  // of those things, and Program Planner was gated on not being a stakeholder
+  // and nothing else. The defaults reproduce exactly who reached each page
+  // before; what changes is that an administrator can now say otherwise.
   const hasCalendarIntelligence = user?.capabilities?.view_calendar_intelligence ?? !isStakeholder;
-  const hasProgramIntelligence = user?.capabilities?.view_pre_post_conference || user?.capabilities?.view_effectiveness;
-  const showIntelligenceSection = hasCalendarIntelligence || (hasProgramIntelligence && !isStakeholder);
+  const hasProgramIntelligence = user?.capabilities?.view_program_intelligence ?? false;
+  const hasProgramPlanner = user?.capabilities?.view_program_planner ?? false;
+  const showIntelligenceSection = hasCalendarIntelligence || hasProgramIntelligence || hasProgramPlanner;
 
   const navLinkClass = (href: string) =>
     `flex items-center ${collapsed ? 'justify-center px-2' : 'gap-3 px-4'} py-3 rounded-lg text-sm font-medium transition-all ${
@@ -209,7 +215,7 @@ export function Sidebar() {
           <>
             {!collapsed && <p className="text-sidebar-font/40 text-[10px] font-bold uppercase tracking-widest px-4 pt-4 pb-1">Intelligence</p>}
             <div className="space-y-1">
-              {!isStakeholder && hasProgramIntelligence && (
+              {hasProgramIntelligence && (
                 <Link href={programIntelligenceItem.href} title={collapsed ? programIntelligenceItem.label : undefined} className={navLinkClass(programIntelligenceItem.href)}>
                   {programIntelligenceItem.icon}
                   {!collapsed && programIntelligenceItem.label}
@@ -228,7 +234,7 @@ export function Sidebar() {
                   {!collapsed && calendarIntelligenceItem.label}
                 </Link>
               )}
-              {!isStakeholder && (
+              {hasProgramPlanner && (
                 <Link href={programPlannerItem.href} title={collapsed ? programPlannerItem.label : undefined} className={navLinkClass(programPlannerItem.href)}>
                   {programPlannerItem.icon}
                   {!collapsed && programPlannerItem.label}

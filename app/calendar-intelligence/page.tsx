@@ -1,4 +1,5 @@
 'use client';
+import { NoAccessPanel } from '@/components/NoAccessPanel';
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
@@ -480,10 +481,13 @@ export default function CalendarIntelligencePage() {
     setBoardRefreshKey(k => k + 1);
   }, []);
 
-  // Capability gate — must be after all hooks
+  // Capability gate — must be after all hooks.
+  //
+  // A panel rather than the redirect this used to do: bouncing to the
+  // dashboard reads as the link being broken, and leaves the reader unable to
+  // tell whether to ask for access or report a bug.
   if (user && !user.capabilities?.view_calendar_intelligence) {
-    router.replace('/');
-    return null;
+    return <NoAccessPanel feature="Calendar Intelligence" />;
   }
 
   // ── Scrollable overlay panel with chevron indicators ──────────────────────

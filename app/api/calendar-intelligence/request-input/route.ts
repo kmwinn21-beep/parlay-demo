@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { requireCapability } from '@/lib/requireCapability';
 import { createNotifications, getConfigIdByEmail } from '@/lib/notifications';
 import { sendInputRequestEmail } from '@/lib/email';
 
@@ -21,7 +21,7 @@ type Recipient = {
 
 // ── POST /api/calendar-intelligence/request-input ─────────────────────────────
 export async function POST(request: NextRequest) {
-  const authResult = await requireAuth(request);
+  const authResult = await requireCapability(request, 'view_calendar_intelligence');
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult.accountId);
 
@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
 
 // ── GET /api/calendar-intelligence/request-input?conferenceId= ────────────────
 export async function GET(request: NextRequest) {
-  const authResult = await requireAuth(request);
+  const authResult = await requireCapability(request, 'view_calendar_intelligence');
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult.accountId);
 

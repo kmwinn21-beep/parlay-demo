@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth, requireAdmin } from '@/lib/auth';
+import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { requireCapability } from '@/lib/requireCapability';
 import { getIcpConfig } from '@/lib/icpRules';
 import { trackEvent, trackFeature } from '@/lib/trackEvent';
 
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAdmin(request);
+  const auth = await requireCapability(request, 'manage_system_config');
   if (auth instanceof NextResponse) return auth;
   const db = await getDb(auth?.accountId);
 

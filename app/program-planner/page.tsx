@@ -1,5 +1,8 @@
 'use client';
 
+import { useCapabilities } from '@/lib/useCapabilities';
+import { NoAccessPanel } from '@/components/NoAccessPanel';
+
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ProgramPlannerCostMatrix } from '@/components/ProgramPlannerCostMatrix';
 import { ProgramPlannerAnalyticsPanel } from '@/components/ProgramPlannerAnalyticsPanel';
@@ -340,6 +343,7 @@ function Skeleton() {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function ProgramPlannerPage() {
+  const capabilities = useCapabilities();
   const currentYear = new Date().getFullYear();
   const yearOptions = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
 
@@ -654,6 +658,20 @@ export default function ProgramPlannerPage() {
   const tableRows = buildRows();
 
   // ── Render ────────────────────────────────────────────────────────────────
+
+  // Capability gate — after every hook, so the order stays stable. The page
+  // had none at all: it was reachable by any role that could guess the URL,
+  // budget, travel and logistics included.
+  if (!capabilities.isLoaded) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-6 h-6 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+  if (!capabilities.capabilities?.view_program_planner) {
+    return <NoAccessPanel feature="Program Planner" />;
+  }
 
   return (
     <>

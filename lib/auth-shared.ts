@@ -30,6 +30,8 @@ export type CapabilityKey =
   | 'manage_system_config'
   | 'manage_users'
   | 'manage_role_scope'
+  | 'view_program_intelligence'
+  | 'view_program_planner'
   | 'view_calendar_intelligence'
   | 'use_calendar_tools'
   | 'record_input_without_invitation';
@@ -50,6 +52,8 @@ export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
   manage_system_config: 'ICP rules, scoring config & branding',
   manage_users: 'User management & invitations',
   manage_role_scope: 'Role Scope',
+  view_program_intelligence: 'View Program Intelligence',
+  view_program_planner: 'View Program Planner',
   view_calendar_intelligence: 'View Calendar Intelligence',
   use_calendar_tools: 'Use Path to Tier & Strategic Lens tools',
   record_input_without_invitation: 'Record input without invitation',
@@ -60,13 +64,13 @@ export const LOCKED_ADMIN_CAPS: CapabilityKey[] = [
 ];
 
 export const DEFAULT_ROLE_CAPABILITIES: RoleCapabilities = {
-  sales_rep:              { view_data: true,  create_activity: true,  view_rep_metrics: true,  view_effectiveness: false, view_financials: false, view_pre_post_conference: false, crm_export: false, manage_conference_data: false, delete_merge: false, manage_system_config: false, manage_users: false, manage_role_scope: false, view_calendar_intelligence: true,  use_calendar_tools: false, record_input_without_invitation: false },
-  manager:                { view_data: true,  create_activity: true,  view_rep_metrics: true,  view_effectiveness: true,  view_financials: false, view_pre_post_conference: true,  crm_export: true,  manage_conference_data: false, delete_merge: false, manage_system_config: false, manage_users: false, manage_role_scope: false, view_calendar_intelligence: true,  use_calendar_tools: true,  record_input_without_invitation: true  },
-  analyst:                { view_data: true,  create_activity: false, view_rep_metrics: true,  view_effectiveness: true,  view_financials: true,  view_pre_post_conference: true,  crm_export: true,  manage_conference_data: false, delete_merge: false, manage_system_config: false, manage_users: false, manage_role_scope: false, view_calendar_intelligence: true,  use_calendar_tools: true,  record_input_without_invitation: false },
-  conference_coordinator: { view_data: true,  create_activity: false, view_rep_metrics: false, view_effectiveness: false, view_financials: false, view_pre_post_conference: false, crm_export: true,  manage_conference_data: true,  delete_merge: true,  manage_system_config: false, manage_users: false, manage_role_scope: false, view_calendar_intelligence: true,  use_calendar_tools: false, record_input_without_invitation: true  },
-  user:                   { view_data: true,  create_activity: true,  view_rep_metrics: true,  view_effectiveness: true,  view_financials: true,  view_pre_post_conference: true,  crm_export: false, manage_conference_data: true,  delete_merge: true,  manage_system_config: false, manage_users: false, manage_role_scope: false, view_calendar_intelligence: true,  use_calendar_tools: true,  record_input_without_invitation: false },
-  administrator:          { view_data: true,  create_activity: true,  view_rep_metrics: true,  view_effectiveness: true,  view_financials: true,  view_pre_post_conference: true,  crm_export: true,  manage_conference_data: true,  delete_merge: true,  manage_system_config: true,  manage_users: true,  manage_role_scope: true,  view_calendar_intelligence: true,  use_calendar_tools: true,  record_input_without_invitation: true  },
-  stakeholder:            { view_data: false, create_activity: false, view_rep_metrics: false, view_effectiveness: false, view_financials: false, view_pre_post_conference: false, crm_export: false, manage_conference_data: false, delete_merge: false, manage_system_config: false, manage_users: false, manage_role_scope: false, view_calendar_intelligence: true,  use_calendar_tools: false, record_input_without_invitation: false },
+  sales_rep:              { view_data: true,  create_activity: true,  view_rep_metrics: true,  view_effectiveness: false, view_financials: false, view_pre_post_conference: false, crm_export: false, manage_conference_data: false, delete_merge: false, manage_system_config: false, manage_users: false, manage_role_scope: false, view_program_intelligence: false,  view_program_planner: true,  view_calendar_intelligence: true,  use_calendar_tools: false, record_input_without_invitation: false },
+  manager:                { view_data: true,  create_activity: true,  view_rep_metrics: true,  view_effectiveness: true,  view_financials: false, view_pre_post_conference: true,  crm_export: true,  manage_conference_data: false, delete_merge: false, manage_system_config: false, manage_users: false, manage_role_scope: false, view_program_intelligence: true,  view_program_planner: true,  view_calendar_intelligence: true,  use_calendar_tools: true,  record_input_without_invitation: true  },
+  analyst:                { view_data: true,  create_activity: false, view_rep_metrics: true,  view_effectiveness: true,  view_financials: true,  view_pre_post_conference: true,  crm_export: true,  manage_conference_data: false, delete_merge: false, manage_system_config: false, manage_users: false, manage_role_scope: false, view_program_intelligence: true,  view_program_planner: true,  view_calendar_intelligence: true,  use_calendar_tools: true,  record_input_without_invitation: false },
+  conference_coordinator: { view_data: true,  create_activity: false, view_rep_metrics: false, view_effectiveness: false, view_financials: false, view_pre_post_conference: false, crm_export: true,  manage_conference_data: true,  delete_merge: true,  manage_system_config: false, manage_users: false, manage_role_scope: false, view_program_intelligence: false,  view_program_planner: true,  view_calendar_intelligence: true,  use_calendar_tools: false, record_input_without_invitation: true  },
+  user:                   { view_data: true,  create_activity: true,  view_rep_metrics: true,  view_effectiveness: true,  view_financials: true,  view_pre_post_conference: true,  crm_export: false, manage_conference_data: true,  delete_merge: true,  manage_system_config: false, manage_users: false, manage_role_scope: false, view_program_intelligence: true,  view_program_planner: true,  view_calendar_intelligence: true,  use_calendar_tools: true,  record_input_without_invitation: false },
+  administrator:          { view_data: true,  create_activity: true,  view_rep_metrics: true,  view_effectiveness: true,  view_financials: true,  view_pre_post_conference: true,  crm_export: true,  manage_conference_data: true,  delete_merge: true,  manage_system_config: true,  manage_users: true,  manage_role_scope: true,  view_program_intelligence: true,  view_program_planner: true,  view_calendar_intelligence: true,  use_calendar_tools: true,  record_input_without_invitation: true  },
+  stakeholder:            { view_data: false, create_activity: false, view_rep_metrics: false, view_effectiveness: false, view_financials: false, view_pre_post_conference: false, crm_export: false, manage_conference_data: false, delete_merge: false, manage_system_config: false, manage_users: false, manage_role_scope: false, view_program_intelligence: false,  view_program_planner: false,  view_calendar_intelligence: true,  use_calendar_tools: false, record_input_without_invitation: false },
 };
 
 export function resolveCapabilities(role: UserRole, stored: Partial<RoleCapabilities>): RoleCapabilityMap {

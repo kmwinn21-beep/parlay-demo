@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { requireCapability } from '@/lib/requireCapability';
 
 export const dynamic = 'force-dynamic';
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireAdmin(request);
+  const auth = await requireCapability(request, 'manage_system_config');
   if (auth instanceof NextResponse) return auth;
   const db = await getDb(auth?.accountId);
 
@@ -35,7 +35,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireAdmin(request);
+  const auth = await requireCapability(request, 'manage_system_config');
   if (auth instanceof NextResponse) return auth;
   const db = await getDb(auth?.accountId);
 
