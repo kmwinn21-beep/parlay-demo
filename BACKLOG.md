@@ -178,3 +178,8 @@ It fails silently. The module swallows all errors by design, and an empty recipi
   Competitive (there is no company to pick), so the tab bar would have to
   disappear and reappear as the view flips. Worth solving properly rather than
   squeezing a third toggle onto the same row.
+
+## Methodology notes
+
+- A prescribed fix for a layout problem gets measured against the actual
+  constrained axis before it gets built.

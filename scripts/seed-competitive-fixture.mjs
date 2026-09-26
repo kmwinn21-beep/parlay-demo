@@ -67,7 +67,11 @@ const COMPANIES = [
  * row rather than anything a real one would. The row this hangs off is the one
  * to watch when deciding whether the expanded body belongs in the grid at all.
  */
-const RICH_REL_ID = 1000;
+/* Two of these share one cell (1004 and 1005 are both Left Competitor under
+   Teton), which is the only arrangement where expanded cards STACK — two open in
+   the same band but different columns sit side by side and the band takes the
+   taller. The stacked case is the one the body cap exists for. */
+const RICH_REL_IDS = [1000, 1004, 1005];
 const RICH_NOTES = 'Renewed through 2027. Procurement lead is skeptical of the '
   + 'reporting module and has asked twice about export formats.';
 const RICH_UPDATES = [
@@ -191,17 +195,19 @@ for (const [id, a, z, status, days] of RELATIONSHIPS) {
 
 // Notes and a thread on one relationship, so the expanded card can be measured
 // against something a rep would actually have written.
-await db.execute({
-  sql: `UPDATE vendor_relationships SET notes = ?, strength = ? WHERE id = ?`,
-  args: [RICH_NOTES, 'Entrenched', RICH_REL_ID],
-}).catch(() => {});
-for (let i = 0; i < RICH_UPDATES.length; i++) {
+for (const relId of RICH_REL_IDS) {
   await db.execute({
-    sql: `INSERT OR REPLACE INTO relationship_updates
-            (id, relationship_id, body, status_before, status_after, marked_stale)
-          VALUES (?, ?, ?, NULL, NULL, 0)`,
-    args: [RICH_REL_ID + i, RICH_REL_ID, RICH_UPDATES[i]],
+    sql: `UPDATE vendor_relationships SET notes = ?, strength = ? WHERE id = ?`,
+    args: [RICH_NOTES, 'Entrenched', relId],
   }).catch(() => {});
+  for (let i = 0; i < RICH_UPDATES.length; i++) {
+    await db.execute({
+      sql: `INSERT OR REPLACE INTO relationship_updates
+              (id, relationship_id, body, status_before, status_after, marked_stale)
+            VALUES (?, ?, ?, NULL, NULL, 0)`,
+      args: [relId * 10 + i, relId, RICH_UPDATES[i]],
+    }).catch(() => {});
+  }
 }
 
 // One internal relationship, so the Int. Relationship pill has something to

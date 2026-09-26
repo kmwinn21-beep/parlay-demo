@@ -400,6 +400,53 @@ console.log('\n— one place, and the Map view left alone —');
     /companiesWithInternal: internal/.test(modal), false);
 }
 
+console.log('\n— why the status pill stays —');
+{
+  // The ROW TITLE carries the class; the PILL carries the status. Two seeded
+  // statuses share the 'current' class and mean different things, so under one
+  // "Use Competitor" heading the pill is the only place the difference lives.
+  // Written as a test so that reading the row labels never makes dropping the
+  // pill look free.
+  // Read from the migration, not from the copy at the top of this file: the
+  // argument is about what the SEEDS do, and a hand-written fixture agreeing
+  // with itself proves nothing about them.
+  const seeds = strip('lib/db-migrations.ts');
+  const classOfSeed = (value) => {
+    const m = seeds.match(
+      new RegExp(`SET action_key = '(\\w+)'[\\s\\S]{0,160}?value IN \\(([^)]*'${value}'[^)]*)\\)`),
+    );
+    return m ? m[1] : null;
+  };
+  eq('the migration puts Current Vendor and Preferred Partner in one class',
+    [classOfSeed('Current Vendor'), classOfSeed('Preferred Partner')], ['current', 'current']);
+  eq('  and Evaluating with Active Pilot',
+    [classOfSeed('Evaluating'), classOfSeed('Active Pilot')], ['evaluating', 'evaluating']);
+
+  const ix = buildStatusIndex(SEEDED);
+  eq('Current Vendor and Preferred Partner are the same class',
+    [ix.classOf.get('current vendor'), ix.classOf.get('preferred partner')],
+    ['current', 'current']);
+  eq('  so they land in the same row',
+    ix.classOf.get('current vendor') === ix.classOf.get('preferred partner'), true);
+  eq('  and they are different statuses',
+    'Current Vendor' === 'Preferred Partner', false);
+  // Same for the evaluating row.
+  eq('Evaluating and Active Pilot likewise',
+    [ix.classOf.get('evaluating'), ix.classOf.get('active pilot')],
+    ['evaluating', 'evaluating']);
+  // Two accounts under one competitor, one of each, must resolve into one row
+  // carrying two different stored statuses.
+  const both = run([
+    row(200, 100, 200, ['Current Vendor']),
+    row(201, 101, 200, ['Preferred Partner']),
+  ]);
+  const cells = deriveSignals({ relationships: both.relationships }).cells;
+  eq('  two cards in one row, one class, two statuses',
+    [cells.length, new Set(cells.map(c => c.row)).size], [2, 1]);
+  eq('  which the row title cannot tell apart, and the pill can',
+    new Set(['Current Vendor', 'Preferred Partner']).size, 2);
+}
+
 console.log('\n— the fixture the view is looked at against —');
 {
   const seed = strip('scripts/seed-competitive-fixture.mjs');

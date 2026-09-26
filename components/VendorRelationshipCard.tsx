@@ -110,7 +110,7 @@ function StatusPill({ value, colorMaps }: { value: string; colorMaps: Record<str
  * building a second one that drifts. Omitting onEdit/onDelete drops the actions
  * menu, which is what a read-only surface wants.
  */
-export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete, onUpdated, readOnly = false, defaultExpanded = false, leadingBadges, title }: {
+export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete, onUpdated, readOnly = false, defaultExpanded = false, leadingBadges, title, bodyMaxHeight }: {
   rel: VendorRelationship;
   userOptions: UserOption[];
   colorMaps: Record<string, Record<string, string | null>>;
@@ -148,6 +148,21 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
    * inbound handling all stay account-side, which is the side that owns them.
    */
   title?: string;
+  /**
+   * Cap the EXPANDED BODY at this many pixels and scroll it, when set.
+   *
+   * The number is the caller's, not the card's: only the surface knows how much
+   * vertical room one open card may take from the ones around it. Unset
+   * everywhere but the competitive grid, where an open card would otherwise
+   * push every other band down the page — see GRID_BODY_MAX_HEIGHT for why that
+   * is capped rather than moved into a rail.
+   *
+   * The header is deliberately outside the capped region. It is a sibling above
+   * this body, so scrolling the body cannot move it — which is what keeps the
+   * grid's connectors, anchored on the header, from drifting as somebody reads
+   * a thread.
+   */
+  bodyMaxHeight?: number;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   // The form's open state lives here rather than in each surface. Unlike edit
@@ -273,7 +288,16 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
       </div>
 
       {expanded && (
-        <div className="border-t border-gray-100 px-3 py-2.5 space-y-2">
+        /* Uncapped unless the caller asked for a cap, so the four surfaces that
+           were here first gain no max-height, no inner scroll and no new
+           overflow context. scrollbar-thin rather than scrollbar-desktop-thin:
+           the latter hides the bar below 1024px, and this view renders from
+           640px up, so a capped body would clip silently in that band. */
+        <div
+          className={`border-t border-gray-100 px-3 py-2.5 space-y-2${
+            bodyMaxHeight ? ' overflow-y-auto scrollbar-thin' : ''}`}
+          style={bodyMaxHeight ? { maxHeight: bodyMaxHeight } : undefined}
+        >
           <div className="flex items-center gap-2">
             {/* flex-1 min-w-0: ScrollRow's scroller is w-0 flex-1 inside, so
                 without a width to claim here it collapses to just a chevron. */}

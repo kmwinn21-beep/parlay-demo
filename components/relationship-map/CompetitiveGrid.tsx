@@ -25,6 +25,23 @@ const COL_WIDTH = 232;
 const LABEL_WIDTH = 92;
 
 /**
+ * How tall an open card's body may get before it scrolls itself.
+ *
+ * Measured, not picked: an expanded card with a real note and a thread grew its
+ * band from 108px to 410px, and two open in one band would be most of the
+ * canvas. The alternative was moving the body into a detail rail, which is the
+ * wrong trade — the rail would cost about 320px, taking the four columns from
+ * 232px to about 175px where most company names clip, and the four-column
+ * comparison across a row is the entire reason this is a grid rather than a
+ * list. Losing that to avoid vertical scroll gives up the thing to save the
+ * thing it needs.
+ *
+ * One constant, passed to the card. The card has no opinion about it, and a
+ * second copy of the number is a second number.
+ */
+const GRID_BODY_MAX_HEIGHT = 240;
+
+/**
  * Accounts by competitor and by what the relationship is.
  *
  * Columns are competitors, rows are the three states. The thing you read is a
@@ -280,6 +297,7 @@ export function CompetitiveGrid({
                           // names the account, which is what the reader is
                           // looking for in a cell under that column.
                           title={nameOf(cell.companyId)}
+                          bodyMaxHeight={GRID_BODY_MAX_HEIGHT}
                           leadingBadges={<SignalPills cell={cell} />}
                         />
                       </div>

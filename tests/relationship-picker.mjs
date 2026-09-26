@@ -652,6 +652,61 @@ console.log('\n— the card header, and the grid it had to change for —');
   // A resolved relationship with no card is a scoping bug, not a gap.
   eq('a missing card says so rather than leaving a hole',
     /card unavailable/.test(grid), true);
+
+  // ── The expanded body is capped in a grid cell and nowhere else ──
+  //
+  // One open card grew its band from 108px to 410px against real content. The
+  // cap is the alternative to a detail rail, which would have cost the column
+  // width the grid exists for.
+  eq('the cap is one number, in one place',
+    (grid.match(/GRID_BODY_MAX_HEIGHT = 240/g) || []).length, 1);
+  eq('  and 240 appears nowhere else',
+    (grid.match(/\b240\b/g) || []).length + (card.match(/\b240\b/g) || []).length, 1);
+  eq('  the grid passes it to the card',
+    /bodyMaxHeight=\{GRID_BODY_MAX_HEIGHT\}/.test(grid), true);
+  eq('  the card applies it as a max height, not a fixed one',
+    /style=\{bodyMaxHeight \? \{ maxHeight: bodyMaxHeight \} : undefined\}/.test(card), true);
+  eq('  with a scroll rather than a clip',
+    /bodyMaxHeight \? ' overflow-y-auto scrollbar-thin' : ''/.test(card), true);
+  // scrollbar-desktop-thin hides the bar below 1024px and this view renders
+  // from 640px up, so a capped body would clip silently in that band.
+  eq('  and a scrollbar that is visible at every width this view renders at',
+    /scrollbar-desktop-thin/.test(card), false);
+  // The four surfaces that were here first get no cap, no inner scroll and no
+  // new overflow context.
+  eq('no other render site passes a cap',
+    [
+      'components/VendorRelationshipsSection.tsx',
+      'components/pre-conference/RelationshipsTab.tsx',
+      'components/relationship-map/MapCanvas.tsx',
+      'components/RelationshipMapModal.tsx',
+    ].some(f => /bodyMaxHeight/.test(strip(f))), false);
+  eq('  so an unset cap leaves the body exactly as it was',
+    /className=\{`border-t border-gray-100 px-3 py-2\.5 space-y-2\$\{/.test(card), true);
+  // Connectors anchor on the header. If the header sat inside the scrolling
+  // region they would drift as somebody read a thread.
+  eq('the header is outside the capped region',
+    card.indexOf('data-card-header') < card.indexOf('bodyMaxHeight ? \' overflow-y-auto'), true);
+  eq('  and the cap is inside the expanded branch only',
+    /\{expanded && \([\s\S]{0,600}bodyMaxHeight/.test(card), true);
+
+  // ── The status pill stays ──
+  //
+  // The ROW TITLE carries the class, the PILL carries the status. Under one
+  // "Use Competitor" heading a card can read Current Vendor or Preferred
+  // Partner — same class, different facts — and the pill is the only place that
+  // distinction survives. Written down so reading the row labels does not make
+  // dropping it look free.
+  eq('the grid card still renders its status pills',
+    /shown\.relationship_status\.map\(s => <StatusPill/.test(card), true);
+  eq('  and the grid does not suppress them',
+    /StatusPill|relationship_status/.test(grid), false);
+  // Two statuses that share a class, so the row title cannot tell them apart.
+  {
+    const seeded = strip('lib/db-migrations.ts');
+    const sameClass = /value IN \('Current Vendor', 'Preferred Partner'\)/.test(seeded);
+    eq('  because two statuses share the Use Competitor class', sameClass, true);
+  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
