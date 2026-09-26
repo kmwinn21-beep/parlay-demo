@@ -2745,4 +2745,37 @@ export const migrations: string[] = [
      WHERE category = 'other_relationship_status'
        AND value = 'Active Pilot'
        AND (inverse_value IS NULL OR inverse_value = 'Active Pilot')`,
+
+  // ── A vendor switch, recorded rather than inferred ────────────────────────
+  //
+  // "They left Red Moon for Nova Moon" is a claim about cause, and no
+  // arrangement of statuses and dates establishes one: a settled account of
+  // three years looks exactly like a switch last week, and two edits made in
+  // the same afternoon look exactly like a switch too. So it is asked, once, at
+  // the moment somebody records the change, and kept.
+  //
+  // One row per QUESTION, not per switch — 'keeping' and 'unknown' are stored
+  // as well. An account deliberately running two vendors is a different
+  // competitive picture from one that moved, and a question that was asked and
+  // answered should not be asked again next week as though it never had.
+  //
+  // No foreign keys on the relationship columns on purpose: a relationship can
+  // be deleted, and what happened still happened. The company columns carry the
+  // answer on their own so a deleted row leaves a fact rather than a hole.
+  `CREATE TABLE IF NOT EXISTS vendor_switches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_company_id INTEGER NOT NULL,
+      incumbent_company_id INTEGER NOT NULL,
+      incumbent_relationship_id INTEGER,
+      incoming_company_id INTEGER,
+      incoming_relationship_id INTEGER,
+      answer TEXT NOT NULL,
+      recorded_by_user_id INTEGER,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+  `CREATE INDEX IF NOT EXISTS idx_vendor_switches_account
+     ON vendor_switches(account_company_id)`,
+  // The pair, for "have we already asked about these two?".
+  `CREATE INDEX IF NOT EXISTS idx_vendor_switches_pair
+     ON vendor_switches(account_company_id, incumbent_company_id, incoming_company_id)`,
 ];

@@ -132,6 +132,47 @@ export function buildStatusIndex(rows: StatusConfigRow[]): StatusIndex {
 }
 
 /**
+ * The class a row's statuses resolve to, or null.
+ *
+ * First status that carries one. A row with several is rare, and the stored
+ * order is the order somebody picked them in, so first wins rather than an
+ * invented precedence. Exported because the switch workflow asks the same
+ * question at save time and two answers to it would be two answers.
+ */
+export function classOfStatuses(statuses: string[], index: StatusIndex): StatusClass | null {
+  for (const s of statuses) {
+    const cls = index.classOf.get(lower(s));
+    if (cls) return cls;
+  }
+  return null;
+}
+
+/**
+ * Which end of a stored row the statuses name as the vendor, or null.
+ *
+ * Null means the words point nowhere — a symmetric status, or one nobody
+ * configured — and the caller falls back to company_type. Exported for the
+ * same reason as classOfStatuses.
+ */
+export function vendorEndOfStatuses(
+  statuses: string[], index: StatusIndex,
+): 'related' | 'logging' | null {
+  for (const s of statuses) {
+    const end = index.vendorEndOf.get(lower(s));
+    if (end) return end;
+  }
+  return null;
+}
+
+/** True when any of a company's types carries the competitor action_key. */
+export function makeIsCompetitor(
+  companies: Map<number, ResolutionCompany>, competitorTypes: Iterable<string>,
+): (id: number) => boolean {
+  const set = new Set(Array.from(competitorTypes, lower));
+  return (id: number) => (companies.get(id)?.types ?? []).some(t => set.has(lower(t)));
+}
+
+/**
  * Normalise stored rows into account → competitor relationships.
  *
  * competitorTypeKeys is the set of company_type values whose action_key marks
@@ -149,9 +190,7 @@ export function resolveCompetitive({
   competitorTypes: Iterable<string>;
 }): ResolutionResult {
   const index = buildStatusIndex(statusConfig);
-  const competitorSet = new Set(Array.from(competitorTypes, lower));
-  const isCompetitor = (id: number) =>
-    (companies.get(id)?.types ?? []).some(t => competitorSet.has(lower(t)));
+  const isCompetitor = makeIsCompetitor(companies, competitorTypes);
 
   // Best row per normalised pair, so a relationship logged from both sides is
   // one entry. Keyed account:competitor, which is the pair as the grid reads it
@@ -162,16 +201,8 @@ export function resolveCompetitive({
   let duplicates = 0;
 
   for (const row of rows) {
-    // First status that says something. A row carrying several is rare and the
-    // stored order is the order somebody picked them in, so first wins rather
-    // than some invented precedence.
-    let end: 'related' | 'logging' | null = null;
-    let statusClass: StatusClass | null = null;
-    for (const s of row.statuses) {
-      const k = lower(s);
-      if (end === null && index.vendorEndOf.has(k)) end = index.vendorEndOf.get(k)!;
-      if (statusClass === null) statusClass = index.classOf.get(k) ?? null;
-    }
+    const end = vendorEndOfStatuses(row.statuses, index);
+    const statusClass = classOfStatuses(row.statuses, index);
 
     let competitorId: number;
     let accountId: number;
