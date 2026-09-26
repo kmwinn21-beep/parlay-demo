@@ -327,12 +327,63 @@ console.log('\n— rows, counts and filters —');
     { cells: [], pairs: [], unclassifiedCount: 0 });
 }
 
+console.log('\n— ordering a Recent Change cell —');
+{
+  const { byRecency } = await import('@/lib/competitiveSignals');
+  const cell = (id, changed) => ({
+    relationshipId: id, companyId: 1, competitorId: 10, statusClass: 'former',
+    row: 'recentChange', statusChangedAt: changed,
+    signals: { evaluatingAlternatives: false, recentChange: false, internalRelationship: false },
+  });
+  const order = list => list.slice().sort(byRecency).map(c => c.relationshipId);
+
+  // The order IS the information here: the account that moved last week is the
+  // call to make, and it belongs at the top rather than wherever the query
+  // happened to return it.
+  eq('most recently changed first',
+    order([cell(1, '2026-01-01 00:00:00'), cell(2, '2026-09-01 00:00:00'), cell(3, '2026-05-01 00:00:00')]),
+    [2, 3, 1]);
+  eq('  whatever order they arrive in',
+    order([cell(3, '2026-05-01 00:00:00'), cell(2, '2026-09-01 00:00:00'), cell(1, '2026-01-01 00:00:00')]),
+    [2, 3, 1]);
+
+  // A null date is no KNOWN change. Putting "we have no idea when this moved"
+  // above "this moved on Tuesday" would be exactly backwards.
+  eq('unknown dates sort last',
+    order([cell(1, null), cell(2, '2020-01-01 00:00:00'), cell(3, null)]), [2, 1, 3]);
+  eq('  and last even against a very old date',
+    order([cell(1, null), cell(2, '1999-01-01 00:00:00')]), [2, 1]);
+  eq('  never first', order([cell(9, null), cell(2, '2026-09-01 00:00:00')])[0], 2);
+  eq('all unknown falls back to the id, so the cell is stable',
+    order([cell(7, null), cell(3, null), cell(5, null)]), [3, 5, 7]);
+  eq('  as does an exact tie on the date',
+    order([cell(7, '2026-02-02 00:00:00'), cell(3, '2026-02-02 00:00:00')]), [3, 7]);
+  // Sorting must not mutate what it was handed.
+  const given = [cell(1, '2026-01-01 00:00:00'), cell(2, '2026-09-01 00:00:00')];
+  given.slice().sort(byRecency);
+  eq('  and the input is left alone', given.map(c => c.relationshipId), [1, 2]);
+
+  // The date has to survive derivation, or there is nothing to sort on.
+  const derived = deriveSignals({
+    relationships: [rel(1, 1, 10, 'former', daysAgo(5))], now: NOW,
+  });
+  eq('the cell carries the change date through', derived.cells[0]?.statusChangedAt, daysAgo(5));
+}
+
 console.log('\n— labels live in one place —');
 {
   const lib = strip('lib/competitiveSignals.ts');
   eq('the row titles are as specified',
     [ROW_LABELS.activeEvaluation, ROW_LABELS.useCompetitor, ROW_LABELS.recentChange],
-    ['Active Evaluation', 'Use Competitor', 'Recent Change']);
+    ['Active Evaluation', 'Use Competitor', 'Left Competitor']);
+  // The row and the signal must not share a name. They did, and on screen the
+  // signal's pill lands in all three rows — so a Recent Change pill sat in
+  // Active Evaluation, next to a row headed Recent Change, reading as a bug.
+  eq('  and no row is named after a signal',
+    Object.values(ROW_LABELS).some(l => Object.values(SIGNAL_LABELS).includes(l)), false);
+  // The key is what the status class maps to and does not follow the wording.
+  eq('  while the KEY is still recentChange',
+    Object.keys(ROW_LABELS).includes('recentChange'), true);
   eq('  and the signal names',
     [SIGNAL_LABELS.evaluatingAlternatives, SIGNAL_LABELS.recentChange, SIGNAL_LABELS.internalRelationship],
     ['Evaluating Alternatives', 'Recent Change', 'Int. Relationship']);

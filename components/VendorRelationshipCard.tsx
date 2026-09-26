@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ScrollRow } from '@/components/ScrollRow';
 import { KebabMenu } from '@/components/KebabMenu';
 import { getBadgeClass, getPreset } from '@/lib/colors';
@@ -110,7 +110,7 @@ function StatusPill({ value, colorMaps }: { value: string; colorMaps: Record<str
  * building a second one that drifts. Omitting onEdit/onDelete drops the actions
  * menu, which is what a read-only surface wants.
  */
-export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete, onUpdated, readOnly = false, defaultExpanded = false }: {
+export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete, onUpdated, readOnly = false, defaultExpanded = false, leadingBadges, title }: {
   rel: VendorRelationship;
   userOptions: UserOption[];
   colorMaps: Record<string, Record<string, string | null>>;
@@ -127,6 +127,27 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
   /** Suppresses the Update button. Nothing sets it today. */
   readOnly?: boolean;
   defaultExpanded?: boolean;
+  /**
+   * Badges that lead the header's second row, before the status pills.
+   *
+   * The competitive grid's signal pills, which say why the card is in the cell
+   * it is in. Passed in rather than derived here: the card has no idea it is in
+   * a grid, and the signals are computed once for the whole view.
+   */
+  leadingBadges?: ReactNode;
+  /**
+   * The name in the header, when the default one is already on screen.
+   *
+   * The card names the OTHER end of the relationship, which is right on a
+   * company record: you are on Abshire's page and the card says Abbott. In the
+   * competitive grid the column heading already says Abbott, so a card repeating
+   * it identifies nothing — what the reader needs is the account, which is the
+   * end the card is being read FROM.
+   *
+   * Only the title. The status wording, the thread, the Update button and the
+   * inbound handling all stay account-side, which is the side that owns them.
+   */
+  title?: string;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   // The form's open state lives here rather than in each surface. Unlike edit
@@ -166,6 +187,25 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
   // links back rather than offering controls that would write to a record the
   // reader is not looking at.
   const inbound = shown.direction === 'inbound';
+  const heading = title ?? shown.related_company_name;
+
+  /**
+   * The header's badge row: wrapping, or a single paged line.
+   *
+   * Wrapping everywhere it already wrapped. In a grid cell there is no width to
+   * wrap into — four columns inside a modal leave about 260px — and a badge row
+   * that wraps to three lines makes every card in the row taller. So where the
+   * grid passes signal pills the row becomes one scrolling line with chevrons
+   * and a fade at whichever edge is cut off, which is what says "there is more"
+   * rather than letting a half-pill read as the end of the list.
+   *
+   * Keyed off leadingBadges rather than a flag of its own: the two always go
+   * together, and a second prop would let a caller ask for one without the
+   * other and get a row that pages for no reason.
+   */
+  const badgeRow = (children: ReactNode) => (leadingBadges
+    ? <ScrollRow className="mt-1" gapClass="gap-1.5" step={90} fade>{children}</ScrollRow>
+    : <div className="flex items-center gap-1.5 mt-1 flex-wrap">{children}</div>);
 
   return (
     // Stale cards are drained rather than recoloured. The six status colours
@@ -175,27 +215,62 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
     <div className={`rounded-lg border overflow-hidden transition-colors ${
       isStale ? 'border-gray-200 border-dashed bg-gray-50/70' : 'border-gray-200'
     }`}>
-      {/* Chevron on the right, matching the internal-relationship card. */}
-      <button type="button" onClick={() => setExpanded(v => !v)} className="w-full text-left px-3 py-2.5 hover:bg-gray-50 transition-colors">
+      {/* A div, with the chevron carrying its own button.
+          The whole header stays clickable — four surfaces already use it that
+          way — but a header that IS a button cannot contain one, and the
+          competitive grid puts a paged pill row in here and anchors its
+          connectors on this element. The chevron is the accessible control: it
+          names the company and reports the state, so a screen reader gets one
+          labelled toggle rather than the whole card read out as a button. */}
+      <div
+        data-card-header
+        onClick={() => setExpanded(v => !v)}
+        className="w-full text-left px-3 py-2.5 hover:bg-gray-50 transition-colors cursor-pointer"
+      >
         <div className="flex items-start gap-2">
           <div className={`min-w-0 flex-1 ${isStale ? 'opacity-60' : ''}`}>
-            <p className="text-sm font-semibold text-gray-800 truncate">{shown.related_company_name}</p>
-            {/* Second row: what this relationship is, then what the company is. */}
-            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-              {isStale && <StalePill />}
-              {shown.relationship_status.map(s => <StatusPill key={s} value={s} colorMaps={colorMaps} />)}
-              {shown.related_company_type && (
-                <span className={`${getBadgeClass(shown.related_company_type, colorMaps.company_type || {})} whitespace-nowrap`}>
-                  {shown.related_company_type}
-                </span>
-              )}
-            </div>
+            {/* Wrapped to two lines where a caller supplied the name, truncated
+                where it did not. Four columns inside the modal leave about 155px
+                for a title, and the longest real company names need nearer 200 —
+                so at that width truncating is not an edge case, it is most of a
+                senior-living book. Two lines costs about 18px on the cards that
+                need it and hides nothing; an ellipsis hides the half of
+                "Belmont Village Senior Living" that tells you which Belmont. */}
+            <p
+              className={`text-sm font-semibold text-gray-800 ${title ? 'line-clamp-2 leading-snug' : 'truncate'}`}
+              title={heading}
+            >
+              {heading}
+            </p>
+            {/* Second row: why this card is here, then what this relationship
+                is, then what the company is. Signals lead because they are the
+                reason the grid drew the card at all. */}
+            {badgeRow(
+              <>
+                {leadingBadges}
+                {isStale && <StalePill />}
+                {shown.relationship_status.map(s => <StatusPill key={s} value={s} colorMaps={colorMaps} />)}
+                {shown.related_company_type && (
+                  <span className={`${getBadgeClass(shown.related_company_type, colorMaps.company_type || {})} whitespace-nowrap`}>
+                    {shown.related_company_type}
+                  </span>
+                )}
+              </>,
+            )}
           </div>
-          <svg className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ml-2 mt-0.5 ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
+            aria-expanded={expanded}
+            aria-label={`${expanded ? 'Collapse' : 'Expand'} ${heading}`}
+            className="flex-shrink-0 ml-1 -mr-1 p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
         </div>
-      </button>
+      </div>
 
       {expanded && (
         <div className="border-t border-gray-100 px-3 py-2.5 space-y-2">

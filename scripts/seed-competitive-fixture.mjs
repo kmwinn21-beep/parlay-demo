@@ -46,6 +46,9 @@ const COMPANIES = [
   // Two types, so the competitor test has to tolerate a list.
   [21, 'Vireo Software', 'Vendor,Competitor'],
   [22, 'Halden Care', 'Competitor'],
+  // A fourth column, and a long name: four columns inside the modal is the
+  // width the grid has to survive, and a name that fits in three is no test.
+  [24, 'Continuum Care Technologies', 'Competitor'],
   // Not a competitor. Here so an excluded row has somewhere to point.
   [23, 'Northwind Capital', 'Capital'],
 ];
@@ -56,6 +59,22 @@ const COMPANIES = [
  * company_id is whoever's page it was logged on, and the status is written from
  * THAT side — which is the whole point of the rows logged from 20/21/22.
  */
+/**
+ * Notes and thread entries on one relationship.
+ *
+ * Without these every card expands to "No strength or vendor type set" and a
+ * date, which measures the FLOOR of how much an expanded card grows its grid
+ * row rather than anything a real one would. The row this hangs off is the one
+ * to watch when deciding whether the expanded body belongs in the grid at all.
+ */
+const RICH_REL_ID = 1000;
+const RICH_NOTES = 'Renewed through 2027. Procurement lead is skeptical of the '
+  + 'reporting module and has asked twice about export formats.';
+const RICH_UPDATES = [
+  'Confirmed with their VP Ops at the regional show — still on Teton, still unhappy with reporting.',
+  'They have asked us for a side-by-side on export formats. Sending Thursday.',
+];
+
 const RELATIONSHIPS = [
   // An account buying from one competitor while trying another: the pair.
   [1000, 1, 20, 'Current Vendor', 400],
@@ -73,6 +92,12 @@ const RELATIONSHIPS = [
   [1006, 5, 21, 'Preferred Partner', 5],
   // No action_key. Counted as unclassified, given no cell.
   [1007, 6, 20, 'Other', 3],
+  // The fourth column's own accounts, so it is not an empty heading.
+  [1010, 3, 24, 'Current Vendor', 60],
+  [1011, 6, 24, 'Evaluating', 8],
+  // An account current with one competitor and evaluating the long-named one:
+  // a second pair, so a connector has to be drawn across three columns.
+  [1012, 3, 21, 'Evaluating', 15],
   // Neither end a competitor. Not this view's business.
   [1008, 7, 23, 'Current Vendor', 9],
   // The status names company 7 as the vendor, and 7 is not a competitor. The
@@ -164,6 +189,21 @@ for (const [id, a, z, status, days] of RELATIONSHIPS) {
   });
 }
 
+// Notes and a thread on one relationship, so the expanded card can be measured
+// against something a rep would actually have written.
+await db.execute({
+  sql: `UPDATE vendor_relationships SET notes = ?, strength = ? WHERE id = ?`,
+  args: [RICH_NOTES, 'Entrenched', RICH_REL_ID],
+}).catch(() => {});
+for (let i = 0; i < RICH_UPDATES.length; i++) {
+  await db.execute({
+    sql: `INSERT OR REPLACE INTO relationship_updates
+            (id, relationship_id, body, status_before, status_after, marked_stale)
+          VALUES (?, ?, ?, NULL, NULL, 0)`,
+    args: [RICH_REL_ID + i, RICH_REL_ID, RICH_UPDATES[i]],
+  }).catch(() => {});
+}
+
 // One internal relationship, so the Int. Relationship pill has something to
 // light. On account 1, which also carries the evaluating-alternatives pair, so
 // two pills land on one card.
@@ -179,4 +219,4 @@ await db.execute({
 console.log(`Seeded ${COMPANIES.length} companies and ${RELATIONSHIPS.length} relationships`);
 console.log(`  ${stamped} carry a status_changed_at; ids ${FIRST_COMPANY_ID}+ and ${FIRST_REL_ID}+`);
 console.log(`  into ${url}`);
-console.log('Expect: 3 competitor columns, 6 cells, 1 unclassified, 2 excluded, 1 collapsed.');
+console.log("Expect: 4 competitor columns, 9 cells, 1 unclassified, 2 excluded, 1 collapsed.");

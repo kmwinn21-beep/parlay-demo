@@ -441,7 +441,10 @@ console.log('\n— the view toggle —');
   eq('  back to the entity picker in Map',
     /\) : \(\s*<EntityPicker/.test(desktopBlock), true);
   eq('  the canvas swaps too',
-    /view === 'competitive' \? \([\s\S]{0,400}\) : loading \? \(/.test(desktopBlock), true);
+    /view === 'competitive' \? \(\s*<CompetitiveGrid/.test(desktopBlock)
+      && /\) : loading \? \(/.test(desktopBlock), true);
+  eq('  back to the map canvas in Map',
+    /<MapCanvas/.test(desktopBlock), true);
   eq('  and the legend explains whichever canvas drew',
     /view === 'competitive' \? \(\s*\(Object\.keys\(SIGNAL_PILL_LABELS\)/.test(desktopBlock), true);
   eq('  Map keeps its edge colours',
@@ -540,6 +543,115 @@ console.log('\n— the view toggle —');
   eq('  and the signal colours are shared, not copied',
     /SIGNAL_TONE\[key\]/.test(desktopBlock)
       && /export const SIGNAL_TONE/.test(strip('lib/competitiveSignals.ts')), true);
+}
+
+console.log('\n— the card header, and the grid it had to change for —');
+{
+  const card = strip('components/VendorRelationshipCard.tsx');
+  const grid = strip('components/relationship-map/CompetitiveGrid.tsx');
+  const scroll = strip('components/ScrollRow.tsx');
+  const modal = strip('components/RelationshipMapModal.tsx');
+
+  // A header that IS a button cannot contain one, and the grid puts a paged
+  // pill row inside it and anchors connectors on it.
+  eq('the header is a div, not a button',
+    /<div\s+data-card-header/.test(card), true);
+  eq('  the whole header still toggles',
+    /data-card-header\s+onClick=\{\(\) => setExpanded\(v => !v\)\}/.test(card), true);
+  eq('  the chevron has a button of its own',
+    /onClick=\{e => \{ e\.stopPropagation\(\); setExpanded\(v => !v\); \}\}/.test(card), true);
+  eq('  which stops the header firing twice',
+    /e\.stopPropagation\(\)/.test(card), true);
+  eq('  reporting its state',
+    /aria-expanded=\{expanded\}/.test(card), true);
+  eq('  and naming the company, so a screen reader hears which card',
+    /aria-label=\{`\$\{expanded \? 'Collapse' : 'Expand'\} \$\{heading\}`\}/.test(card), true);
+  // Every render site relies on this: none of them wraps the card in a button,
+  // which is what the five-site browser check confirms.
+  eq('  no render site nests it in a button',
+    [
+      'components/VendorRelationshipsSection.tsx',
+      'components/pre-conference/RelationshipsTab.tsx',
+      'components/relationship-map/MapCanvas.tsx',
+      'components/relationship-map/CompetitiveGrid.tsx',
+      'components/RelationshipMapModal.tsx',
+    ].some(f => /<button[^>]*>[\s\S]{0,400}<VendorRelationshipCard/.test(strip(f))), false);
+
+  // The card names the OTHER end, which in a grid is already the column.
+  eq('the heading can be overridden, and only the heading',
+    /const heading = title \?\? shown\.related_company_name;/.test(card), true);
+  eq('  the grid passes the account, because the column is the competitor',
+    /title=\{nameOf\(cell\.companyId\)\}/.test(grid), true);
+  eq('  and the status wording is untouched by it',
+    /const shown: VendorRelationship = saved/.test(card)
+      && /title \?\? shown\.relationship_status/.test(card) === false, true);
+  // Two lines rather than an ellipsis where a caller supplied the name: at four
+  // columns the longest real names do not fit on one.
+  eq('an overridden heading wraps rather than truncating',
+    /title \? 'line-clamp-2 leading-snug' : 'truncate'/.test(card), true);
+
+  // The badge row pages instead of wrapping, but only where the grid asked.
+  eq('the badge row pages only when signal pills are passed',
+    /leadingBadges\s*\?\s*<ScrollRow/.test(card), true);
+  eq('  and still wraps everywhere it already did',
+    /: <div className="flex items-center gap-1\.5 mt-1 flex-wrap">/.test(card), true);
+  eq('  with a fade at the cut-off edge',
+    /fade && canRight/.test(scroll) && /fade && canLeft/.test(scroll), true);
+  // Both edges. One mask left pointer-transparent and the other not is a card
+  // that toggles on one side of its own pill row and not the other.
+  eq('  that does not eat the click it is fading, at either edge',
+    (scroll.match(/pointer-events-none absolute/g) || []).length, 2);
+  eq('  and the paging arrows do not collapse the card under them',
+    (scroll.match(/e\.stopPropagation\(\); scroll\(/g) || []).length, 2);
+  eq('  fade is opt-in, so existing rows are unchanged',
+    /fade = false,/.test(scroll), true);
+
+  // Connectors are drawn from pairs and anchored on the HEADER.
+  eq('connectors come from the derived pairs, not a second self-join',
+    /for \(const p of pairs\)/.test(grid) && /evaluatingAlternatives/.test(grid), true);
+  eq('  anchored on the card header, which does not move when a card expands',
+    /headerRefs\.current\.get\(`useCompetitor:/.test(grid)
+      && /querySelector\('\[data-card-header\]'\)/.test(grid), true);
+  eq('  measured against the scrolled CONTENT, not the viewport',
+    /const host = contentRef\.current;/.test(grid)
+      && /host\.scrollLeft/.test(grid) === false, true);
+  eq('  and re-measured when a card changes height',
+    /new ResizeObserver\(measure\)/.test(grid), true);
+  eq('  a pair with an end filtered out draws nothing',
+    /if \(!a \|\| !b\) continue;/.test(grid), true);
+
+  // Recent Change orders by recency; the other rows have no clock.
+  eq('the Recent Change cells sort by recency',
+    /key\.startsWith\('recentChange:'\)\s*\?\s*list\.slice\(\)\.sort\(byRecency\)/.test(grid), true);
+  eq('  and the others alphabetically, so nothing is arbitrary',
+    /nameOf\(a\.companyId\)\.localeCompare\(nameOf\(b\.companyId\)\)/.test(grid), true);
+  eq('  using the tested comparator rather than an inline one',
+    /byRecency/.test(grid) && /statusChangedAt/.test(grid) === false, true);
+
+  // The rail's filters are alternatives, not conditions.
+  eq('picking two signals means either, not both',
+    /Array\.from\(activeSignals\)\.some\(k => c\.signals\[k\]\)/.test(grid), true);
+  eq('  and picking none filters nothing',
+    /activeSignals\.size > 0 &&/.test(grid), true);
+  eq('signals only drops the cards carrying none',
+    /signalsOnly && !hasAnySignal\(c\)/.test(grid), true);
+  eq('a hidden competitor takes its whole column',
+    /!visibleIds\.has\(c\.competitorId\)/.test(grid)
+      && /const shownCompetitors = useMemo/.test(modal), true);
+
+  // Nothing is deduplicated by company: one account under two competitors IS
+  // the signal, and collapsing it would delete the thing the grid is for.
+  // One account under two competitors IS the signal, so nothing here may
+  // collapse on company. The static check is a tripwire; the fixture proves it
+  // — company 3 appears in all three rows across three columns.
+  eq('nothing in the grid collapses cells on company',
+    /dedupe|distinctBy|new Set\(shown\.map\(c => c\.companyId\)\)/.test(grid), false);
+  eq('  and the cells are grouped by row AND column, not by account',
+    /const key = `\$\{c\.row\}:\$\{c\.competitorId\}`;/.test(grid), true);
+
+  // A resolved relationship with no card is a scoping bug, not a gap.
+  eq('a missing card says so rather than leaving a hole',
+    /card unavailable/.test(grid), true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

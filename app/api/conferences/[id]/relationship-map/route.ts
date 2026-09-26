@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
-import { vendorRelsQuery, loadInverseStatuses } from '@/lib/relationshipThread';
+import {
+  vendorRelsQuery, loadInverseStatuses, loadRelationshipThreads, presentRelationships,
+} from '@/lib/relationshipThread';
 import { isInverted } from '@/lib/relationshipDirection';
 import { getIcpCompanyTypes } from '@/lib/icpCompanyTypes';
 import { buildGraph, pruneIsolated, type GraphCompany, type GraphEdgeInput } from '@/lib/relationshipGraph';
@@ -93,7 +95,7 @@ export async function GET(
       return NextResponse.json({
         scope, nodes: [], edges: [],
         competitive: {
-          relationships: [], competitors: [], companiesWithInternal: [],
+          relationships: [], competitors: [], companiesWithInternal: [], cards: [],
           notCompetitive: 0, duplicates: 0,
         },
       }, { headers: { 'Cache-Control': 'no-store' } });
@@ -215,7 +217,7 @@ export async function GET(
       const ids = Array.from(inSet);
       if (ids.length === 0) {
         return {
-          relationships: [], competitors: [], companiesWithInternal: [],
+          relationships: [], competitors: [], companiesWithInternal: [], cards: [],
           notCompetitive: 0, duplicates: 0,
         };
       }
@@ -305,8 +307,26 @@ export async function GET(
         competitorTypes: compTypeRes.rows.map(r => String(r.value ?? '')).filter(Boolean),
       });
 
+      /* The cards the grid renders, read from the ACCOUNT's side.
+         presentRelationships is the same presenter the company record and the
+         pre-conference views use, over the relRows this route already loaded, so
+         the grid shows the real card — thread, Update button, inverted wording
+         and all — rather than a lighter copy that would drift from it.
+
+         Threads only for the relationships that survived resolution, so the
+         payload does not carry the whole conference's history to fill a grid of
+         collapsed cards. */
+      const threads = await loadRelationshipThreads(db, resolved.relationships.map(r => r.id));
+      const presented = presentRelationships(relRows.rows, threads, inverses);
+      // Keyed on the pair, not on an id: resolution picks its survivor by change
+      // date and collapsePairs picks the outbound row, so the two can name
+      // different rows for the same relationship. The pair is what both agree on.
+      const wanted = new Set(resolved.relationships.map(r => `${r.companyId}:${r.competitorId}`));
+      const cards = presented.filter(c => wanted.has(`${c.company_id}:${c.related_company_id}`));
+
       return {
         ...resolved,
+        cards,
         // Narrowed to the companies on this map, so the payload does not carry
         // the account's whole book to light three pills.
         companiesWithInternal: internalRes.rows

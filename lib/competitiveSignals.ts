@@ -47,16 +47,27 @@ export type SignalKey = 'evaluatingAlternatives' | 'recentChange' | 'internalRel
 /**
  * Display strings, in one place.
  *
- * Render sites read from here so a wording change is one edit. "Recent Change"
- * deliberately appears in both maps and they are not the same thing: the row
- * holds relationships the account has moved away from, the signal marks any
- * card whose status changed lately — including one sitting in Use Competitor
- * because it switched TO this competitor.
+ * Render sites read from here so a wording change is one edit.
+ *
+ * The row key is still recentChange and its label is not, deliberately. The two
+ * were the same words once and they are not the same thing: the ROW holds
+ * relationships the account has moved away from, while the SIGNAL marks any
+ * card whose status changed lately, in any row, including one that changed
+ * toward a competitor. Shown side by side they read as a contradiction, so the
+ * row took the name that describes its contents. The key stays because it is
+ * what the status class maps to.
  */
 export const ROW_LABELS: Record<GridRow, string> = {
   activeEvaluation: 'Active Evaluation',
   useCompetitor: 'Use Competitor',
-  recentChange: 'Recent Change',
+  // NOT "Recent Change", which this row was called until it was looked at
+  // against data. The signal of that name lands on cards in ALL THREE rows —
+  // including cards that changed TOWARD a competitor — so a reader saw Recent
+  // Change pills sitting in Active Evaluation and reasonably asked why those
+  // cards were not in the Recent Change row. The row holds accounts that left a
+  // competitor, which is a different fact and now says so. It also parallels
+  // Use Competitor, which is the row it is the past tense of.
+  recentChange: 'Left Competitor',
 };
 
 export const SIGNAL_LABELS: Record<SignalKey, string> = {
@@ -145,6 +156,8 @@ export interface SignalCell {
   competitorId: number;
   statusClass: StatusClass;
   row: GridRow;
+  /** Carried through so a cell can be ordered by it. See byRecency. */
+  statusChangedAt: string | null;
   signals: Record<SignalKey, boolean>;
 }
 
@@ -244,6 +257,7 @@ export function deriveSignals(input: SignalInput): SignalResult {
     competitorId: r.competitorId,
     statusClass: r.statusClass,
     row: ROW_FOR_CLASS[r.statusClass],
+    statusChangedAt: r.statusChangedAt ?? null,
     signals: {
       evaluatingAlternatives: inPair.has(`${r.companyId}:${r.competitorId}`),
       recentChange: isRecent(r.statusChangedAt, now),
@@ -265,6 +279,26 @@ export function countSignals(cells: SignalCell[]): Record<SignalKey, number> {
     }
   }
   return counts;
+}
+
+/**
+ * Most recently changed first, unknown dates last.
+ *
+ * For the Recent Change row, where the order IS the information: the account
+ * that moved last week is the call to make, and it has to be at the top rather
+ * than wherever the query happened to return it.
+ *
+ * A null date sorts last and never first. It means no KNOWN change — see
+ * SignalRelationship — and putting "we have no idea when this moved" above
+ * "this moved on Tuesday" would be exactly backwards. Compared as text because
+ * the stamps are SQLite's fixed-width UTC, and the relationship id breaks a tie
+ * so two reads of the same data lay the cell out the same way.
+ */
+export function byRecency(a: SignalCell, b: SignalCell): number {
+  const x = a.statusChangedAt ?? '';
+  const y = b.statusChangedAt ?? '';
+  if (x !== y) return y.localeCompare(x);
+  return a.relationshipId - b.relationshipId;
 }
 
 /** True when a cell carries any signal at all — what "Signals only" filters on. */

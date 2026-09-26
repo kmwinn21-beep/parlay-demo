@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EntityPicker } from '@/components/relationship-map/EntityPicker';
 import { CompetitiveRail, type CompetitorColumn } from '@/components/relationship-map/CompetitiveRail';
+import { CompetitiveGrid } from '@/components/relationship-map/CompetitiveGrid';
 import {
   countSignals, deriveSignals, SIGNAL_PILL_LABELS, SIGNAL_TONE,
   type SignalKey, type SignalRelationship,
@@ -14,6 +15,10 @@ import { useUserOptions } from '@/lib/useUserOptions';
 import { toneFor, type PickerCompany } from '@/lib/relationshipPicker';
 import { RelationshipAttendeeCard, SectionHead } from '@/components/pre-conference/RelationshipsTab';
 import type { RelationshipRow } from '@/components/PreConferenceReview';
+// The presenter's own shape, which carries company_id. VendorRelationship is
+// what the CARD needs and deliberately omits it — the surface rendering one
+// already knows whose page it is on, and the grid does not.
+import type { RelationshipCard } from '@/lib/relationshipThread';
 
 interface GraphNode extends PickerCompany {
   company_type: string | null;
@@ -47,13 +52,20 @@ interface CompetitivePayload {
    * would leave this signal quietly low at "All Relationships".
    */
   companiesWithInternal: number[];
+  /**
+   * The cards the grid renders, read from each ACCOUNT's side.
+   *
+   * The same VendorRelationship shape the company record gets, from the same
+   * presenter, so the grid shows the real card rather than a lighter copy of it.
+   */
+  cards: RelationshipCard[];
   /** Rows where neither end is a competitor — the partnership landscape's. */
   notCompetitive: number;
   /** Rows folded into a pair already logged from the other side. */
   duplicates: number;
 }
 const EMPTY_COMPETITIVE: CompetitivePayload = {
-  relationships: [], competitors: [], companiesWithInternal: [],
+  relationships: [], competitors: [], companiesWithInternal: [], cards: [],
   notCompetitive: 0, duplicates: 0,
 };
 
@@ -265,6 +277,24 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
   }), [competitiveData]);
   const signalCounts = useMemo(() => countSignals(competitive.cells), [competitive]);
   const competitors = competitiveData.competitors;
+  /** Columns the rail has not switched off, in the order it lists them. */
+  const shownCompetitors = useMemo(
+    () => competitors.filter(c => !hiddenCompetitorIds.has(c.id)),
+    [competitors, hiddenCompetitorIds],
+  );
+  // Keyed on the pair for the same reason the endpoint filters on it: the two
+  // sides can name different rows for one relationship, and the pair is what
+  // they agree on.
+  const cardByPair = useMemo(() => new Map(
+    competitiveData.cards.map(c => [`${c.company_id}:${c.related_company_id}`, c]),
+  ), [competitiveData]);
+  const cardFor = useCallback(
+    (companyId: number, competitorId: number) => cardByPair.get(`${companyId}:${competitorId}`),
+    [cardByPair],
+  );
+  // Names for ordering a cell and for naming a card the query did not return.
+  // byId covers the map's own nodes; the competitor columns carry their own.
+  const nameOf = useCallback((companyId: number) => byId.get(companyId)?.name ?? '', [byId]);
   // Counted off the cells, so the subtitle can never disagree with the grid.
   const accountCount = useMemo(
     () => new Set(competitive.cells.map(c => c.companyId)).size,
@@ -451,12 +481,19 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
 
           <div className="flex-1 min-w-0 flex flex-col gap-2">
             {view === 'competitive' ? (
-              /* The grid lands here. Until it does this is the empty state it
-                 will fall back to anyway, rather than a placeholder that has to
-                 be remembered and removed. */
-              <div className="flex-1 flex items-center justify-center">
-                <p className="text-sm text-gray-400">No competitor relationships to compare.</p>
-              </div>
+              <CompetitiveGrid
+                cells={competitive.cells}
+                pairs={competitive.pairs}
+                competitors={shownCompetitors}
+                cardFor={cardFor}
+                nameOf={nameOf}
+                signalsOnly={signalsOnly}
+                activeSignals={activeSignals}
+                showConnectors={showConnectors}
+                userOptions={userOptions}
+                colorMaps={colorMaps}
+                onUpdated={() => { if (selectedId != null) loadRels(selectedId); }}
+              />
             ) : loading ? (
               <div className="flex-1 flex items-center justify-center">
                 <div className="w-6 h-6 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin" />
