@@ -14,7 +14,8 @@
  *                           — updated_at moves on a notes correction, and
  *                           reading that as a change is the bug this column
  *                           exists to avoid.
- *   internalRelationship    each of its two sources flags on its own.
+ *   internalRelationship    the one source flags it, a window never ages it
+ *                           out, and no activity feed can stand in for it.
  *
  * Exits non-zero on the first failing expectation, so it can gate a build.
  */
@@ -38,6 +39,8 @@ const strip = (f) => readFileSync(f, 'utf8')
   .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
 const NOW = new Date('2026-09-26T12:00:00Z');
+/** Years on, for showing that a standing fact takes no window. */
+const FUTURE = new Date('2031-09-26T12:00:00Z');
 const daysAgo = (n) => {
   const d = new Date(NOW.getTime() - n * 24 * 60 * 60 * 1000);
   return d.toISOString().replace('T', ' ').slice(0, 19);
@@ -228,47 +231,41 @@ console.log('\n— the stored shape is read as UTC, wherever the reader is —')
   eq('  and the boundary still falls inside the window', got.atBoundary, true);
 }
 
-console.log('\n— internal relationship: each source on its own —');
+console.log('\n— internal relationship: one source, and only one —');
 {
   const base = [rel(1, 1, 10, 'current')];
   const internalOnly = deriveSignals({
     relationships: base, companiesWithInternal: [1], now: NOW,
   });
-  eq('an internal relationship flags on its own',
+  eq('an internal relationship flags the cell',
     flagged(internalOnly, 1, 10, 'internalRelationship'), true);
 
-  const activityOnly = deriveSignals({
-    relationships: base, lastActivityByCompany: { 1: daysAgo(10) }, now: NOW,
-  });
-  eq('recent activity flags on its own',
-    flagged(activityOnly, 1, 10, 'internalRelationship'), true);
+  // A standing fact, so no window. Somebody who knows somebody there still
+  // knows them, whatever the date on the row.
+  eq('  and is never aged out',
+    flagged(deriveSignals({ relationships: base, companiesWithInternal: [1], now: FUTURE }),
+      1, 10, 'internalRelationship'), true);
 
-  // An internal relationship is a standing fact and takes no window.
-  const oldInternal = deriveSignals({
-    relationships: base, companiesWithInternal: [1],
-    lastActivityByCompany: { 1: daysAgo(900) }, now: NOW,
-  });
-  eq('  and an internal relationship is not aged out by stale activity',
-    flagged(oldInternal, 1, 10, 'internalRelationship'), true);
-
-  // Activity is an event and does take one.
-  const staleActivity = deriveSignals({
-    relationships: base, lastActivityByCompany: { 1: daysAgo(RECENT_DAYS + 1) }, now: NOW,
-  });
-  eq('activity outside the window does not flag',
-    flagged(staleActivity, 1, 10, 'internalRelationship'), false);
-  const boundary = deriveSignals({
-    relationships: base, lastActivityByCompany: { 1: daysAgo(RECENT_DAYS) }, now: NOW,
-  });
-  eq(`  and activity exactly ${RECENT_DAYS} days ago does`,
-    flagged(boundary, 1, 10, 'internalRelationship'), true);
-
-  eq('neither source is no signal',
+  eq('no internal relationship is no signal',
     flagged(deriveSignals({ relationships: base, now: NOW }), 1, 10, 'internalRelationship'), false);
   // Somebody else's internal relationship is not this account's.
   eq('  and another company\u2019s does not carry over',
     flagged(deriveSignals({ relationships: base, companiesWithInternal: [2], now: NOW }), 1, 10,
       'internalRelationship'), false);
+
+  // The pill says "Int. Relationship". A meeting or a touchpoint is not one,
+  // and the module must not offer a way to pretend otherwise: a parameter
+  // nothing passes is a promise the module is not keeping.
+  const mod = strip('lib/competitiveSignals.ts');
+  eq('the module takes no activity feed at all',
+    /lastActivity/i.test(mod), false);
+  eq('  and the signal reads only the internal set',
+    /internalRelationship: withInternal\.has\(r\.companyId\),/.test(mod), true);
+  // Passing one anyway must not quietly work.
+  eq('  an activity feed passed by mistake changes nothing',
+    flagged(deriveSignals({
+      relationships: base, lastActivityByCompany: { 1: daysAgo(1) }, now: NOW,
+    }), 1, 10, 'internalRelationship'), false);
 }
 
 console.log('\n— a status nobody classified —');

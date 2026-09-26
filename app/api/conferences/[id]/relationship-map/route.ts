@@ -92,7 +92,10 @@ export async function GET(
     if (seedIds.length === 0) {
       return NextResponse.json({
         scope, nodes: [], edges: [],
-        competitive: { relationships: [], competitors: [], notCompetitive: 0, duplicates: 0 },
+        competitive: {
+          relationships: [], competitors: [], companiesWithInternal: [],
+          notCompetitive: 0, duplicates: 0,
+        },
       }, { headers: { 'Cache-Control': 'no-store' } });
     }
 
@@ -211,7 +214,10 @@ export async function GET(
       const inSet = new Set(companies.map(c => c.id));
       const ids = Array.from(inSet);
       if (ids.length === 0) {
-        return { relationships: [], competitors: [], notCompetitive: 0, duplicates: 0 };
+        return {
+          relationships: [], competitors: [], companiesWithInternal: [],
+          notCompetitive: 0, duplicates: 0,
+        };
       }
 
       const rawRows: RawRelationshipRow[] = [];
@@ -256,7 +262,7 @@ export async function GET(
       const seen = new Set<number>();
       const rows = rawRows.filter(r => (seen.has(r.id) ? false : (seen.add(r.id), true)));
 
-      const [statusRes, compTypeRes] = await Promise.all([
+      const [statusRes, compTypeRes, internalRes] = await Promise.all([
         db.execute({
           sql: `SELECT value, inverse_value, action_key FROM config_options
                 WHERE category = 'other_relationship_status'`,
@@ -269,13 +275,26 @@ export async function GET(
                 WHERE category = 'company_type' AND action_key = 'competitor'`,
           args: [],
         }).catch(() => ({ rows: [] as Record<string, unknown>[] })),
+        /* Which companies somebody here already knows somebody at.
+           Its own query, deliberately, rather than the pre-conference load the
+           Map's internal column uses. That load is conference-scoped because it
+           computes a health ring — five cross-conference queries — and this
+           signal needs none of that, only whether a row exists. Inheriting the
+           narrower read would have left the signal quietly LOW at "All
+           Relationships": nothing errors, nothing logs, the number is just
+           wrong at the setting that claims to show everything. */
+        db.execute({
+          sql: `SELECT DISTINCT company_id FROM internal_relationships
+                WHERE company_id IS NOT NULL`,
+          args: [],
+        }).catch(() => ({ rows: [] as Record<string, unknown>[] })),
       ]);
 
       const companyMap = new Map<number, ResolutionCompany>(
         companies.map(c => [c.id, { id: c.id, name: c.name, types: c.company_types }]),
       );
 
-      return resolveCompetitive({
+      const resolved = resolveCompetitive({
         rows,
         statusConfig: statusRes.rows.map(r => ({
           value: String(r.value ?? ''),
@@ -285,6 +304,15 @@ export async function GET(
         companies: companyMap,
         competitorTypes: compTypeRes.rows.map(r => String(r.value ?? '')).filter(Boolean),
       });
+
+      return {
+        ...resolved,
+        // Narrowed to the companies on this map, so the payload does not carry
+        // the account's whole book to light three pills.
+        companiesWithInternal: internalRes.rows
+          .map(r => Number(r.company_id))
+          .filter(id => id && inSet.has(id)),
+      };
     })();
 
     // The account's ICP company types, so the picker can lead with them.

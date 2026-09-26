@@ -381,6 +381,54 @@ console.log('\n— one place, and the Map view left alone —');
     /NULL AS status_changed_at/.test(route), true);
   eq('  and a missing config table falls back to empty',
     (route.match(/catch\(\(\) => \(\{ rows: \[\] as Record<string, unknown>\[\] \}\)\)/g) || []).length >= 3, true);
+
+  // The internal-relationship signal reads internal_relationships directly.
+  // Taken from the conference-scoped pre-conference load instead, it would be
+  // quietly LOW at "All Relationships" — nothing errors, nothing logs, the
+  // number is just wrong at the setting that claims to show everything.
+  eq('the internal signal has its own read, not the conference-scoped one',
+    /SELECT DISTINCT company_id FROM internal_relationships/.test(route), true);
+  eq('  unfiltered by conference, so both scopes are right',
+    /FROM internal_relationships\s*\n\s*WHERE company_id IS NOT NULL/.test(route), true);
+  eq('  and not taken from the pre-conference load',
+    /pre-conference/.test(route), false);
+  eq('  narrowed to the companies on this map before it is sent',
+    /companiesWithInternal: internalRes\.rows[\s\S]{0,140}inSet\.has\(id\)/.test(route), true);
+  eq('  the modal passes the payload list, not the pre-conference one',
+    /companiesWithInternal: competitiveData\.companiesWithInternal/.test(modal), true);
+  eq('  and does not derive it from the internal cards',
+    /companiesWithInternal: internal/.test(modal), false);
+}
+
+console.log('\n— the fixture the view is looked at against —');
+{
+  const seed = strip('scripts/seed-competitive-fixture.mjs');
+  // Read unstripped: the reason lives in the header comment, which is the point.
+  const seedRaw = readFileSync('scripts/seed-competitive-fixture.mjs', 'utf8');
+  // An empty grid looks the same whether the resolution rule is right or wrong,
+  // which is the whole reason a fixture is committed rather than improvised.
+  eq('the seed script says why it exists',
+    /empty grid looks EXACTLY the same whether the resolution rule is right or[\s*]+wrong/.test(seedRaw), true);
+  // Fixed ids and INSERT OR REPLACE, so running it twice is running it once.
+  eq('  it is idempotent',
+    /INSERT OR REPLACE INTO companies/.test(seed)
+      && /INSERT OR REPLACE INTO vendor_relationships/.test(seed), true);
+  eq('  and owns a declared id range rather than clearing the table',
+    /FIRST_COMPANY_ID = 20/.test(seed) && /DELETE FROM/.test(seed) === false, true);
+  // A fixture on unclassified statuses would exercise nothing, silently.
+  eq('  it refuses to seed against unseeded action_keys',
+    /action_key/.test(seed) && /process\.exit\(1\)/.test(seed), true);
+  // Every branch of the resolver, including the ones that must produce nothing.
+  eq('  it covers a row stored counterpart-side',
+    /'Customer', 30\]/.test(seed), true);
+  eq('  the same pair logged from both sides',
+    /'Current Vendor', null\]/.test(seed), true);
+  eq('  a symmetric status, and one with no class',
+    /'Preferred Partner'/.test(seed) && /'Other'/.test(seed), true);
+  eq('  a relationship to a non-competitor',
+    /1008, 7, 23/.test(seed), true);
+  eq('  and the row that must not be flipped in',
+    /1009, 7, 20, 'Customer'/.test(seed), true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

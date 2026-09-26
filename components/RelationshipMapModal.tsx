@@ -38,13 +38,23 @@ interface GraphEdge {
 interface CompetitivePayload {
   relationships: SignalRelationship[];
   competitors: CompetitorColumn[];
+  /**
+   * Companies somebody here already knows somebody at.
+   *
+   * From the endpoint's own DISTINCT read over internal_relationships, not from
+   * the conference-scoped pre-conference load the Map's internal column uses —
+   * that one is narrow because it computes a health ring, and inheriting it
+   * would leave this signal quietly low at "All Relationships".
+   */
+  companiesWithInternal: number[];
   /** Rows where neither end is a competitor — the partnership landscape's. */
   notCompetitive: number;
   /** Rows folded into a pair already logged from the other side. */
   duplicates: number;
 }
 const EMPTY_COMPETITIVE: CompetitivePayload = {
-  relationships: [], competitors: [], notCompetitive: 0, duplicates: 0,
+  relationships: [], competitors: [], companiesWithInternal: [],
+  notCompetitive: 0, duplicates: 0,
 };
 
 /**
@@ -245,16 +255,14 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
    * is the signal derivation, which is the same pure function the tests drive
    * without a browser or a database.
    *
-   * Internal relationships come from the pre-conference load the modal already
-   * does. No window on them: somebody here knowing somebody there is a standing
-   * fact, not a recent event.
+   * Both lists come from the same payload, so the signal is true at either
+   * scope. No window on the internal one: somebody here knowing somebody there
+   * is a standing fact, not a recent event.
    */
   const competitive = useMemo(() => deriveSignals({
     relationships: competitiveData.relationships,
-    companiesWithInternal: internal
-      .filter(r => r.attendees.length > 0)
-      .map(r => r.company_id),
-  }), [competitiveData, internal]);
+    companiesWithInternal: competitiveData.companiesWithInternal,
+  }), [competitiveData]);
   const signalCounts = useMemo(() => countSignals(competitive.cells), [competitive]);
   const competitors = competitiveData.competitors;
   // Counted off the cells, so the subtitle can never disagree with the grid.

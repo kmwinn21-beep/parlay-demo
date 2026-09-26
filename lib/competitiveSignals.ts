@@ -15,7 +15,9 @@
  *                           worked out again in the view.
  *   recentChange            the status changed inside the window. Not "the row
  *                           was touched" — see statusChangedAt below.
- *   internalRelationship    somebody here knows somebody there.
+ *   internalRelationship    somebody here knows somebody there. A standing
+ *                           fact, so no window — and only that fact, never a
+ *                           recent meeting standing in for it.
  */
 
 /**
@@ -117,16 +119,16 @@ export interface SignalRelationship {
 
 export interface SignalInput {
   relationships: SignalRelationship[];
-  /** Companies with an internal relationship. No window: a standing fact. */
-  companiesWithInternal?: Iterable<number>;
   /**
-   * Company id → the most recent meeting or touchpoint, as a timestamp.
+   * Companies with an internal relationship. No window: a standing fact.
    *
-   * The most recent one only, because the window is applied here rather than
-   * in the query — that keeps RECENT_DAYS in one place and makes the boundary
-   * testable without a database.
+   * Only this. A recent meeting or touchpoint deliberately does NOT light this
+   * pill — the pill says "Int. Relationship", and a booth conversation is not
+   * one. Lighting it for activity would make the label lie about what it found.
+   * If recent activity earns a signal it comes back as its own, with its own
+   * name; see BACKLOG.md.
    */
-  lastActivityByCompany?: Record<number, string | null>;
+  companiesWithInternal?: Iterable<number>;
   now?: Date;
 }
 
@@ -193,7 +195,6 @@ export function isRecent(raw: string | null | undefined, now: Date): boolean {
 export function deriveSignals(input: SignalInput): SignalResult {
   const now = input.now ?? new Date();
   const withInternal = new Set(input.companiesWithInternal ?? []);
-  const lastActivity = input.lastActivityByCompany ?? {};
 
   const classified: Array<SignalRelationship & { statusClass: StatusClass }> = [];
   let unclassifiedCount = 0;
@@ -246,8 +247,7 @@ export function deriveSignals(input: SignalInput): SignalResult {
     signals: {
       evaluatingAlternatives: inPair.has(`${r.companyId}:${r.competitorId}`),
       recentChange: isRecent(r.statusChangedAt, now),
-      internalRelationship:
-        withInternal.has(r.companyId) || isRecent(lastActivity[r.companyId], now),
+      internalRelationship: withInternal.has(r.companyId),
     },
   }));
 

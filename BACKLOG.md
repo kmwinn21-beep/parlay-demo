@@ -133,6 +133,22 @@ It fails silently. The module swallows all errors by design, and an empty recipi
   backfill could have been complete, which it is not — see the note at that
   migration.
 
+- **A "Recent Activity" signal, if it earns one.** The competitive view's third
+  signal is Int. Relationship: somebody here knows somebody there, read from
+  `internal_relationships`. `deriveSignals` briefly also accepted a
+  `lastActivityByCompany` feed so a recent meeting or touchpoint could light the
+  same pill, and that was removed rather than left unwired. The pill says "Int.
+  Relationship", and a booth conversation is not one — lighting it for activity
+  would make the label lie about what it found, and a parameter nothing passes is
+  a promise the module is not keeping.
+
+  If recent activity is worth surfacing it comes back as its own signal with its
+  own name, its own count in the rail and its own pill, not as a second way to
+  light an existing one. It would need: a MAX(created_at) per company over
+  meetings and touchpoints, the existing `RECENT_DAYS` window applied in the
+  module rather than the query, and a decision about whether it means anything
+  on a card whose account has no internal relationship at all.
+
 - **A single-competitor mobile Competitive view.** The competitive view is
   desktop-only: the `[Map | Competitive]` toggle is hidden in the modal's
   `sm:hidden` branch, which never reads `view` at all. The reason is the grid
