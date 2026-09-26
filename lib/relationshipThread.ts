@@ -1,5 +1,6 @@
 import type { getDb } from '@/lib/getDb';
 import { collapsePairs, statusesFor } from '@/lib/relationshipDirection';
+import { buildCounterpartMap } from '@/lib/relationshipStatusOptions';
 
 /** One entry in a relationship's thread, as the card renders it. */
 export interface RelationshipUpdate {
@@ -184,16 +185,19 @@ export async function vendorRelsQuery(
  */
 export async function loadInverseStatuses(db: Db): Promise<Record<string, string | null>> {
   const res = await db.execute({
-    sql: `SELECT value, inverse_value FROM config_options
+    sql: `SELECT id, value, inverse_value FROM config_options
           WHERE category = 'other_relationship_status'`,
     args: [],
   }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
 
-  const map: Record<string, string | null> = {};
-  for (const r of res.rows) {
-    map[String(r.value)] = r.inverse_value ? String(r.inverse_value) : null;
-  }
-  return map;
+  // Both directions. Either half of a pair can be the one stored now — a rep
+  // can log "Abbott is our current vendor" or "Abshire is our customer" — so
+  // the pairing has to be followed backwards as well as forwards.
+  return buildCounterpartMap(res.rows.map(r => ({
+    id: Number(r.id ?? 0),
+    value: String(r.value ?? ''),
+    inverse_value: r.inverse_value ? String(r.inverse_value) : null,
+  })));
 }
 
 /** A relationship as every surface renders it, read from one company's side. */

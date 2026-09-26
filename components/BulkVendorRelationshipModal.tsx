@@ -8,6 +8,7 @@ import {
   type CompanyOption, type ConfigOption,
 } from '@/components/VendorRelationshipFields';
 import type { UserOption } from '@/lib/useUserOptions';
+import { useRelationshipStatusOptions } from '@/lib/useRelationshipStatusOptions';
 
 /**
  * The Vendor / Other Relationship form, applied across a table selection.
@@ -31,7 +32,9 @@ export function BulkVendorRelationshipModal({
   currentUserConfigId: number | null;
 }) {
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
-  const [statusOptions, setStatusOptions] = useState<ConfigOption[]>([]);
+  // Both halves of every pair — "Current Vendor" and "Customer" are the same
+  // fact from opposite ends, and either is a reasonable thing to reach for.
+  const statusOptions = useRelationshipStatusOptions();
   const [vendorTypeOptions, setVendorTypeOptions] = useState<ConfigOption[]>([]);
   const [strengthOptions, setStrengthOptions] = useState<ConfigOption[]>([]);
   const [saving, setSaving] = useState(false);
@@ -56,7 +59,6 @@ export function BulkVendorRelationshipModal({
     const loadCat = (cat: string, set: (v: ConfigOption[]) => void) =>
       fetch(`/api/config?category=${cat}`).then(r => r.ok ? r.json() : []).then((d: ConfigOption[]) =>
         set(Array.isArray(d) ? d.map(o => ({ id: o.id, value: o.value })) : [])).catch(() => {});
-    loadCat('other_relationship_status', setStatusOptions);
     loadCat('vendor_type', setVendorTypeOptions);
     loadCat('rep_relationship_type', setStrengthOptions);
   }, [isOpen, currentUserConfigId]);

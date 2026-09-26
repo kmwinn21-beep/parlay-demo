@@ -2652,4 +2652,19 @@ export const migrations: string[] = [
   // They are evaluating you, which from your side makes them a prospect.
   `UPDATE config_options SET inverse_value = 'Prospect'
      WHERE category = 'other_relationship_status' AND value = 'Evaluating' AND inverse_value IS NULL`,
+
+  // ── Every relationship status gets its counterpart ────────────────────────
+  //
+  // The first pass set one only where the words change, leaving the symmetric
+  // ones NULL. That was enough while the counterpart was a display detail, and
+  // is not now that it is an option in its own right: a rep picking "Preferred
+  // Partner" on either side needs that to be a real, selectable value with a
+  // known other half, not an absence the code reads as "same both ways".
+  //
+  // Other is symmetric too. It is the catch-all, and a catch-all is the same
+  // catch-all whichever end you read it from.
+  `UPDATE config_options SET inverse_value = value
+     WHERE category = 'other_relationship_status'
+       AND value IN ('Preferred Partner', 'Active Pilot', 'Other')
+       AND inverse_value IS NULL`,
 ];

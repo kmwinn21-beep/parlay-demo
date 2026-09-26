@@ -221,8 +221,10 @@ console.log('\n— the inverse words come from config —');
   eq('  leaving the symmetric ones alone',
     /inverse_value = '(Preferred Partner|Active Pilot)'/.test(mig), false);
   // The backfill must not overwrite an account that already set its own.
+  // Four backfills now: the three that invert, plus the one giving the
+  // symmetric statuses themselves as their counterpart.
   eq('  without overwriting an account\'s own wording',
-    (mig.match(/AND inverse_value IS NULL/g) ?? []).length, 3);
+    (mig.match(/AND inverse_value IS NULL/g) ?? []).length, 4);
 
   // A tenant that has not run the migration yields an empty map, which reads
   // as every status symmetric — the same answer as before inbound rows were

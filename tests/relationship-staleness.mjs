@@ -283,10 +283,10 @@ console.log('\n— one card, not four —');
     /onUpdate=\{/.test(readFileSync('components/pre-conference/RelationshipsTab.tsx', 'utf8')
       + readFileSync('components/VendorRelationshipsSection.tsx', 'utf8')), false);
 
-  // The form loads its own options for the same reason.
+  // The form takes the shared list, which offers both halves of every pair.
   const form = strip('components/RelationshipUpdateForm.tsx');
-  eq('the form fetches its own status options',
-    /fetch\('\/api\/config\?category=other_relationship_status'\)/.test(form), true);
+  eq('the form takes the shared status list',
+    /useRelationshipStatusOptions\(\)/.test(form), true);
 
   // Verified in Chromium at 1280 and 390 wide: the button renders on both, the
   // stale card shows its pill, and a save appears in the thread with its

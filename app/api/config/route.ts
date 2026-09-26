@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
   const db = await getDb(authResult?.accountId);
   try {
     const body = await request.json();
-    const { category, value, sort_order, color, category_id, description } = body;
+    const { category, value, sort_order, color, category_id, description, inverse_value } = body;
 
     if (!category || !value) {
       return NextResponse.json({ error: 'category and value are required' }, { status: 400 });
@@ -124,10 +124,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '"True" and "False" are reserved and cannot be used as ICP options' }, { status: 400 });
     }
 
+    // A relationship status with no counterpart cannot be read from the other
+    // company at all, which is the whole reason the field exists. Required
+    // here as well as in the form, because the form is not the only way in.
+    const counterpart = String(inverse_value ?? '').trim();
+    if (category === 'other_relationship_status' && !counterpart) {
+      return NextResponse.json(
+        { error: 'A relationship status needs a counterpart — what it is called from the other company\u2019s side.' },
+        { status: 400 },
+      );
+    }
+
     const result = await db.execute({
+      sql: 'INSERT INTO config_options (category, value, sort_order, color, category_id, description, inverse_value) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *',
+      args: [category, value, sort_order ?? 0, color ?? null, category_id ?? null, description ?? null, counterpart || null],
+    // A tenant whose table predates the column keeps the option rather than
+    // losing the write; it simply has no counterpart until they migrate.
+    }).catch(() => db.execute({
       sql: 'INSERT INTO config_options (category, value, sort_order, color, category_id, description) VALUES (?, ?, ?, ?, ?, ?) RETURNING *',
       args: [category, value, sort_order ?? 0, color ?? null, category_id ?? null, description ?? null],
-    });
+    }));
 
     return NextResponse.json(result.rows[0], { status: 201 });
   } catch (error) {

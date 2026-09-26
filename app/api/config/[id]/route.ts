@@ -12,7 +12,7 @@ export async function PUT(
   const db = await getDb(authResult?.accountId);
   try {
     const body = await request.json();
-    const { value, sort_order, color, visible_forms, scope, auto_follow_up, category_id, description } = body as {
+    const { value, sort_order, color, visible_forms, scope, auto_follow_up, category_id, description, inverse_value } = body as {
       value: string;
       sort_order?: number;
       color?: string | null;
@@ -21,6 +21,7 @@ export async function PUT(
       auto_follow_up?: boolean | number;
       category_id?: number | null;
       description?: string | null;
+      inverse_value?: string | null;
     };
 
     if (!value) {
@@ -51,6 +52,30 @@ export async function PUT(
         && category !== 'company_type' && category !== 'products'
         && category !== 'product_category' && category !== 'entity_structure') {
       return NextResponse.json({ error: 'System options cannot be renamed.' }, { status: 403 });
+    }
+
+    // The counterpart on a seeded status is the system's to keep: the pairing
+    // is what lets a relationship be read from either end, and an account
+    // renaming one half would leave rows that no longer pair with anything.
+    // A custom status still needs one, here as in the create.
+    const counterpart = inverse_value === undefined ? undefined : String(inverse_value ?? '').trim();
+    if (category === 'other_relationship_status' && counterpart !== undefined) {
+      if (isSystem) {
+        return NextResponse.json(
+          { error: 'The counterpart on a system status cannot be changed.' },
+          { status: 403 },
+        );
+      }
+      if (!counterpart) {
+        return NextResponse.json(
+          { error: 'A relationship status needs a counterpart — what it is called from the other company\u2019s side.' },
+          { status: 400 },
+        );
+      }
+      await db.execute({
+        sql: 'UPDATE config_options SET inverse_value = ? WHERE id = ?',
+        args: [counterpart, params.id],
+      }).catch(() => {});
     }
 
     const scopeValue = scope === 'user' ? 'user' : 'global';
