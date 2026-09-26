@@ -183,3 +183,27 @@ It fails silently. The module swallows all errors by design, and an empty recipi
 
 - A prescribed fix for a layout problem gets measured against the actual
   constrained axis before it gets built.
+
+## The vendor switch workflow
+
+- **Bulk edits record no switches.** BulkVendorRelationshipModal can set many
+  relationships to a current status at once, and the switch prompt is not wired
+  into it. Deliberate: thirty saves would mean thirty modals, and a rep clicking
+  through a wizard that long is collecting confident wrong answers, which is
+  worse than collecting none. The cost is that a bulk cleanup pass records no
+  switches at all. A summary step — one screen listing every conflict the batch
+  created — would recover them, and is its own piece of work.
+
+- **A switch is never aged out.** The Switched Vendors signal has no window: the
+  record is a durable fact and Recent Change already answers the recency
+  question. An account that switched three years ago still shows the connector
+  as long as both statuses stand. If the grid gets noisy on a mature book, the
+  fix is a window on the record's created_at rather than on the statuses —
+  worth measuring against real data before choosing a number.
+
+- **Nobody is asked twice, but nothing uses that yet.** vendor_switches is
+  indexed on (account, incumbent, incoming) so "have we already asked about
+  these two?" is a cheap lookup, and detectSwitchPrompt does not yet make it.
+  A rep who answered "keeping" last month is asked again the next time the
+  status is touched. Suppressing a recently answered question is small, and the
+  right rule for how recent needs a look at how often it actually happens.

@@ -6,7 +6,7 @@ import { CompetitiveRail, type CompetitorColumn } from '@/components/relationshi
 import { CompetitiveGrid, SignalBadge } from '@/components/relationship-map/CompetitiveGrid';
 import {
   countSignals, deriveSignals, SIGNAL_FULL_LABELS,
-  type SignalKey, type SignalRelationship,
+  type SignalKey, type SignalRelationship, type SwitchPair,
 } from '@/lib/competitiveSignals';
 import { MapCanvas, TONE_COLOR, type Spoke } from '@/components/relationship-map/MapCanvas';
 import { VendorRelationshipCard, type VendorRelationship } from '@/components/VendorRelationshipCard';
@@ -68,6 +68,13 @@ interface CompetitivePayload {
    * row writes about the competitor.
    */
   inverses: InverseMap;
+  /**
+   * Switches a rep recorded on the companies on this map.
+   *
+   * Read, never derived: "they left A for B" is a claim about cause, and two
+   * end-states and a calendar cannot establish one. See lib/vendorSwitch.
+   */
+  switches: SwitchPair[];
   /** Rows where neither end is a competitor — the partnership landscape's. */
   notCompetitive: number;
   /** Rows folded into a pair already logged from the other side. */
@@ -75,7 +82,7 @@ interface CompetitivePayload {
 }
 const EMPTY_COMPETITIVE: CompetitivePayload = {
   relationships: [], competitors: [], companiesWithInternal: [], cards: [],
-  inverses: {}, notCompetitive: 0, duplicates: 0,
+  inverses: {}, switches: [], notCompetitive: 0, duplicates: 0,
 };
 
 /**
@@ -283,6 +290,7 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
   const competitive = useMemo(() => deriveSignals({
     relationships: competitiveData.relationships,
     companiesWithInternal: competitiveData.companiesWithInternal,
+    switches: competitiveData.switches,
   }), [competitiveData]);
   const signalCounts = useMemo(() => countSignals(competitive.cells), [competitive]);
   const competitors = competitiveData.competitors;
@@ -518,6 +526,7 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
               <CompetitiveGrid
                 cells={competitive.cells}
                 pairs={competitive.pairs}
+                switches={competitive.switches}
                 competitors={shownCompetitors}
                 cardFor={cardFor}
                 nameOf={nameOf}

@@ -71,36 +71,58 @@ export interface Incumbent {
   statuses: string[];
 }
 
+/** Which end is the vendor and which the account, before any competitor test. */
+function splitEnds(
+  row: SwitchRow, index: StatusIndex, isCompetitor: (id: number) => boolean,
+): { vendorId: number; accountId: number } | null {
+  const end = vendorEndOfStatuses(row.statuses, index);
+  if (end === 'related') return { vendorId: row.relatedCompanyId, accountId: row.companyId };
+  if (end === 'logging') return { vendorId: row.companyId, accountId: row.relatedCompanyId };
+  // The words point nowhere — a symmetric status, or one nobody configured —
+  // so the types decide. When neither end is a competitor there is nothing to
+  // tell them apart, and guessing would be a coin toss about which company is
+  // buying from which.
+  if (isCompetitor(row.relatedCompanyId)) {
+    return { vendorId: row.relatedCompanyId, accountId: row.companyId };
+  }
+  if (isCompetitor(row.companyId)) {
+    return { vendorId: row.companyId, accountId: row.relatedCompanyId };
+  }
+  return null;
+}
+
 /**
- * Which end of a row is the vendor, by the same rule the grid uses.
+ * Which end of a row is the competitor, by the same rule the grid uses.
  *
- * The status points at one end; a symmetric or unclassified status points
- * nowhere and the company types decide. Returns null when neither end is a
- * competitor, which is this workflow's whole scope — a switch between two
- * companies we do not compete with is somebody else's feature.
+ * Null when the vendor end is not a competitor. Never flipped to make it fit:
+ * a status naming an end that is not a competitor means this is not an
+ * account-to-competitor relationship however the other end is typed, and
+ * swapping them would invent a purchase running the other way.
+ *
+ * This is the test for a DEPARTURE — somebody has to have been a competitor
+ * for their leaving to be competitive news.
  */
 export function endsOf(
   row: SwitchRow, index: StatusIndex, isCompetitor: (id: number) => boolean,
 ): { competitorId: number; accountId: number } | null {
-  const end = vendorEndOfStatuses(row.statuses, index);
-  let competitorId: number;
-  let accountId: number;
-  if (end === 'related') {
-    competitorId = row.relatedCompanyId; accountId = row.companyId;
-  } else if (end === 'logging') {
-    competitorId = row.companyId; accountId = row.relatedCompanyId;
-  } else if (isCompetitor(row.relatedCompanyId)) {
-    competitorId = row.relatedCompanyId; accountId = row.companyId;
-  } else if (isCompetitor(row.companyId)) {
-    competitorId = row.companyId; accountId = row.relatedCompanyId;
-  } else {
-    return null;
-  }
-  // Never flipped to make it fit. A status naming an end that is not a
-  // competitor means this is not an account-to-competitor relationship however
-  // the other end is typed, and swapping them would invent a purchase running
-  // the other way.
-  return isCompetitor(competitorId) ? { competitorId, accountId } : null;
+  const ends = splitEnds(row, index, isCompetitor);
+  if (!ends || !isCompetitor(ends.vendorId)) return null;
+  return { competitorId: ends.vendorId, accountId: ends.accountId };
+}
+
+/**
+ * The same split, without requiring the vendor end to be a competitor.
+ *
+ * For an ARRIVAL. The company moving in may not be typed Competitor yet —
+ * that is the whole reason the prompt offers to mark it — so insisting on it
+ * here would skip the prompt in exactly the case it was built for. What makes
+ * an arrival competitive news is the INCUMBENT being a competitor, which
+ * findIncumbents tests.
+ */
+export function arrivalEnds(
+  row: SwitchRow, index: StatusIndex, isCompetitor: (id: number) => boolean,
+): { vendorId: number; accountId: number } | null {
+  return splitEnds(row, index, isCompetitor);
 }
 
 /**

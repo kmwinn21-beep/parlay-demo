@@ -324,7 +324,45 @@ console.log('\n— rows, counts and filters —');
   eq('  and one with something does', hasAnySignal(res.cells[0]), true);
 
   eq('nothing in is nothing out', deriveSignals({ relationships: [], now: NOW }),
-    { cells: [], pairs: [], unclassifiedCount: 0 });
+    { cells: [], pairs: [], switches: [], unclassifiedCount: 0 });
+}
+
+console.log('\n— a switch somebody recorded —');
+{
+  // Never derived. "They left A for B" is a claim about cause, and two
+  // end-states and a calendar cannot establish one — so it arrives as input.
+  const base = [rel(1, 1, 10, 'former'), rel(2, 1, 20, 'current')];
+  const sw = { companyId: 1, fromCompetitorId: 10, toCompetitorId: 20 };
+  const res = deriveSignals({ relationships: base, switches: [sw], now: NOW });
+  eq('both ends of a recorded switch carry the signal',
+    res.cells.map(c => [c.competitorId, c.signals.switched]), [[10, true], [20, true]]);
+  eq('  and the switch comes back for the connector', res.switches, [sw]);
+  eq('no switches recorded means no signal',
+    deriveSignals({ relationships: base, now: NOW }).cells.map(c => c.signals.switched),
+    [false, false]);
+  // Half a connector points at a cell that is not there and reads as a bug.
+  eq('a switch with an end that drew no cell is not returned',
+    deriveSignals({
+      relationships: [rel(1, 1, 10, 'former')], switches: [sw], now: NOW,
+    }).switches, []);
+  eq('  and the end that IS drawn still carries the signal',
+    deriveSignals({
+      relationships: [rel(1, 1, 10, 'former')], switches: [sw], now: NOW,
+    }).cells.map(c => c.signals.switched), [true]);
+  // Another account's switch is not this one's.
+  eq('a switch belongs to its own account',
+    deriveSignals({
+      relationships: [rel(1, 2, 10, 'former'), rel(2, 2, 20, 'current')],
+      switches: [sw], now: NOW,
+    }).cells.map(c => c.signals.switched), [false, false]);
+  // A switch is a durable fact, not a recent event: the window belongs to
+  // Recent Change, which answers a different question.
+  eq('no window is applied to it',
+    deriveSignals({ relationships: base, switches: [sw], now: FUTURE })
+      .cells.every(c => c.signals.switched), true);
+  // Its own signal, so it counts and filters on its own.
+  eq('it counts separately',
+    countSignals(res.cells).switched, 2);
 }
 
 console.log('\n— ordering a Recent Change cell —');
@@ -397,7 +435,8 @@ console.log('\n— labels live in one place —');
   eq('  every abbreviation two characters',
     Object.values(SIGNAL_ABBREVIATIONS).every(a => a.length === 2), true);
   eq('  and distinct, or the legend cannot explain them',
-    new Set(Object.values(SIGNAL_ABBREVIATIONS)).size, 3);
+    new Set(Object.values(SIGNAL_ABBREVIATIONS)).size,
+    Object.keys(SIGNAL_ABBREVIATIONS).length);
   eq('  the full names for the legend',
     [SIGNAL_FULL_LABELS.evaluatingAlternatives, SIGNAL_FULL_LABELS.recentChange,
       SIGNAL_FULL_LABELS.internalRelationship],

@@ -286,5 +286,280 @@ console.log('\n— the record the answer lands in —');
     /idx_vendor_switches_account/.test(mig) && /idx_vendor_switches_pair/.test(mig), true);
 }
 
+console.log('\n— what an answer actually does, against a database —');
+{
+  // The writes are the part regexes cannot check. A record that is not written,
+  // a status moved in the wrong wording, a thread entry missing from a card
+  // nobody opened — each one is invisible afterwards and each one is the whole
+  // point of the feature.
+  const { createRequire } = await import('node:module');
+  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { createClient } = createRequire(`${process.cwd()}/package.json`)('@libsql/client');
+  const { applySwitch, loadSwitchContext } = await import('@/lib/vendorSwitchServer');
+
+  const dir = mkdtempSync(join(tmpdir(), 'switch-'));
+  const db = createClient({ url: `file:${join(dir, 'x.db')}` });
+  const ex = (sql, args = []) => db.execute({ sql, args });
+
+  await ex(`CREATE TABLE config_options (id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT, value TEXT, inverse_value TEXT, action_key TEXT)`);
+  await ex(`CREATE TABLE companies (id INTEGER PRIMARY KEY, name TEXT, company_type TEXT)`);
+  await ex(`CREATE TABLE vendor_relationships (id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER, related_company_id INTEGER, rep_id INTEGER,
+    relationship_status TEXT, strength TEXT, vendor_type TEXT, notes TEXT,
+    updated_at TEXT, status_changed_at TEXT)`);
+  await ex(`CREATE TABLE relationship_updates (id INTEGER PRIMARY KEY AUTOINCREMENT,
+    relationship_id INTEGER, body TEXT, status_before TEXT, status_after TEXT,
+    marked_stale INTEGER DEFAULT 0, author_user_id INTEGER,
+    created_at TEXT DEFAULT (datetime('now')))`);
+  await ex(`CREATE TABLE vendor_switches (id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_company_id INTEGER NOT NULL, incumbent_company_id INTEGER NOT NULL,
+    incumbent_relationship_id INTEGER, incoming_company_id INTEGER,
+    incoming_relationship_id INTEGER, answer TEXT NOT NULL,
+    recorded_by_user_id INTEGER, created_at TEXT DEFAULT (datetime('now')))`);
+  for (const r of SEEDED) {
+    await ex('INSERT INTO config_options (category, value, inverse_value, action_key) VALUES (?,?,?,?)',
+      ['other_relationship_status', r.value, r.inverseValue, r.actionKey]);
+  }
+  await ex('INSERT INTO config_options (category, value, action_key) VALUES (?,?,?)',
+    ['company_type', 'Competitor', 'competitor']);
+  await ex(`INSERT INTO companies (id,name,company_type) VALUES
+    (1,'Mission Health','Operator'),(20,'Red Moon','Competitor'),
+    (21,'Nova Moon','Vendor'),(22,'Halden Care','Competitor')`);
+  const ctx = await loadSwitchContext(db);
+  const rows = async (sql) => (await ex(sql)).rows;
+
+  // ── keeping: recorded, nothing moved ──
+  await ex(`INSERT INTO vendor_relationships (id,company_id,related_company_id,relationship_status,vendor_type,notes)
+            VALUES (1,1,20,'Current Vendor','EHR','x'),(2,1,21,'Current Vendor','EHR','y')`);
+  await applySwitch(db, 9, {
+    accountId: 1, incumbentCompanyId: 20, incumbentRelationshipId: 1,
+    incomingCompanyId: 21, incomingRelationshipId: 2, answer: 'keeping',
+  }, ctx);
+  eq('keeping is recorded',
+    (await rows('SELECT answer FROM vendor_switches')).map(r => r.answer), ['keeping']);
+  eq('  and moves no status',
+    (await rows('SELECT relationship_status FROM vendor_relationships ORDER BY id'))
+      .map(r => r.relationship_status), ['Current Vendor', 'Current Vendor']);
+  eq('  and writes no thread entry', (await rows('SELECT id FROM relationship_updates')).length, 0);
+  eq('  attributed to the session user',
+    (await rows('SELECT recorded_by_user_id FROM vendor_switches'))[0]?.recorded_by_user_id, 9);
+
+  // ── unknown: recorded too ──
+  await applySwitch(db, 9, {
+    accountId: 1, incumbentCompanyId: 22, answer: 'unknown',
+  }, ctx);
+  eq('unknown is recorded as well',
+    (await rows('SELECT answer FROM vendor_switches ORDER BY id')).map(r => r.answer),
+    ['keeping', 'unknown']);
+
+  // ── replacing: the incumbent moves, with an entry, and the type is added ──
+  await ex('DELETE FROM vendor_switches');
+  const res = await applySwitch(db, 9, {
+    accountId: 1, incumbentCompanyId: 20, incumbentRelationshipId: 1,
+    incomingCompanyId: 21, incomingRelationshipId: 2, answer: 'replacing',
+    markCompetitor: true,
+  }, ctx);
+  eq('replacing moves the incumbent to former',
+    ((await rows('SELECT relationship_status FROM vendor_relationships WHERE id = 1'))[0] ?? {})
+      .relationship_status, 'Former Vendor');
+  eq('  leaving a thread entry saying why',
+    (await rows('SELECT body, status_before, status_after FROM relationship_updates')).map(r =>
+      [r.body, r.status_before, r.status_after]),
+    [['Marked former — replaced by Nova Moon on this account.', 'Current Vendor', 'Former Vendor']]);
+  eq('  and stamping when the status changed',
+    ((await rows('SELECT status_changed_at FROM vendor_relationships WHERE id = 1'))[0] ?? {})
+      .status_changed_at != null, true);
+  eq('  the incoming company gains the competitor type, keeping what it had',
+    (await rows('SELECT company_type FROM companies WHERE id = 21'))[0]?.company_type,
+    'Vendor,Competitor');
+  eq('  and it is reported as changed', res.markedCompetitor, true);
+  eq('  the record names both relationships',
+    (await rows('SELECT incumbent_relationship_id, incoming_relationship_id FROM vendor_switches'))
+      .map(r => [r.incumbent_relationship_id, r.incoming_relationship_id]), [[1, 2]]);
+
+  // ── a relationship that does not exist yet is created ──
+  await ex('DELETE FROM vendor_switches'); await ex('DELETE FROM relationship_updates');
+  await ex('DELETE FROM vendor_relationships');
+  // Logged on the COMPETITOR's page, so the wording has to be the counterpart.
+  await ex(`INSERT INTO vendor_relationships (id,company_id,related_company_id,relationship_status,vendor_type,notes)
+            VALUES (10,22,1,'Customer','EHR,Billing','z')`);
+  const created = await applySwitch(db, 9, {
+    accountId: 1, incumbentCompanyId: 22, incumbentRelationshipId: 10,
+    incomingCompanyId: 21, answer: 'replacing', vendorType: ['EHR', 'Billing'],
+  }, ctx);
+  eq('the outgoing row keeps its own side\u2019s wording',
+    ((await rows('SELECT relationship_status FROM vendor_relationships WHERE id = 10'))[0] ?? {})
+      .relationship_status, 'Former Customer');
+  eq('a relationship is created for the new vendor',
+    created.createdRelationshipId != null, true);
+  const made = (await rows('SELECT company_id, related_company_id, relationship_status, strength, vendor_type, notes FROM vendor_relationships WHERE id != 10'))[0] ?? {};
+  eq('  on the account\u2019s side, as current',
+    [made.company_id, made.related_company_id, made.relationship_status],
+    [1, 21, 'Current Vendor']);
+  eq('  with the vendor type carried over', made.vendor_type, 'EHR,Billing');
+  eq('  strength left blank rather than guessed', made.strength, null);
+  eq('  and the switch written into its notes',
+    /^Switched from Halden Care to Nova Moon on \d{2}\/\d{2}\/\d{4}$/.test(String(made.notes)), true);
+  eq('  the record points at the relationship it created',
+    (await rows('SELECT incoming_relationship_id FROM vendor_switches'))[0]?.incoming_relationship_id,
+    created.createdRelationshipId);
+
+  // ── answering twice does not fill the thread with nothing ──
+  const beforeEntries = (await rows('SELECT id FROM relationship_updates')).length;
+  await applySwitch(db, 9, {
+    accountId: 1, incumbentCompanyId: 22, incumbentRelationshipId: 10,
+    incomingCompanyId: 21, answer: 'replacing',
+  }, ctx);
+  eq('a status already where it belongs writes no second entry',
+    (await rows('SELECT id FROM relationship_updates')).length, beforeEntries);
+  eq('  and an existing relationship is reused rather than duplicated',
+    (await rows('SELECT id FROM vendor_relationships')).length, 2);
+
+  await ex('DELETE FROM vendor_switches');
+  rmSync(dir, { recursive: true, force: true });
+}
+
+console.log('\n— asked from all three doors, and only after the save —');
+{
+  const prompt = strip('components/VendorSwitchPrompt.tsx');
+  const update = strip('components/RelationshipUpdateForm.tsx');
+  const section = strip('components/VendorRelationshipsSection.tsx');
+  const relRoute = strip('app/api/vendor-relationships/route.ts');
+  const updRoute = strip('app/api/vendor-relationships/updates/route.ts');
+  const server = strip('lib/vendorSwitchServer.ts');
+
+  // Three forms can move a status. Every rule that has lived in three places
+  // in this codebase has drifted, and here drifting means one entry path
+  // recording no switches at all.
+  eq('one prompt component, not three',
+    /export function VendorSwitchPrompt/.test(prompt), true);
+  eq('  the update form uses it', /<VendorSwitchPrompt/.test(update), true);
+  eq('  and so does the add/edit form', /<VendorSwitchPrompt/.test(section), true);
+  eq('one detector, not three',
+    /export async function detectSwitchPrompt/.test(server), true);
+  eq('  called from the create path', /relationshipId: id, before: \[\]/.test(relRoute), true);
+  eq('  the edit path', /before: previousList/.test(relRoute), true);
+  eq('  and the update path', /before: before \?/.test(updRoute), true);
+
+  // Asked after the save. The relationship the rep came to record is already
+  // written and is not held hostage to an answer about a different one.
+  eq('the update form saves first, then asks',
+    /onSaved\?\.\(data as SavedUpdate\);\s*\n\s*const prompt = \(data as SavedUpdate\)\.switch_prompt;/.test(update), true);
+  eq('  and dismissing still closes the form',
+    /onDone=\{\(\) => \{ setSwitchPrompt\(null\); onClose\(\); \}\}/.test(update), true);
+  // A confirmation leaves the status alone and must not ask who replaced anyone.
+  eq('a confirmation never asks', /const switch_prompt = changed/.test(updRoute), true);
+  eq('  nor does an edit that left the status alone',
+    /const switch_prompt = statusChanged/.test(relRoute), true);
+  // Working out whether to ask must never fail a save that already happened.
+  eq('detection failing cannot fail the save',
+    (relRoute.match(/\.catch\(\(\) => null\)/g) || []).length >= 2
+      && /\.catch\(\(\) => null\)/.test(updRoute), true);
+
+  // The edit form now writes a thread entry when a status moves. It used to
+  // record WHEN and never WHY.
+  eq('the edit form writes a thread entry on a status change',
+    /Status changed from the relationship form\./.test(relRoute), true);
+
+  // Three answers on an arrival, four on a departure.
+  eq('the arrival offers replacing, keeping and don\u2019t know',
+    ["answer\\('replacing'\\)", "answer\\('keeping'\\)", "answer\\('unknown'\\)"]
+      .every(re => new RegExp(re).test(prompt)), true);
+  eq('  the departure offers nobody as well',
+    /submit\('none'\)/.test(prompt) && /submit\('unknown'\)/.test(prompt), true);
+  // Required would collect whatever was at the top of the list.
+  eq('  and its picker is skippable',
+    /disabled=\{saving \|\| !picked\}/.test(prompt), true);
+  // One record per pair: two incumbents replaced at once is two facts, and
+  // collapsing them leaves the grid unable to draw either line.
+  eq('one record per incumbent, not one per prompt',
+    /for \(const t of targets\)/.test(prompt), true);
+  // Choosing for the rep on a multi-vendor account would be wrong more often
+  // than right.
+  eq('nothing is preselected when there is more than one incumbent',
+    /prompt\.incumbents\.length === 1 \? \[prompt\.incumbents\[0\]\.id\] : \[\]/.test(prompt), true);
+
+  // Company type drives more than this view, so it is offered rather than done.
+  // Both prompts. One offering the choice and the other doing it silently is
+  // the same bug with half the surface.
+  eq('the competitor type is a checkbox, not a side effect',
+    (prompt.match(/checked=\{markCompetitor\}/g) || []).length, 2);
+  eq('  ticked by default, and only when it is not one already',
+    /useState\(!prompt\.incomingIsCompetitor\)/.test(prompt)
+      && /\{!prompt\.incomingIsCompetitor && \(/.test(prompt), true);
+  eq('  and appended to the types it has, never replacing them',
+    /\[\.\.\.raw, target\]\.join\(','\)/.test(server), true);
+  // A guessed vendor type that is silent is a mislabelled vendor nobody
+  // notices.
+  eq('the created relationship\u2019s vendor type is shown and editable',
+    /value=\{vendorType\.join\(', '\)\}/.test(prompt), true);
+  // A guess there is a claim about a relationship that started five minutes
+  // ago.
+  eq('  and its strength is left blank rather than guessed',
+    /VALUES \(\?, \?, \?, \?, NULL, \?, \?, datetime\('now'\)\)/.test(server), true);
+}
+
+console.log('\n— the writes an answer sets off —');
+{
+  const server = strip('lib/vendorSwitchServer.ts');
+  const route = strip('app/api/vendor-relationships/switch/route.ts');
+
+  // The record is written whatever the answer — that is the point of asking —
+  // and only 'replacing' moves a status.
+  eq('only replacing moves anything',
+    /if \(input\.answer === 'replacing'\) \{/.test(server), true);
+  eq('  the record is written either way',
+    server.indexOf("if (input.answer === 'replacing')")
+      < server.indexOf('INSERT INTO vendor_switches'), true);
+
+  // Writing "Former Vendor" onto a row stored on the competitor's page would
+  // say the ACCOUNT is the former vendor, silently reversing the ends.
+  eq('a status is written in the wording its row uses',
+    /const fromAccountSide = Number\(r\.company_id\) === accountId;/.test(server)
+      && /statusValueFor\(ctx, target, fromAccountSide\)/.test(server), true);
+  eq('  chosen by class, so a renamed status still works',
+    /if \(cls !== target\) continue;/.test(server), true);
+  eq('  in the spelling the option carries, not the lookup key',
+    /ctx\.index\.original\.get\(value\) \?\? value/.test(server), true);
+
+  // The rep did not open that card and will not remember touching it.
+  eq('every auto-change leaves a thread entry',
+    /INSERT INTO relationship_updates/.test(server), true);
+  eq('  and its loss is logged, not swallowed',
+    /console\.error\('vendor switch: thread entry failed'/.test(server), true);
+  eq('  naming what happened',
+    /departureEntry\(incomingName\)/.test(server) && /arrivalEntry\(incumbentName\)/.test(server), true);
+  // Nothing moves when it is already there, so re-answering does not fill the
+  // thread with entries saying nothing changed.
+  eq('a status already where it belongs is left alone',
+    /if \(!value \|\| before\.join\(\) === value\) return;/.test(server), true);
+
+  // The switch has two ends and only one of them may exist.
+  eq('a missing relationship is created rather than left out',
+    /createRelationship\(db, ctx, \{/.test(server), true);
+  eq('  on the account\u2019s side',
+    /INSERT INTO vendor_relationships\s*\n\s*\(company_id, related_company_id/.test(server), true);
+  eq('  with the switch written into its notes',
+    /switchNote\(incumbentName, incomingName \?\? '', new Date\(\)\)/.test(server), true);
+  eq('  after looking for one that already exists',
+    /findRelationship\(db, input\.accountId, input\.incomingCompanyId\)/.test(server), true);
+
+  // Attribution: an author the client can name is not attribution.
+  eq('the answer is attributed to the session, not the body',
+    /applySwitch\(db, authResult\.id,/.test(route), true);
+  eq('  and an unknown answer is refused',
+    /SWITCH_ANSWERS\.includes\(answer\)/.test(route), true);
+  // Saying somebody replaced them without saying who records half a connector.
+  eq('  replacing without a replacement is refused',
+    /answer === 'replacing' && !incomingCompanyId/.test(route), true);
+  // The whole book is thousands of rows nobody scrolls.
+  eq('the picker leads with competitors and searches the rest',
+    /isCompetitor\(c\.id\) \? competitors : others/.test(route)
+      && /othersTruncated/.test(route), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

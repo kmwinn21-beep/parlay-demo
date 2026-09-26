@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { detectSwitchPrompt, loadSwitchContext } from '@/lib/vendorSwitchServer';
 
 /**
  * Adding to a relationship's thread, and saying whether it still holds.
@@ -107,8 +108,21 @@ export async function POST(request: NextRequest) {
       args: [authResult.id],
     }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
 
+    // Only a genuine status move can be a switch. A confirmation leaves the
+    // status alone and must not ask who replaced anybody.
+    const switch_prompt = changed
+      ? await loadSwitchContext(db)
+        .then(ctx => detectSwitchPrompt(db, {
+          relationshipId: relId,
+          before: before ? before.split(',').map(v => v.trim()).filter(Boolean) : [],
+          ctx,
+        }))
+        .catch(() => null)
+      : null;
+
     return NextResponse.json({
       success: true,
+      switch_prompt,
       update: {
         id: Number(inserted.rows[0]?.id ?? 0),
         body: comment,

@@ -8,6 +8,11 @@
  *
  * Three signals:
  *
+ *   switched                a rep recorded that this account left one
+ *                           competitor for another. Never inferred: "they left
+ *                           A for B" is a claim about cause, and two end-states
+ *                           and a calendar cannot establish one. It arrives
+ *                           because somebody was asked and answered.
  *   evaluatingAlternatives  the account buys from one competitor and is trying
  *                           a different one at the same time. The matched pair
  *                           comes back with it, because the connector between
@@ -42,7 +47,8 @@ export type StatusClass = 'current' | 'evaluating' | 'former';
 export type GridRow = 'activeEvaluation' | 'useCompetitor' | 'recentChange';
 
 /** Signals. Keys, not labels — see SIGNAL_LABELS. */
-export type SignalKey = 'evaluatingAlternatives' | 'recentChange' | 'internalRelationship';
+export type SignalKey =
+  'evaluatingAlternatives' | 'switched' | 'recentChange' | 'internalRelationship';
 
 /**
  * Display strings, in one place.
@@ -72,6 +78,7 @@ export const ROW_LABELS: Record<GridRow, string> = {
 
 export const SIGNAL_LABELS: Record<SignalKey, string> = {
   evaluatingAlternatives: 'Evaluating Alternatives',
+  switched: 'Switched Vendors',
   recentChange: 'Recent Change',
   internalRelationship: 'Int. Relationship',
 };
@@ -86,6 +93,7 @@ export const SIGNAL_LABELS: Record<SignalKey, string> = {
  */
 export const SIGNAL_ABBREVIATIONS: Record<SignalKey, string> = {
   evaluatingAlternatives: 'EA',
+  switched: 'SW',
   recentChange: 'RC',
   internalRelationship: 'IR',
 };
@@ -101,6 +109,7 @@ export const SIGNAL_ABBREVIATIONS: Record<SignalKey, string> = {
  */
 export const SIGNAL_FULL_LABELS: Record<SignalKey, string> = {
   evaluatingAlternatives: 'Evaluating Alternatives',
+  switched: 'Switched Vendors',
   recentChange: 'Recent Change',
   internalRelationship: 'Internal Relationship',
 };
@@ -115,6 +124,7 @@ export const SIGNAL_FULL_LABELS: Record<SignalKey, string> = {
  */
 export const SIGNAL_TONE: Record<SignalKey, string> = {
   evaluatingAlternatives: '#D97706',
+  switched: '#7C3AED',
   recentChange: '#2563EB',
   internalRelationship: '#059669',
 };
@@ -150,8 +160,22 @@ export interface SignalRelationship {
   statusChangedAt?: string | null;
 }
 
+/**
+ * A switch a rep recorded: this account left one competitor for another.
+ *
+ * Directional, unlike an alternatives pair. An account caught between two
+ * vendors has no first and second; one that moved does.
+ */
+export interface SwitchPair {
+  companyId: number;
+  fromCompetitorId: number;
+  toCompetitorId: number;
+}
+
 export interface SignalInput {
   relationships: SignalRelationship[];
+  /** Recorded switches. Not derived here, and not derivable — see SignalKey. */
+  switches?: SwitchPair[];
   /**
    * Companies with an internal relationship. No window: a standing fact.
    *
@@ -186,6 +210,14 @@ export interface SignalCell {
 export interface SignalResult {
   cells: SignalCell[];
   pairs: AlternativePair[];
+  /**
+   * The switches whose BOTH ends are on screen as cells.
+   *
+   * Half a connector points at a cell that is not there — a column switched
+   * off, or a status that has moved on since — and reads as a bug rather than
+   * as missing data.
+   */
+  switches: SwitchPair[];
   /**
    * Relationships on a status nobody classified.
    *
@@ -230,6 +262,13 @@ export function isRecent(raw: string | null | undefined, now: Date): boolean {
 export function deriveSignals(input: SignalInput): SignalResult {
   const now = input.now ?? new Date();
   const withInternal = new Set(input.companiesWithInternal ?? []);
+  const switchPairs = input.switches ?? [];
+  // Both ends of every recorded switch, so a cell knows it is one of them.
+  const inSwitch = new Set<string>();
+  for (const sw of switchPairs) {
+    inSwitch.add(`${sw.companyId}:${sw.fromCompetitorId}`);
+    inSwitch.add(`${sw.companyId}:${sw.toCompetitorId}`);
+  }
 
   const classified: Array<SignalRelationship & { statusClass: StatusClass }> = [];
   let unclassifiedCount = 0;
@@ -282,18 +321,24 @@ export function deriveSignals(input: SignalInput): SignalResult {
     statusChangedAt: r.statusChangedAt ?? null,
     signals: {
       evaluatingAlternatives: inPair.has(`${r.companyId}:${r.competitorId}`),
+      switched: inSwitch.has(`${r.companyId}:${r.competitorId}`),
       recentChange: isRecent(r.statusChangedAt, now),
       internalRelationship: withInternal.has(r.companyId),
     },
   }));
 
-  return { cells, pairs, unclassifiedCount };
+  const drawn = new Set(cells.map(c => `${c.companyId}:${c.competitorId}`));
+  const switches = switchPairs.filter(sw =>
+    drawn.has(`${sw.companyId}:${sw.fromCompetitorId}`)
+      && drawn.has(`${sw.companyId}:${sw.toCompetitorId}`));
+
+  return { cells, pairs, switches, unclassifiedCount };
 }
 
 /** How many cells carry each signal, for the rail's filter counts. */
 export function countSignals(cells: SignalCell[]): Record<SignalKey, number> {
   const counts: Record<SignalKey, number> = {
-    evaluatingAlternatives: 0, recentChange: 0, internalRelationship: 0,
+    evaluatingAlternatives: 0, switched: 0, recentChange: 0, internalRelationship: 0,
   };
   for (const c of cells) {
     for (const k of Object.keys(counts) as SignalKey[]) {

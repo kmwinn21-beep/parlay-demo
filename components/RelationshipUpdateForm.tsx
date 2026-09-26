@@ -6,6 +6,7 @@ import { MobileFormSheet } from '@/components/MobileFormSheet';
 import { MultiSelect, type ConfigOption } from '@/components/VendorRelationshipFields';
 import { useIsDesktop } from '@/lib/useIsDesktop';
 import { useRelationshipStatusOptions } from '@/lib/useRelationshipStatusOptions';
+import { VendorSwitchPrompt, type SwitchPrompt } from '@/components/VendorSwitchPrompt';
 import type { VendorRelationship, RelationshipUpdate } from '@/components/VendorRelationshipCard';
 
 /** What the write endpoint hands back, so the card can show it immediately. */
@@ -15,6 +16,14 @@ export interface SavedUpdate {
   status_as_of: string;
   /** The new status, or null when it did not change. */
   relationship_status: string[] | null;
+  /**
+   * A question to ask before this is finished, or nothing.
+   *
+   * Worked out by the server, which is the only side that knows what the
+   * account's other relationships say and which company types count as
+   * competitors. See lib/vendorSwitchServer.
+   */
+  switch_prompt?: SwitchPrompt | null;
 }
 
 /**
@@ -55,6 +64,14 @@ export function RelationshipUpdateForm({ rel, onClose, onSaved }: {
   const [status, setStatus] = useState<string[]>(rel.relationship_status);
   const [markStale, setMarkStale] = useState(false);
   const [saving, setSaving] = useState(false);
+  /**
+   * Held open after the save, when the change might be a vendor switch.
+   *
+   * The update is already written by this point and is not held hostage to the
+   * answer: dismissing loses the switch, which is a far smaller loss than
+   * losing the note the rep came to write.
+   */
+  const [switchPrompt, setSwitchPrompt] = useState<SwitchPrompt | null>(null);
   // Both halves of every pair, from the shared hook — three forms asked for
   // this list and each fetched it separately.
   const statusOptions = useRelationshipStatusOptions();
@@ -98,11 +115,22 @@ export function RelationshipUpdateForm({ rel, onClose, onSaved }: {
       }
       toast.success(markStale ? 'Flagged as possibly out of date' : 'Relationship confirmed');
       onSaved?.(data as SavedUpdate);
+      const prompt = (data as SavedUpdate).switch_prompt;
+      if (prompt) { setSwitchPrompt(prompt); return; }
       onClose();
     } finally {
       setSaving(false);
     }
   };
+
+  if (switchPrompt) {
+    return (
+      <VendorSwitchPrompt
+        prompt={switchPrompt}
+        onDone={() => { setSwitchPrompt(null); onClose(); }}
+      />
+    );
+  }
 
   return (
     <MobileFormSheet title={`Update · ${rel.related_company_name}`} onClose={onClose}>

@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { MobileFormSheet } from '@/components/MobileFormSheet';
 import { SectionAddButton } from '@/components/SectionAddButton';
 import { useConfigColors } from '@/lib/useConfigColors';
+import { VendorSwitchPrompt, type SwitchPrompt } from '@/components/VendorSwitchPrompt';
 import { type UserOption } from '@/lib/useUserOptions';
 import { useCollapsibleSection } from '@/lib/sectionExpansion';
 import {
@@ -49,6 +50,8 @@ export function VendorRelationshipsSection({ companyId, userOptions, currentUser
   const [otherVendorType, setOtherVendorType] = useState('');
   // Set while asking whether a typed-in value should become a standing option.
   const [keepPrompt, setKeepPrompt] = useState<{ category: string; label: string; value: string }[] | null>(null);
+  /** Asked after a save that might be a vendor switch. See VendorSwitchPrompt. */
+  const [switchPrompt, setSwitchPrompt] = useState<SwitchPrompt | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/vendor-relationships?company_id=${companyId}`, { cache: 'no-store' });
@@ -183,6 +186,9 @@ export function VendorRelationshipsSection({ companyId, userOptions, currentUser
         toast.error(err.error || 'Failed to save the relationship.');
         return;
       }
+      // Not every rep uses the Update button, so this form asks too. Read
+      // before the sub-type write below, which replaces the response body.
+      const saved = await res.json().catch(() => ({})) as { switch_prompt?: SwitchPrompt | null };
       // The vendor's own Sub Type(s) follow what was chosen here, so the fact
       // lives on the company rather than only on this relationship. Written
       // after the relationship saves, and only when it actually differs.
@@ -204,6 +210,9 @@ export function VendorRelationshipsSection({ companyId, userOptions, currentUser
       toast.success(editingId ? 'Relationship updated.' : 'Relationship added.');
       resetForm();
       await load();
+      // After the reload, so the card the prompt is about is already on screen
+      // behind it and the answer lands on a list that is current.
+      if (saved.switch_prompt) setSwitchPrompt(saved.switch_prompt);
     } finally {
       setSaving(false);
     }
@@ -392,6 +401,15 @@ export function VendorRelationshipsSection({ companyId, userOptions, currentUser
             </div>
           </div>
         </div>
+      )}
+
+      {/* Over the section rather than inside the form, because the form has
+          already closed and reloaded by the time this is asked. */}
+      {switchPrompt && (
+        <VendorSwitchPrompt
+          prompt={switchPrompt}
+          onDone={recorded => { setSwitchPrompt(null); if (recorded) void load(); }}
+        />
       )}
     </div>
   );

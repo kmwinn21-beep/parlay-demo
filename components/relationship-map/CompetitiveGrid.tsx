@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { VendorRelationshipCard, type VendorRelationship } from '@/components/VendorRelationshipCard';
 import {
   byRecency, hasAnySignal, ROW_LABELS, SIGNAL_ABBREVIATIONS, SIGNAL_FULL_LABELS, SIGNAL_TONE,
-  type AlternativePair, type GridRow, type SignalCell, type SignalKey,
+  type AlternativePair, type GridRow, type SignalCell, type SignalKey, type SwitchPair,
 } from '@/lib/competitiveSignals';
 import type { CompetitorColumn } from '@/components/relationship-map/CompetitiveRail';
 import type { UserOption } from '@/lib/useUserOptions';
@@ -42,12 +42,12 @@ const LABEL_WIDTH = 92;
 const GRID_BODY_MAX_HEIGHT = 240;
 
 /**
- * The signal a connector is drawn for.
+ * The signals a connector is drawn for.
  *
- * One today. Named rather than written into each place that draws or lights
- * something, so adding a second connector signal is a list rather than a hunt.
+ * Named rather than written into each place that draws or lights something, so
+ * a third is a list entry rather than a hunt.
  */
-const CONNECTOR_SIGNAL: SignalKey = 'evaluatingAlternatives';
+const CONNECTOR_SIGNALS: SignalKey[] = ['evaluatingAlternatives', 'switched'];
 
 /** Space between a card's edge and the arrowhead pointing at it. */
 const CONNECTOR_GAP = 7;
@@ -67,13 +67,15 @@ const CONNECTOR_GAP = 7;
  * told them where to look.
  */
 export function CompetitiveGrid({
-  cells, pairs, competitors, cardFor, nameOf, typesOf, statusesOf,
+  cells, pairs, switches, competitors, cardFor, nameOf, typesOf, statusesOf,
   signalsOnly, activeSignals, showConnectors,
   userOptions, colorMaps, onUpdated,
 }: {
   cells: SignalCell[];
   /** The account/competitor pairs the connectors are drawn from. */
   pairs: AlternativePair[];
+  /** Switches a rep recorded, which the second connector is drawn from. */
+  switches: SwitchPair[];
   /** Visible columns, in order, already filtered by the rail. */
   competitors: CompetitorColumn[];
   cardFor: (companyId: number, competitorId: number) => VendorRelationship | undefined;
@@ -104,7 +106,7 @@ export function CompetitiveGrid({
    * an account's third, unconnected card would otherwise light two cells
    * somewhere else on screen and grey out the one under the cursor.
    */
-  const [hovered, setHovered] = useState<number | null>(null);
+  const [hovered, setHovered] = useState<{ companyId: number; signal: SignalKey } | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
 
   const visibleIds = useMemo(() => new Set(competitors.map(c => c.id)), [competitors]);
@@ -162,29 +164,58 @@ export function CompetitiveGrid({
     // moment anybody scrolled.
     const origin = host.getBoundingClientRect();
     const next: Line[] = [];
-    for (const p of pairs) {
-      const a = headerRefs.current.get(`useCompetitor:${p.companyId}:${p.currentCompetitorId}`);
-      const b = headerRefs.current.get(`activeEvaluation:${p.companyId}:${p.evaluatingCompetitorId}`);
-      if (!a || !b) continue;
+
+    /* Nearest sides, not centres. A line into the middle of a card runs across
+       the company name it is pointing at, and its arrowhead lands underneath
+       the card rather than against it.
+
+       `toKey` marks the end a switch points AT, so the single arrowhead stays
+       on the new vendor whichever side of the grid it happens to sit. */
+    const join = (
+      key: string, companyId: number, signal: SignalKey,
+      fromKey: string, toKey: string, directional: boolean,
+    ) => {
+      const a = headerRefs.current.get(fromKey);
+      const b = headerRefs.current.get(toKey);
+      if (!a || !b) return;
       const ra = a.getBoundingClientRect();
       const rb = b.getBoundingClientRect();
-      // Nearest sides, not centres. A line into the middle of a card runs
-      // across the company name it is pointing at, and its arrowhead lands
-      // underneath the card rather than against it. Whichever header is
-      // further left is left by the columns, so this is the reading order of
-      // the two cells as well as their geometry.
-      const [left, right] = ra.left <= rb.left ? [ra, rb] : [rb, ra];
+      const aIsLeft = ra.left <= rb.left;
+      const [left, right] = aIsLeft ? [ra, rb] : [rb, ra];
       next.push({
-        key: `${p.companyId}:${p.currentCompetitorId}:${p.evaluatingCompetitorId}`,
-        companyId: p.companyId,
+        key, companyId, signal,
         x1: left.right - origin.left + CONNECTOR_GAP,
         y1: left.top - origin.top + left.height / 2,
         x2: right.left - origin.left - CONNECTOR_GAP,
         y2: right.top - origin.top + right.height / 2,
+        // An alternatives pair has no first and second — the account is caught
+        // between two — so both ends get a head. A switch has a direction and
+        // gets one, on the end it moved to.
+        arrowStart: !directional || !aIsLeft,
+        arrowEnd: !directional || aIsLeft,
       });
+    };
+
+    for (const p of pairs) {
+      join(
+        `ea:${p.companyId}:${p.currentCompetitorId}:${p.evaluatingCompetitorId}`,
+        p.companyId, 'evaluatingAlternatives',
+        `useCompetitor:${p.companyId}:${p.currentCompetitorId}`,
+        `activeEvaluation:${p.companyId}:${p.evaluatingCompetitorId}`,
+        false,
+      );
+    }
+    for (const sw of switches) {
+      join(
+        `sw:${sw.companyId}:${sw.fromCompetitorId}:${sw.toCompetitorId}`,
+        sw.companyId, 'switched',
+        `recentChange:${sw.companyId}:${sw.fromCompetitorId}`,
+        `useCompetitor:${sw.companyId}:${sw.toCompetitorId}`,
+        true,
+      );
     }
     setLines(next);
-  }, [pairs]);
+  }, [pairs, switches]);
 
   // Measured after layout rather than in an effect that runs alongside it, so a
   // line is never drawn against last render's positions.
@@ -247,31 +278,36 @@ export function CompetitiveGrid({
         {showConnectors && lines.length > 0 && (
           <svg aria-hidden className="absolute inset-0 w-full h-full pointer-events-none z-0">
             <defs>
-              {/* Both ends. The relationship runs both ways — this account is
-                  on one and looking at the other — and a single head would
-                  claim a direction the signal does not have. */}
-              <marker
-                id="competitive-connector-arrow"
-                viewBox="0 0 10 10" refX="8" refY="5"
-                markerWidth="5" markerHeight="5"
-                orient="auto-start-reverse"
-              >
-                <path d="M 0 0 L 10 5 L 0 10 z" fill={SIGNAL_TONE[CONNECTOR_SIGNAL]} />
-              </marker>
+              {/* One head per signal, because a marker cannot inherit the
+                  line's stroke. auto-start-reverse so a head at the start
+                  points outwards rather than back along the line. */}
+              {CONNECTOR_SIGNALS.map(sig => (
+                <marker
+                  key={sig}
+                  id={`competitive-arrow-${sig}`}
+                  viewBox="0 0 10 10" refX="8" refY="5"
+                  markerWidth="5" markerHeight="5"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill={SIGNAL_TONE[sig]} />
+                </marker>
+              ))}
             </defs>
             {lines.map(l => (
               <line
                 key={l.key}
                 x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2}
-                stroke={SIGNAL_TONE[CONNECTOR_SIGNAL]}
+                stroke={SIGNAL_TONE[l.signal]}
                 strokeWidth={2.5}
                 strokeDasharray="6 4"
                 // A line recedes with the cards it joins. Left bright over two
                 // greyed cards it points at an account the hover is saying to
                 // ignore, which is the opposite of what the greying is for.
-                opacity={hovered === null || hovered === l.companyId ? 0.9 : 0.15}
-                markerStart="url(#competitive-connector-arrow)"
-                markerEnd="url(#competitive-connector-arrow)"
+                opacity={hovered === null
+                  || (hovered.companyId === l.companyId && hovered.signal === l.signal)
+                  ? 0.9 : 0.15}
+                markerStart={l.arrowStart ? `url(#competitive-arrow-${l.signal})` : undefined}
+                markerEnd={l.arrowEnd ? `url(#competitive-arrow-${l.signal})` : undefined}
               />
             ))}
           </svg>
@@ -338,10 +374,15 @@ export function CompetitiveGrid({
                         // Only a card that carries the connector signal starts a
                         // hover. Any other card of the same account would light
                         // two cells elsewhere and dim the one being pointed at.
+                        // The first connector signal this card carries. Only a
+                        // card that carries one starts a hover: any other card
+                        // of the same account would light two cells elsewhere
+                        // and dim the one being pointed at.
                         onMouseEnter={() => {
-                          if (cell.signals[CONNECTOR_SIGNAL]) setHovered(cell.companyId);
+                          const sig = CONNECTOR_SIGNALS.find(k => cell.signals[k]);
+                          if (sig) setHovered({ companyId: cell.companyId, signal: sig });
                         }}
-                        onMouseLeave={() => setHovered(h => (h === cell.companyId ? null : h))}
+                        onMouseLeave={() => setHovered(h => (h?.companyId === cell.companyId ? null : h))}
                         className={`transition-opacity ${
                           hovered !== null && !isLit(cell, hovered) ? 'opacity-30' : ''}`}
                       >
@@ -358,7 +399,7 @@ export function CompetitiveGrid({
                           statuses={statusesOf(rel)}
                           bodyMaxHeight={GRID_BODY_MAX_HEIGHT}
                           titleBadges={<SignalBadges cell={cell} />}
-                          highlight={isLit(cell, hovered) ? SIGNAL_TONE[CONNECTOR_SIGNAL] : null}
+                          highlight={isLit(cell, hovered) ? SIGNAL_TONE[hovered!.signal] : null}
                         />
                       </div>
                     );
@@ -382,14 +423,21 @@ export function CompetitiveGrid({
  * about, and cross-column repetition only reads as a pair when the pair alone
  * is lit.
  */
-function isLit(cell: SignalCell, hovered: number | null): boolean {
-  return hovered !== null && cell.companyId === hovered && cell.signals[CONNECTOR_SIGNAL];
+function isLit(
+  cell: SignalCell, hovered: { companyId: number; signal: SignalKey } | null,
+): boolean {
+  return hovered !== null
+    && cell.companyId === hovered.companyId
+    && cell.signals[hovered.signal];
 }
 
 interface Line {
   key: string;
   companyId: number;
+  signal: SignalKey;
   x1: number; y1: number; x2: number; y2: number;
+  arrowStart: boolean;
+  arrowEnd: boolean;
 }
 
 /**

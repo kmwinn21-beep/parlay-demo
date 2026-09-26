@@ -106,17 +106,29 @@ export interface StatusIndex {
   classOf: Map<string, StatusClass | null>;
   /** lowered status → which end of the stored row it names as the vendor. */
   vendorEndOf: Map<string, 'related' | 'logging'>;
+  /**
+   * lowered status → the value as configured.
+   *
+   * The other two maps are keyed lowered so a stored row matches whatever case
+   * somebody typed. Anything that WRITES a status back has to put the
+   * configured spelling in the column, not the lookup key — a row reading
+   * "former vendor" would not match the option it came from.
+   */
+  original: Map<string, string>;
 }
 
 export function buildStatusIndex(rows: StatusConfigRow[]): StatusIndex {
   const classOf = new Map<string, StatusClass | null>();
   const vendorEndOf = new Map<string, 'related' | 'logging'>();
+  const original = new Map<string, string>();
 
   for (const r of rows) {
     const v = String(r.value ?? '').trim();
     if (!v) continue;
     const inv = String(r.inverseValue ?? '').trim();
     const cls = asClass(r.actionKey);
+    if (!original.has(lower(v))) original.set(lower(v), v);
+    if (inv && !original.has(lower(inv))) original.set(lower(inv), inv);
 
     // A configured value wins over the same word arriving as somebody else's
     // counterpart, the same way buildCounterpartMap resolves it.
@@ -128,7 +140,7 @@ export function buildStatusIndex(rows: StatusConfigRow[]): StatusIndex {
       if (!vendorEndOf.has(lower(inv))) vendorEndOf.set(lower(inv), 'logging');
     }
   }
-  return { classOf, vendorEndOf };
+  return { classOf, vendorEndOf, original };
 }
 
 /**

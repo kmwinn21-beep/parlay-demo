@@ -717,7 +717,7 @@ console.log('\n— the card header, and the grid it had to change for —');
   eq('  the hover branch is gone from the overlay',
     /showConnectors \|\| hovered !== null/.test(grid), false);
   eq('hover lights both ends of the pair',
-    /highlight=\{isLit\(cell, hovered\) \? SIGNAL_TONE\[CONNECTOR_SIGNAL\] : null\}/.test(grid), true);
+    /highlight=\{isLit\(cell, hovered\) \? SIGNAL_TONE\[hovered!\.signal\] : null\}/.test(grid), true);
   eq('  in the card\u2019s own border and fill',
     /borderColor: highlight, backgroundColor: `\$\{highlight\}14`/.test(card), true);
   eq('  and greys everything that is not one of them',
@@ -725,28 +725,60 @@ console.log('\n— the card header, and the grid it had to change for —');
   // Hovering an account's third, unconnected card would otherwise light two
   // cells elsewhere and dim the one under the cursor.
   eq('only a card carrying the signal starts a hover',
-    /if \(cell\.signals\[CONNECTOR_SIGNAL\]\) setHovered\(cell\.companyId\);/.test(grid), true);
-  eq('  and lit means the same account AND the signal',
-    /cell\.companyId === hovered && cell\.signals\[CONNECTOR_SIGNAL\]/.test(grid), true);
+    /const sig = CONNECTOR_SIGNALS\.find\(k => cell\.signals\[k\]\);\s*\n\s*if \(sig\) setHovered/.test(grid), true);
+  eq('  and lit means the same account AND that signal',
+    /cell\.companyId === hovered\.companyId\s*\n?\s*&& cell\.signals\[hovered\.signal\]/.test(grid), true);
   // A bright line over two greyed cards points at the account the hover says
   // to ignore.
   eq('a line recedes with the cards it joins',
-    /hovered === null \|\| hovered === l\.companyId \? 0\.9 : 0\.15/.test(grid), true);
+    /hovered\.companyId === l\.companyId && hovered\.signal === l\.signal\)\s*\n?\s*\? 0\.9 : 0\.15/.test(grid), true);
   // One name for the signal a connector is drawn for, so a second one is a
   // list rather than a hunt.
-  eq('the connector signal is named once',
-    (grid.match(/CONNECTOR_SIGNAL: SignalKey = 'evaluatingAlternatives'/g) || []).length, 1);
+  // Two connector signals now, listed in one place so a third is a list entry
+  // rather than a hunt through everything that draws or lights something.
+  eq('the connector signals are named once, as a list',
+    (grid.match(/CONNECTOR_SIGNALS: SignalKey\[\] = \['evaluatingAlternatives', 'switched'\]/g) || []).length, 1);
+  // The two places that must cover ALL of them read the list. Each join call
+  // naming its own signal is the point — that is what it is drawing.
+  eq('  the arrowheads are generated from the list',
+    /CONNECTOR_SIGNALS\.map\(sig => \(/.test(grid), true);
+  eq('  and so is the hover lookup',
+    /CONNECTOR_SIGNALS\.find\(k => cell\.signals\[k\]\)/.test(grid), true);
+
+  // ── The switch connector ──
+  //
+  // A switch has a direction — this account moved FROM one TO another — so it
+  // gets one arrowhead, on the end it moved to. An alternatives pair has no
+  // first and second and gets two.
+  eq('a switch joins the Left Competitor cell to the Use Competitor cell',
+    /`recentChange:\$\{sw\.companyId\}:\$\{sw\.fromCompetitorId\}`/.test(grid)
+      && /`useCompetitor:\$\{sw\.companyId\}:\$\{sw\.toCompetitorId\}`/.test(grid), true);
+  eq('  drawn directional, where the pair is not',
+    /'switched',[\s\S]{0,160}true,\n/.test(grid)
+      && /'evaluatingAlternatives',[\s\S]{0,160}false,\n/.test(grid), true);
+  eq('  the head stays on the end it moved to, whichever side that is',
+    /arrowStart: !directional \|\| !aIsLeft,/.test(grid)
+      && /arrowEnd: !directional \|\| aIsLeft,/.test(grid), true);
+  eq('  and each signal gets its own head, since a marker cannot inherit a stroke',
+    /id=\{`competitive-arrow-\$\{sig\}`\}/.test(grid)
+      && /stroke=\{SIGNAL_TONE\[l\.signal\]\}/.test(grid), true);
+  eq('the grid reads recorded switches rather than deriving them',
+    /switches: SwitchPair\[\];/.test(grid) && /for \(const sw of switches\)/.test(grid), true);
+  eq('  fed from the payload, which reads the table',
+    /switches=\{competitive\.switches\}/.test(modal)
+      && /switches: competitiveData\.switches,/.test(modal), true);
 
   // Connectors are drawn from pairs and anchored on the HEADER.
   eq('connectors come from the derived pairs, not a second self-join',
     /for \(const p of pairs\)/.test(grid) && /evaluatingAlternatives/.test(grid), true);
   eq('  anchored on the card header, which does not move when a card expands',
-    /headerRefs\.current\.get\(`useCompetitor:/.test(grid)
+    /headerRefs\.current\.get\(fromKey\)/.test(grid)
       && /querySelector\('\[data-card-header\]'\)/.test(grid), true);
   // Nearest sides, not centres: a line into the middle of a card runs across
   // the name it points at and hides its own arrowhead under the card.
   eq('  edge to edge, on the two nearest sides',
-    /const \[left, right\] = ra\.left <= rb\.left \? \[ra, rb\] : \[rb, ra\];/.test(grid), true);
+    /const aIsLeft = ra\.left <= rb\.left;/.test(grid)
+      && /const \[left, right\] = aIsLeft \? \[ra, rb\] : \[rb, ra\];/.test(grid), true);
   eq('  the left card\u2019s right edge and the right card\u2019s left edge',
     /x1: left\.right - origin\.left \+ CONNECTOR_GAP/.test(grid)
       && /x2: right\.left - origin\.left - CONNECTOR_GAP/.test(grid), true);
@@ -755,9 +787,8 @@ console.log('\n— the card header, and the grid it had to change for —');
       && /y2: right\.top - origin\.top \+ right\.height \/ 2/.test(grid), true);
   eq('  clear of the card, so the arrowhead is not behind it',
     /const CONNECTOR_GAP = 7;/.test(grid), true);
-  eq('  with an arrowhead at BOTH ends',
-    /markerStart="url\(#competitive-connector-arrow\)"/.test(grid)
-      && /markerEnd="url\(#competitive-connector-arrow\)"/.test(grid), true);
+  eq('  with an arrowhead at both ends of a pair',
+    /markerStart=\{l\.arrowStart \?/.test(grid) && /markerEnd=\{l\.arrowEnd \?/.test(grid), true);
   eq('  reversed at the start, or both would point the same way',
     /orient="auto-start-reverse"/.test(grid), true);
   eq('  thicker and darker than the hover line it replaced',
@@ -767,8 +798,8 @@ console.log('\n— the card header, and the grid it had to change for —');
       && /host\.scrollLeft/.test(grid) === false, true);
   eq('  and re-measured when a card changes height',
     /new ResizeObserver\(measure\)/.test(grid), true);
-  eq('  a pair with an end filtered out draws nothing',
-    /if \(!a \|\| !b\) continue;/.test(grid), true);
+  eq('  a connector with an end filtered out draws nothing',
+    /if \(!a \|\| !b\) return;/.test(grid), true);
 
   // Recent Change orders by recency; the other rows have no clock.
   eq('the Recent Change cells sort by recency',

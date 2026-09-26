@@ -96,7 +96,7 @@ export async function GET(
         scope, nodes: [], edges: [],
         competitive: {
           relationships: [], competitors: [], companiesWithInternal: [], cards: [],
-          inverses: {}, notCompetitive: 0, duplicates: 0,
+          inverses: {}, switches: [], notCompetitive: 0, duplicates: 0,
         },
       }, { headers: { 'Cache-Control': 'no-store' } });
     }
@@ -218,7 +218,7 @@ export async function GET(
       if (ids.length === 0) {
         return {
           relationships: [], competitors: [], companiesWithInternal: [], cards: [],
-          inverses: {}, notCompetitive: 0, duplicates: 0,
+          inverses: {}, switches: [], notCompetitive: 0, duplicates: 0,
         };
       }
 
@@ -324,6 +324,23 @@ export async function GET(
       const wanted = new Set(resolved.relationships.map(r => `${r.companyId}:${r.competitorId}`));
       const cards = presented.filter(c => wanted.has(`${c.company_id}:${c.related_company_id}`));
 
+      /* Recorded switches between companies on this map.
+         Only 'replacing' — the other answers are stored so the question is not
+         asked twice, and none of them says a vendor was displaced. */
+      const switchRes = await db.execute({
+        sql: `SELECT account_company_id, incumbent_company_id, incoming_company_id
+              FROM vendor_switches
+              WHERE answer = 'replacing' AND incoming_company_id IS NOT NULL`,
+        args: [],
+      }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
+      const switches = switchRes.rows
+        .map(r => ({
+          companyId: Number(r.account_company_id),
+          fromCompetitorId: Number(r.incumbent_company_id),
+          toCompetitorId: Number(r.incoming_company_id),
+        }))
+        .filter(x => inSet.has(x.companyId) && inSet.has(x.fromCompetitorId) && inSet.has(x.toCompetitorId));
+
       return {
         ...resolved,
         cards,
@@ -332,6 +349,10 @@ export async function GET(
            than as pre-inverted statuses: statusesFor already does the reading
            and a second implementation in the browser would be a second answer. */
         inverses,
+        /* Switches a rep recorded, for the grid's second connector.
+           Read rather than derived: "they left A for B" is a claim about cause,
+           and no arrangement of statuses and dates establishes one. */
+        switches,
         // Narrowed to the companies on this map, so the payload does not carry
         // the account's whole book to light three pills.
         companiesWithInternal: internalRes.rows
