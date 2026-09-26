@@ -520,9 +520,21 @@ console.log('\n— the view toggle —');
   // in a module that is tested without a browser.
   eq('the rail derives nothing itself',
     /deriveSignals|countSignals|RECENT_DAYS/.test(rail), false);
+  // Fed the resolved list, not an empty one and not a second derivation of its
+  // own. An empty array here is the Phase 2 shell, and shipping it would leave
+  // every count reading zero against real data.
   eq('  the modal derives it through the tested module',
-    /deriveSignals\(\{ relationships: \[\] \}\)/.test(modal)
+    /deriveSignals\(\{\s*relationships: competitiveData\.relationships/.test(modal)
       && /countSignals\(competitive\.cells\)/.test(modal), true);
+  eq('  and not from an empty list',
+    /deriveSignals\(\{ relationships: \[\] \}\)/.test(modal), false);
+  eq('  with the competitor columns taken from the payload, not recomputed',
+    /const competitors = competitiveData\.competitors/.test(modal), true);
+  // Wired to the same fetch the map reads, so one load fills both views.
+  eq('  and the payload is actually stored from the map fetch',
+    /setCompetitiveData\(\{ \.\.\.EMPTY_COMPETITIVE, \.\.\.\(d\.competitive \?\? \{\}\) \}\)/.test(modal), true);
+  eq('  defaulting every field, so an old endpoint cannot crash the rail',
+    /const EMPTY_COMPETITIVE: CompetitivePayload = \{/.test(modal), true);
   // The signal colours are one source, so a legend swatch cannot disagree with
   // the pill it describes.
   eq('  and the signal colours are shared, not copied',

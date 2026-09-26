@@ -5,6 +5,9 @@ import { vendorRelsQuery, loadInverseStatuses } from '@/lib/relationshipThread';
 import { isInverted } from '@/lib/relationshipDirection';
 import { getIcpCompanyTypes } from '@/lib/icpCompanyTypes';
 import { buildGraph, pruneIsolated, type GraphCompany, type GraphEdgeInput } from '@/lib/relationshipGraph';
+import {
+  resolveCompetitive, type RawRelationshipRow, type ResolutionCompany,
+} from '@/lib/competitiveResolution';
 
 /**
  * The relationship map for one conference.
@@ -87,7 +90,10 @@ export async function GET(
     }
 
     if (seedIds.length === 0) {
-      return NextResponse.json({ scope, nodes: [], edges: [] }, { headers: { 'Cache-Control': 'no-store' } });
+      return NextResponse.json({
+        scope, nodes: [], edges: [],
+        competitive: { relationships: [], competitors: [], notCompetitive: 0, duplicates: 0 },
+      }, { headers: { 'Cache-Control': 'no-store' } });
     }
 
     const [relRows, inverses] = await Promise.all([
@@ -193,6 +199,94 @@ export async function GET(
 
     const graph = pruneIsolated(buildGraph(companies, edges, attendeeCounts), atConference);
 
+    /* ── The competitive view's own read ──────────────────────────────────────
+       Additive. The map's nodes and edges above are untouched: this is a second
+       shape over the same relationships, not a change to the first.
+
+       Read from vendor_relationships directly rather than from vendorRelsQuery,
+       which returns each row once per end it was asked for. Resolution needs the
+       row as STORED — company_id is the side the status was written from, and
+       that is the whole basis of working out which end is the competitor. */
+    const competitive = await (async () => {
+      const inSet = new Set(companies.map(c => c.id));
+      const ids = Array.from(inSet);
+      if (ids.length === 0) {
+        return { relationships: [], competitors: [], notCompetitive: 0, duplicates: 0 };
+      }
+
+      const rawRows: RawRelationshipRow[] = [];
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const slice = ids.slice(i, i + CHUNK);
+        const ph = slice.map(() => '?').join(',');
+        // status_changed_at arrived with this feature. A tenant that has not run
+        // the migration loses the Recent Change signal rather than the view.
+        const res = await db.execute({
+          sql: `SELECT id, company_id, related_company_id, relationship_status, status_changed_at
+                FROM vendor_relationships
+                WHERE company_id IN (${ph}) OR related_company_id IN (${ph})`,
+          args: [...slice, ...slice],
+        }).catch(() => db.execute({
+          sql: `SELECT id, company_id, related_company_id, relationship_status,
+                       NULL AS status_changed_at
+                FROM vendor_relationships
+                WHERE company_id IN (${ph}) OR related_company_id IN (${ph})`,
+          args: [...slice, ...slice],
+        }).catch(() => ({ rows: [] as Record<string, unknown>[] })));
+
+        for (const r of res.rows) {
+          const a = Number(r.company_id);
+          const z = Number(r.related_company_id);
+          // Both ends have to be on this map, or the grid would hold a column
+          // for a company the scope excluded.
+          if (!inSet.has(a) || !inSet.has(z)) continue;
+          // The same scope rule the edges use: at conference scope a
+          // relationship counts only when both ends are at this show.
+          if (scope !== 'all' && !(atConference.has(a) && atConference.has(z))) continue;
+          rawRows.push({
+            id: Number(r.id),
+            companyId: a,
+            relatedCompanyId: z,
+            statuses: splitList(r.relationship_status),
+            statusChangedAt: r.status_changed_at ? String(r.status_changed_at) : null,
+          });
+        }
+      }
+      // The chunked OR can return a row twice when both its ends fall in
+      // different slices.
+      const seen = new Set<number>();
+      const rows = rawRows.filter(r => (seen.has(r.id) ? false : (seen.add(r.id), true)));
+
+      const [statusRes, compTypeRes] = await Promise.all([
+        db.execute({
+          sql: `SELECT value, inverse_value, action_key FROM config_options
+                WHERE category = 'other_relationship_status'`,
+          args: [],
+        }).catch(() => ({ rows: [] as Record<string, unknown>[] })),
+        // Matched on the action_key, not the word: an account that renamed
+        // Competitor still has competitors.
+        db.execute({
+          sql: `SELECT value FROM config_options
+                WHERE category = 'company_type' AND action_key = 'competitor'`,
+          args: [],
+        }).catch(() => ({ rows: [] as Record<string, unknown>[] })),
+      ]);
+
+      const companyMap = new Map<number, ResolutionCompany>(
+        companies.map(c => [c.id, { id: c.id, name: c.name, types: c.company_types }]),
+      );
+
+      return resolveCompetitive({
+        rows,
+        statusConfig: statusRes.rows.map(r => ({
+          value: String(r.value ?? ''),
+          inverseValue: r.inverse_value ? String(r.inverse_value) : null,
+          actionKey: r.action_key ? String(r.action_key) : null,
+        })),
+        companies: companyMap,
+        competitorTypes: compTypeRes.rows.map(r => String(r.value ?? '')).filter(Boolean),
+      });
+    })();
+
     // The account's ICP company types, so the picker can lead with them.
     const icp = await getIcpCompanyTypes(db).catch(() => ({ values: [] as string[], configured: false }));
 
@@ -205,6 +299,8 @@ export async function GET(
         // is zero for a company nobody from it attended.
         atConference: Array.from(atConference),
         ...graph,
+        // Additive: the Map view reads nodes and edges and never looks here.
+        competitive,
       },
       { headers: { 'Cache-Control': 'no-store' } },
     );

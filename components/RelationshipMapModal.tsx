@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EntityPicker } from '@/components/relationship-map/EntityPicker';
 import { CompetitiveRail, type CompetitorColumn } from '@/components/relationship-map/CompetitiveRail';
 import {
-  countSignals, deriveSignals, SIGNAL_PILL_LABELS, SIGNAL_TONE, type SignalKey,
+  countSignals, deriveSignals, SIGNAL_PILL_LABELS, SIGNAL_TONE,
+  type SignalKey, type SignalRelationship,
 } from '@/lib/competitiveSignals';
 import { MapCanvas, TONE_COLOR, type Spoke } from '@/components/relationship-map/MapCanvas';
 import { VendorRelationshipCard, type VendorRelationship } from '@/components/VendorRelationshipCard';
@@ -25,6 +26,26 @@ interface GraphEdge {
   relationship_status: string[];
   stale: boolean;
 }
+
+/**
+ * The competitive half of the payload, resolved server-side.
+ *
+ * Which end of a stored row is the competitor is decided once, in
+ * lib/competitiveResolution.ts, because it needs the config the browser does not
+ * have. Deciding it again here is how the rail and the grid would come to
+ * disagree about the same relationship.
+ */
+interface CompetitivePayload {
+  relationships: SignalRelationship[];
+  competitors: CompetitorColumn[];
+  /** Rows where neither end is a competitor — the partnership landscape's. */
+  notCompetitive: number;
+  /** Rows folded into a pair already logged from the other side. */
+  duplicates: number;
+}
+const EMPTY_COMPETITIVE: CompetitivePayload = {
+  relationships: [], competitors: [], notCompetitive: 0, duplicates: 0,
+};
 
 /**
  * The relationship map, over the conference's companies.
@@ -62,6 +83,8 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [icpTypes, setIcpTypes] = useState<string[]>([]);
+  /** The competitive read, already normalised server-side. See competitiveResolution. */
+  const [competitiveData, setCompetitiveData] = useState<CompetitivePayload>(EMPTY_COMPETITIVE);
   const [atConference, setAtConference] = useState<Set<number>>(new Set());
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [rels, setRels] = useState<VendorRelationship[]>([]);
@@ -127,12 +150,16 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
     setLoading(true);
     fetch(`/api/conferences/${conferenceId}/relationship-map?scope=${scope}`, { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : null))
-      .then((d: { nodes?: GraphNode[]; edges?: GraphEdge[]; icpTypes?: string[]; atConference?: number[] } | null) => {
+      .then((d: {
+        nodes?: GraphNode[]; edges?: GraphEdge[]; icpTypes?: string[];
+        atConference?: number[]; competitive?: Partial<CompetitivePayload>;
+      } | null) => {
         if (cancelled || !d) return;
         setNodes(d.nodes ?? []);
         setEdges(d.edges ?? []);
         setIcpTypes(d.icpTypes ?? []);
         setAtConference(new Set(d.atConference ?? []));
+        setCompetitiveData({ ...EMPTY_COMPETITIVE, ...(d.competitive ?? {}) });
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -213,20 +240,23 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
   /**
    * What the competitive view has to show.
    *
-   * Empty for now, and empty on purpose: the relationship-map endpoint returns
-   * an edge's statuses as words, with no class attached and no status_changed_at,
-   * so there is nothing here yet to classify. Wiring it needs a decision this
-   * shell should not make quietly — which companies count as competitors, and
-   * which end of a directional relationship is the account — and that decision
-   * belongs with the grid that depends on it.
+   * The relationships arrive already normalised — account and competitor
+   * resolved, class read off the status's action_key — so all that is left here
+   * is the signal derivation, which is the same pure function the tests drive
+   * without a browser or a database.
    *
-   * It goes through deriveSignals rather than around it so the rail is reading
-   * the real shape from the first commit. The day the endpoint grows those two
-   * fields, this list is the only thing that changes.
+   * Internal relationships come from the pre-conference load the modal already
+   * does. No window on them: somebody here knowing somebody there is a standing
+   * fact, not a recent event.
    */
-  const competitive = useMemo(() => deriveSignals({ relationships: [] }), []);
+  const competitive = useMemo(() => deriveSignals({
+    relationships: competitiveData.relationships,
+    companiesWithInternal: internal
+      .filter(r => r.attendees.length > 0)
+      .map(r => r.company_id),
+  }), [competitiveData, internal]);
   const signalCounts = useMemo(() => countSignals(competitive.cells), [competitive]);
-  const competitors: CompetitorColumn[] = useMemo(() => [], []);
+  const competitors = competitiveData.competitors;
   // Counted off the cells, so the subtitle can never disagree with the grid.
   const accountCount = useMemo(
     () => new Set(competitive.cells.map(c => c.companyId)).size,
