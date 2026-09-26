@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EntityPicker } from '@/components/relationship-map/EntityPicker';
+import { CompetitiveRail, type CompetitorColumn } from '@/components/relationship-map/CompetitiveRail';
+import {
+  countSignals, deriveSignals, SIGNAL_PILL_LABELS, SIGNAL_TONE, type SignalKey,
+} from '@/lib/competitiveSignals';
 import { MapCanvas, TONE_COLOR, type Spoke } from '@/components/relationship-map/MapCanvas';
 import { VendorRelationshipCard, type VendorRelationship } from '@/components/VendorRelationshipCard';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -46,6 +50,15 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
   const userOptions = useUserOptions();
 
   const [scope, setScope] = useState<'conference' | 'all'>('conference');
+  /**
+   * Which canvas the modal is showing.
+   *
+   * A sibling of scope rather than a nesting of it: the two are independent, so
+   * flipping the view keeps whatever scope was chosen and flipping the scope
+   * keeps the view. Map opens, because that is what the button that opens this
+   * modal has always meant.
+   */
+  const [view, setView] = useState<'map' | 'competitive'>('map');
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [icpTypes, setIcpTypes] = useState<string[]>([]);
@@ -66,6 +79,37 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
   const [internalOpen, setInternalOpen] = useState(true);
   // Mobile shows one panel at a time, the way the pre-conference tab does.
   const [mobileTab, setMobileTab] = useState<'companies' | 'relationships'>('companies');
+
+  // ── Competitive view ──
+  const [signalsOnly, setSignalsOnly] = useState(false);
+  /**
+   * Whether the grid draws the lines between an account's two cells.
+   *
+   * Plain state, deliberately. Not localStorage, not sessionStorage, not a ref
+   * outside the component: the modal unmounts when it closes, so this goes back
+   * to unchecked every time it opens. Connectors are a thing you turn on to
+   * answer one question, and finding them already on next week — with no memory
+   * of asking for them — reads as the grid being broken.
+   */
+  const [showConnectors, setShowConnectors] = useState(false);
+  const [activeSignals, setActiveSignals] = useState<Set<SignalKey>>(new Set());
+  // What is hidden, not what is shown. See the note in CompetitiveRail.
+  const [hiddenCompetitorIds, setHiddenCompetitorIds] = useState<Set<number>>(new Set());
+
+  const toggleSignal = useCallback((key: SignalKey) => {
+    setActiveSignals(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
+  const toggleCompetitor = useCallback((id: number) => {
+    setHiddenCompetitorIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -166,6 +210,33 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
         : edges.filter(e => e.from === hubNode.id || e.to === hubNode.id).length)
     : 0;
 
+  /**
+   * What the competitive view has to show.
+   *
+   * Empty for now, and empty on purpose: the relationship-map endpoint returns
+   * an edge's statuses as words, with no class attached and no status_changed_at,
+   * so there is nothing here yet to classify. Wiring it needs a decision this
+   * shell should not make quietly — which companies count as competitors, and
+   * which end of a directional relationship is the account — and that decision
+   * belongs with the grid that depends on it.
+   *
+   * It goes through deriveSignals rather than around it so the rail is reading
+   * the real shape from the first commit. The day the endpoint grows those two
+   * fields, this list is the only thing that changes.
+   */
+  const competitive = useMemo(() => deriveSignals({ relationships: [] }), []);
+  const signalCounts = useMemo(() => countSignals(competitive.cells), [competitive]);
+  const competitors: CompetitorColumn[] = useMemo(() => [], []);
+  // Counted off the cells, so the subtitle can never disagree with the grid.
+  const accountCount = useMemo(
+    () => new Set(competitive.cells.map(c => c.companyId)).size,
+    [competitive],
+  );
+
+  const scopeLabel = scope === 'conference'
+    ? (conferenceName ?? 'This conference')
+    : 'All relationships';
+
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
@@ -173,11 +244,40 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
-          <div className="min-w-0">
-            <h3 className="text-base font-semibold text-brand-primary font-serif">Relationship Map</h3>
-            <p className="text-xs text-gray-400 mt-0.5 truncate">{hubNode?.name ?? 'Select a company'}</p>
+          <div className="min-w-0 flex items-center gap-3">
+            <div className="min-w-0">
+              <h3 className="text-base font-semibold text-brand-primary font-serif">Relationship Map</h3>
+              <p className="text-xs text-gray-400 mt-0.5 truncate">
+                {view === 'competitive'
+                  ? `${competitors.length} competitor${competitors.length === 1 ? '' : 's'} · ${accountCount} account${accountCount === 1 ? '' : 's'} · ${scopeLabel}`
+                  : (hubNode?.name ?? 'Select a company')}
+              </p>
+            </div>
+            {/* Beside the title rather than beside the scope toggle: this
+                chooses what you are looking at, scope chooses how much of it,
+                and a row of four buttons reads as one four-way choice.
+
+                Desktop only. The competitive grid is columns across, which has
+                no honest rendering at phone width — see BACKLOG.md. Hidden
+                outright rather than disabled: a control nobody can reach does
+                not need explaining. */}
+            <div className="hidden sm:flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+              {(['map', 'competitive'] as const).map(v => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setView(v)}
+                  aria-pressed={view === v}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                    view === v ? 'bg-brand-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {v === 'map' ? 'Map' : 'Competitive'}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
               {(['conference', 'all'] as const).map(s => (
                 <button
@@ -288,15 +388,38 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
         </div>
 
         <div className="flex-1 min-h-0 hidden sm:flex gap-3 p-3">
-          <EntityPicker
-            companies={connected}
-            icpTypes={icpTypes}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-          />
+          {view === 'competitive' ? (
+            <CompetitiveRail
+              signalCounts={signalCounts}
+              competitors={competitors}
+              hiddenCompetitorIds={hiddenCompetitorIds}
+              onToggleCompetitor={toggleCompetitor}
+              signalsOnly={signalsOnly}
+              onSignalsOnly={setSignalsOnly}
+              showConnectors={showConnectors}
+              onShowConnectors={setShowConnectors}
+              activeSignals={activeSignals}
+              onToggleSignal={toggleSignal}
+              unclassifiedCount={competitive.unclassifiedCount}
+            />
+          ) : (
+            <EntityPicker
+              companies={connected}
+              icpTypes={icpTypes}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+            />
+          )}
 
           <div className="flex-1 min-w-0 flex flex-col gap-2">
-            {loading ? (
+            {view === 'competitive' ? (
+              /* The grid lands here. Until it does this is the empty state it
+                 will fall back to anyway, rather than a placeholder that has to
+                 be remembered and removed. */
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-sm text-gray-400">No competitor relationships to compare.</p>
+              </div>
+            ) : loading ? (
               <div className="flex-1 flex items-center justify-center">
                 <div className="w-6 h-6 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin" />
               </div>
@@ -321,21 +444,41 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
               </div>
             )}
 
+            {/* The legend explains whatever the canvas above it drew. In Map
+                that is the edge colours; in Competitive the edges are gone and
+                the colours belong to the signal pills instead. */}
             <div className="flex items-center gap-4 px-1 flex-shrink-0">
-              {([['current', 'Current'], ['pilot', 'Pilot / evaluating'], ['former', 'Former'], ['competitor', 'Competitor']] as const).map(([tone, label]) => (
-                <span key={tone} className="inline-flex items-center gap-1.5 text-[11px] text-gray-500">
-                  <span className="w-4 h-0.5 rounded" style={{ backgroundColor: TONE_COLOR[tone] }} />
-                  {label}
-                </span>
-              ))}
-              <span className="text-[11px] text-gray-400 ml-auto">Drag the grip on a card to rearrange</span>
+              {view === 'competitive' ? (
+                (Object.keys(SIGNAL_PILL_LABELS) as SignalKey[]).map(key => (
+                  <span key={key} className="inline-flex items-center gap-1.5 text-[11px] text-gray-500">
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: SIGNAL_TONE[key] }} />
+                    {SIGNAL_PILL_LABELS[key]}
+                  </span>
+                ))
+              ) : (
+                <>
+                  {([['current', 'Current'], ['pilot', 'Pilot / evaluating'], ['former', 'Former'], ['competitor', 'Competitor']] as const).map(([tone, label]) => (
+                    <span key={tone} className="inline-flex items-center gap-1.5 text-[11px] text-gray-500">
+                      <span className="w-4 h-0.5 rounded" style={{ backgroundColor: TONE_COLOR[tone] }} />
+                      {label}
+                    </span>
+                  ))}
+                  <span className="text-[11px] text-gray-400 ml-auto">Drag the grip on a card to rearrange</span>
+                </>
+              )}
             </div>
           </div>
 
           {/* Internal relationships, when the selected company has any.
               Absent entirely when it does not, rather than an empty column
-              taking width from the map. */}
-          {internalCards.length > 0 && (
+              taking width from the map.
+
+              Map only. These cards are the SELECTED company's contacts, and
+              Competitive has no selected company — the column would show the
+              last hub's people beside a grid of everybody else's, which reads
+              as the grid's own contacts. Dropping the column takes its collapse
+              chevron with it. */}
+          {view === 'map' && internalCards.length > 0 && (
             <div
               className="flex-shrink-0 flex flex-col min-h-0 overflow-hidden transition-[width] duration-300 ease-in-out"
               style={{ width: internalOpen ? 320 : 40 }}

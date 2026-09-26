@@ -374,5 +374,161 @@ console.log('\n— on a phone —');
     /className = 'w-72 flex-shrink-0'/.test(picker), true);
 }
 
+console.log('\n— the view toggle —');
+{
+  const modal = strip('components/RelationshipMapModal.tsx');
+  const rail = strip('components/relationship-map/CompetitiveRail.tsx');
+  const desktopBlock = modal.slice(modal.indexOf('hidden sm:flex gap-3 p-3'));
+  const mobileBlock = modal.slice(
+    modal.indexOf('sm:hidden flex flex-col p-3'),
+    modal.indexOf('hidden sm:flex gap-3 p-3'),
+  );
+  const header = modal.slice(
+    modal.indexOf('Relationship Map</h3>'),
+    modal.indexOf('sm:hidden flex flex-col p-3'),
+  );
+
+  // Two independent choices, two pieces of state. Nesting view inside scope
+  // (or the reverse) is what makes flipping one silently reset the other.
+  eq('view is a sibling of scope, not derived from it',
+    /const \[view, setView\] = useState<'map' \| 'competitive'>\('map'\)/.test(modal), true);
+  eq('  and Map is what the modal opens on',
+    /useState<'map' \| 'competitive'>\('map'\)/.test(modal), true);
+  eq('  scope is untouched by it',
+    /const \[scope, setScope\] = useState<'conference' \| 'all'>\('conference'\)/.test(modal), true);
+  eq('  so no scope reset hides in the view handler',
+    /setView\([^)]*\)[^}]*setScope\(/.test(modal), false);
+
+  // Beside the title, not beside the scope toggle. Four buttons in one row
+  // reads as one four-way choice.
+  eq('the toggle sits in the title block',
+    /Relationship Map<\/h3>[\s\S]*?setView\(v\)[\s\S]*?<\/div>\s*<\/div>\s*<div className="flex items-center gap-2 flex-shrink-0">/.test(modal), true);
+  eq('  labelled Map and Competitive',
+    /\{v === 'map' \? 'Map' : 'Competitive'\}/.test(modal), true);
+  eq('  and it matches the scope toggle, not a new pattern',
+    /\(\['map', 'competitive'\] as const\)\.map/.test(modal)
+      && /view === v \? 'bg-brand-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'/.test(modal), true);
+  eq('  pressed state is exposed, not only coloured',
+    /aria-pressed=\{view === v\}/.test(header), true);
+
+  // Desktop only, and hidden rather than disabled. A control nobody can reach
+  // does not need explaining — see BACKLOG.md for what a narrow layout costs.
+  eq('the toggle is hidden below the breakpoint',
+    /<div className="hidden sm:flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">/.test(header), true);
+  eq('  with no disabled state', /disabled/.test(header), false);
+  eq('  and no view-it-on-desktop placeholder',
+    /desktop/i.test(mobileBlock), false);
+
+  // The whole point of the mobile branch being untouched: it must not read
+  // view at all, or a stale render hides in the branch nobody asserts.
+  // The identifier, not the word — "view its relationships" is copy.
+  eq('the mobile branch never reads view',
+    /\bview\s*===|\bsetView\b|\{\s*view\b/.test(mobileBlock), false);
+  eq('  it still reads mobileTab', /mobileTab === 'companies'/.test(mobileBlock), true);
+  eq('  and renders neither the competitive rail nor its canvas',
+    /CompetitiveRail/.test(mobileBlock), false);
+  // narrow → desktop comes back to Competitive, which only holds while view
+  // survives the breakpoint. Both branches live in one component and one
+  // render, so there is no second copy of the state to go stale.
+  eq('one component owns both branches, so view survives a resize',
+    (modal.match(/export function RelationshipMapModal/g) || []).length, 1);
+  eq('  and neither branch is mounted conditionally on width in JS',
+    /window\.(innerWidth|matchMedia)/.test(modal), false);
+
+  // The rail swaps; the canvas swaps; the legend swaps.
+  eq('the desktop rail swaps with the view',
+    /view === 'competitive' \? \(\s*<CompetitiveRail/.test(desktopBlock), true);
+  eq('  back to the entity picker in Map',
+    /\) : \(\s*<EntityPicker/.test(desktopBlock), true);
+  eq('  the canvas swaps too',
+    /view === 'competitive' \? \([\s\S]{0,400}\) : loading \? \(/.test(desktopBlock), true);
+  eq('  and the legend explains whichever canvas drew',
+    /view === 'competitive' \? \(\s*\(Object\.keys\(SIGNAL_PILL_LABELS\)/.test(desktopBlock), true);
+  eq('  Map keeps its edge colours',
+    /TONE_COLOR\[tone\]/.test(desktopBlock), true);
+  eq('  and its drag hint, which Competitive has no cards to drag in',
+    /Drag the grip on a card to rearrange[\s\S]*?\) : \(/.test(desktopBlock)
+      || /view === 'competitive' \? \([\s\S]*?Drag the grip on a card to rearrange/.test(desktopBlock), true);
+
+  // The internal column is the SELECTED company's contacts. Competitive has no
+  // selected company, so the column goes — and its chevron with it.
+  eq('the internal column is Map only',
+    /\{view === 'map' && internalCards\.length > 0 && \(/.test(desktopBlock), true);
+  eq('  so the collapse chevron cannot appear in Competitive',
+    /setInternalOpen/.test(desktopBlock.slice(desktopBlock.indexOf("view === 'map' && internalCards"))), true);
+
+  // The subtitle says what you are looking at. One company in Map; the size of
+  // the field in Competitive.
+  eq('the subtitle swaps with the view',
+    /view === 'competitive'\s*\? `\$\{competitors\.length\} competitor/.test(header), true);
+  eq('  counting accounts off the cells, not a second query',
+    /new Set\(competitive\.cells\.map\(c => c\.companyId\)\)\.size/.test(modal), true);
+  eq('  and naming the scope rather than always the conference',
+    /scope === 'conference'\s*\? \(conferenceName \?\? 'This conference'\)\s*: 'All relationships'/.test(modal), true);
+  eq('  Map still names the selected company',
+    /: \(hubNode\?\.name \?\? 'Select a company'\)/.test(header), true);
+
+  // Show connectors is per-opening. Nothing outlives the modal.
+  eq('show connectors starts off',
+    /const \[showConnectors, setShowConnectors\] = useState\(false\)/.test(modal), true);
+  eq('  and is not persisted anywhere',
+    /localStorage|sessionStorage/.test(modal), false);
+  eq('  nor parked in a ref that outlives a render',
+    /useRef/.test(modal), false);
+  // The reset IS the unmount, which only holds while the call site unmounts it.
+  eq('  the modal is unmounted on close, which is what resets it',
+    /\{showRelationshipMap && conference && \(\s*<RelationshipMapModal/.test(strip('app/conferences/[id]/page.tsx')), true);
+  eq('  and nothing is written outside component state',
+    /window\.__|globalThis\./.test(modal), false);
+
+  // Signals only governs the three filters, so it shares their heading's row
+  // rather than sitting under them as a fourth.
+  eq('the rail is the competitive one, by an unambiguous name',
+    /view-competitive/.test(rail), true);
+  eq('  and that class is not also content',
+    /className="view-competitive"|>view-competitive</.test(rail), false);
+  eq('signals only shares the heading row',
+    /font-serif">Signals<\/p>[\s\S]{0,400}checked=\{signalsOnly\}/.test(rail), true);
+  eq('  show connectors sits below it',
+    rail.indexOf('checked={signalsOnly}') < rail.indexOf('checked={showConnectors}'), true);
+  eq('  three signal filters, named from the shared map',
+    /\(Object\.keys\(SIGNAL_LABELS\) as SignalKey\[\]\)\.map/.test(rail), true);
+  eq('  each with its count',
+    /\{signalCounts\[key\]\}/.test(rail), true);
+  eq('  and the competitor list doubles as the column picker',
+    /Competitors shown/.test(rail) && /onToggleCompetitor\(c\.id\)/.test(rail), true);
+  eq('  showing each competitor its account count',
+    /\{c\.accountCount\} account\{c\.accountCount === 1 \? '' : 's'\}/.test(rail), true);
+  // Hidden, not shown: a competitor that arrives after the modal opened must
+  // appear in its own grid rather than be quietly left out of it.
+  // Shown unless hidden. As an allowlist, a competitor that arrives in the data
+  // after the modal opened is quietly missing from its own grid.
+  eq('  tracked as what is hidden, not what is shown',
+    /const on = !hiddenCompetitorIds\.has\(c\.id\)/.test(rail), true);
+
+  // Unclassified statuses take part in nothing. That must not be silent.
+  eq('the unclassified note appears only when there is one',
+    /\{unclassifiedCount > 0 && \(/.test(rail), true);
+  eq('  worded as not counted rather than not present',
+    /not counted in signals/.test(rail), true);
+  eq('  and it links somewhere the account can fix it',
+    /href="\/admin"/.test(rail), true);
+  eq('  the count comes from the signal module, not a recount here',
+    /unclassifiedCount=\{competitive\.unclassifiedCount\}/.test(modal), true);
+
+  // The rail is presentational: every number arrives derived, so the rules stay
+  // in a module that is tested without a browser.
+  eq('the rail derives nothing itself',
+    /deriveSignals|countSignals|RECENT_DAYS/.test(rail), false);
+  eq('  the modal derives it through the tested module',
+    /deriveSignals\(\{ relationships: \[\] \}\)/.test(modal)
+      && /countSignals\(competitive\.cells\)/.test(modal), true);
+  // The signal colours are one source, so a legend swatch cannot disagree with
+  // the pill it describes.
+  eq('  and the signal colours are shared, not copied',
+    /SIGNAL_TONE\[key\]/.test(desktopBlock)
+      && /export const SIGNAL_TONE/.test(strip('lib/competitiveSignals.ts')), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

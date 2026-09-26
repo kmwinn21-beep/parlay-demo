@@ -71,6 +71,20 @@ export const SIGNAL_PILL_LABELS: Record<SignalKey, string> = {
 };
 
 /**
+ * One colour per signal, for the pill and the legend that explains it.
+ *
+ * Here rather than in either render site: a legend whose swatch does not match
+ * the pill it describes is worse than no legend, and that is what two copies of
+ * a colour drift into. Amber leads because an account caught between two
+ * vendors is the one worth a call today.
+ */
+export const SIGNAL_TONE: Record<SignalKey, string> = {
+  evaluatingAlternatives: '#D97706',
+  recentChange: '#2563EB',
+  internalRelationship: '#059669',
+};
+
+/**
  * Which row a relationship sits in, by what its status means.
  *
  * Three classes, three rows, one each. A company in two rows is two different

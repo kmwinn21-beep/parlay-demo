@@ -132,3 +132,33 @@ It fails silently. The module swallows all errors by design, and an empty recipi
   and answer the better question. It also means the `status_changed_at`
   backfill could have been complete, which it is not — see the note at that
   migration.
+
+- **A single-competitor mobile Competitive view.** The competitive view is
+  desktop-only: the `[Map | Competitive]` toggle is hidden in the modal's
+  `sm:hidden` branch, which never reads `view` at all. The reason is the grid
+  itself — competitors run across as columns, and the thing you read is a row,
+  tracing one account under two different competitors. Four columns at 390px is
+  about ninety pixels each, which does not hold a company name, let alone the
+  signal pills. Horizontal scrolling renders it and destroys it at the same
+  time: the comparison only exists while two columns are on screen together.
+
+  The right narrow layout is a different layout, not a squeezed grid. The
+  competitor picker in the rail becomes a one-of-N selector and the canvas shows
+  that single competitor's three rows stacked — Active Evaluation, Use
+  Competitor, Recent Change — with the existing cards beneath each.
+
+  **What it drops, and why that is the trade:** the cross-column comparison,
+  which is the whole reason the desktop view is a grid. An account appearing
+  under two competitors is the signal; one column at a time can only tell you
+  *that* it carries the Evaluating Alternatives pill, never *against whom*
+  without switching columns and holding the first in your head. So the mobile
+  view would answer "who is in play under this competitor" and not "who is
+  caught between these two". That is a real loss, and it is still better than a
+  four-column grid nobody can read — which is why this is the answer if the view
+  ever needs to be reachable on a phone, and why it was not built as the default.
+
+  Also unresolved for that layout: the header already carries the scope toggle
+  and the Companies/Relationships tab bar, and `mobileTab` has no meaning in
+  Competitive (there is no company to pick), so the tab bar would have to
+  disappear and reappear as the view flips. Worth solving properly rather than
+  squeezing a third toggle onto the same row.
