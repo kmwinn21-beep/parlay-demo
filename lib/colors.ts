@@ -152,11 +152,20 @@ export function buildColorMap(
 
 const RED_PRESET = COLOR_PRESETS.find(p => p.key === 'red')!;
 
-/** Get badge class for a value, using its color from the map */
-export function getBadgeClass(value: string | undefined, colorMap: ColorMap): string {
-  if (!value) return `inline-flex px-2 py-0.5 rounded-lg text-xs font-semibold ${FALLBACK.badgeClass}`;
+/**
+ * Get badge class for a value, using its color from the map.
+ *
+ * sizeClass is the one thing a caller ever needs to vary — a badge in a grid
+ * cell is smaller than the same badge on a record page — and passing it beats
+ * appending a second font-size utility, which would leave two of them on the
+ * element and let stylesheet order decide which won.
+ */
+export function getBadgeClass(
+  value: string | undefined, colorMap: ColorMap, sizeClass = 'text-xs',
+): string {
+  if (!value) return `inline-flex px-2 py-0.5 rounded-lg ${sizeClass} font-semibold ${FALLBACK.badgeClass}`;
   const preset = value === 'Competitor' ? RED_PRESET : getPreset(colorMap[value]);
-  return `inline-flex px-2 py-0.5 rounded-lg text-xs font-semibold ${preset.badgeClass}`;
+  return `inline-flex px-2 py-0.5 rounded-lg ${sizeClass} font-semibold ${preset.badgeClass}`;
 }
 
 /** Get pill class for a value (solid bg, used on detail pages) */

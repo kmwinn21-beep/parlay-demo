@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EntityPicker } from '@/components/relationship-map/EntityPicker';
 import { CompetitiveRail, type CompetitorColumn } from '@/components/relationship-map/CompetitiveRail';
-import { CompetitiveGrid } from '@/components/relationship-map/CompetitiveGrid';
+import { CompetitiveGrid, SignalBadge } from '@/components/relationship-map/CompetitiveGrid';
 import {
-  countSignals, deriveSignals, SIGNAL_PILL_LABELS, SIGNAL_TONE,
+  countSignals, deriveSignals, SIGNAL_FULL_LABELS,
   type SignalKey, type SignalRelationship,
 } from '@/lib/competitiveSignals';
 import { MapCanvas, TONE_COLOR, type Spoke } from '@/components/relationship-map/MapCanvas';
@@ -560,10 +560,15 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
                 the colours belong to the signal pills instead. */}
             <div className="flex items-center gap-4 px-1 flex-shrink-0">
               {view === 'competitive' ? (
-                (Object.keys(SIGNAL_PILL_LABELS) as SignalKey[]).map(key => (
+                // The badge itself, not a swatch of its colour. This is where a
+                // reader who has just met "EA" on a card comes to find out what
+                // it means, so it has to be the same mark — and the name is
+                // spelled out here because abbreviating it would answer the
+                // question with the question.
+                (Object.keys(SIGNAL_FULL_LABELS) as SignalKey[]).map(key => (
                   <span key={key} className="inline-flex items-center gap-1.5 text-[11px] text-gray-500">
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: SIGNAL_TONE[key] }} />
-                    {SIGNAL_PILL_LABELS[key]}
+                    <SignalBadge signal={key} />
+                    {SIGNAL_FULL_LABELS[key]}
                   </span>
                 ))
               ) : (

@@ -76,11 +76,33 @@ export const SIGNAL_LABELS: Record<SignalKey, string> = {
   internalRelationship: 'Int. Relationship',
 };
 
-/** The same names at pill width, where the long form does not fit. */
-export const SIGNAL_PILL_LABELS: Record<SignalKey, string> = {
-  evaluatingAlternatives: 'Evaluating Alt.',
+/**
+ * Two letters, for the badge beside a card's name.
+ *
+ * A card in a 232px column has no room for a row of worded pills beside the
+ * company it is about. The badge says a signal is there and where to look; the
+ * legend at the foot of the grid says what it means, which is why that one
+ * spells the names out in full rather than repeating these.
+ */
+export const SIGNAL_ABBREVIATIONS: Record<SignalKey, string> = {
+  evaluatingAlternatives: 'EA',
+  recentChange: 'RC',
+  internalRelationship: 'IR',
+};
+
+/**
+ * The names spelled out, for the legend.
+ *
+ * Not SIGNAL_LABELS: those are sized for the rail's filter rows, which have a
+ * count badge eating the end of the line, and "Int. Relationship" is the
+ * abbreviation that buys. The legend has a whole row to itself and is the one
+ * place a reader goes to find out what IR means, so abbreviating it there would
+ * answer the question with the question.
+ */
+export const SIGNAL_FULL_LABELS: Record<SignalKey, string> = {
+  evaluatingAlternatives: 'Evaluating Alternatives',
   recentChange: 'Recent Change',
-  internalRelationship: 'Int. Relationship',
+  internalRelationship: 'Internal Relationship',
 };
 
 /**

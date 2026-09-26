@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { VendorRelationshipCard, type VendorRelationship } from '@/components/VendorRelationshipCard';
 import {
-  byRecency, hasAnySignal, ROW_LABELS, SIGNAL_PILL_LABELS, SIGNAL_TONE,
+  byRecency, hasAnySignal, ROW_LABELS, SIGNAL_ABBREVIATIONS, SIGNAL_FULL_LABELS, SIGNAL_TONE,
   type AlternativePair, type GridRow, type SignalCell, type SignalKey,
 } from '@/lib/competitiveSignals';
 import type { CompetitorColumn } from '@/components/relationship-map/CompetitiveRail';
@@ -40,6 +40,17 @@ const LABEL_WIDTH = 92;
  * second copy of the number is a second number.
  */
 const GRID_BODY_MAX_HEIGHT = 240;
+
+/**
+ * The signal a connector is drawn for.
+ *
+ * One today. Named rather than written into each place that draws or lights
+ * something, so adding a second connector signal is a list rather than a hunt.
+ */
+const CONNECTOR_SIGNAL: SignalKey = 'evaluatingAlternatives';
+
+/** Space between a card's edge and the arrowhead pointing at it. */
+const CONNECTOR_GAP = 7;
 
 /**
  * Accounts by competitor and by what the relationship is.
@@ -86,6 +97,13 @@ export function CompetitiveGrid({
   const contentRef = useRef<HTMLDivElement>(null);
   /** Card header element per cell, for anchoring a connector on the header. */
   const headerRefs = useRef(new Map<string, HTMLElement>());
+  /**
+   * The account whose connected cells are lit, or null.
+   *
+   * Set only from a card that actually carries the connector signal. Hovering
+   * an account's third, unconnected card would otherwise light two cells
+   * somewhere else on screen and grey out the one under the cursor.
+   */
   const [hovered, setHovered] = useState<number | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
 
@@ -150,13 +168,19 @@ export function CompetitiveGrid({
       if (!a || !b) continue;
       const ra = a.getBoundingClientRect();
       const rb = b.getBoundingClientRect();
+      // Nearest sides, not centres. A line into the middle of a card runs
+      // across the company name it is pointing at, and its arrowhead lands
+      // underneath the card rather than against it. Whichever header is
+      // further left is left by the columns, so this is the reading order of
+      // the two cells as well as their geometry.
+      const [left, right] = ra.left <= rb.left ? [ra, rb] : [rb, ra];
       next.push({
         key: `${p.companyId}:${p.currentCompetitorId}:${p.evaluatingCompetitorId}`,
         companyId: p.companyId,
-        x1: ra.left - origin.left + ra.width / 2,
-        y1: ra.top - origin.top + ra.height / 2,
-        x2: rb.left - origin.left + rb.width / 2,
-        y2: rb.top - origin.top + rb.height / 2,
+        x1: left.right - origin.left + CONNECTOR_GAP,
+        y1: left.top - origin.top + left.height / 2,
+        x2: right.left - origin.left - CONNECTOR_GAP,
+        y2: right.top - origin.top + right.height / 2,
       });
     }
     setLines(next);
@@ -214,23 +238,42 @@ export function CompetitiveGrid({
         {/* Under the cards, over the background: a connector painted on top
             would run across the company names it is connecting. Inside the
             content rather than pinned to the scroller, so it scrolls with what
-            it is pointing at. */}
-        {(showConnectors || hovered !== null) && lines.length > 0 && (
+            it is pointing at.
+
+            Only when asked for. Hovering used to draw one of these too, and a
+            line that appears under the cursor and vanishes cannot be followed
+            — hover lights the two cards instead, which is the same fact said
+            where the reader is already looking. */}
+        {showConnectors && lines.length > 0 && (
           <svg aria-hidden className="absolute inset-0 w-full h-full pointer-events-none z-0">
-            {lines.map(l => {
-              const lit = hovered === l.companyId;
-              if (!showConnectors && !lit) return null;
-              return (
-                <line
-                  key={l.key}
-                  x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2}
-                  stroke={SIGNAL_TONE.evaluatingAlternatives}
-                  strokeWidth={lit ? 2 : 1}
-                  strokeDasharray={lit ? undefined : '4 3'}
-                  opacity={lit ? 0.9 : 0.35}
-                />
-              );
-            })}
+            <defs>
+              {/* Both ends. The relationship runs both ways — this account is
+                  on one and looking at the other — and a single head would
+                  claim a direction the signal does not have. */}
+              <marker
+                id="competitive-connector-arrow"
+                viewBox="0 0 10 10" refX="8" refY="5"
+                markerWidth="5" markerHeight="5"
+                orient="auto-start-reverse"
+              >
+                <path d="M 0 0 L 10 5 L 0 10 z" fill={SIGNAL_TONE[CONNECTOR_SIGNAL]} />
+              </marker>
+            </defs>
+            {lines.map(l => (
+              <line
+                key={l.key}
+                x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2}
+                stroke={SIGNAL_TONE[CONNECTOR_SIGNAL]}
+                strokeWidth={2.5}
+                strokeDasharray="6 4"
+                // A line recedes with the cards it joins. Left bright over two
+                // greyed cards it points at an account the hover is saying to
+                // ignore, which is the opposite of what the greying is for.
+                opacity={hovered === null || hovered === l.companyId ? 0.9 : 0.15}
+                markerStart="url(#competitive-connector-arrow)"
+                markerEnd="url(#competitive-connector-arrow)"
+              />
+            ))}
           </svg>
         )}
         <div className="relative z-10">
@@ -292,8 +335,15 @@ export function CompetitiveGrid({
                           if (header) headerRefs.current.set(key, header);
                           else headerRefs.current.delete(key);
                         }}
-                        onMouseEnter={() => setHovered(cell.companyId)}
+                        // Only a card that carries the connector signal starts a
+                        // hover. Any other card of the same account would light
+                        // two cells elsewhere and dim the one being pointed at.
+                        onMouseEnter={() => {
+                          if (cell.signals[CONNECTOR_SIGNAL]) setHovered(cell.companyId);
+                        }}
                         onMouseLeave={() => setHovered(h => (h === cell.companyId ? null : h))}
+                        className={`transition-opacity ${
+                          hovered !== null && !isLit(cell, hovered) ? 'opacity-30' : ''}`}
                       >
                         <VendorRelationshipCard
                           rel={rel}
@@ -307,7 +357,8 @@ export function CompetitiveGrid({
                           typeBadges={typesOf(cell.companyId)}
                           statuses={statusesOf(rel)}
                           bodyMaxHeight={GRID_BODY_MAX_HEIGHT}
-                          leadingBadges={<SignalPills cell={cell} />}
+                          titleBadges={<SignalBadges cell={cell} />}
+                          highlight={isLit(cell, hovered) ? SIGNAL_TONE[CONNECTOR_SIGNAL] : null}
                         />
                       </div>
                     );
@@ -323,6 +374,18 @@ export function CompetitiveGrid({
   );
 }
 
+/**
+ * Whether a cell is one of the two ends the hover is pointing at.
+ *
+ * The same account carrying the connector signal, which is both halves of the
+ * pair and nothing else — its other relationships are not what the hover is
+ * about, and cross-column repetition only reads as a pair when the pair alone
+ * is lit.
+ */
+function isLit(cell: SignalCell, hovered: number | null): boolean {
+  return hovered !== null && cell.companyId === hovered && cell.signals[CONNECTOR_SIGNAL];
+}
+
 interface Line {
   key: string;
   companyId: number;
@@ -332,25 +395,35 @@ interface Line {
 /**
  * Why this card is in this cell.
  *
- * Leads the card's badge row, ahead of the status pills, because it is the
- * reason the grid drew the card at all. Nothing at all when the card carries no
- * signal — which happens with "Signals only" off, and an empty row of nothing
- * is better than a placeholder saying so.
+ * Two letters in a circle, beside the company name. Shared with the legend at
+ * the foot of the grid, which is the same badge with the name spelled out — so
+ * a reader meeting "EA" for the first time has somewhere to look, and the two
+ * cannot drift into different shapes.
+ *
+ * Nothing at all when the card carries no signal, which happens with "Signals
+ * only" off. An empty row is better than a placeholder saying it is empty.
  */
-function SignalPills({ cell }: { cell: SignalCell }) {
-  const on = (Object.keys(SIGNAL_PILL_LABELS) as SignalKey[]).filter(k => cell.signals[k]);
+function SignalBadges({ cell }: { cell: SignalCell }) {
+  const on = (Object.keys(SIGNAL_ABBREVIATIONS) as SignalKey[]).filter(k => cell.signals[k]);
   if (on.length === 0) return null;
   return (
     <>
-      {on.map(k => (
-        <span
-          key={k}
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold whitespace-nowrap"
-          style={{ color: SIGNAL_TONE[k], backgroundColor: `${SIGNAL_TONE[k]}1A` }}
-        >
-          {SIGNAL_PILL_LABELS[k]}
-        </span>
-      ))}
+      {on.map(k => <SignalBadge key={k} signal={k} />)}
     </>
+  );
+}
+
+/** The badge itself, so the card and the legend draw one thing. */
+export function SignalBadge({ signal }: { signal: SignalKey }) {
+  return (
+    <span
+      className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none"
+      style={{ color: SIGNAL_TONE[signal], backgroundColor: `${SIGNAL_TONE[signal]}1F` }}
+      // The full name on hover. A tooltip repeating the two letters already on
+      // screen tells the one reader who needed it nothing.
+      title={SIGNAL_FULL_LABELS[signal]}
+    >
+      {SIGNAL_ABBREVIATIONS[signal]}
+    </span>
   );
 }

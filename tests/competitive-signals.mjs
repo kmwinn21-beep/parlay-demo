@@ -32,7 +32,7 @@ const eq = (label, got, want) => {
 
 const {
   deriveSignals, countSignals, hasAnySignal, isRecent, daysSince,
-  RECENT_DAYS, ROW_LABELS, SIGNAL_LABELS, SIGNAL_PILL_LABELS,
+  RECENT_DAYS, ROW_LABELS, SIGNAL_LABELS, SIGNAL_ABBREVIATIONS, SIGNAL_FULL_LABELS,
 } = await import('@/lib/competitiveSignals');
 
 const strip = (f) => readFileSync(f, 'utf8')
@@ -387,9 +387,29 @@ console.log('\n— labels live in one place —');
   eq('  and the signal names',
     [SIGNAL_LABELS.evaluatingAlternatives, SIGNAL_LABELS.recentChange, SIGNAL_LABELS.internalRelationship],
     ['Evaluating Alternatives', 'Recent Change', 'Int. Relationship']);
-  // "Evaluating Alternatives" will not fit a pill at cell width.
-  eq('  with a short form for the pill',
-    SIGNAL_PILL_LABELS.evaluatingAlternatives, 'Evaluating Alt.');
+  // Three names for three jobs, and none of them is the others shortened by
+  // accident. The rail has a filter row with a count eating the end of it, the
+  // badge beside a company name has room for two letters, and the legend is
+  // where somebody goes to find out what those two letters mean.
+  eq('  a two-letter form for the badge beside a name',
+    [SIGNAL_ABBREVIATIONS.evaluatingAlternatives, SIGNAL_ABBREVIATIONS.recentChange,
+      SIGNAL_ABBREVIATIONS.internalRelationship], ['EA', 'RC', 'IR']);
+  eq('  every abbreviation two characters',
+    Object.values(SIGNAL_ABBREVIATIONS).every(a => a.length === 2), true);
+  eq('  and distinct, or the legend cannot explain them',
+    new Set(Object.values(SIGNAL_ABBREVIATIONS)).size, 3);
+  eq('  the full names for the legend',
+    [SIGNAL_FULL_LABELS.evaluatingAlternatives, SIGNAL_FULL_LABELS.recentChange,
+      SIGNAL_FULL_LABELS.internalRelationship],
+    ['Evaluating Alternatives', 'Recent Change', 'Internal Relationship']);
+  // Abbreviating it in the legend would answer the question with the question.
+  eq('  none of which is abbreviated',
+    Object.values(SIGNAL_FULL_LABELS).some(v => v.includes('.')), false);
+  // All three maps cover every signal, so a fourth cannot be half-added.
+  eq('  and all three maps cover every signal',
+    [SIGNAL_LABELS, SIGNAL_ABBREVIATIONS, SIGNAL_FULL_LABELS]
+      .map(m => Object.keys(m).sort().join()),
+    Array(3).fill(Object.keys(SIGNAL_LABELS).sort().join()));
 
   // One constant, used by both windows. Two that happen to be equal today are
   // two that disagree later.

@@ -91,13 +91,17 @@ function StalePill() {
   );
 }
 
-function StatusPill({ value, colorMaps }: { value: string; colorMaps: Record<string, Record<string, string | null>> }) {
+function StatusPill({ value, colorMaps, sizeClass = 'text-xs' }: {
+  value: string;
+  colorMaps: Record<string, Record<string, string | null>>;
+  sizeClass?: string;
+}) {
   // Full-strength text and border with a wash of the same colour behind, from
   // whatever hex the option carries in admin settings.
   const hex = getPreset(colorMaps.other_relationship_status?.[value]).hex;
   return (
     <span
-      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap"
+      className={`inline-flex items-center px-2 py-0.5 rounded-full ${sizeClass} font-semibold border whitespace-nowrap`}
       style={{ color: hex, borderColor: hex, backgroundColor: `${hex}1F` }}
     >
       {value}
@@ -110,7 +114,7 @@ function StatusPill({ value, colorMaps }: { value: string; colorMaps: Record<str
  * building a second one that drifts. Omitting onEdit/onDelete drops the actions
  * menu, which is what a read-only surface wants.
  */
-export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete, onUpdated, readOnly = false, defaultExpanded = false, leadingBadges, title, typeBadges, statuses, bodyMaxHeight }: {
+export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete, onUpdated, readOnly = false, defaultExpanded = false, titleBadges, title, typeBadges, statuses, bodyMaxHeight, highlight }: {
   rel: VendorRelationship;
   userOptions: UserOption[];
   colorMaps: Record<string, Record<string, string | null>>;
@@ -128,13 +132,27 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
   readOnly?: boolean;
   defaultExpanded?: boolean;
   /**
-   * Badges that lead the header's second row, before the status pills.
+   * Badges beside the company name, at the top of the header.
    *
-   * The competitive grid's signal pills, which say why the card is in the cell
+   * The competitive grid's signal badges, which say why the card is in the cell
    * it is in. Passed in rather than derived here: the card has no idea it is in
    * a grid, and the signals are computed once for the whole view.
+   *
+   * Beside the NAME rather than in the badge row below it. In a 232px column
+   * that row is already carrying a status and a type, and three more worded
+   * pills pushed both off the end of a scroller — the signals are the reason
+   * the card is on screen, so they sit where the eye lands first.
    */
-  leadingBadges?: ReactNode;
+  titleBadges?: ReactNode;
+  /**
+   * Paint the card's border and fill in this colour.
+   *
+   * The grid's hover: the account under two competitors lights up in both
+   * cells at once, in the colour of the signal that connects them. Null leaves
+   * the card alone, which is every other surface and every card the grid is not
+   * pointing at.
+   */
+  highlight?: string | null;
   /**
    * ── Reading the card from the other end ──
    *
@@ -235,22 +253,32 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
    * and a fade at whichever edge is cut off, which is what says "there is more"
    * rather than letting a half-pill read as the end of the list.
    *
-   * Keyed off leadingBadges rather than a flag of its own: the two always go
-   * together, and a second prop would let a caller ask for one without the
-   * other and get a row that pages for no reason.
+   * Keyed off titleBadges rather than a flag of its own: the compact card and
+   * the signal badges always go together, and a second prop would let a caller
+   * ask for one without the other and get a row that pages for no reason.
    */
-  const badgeRow = (children: ReactNode) => (leadingBadges
+  const badgeRow = (children: ReactNode) => (titleBadges
     ? <ScrollRow className="mt-1" gapClass="gap-1.5" step={90} fade>{children}</ScrollRow>
     : <div className="flex items-center gap-1.5 mt-1 flex-wrap">{children}</div>);
+
+  // A grid cell is 232px wide. The record pages have room for the default size
+  // and keep it; only the surface that asked for the compact card gets this.
+  const compact = titleBadges != null;
+  const badgeSize = compact ? 'text-[10px]' : 'text-xs';
 
   return (
     // Stale cards are drained rather than recoloured. The six status colours
     // already carry meaning and a seventh grey would compete with Former
     // Vendor's; washing the whole card out says "do not rely on this" without
     // claiming anything about what the relationship is.
-    <div className={`rounded-lg border overflow-hidden transition-colors ${
-      isStale ? 'border-gray-200 border-dashed bg-gray-50/70' : 'border-gray-200'
-    }`}>
+    <div
+      className={`rounded-lg border overflow-hidden transition-colors ${
+        isStale ? 'border-gray-200 border-dashed bg-gray-50/70' : 'border-gray-200'
+      }`}
+      // Inline, because the colour is a signal's and signals are data. A
+      // Tailwind class per signal would be a second place they are declared.
+      style={highlight ? { borderColor: highlight, backgroundColor: `${highlight}14` } : undefined}
+    >
       {/* A div, with the chevron carrying its own button.
           The whole header stays clickable — four surfaces already use it that
           way — but a header that IS a button cannot contain one, and the
@@ -272,22 +300,29 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
                 senior-living book. Two lines costs about 18px on the cards that
                 need it and hides nothing; an ellipsis hides the half of
                 "Belmont Village Senior Living" that tells you which Belmont. */}
-            <p
-              className={`text-sm font-semibold text-gray-800 ${title ? 'line-clamp-2 leading-snug' : 'truncate'}`}
-              title={heading}
-            >
-              {heading}
-            </p>
+            <div className="flex items-start gap-1.5 min-w-0">
+              <p
+                className={`font-semibold text-gray-800 ${
+                  title ? 'text-xs line-clamp-2 leading-snug' : 'text-sm truncate'}`}
+                title={heading}
+              >
+                {heading}
+              </p>
+              {titleBadges && (
+                <span className="flex items-center gap-1 flex-shrink-0">{titleBadges}</span>
+              )}
+            </div>
             {/* Second row: why this card is here, then what this relationship
                 is, then what the company is. Signals lead because they are the
                 reason the grid drew the card at all. */}
             {badgeRow(
               <>
-                {leadingBadges}
                 {isStale && <StalePill />}
-                {shownStatuses.map(s => <StatusPill key={s} value={s} colorMaps={colorMaps} />)}
+                {shownStatuses.map(s => (
+                  <StatusPill key={s} value={s} colorMaps={colorMaps} sizeClass={badgeSize} />
+                ))}
                 {shownTypes.map(t => (
-                  <span key={t} className={`${getBadgeClass(t, colorMaps.company_type || {})} whitespace-nowrap`}>
+                  <span key={t} className={`${getBadgeClass(t, colorMaps.company_type || {}, badgeSize)} whitespace-nowrap`}>
                     {t}
                   </span>
                 ))}

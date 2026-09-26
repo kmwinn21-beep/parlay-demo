@@ -446,7 +446,7 @@ console.log('\n— the view toggle —');
   eq('  back to the map canvas in Map',
     /<MapCanvas/.test(desktopBlock), true);
   eq('  and the legend explains whichever canvas drew',
-    /view === 'competitive' \? \(\s*\(Object\.keys\(SIGNAL_PILL_LABELS\)/.test(desktopBlock), true);
+    /view === 'competitive' \? \(\s*\(Object\.keys\(SIGNAL_FULL_LABELS\)/.test(desktopBlock), true);
   eq('  Map keeps its edge colours',
     /TONE_COLOR\[tone\]/.test(desktopBlock), true);
   eq('  and its drag hint, which Competitive has no cards to drag in',
@@ -540,9 +540,12 @@ console.log('\n— the view toggle —');
     /const EMPTY_COMPETITIVE: CompetitivePayload = \{/.test(modal), true);
   // The signal colours are one source, so a legend swatch cannot disagree with
   // the pill it describes.
+  // The legend now draws the badge itself rather than a swatch, so the colour
+  // is shared by sharing the component.
   eq('  and the signal colours are shared, not copied',
-    /SIGNAL_TONE\[key\]/.test(desktopBlock)
-      && /export const SIGNAL_TONE/.test(strip('lib/competitiveSignals.ts')), true);
+    /<SignalBadge signal=\{key\} \/>/.test(desktopBlock)
+      && /export const SIGNAL_TONE/.test(strip('lib/competitiveSignals.ts'))
+      && /SIGNAL_TONE/.test(strip('components/RelationshipMapModal.tsx')) === false, true);
 }
 
 console.log('\n— the card header, and the grid it had to change for —');
@@ -551,6 +554,8 @@ console.log('\n— the card header, and the grid it had to change for —');
   const grid = strip('components/relationship-map/CompetitiveGrid.tsx');
   const scroll = strip('components/ScrollRow.tsx');
   const modal = strip('components/RelationshipMapModal.tsx');
+  const { SIGNAL_ABBREVIATIONS, SIGNAL_FULL_LABELS, SIGNAL_LABELS } =
+    await import('@/lib/competitiveSignals');
 
   // A header that IS a button cannot contain one, and the grid puts a paged
   // pill row inside it and anchors connectors on it.
@@ -592,7 +597,7 @@ console.log('\n— the card header, and the grid it had to change for —');
   eq('  and the statuses',
     /const shownStatuses = statuses \?\? shown\.relationship_status;/.test(card), true);
   eq('  all three are rendered from the overridable values',
-    /\{shownStatuses\.map\(s => <StatusPill/.test(card)
+    /<StatusPill key=\{s\} value=\{s\}/.test(card)
       && /\{shownTypes\.map\(t => \(/.test(card)
       && /\{heading\}/.test(card), true);
   eq('  and nothing still reads the raw fields in the header',
@@ -637,11 +642,11 @@ console.log('\n— the card header, and the grid it had to change for —');
   // Two lines rather than an ellipsis where a caller supplied the name: at four
   // columns the longest real names do not fit on one.
   eq('an overridden heading wraps rather than truncating',
-    /title \? 'line-clamp-2 leading-snug' : 'truncate'/.test(card), true);
+    /title \? 'text-xs line-clamp-2 leading-snug' : 'text-sm truncate'/.test(card), true);
 
   // The badge row pages instead of wrapping, but only where the grid asked.
   eq('the badge row pages only when signal pills are passed',
-    /leadingBadges\s*\?\s*<ScrollRow/.test(card), true);
+    /titleBadges\s*\?\s*<ScrollRow/.test(card), true);
   eq('  and still wraps everywhere it already did',
     /: <div className="flex items-center gap-1\.5 mt-1 flex-wrap">/.test(card), true);
   eq('  with a fade at the cut-off edge',
@@ -655,12 +660,108 @@ console.log('\n— the card header, and the grid it had to change for —');
   eq('  fade is opt-in, so existing rows are unchanged',
     /fade = false,/.test(scroll), true);
 
+  // ── The signal badges, and the legend that explains them ──
+  //
+  // Two letters in a circle beside the company name. A 232px column has no room
+  // for three worded pills beside the name, and the signals are the reason the
+  // card is on screen, so they sit where the eye lands first.
+  eq('the badges sit beside the name, not in the row below',
+    /\{titleBadges && \(\s*\n\s*<span className="flex items-center gap-1 flex-shrink-0">/.test(card), true);
+  eq('  above the status and type row',
+    card.indexOf('titleBadges && (') < card.indexOf('badgeRow('), true);
+  eq('  rendered as two letters',
+    /\{SIGNAL_ABBREVIATIONS\[signal\]\}\s*\n\s*<\/span>/.test(grid), true);
+  // A tooltip repeating the two letters already on screen helps nobody.
+  eq('  with the full name on hover',
+    /title=\{SIGNAL_FULL_LABELS\[signal\]\}/.test(grid), true);
+  eq('  in a circle at 9px',
+    /rounded-full text-\[9px\] font-bold/.test(grid), true);
+  eq('the abbreviations are EA, RC and IR',
+    [SIGNAL_ABBREVIATIONS.evaluatingAlternatives, SIGNAL_ABBREVIATIONS.recentChange,
+      SIGNAL_ABBREVIATIONS.internalRelationship], ['EA', 'RC', 'IR']);
+  // The legend is where a reader meeting "EA" goes to find out what it means,
+  // so it draws the same mark and spells the name out.
+  eq('the legend draws the badge, not a swatch of its colour',
+    /<SignalBadge signal=\{key\} \/>/.test(modal), true);
+  eq('  with no coloured dot left behind',
+    /w-2 h-2 rounded-full[\s\S]{0,80}SIGNAL_TONE\[key\]/.test(modal), false);
+  eq('  and the names spelled out',
+    [SIGNAL_FULL_LABELS.evaluatingAlternatives, SIGNAL_FULL_LABELS.internalRelationship],
+    ['Evaluating Alternatives', 'Internal Relationship']);
+  eq('  read from the full map, not the abbreviations',
+    /\{SIGNAL_FULL_LABELS\[key\]\}/.test(modal)
+      && /SIGNAL_ABBREVIATIONS/.test(modal) === false, true);
+  eq('  which the rail\u2019s narrower rows still abbreviate',
+    SIGNAL_LABELS.internalRelationship, 'Int. Relationship');
+  // One badge component, so the card and the legend cannot drift apart.
+  eq('the card and the legend share one badge',
+    /export function SignalBadge/.test(grid)
+      && /CompetitiveGrid'/.test(modal) && /SignalBadge/.test(modal), true);
+
+  // Sized for a 232px column, and only there.
+  eq('the grid card\u2019s name is a size down',
+    /title \? 'text-xs line-clamp-2 leading-snug' : 'text-sm truncate'/.test(card), true);
+  eq('  and its status and type pills too',
+    /const badgeSize = compact \? 'text-\[10px\]' : 'text-xs';/.test(card), true);
+  eq('  keyed off the same prop as every other compact choice',
+    /const compact = titleBadges != null;/.test(card), true);
+  eq('  passed rather than appended, so two font sizes never land on one element',
+    /getBadgeClass\(t, colorMaps\.company_type \|\| \{\}, badgeSize\)/.test(card)
+      && /sizeClass=\{badgeSize\}/.test(card), true);
+  eq('  and getBadgeClass defaults to what every other surface already had',
+    /sizeClass = 'text-xs',/.test(strip('lib/colors.ts')), true);
+
+  // ── Hover lights the pair; it no longer draws a line ──
+  eq('hover draws no connector',
+    /showConnectors && lines\.length > 0 && \(/.test(grid), true);
+  eq('  the hover branch is gone from the overlay',
+    /showConnectors \|\| hovered !== null/.test(grid), false);
+  eq('hover lights both ends of the pair',
+    /highlight=\{isLit\(cell, hovered\) \? SIGNAL_TONE\[CONNECTOR_SIGNAL\] : null\}/.test(grid), true);
+  eq('  in the card\u2019s own border and fill',
+    /borderColor: highlight, backgroundColor: `\$\{highlight\}14`/.test(card), true);
+  eq('  and greys everything that is not one of them',
+    /hovered !== null && !isLit\(cell, hovered\) \? 'opacity-30' : ''/.test(grid), true);
+  // Hovering an account's third, unconnected card would otherwise light two
+  // cells elsewhere and dim the one under the cursor.
+  eq('only a card carrying the signal starts a hover',
+    /if \(cell\.signals\[CONNECTOR_SIGNAL\]\) setHovered\(cell\.companyId\);/.test(grid), true);
+  eq('  and lit means the same account AND the signal',
+    /cell\.companyId === hovered && cell\.signals\[CONNECTOR_SIGNAL\]/.test(grid), true);
+  // A bright line over two greyed cards points at the account the hover says
+  // to ignore.
+  eq('a line recedes with the cards it joins',
+    /hovered === null \|\| hovered === l\.companyId \? 0\.9 : 0\.15/.test(grid), true);
+  // One name for the signal a connector is drawn for, so a second one is a
+  // list rather than a hunt.
+  eq('the connector signal is named once',
+    (grid.match(/CONNECTOR_SIGNAL: SignalKey = 'evaluatingAlternatives'/g) || []).length, 1);
+
   // Connectors are drawn from pairs and anchored on the HEADER.
   eq('connectors come from the derived pairs, not a second self-join',
     /for \(const p of pairs\)/.test(grid) && /evaluatingAlternatives/.test(grid), true);
   eq('  anchored on the card header, which does not move when a card expands',
     /headerRefs\.current\.get\(`useCompetitor:/.test(grid)
       && /querySelector\('\[data-card-header\]'\)/.test(grid), true);
+  // Nearest sides, not centres: a line into the middle of a card runs across
+  // the name it points at and hides its own arrowhead under the card.
+  eq('  edge to edge, on the two nearest sides',
+    /const \[left, right\] = ra\.left <= rb\.left \? \[ra, rb\] : \[rb, ra\];/.test(grid), true);
+  eq('  the left card\u2019s right edge and the right card\u2019s left edge',
+    /x1: left\.right - origin\.left \+ CONNECTOR_GAP/.test(grid)
+      && /x2: right\.left - origin\.left - CONNECTOR_GAP/.test(grid), true);
+  eq('  at each card\u2019s vertical middle',
+    /y1: left\.top - origin\.top \+ left\.height \/ 2/.test(grid)
+      && /y2: right\.top - origin\.top \+ right\.height \/ 2/.test(grid), true);
+  eq('  clear of the card, so the arrowhead is not behind it',
+    /const CONNECTOR_GAP = 7;/.test(grid), true);
+  eq('  with an arrowhead at BOTH ends',
+    /markerStart="url\(#competitive-connector-arrow\)"/.test(grid)
+      && /markerEnd="url\(#competitive-connector-arrow\)"/.test(grid), true);
+  eq('  reversed at the start, or both would point the same way',
+    /orient="auto-start-reverse"/.test(grid), true);
+  eq('  thicker and darker than the hover line it replaced',
+    /strokeWidth=\{2\.5\}/.test(grid), true);
   eq('  measured against the scrolled CONTENT, not the viewport',
     /const host = contentRef\.current;/.test(grid)
       && /host\.scrollLeft/.test(grid) === false, true);
@@ -747,7 +848,7 @@ console.log('\n— the card header, and the grid it had to change for —');
   // distinction survives. Written down so reading the row labels does not make
   // dropping it look free.
   eq('the grid card still renders its status pills',
-    /\{shownStatuses\.map\(s => <StatusPill/.test(card), true);
+    /\{shownStatuses\.map\(s => \(\s*\n\s*<StatusPill key=\{s\}/.test(card), true);
   eq('  and the grid does not suppress them',
     /StatusPill|relationship_status/.test(grid), false);
   // Two statuses that share a class, so the row title cannot tell them apart.
