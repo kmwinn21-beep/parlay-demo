@@ -36,7 +36,7 @@ const SEEDED = [
   { id: 2, value: 'Evaluating', inverse_value: 'Prospect' },
   { id: 3, value: 'Former Vendor', inverse_value: 'Former Customer' },
   { id: 4, value: 'Preferred Partner', inverse_value: 'Preferred Partner' },
-  { id: 5, value: 'Active Pilot', inverse_value: 'Active Pilot' },
+  { id: 5, value: 'Active Pilot', inverse_value: 'Piloting' },
   { id: 6, value: 'Other', inverse_value: 'Other' },
 ];
 
@@ -47,21 +47,24 @@ console.log('\n— both halves in the dropdown —');
   eq('every configured status is offered',
     SEEDED.every(r => values.includes(r.value)), true);
   eq('  and so is every counterpart that differs',
-    ['Customer', 'Prospect', 'Former Customer'].every(v => values.includes(v)), true);
+    ['Customer', 'Prospect', 'Former Customer', 'Piloting'].every(v => values.includes(v)), true);
   // A Preferred Partner is one both ways round, so offering it twice would be
   // two identical rows in the list.
   eq('a status that is its own counterpart appears once',
     values.filter(v => v === 'Preferred Partner').length, 1);
   eq('  and the whole list has no duplicates',
     values.length, new Set(values.map(v => v.toLowerCase())).size);
-  eq('nine options from six statuses', values.length, 9);
+  // Six configured statuses, four of which have a counterpart in different
+  // words: Preferred Partner and Other are their own, so they appear once.
+  eq('ten options from six statuses', values.length, 10);
 
   // Counterparts are not config rows. A negative id can never be mistaken for
   // one by anything downstream, and React only needs it to be stable.
   eq('configured statuses keep their own ids',
     opts.filter(o => o.id > 0).map(o => o.value), SEEDED.map(r => r.value));
   eq('  and counterparts are marked with negative ones',
-    opts.filter(o => o.id < 0).map(o => o.value), ['Customer', 'Prospect', 'Former Customer']);
+    opts.filter(o => o.id < 0).map(o => o.value),
+    ['Customer', 'Prospect', 'Former Customer', 'Piloting']);
   eq('  every id distinct', opts.length, new Set(opts.map(o => o.id)).size);
 
   // An account that has configured both halves as options of their own should
@@ -96,7 +99,11 @@ console.log('\n— reading a stored status from the other side —');
   // A symmetric status maps to itself in config; the map leaves it null so
   // "does this change when you turn it round" stays answerable.
   eq('a symmetric status has no other word', map['Preferred Partner'], null);
-  eq('  nor does Active Pilot', map['Active Pilot'], null);
+  // Active Pilot is NOT one of them. A preferred partner is a preferred partner
+  // both ways round; a pilot has a side — the thing being piloted, and the
+  // company running it.
+  eq('  but an active pilot does', map['Active Pilot'], 'Piloting');
+  eq('  and the pairing is followed backwards too', map['Piloting'], 'Active Pilot');
 
   // A configured option's own counterpart wins over one inferred from being
   // on the far side of somebody else's.
@@ -170,6 +177,14 @@ console.log('\n— seeded, and not editable —');
   // Neither backfill overwrites an account that already set its own.
   eq('  without overwriting anything already set',
     (mig.match(/AND inverse_value IS NULL/g) ?? []).length, 4);
+  // Active Pilot was seeded into that list and corrected afterwards, because
+  // the migrations are append-only and an earlier one is never edited.
+  eq('a later migration corrects Active Pilot to Piloting',
+    /SET inverse_value = 'Piloting'[\s\S]{0,200}value = 'Active Pilot'/.test(mig), true);
+  eq('  guarded so an account that changed it keeps theirs',
+    /inverse_value IS NULL OR inverse_value = 'Active Pilot'/.test(mig), true);
+  eq('  and it comes after the pass that made it symmetric',
+    mig.indexOf("'Preferred Partner', 'Active Pilot', 'Other'") < mig.indexOf("SET inverse_value = 'Piloting'"), true);
 }
 
 console.log('\n— one list, three forms —');
@@ -229,6 +244,50 @@ console.log('\n— the counterpart is required, and seeded ones are locked —')
   // Sending it unchanged on a seeded status would turn every save into a 403.
   eq('  sent only for a custom status',
     /needsCounterpart && !localOptions\.find\(o => o\.id === id\)\?\.is_system/.test(admin), true);
+}
+
+console.log('\n— the counterpart has to reach the browser —');
+{
+  const route = strip('app/api/config/route.ts');
+  // It was written by the POST and the PUT and never selected back, so every
+  // reader saw undefined: the dropdown that offers both halves only ever
+  // offered one, and no counterpart could be paired with its own colour.
+  eq('/api/config selects inverse_value',
+    (route.match(/description, metadata, inverse_value FROM config_options/g) || []).length, 2);
+  eq('  on the single-category read and the all-categories read',
+    /WHERE category = \? ORDER BY[\s\S]{0,40}/.test(route)
+      && route.split('inverse_value FROM config_options').length - 1, 2);
+  eq('  and returns it',
+    /inverse_value: r\.inverse_value \? String\(r\.inverse_value\) : null,/.test(route), true);
+  // Without it the hook's map is empty and the feature is a no-op.
+  eq('the status hook reads it',
+    /inverse_value: r\.inverse_value \?\? null,/.test(strip('lib/useRelationshipStatusOptions.ts')), true);
+
+  // A counterpart takes the colour of the half it pairs with: two colours for
+  // one fact says it is two facts.
+  const { buildColorMap } = await import('@/lib/colors');
+  const map = buildColorMap([
+    { value: 'Current Vendor', color: 'blue', inverse_value: 'Customer' },
+    { value: 'Active Pilot', color: 'purple', inverse_value: 'Piloting' },
+    { value: 'Preferred Partner', color: 'green', inverse_value: 'Preferred Partner' },
+  ]);
+  eq('a counterpart inherits its pair\u2019s colour',
+    [map['Customer'], map['Piloting']], ['blue', 'purple']);
+  eq('  the configured value keeps its own',
+    [map['Current Vendor'], map['Active Pilot']], ['blue', 'purple']);
+  eq('  and a symmetric one adds no second key',
+    Object.keys(map).filter(k => k === 'Preferred Partner').length, 1);
+  // A counterpart that is a configured option in its own right wins, the same
+  // way buildCounterpartMap resolves it.
+  const both = buildColorMap([
+    { value: 'Current Vendor', color: 'blue', inverse_value: 'Customer' },
+    { value: 'Customer', color: 'teal', inverse_value: 'Current Vendor' },
+  ]);
+  eq('  a configured counterpart keeps its own colour', both['Customer'], 'teal');
+  // Every other category has no counterpart and must be untouched.
+  const plain = buildColorMap([{ value: 'Operator', color: 'gray' }]);
+  eq('  and a category without counterparts is unchanged',
+    Object.keys(plain), ['Operator']);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

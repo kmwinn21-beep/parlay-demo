@@ -577,14 +577,63 @@ console.log('\n— the card header, and the grid it had to change for —');
       'components/RelationshipMapModal.tsx',
     ].some(f => /<button[^>]*>[\s\S]{0,400}<VendorRelationshipCard/.test(strip(f))), false);
 
-  // The card names the OTHER end, which in a grid is already the column.
-  eq('the heading can be overridden, and only the heading',
+  // ── The card's subject moves as a whole, or not at all ──
+  //
+  // The card describes the OTHER end of the relationship, which in a grid is
+  // the column heading. So the grid makes the ACCOUNT the subject — and every
+  // field that describes a subject has to move with it. Getting that half-right
+  // is worse than not doing it: a card headed "Annefurt LLC" showing the
+  // competitor's type and the competitor's status is three false claims about
+  // Annefurt.
+  eq('the heading can be overridden',
     /const heading = title \?\? shown\.related_company_name;/.test(card), true);
-  eq('  the grid passes the account, because the column is the competitor',
+  eq('  the types too',
+    /const shownTypes = typeBadges\s*\?\? \(shown\.related_company_type/.test(card), true);
+  eq('  and the statuses',
+    /const shownStatuses = statuses \?\? shown\.relationship_status;/.test(card), true);
+  eq('  all three are rendered from the overridable values',
+    /\{shownStatuses\.map\(s => <StatusPill/.test(card)
+      && /\{shownTypes\.map\(t => \(/.test(card)
+      && /\{heading\}/.test(card), true);
+  eq('  and nothing still reads the raw fields in the header',
+    /shown\.related_company_type &&/.test(card) || /shown\.relationship_status\.map/.test(card), false);
+
+  eq('the grid passes the account name, because the column is the competitor',
     /title=\{nameOf\(cell\.companyId\)\}/.test(grid), true);
-  eq('  and the status wording is untouched by it',
-    /const shown: VendorRelationship = saved/.test(card)
-      && /title \?\? shown\.relationship_status/.test(card) === false, true);
+  // A whole column of pills reading "Competitor" says only what its own
+  // heading already said.
+  eq('  the account types, not the competitor\u2019s',
+    /typeBadges=\{typesOf\(cell\.companyId\)\}/.test(grid), true);
+  // "Annefurt LLC / Current Vendor" claims Annefurt is the vendor. It is the
+  // customer; the counterpart is what that reading is.
+  eq('  and the statuses as the ACCOUNT reads them',
+    /statuses=\{statusesOf\(rel\)\}/.test(grid), true);
+  eq('  all three together, never one without the others',
+    ['title=\\{nameOf', 'typeBadges=\\{typesOf', 'statuses=\\{statusesOf']
+      .every(re => new RegExp(re).test(grid)), true);
+
+  // Read through the shared function, not a second inversion in the browser.
+  eq('the counterpart reading uses statusesFor, not a copy of it',
+    /statusesFor\(card\.relationship_status, 'inbound', competitiveData\.inverses\)/.test(modal), true);
+  eq('  fed by the pairing the endpoint already loads',
+    /inverses,/.test(strip('app/api/conferences/[id]/relationship-map/route.ts')), true);
+  eq('  and the grid does not invert anything itself',
+    /inverse|counterpart/i.test(grid), false);
+  // One badge per type: the column stores them comma-separated and rendered as
+  // a single badge reading "Vendor,Competitor".
+  eq('several types render as several badges',
+    /typeBadges\s*\?\? \(shown\.related_company_type \? \[shown\.related_company_type\] : \[\]\)/.test(card), true);
+
+  // What does NOT move: the row belongs to the page it was logged on.
+  eq('the thread and the Update button stay account-side',
+    /statuses \?\? shown\.updates/.test(card) || /title \?\? shown\.updates/.test(card), false);
+  eq('  and the four other render sites pass none of the three',
+    [
+      'components/VendorRelationshipsSection.tsx',
+      'components/pre-conference/RelationshipsTab.tsx',
+      'components/relationship-map/MapCanvas.tsx',
+      'components/RelationshipMapModal.tsx',
+    ].some(f => /typeBadges=|statuses=\{/.test(strip(f))), false);
   // Two lines rather than an ellipsis where a caller supplied the name: at four
   // columns the longest real names do not fit on one.
   eq('an overridden heading wraps rather than truncating',
@@ -698,7 +747,7 @@ console.log('\n— the card header, and the grid it had to change for —');
   // distinction survives. Written down so reading the row labels does not make
   // dropping it look free.
   eq('the grid card still renders its status pills',
-    /shown\.relationship_status\.map\(s => <StatusPill/.test(card), true);
+    /\{shownStatuses\.map\(s => <StatusPill/.test(card), true);
   eq('  and the grid does not suppress them',
     /StatusPill|relationship_status/.test(grid), false);
   // Two statuses that share a class, so the row title cannot tell them apart.

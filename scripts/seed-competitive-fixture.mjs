@@ -102,6 +102,9 @@ const RELATIONSHIPS = [
   // An account current with one competitor and evaluating the long-named one:
   // a second pair, so a connector has to be drawn across three columns.
   [1012, 3, 21, 'Evaluating', 15],
+  // An active pilot, which is directional: the value names the thing being
+  // piloted, so the account reads as Piloting.
+  [1013, 2, 20, 'Active Pilot', 4],
   // Neither end a competitor. Not this view's business.
   [1008, 7, 23, 'Current Vendor', 9],
   // The status names company 7 as the vendor, and 7 is not a competitor. The

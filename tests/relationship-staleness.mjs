@@ -170,8 +170,10 @@ console.log('\n— stale is not a status —');
     /border border-dashed border-gray-400 text-gray-500 bg-white/.test(card), true);
   // The status pills still render on a stale card: what the relationship was
   // is exactly the thing worth keeping.
+  // shownStatuses, not shown.relationship_status: the competitive grid supplies
+  // the counterpart wording, and either way the pill renders beside the flag.
   eq('the status is still shown on a stale card',
-    /\{isStale && <StalePill \/>\}\s*\n\s*\{shown\.relationship_status\.map/.test(card), true);
+    /\{isStale && <StalePill \/>\}\s*\n\s*\{shownStatuses\.map/.test(card), true);
   // Freshness is derived, not read off a column, so a relationship nobody has
   // opened still ages.
   eq('freshness is derived rather than stored', /const freshness = freshnessOf\(shown\);/.test(card), true);

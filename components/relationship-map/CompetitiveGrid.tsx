@@ -56,7 +56,7 @@ const GRID_BODY_MAX_HEIGHT = 240;
  * told them where to look.
  */
 export function CompetitiveGrid({
-  cells, pairs, competitors, cardFor, nameOf,
+  cells, pairs, competitors, cardFor, nameOf, typesOf, statusesOf,
   signalsOnly, activeSignals, showConnectors,
   userOptions, colorMaps, onUpdated,
 }: {
@@ -66,7 +66,14 @@ export function CompetitiveGrid({
   /** Visible columns, in order, already filtered by the rail. */
   competitors: CompetitorColumn[];
   cardFor: (companyId: number, competitorId: number) => VendorRelationship | undefined;
+  /* The card's subject here is the ACCOUNT, not the competitor the column names
+     — so its name, its types and the status as IT reads them all come from the
+     caller together. Half of that is worse than none: a card headed with the
+     account showing the competitor's type and status is three false claims
+     about the account. See the props on VendorRelationshipCard. */
   nameOf: (companyId: number) => string;
+  typesOf: (companyId: number) => string[];
+  statusesOf: (card: VendorRelationship) => string[];
   signalsOnly: boolean;
   activeSignals: Set<SignalKey>;
   showConnectors: boolean;
@@ -297,6 +304,8 @@ export function CompetitiveGrid({
                           // names the account, which is what the reader is
                           // looking for in a cell under that column.
                           title={nameOf(cell.companyId)}
+                          typeBadges={typesOf(cell.companyId)}
+                          statuses={statusesOf(rel)}
                           bodyMaxHeight={GRID_BODY_MAX_HEIGHT}
                           leadingBadges={<SignalPills cell={cell} />}
                         />

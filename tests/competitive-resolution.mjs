@@ -35,7 +35,7 @@ const SEEDED = [
   { value: 'Evaluating', inverseValue: 'Prospect', actionKey: 'evaluating' },
   { value: 'Former Vendor', inverseValue: 'Former Customer', actionKey: 'former' },
   { value: 'Preferred Partner', inverseValue: 'Preferred Partner', actionKey: 'current' },
-  { value: 'Active Pilot', inverseValue: 'Active Pilot', actionKey: 'evaluating' },
+  { value: 'Active Pilot', inverseValue: 'Piloting', actionKey: 'evaluating' },
   { value: 'Other', inverseValue: 'Other', actionKey: null },
 ];
 
@@ -120,8 +120,18 @@ console.log('\n— a symmetric status has no direction, so the types decide —'
   eq('  and reversed, the competitor is still the competitor',
     run([row(10, 200, 100, ['Preferred Partner'])]).relationships,
     [{ id: 10, companyId: 100, competitorId: 200, statusClass: 'current', statusChangedAt: null }]);
-  eq('Active Pilot is symmetric and evaluating',
-    run([row(11, 200, 101, ['Active Pilot'])]).relationships.map(r => [r.companyId, r.competitorId, r.statusClass]),
+  // Active Pilot is NOT symmetric — the value names the thing being piloted —
+  // so it points at an end like any other directional status.
+  eq('Active Pilot names the related end as the competitor',
+    run([row(11, 101, 200, ['Active Pilot'])]).relationships.map(r => [r.companyId, r.competitorId, r.statusClass]),
+    [[101, 200, 'evaluating']]);
+  eq('  and Piloting names the logging end',
+    run([row(12, 101, 200, ['Piloting'])]).relationships.map(r => [r.companyId, r.competitorId]),
+    []);
+  eq('  which drops when the logging end is not a competitor',
+    run([row(13, 101, 200, ['Piloting'])]).notCompetitive, 1);
+  eq('  and resolves when it is',
+    run([row(14, 200, 101, ['Piloting'])]).relationships.map(r => [r.companyId, r.competitorId, r.statusClass]),
     [[101, 200, 'evaluating']]);
   eq('a symmetric status between two non-competitors is not this view at all',
     run([row(12, 100, 300, ['Preferred Partner'])]),

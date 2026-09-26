@@ -2719,4 +2719,30 @@ export const migrations: string[] = [
           AND ru.status_after IS NOT NULL AND TRIM(ru.status_after) != ''
       )
     WHERE status_changed_at IS NULL`,
+
+  // ── Active Pilot is not symmetric after all ───────────────────────────────
+  //
+  // It was seeded as its own counterpart alongside Preferred Partner, and that
+  // was wrong. A preferred partner really is a preferred partner both ways
+  // round; a pilot has a side. The value describes the RELATED company — the
+  // thing being piloted — and the company running it is Piloting. Reading
+  // "Active Pilot" back from the other end claimed the account was the pilot.
+  //
+  // Guarded on the old value so an account that has already changed it keeps
+  // what they chose. Nothing is rewritten in vendor_relationships: rows store
+  // the words somebody picked, and the pairing is what reads them from the
+  // other side.
+  //
+  // CONSEQUENCE WORTH KNOWING: this status now carries a DIRECTION where it
+  // carried none. lib/competitiveResolution.ts read symmetric statuses by
+  // company_type and now reads this one by the words, so an Active Pilot row
+  // logged from the competitor's page — which under this pairing says the
+  // ACCOUNT is the thing being piloted — resolves the other way and drops out
+  // of the competitive grid rather than being flipped to fit. That is the
+  // fail-closed behaviour the resolver is built on, and it is visible in the
+  // rail's unclassified-and-excluded counts rather than silent.
+  `UPDATE config_options SET inverse_value = 'Piloting'
+     WHERE category = 'other_relationship_status'
+       AND value = 'Active Pilot'
+       AND (inverse_value IS NULL OR inverse_value = 'Active Pilot')`,
 ];

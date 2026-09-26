@@ -125,10 +125,27 @@ export function getPreset(colorKey: string | null | undefined): ColorPreset {
 export type ColorMap = Record<string, string | null>;
 
 /** Build a color map from config option rows */
-export function buildColorMap(options: Array<{ value: string; color: string | null }>): ColorMap {
+export function buildColorMap(
+  options: Array<{ value: string; color: string | null; inverse_value?: string | null }>,
+): ColorMap {
   const map: ColorMap = {};
   for (const opt of options) {
     map[opt.value] = opt.color;
+  }
+  // A counterpart takes the colour of the status it is the other half of.
+  //
+  // "Customer" and "Current Vendor" are one fact read from two ends, so showing
+  // them in two colours says they are two things. Only relationship statuses
+  // carry a counterpart, so every other category is untouched.
+  //
+  // Second pass, and only where nothing is already there: a counterpart that is
+  // also a configured option in its own right keeps its own colour, the same
+  // way buildCounterpartMap lets a configured value win. That one guard also
+  // covers a symmetric status — the first pass already claimed its own value,
+  // so it is skipped here without needing a test of its own.
+  for (const opt of options) {
+    const inv = String(opt.inverse_value ?? '').trim();
+    if (inv && !(inv in map)) map[inv] = opt.color;
   }
   return map;
 }

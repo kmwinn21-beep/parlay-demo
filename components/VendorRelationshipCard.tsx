@@ -110,7 +110,7 @@ function StatusPill({ value, colorMaps }: { value: string; colorMaps: Record<str
  * building a second one that drifts. Omitting onEdit/onDelete drops the actions
  * menu, which is what a read-only surface wants.
  */
-export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete, onUpdated, readOnly = false, defaultExpanded = false, leadingBadges, title, bodyMaxHeight }: {
+export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete, onUpdated, readOnly = false, defaultExpanded = false, leadingBadges, title, typeBadges, statuses, bodyMaxHeight }: {
   rel: VendorRelationship;
   userOptions: UserOption[];
   colorMaps: Record<string, Record<string, string | null>>;
@@ -136,18 +136,30 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
    */
   leadingBadges?: ReactNode;
   /**
-   * The name in the header, when the default one is already on screen.
+   * ── Reading the card from the other end ──
    *
-   * The card names the OTHER end of the relationship, which is right on a
-   * company record: you are on Abshire's page and the card says Abbott. In the
-   * competitive grid the column heading already says Abbott, so a card repeating
-   * it identifies nothing — what the reader needs is the account, which is the
-   * end the card is being read FROM.
+   * title, typeBadges and statuses go together and are supplied together.
    *
-   * Only the title. The status wording, the thread, the Update button and the
-   * inbound handling all stay account-side, which is the side that owns them.
+   * The card describes the OTHER end of the relationship, which is right on a
+   * company record: you are on Abshire's page, the card says Abbott, Abbott's
+   * type, and what Abbott is to Abshire. In the competitive grid the column
+   * heading already says Abbott, so the card's subject has to be the ACCOUNT —
+   * and once it is, EVERY field that describes a subject has to move with it.
+   *
+   * Getting that half-right is worse than not doing it: a card headed "Annefurt
+   * LLC" showing Abbott's type and Abbott's status reads as a set of claims
+   * about Annefurt, all of them false. So these three are one decision, not
+   * three optional overrides, and a caller that passes one passes all three.
+   *
+   * What does NOT move: the thread, the Update button, the edit ownership and
+   * the inbound handling. Those belong to the row, and the row belongs to the
+   * page it was logged on.
    */
   title?: string;
+  /** The subject's company types, one badge each. */
+  typeBadges?: string[];
+  /** The statuses as the subject reads them — the counterpart wording. */
+  statuses?: string[];
   /**
    * Cap the EXPANDED BODY at this many pixels and scroll it, when set.
    *
@@ -203,6 +215,15 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
   // reader is not looking at.
   const inbound = shown.direction === 'inbound';
   const heading = title ?? shown.related_company_name;
+  // The status as the heading's subject reads it. saved.relationship_status
+  // still wins on the account-side card underneath, so a caller supplying
+  // statuses gets a stale pill until the surface reloads — which is the same
+  // trade every override here makes and is noted at the props.
+  const shownStatuses = statuses ?? shown.relationship_status;
+  // One badge per type. The column stores them comma-separated, which rendered
+  // as a single badge reading "Vendor,Competitor".
+  const shownTypes = typeBadges
+    ?? (shown.related_company_type ? [shown.related_company_type] : []);
 
   /**
    * The header's badge row: wrapping, or a single paged line.
@@ -264,12 +285,12 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
               <>
                 {leadingBadges}
                 {isStale && <StalePill />}
-                {shown.relationship_status.map(s => <StatusPill key={s} value={s} colorMaps={colorMaps} />)}
-                {shown.related_company_type && (
-                  <span className={`${getBadgeClass(shown.related_company_type, colorMaps.company_type || {})} whitespace-nowrap`}>
-                    {shown.related_company_type}
+                {shownStatuses.map(s => <StatusPill key={s} value={s} colorMaps={colorMaps} />)}
+                {shownTypes.map(t => (
+                  <span key={t} className={`${getBadgeClass(t, colorMaps.company_type || {})} whitespace-nowrap`}>
+                    {t}
                   </span>
-                )}
+                ))}
               </>,
             )}
           </div>

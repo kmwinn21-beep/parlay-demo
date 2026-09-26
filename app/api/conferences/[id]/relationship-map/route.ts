@@ -96,7 +96,7 @@ export async function GET(
         scope, nodes: [], edges: [],
         competitive: {
           relationships: [], competitors: [], companiesWithInternal: [], cards: [],
-          notCompetitive: 0, duplicates: 0,
+          inverses: {}, notCompetitive: 0, duplicates: 0,
         },
       }, { headers: { 'Cache-Control': 'no-store' } });
     }
@@ -218,7 +218,7 @@ export async function GET(
       if (ids.length === 0) {
         return {
           relationships: [], competitors: [], companiesWithInternal: [], cards: [],
-          notCompetitive: 0, duplicates: 0,
+          inverses: {}, notCompetitive: 0, duplicates: 0,
         };
       }
 
@@ -327,6 +327,11 @@ export async function GET(
       return {
         ...resolved,
         cards,
+        /* The counterpart pairing, so the grid can read a card from the
+           account's side rather than the competitor's. Sent as the map rather
+           than as pre-inverted statuses: statusesFor already does the reading
+           and a second implementation in the browser would be a second answer. */
+        inverses,
         // Narrowed to the companies on this map, so the payload does not carry
         // the account's whole book to light three pills.
         companiesWithInternal: internalRes.rows

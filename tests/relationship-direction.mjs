@@ -42,7 +42,8 @@ const INV = {
   'Former Vendor': 'Former Customer',
   'Evaluating': 'Prospect',
   'Preferred Partner': null,
-  'Active Pilot': null,
+  'Active Pilot': 'Piloting',
+  'Piloting': 'Active Pilot',
   'Other': null,
 };
 
@@ -67,8 +68,12 @@ console.log('\n— the same fact, from the other end —');
   // would invent a distinction that is not there.
   eq('a preferred partner is one both ways',
     statusesFor(['Preferred Partner'], 'inbound', INV), ['Preferred Partner']);
-  eq('  and so is an active pilot',
-    statusesFor(['Active Pilot'], 'inbound', INV), ['Active Pilot']);
+  // An active pilot is not. The value names the thing being piloted; the
+  // company running it is Piloting.
+  eq('  but an active pilot is not',
+    statusesFor(['Active Pilot'], 'inbound', INV), ['Piloting']);
+  eq('  and it reads back the other way too',
+    statusesFor(['Piloting'], 'inbound', INV), ['Active Pilot']);
 
   // Multi-select: a row can carry several, and each inverts on its own.
   eq('each status in a row inverts separately',
@@ -219,7 +224,7 @@ console.log('\n— the inverse words come from config —');
   // Symmetric statuses are left NULL rather than set to themselves, so the
   // card can tell "same both ways" from "nobody has said".
   eq('  leaving the symmetric ones alone',
-    /inverse_value = '(Preferred Partner|Active Pilot)'/.test(mig), false);
+    /inverse_value = 'Preferred Partner'/.test(mig), false);
   // The backfill must not overwrite an account that already set its own.
   // Four backfills now: the three that invert, plus the one giving the
   // symmetric statuses themselves as their counterpart.

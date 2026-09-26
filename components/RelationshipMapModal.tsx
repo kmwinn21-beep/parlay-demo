@@ -19,6 +19,7 @@ import type { RelationshipRow } from '@/components/PreConferenceReview';
 // what the CARD needs and deliberately omits it — the surface rendering one
 // already knows whose page it is on, and the grid does not.
 import type { RelationshipCard } from '@/lib/relationshipThread';
+import { statusesFor, type InverseMap } from '@/lib/relationshipDirection';
 
 interface GraphNode extends PickerCompany {
   company_type: string | null;
@@ -59,6 +60,14 @@ interface CompetitivePayload {
    * presenter, so the grid shows the real card rather than a lighter copy of it.
    */
   cards: RelationshipCard[];
+  /**
+   * value → the words for the other end, or null when the status is symmetric.
+   *
+   * The grid's cards are titled with the ACCOUNT, so every field on them has to
+   * be read from the account's side — including the status, which the stored
+   * row writes about the competitor.
+   */
+  inverses: InverseMap;
   /** Rows where neither end is a competitor — the partnership landscape's. */
   notCompetitive: number;
   /** Rows folded into a pair already logged from the other side. */
@@ -66,7 +75,7 @@ interface CompetitivePayload {
 }
 const EMPTY_COMPETITIVE: CompetitivePayload = {
   relationships: [], competitors: [], companiesWithInternal: [], cards: [],
-  notCompetitive: 0, duplicates: 0,
+  inverses: {}, notCompetitive: 0, duplicates: 0,
 };
 
 /**
@@ -295,6 +304,31 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
   // Names for ordering a cell and for naming a card the query did not return.
   // byId covers the map's own nodes; the competitor columns carry their own.
   const nameOf = useCallback((companyId: number) => byId.get(companyId)?.name ?? '', [byId]);
+  /**
+   * The account's own types, for a card whose subject is the account.
+   *
+   * Resolved already by the graph endpoint, which turns a company_type holding
+   * an option id or a comma-separated list into values. The card would
+   * otherwise show the COMPETITOR's type, which is every cell in a column
+   * repeating its own heading.
+   */
+  const typesOf = useCallback(
+    (companyId: number) => byId.get(companyId)?.company_types ?? [], [byId],
+  );
+  /**
+   * The statuses as the ACCOUNT reads them.
+   *
+   * The stored row says what the competitor is — "Current Vendor" — and a card
+   * headed with the account's name saying that claims the account is the
+   * vendor. 'inbound' is exactly "read this from the other end", which is the
+   * same function every other surface uses for the same job.
+   */
+  const statusesOf = useCallback(
+    // Only the statuses, so this takes only what it reads.
+    (card: { relationship_status: string[] }) =>
+      statusesFor(card.relationship_status, 'inbound', competitiveData.inverses),
+    [competitiveData],
+  );
   // Counted off the cells, so the subtitle can never disagree with the grid.
   const accountCount = useMemo(
     () => new Set(competitive.cells.map(c => c.companyId)).size,
@@ -487,6 +521,8 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
                 competitors={shownCompetitors}
                 cardFor={cardFor}
                 nameOf={nameOf}
+                typesOf={typesOf}
+                statusesOf={statusesOf}
                 signalsOnly={signalsOnly}
                 activeSignals={activeSignals}
                 showConnectors={showConnectors}
