@@ -127,10 +127,24 @@ export async function PUT(request: NextRequest) {
     if (!String(notes ?? '').trim()) return NextResponse.json({ error: 'Notes / Context is required' }, { status: 400 });
     if (!rep_id) return NextResponse.json({ error: 'Rep is required' }, { status: 400 });
 
+    // Stamp status_changed_at only when the status value actually differs.
+    //
+    // This form writes updated_at on any field — a notes correction, a rep
+    // reassignment — so updated_at cannot answer "when did the status change".
+    // Reading the old value first is what keeps the two apart.
+    const before = await db.execute({
+      sql: 'SELECT relationship_status FROM vendor_relationships WHERE id = ?',
+      args: [Number(id)],
+    }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
+    const previous = before.rows[0]?.relationship_status
+      ? String(before.rows[0].relationship_status) : null;
+    const statusChanged = previous !== statuses;
+
     await db.execute({
       sql: `UPDATE vendor_relationships
             SET related_company_id = ?, rep_id = ?, relationship_status = ?, strength = ?,
-                vendor_type = ?, notes = ?, updated_at = datetime('now')
+                vendor_type = ?, notes = ?, updated_at = datetime('now')${
+                  statusChanged ? ", status_changed_at = datetime('now')" : ''}
             WHERE id = ?`,
       args: [
         Number(related_company_id), Number(rep_id), statuses,

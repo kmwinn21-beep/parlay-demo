@@ -2667,4 +2667,56 @@ export const migrations: string[] = [
      WHERE category = 'other_relationship_status'
        AND value IN ('Preferred Partner', 'Active Pilot', 'Other')
        AND inverse_value IS NULL`,
+
+  // ── Relationship statuses get a stable key ────────────────────────────────
+  //
+  // The competitive view needs to know which statuses mean "they buy this
+  // today" and which mean "they are trying it", and the display values are the
+  // account's to rename. Matching on the words would break the first time
+  // somebody renamed one, and break silently in any language nobody thought to
+  // anticipate.
+  //
+  // Same column and same pattern company_type already uses for 'competitor'.
+  // A status an account adds has no key and takes part in no signal — failing
+  // closed, never guessing. The view says how many such relationships it is
+  // not counting rather than letting the gap be silent.
+  `UPDATE config_options SET action_key = 'current'
+     WHERE category = 'other_relationship_status' AND value IN ('Current Vendor', 'Preferred Partner')`,
+  `UPDATE config_options SET action_key = 'evaluating'
+     WHERE category = 'other_relationship_status' AND value IN ('Evaluating', 'Active Pilot')`,
+  `UPDATE config_options SET action_key = 'former'
+     WHERE category = 'other_relationship_status' AND value = 'Former Vendor'`,
+
+  // ── When a relationship's status actually changed ─────────────────────────
+  //
+  // updated_at cannot answer this. It is bumped by the edit form on any field —
+  // a notes correction, a rep reassignment — and by the update form on BOTH
+  // branches, including the "still accurate, nothing changed" confirmation.
+  // Reading it as a status change would mark a relationship somebody had just
+  // confirmed as current. The same shape bit social_event_rsvps, where the
+  // guest-ranking route bumped updated_at and a rank change rendered as an RSVP.
+  //
+  // Distinct from status_as_of, which means "last confirmed". A confirmation
+  // moves that and must never move this; a change moves this and must never
+  // move that.
+  `ALTER TABLE vendor_relationships ADD COLUMN status_changed_at TEXT`,
+
+  // Backfilled from the thread, which records status_after only when the value
+  // genuinely differed.
+  //
+  // THIS BACKFILL IS INCOMPLETE BY CONSTRUCTION, and a future reader should not
+  // assume otherwise. A status changed through the edit form writes no thread
+  // entry at all, so those rows backfill to NULL and read as never changed.
+  // The information was never recorded and is not recoverable. Going forward
+  // both write paths stamp the column, so only history is affected.
+  //
+  // NULL means "no known status change" — not "changed long ago", and not the
+  // epoch. Every reader must treat it as no signal rather than as an old one.
+  `UPDATE vendor_relationships
+      SET status_changed_at = (
+        SELECT MAX(ru.created_at) FROM relationship_updates ru
+        WHERE ru.relationship_id = vendor_relationships.id
+          AND ru.status_after IS NOT NULL AND TRIM(ru.status_after) != ''
+      )
+    WHERE status_changed_at IS NULL`,
 ];

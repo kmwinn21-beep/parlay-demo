@@ -70,11 +70,19 @@ export async function POST(request: NextRequest) {
     // does bump. Marking stale leaves it alone: the reason to flag a card is
     // that you do NOT know it is current, and stamping today's date on it
     // would say the opposite.
+    // Only when the status genuinely differs. `changed` is already exactly
+    // that — the confirmation path leaves the status alone and must not look
+    // like a change, which is the case that would have made the column useless.
+    //
+    // status_as_of below is a different fact: last confirmed, not last changed.
+    // A confirmation moves that and never this.
+    const STATUS_STAMP = changed ? ", status_changed_at = datetime('now')" : '';
+
     if (stale) {
       await db.execute({
         sql: `UPDATE vendor_relationships
               SET stale = 1, relationship_status = COALESCE(?, relationship_status),
-                  updated_at = datetime('now')
+                  updated_at = datetime('now')${STATUS_STAMP}
               WHERE id = ?`,
         args: [changed ? after : null, relId],
       });
@@ -83,7 +91,7 @@ export async function POST(request: NextRequest) {
         sql: `UPDATE vendor_relationships
               SET stale = 0, status_as_of = datetime('now'),
                   relationship_status = COALESCE(?, relationship_status),
-                  updated_at = datetime('now')
+                  updated_at = datetime('now')${STATUS_STAMP}
               WHERE id = ?`,
         args: [changed ? after : null, relId],
       });

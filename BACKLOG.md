@@ -116,3 +116,19 @@ It fails silently. The module swallows all errors by design, and an empty recipi
 **Why it is its own project, not a cleanup item:** the fix *starts* delivering notifications to tenant users who currently get none. That is a live behaviour change across every notification type at once, with real email volume attached, so it needs its own testing plan and a deliberate rollout — ideally verified against a provisioned tenant DB, which a single-tenant local environment cannot exercise.
 
 **Verification caveat:** identified by code inspection. It could not be reproduced locally because the local `accounts` table is empty, so every call resolves to master and the bug is invisible. Confirm against a real tenant before and after the fix.
+
+## Relationship statuses and the competitive view
+
+- **Admin screen for mapping custom statuses to a class.** A status an account
+  adds has no `action_key` and so takes part in no signal. The competitive view
+  says how many relationships it is not counting, which turns the gap from
+  silent into visible, but the account still cannot fix it themselves. The
+  screen would let them map their own statuses to current / evaluating / former.
+
+- **The edit form should write a `relationship_updates` entry when the status
+  changes.** Today only the update form writes to the thread, so a status
+  changed through the edit form records *when* (`status_changed_at`) but not
+  *why*. Writing a thread entry from both paths would make the thread complete
+  and answer the better question. It also means the `status_changed_at`
+  backfill could have been complete, which it is not — see the note at that
+  migration.
