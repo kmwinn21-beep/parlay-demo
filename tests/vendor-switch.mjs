@@ -407,6 +407,45 @@ console.log('\n— what an answer actually does, against a database —');
     (await rows('SELECT incoming_relationship_id FROM vendor_switches'))[0]?.incoming_relationship_id,
     created.createdRelationshipId);
 
+  // ── the prompt is answered later, and the world may have moved ──
+  //
+  // It is worked out at save time and answered seconds or minutes later.
+  // Marking a relationship former because it WAS current is the one mistake
+  // here nobody would ever notice.
+  await ex('DELETE FROM vendor_switches'); await ex('DELETE FROM relationship_updates');
+  await ex('DELETE FROM vendor_relationships');
+  await ex(`INSERT INTO vendor_relationships (id,company_id,related_company_id,relationship_status,notes)
+            VALUES (40,1,20,'Active Pilot','a'),(41,1,21,'Current Vendor','b')`);
+  await applySwitch(db, 9, {
+    accountId: 1, incumbentCompanyId: 20, incumbentRelationshipId: 40,
+    incomingCompanyId: 21, incomingRelationshipId: 41, answer: 'replacing',
+  }, ctx);
+  eq('an incumbent that is no longer current is left alone',
+    ((await rows('SELECT relationship_status FROM vendor_relationships WHERE id = 40'))[0] ?? {})
+      .relationship_status, 'Active Pilot');
+  eq('  and no entry claims it moved',
+    (await rows('SELECT id FROM relationship_updates')).length, 0);
+  // The rep's answer about what happened is true whatever the row says now.
+  eq('  but the answer is still recorded',
+    (await rows('SELECT answer FROM vendor_switches')).map(r => r.answer), ['replacing']);
+  // A relationship deleted between the prompt and the answer, likewise.
+  await ex('DELETE FROM vendor_switches');
+  await applySwitch(db, 9, {
+    accountId: 1, incumbentCompanyId: 20, incumbentRelationshipId: 999,
+    incomingCompanyId: 21, incomingRelationshipId: 41, answer: 'replacing',
+  }, ctx);
+  eq('an incumbent that has gone is not an error',
+    (await rows('SELECT answer FROM vendor_switches')).length, 1);
+
+  await ex('DELETE FROM vendor_switches'); await ex('DELETE FROM relationship_updates');
+  await ex('DELETE FROM vendor_relationships');
+  await ex(`INSERT INTO vendor_relationships (id,company_id,related_company_id,relationship_status,vendor_type,notes)
+            VALUES (10,22,1,'Customer','EHR,Billing','z')`);
+  await applySwitch(db, 9, {
+    accountId: 1, incumbentCompanyId: 22, incumbentRelationshipId: 10,
+    incomingCompanyId: 21, answer: 'replacing', vendorType: ['EHR', 'Billing'],
+  }, ctx);
+
   // ── answering twice does not fill the thread with nothing ──
   const beforeEntries = (await rows('SELECT id FROM relationship_updates')).length;
   await applySwitch(db, 9, {
@@ -437,6 +476,11 @@ console.log('\n— asked from all three doors, and only after the save —');
   eq('one prompt component, not three',
     /export function VendorSwitchPrompt/.test(prompt), true);
   eq('  the update form uses it', /<VendorSwitchPrompt/.test(update), true);
+  // Answering writes to relationships the card is not showing, after the save
+  // that onSaved already reported.
+  eq('  and refreshes again once an answer is recorded',
+    /if \(recorded\) onRefresh\?\.\(\);/.test(update)
+      && /onRefresh=\{onUpdated\}/.test(strip('components/VendorRelationshipCard.tsx')), true);
   eq('  and so does the add/edit form', /<VendorSwitchPrompt/.test(section), true);
   eq('one detector, not three',
     /export async function detectSwitchPrompt/.test(server), true);
@@ -449,7 +493,7 @@ console.log('\n— asked from all three doors, and only after the save —');
   eq('the update form saves first, then asks',
     /onSaved\?\.\(data as SavedUpdate\);\s*\n\s*const prompt = \(data as SavedUpdate\)\.switch_prompt;/.test(update), true);
   eq('  and dismissing still closes the form',
-    /onDone=\{\(\) => \{ setSwitchPrompt\(null\); onClose\(\); \}\}/.test(update), true);
+    /onDone=\{recorded => \{\s*\n\s*setSwitchPrompt\(null\);[\s\S]{0,80}onClose\(\);/.test(update), true);
   // A confirmation leaves the status alone and must not ask who replaced anyone.
   eq('a confirmation never asks', /const switch_prompt = changed/.test(updRoute), true);
   eq('  nor does an edit that left the status alone',
@@ -463,6 +507,16 @@ console.log('\n— asked from all three doors, and only after the save —');
   // record WHEN and never WHY.
   eq('the edit form writes a thread entry on a status change',
     /Status changed from the relationship form\./.test(relRoute), true);
+
+  // The prompt names the status it matched on. "Is recorded as a current
+  // vendor here" is a claim about a row the rep is not looking at, and when it
+  // disagrees with the record behind the prompt there is no way to tell which
+  // of the two is wrong without seeing it.
+  eq('the prompt says which status made it an incumbent',
+    /statuses: i\.statuses,/.test(server), true);
+  eq('  and the prompt renders it',
+    /prompt\.incumbents\[0\]\.statuses\.join\(', '\)/.test(prompt)
+      && /\{i\.statuses\.join\(', '\)\}/.test(prompt), true);
 
   // Three answers on an arrival, four on a departure.
   eq('the arrival offers replacing, keeping and don\u2019t know',
@@ -548,6 +602,14 @@ console.log('\n— the writes an answer sets off —');
     /findRelationship\(db, input\.accountId, input\.incomingCompanyId\)/.test(server), true);
 
   // Attribution: an author the client can name is not attribution.
+  // Re-checked at the moment it would be acted on, with the same class test
+  // that chose it.
+  eq('an incumbent is re-checked before it is moved',
+    /await stillCurrent\(/.test(server)
+      && /classOfStatuses\(row\.statuses, ctx\.index\) !== 'current'/.test(server), true);
+  eq('  from the account\u2019s side, like every other read',
+    /ends != null && ends\.accountId === accountId/.test(server), true);
+
   eq('the answer is attributed to the session, not the body',
     /applySwitch\(db, authResult\.id,/.test(route), true);
   eq('  and an unknown answer is refused',

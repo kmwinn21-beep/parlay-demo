@@ -131,10 +131,14 @@ function ArrivalPrompt({ prompt, onDone }: {
       subtitle={`${prompt.accountName} is now with ${prompt.incoming.name}.`}
       onClose={() => onDone(false)}
     >
+      {/* Naming the status it matched on. "Is recorded as a current vendor
+          here" is a claim about a row the rep is not looking at, and when it
+          disagrees with the record behind this prompt there is no way to tell
+          which of the two is wrong without seeing it. */}
       <p className="text-xs text-gray-500">
         {prompt.incumbents.length === 1
-          ? `${prompt.incumbents[0].name} is recorded as a current vendor here.`
-          : 'These competitors are recorded as current vendors here.'}
+          ? `${prompt.incumbents[0].name} is recorded here as ${prompt.incumbents[0].statuses.join(', ') || 'a current vendor'}.`
+          : 'These competitors are recorded here as current vendors.'}
       </p>
 
       <div className="space-y-1.5">
@@ -146,12 +150,15 @@ function ArrivalPrompt({ prompt, onDone }: {
               type="button"
               onClick={() => setChosen(p => (on ? p.filter(x => x !== i.id) : [...p, i.id]))}
               aria-pressed={on}
-              className={`w-full text-left rounded-lg border px-3 py-2.5 text-sm font-medium transition-all ${
+              className={`w-full text-left rounded-lg border px-3 py-2.5 transition-all ${
                 on ? 'border-brand-secondary bg-brand-secondary/5 text-brand-primary'
                   : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100'
               }`}
             >
-              {i.name}
+              <span className="block text-sm font-medium">{i.name}</span>
+              {i.statuses.length > 0 && (
+                <span className="block text-[11px] text-gray-400 mt-0.5">{i.statuses.join(', ')}</span>
+              )}
             </button>
           );
         })}

@@ -13,7 +13,7 @@
 
 import type { getDb } from '@/lib/getDb';
 import {
-  buildStatusIndex, makeIsCompetitor,
+  buildStatusIndex, classOfStatuses, makeIsCompetitor,
   type ResolutionCompany, type StatusIndex,
 } from '@/lib/competitiveResolution';
 import {
@@ -45,8 +45,15 @@ export type SwitchPrompt =
        * the browser would be a second place it is worked out.
        */
       incomingIsCompetitor: boolean;
-      /** Every competitor already current here. Several is a real answer. */
-      incumbents: (SwitchCompany & { relationshipId: number })[];
+      /**
+       * Every competitor already current here. Several is a real answer.
+       *
+       * Each carries the status it matched on. The prompt says it out loud:
+       * "is recorded as a current vendor here" is a claim about a row the rep
+       * is not looking at, and when it disagrees with the card behind the
+       * prompt there is no way to tell which is wrong without it.
+       */
+      incumbents: (SwitchCompany & { relationshipId: number; statuses: string[] })[];
     }
   | {
       kind: 'departure';
@@ -225,6 +232,7 @@ export async function detectSwitchPrompt(db: Db, {
       relationshipId: i.relationshipId,
       id: i.competitorId,
       name: all.get(i.competitorId)?.name ?? '',
+      statuses: i.statuses,
     })),
   };
 }
@@ -282,7 +290,16 @@ export async function applySwitch(
 
   if (input.answer === 'replacing') {
     // The outgoing relationship, written from the side its row lives on.
-    if (input.incumbentRelationshipId) {
+    //
+    // Re-checked first. The prompt was worked out when the save happened and
+    // is answered seconds or minutes later, and in between the status it
+    // matched on can have moved — by another rep, another tab, or the rep
+    // themselves in a second window. Marking a relationship former because it
+    // WAS current is the one mistake here nobody would ever notice, so it is
+    // only moved if it is still current now.
+    if (input.incumbentRelationshipId && await stillCurrent(
+      db, ctx, input.incumbentRelationshipId, input.accountId,
+    )) {
       await setStatus(db, ctx, {
         relationshipId: input.incumbentRelationshipId,
         accountId: input.accountId,
@@ -343,6 +360,36 @@ export async function applySwitch(
     ...(createdRelationshipId ? { createdRelationshipId } : {}),
     ...(markedCompetitor ? { markedCompetitor } : {}),
   };
+}
+
+/**
+ * Whether a relationship still reads as current from the account's side.
+ *
+ * The same class test findIncumbents used to choose it, run again at the moment
+ * it would be acted on. A relationship that has moved on since is left alone —
+ * the switch is still recorded, because the rep's answer about what happened is
+ * true whatever the row says now.
+ */
+async function stillCurrent(
+  db: Db, ctx: SwitchContext, relationshipId: number, accountId: number,
+): Promise<boolean> {
+  const res = await db.execute({
+    sql: `SELECT id, company_id, related_company_id, relationship_status
+          FROM vendor_relationships WHERE id = ?`,
+    args: [relationshipId],
+  }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
+  if (res.rows.length === 0) return false;
+  const r = res.rows[0];
+  const row: SwitchRow = {
+    id: Number(r.id),
+    companyId: Number(r.company_id),
+    relatedCompanyId: Number(r.related_company_id),
+    statuses: splitList(r.relationship_status),
+  };
+  if (classOfStatuses(row.statuses, ctx.index) !== 'current') return false;
+  const companies = await loadCompanies(db, [row.companyId, row.relatedCompanyId], ctx);
+  const ends = endsOf(row, ctx.index, makeIsCompetitor(companies, ctx.competitorTypes));
+  return ends != null && ends.accountId === accountId;
 }
 
 /** The account's relationship with a company, either way round, or null. */

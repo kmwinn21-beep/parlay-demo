@@ -853,7 +853,14 @@ console.log('\n— the card header, and the grid it had to change for —');
   // Both Map surfaces — the mobile card list and the desktop canvas. One of
   // them losing its refresh looks exactly like the bug this fixes.
   eq('  the Map view still refreshes its spokes, on both its surfaces',
-    (modal.match(/onUpdated=\{\(\) => loadRels\(hubNode\.id\)\}/g) || []).length, 2);
+    (modal.match(/loadRels\(hubNode\.id\)/g) || []).length, 2);
+  // And the map payload with them. Updating in Map view and then flipping to
+  // Competitive was looking at the state the modal opened with — the same bug,
+  // one route further along, reachable without leaving the modal.
+  eq('  and the map payload too, so flipping to Competitive is not stale',
+    (modal.match(/onUpdated=\{\(\) => \{ loadRels\(hubNode\.id\); void loadMap\(true\); \}\}/g) || []).length, 2);
+  eq('  every card in the modal refreshes the payload the grid reads',
+    (modal.match(/void loadMap\(true\)/g) || []).length, 3);
   // A refetch that unmounts the grid collapses every open card and throws away
   // the scroll position of somebody mid-read.
   eq('  silently, so the grid is not unmounted under the reader',

@@ -201,12 +201,18 @@ It fails silently. The module swallows all errors by design, and an empty recipi
   fix is a window on the record's created_at rather than on the statuses —
   worth measuring against real data before choosing a number.
 
-- **A relationship changed outside the modal still goes stale.** The grid now
-  refetches its own payload after an Update made on one of its cards, which is
-  what fixes a status landing in the wrong row. A change made anywhere else
-  while the modal is open — another tab, the company record behind it — still
-  is not seen until it is reopened. Lower stakes than the original bug, since
-  nothing on screen contradicts itself, but the same shape.
+- **Another session's edits are not seen until the modal is reopened.** Every
+  path inside the modal now refetches: a card's Update on either view, and
+  answering the switch prompt, which writes to relationships the card is not
+  showing. What remains is concurrency — another rep, or another tab of your
+  own, changing a relationship while the modal sits open. Unavoidable without
+  polling or sockets, and genuinely low stakes: nothing on screen disagrees
+  with itself, it is only a few minutes old.
+
+  An earlier version of this note said "the company record behind it", which is
+  impossible — the modal is a blocking overlay and closing it unmounts and
+  refetches. Filing two live in-modal bugs under that wrong example is how they
+  stayed unfixed for a commit.
 
 - **Nobody is asked twice, but nothing uses that yet.** vendor_switches is
   indexed on (account, incumbent, incoming) so "have we already asked about

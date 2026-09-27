@@ -407,6 +407,10 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
               rel={shown}
               onClose={() => setUpdating(false)}
               onSaved={result => { setSaved(result); onUpdated?.(); }}
+              // Again after a switch is recorded: that writes to relationships
+              // this card is not showing, and the optimistic copy above cannot
+              // stand in for them.
+              onRefresh={onUpdated}
             />
           )}
 

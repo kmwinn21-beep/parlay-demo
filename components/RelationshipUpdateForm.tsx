@@ -46,9 +46,18 @@ export interface SavedUpdate {
  * status change (to Former Vendor) and is not stale at all — it is the
  * freshest the record has ever been.
  */
-export function RelationshipUpdateForm({ rel, onClose, onSaved }: {
+export function RelationshipUpdateForm({ rel, onClose, onSaved, onRefresh }: {
   rel: VendorRelationship;
   onClose: () => void;
+  /**
+   * Something outside this relationship changed — reload whatever is showing it.
+   *
+   * Answering the switch prompt moves ANOTHER relationship's status, may create
+   * a third and may retype a company, all after the save that onSaved reported.
+   * A surface that only refreshes on save shows the card it just edited
+   * correctly and everything the answer touched as it was a moment ago.
+   */
+  onRefresh?: () => void;
   /**
    * The saved entry, as the server wrote it.
    *
@@ -127,7 +136,11 @@ export function RelationshipUpdateForm({ rel, onClose, onSaved }: {
     return (
       <VendorSwitchPrompt
         prompt={switchPrompt}
-        onDone={() => { setSwitchPrompt(null); onClose(); }}
+        onDone={recorded => {
+          setSwitchPrompt(null);
+          if (recorded) onRefresh?.();
+          onClose();
+        }}
       />
     );
   }

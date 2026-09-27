@@ -501,7 +501,7 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
                             rel={s.rel}
                             userOptions={userOptions}
                             colorMaps={colorMaps}
-                            onUpdated={() => loadRels(hubNode.id)}
+                            onUpdated={() => { loadRels(hubNode.id); void loadMap(true); }}
                           />
                         ))}
                       </div>
@@ -614,7 +614,7 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
                 spokes={spokes}
                 userOptions={userOptions}
                 colorMaps={colorMaps}
-                onUpdated={() => loadRels(hubNode.id)}
+                onUpdated={() => { loadRels(hubNode.id); void loadMap(true); }}
               />
             ) : (
               <div className="flex-1 flex items-center justify-center">
