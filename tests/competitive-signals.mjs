@@ -66,14 +66,87 @@ console.log('\n— evaluating alternatives: what must be flagged —');
 
   // The pair comes back so the connector is drawn from it rather than worked
   // out again in the view.
-  eq('  and the matched pair comes back', res.pairs,
-    [{ companyId: 1, currentCompetitorId: 10, evaluatingCompetitorId: 20 }]);
+  eq('  and the matched pair comes back', res.pairs, [{
+    companyId: 1,
+    a: { competitorId: 10, row: 'useCompetitor' },
+    b: { competitorId: 20, row: 'activeEvaluation' },
+  }]);
+  // Each end carries its row, so the connector can be drawn between any two
+  // cells without the view working out where they landed.
   // Read defensively: a change that stops pairs being built should turn this
   // red, not throw. A crash exits non-zero too, and a mutation harness cannot
   // tell that from a caught mutant.
-  eq('  naming which end is which',
-    [res.pairs[0]?.currentCompetitorId ?? null, res.pairs[0]?.evaluatingCompetitorId ?? null],
+  eq('  each end knowing its own row',
+    [res.pairs[0]?.a?.row ?? null, res.pairs[0]?.b?.row ?? null],
+    ['useCompetitor', 'activeEvaluation']);
+  eq('  and which competitor it is',
+    [res.pairs[0]?.a?.competitorId ?? null, res.pairs[0]?.b?.competitorId ?? null],
     [10, 20]);
+}
+
+console.log('\n— evaluating alternatives: two trials against each other —');
+{
+  // The signal's own words, taken literally. Nobody has won yet, which is the
+  // case a rep most wants at a conference.
+  const two = deriveSignals({
+    relationships: [rel(1, 1, 10, 'evaluating'), rel(2, 1, 20, 'evaluating')],
+    now: NOW,
+  });
+  eq('evaluating two competitors flags both cells',
+    [flagged(two, 1, 10, 'evaluatingAlternatives'), flagged(two, 1, 20, 'evaluatingAlternatives')],
+    [true, true]);
+  eq('  and pairs them', two.pairs, [{
+    companyId: 1,
+    a: { competitorId: 10, row: 'activeEvaluation' },
+    b: { competitorId: 20, row: 'activeEvaluation' },
+  }]);
+  // Both ends land in the same band, so the connector runs across one row.
+  eq('  with both ends in Active Evaluation',
+    [two.pairs[0]?.a?.row, two.pairs[0]?.b?.row], ['activeEvaluation', 'activeEvaluation']);
+
+  // (A,B) and (B,A) are one fact. Emitting both would draw the line twice and
+  // count the signal twice in the rail.
+  eq('each unordered pair once', two.pairs.length, 1);
+  const three = deriveSignals({
+    relationships: [
+      rel(1, 1, 10, 'evaluating'), rel(2, 1, 20, 'evaluating'), rel(3, 1, 30, 'evaluating'),
+    ],
+    now: NOW,
+  });
+  eq('  three evaluations make three pairs, not six', three.pairs.length, 3);
+  eq('  and every one of them is flagged',
+    three.cells.every(c => c.signals.evaluatingAlternatives), true);
+
+  // Two rows naming the SAME competitor is one relationship recorded twice,
+  // not an account weighing a vendor against itself. resolveCompetitive already
+  // collapses those, but this module is pure and does not get to assume its
+  // caller did — the same reason the buy-versus-trial loop has the same guard.
+  const dupe = deriveSignals({
+    relationships: [rel(1, 1, 10, 'evaluating'), rel(2, 1, 10, 'evaluating')],
+    now: NOW,
+  });
+  eq('two trials of the same competitor make no pair', dupe.pairs, []);
+  eq('  and flag nothing',
+    dupe.cells.some(c => c.signals.evaluatingAlternatives), false);
+
+  // A trial against a buy still pairs, so adding the new shape did not replace
+  // the old one.
+  const both = deriveSignals({
+    relationships: [
+      rel(1, 1, 10, 'current'), rel(2, 1, 20, 'evaluating'), rel(3, 1, 30, 'evaluating'),
+    ],
+    now: NOW,
+  });
+  eq('a buy and two trials make three pairs', both.pairs.length, 3);
+  // The signal is set from the pair SET, so all three cards light together —
+  // lighting two of them would say the third is not part of the same decision.
+  eq('  and all three cards carry the signal',
+    both.cells.map(c => [c.competitorId, c.signals.evaluatingAlternatives]),
+    [[10, true], [20, true], [30, true]]);
+  eq('  two of them against the incumbent',
+    both.pairs.filter(p => p.a.row === 'useCompetitor').length, 2);
+  eq('  and one between the trials',
+    both.pairs.filter(p => p.a.row === 'activeEvaluation' && p.b.row === 'activeEvaluation').length, 1);
 }
 
 console.log('\n— evaluating alternatives: what must NOT be —');
@@ -93,14 +166,17 @@ console.log('\n— evaluating alternatives: what must NOT be —');
   eq('  and neither cell is flagged',
     twoCurrents.cells.some(c => c.signals.evaluatingAlternatives), false);
 
-  const evalOnly = deriveSignals({
-    relationships: [rel(1, 1, 10, 'evaluating'), rel(2, 1, 20, 'evaluating')],
+  // Two CURRENTS are not a pair. An account running two vendors side by side
+  // has decided; it is not weighing anything, and saying so would put the pill
+  // on half the book. (Two EVALUATIONS are — see the section above.)
+  const bothCurrent = deriveSignals({
+    relationships: [rel(1, 1, 10, 'current'), rel(2, 1, 20, 'current')],
     now: NOW,
   });
-  eq('evaluating two competitors with no current is not flagged',
-    [flagged(evalOnly, 1, 10, 'evaluatingAlternatives'), flagged(evalOnly, 1, 20, 'evaluatingAlternatives')],
-    [false, false]);
-  eq('  and produces no pair', evalOnly.pairs, []);
+  eq('two currents and nothing being tried is not flagged',
+    [flagged(bothCurrent, 1, 10, 'evaluatingAlternatives'),
+      flagged(bothCurrent, 1, 20, 'evaluatingAlternatives')], [false, false]);
+  eq('  and produces no pair', bothCurrent.pairs, []);
 
   // The same competitor on both sides is an account trying more of what it
   // already buys, not an account in play.
@@ -136,7 +212,7 @@ console.log('\n— evaluating alternatives: what must NOT be —');
   });
   eq('two currents and one evaluating make two pairs', many.pairs.length, 2);
   eq('  both naming the same evaluating end',
-    many.pairs.map(p => p.evaluatingCompetitorId), [30, 30]);
+    many.pairs.map(p => p.b.competitorId), [30, 30]);
   eq('  and every cell is flagged', many.cells.every(c => c.signals.evaluatingAlternatives), true);
 }
 

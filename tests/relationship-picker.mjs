@@ -751,6 +751,11 @@ console.log('\n— the card header, and the grid it had to change for —');
     /showConnectors && lines\.length > 0 && \(/.test(grid), true);
   eq('  the hover branch is gone from the overlay',
     /showConnectors \|\| hovered !== null/.test(grid), false);
+  // Every cell in the company's pair SET, not just two. An account buying from
+  // one competitor and trying two others has three cards in play, and lighting
+  // two of them would say the third is not part of the same decision.
+  eq('hover lights every cell carrying the signal for that account',
+    /cell\.companyId === hovered\.companyId\s*\n?\s*&& cell\.signals\[hovered\.signal\]/.test(grid), true);
   eq('hover lights both ends of the pair',
     /highlight=\{isLit\(cell, hovered\) \? SIGNAL_TONE\[hovered!\.signal\] : null\}/.test(grid), true);
   eq('  in the card\u2019s own border and fill',
@@ -806,6 +811,14 @@ console.log('\n— the card header, and the grid it had to change for —');
   // Connectors are drawn from pairs and anchored on the HEADER.
   eq('connectors come from the derived pairs, not a second self-join',
     /for \(const p of pairs\)/.test(grid) && /evaluatingAlternatives/.test(grid), true);
+  // Each end carries its row, so two trials join two cells in the SAME band
+  // and a buy-versus-trial joins two in different ones, without the grid
+  // having to know which shape it was handed.
+  eq('  reading each end\u2019s row rather than assuming the two',
+    /`\$\{p\.a\.row\}:\$\{p\.companyId\}:\$\{p\.a\.competitorId\}`/.test(grid)
+      && /`\$\{p\.b\.row\}:\$\{p\.companyId\}:\$\{p\.b\.competitorId\}`/.test(grid), true);
+  eq('  with no row hard-coded into the pair connector',
+    /useCompetitor:\$\{p\.companyId\}/.test(grid), false);
   eq('  anchored on the card header, which does not move when a card expands',
     /headerRefs\.current\.get\(fromKey\)/.test(grid)
       && /querySelector\('\[data-card-header\]'\)/.test(grid), true);

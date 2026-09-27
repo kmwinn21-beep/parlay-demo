@@ -198,11 +198,14 @@ export function CompetitiveGrid({
     };
 
     for (const p of pairs) {
+      // Each end knows its own row, so a pair of trials joins two cells in the
+      // SAME band and a buy-versus-trial joins two in different ones, without
+      // this having to know which shape it was handed.
       join(
-        `ea:${p.companyId}:${p.currentCompetitorId}:${p.evaluatingCompetitorId}`,
+        `ea:${p.companyId}:${p.a.row}:${p.a.competitorId}:${p.b.row}:${p.b.competitorId}`,
         p.companyId, 'evaluatingAlternatives',
-        `useCompetitor:${p.companyId}:${p.currentCompetitorId}`,
-        `activeEvaluation:${p.companyId}:${p.evaluatingCompetitorId}`,
+        `${p.a.row}:${p.companyId}:${p.a.competitorId}`,
+        `${p.b.row}:${p.companyId}:${p.b.competitorId}`,
         false,
       );
     }
