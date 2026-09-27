@@ -201,6 +201,16 @@ It fails silently. The module swallows all errors by design, and an empty recipi
   fix is a window on the record's created_at rather than on the statuses —
   worth measuring against real data before choosing a number.
 
+- **The competitive grid scrolls sideways below about 1650px.** The
+  relationship map now centres between the sidebar and the right edge, so on a
+  narrower screen the panel is narrower than its 1360px cap and the four
+  competitor columns no longer fit: measured, 1880px is clear, 1600px and
+  1440px both scroll with the rail open. Folding the rail clears it at every
+  width tested, which is what the fold is for — but nothing tells a reader
+  that, and somebody meeting a sideways scroll will not guess. A hint when the
+  grid overflows, or folding the rail automatically the first time it does,
+  would close it.
+
 - **Another session's edits are not seen until the modal is reopened.** Every
   path inside the modal now refetches: a card's Update on either view, and
   answering the switch prompt, which writes to relationships the card is not

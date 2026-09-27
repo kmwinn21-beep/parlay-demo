@@ -753,6 +753,33 @@ console.log('\n— the card header, and the grid it had to change for —');
   eq('  and getBadgeClass defaults to what every other surface already had',
     /sizeClass = 'text-xs',/.test(strip('lib/colors.ts')), true);
 
+  // ── Centred in what is left of the screen ──
+  //
+  // The sidebar is opaque and permanent, so centring over the whole viewport
+  // put the modal visibly left of the content it belongs to.
+  eq('the panel is centred clear of the sidebar',
+    /absolute inset-0 sm:left-\[var\(--sidebar-w\)\]/.test(modal), true);
+  eq('  reading its width from the same place the sidebar does',
+    /sidebarCollapsed \? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH/.test(modal), true);
+  eq('  with no width of its own',
+    /\b256\b|\bw-64\b/.test(modal), false);
+  // Below sm the sidebar is an overlay, so the modal takes the whole screen.
+  eq('  and only above the breakpoint',
+    /sm:left-\[var/.test(modal), true);
+  // The two move together rather than the modal jumping after it.
+  eq('  moving with the sidebar, at its speed',
+    /transition-\[left\] duration-300 ease-in-out/.test(modal), true);
+  // Dimming only part of the screen would say the rest was still live.
+  eq('the backdrop still covers everything',
+    /<div className="absolute inset-0 bg-black\/50" onClick=\{onClose\} \/>/.test(modal), true);
+  // A sibling of the backdrop, so the panel's clicks have nowhere to bubble;
+  // pointer-events-none lets a click in the margin fall through and close.
+  eq('  and a click in the margin still reaches it',
+    /pointer-events-none transition-\[left\]/.test(modal)
+      && /pointer-events-auto bg-white rounded-2xl/.test(modal), true);
+  eq('  so the panel needs no stopPropagation',
+    /onClick=\{e => e\.stopPropagation\(\)\}/.test(modal), false);
+
   // ── Highlighting, not lines ──
   //
   // A connector line appeared under the cursor and vanished with it, which is

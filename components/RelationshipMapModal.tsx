@@ -1,10 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { EntityPicker } from '@/components/relationship-map/EntityPicker';
 import { CompetitiveRail, type CompetitorColumn } from '@/components/relationship-map/CompetitiveRail';
 import { CompetitiveGrid, SignalBadge } from '@/components/relationship-map/CompetitiveGrid';
 import { QuickViewDrawer } from '@/components/QuickViewDrawer';
+import {
+  useSidebarCollapse, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_EXPANDED_WIDTH,
+} from '@/components/SidebarCollapseContext';
 import {
   countSignals, deriveSignals, SIGNAL_FULL_LABELS,
   type SignalKey, type SignalRelationship, type SwitchPair,
@@ -119,6 +122,7 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
   onClose: () => void;
 }) {
   const colorMaps = useConfigColors();
+  const { collapsed: sidebarCollapsed } = useSidebarCollapse();
   const userOptions = useUserOptions();
 
   const [scope, setScope] = useState<'conference' | 'all'>('conference');
@@ -384,11 +388,26 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
     : 'All relationships';
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[200]">
+      {/* The backdrop covers everything, sidebar included: a click anywhere
+          outside the panel closes, and dimming only part of the screen would
+          say the rest was still live. */}
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      {/* Centred in what is LEFT of the screen, not in the screen. The sidebar
+          is opaque and permanent, so centring over it put the modal visibly
+          left of the content it belongs to.
+
+          A sibling of the backdrop rather than its child, so the panel's clicks
+          have nowhere to bubble to — and pointer-events-none lets a click in
+          the margin fall through to the backdrop and close.
+
+          The transition matches the sidebar's own 300ms, so the two move
+          together instead of the modal jumping after it. */}
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-[1360px] h-[88vh] flex flex-col"
-        onClick={e => e.stopPropagation()}
+        className="absolute inset-0 sm:left-[var(--sidebar-w)] flex items-center justify-center p-4 pointer-events-none transition-[left] duration-300 ease-in-out"
+        style={{ '--sidebar-w': `${sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH}px` } as CSSProperties}
       >
+        <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl w-full max-w-[1360px] h-[88vh] flex flex-col">
         {/* px-3, not px-5, so the title's left edge sits over the rail's and
             the close button's right edge over the canvas's. */}
         <div className="flex items-center justify-between px-3 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
@@ -745,6 +764,7 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
               </div>
             </div>
           )}
+        </div>
         </div>
       </div>
       {quickView && (
