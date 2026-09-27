@@ -166,7 +166,7 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
   // ── Competitive view ──
   const [signalsOnly, setSignalsOnly] = useState(false);
   /**
-   * Whether every connected card is lit at once.
+   * Whether every card carrying a signal is lit at once.
    *
    * Plain state, deliberately. Not localStorage, not sessionStorage, not a ref
    * outside the component: the modal unmounts when it closes, so this goes back
@@ -174,7 +174,7 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
    * question, and finding it already on next week — with no memory of asking
    * for it — reads as the grid being broken.
    */
-  const [highlightConnected, setHighlightConnected] = useState(false);
+  const [highlightSignals, setHighlightSignals] = useState(false);
   const [activeSignals, setActiveSignals] = useState<Set<SignalKey>>(new Set());
   // What is hidden, not what is shown. See the note in CompetitiveRail.
   const [hiddenCompetitorIds, setHiddenCompetitorIds] = useState<Set<number>>(new Set());
@@ -591,8 +591,8 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
                   onToggleCompetitor={toggleCompetitor}
                   signalsOnly={signalsOnly}
                   onSignalsOnly={setSignalsOnly}
-                  highlightConnected={highlightConnected}
-                  onHighlightConnected={setHighlightConnected}
+                  highlightSignals={highlightSignals}
+                  onHighlightSignals={setHighlightSignals}
                   activeSignals={activeSignals}
                   onToggleSignal={toggleSignal}
                   unclassifiedCount={competitive.unclassifiedCount}
@@ -633,7 +633,7 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
                 statusesOf={statusesOf}
                 signalsOnly={signalsOnly}
                 activeSignals={activeSignals}
-                highlightConnected={highlightConnected}
+                highlightSignals={highlightSignals}
                 onOpenCompany={setQuickView}
                 userOptions={userOptions}
                 colorMaps={colorMaps}

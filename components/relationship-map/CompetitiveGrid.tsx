@@ -67,7 +67,7 @@ const CONNECTOR_SIGNALS: SignalKey[] = ['evaluatingAlternatives', 'switched'];
  */
 export function CompetitiveGrid({
   cells, competitors, cardFor, nameOf, typesOf, statusesOf, onOpenCompany,
-  signalsOnly, activeSignals, highlightConnected,
+  signalsOnly, activeSignals, highlightSignals,
   userOptions, colorMaps, onUpdated,
 }: {
   cells: SignalCell[];
@@ -86,8 +86,8 @@ export function CompetitiveGrid({
   onOpenCompany?: (target: { id: number; name: string }) => void;
   signalsOnly: boolean;
   activeSignals: Set<SignalKey>;
-  /** Light every connected card at once, rather than one account on hover. */
-  highlightConnected: boolean;
+  /** Light every card carrying a signal at once, rather than one account on hover. */
+  highlightSignals: boolean;
   userOptions: UserOption[];
   colorMaps: Record<string, Record<string, string | null>>;
   onUpdated?: () => void;
@@ -115,7 +115,7 @@ export function CompetitiveGrid({
   /**
    * The colour a card is painted, or null for one that is not in play.
    *
-   * Two ways in, and hovering wins. "Highlight connections" lights every
+   * Two ways in, and hovering wins. "Highlight signals" lights every
    * connected card at once, which answers "who is in play at all"; pointing at
    * one narrows it to that account's cards, which answers "what is THIS
    * account weighing". Leaving the broad highlight on under the cursor would
@@ -123,11 +123,11 @@ export function CompetitiveGrid({
    */
   const litWith = (cell: SignalCell): string | null => {
     if (hovered) return isLit(cell, hovered) ? SIGNAL_TONE[hovered.signal] : null;
-    if (!highlightConnected) return null;
+    if (!highlightSignals) return null;
     const sig = connectorSignalOf(cell);
     return sig ? SIGNAL_TONE[sig] : null;
   };
-  const anyHighlight = hovered !== null || highlightConnected;
+  const anyHighlight = hovered !== null || highlightSignals;
 
   /**
    * Which cells survive the rail's filters.

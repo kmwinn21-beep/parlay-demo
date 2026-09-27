@@ -498,11 +498,11 @@ console.log('\n— the view toggle —');
     /: \(hubNode\?\.name \?\? 'Select a company'\)/.test(header), true);
 
   // The highlight is per-opening. Nothing outlives the modal.
-  eq('the connection highlight starts off',
-    /const \[highlightConnected, setHighlightConnected\] = useState\(false\)/.test(modal), true);
+  eq('the signal highlight starts off',
+    /const \[highlightSignals, setHighlightSignals\] = useState\(false\)/.test(modal), true);
   // It shows no connectors, so it no longer says it does.
   eq('  and is not called what it stopped doing',
-    /showConnectors/.test(modal), false);
+    /showConnectors|highlightConnected/.test(modal), false);
   eq('  and is not persisted anywhere',
     /localStorage|sessionStorage/.test(modal), false);
   eq('  nor parked in a ref that outlives a render',
@@ -530,10 +530,12 @@ console.log('\n— the view toggle —');
     /Select an entity/.test(strip('components/relationship-map/EntityPicker.tsx')), false);
   eq('signals only still leads the rail',
     /checked=\{signalsOnly\}/.test(rail), true);
-  eq('  the connection highlight sits beside it',
-    rail.indexOf('checked={signalsOnly}') < rail.indexOf('checked={highlightConnected}'), true);
+  eq('  the signal highlight sits beside it',
+    rail.indexOf('checked={signalsOnly}') < rail.indexOf('checked={highlightSignals}'), true);
+  // It draws nothing, so it says nothing about connectors.
   eq('  labelled for what it does',
-    /Highlight connections/.test(rail) && /Show connectors/.test(rail) === false, true);
+    /Highlight signals/.test(rail)
+      && /Show connectors|Highlight connections/.test(rail) === false, true);
   eq('  three signal filters, named from the shared map',
     /\(Object\.keys\(SIGNAL_LABELS\) as SignalKey\[\]\)\.map/.test(rail), true);
   eq('  each with its count',
@@ -769,8 +771,8 @@ console.log('\n— the card header, and the grid it had to change for —');
   eq('  reading the signal off the cell instead',
     /CONNECTOR_SIGNALS\.find\(k => cell\.signals\[k\]\) \?\? null/.test(grid), true);
 
-  eq('the checkbox lights every connected card at once',
-    /if \(!highlightConnected\) return null;/.test(grid), true);
+  eq('the checkbox lights every card carrying a signal at once',
+    /if \(!highlightSignals\) return null;/.test(grid), true);
   eq('  in that signal\u2019s own colour',
     /return sig \? SIGNAL_TONE\[sig\] : null;/.test(grid), true);
   eq('  and greys every card that carries none',
@@ -921,7 +923,7 @@ console.log('\n— the card header, and the grid it had to change for —');
     railSrc.indexOf('scrollbar-desktop-thin'),
   );
   eq('both switches share one row',
-    /checked=\{signalsOnly\}/.test(switchRow) && /checked=\{highlightConnected\}/.test(switchRow), true);
+    /checked=\{signalsOnly\}/.test(switchRow) && /checked=\{highlightSignals\}/.test(switchRow), true);
   eq('  neither left on a line of its own',
     (railSrc.match(/<label className="flex items-center gap-1\.5/g) || []).length, 0);
   // Wraps rather than truncating: a tenant with longer words should lose a
