@@ -3486,8 +3486,14 @@ export default function ConferenceDetailPage() {
                 type="button"
                 onClick={() => setShowRelationshipMap(true)}
                 /* Matches the two it sits between: same padding, same hover,
-                   same nowrap so it does not fold inside the scrolling row. */
-                className="flex items-center gap-1 py-1 px-1 text-sm font-medium text-gray-500 hover:text-brand-accent transition-colors whitespace-nowrap cursor-pointer flex-shrink-0"
+                   same nowrap so it does not fold inside the scrolling row.
+
+                   Desktop only. The map is a canvas you rearrange by dragging
+                   and the competitive view is four columns read across, and
+                   neither has an honest rendering at phone width — see
+                   BACKLOG.md. Hidden rather than disabled: a control nobody
+                   can reach does not need explaining. */
+                className="hidden sm:flex items-center gap-1 py-1 px-1 text-sm font-medium text-gray-500 hover:text-brand-accent transition-colors whitespace-nowrap cursor-pointer flex-shrink-0"
               >
                 {/* Hub and spokes: a centre with four lines out to satellites. */}
                 <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">

@@ -274,7 +274,7 @@ console.log('\n— the pieces on the page —');
     /readOnly\s*\n?\s*\/>/.test(modal), true);
   // An empty column would take width from the map for nothing.
   eq('the column is absent when there are no internal relationships',
-    /\{internalCards\.length > 0 && \(/.test(modal), true);
+    /\{view === 'map' && internalCards\.length > 0 && \(/.test(modal), true);
   eq('  and collapses to a strip rather than disappearing',
     /width: internalOpen \? 320 : 40/.test(modal), true);
   eq('  with the width animated both ways',
@@ -331,46 +331,41 @@ console.log('\n— the pieces on the page —');
   eq('the analytics tab still renders the charts', /activeTab === 'analytics'/.test(page), true);
 }
 
-console.log('\n— on a phone —');
+console.log('\n— not on a phone at all —');
 {
   const modal = strip('components/RelationshipMapModal.tsx');
-  const tab = strip('components/pre-conference/RelationshipsTab.tsx');
+  const page = strip('app/conferences/[id]/page.tsx');
 
-  // The same two panels the pre-conference relationships tab uses, rather than
-  // a shrunken version of the canvas.
-  eq('the two layouts are exclusive',
-    /sm:hidden flex flex-col p-3/.test(modal) && /hidden sm:flex gap-3 p-3/.test(modal), true);
-  eq('  with a toggle between a list and the chosen company',
-    /setMobileTab\('companies'\)/.test(modal) && /setMobileTab\('relationships'\)/.test(modal), true);
-  eq('  naming the company on the second tab',
-    /\{hubNode \? hubNode\.name : 'Relationships'\}/.test(modal), true);
-  eq('  and switching to it when one is picked',
-    /setSelectedId\(id\); setMobileTab\('relationships'\);/.test(modal), true);
+  // The map is a canvas you rearrange by dragging and the competitive view is
+  // four columns read across. Neither has an honest rendering at phone width,
+  // and a two-panel card list was a third thing to keep in step with both.
+  eq('the button that opens it is desktop only',
+    /hidden sm:flex items-center gap-1 py-1 px-1 text-sm font-medium text-gray-500 hover:text-brand-accent/.test(page), true);
+  // Hidden rather than disabled: a control nobody can reach does not need
+  // explaining.
+  eq('  hidden rather than disabled',
+    /disabled[\s\S]{0,60}setShowRelationshipMap/.test(page), false);
 
-  // No hub and spokes: a canvas you rearrange by dragging is of no use on a
-  // phone, and the cards are the content.
-  const mobileBlock = modal.slice(modal.indexOf('sm:hidden flex flex-col p-3'), modal.indexOf('hidden sm:flex gap-3 p-3'));
-  eq('the canvas is not rendered on a phone', /<MapCanvas/.test(mobileBlock), false);
-  eq('  the cards are, stacked', /<VendorRelationshipCard/.test(mobileBlock), true);
-  eq('  under the same headings the tab uses',
-    /<SectionHead label="Internal"/.test(mobileBlock), true);
-  eq('  and the picker fills the width',
-    /className="flex-1 min-h-0"/.test(mobileBlock), true);
-  // Which of the two panels is on screen follows the toggle. Without this the
-  // list can be wired to the tab and still never shown.
-  eq('  with the toggle choosing which panel shows',
-    /\{mobileTab === 'companies' \? \(/.test(mobileBlock), true);
+  // By not rendering rather than by hiding its contents: narrowing the window
+  // with it open would otherwise leave the shell of a modal with nothing in it.
+  eq('the modal itself renders nothing below the breakpoint',
+    /className="fixed inset-0 z-\[200\] hidden sm:block"/.test(modal), true);
 
-  // One SectionHead, shared. Two lines is exactly the size of thing that gets
-  // copied and then drifts.
-  eq('the section heading is shared, not copied',
-    /export function SectionHead/.test(tab) && /SectionHead \}? from '@\/components\/pre-conference\/RelationshipsTab'|RelationshipAttendeeCard, SectionHead \}/.test(modal), true);
-  eq('  and the modal declares none of its own',
-    /function SectionHead/.test(modal), false);
+  // The phone layout is gone, not merely unreachable. Dead code is worse than
+  // no code, and an unreachable branch is the one that silently rots.
+  eq('the phone layout is deleted, not left unreachable',
+    /sm:hidden/.test(modal), false);
+  eq('  with nothing left steering it',
+    /mobileTab/.test(modal), false);
+  eq('  and nothing imported only to feed it',
+    /SectionHead/.test(modal) || /<VendorRelationshipCard/.test(modal), false);
+  // The desktop layout no longer needs to say it is the desktop one.
+  eq('  leaving one layout, which is the only one',
+    (modal.match(/hidden sm:flex gap-3 p-3 overflow-hidden/g) || []).length, 1);
 
-  // The picker was a fixed-width column; on a phone it is the whole screen.
+  // The picker is still told its width by the caller — the rail owns it now.
   const picker = strip('components/relationship-map/EntityPicker.tsx');
-  eq('the picker takes its width from the caller',
+  eq('the picker still takes its width from the caller',
     /className = 'w-72 flex-shrink-0'/.test(picker), true);
 }
 
@@ -450,9 +445,8 @@ console.log('\n— the view toggle —');
   // The identifier, not the word — "view its relationships" is copy.
   eq('the mobile branch never reads view',
     /\bview\s*===|\bsetView\b|\{\s*view\b/.test(mobileBlock), false);
-  eq('  it still reads mobileTab', /mobileTab === 'companies'/.test(mobileBlock), true);
-  eq('  and renders neither the competitive rail nor its canvas',
-    /CompetitiveRail/.test(mobileBlock), false);
+  eq('  because there is no mobile branch left to read it',
+    /mobileTab/.test(modal), false);
   // narrow → desktop comes back to Competitive, which only holds while view
   // survives the breakpoint. Both branches live in one component and one
   // render, so there is no second copy of the state to go stale.
@@ -887,15 +881,16 @@ console.log('\n— the card header, and the grid it had to change for —');
     /onUpdated=\{\(\) => \{ void loadMap\(true\); \}\}/.test(modal), true);
   // Both Map surfaces — the mobile card list and the desktop canvas. One of
   // them losing its refresh looks exactly like the bug this fixes.
-  eq('  the Map view still refreshes its spokes, on both its surfaces',
-    (modal.match(/loadRels\(hubNode\.id\)/g) || []).length, 2);
+  // One Map surface now that the phone layout is gone.
+  eq('  the Map canvas still refreshes its spokes',
+    (modal.match(/loadRels\(hubNode\.id\)/g) || []).length, 1);
   // And the map payload with them. Updating in Map view and then flipping to
-  // Competitive was looking at the state the modal opened with — the same bug,
+  // Competition was looking at the state the modal opened with — the same bug,
   // one route further along, reachable without leaving the modal.
-  eq('  and the map payload too, so flipping to Competitive is not stale',
-    (modal.match(/onUpdated=\{\(\) => \{ loadRels\(hubNode\.id\); void loadMap\(true\); \}\}/g) || []).length, 2);
+  eq('  and the map payload too, so flipping to Competition is not stale',
+    (modal.match(/onUpdated=\{\(\) => \{ loadRels\(hubNode\.id\); void loadMap\(true\); \}\}/g) || []).length, 1);
   eq('  every card in the modal refreshes the payload the grid reads',
-    (modal.match(/void loadMap\(true\)/g) || []).length, 3);
+    (modal.match(/void loadMap\(true\)/g) || []).length, 2);
   // A refetch that unmounts the grid collapses every open card and throws away
   // the scroll position of somebody mid-read.
   eq('  silently, so the grid is not unmounted under the reader',

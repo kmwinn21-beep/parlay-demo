@@ -149,9 +149,17 @@ It fails silently. The module swallows all errors by design, and an empty recipi
   module rather than the query, and a decision about whether it means anything
   on a card whose account has no internal relationship at all.
 
-- **A single-competitor mobile Competitive view.** The competitive view is
-  desktop-only: the `[Map | Competitive]` toggle is hidden in the modal's
-  `sm:hidden` branch, which never reads `view` at all. The reason is the grid
+- **A mobile relationship map at all.** The whole modal is now desktop-only —
+  the button that opens it is hidden below the breakpoint and the modal renders
+  nothing there — so the two-panel phone layout that used to stand in for the
+  map has been deleted rather than left unreachable. If it ever needs to be
+  reachable on a phone, both views need answering, not just one.
+
+  For the MAP view that means something other than a canvas you rearrange by
+  dragging; the deleted layout — a company list, then that company's cards —
+  is in git history and was a reasonable answer.
+
+  For the COMPETITIVE view, a single-competitor layout. The reason is the grid
   itself — competitors run across as columns, and the thing you read is a row,
   tracing one account under two different competitors. Four columns at 390px is
   about ninety pixels each, which does not hold a company name, let alone the
@@ -173,11 +181,9 @@ It fails silently. The module swallows all errors by design, and an empty recipi
   four-column grid nobody can read — which is why this is the answer if the view
   ever needs to be reachable on a phone, and why it was not built as the default.
 
-  Also unresolved for that layout: the header already carries the scope toggle
-  and the Companies/Relationships tab bar, and `mobileTab` has no meaning in
-  Competitive (there is no company to pick), so the tab bar would have to
-  disappear and reappear as the view flips. Worth solving properly rather than
-  squeezing a third toggle onto the same row.
+  Also unresolved: the header would carry the scope toggle, the view toggle and
+  whatever the map view's own layout needs, on a 390px row. Worth solving
+  properly rather than squeezing three toggles onto one line.
 
 ## Methodology notes
 
