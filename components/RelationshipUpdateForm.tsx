@@ -5,6 +5,8 @@ import toast from 'react-hot-toast';
 import { MobileFormSheet } from '@/components/MobileFormSheet';
 import { MultiSelect, type ConfigOption } from '@/components/VendorRelationshipFields';
 import { useIsDesktop } from '@/lib/useIsDesktop';
+import { useRelationshipStatusOptions } from '@/lib/useRelationshipStatusOptions';
+import { VendorSwitchPrompt, type SwitchPrompt } from '@/components/VendorSwitchPrompt';
 import type { VendorRelationship, RelationshipUpdate } from '@/components/VendorRelationshipCard';
 
 /** What the write endpoint hands back, so the card can show it immediately. */
@@ -14,6 +16,14 @@ export interface SavedUpdate {
   status_as_of: string;
   /** The new status, or null when it did not change. */
   relationship_status: string[] | null;
+  /**
+   * A question to ask before this is finished, or nothing.
+   *
+   * Worked out by the server, which is the only side that knows what the
+   * account's other relationships say and which company types count as
+   * competitors. See lib/vendorSwitchServer.
+   */
+  switch_prompt?: SwitchPrompt | null;
 }
 
 /**
@@ -36,9 +46,18 @@ export interface SavedUpdate {
  * status change (to Former Vendor) and is not stale at all — it is the
  * freshest the record has ever been.
  */
-export function RelationshipUpdateForm({ rel, onClose, onSaved }: {
+export function RelationshipUpdateForm({ rel, onClose, onSaved, onRefresh }: {
   rel: VendorRelationship;
   onClose: () => void;
+  /**
+   * Something outside this relationship changed — reload whatever is showing it.
+   *
+   * Answering the switch prompt moves ANOTHER relationship's status, may create
+   * a third and may retype a company, all after the save that onSaved reported.
+   * A surface that only refreshes on save shows the card it just edited
+   * correctly and everything the answer touched as it was a moment ago.
+   */
+  onRefresh?: () => void;
   /**
    * The saved entry, as the server wrote it.
    *
@@ -54,10 +73,17 @@ export function RelationshipUpdateForm({ rel, onClose, onSaved }: {
   const [status, setStatus] = useState<string[]>(rel.relationship_status);
   const [markStale, setMarkStale] = useState(false);
   const [saving, setSaving] = useState(false);
-  // Fetched here rather than passed in. The card renders on four surfaces and
-  // only one of them was already loading these; threading them through the
-  // other three is how the button ends up missing from two of them.
-  const [statusOptions, setStatusOptions] = useState<ConfigOption[]>([]);
+  /**
+   * Held open after the save, when the change might be a vendor switch.
+   *
+   * The update is already written by this point and is not held hostage to the
+   * answer: dismissing loses the switch, which is a far smaller loss than
+   * losing the note the rep came to write.
+   */
+  const [switchPrompt, setSwitchPrompt] = useState<SwitchPrompt | null>(null);
+  // Both halves of every pair, from the shared hook — three forms asked for
+  // this list and each fetched it separately.
+  const statusOptions = useRelationshipStatusOptions();
 
   /**
    * Focus the note, but only on a desktop.
@@ -73,15 +99,6 @@ export function RelationshipUpdateForm({ rel, onClose, onSaved }: {
   useEffect(() => {
     if (isDesktop === true) bodyRef.current?.focus();
   }, [isDesktop]);
-
-  useEffect(() => {
-    fetch('/api/config?category=other_relationship_status')
-      .then(r => (r.ok ? r.json() : []))
-      .then((d: ConfigOption[]) => setStatusOptions(
-        Array.isArray(d) ? d.map(o => ({ id: o.id, value: o.value })) : [],
-      ))
-      .catch(() => {});
-  }, []);
 
   const save = async () => {
     if (!body.trim()) {
@@ -107,11 +124,26 @@ export function RelationshipUpdateForm({ rel, onClose, onSaved }: {
       }
       toast.success(markStale ? 'Flagged as possibly out of date' : 'Relationship confirmed');
       onSaved?.(data as SavedUpdate);
+      const prompt = (data as SavedUpdate).switch_prompt;
+      if (prompt) { setSwitchPrompt(prompt); return; }
       onClose();
     } finally {
       setSaving(false);
     }
   };
+
+  if (switchPrompt) {
+    return (
+      <VendorSwitchPrompt
+        prompt={switchPrompt}
+        onDone={recorded => {
+          setSwitchPrompt(null);
+          if (recorded) onRefresh?.();
+          onClose();
+        }}
+      />
+    );
+  }
 
   return (
     <MobileFormSheet title={`Update · ${rel.related_company_name}`} onClose={onClose}>

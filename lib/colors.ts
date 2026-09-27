@@ -125,21 +125,47 @@ export function getPreset(colorKey: string | null | undefined): ColorPreset {
 export type ColorMap = Record<string, string | null>;
 
 /** Build a color map from config option rows */
-export function buildColorMap(options: Array<{ value: string; color: string | null }>): ColorMap {
+export function buildColorMap(
+  options: Array<{ value: string; color: string | null; inverse_value?: string | null }>,
+): ColorMap {
   const map: ColorMap = {};
   for (const opt of options) {
     map[opt.value] = opt.color;
+  }
+  // A counterpart takes the colour of the status it is the other half of.
+  //
+  // "Customer" and "Current Vendor" are one fact read from two ends, so showing
+  // them in two colours says they are two things. Only relationship statuses
+  // carry a counterpart, so every other category is untouched.
+  //
+  // Second pass, and only where nothing is already there: a counterpart that is
+  // also a configured option in its own right keeps its own colour, the same
+  // way buildCounterpartMap lets a configured value win. That one guard also
+  // covers a symmetric status — the first pass already claimed its own value,
+  // so it is skipped here without needing a test of its own.
+  for (const opt of options) {
+    const inv = String(opt.inverse_value ?? '').trim();
+    if (inv && !(inv in map)) map[inv] = opt.color;
   }
   return map;
 }
 
 const RED_PRESET = COLOR_PRESETS.find(p => p.key === 'red')!;
 
-/** Get badge class for a value, using its color from the map */
-export function getBadgeClass(value: string | undefined, colorMap: ColorMap): string {
-  if (!value) return `inline-flex px-2 py-0.5 rounded-lg text-xs font-semibold ${FALLBACK.badgeClass}`;
+/**
+ * Get badge class for a value, using its color from the map.
+ *
+ * sizeClass is the one thing a caller ever needs to vary — a badge in a grid
+ * cell is smaller than the same badge on a record page — and passing it beats
+ * appending a second font-size utility, which would leave two of them on the
+ * element and let stylesheet order decide which won.
+ */
+export function getBadgeClass(
+  value: string | undefined, colorMap: ColorMap, sizeClass = 'text-xs',
+): string {
+  if (!value) return `inline-flex px-2 py-0.5 rounded-lg ${sizeClass} font-semibold ${FALLBACK.badgeClass}`;
   const preset = value === 'Competitor' ? RED_PRESET : getPreset(colorMap[value]);
-  return `inline-flex px-2 py-0.5 rounded-lg text-xs font-semibold ${preset.badgeClass}`;
+  return `inline-flex px-2 py-0.5 rounded-lg ${sizeClass} font-semibold ${preset.badgeClass}`;
 }
 
 /** Get pill class for a value (solid bg, used on detail pages) */

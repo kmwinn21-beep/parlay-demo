@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
 import { vendorRelsQuery, loadRelationshipThreads, loadInverseStatuses, presentRelationships } from '@/lib/relationshipThread';
+import { detectSwitchPrompt, loadSwitchContext } from '@/lib/vendorSwitchServer';
 
 /** Multi-selects arrive as arrays and are stored comma-separated, like services. */
 function serializeList(value: unknown): string | null {
@@ -105,7 +106,14 @@ export async function POST(request: NextRequest) {
         serializeList(vendor_type), String(notes).trim(),
       ],
     });
-    return NextResponse.json({ id: Number(res.rows[0].id) });
+    // Not every rep uses the Update button, so the add form asks too. Failing
+    // to work out whether to prompt must never fail the save that already
+    // happened — the relationship is written either way.
+    const id = Number(res.rows[0].id);
+    const switch_prompt = await loadSwitchContext(db)
+      .then(ctx => detectSwitchPrompt(db, { relationshipId: id, before: [], ctx }))
+      .catch(() => null);
+    return NextResponse.json({ id, switch_prompt });
   } catch (error) {
     console.error('POST /api/vendor-relationships error:', error);
     return NextResponse.json({ error: 'Failed to save relationship' }, { status: 500 });
@@ -127,10 +135,26 @@ export async function PUT(request: NextRequest) {
     if (!String(notes ?? '').trim()) return NextResponse.json({ error: 'Notes / Context is required' }, { status: 400 });
     if (!rep_id) return NextResponse.json({ error: 'Rep is required' }, { status: 400 });
 
+    // Stamp status_changed_at only when the status value actually differs.
+    //
+    // This form writes updated_at on any field — a notes correction, a rep
+    // reassignment — so updated_at cannot answer "when did the status change".
+    // Reading the old value first is what keeps the two apart.
+    const before = await db.execute({
+      sql: 'SELECT relationship_status FROM vendor_relationships WHERE id = ?',
+      args: [Number(id)],
+    }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
+    const previous = before.rows[0]?.relationship_status
+      ? String(before.rows[0].relationship_status) : null;
+    const statusChanged = previous !== statuses;
+    const previousList = previous
+      ? previous.split(',').map(v => v.trim()).filter(Boolean) : [];
+
     await db.execute({
       sql: `UPDATE vendor_relationships
             SET related_company_id = ?, rep_id = ?, relationship_status = ?, strength = ?,
-                vendor_type = ?, notes = ?, updated_at = datetime('now')
+                vendor_type = ?, notes = ?, updated_at = datetime('now')${
+                  statusChanged ? ", status_changed_at = datetime('now')" : ''}
             WHERE id = ?`,
       args: [
         Number(related_company_id), Number(rep_id), statuses,
@@ -138,7 +162,28 @@ export async function PUT(request: NextRequest) {
         String(notes).trim(), Number(id),
       ],
     });
-    return NextResponse.json({ success: true });
+    // The edit form also writes a thread entry when the status moved. It used
+    // to record WHEN a status changed and never WHY, so a card edited this way
+    // had a date with nothing behind it — and the switch this may have been
+    // part of had no entry to hang off.
+    if (statusChanged) {
+      await db.execute({
+        sql: `INSERT INTO relationship_updates
+                (relationship_id, body, status_before, status_after, marked_stale, author_user_id)
+              VALUES (?, ?, ?, ?, 0, ?)`,
+        args: [
+          Number(id), 'Status changed from the relationship form.',
+          previous, statuses, authResult.id,
+        ],
+      }).catch(() => {});
+    }
+
+    const switch_prompt = statusChanged
+      ? await loadSwitchContext(db)
+        .then(ctx => detectSwitchPrompt(db, { relationshipId: Number(id), before: previousList, ctx }))
+        .catch(() => null)
+      : null;
+    return NextResponse.json({ success: true, switch_prompt });
   } catch (error) {
     console.error('PUT /api/vendor-relationships error:', error);
     return NextResponse.json({ error: 'Failed to update relationship' }, { status: 500 });

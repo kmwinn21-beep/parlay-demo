@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
-import { vendorRelsQuery, loadInverseStatuses } from '@/lib/relationshipThread';
+import {
+  vendorRelsQuery, loadInverseStatuses, loadRelationshipThreads, presentRelationships,
+} from '@/lib/relationshipThread';
 import { isInverted } from '@/lib/relationshipDirection';
 import { getIcpCompanyTypes } from '@/lib/icpCompanyTypes';
 import { buildGraph, pruneIsolated, type GraphCompany, type GraphEdgeInput } from '@/lib/relationshipGraph';
+import {
+  resolveCompetitive, type RawRelationshipRow, type ResolutionCompany,
+} from '@/lib/competitiveResolution';
 
 /**
  * The relationship map for one conference.
@@ -87,7 +92,13 @@ export async function GET(
     }
 
     if (seedIds.length === 0) {
-      return NextResponse.json({ scope, nodes: [], edges: [] }, { headers: { 'Cache-Control': 'no-store' } });
+      return NextResponse.json({
+        scope, nodes: [], edges: [],
+        competitive: {
+          relationships: [], competitors: [], companiesWithInternal: [], cards: [],
+          inverses: {}, switches: [], notCompetitive: 0, duplicates: 0,
+        },
+      }, { headers: { 'Cache-Control': 'no-store' } });
     }
 
     const [relRows, inverses] = await Promise.all([
@@ -193,6 +204,163 @@ export async function GET(
 
     const graph = pruneIsolated(buildGraph(companies, edges, attendeeCounts), atConference);
 
+    /* ── The competitive view's own read ──────────────────────────────────────
+       Additive. The map's nodes and edges above are untouched: this is a second
+       shape over the same relationships, not a change to the first.
+
+       Read from vendor_relationships directly rather than from vendorRelsQuery,
+       which returns each row once per end it was asked for. Resolution needs the
+       row as STORED — company_id is the side the status was written from, and
+       that is the whole basis of working out which end is the competitor. */
+    const competitive = await (async () => {
+      const inSet = new Set(companies.map(c => c.id));
+      const ids = Array.from(inSet);
+      if (ids.length === 0) {
+        return {
+          relationships: [], competitors: [], companiesWithInternal: [], cards: [],
+          inverses: {}, switches: [], notCompetitive: 0, duplicates: 0,
+        };
+      }
+
+      const rawRows: RawRelationshipRow[] = [];
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const slice = ids.slice(i, i + CHUNK);
+        const ph = slice.map(() => '?').join(',');
+        // status_changed_at arrived with this feature. A tenant that has not run
+        // the migration loses the Recent Change signal rather than the view.
+        const res = await db.execute({
+          sql: `SELECT id, company_id, related_company_id, relationship_status, status_changed_at
+                FROM vendor_relationships
+                WHERE company_id IN (${ph}) OR related_company_id IN (${ph})`,
+          args: [...slice, ...slice],
+        }).catch(() => db.execute({
+          sql: `SELECT id, company_id, related_company_id, relationship_status,
+                       NULL AS status_changed_at
+                FROM vendor_relationships
+                WHERE company_id IN (${ph}) OR related_company_id IN (${ph})`,
+          args: [...slice, ...slice],
+        }).catch(() => ({ rows: [] as Record<string, unknown>[] })));
+
+        for (const r of res.rows) {
+          const a = Number(r.company_id);
+          const z = Number(r.related_company_id);
+          // Both ends have to be on this map, or the grid would hold a column
+          // for a company the scope excluded.
+          if (!inSet.has(a) || !inSet.has(z)) continue;
+          // The same scope rule the edges use: at conference scope a
+          // relationship counts only when both ends are at this show.
+          if (scope !== 'all' && !(atConference.has(a) && atConference.has(z))) continue;
+          rawRows.push({
+            id: Number(r.id),
+            companyId: a,
+            relatedCompanyId: z,
+            statuses: splitList(r.relationship_status),
+            statusChangedAt: r.status_changed_at ? String(r.status_changed_at) : null,
+          });
+        }
+      }
+      // The chunked OR can return a row twice when both its ends fall in
+      // different slices.
+      const seen = new Set<number>();
+      const rows = rawRows.filter(r => (seen.has(r.id) ? false : (seen.add(r.id), true)));
+
+      const [statusRes, compTypeRes, internalRes] = await Promise.all([
+        db.execute({
+          sql: `SELECT value, inverse_value, action_key FROM config_options
+                WHERE category = 'other_relationship_status'`,
+          args: [],
+        }).catch(() => ({ rows: [] as Record<string, unknown>[] })),
+        // Matched on the action_key, not the word: an account that renamed
+        // Competitor still has competitors.
+        db.execute({
+          sql: `SELECT value FROM config_options
+                WHERE category = 'company_type' AND action_key = 'competitor'`,
+          args: [],
+        }).catch(() => ({ rows: [] as Record<string, unknown>[] })),
+        /* Which companies somebody here already knows somebody at.
+           Its own query, deliberately, rather than the pre-conference load the
+           Map's internal column uses. That load is conference-scoped because it
+           computes a health ring — five cross-conference queries — and this
+           signal needs none of that, only whether a row exists. Inheriting the
+           narrower read would have left the signal quietly LOW at "All
+           Relationships": nothing errors, nothing logs, the number is just
+           wrong at the setting that claims to show everything. */
+        db.execute({
+          sql: `SELECT DISTINCT company_id FROM internal_relationships
+                WHERE company_id IS NOT NULL`,
+          args: [],
+        }).catch(() => ({ rows: [] as Record<string, unknown>[] })),
+      ]);
+
+      const companyMap = new Map<number, ResolutionCompany>(
+        companies.map(c => [c.id, { id: c.id, name: c.name, types: c.company_types }]),
+      );
+
+      const resolved = resolveCompetitive({
+        rows,
+        statusConfig: statusRes.rows.map(r => ({
+          value: String(r.value ?? ''),
+          inverseValue: r.inverse_value ? String(r.inverse_value) : null,
+          actionKey: r.action_key ? String(r.action_key) : null,
+        })),
+        companies: companyMap,
+        competitorTypes: compTypeRes.rows.map(r => String(r.value ?? '')).filter(Boolean),
+      });
+
+      /* The cards the grid renders, read from the ACCOUNT's side.
+         presentRelationships is the same presenter the company record and the
+         pre-conference views use, over the relRows this route already loaded, so
+         the grid shows the real card — thread, Update button, inverted wording
+         and all — rather than a lighter copy that would drift from it.
+
+         Threads only for the relationships that survived resolution, so the
+         payload does not carry the whole conference's history to fill a grid of
+         collapsed cards. */
+      const threads = await loadRelationshipThreads(db, resolved.relationships.map(r => r.id));
+      const presented = presentRelationships(relRows.rows, threads, inverses);
+      // Keyed on the pair, not on an id: resolution picks its survivor by change
+      // date and collapsePairs picks the outbound row, so the two can name
+      // different rows for the same relationship. The pair is what both agree on.
+      const wanted = new Set(resolved.relationships.map(r => `${r.companyId}:${r.competitorId}`));
+      const cards = presented.filter(c => wanted.has(`${c.company_id}:${c.related_company_id}`));
+
+      /* Recorded switches between companies on this map.
+         Only 'replacing' — the other answers are stored so the question is not
+         asked twice, and none of them says a vendor was displaced. */
+      const switchRes = await db.execute({
+        sql: `SELECT account_company_id, incumbent_company_id, incoming_company_id
+              FROM vendor_switches
+              WHERE answer = 'replacing' AND incoming_company_id IS NOT NULL`,
+        args: [],
+      }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
+      const switches = switchRes.rows
+        .map(r => ({
+          companyId: Number(r.account_company_id),
+          fromCompetitorId: Number(r.incumbent_company_id),
+          toCompetitorId: Number(r.incoming_company_id),
+        }))
+        .filter(x => inSet.has(x.companyId) && inSet.has(x.fromCompetitorId) && inSet.has(x.toCompetitorId));
+
+      return {
+        ...resolved,
+        cards,
+        /* The counterpart pairing, so the grid can read a card from the
+           account's side rather than the competitor's. Sent as the map rather
+           than as pre-inverted statuses: statusesFor already does the reading
+           and a second implementation in the browser would be a second answer. */
+        inverses,
+        /* Switches a rep recorded, for the grid's second connector.
+           Read rather than derived: "they left A for B" is a claim about cause,
+           and no arrangement of statuses and dates establishes one. */
+        switches,
+        // Narrowed to the companies on this map, so the payload does not carry
+        // the account's whole book to light three pills.
+        companiesWithInternal: internalRes.rows
+          .map(r => Number(r.company_id))
+          .filter(id => id && inSet.has(id)),
+      };
+    })();
+
     // The account's ICP company types, so the picker can lead with them.
     const icp = await getIcpCompanyTypes(db).catch(() => ({ values: [] as string[], configured: false }));
 
@@ -205,6 +373,8 @@ export async function GET(
         // is zero for a company nobody from it attended.
         atConference: Array.from(atConference),
         ...graph,
+        // Additive: the Map view reads nodes and edges and never looks here.
+        competitive,
       },
       { headers: { 'Cache-Control': 'no-store' } },
     );

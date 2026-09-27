@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { detectSwitchPrompt, loadSwitchContext } from '@/lib/vendorSwitchServer';
 
 /**
  * Adding to a relationship's thread, and saying whether it still holds.
@@ -70,11 +71,19 @@ export async function POST(request: NextRequest) {
     // does bump. Marking stale leaves it alone: the reason to flag a card is
     // that you do NOT know it is current, and stamping today's date on it
     // would say the opposite.
+    // Only when the status genuinely differs. `changed` is already exactly
+    // that — the confirmation path leaves the status alone and must not look
+    // like a change, which is the case that would have made the column useless.
+    //
+    // status_as_of below is a different fact: last confirmed, not last changed.
+    // A confirmation moves that and never this.
+    const STATUS_STAMP = changed ? ", status_changed_at = datetime('now')" : '';
+
     if (stale) {
       await db.execute({
         sql: `UPDATE vendor_relationships
               SET stale = 1, relationship_status = COALESCE(?, relationship_status),
-                  updated_at = datetime('now')
+                  updated_at = datetime('now')${STATUS_STAMP}
               WHERE id = ?`,
         args: [changed ? after : null, relId],
       });
@@ -83,7 +92,7 @@ export async function POST(request: NextRequest) {
         sql: `UPDATE vendor_relationships
               SET stale = 0, status_as_of = datetime('now'),
                   relationship_status = COALESCE(?, relationship_status),
-                  updated_at = datetime('now')
+                  updated_at = datetime('now')${STATUS_STAMP}
               WHERE id = ?`,
         args: [changed ? after : null, relId],
       });
@@ -99,8 +108,21 @@ export async function POST(request: NextRequest) {
       args: [authResult.id],
     }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
 
+    // Only a genuine status move can be a switch. A confirmation leaves the
+    // status alone and must not ask who replaced anybody.
+    const switch_prompt = changed
+      ? await loadSwitchContext(db)
+        .then(ctx => detectSwitchPrompt(db, {
+          relationshipId: relId,
+          before: before ? before.split(',').map(v => v.trim()).filter(Boolean) : [],
+          ctx,
+        }))
+        .catch(() => null)
+      : null;
+
     return NextResponse.json({
       success: true,
+      switch_prompt,
       update: {
         id: Number(inserted.rows[0]?.id ?? 0),
         body: comment,

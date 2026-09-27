@@ -17,6 +17,7 @@ import { CATEGORY_FORM_USAGE } from '@/lib/configOptionForms';
 import { BRAND_COLOR_DEFAULTS, BRAND_COLOR_META, BRAND_CSS_VARS, hexToRgbChannels, FONT_OPTIONS, DEFAULT_FONT_KEY, type BrandColorKey } from '@/lib/brand';
 import { DEFAULT_ROLE_CAPABILITIES, CAPABILITY_LABELS, LOCKED_ADMIN_CAPS, type UserRole, type RoleCapabilities, type CapabilityKey } from '@/lib/auth-shared';
 import { useCapabilities, invalidateCapabilitiesCache } from '@/lib/useCapabilities';
+import { counterpartError } from '@/lib/relationshipStatusOptions';
 import { useOnboarding } from '@/lib/OnboardingContext';
 import { invalidateAppName } from '@/lib/useAppName';
 import { invalidateLogoConfig } from '@/lib/useLogoConfig';
@@ -36,6 +37,8 @@ interface ConfigOption {
   scope?: string; // 'global' | 'user' — only meaningful for status category
   auto_follow_up?: number; // 1 = yes, 0 = no — only meaningful for touchpoints category
   is_system?: number; // 1 = seeded system value, cannot be deleted
+  /** For other_relationship_status: the words from the other company's side. */
+  inverse_value?: string | null;
   is_primary?: number; // 1 = primary designation for this category
   action_key?: string | null; // stable identifier; company_type uses 'prospect' to mark the primary target type
   category_id?: number | null;
@@ -257,6 +260,11 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
   const [editVisibleForms, setEditVisibleForms] = useState<string[]>([]);
+  // Only asked for on relationship statuses, where a status with no counterpart
+  // cannot be read from the other company at all.
+  const [editCounterpart, setEditCounterpart] = useState('');
+  const [newCounterpart, setNewCounterpart] = useState('');
+  const needsCounterpart = category === 'other_relationship_status';
   const [editScope, setEditScope] = useState<'global' | 'user'>('global');
   const [isAdding, setIsAdding] = useState(false);
   const dragIndexRef = useRef<number | null>(null);
@@ -282,6 +290,7 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
     setEditAutoFollowUp(opt.auto_follow_up === undefined ? true : opt.auto_follow_up !== 0);
     setEditCategoryId(opt.category_id ?? null);
     setEditDescription(opt.description ?? '');
+    setEditCounterpart(opt.inverse_value ?? '');
     setFormPickerOpenId(null);
     setExpandedOptions(prev => new Set(prev).add(opt.id));
   };
@@ -309,13 +318,20 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
       if (showAutoFollowUp) payload.auto_follow_up = editAutoFollowUp;
       if (category === 'products') payload.category_id = editCategoryId;
       if (category === 'product_category' || category === 'follow_up_actions') payload.description = editDescription.trim() || null;
+      // Only sent for a custom status. The server refuses it on a seeded one,
+      // and sending it unchanged would turn every save into a 403.
+      if (needsCounterpart && !localOptions.find(o => o.id === id)?.is_system) {
+        const err = counterpartError(editValue, editCounterpart);
+        if (err) { toast.error(err); return; }
+        payload.inverse_value = editCounterpart.trim();
+      }
       const res = await fetch(`/api/config/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error('Update failed');
-      setLocalOptions(prev => prev.map(opt => opt.id === id ? { ...opt, value: editValue.trim(), visible_forms: [...editVisibleForms], scope: showScopeDropdown ? editScope : opt.scope, auto_follow_up: showAutoFollowUp ? (editAutoFollowUp ? 1 : 0) : opt.auto_follow_up } : opt));
+      setLocalOptions(prev => prev.map(opt => opt.id === id ? { ...opt, value: editValue.trim(), inverse_value: needsCounterpart && !opt.is_system ? editCounterpart.trim() : opt.inverse_value, visible_forms: [...editVisibleForms], scope: showScopeDropdown ? editScope : opt.scope, auto_follow_up: showAutoFollowUp ? (editAutoFollowUp ? 1 : 0) : opt.auto_follow_up } : opt));
       toast.success('Updated!');
       setEditingId(null);
       setExpandedOptions(prev => {
@@ -358,11 +374,16 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
     const trimmed = ((fd.get('newOption') as string) ?? '').trim();
     const newDesc = ((fd.get('newDescription') as string) ?? '').trim() || null;
     if (!trimmed) { toast.error('Value cannot be empty.'); return; }
+    if (needsCounterpart) {
+      const err = counterpartError(trimmed, newCounterpart);
+      if (err) { toast.error(err); return; }
+    }
     setIsAdding(true);
     try {
       const addPayload: Record<string, unknown> = { category, value: trimmed, sort_order: localOptions.length + 1 };
       if (category === 'products') addPayload.category_id = newOptionCategoryId;
       if ((category === 'product_category' || category === 'follow_up_actions') && newDesc) addPayload.description = newDesc;
+      if (needsCounterpart) addPayload.inverse_value = newCounterpart.trim();
       const res = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(addPayload) });
       if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || 'Failed to add'); }
       const newOption = await res.json();
@@ -372,8 +393,10 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
         value: String(newOption.value),
         sort_order: Number(newOption.sort_order ?? 0),
         color: newOption.color ? String(newOption.color) : null,
+        inverse_value: newOption.inverse_value ? String(newOption.inverse_value) : null,
         visible_forms: availableForms.map(f => f.key),
       }]);
+      setNewCounterpart('');
       toast.success('Added!');
       form.reset();
       onRefresh();
@@ -570,6 +593,30 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
                             />
                           )}
                         </div>
+                        {needsCounterpart && (
+                          <div>
+                            <label className="text-xs text-gray-500 mb-1 block">Counterpart</label>
+                            {opt.is_system ? (
+                              <div className="input-field w-full text-sm bg-gray-50 text-gray-500 flex items-center justify-between">
+                                <span>{opt.inverse_value || '\u2014'}</span>
+                                <span className="text-[10px] text-gray-400 italic ml-2">locked</span>
+                              </div>
+                            ) : (
+                              <input
+                                value={editingId === opt.id ? editCounterpart : (opt.inverse_value ?? '')}
+                                onChange={(e) => setEditCounterpart(e.target.value)}
+                                onFocus={() => { if (editingId !== opt.id) handleEdit(opt); }}
+                                placeholder="e.g. Customer"
+                                className="input-field w-full text-sm"
+                              />
+                            )}
+                            <p className="text-[11px] text-gray-400 mt-1">
+                              What this is called from the other company&apos;s side. &ldquo;Current Vendor&rdquo;
+                              one way is &ldquo;Customer&rdquo; the other; a status that reads the same both
+                              ways is its own counterpart.
+                            </p>
+                          </div>
+                        )}
                         <div>
                           <label className="text-xs text-gray-500 mb-1 block">Visible In Forms</label>
                           {availableForms.length === 0 ? (
@@ -648,7 +695,22 @@ function CategorySection({ category, label, options, onRefresh, categoryOptions 
                             </p>
                           </div>
                         )}
-                        {category === 'products' && (
+                        {needsCounterpart && (
+              <div>
+                <input
+                  value={newCounterpart}
+                  onChange={e => setNewCounterpart(e.target.value)}
+                  placeholder="Counterpart (required) — e.g. Customer"
+                  className="input-field w-full text-sm"
+                  autoComplete="off"
+                />
+                <p className="text-[11px] text-gray-400 mt-1">
+                  What the new status is called from the other company&apos;s side, so a relationship
+                  can be read from either end.
+                </p>
+              </div>
+            )}
+            {category === 'products' && (
                           <div>
                             <label className="text-xs text-gray-500 mb-1 block">Category</label>
                             <select

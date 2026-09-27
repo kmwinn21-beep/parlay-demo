@@ -10,6 +10,8 @@ interface ConfigOption {
   value: string;
   sort_order: number;
   color: string | null;
+  /** Relationship statuses only; its colour follows the value it pairs with. */
+  inverse_value?: string | null;
 }
 
 /**

@@ -2652,4 +2652,130 @@ export const migrations: string[] = [
   // They are evaluating you, which from your side makes them a prospect.
   `UPDATE config_options SET inverse_value = 'Prospect'
      WHERE category = 'other_relationship_status' AND value = 'Evaluating' AND inverse_value IS NULL`,
+
+  // ── Every relationship status gets its counterpart ────────────────────────
+  //
+  // The first pass set one only where the words change, leaving the symmetric
+  // ones NULL. That was enough while the counterpart was a display detail, and
+  // is not now that it is an option in its own right: a rep picking "Preferred
+  // Partner" on either side needs that to be a real, selectable value with a
+  // known other half, not an absence the code reads as "same both ways".
+  //
+  // Other is symmetric too. It is the catch-all, and a catch-all is the same
+  // catch-all whichever end you read it from.
+  `UPDATE config_options SET inverse_value = value
+     WHERE category = 'other_relationship_status'
+       AND value IN ('Preferred Partner', 'Active Pilot', 'Other')
+       AND inverse_value IS NULL`,
+
+  // ── Relationship statuses get a stable key ────────────────────────────────
+  //
+  // The competitive view needs to know which statuses mean "they buy this
+  // today" and which mean "they are trying it", and the display values are the
+  // account's to rename. Matching on the words would break the first time
+  // somebody renamed one, and break silently in any language nobody thought to
+  // anticipate.
+  //
+  // Same column and same pattern company_type already uses for 'competitor'.
+  // A status an account adds has no key and takes part in no signal — failing
+  // closed, never guessing. The view says how many such relationships it is
+  // not counting rather than letting the gap be silent.
+  `UPDATE config_options SET action_key = 'current'
+     WHERE category = 'other_relationship_status' AND value IN ('Current Vendor', 'Preferred Partner')`,
+  `UPDATE config_options SET action_key = 'evaluating'
+     WHERE category = 'other_relationship_status' AND value IN ('Evaluating', 'Active Pilot')`,
+  `UPDATE config_options SET action_key = 'former'
+     WHERE category = 'other_relationship_status' AND value = 'Former Vendor'`,
+
+  // ── When a relationship's status actually changed ─────────────────────────
+  //
+  // updated_at cannot answer this. It is bumped by the edit form on any field —
+  // a notes correction, a rep reassignment — and by the update form on BOTH
+  // branches, including the "still accurate, nothing changed" confirmation.
+  // Reading it as a status change would mark a relationship somebody had just
+  // confirmed as current. The same shape bit social_event_rsvps, where the
+  // guest-ranking route bumped updated_at and a rank change rendered as an RSVP.
+  //
+  // Distinct from status_as_of, which means "last confirmed". A confirmation
+  // moves that and must never move this; a change moves this and must never
+  // move that.
+  `ALTER TABLE vendor_relationships ADD COLUMN status_changed_at TEXT`,
+
+  // Backfilled from the thread, which records status_after only when the value
+  // genuinely differed.
+  //
+  // THIS BACKFILL IS INCOMPLETE BY CONSTRUCTION, and a future reader should not
+  // assume otherwise. A status changed through the edit form writes no thread
+  // entry at all, so those rows backfill to NULL and read as never changed.
+  // The information was never recorded and is not recoverable. Going forward
+  // both write paths stamp the column, so only history is affected.
+  //
+  // NULL means "no known status change" — not "changed long ago", and not the
+  // epoch. Every reader must treat it as no signal rather than as an old one.
+  `UPDATE vendor_relationships
+      SET status_changed_at = (
+        SELECT MAX(ru.created_at) FROM relationship_updates ru
+        WHERE ru.relationship_id = vendor_relationships.id
+          AND ru.status_after IS NOT NULL AND TRIM(ru.status_after) != ''
+      )
+    WHERE status_changed_at IS NULL`,
+
+  // ── Active Pilot is not symmetric after all ───────────────────────────────
+  //
+  // It was seeded as its own counterpart alongside Preferred Partner, and that
+  // was wrong. A preferred partner really is a preferred partner both ways
+  // round; a pilot has a side. The value describes the RELATED company — the
+  // thing being piloted — and the company running it is Piloting. Reading
+  // "Active Pilot" back from the other end claimed the account was the pilot.
+  //
+  // Guarded on the old value so an account that has already changed it keeps
+  // what they chose. Nothing is rewritten in vendor_relationships: rows store
+  // the words somebody picked, and the pairing is what reads them from the
+  // other side.
+  //
+  // CONSEQUENCE WORTH KNOWING: this status now carries a DIRECTION where it
+  // carried none. lib/competitiveResolution.ts read symmetric statuses by
+  // company_type and now reads this one by the words, so an Active Pilot row
+  // logged from the competitor's page — which under this pairing says the
+  // ACCOUNT is the thing being piloted — resolves the other way and drops out
+  // of the competitive grid rather than being flipped to fit. That is the
+  // fail-closed behaviour the resolver is built on, and it is visible in the
+  // rail's unclassified-and-excluded counts rather than silent.
+  `UPDATE config_options SET inverse_value = 'Piloting'
+     WHERE category = 'other_relationship_status'
+       AND value = 'Active Pilot'
+       AND (inverse_value IS NULL OR inverse_value = 'Active Pilot')`,
+
+  // ── A vendor switch, recorded rather than inferred ────────────────────────
+  //
+  // "They left Red Moon for Nova Moon" is a claim about cause, and no
+  // arrangement of statuses and dates establishes one: a settled account of
+  // three years looks exactly like a switch last week, and two edits made in
+  // the same afternoon look exactly like a switch too. So it is asked, once, at
+  // the moment somebody records the change, and kept.
+  //
+  // One row per QUESTION, not per switch — 'keeping' and 'unknown' are stored
+  // as well. An account deliberately running two vendors is a different
+  // competitive picture from one that moved, and a question that was asked and
+  // answered should not be asked again next week as though it never had.
+  //
+  // No foreign keys on the relationship columns on purpose: a relationship can
+  // be deleted, and what happened still happened. The company columns carry the
+  // answer on their own so a deleted row leaves a fact rather than a hole.
+  `CREATE TABLE IF NOT EXISTS vendor_switches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_company_id INTEGER NOT NULL,
+      incumbent_company_id INTEGER NOT NULL,
+      incumbent_relationship_id INTEGER,
+      incoming_company_id INTEGER,
+      incoming_relationship_id INTEGER,
+      answer TEXT NOT NULL,
+      recorded_by_user_id INTEGER,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`,
+  `CREATE INDEX IF NOT EXISTS idx_vendor_switches_account
+     ON vendor_switches(account_company_id)`,
+  // The pair, for "have we already asked about these two?".
+  `CREATE INDEX IF NOT EXISTS idx_vendor_switches_pair
+     ON vendor_switches(account_company_id, incumbent_company_id, incoming_company_id)`,
 ];

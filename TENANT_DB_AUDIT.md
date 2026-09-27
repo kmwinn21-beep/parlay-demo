@@ -648,3 +648,81 @@ working around a slow database.
 calls them for whether it is prepared to wait on an email and a Slack round trip
 before responding. That is a real piece of work with a real latency cost, not a
 one-line change, which is why it is recorded here instead of done in passing.
+
+---
+
+## A third rule, from a third class of bug
+
+The two rules above are about *which database* a read reaches for. This one is
+about *which end of a row* a read believes, and it has the same shape: a
+correctness requirement spread across call sites, failing quietly at each one
+that misses it.
+
+> **`vendor_relationships` stores the status AS WRITTEN, from whichever side
+> logged it. Every reader must normalise through the counterpart map before
+> deciding which end is the vendor. Reading `related_company_id` as the vendor
+> end is correct only for rows written before the both-halves dropdown shipped,
+> and silently wrong after.**
+
+### What the columns actually mean
+
+`company_id` is not "the buyer". It is whoever's page somebody was on when they
+logged the row, and `relationship_status` is written from *that* side. So these
+two rows are the same fact:
+
+| id | company_id | related_company_id | relationship_status |
+|----|-----------|--------------------|---------------------|
+| 1  | Abshire   | Abbott             | `Current Vendor`    |
+| 2  | Abbott     | Abshire            | `Customer`          |
+
+Row 1 says Abbott is the vendor. Row 2 also says Abbott is the vendor — with the
+columns swapped and the words inverted. A reader that takes
+`related_company_id` as the vendor end gets row 1 right and row 2 exactly
+backwards.
+
+### Why this became live rather than being live all along
+
+Until relationship statuses gained counterparts, only the vendor-naming half of
+each pairing was selectable. Counterparts existed but only at display time:
+`statusesFor()` inverted an inbound row on the way to the screen and nothing was
+ever stored counterpart-side. `related_company_id` really was always the vendor
+end, and a reader could rely on it without knowing it was relying on anything.
+
+`expandStatusOptions()` put both halves in the dropdown, and the write path
+stores the chosen label verbatim. From that point either half can be the stored
+value, and the assumption silently stopped holding. Rows written before it are
+all vendor-naming, so nothing already in a database is wrong — which is the
+dangerous version of this bug, not the safe one. There is no corrupt row to find
+and no backfill to run. The first wrong reading happens on the first row a rep
+logs from the other side, and it looks like ordinary data.
+
+### Why normalising on write was not the answer
+
+The obvious fix — flip the row on the way in so `related_company_id` is always
+the vendor — moves the relationship to a different page.
+
+A row belongs to the record it was logged on. The company page renders its own
+relationships from `company_id`, the thread hangs off that row, and the rep who
+wrote it is that page's rep. `collapsePairs` is built on the distinction: the
+outbound row wins because it belongs to the page being viewed, and the inbound
+one survives as `counterpart` so the card can say the other company recorded
+this too. Normalising on write would take a relationship a rep logged on
+Abbott's page and make it appear on Abshire's instead, with Abbott's thread
+attached to somebody else's record.
+
+So the storage is right and the *readers* carry the obligation. Which is exactly
+why it belongs in this document.
+
+### Where it is handled
+
+`lib/competitiveResolution.ts` is the one place the competitive view decides it,
+and `tests/competitive-resolution.mjs` pins both directions resolving to the same
+pair. The display path handles it separately and already did:
+`lib/relationshipDirection.ts` (`statusesFor`, `isInverted`, `collapsePairs`) and
+`lib/relationshipStatusOptions.ts` (`buildCounterpartMap`, bidirectional so
+either half can be the stored value).
+
+**The latent surface** is any future reader that joins `vendor_relationships` and
+treats one column as the vendor. Grep for `related_company_id` before writing
+one: the ones that are correct are correct because they render from the subject's
+side and invert, not because the column means what it looks like it means.

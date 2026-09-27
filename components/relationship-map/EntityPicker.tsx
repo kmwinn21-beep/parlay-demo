@@ -20,13 +20,15 @@ const VISIBLE = COLS * ROWS_COLLAPSED;
  * Partner shows both, which is what a row of chips means to the person
  * clicking them.
  */
-export function EntityPicker({ companies, icpTypes, selectedId, onSelect, className = 'w-72 flex-shrink-0' }: {
+export function EntityPicker({ companies, icpTypes, selectedId, onSelect, className = 'w-72 flex-shrink-0', style }: {
   companies: PickerCompany[];
   icpTypes: string[];
   selectedId: number | null;
   onSelect: (id: number) => void;
   /** The desktop column is a fixed width; on a phone it is the whole screen. */
   className?: string;
+  /** Its width, when the caller owns it. See RAIL_WIDTH. */
+  style?: React.CSSProperties;
 }) {
   const [search, setSearch] = useState('');
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
@@ -48,10 +50,8 @@ export function EntityPicker({ companies, icpTypes, selectedId, onSelect, classN
     setSelectedTypes(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
 
   return (
-    <div className={`${className} flex flex-col min-h-0 rounded-xl border border-gray-200 bg-white`}>
+    <div style={style} className={`${className} flex flex-col min-h-0 rounded-xl border border-gray-200 bg-white`}>
       <div className="p-3 border-b border-gray-100 space-y-3">
-        <p className="text-sm font-bold text-brand-primary font-serif">Select an entity</p>
-
         <input
           type="search"
           value={search}

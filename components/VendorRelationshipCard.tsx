@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ScrollRow } from '@/components/ScrollRow';
 import { KebabMenu } from '@/components/KebabMenu';
 import { getBadgeClass, getPreset } from '@/lib/colors';
@@ -91,13 +91,17 @@ function StalePill() {
   );
 }
 
-function StatusPill({ value, colorMaps }: { value: string; colorMaps: Record<string, Record<string, string | null>> }) {
+function StatusPill({ value, colorMaps, sizeClass = 'text-xs' }: {
+  value: string;
+  colorMaps: Record<string, Record<string, string | null>>;
+  sizeClass?: string;
+}) {
   // Full-strength text and border with a wash of the same colour behind, from
   // whatever hex the option carries in admin settings.
   const hex = getPreset(colorMaps.other_relationship_status?.[value]).hex;
   return (
     <span
-      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap"
+      className={`inline-flex items-center px-2 py-0.5 rounded-full ${sizeClass} font-semibold border whitespace-nowrap`}
       style={{ color: hex, borderColor: hex, backgroundColor: `${hex}1F` }}
     >
       {value}
@@ -110,7 +114,7 @@ function StatusPill({ value, colorMaps }: { value: string; colorMaps: Record<str
  * building a second one that drifts. Omitting onEdit/onDelete drops the actions
  * menu, which is what a read-only surface wants.
  */
-export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete, onUpdated, readOnly = false, defaultExpanded = false }: {
+export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete, onUpdated, readOnly = false, defaultExpanded = false, titleBadges, title, typeBadges, statuses, bodyMaxHeight, highlight }: {
   rel: VendorRelationship;
   userOptions: UserOption[];
   colorMaps: Record<string, Record<string, string | null>>;
@@ -127,6 +131,68 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
   /** Suppresses the Update button. Nothing sets it today. */
   readOnly?: boolean;
   defaultExpanded?: boolean;
+  /**
+   * Badges beside the company name, at the top of the header.
+   *
+   * The competitive grid's signal badges, which say why the card is in the cell
+   * it is in. Passed in rather than derived here: the card has no idea it is in
+   * a grid, and the signals are computed once for the whole view.
+   *
+   * Beside the NAME rather than in the badge row below it. In a 232px column
+   * that row is already carrying a status and a type, and three more worded
+   * pills pushed both off the end of a scroller — the signals are the reason
+   * the card is on screen, so they sit where the eye lands first.
+   */
+  titleBadges?: ReactNode;
+  /**
+   * Paint the card's border and fill in this colour.
+   *
+   * The grid's hover: the account under two competitors lights up in both
+   * cells at once, in the colour of the signal that connects them. Null leaves
+   * the card alone, which is every other surface and every card the grid is not
+   * pointing at.
+   */
+  highlight?: string | null;
+  /**
+   * ── Reading the card from the other end ──
+   *
+   * title, typeBadges and statuses go together and are supplied together.
+   *
+   * The card describes the OTHER end of the relationship, which is right on a
+   * company record: you are on Abshire's page, the card says Abbott, Abbott's
+   * type, and what Abbott is to Abshire. In the competitive grid the column
+   * heading already says Abbott, so the card's subject has to be the ACCOUNT —
+   * and once it is, EVERY field that describes a subject has to move with it.
+   *
+   * Getting that half-right is worse than not doing it: a card headed "Annefurt
+   * LLC" showing Abbott's type and Abbott's status reads as a set of claims
+   * about Annefurt, all of them false. So these three are one decision, not
+   * three optional overrides, and a caller that passes one passes all three.
+   *
+   * What does NOT move: the thread, the Update button, the edit ownership and
+   * the inbound handling. Those belong to the row, and the row belongs to the
+   * page it was logged on.
+   */
+  title?: string;
+  /** The subject's company types, one badge each. */
+  typeBadges?: string[];
+  /** The statuses as the subject reads them — the counterpart wording. */
+  statuses?: string[];
+  /**
+   * Cap the EXPANDED BODY at this many pixels and scroll it, when set.
+   *
+   * The number is the caller's, not the card's: only the surface knows how much
+   * vertical room one open card may take from the ones around it. Unset
+   * everywhere but the competitive grid, where an open card would otherwise
+   * push every other band down the page — see GRID_BODY_MAX_HEIGHT for why that
+   * is capped rather than moved into a rail.
+   *
+   * The header is deliberately outside the capped region. It is a sibling above
+   * this body, so scrolling the body cannot move it — which is what keeps the
+   * grid's connectors, anchored on the header, from drifting as somebody reads
+   * a thread.
+   */
+  bodyMaxHeight?: number;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   // The form's open state lives here rather than in each surface. Unlike edit
@@ -166,39 +232,128 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
   // links back rather than offering controls that would write to a record the
   // reader is not looking at.
   const inbound = shown.direction === 'inbound';
+  const heading = title ?? shown.related_company_name;
+  // The status as the heading's subject reads it. saved.relationship_status
+  // still wins on the account-side card underneath, so a caller supplying
+  // statuses gets a stale pill until the surface reloads — which is the same
+  // trade every override here makes and is noted at the props.
+  const shownStatuses = statuses ?? shown.relationship_status;
+  // One badge per type. The column stores them comma-separated, which rendered
+  // as a single badge reading "Vendor,Competitor".
+  const shownTypes = typeBadges
+    ?? (shown.related_company_type ? [shown.related_company_type] : []);
+
+  /**
+   * The header's badge row: wrapping, or a single paged line.
+   *
+   * Wrapping everywhere it already wrapped. In a grid cell there is no width to
+   * wrap into — four columns inside a modal leave about 260px — and a badge row
+   * that wraps to three lines makes every card in the row taller. So where the
+   * grid passes signal pills the row becomes one scrolling line with chevrons
+   * and a fade at whichever edge is cut off, which is what says "there is more"
+   * rather than letting a half-pill read as the end of the list.
+   *
+   * Keyed off titleBadges rather than a flag of its own: the compact card and
+   * the signal badges always go together, and a second prop would let a caller
+   * ask for one without the other and get a row that pages for no reason.
+   */
+  const badgeRow = (children: ReactNode) => (titleBadges
+    ? <ScrollRow className="mt-1" gapClass="gap-1.5" step={90} fade>{children}</ScrollRow>
+    : <div className="flex items-center gap-1.5 mt-1 flex-wrap">{children}</div>);
+
+  // A grid cell is 232px wide. The record pages have room for the default size
+  // and keep it; only the surface that asked for the compact card gets this.
+  const compact = titleBadges != null;
+  const badgeSize = compact ? 'text-[10px]' : 'text-xs';
 
   return (
     // Stale cards are drained rather than recoloured. The six status colours
     // already carry meaning and a seventh grey would compete with Former
     // Vendor's; washing the whole card out says "do not rely on this" without
     // claiming anything about what the relationship is.
-    <div className={`rounded-lg border overflow-hidden transition-colors ${
-      isStale ? 'border-gray-200 border-dashed bg-gray-50/70' : 'border-gray-200'
-    }`}>
-      {/* Chevron on the right, matching the internal-relationship card. */}
-      <button type="button" onClick={() => setExpanded(v => !v)} className="w-full text-left px-3 py-2.5 hover:bg-gray-50 transition-colors">
+    <div
+      className={`rounded-lg border overflow-hidden transition-colors ${
+        isStale ? 'border-gray-200 border-dashed bg-gray-50/70' : 'border-gray-200'
+      }`}
+      // Inline, because the colour is a signal's and signals are data. A
+      // Tailwind class per signal would be a second place they are declared.
+      style={highlight ? { borderColor: highlight, backgroundColor: `${highlight}14` } : undefined}
+    >
+      {/* A div, with the chevron carrying its own button.
+          The whole header stays clickable — four surfaces already use it that
+          way — but a header that IS a button cannot contain one, and the
+          competitive grid puts a paged pill row in here and anchors its
+          connectors on this element. The chevron is the accessible control: it
+          names the company and reports the state, so a screen reader gets one
+          labelled toggle rather than the whole card read out as a button. */}
+      <div
+        data-card-header
+        onClick={() => setExpanded(v => !v)}
+        className="w-full text-left px-3 py-2.5 hover:bg-gray-50 transition-colors cursor-pointer"
+      >
         <div className="flex items-start gap-2">
           <div className={`min-w-0 flex-1 ${isStale ? 'opacity-60' : ''}`}>
-            <p className="text-sm font-semibold text-gray-800 truncate">{shown.related_company_name}</p>
-            {/* Second row: what this relationship is, then what the company is. */}
-            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-              {isStale && <StalePill />}
-              {shown.relationship_status.map(s => <StatusPill key={s} value={s} colorMaps={colorMaps} />)}
-              {shown.related_company_type && (
-                <span className={`${getBadgeClass(shown.related_company_type, colorMaps.company_type || {})} whitespace-nowrap`}>
-                  {shown.related_company_type}
-                </span>
+            {/* Wrapped to two lines where a caller supplied the name, truncated
+                where it did not. Four columns inside the modal leave about 155px
+                for a title, and the longest real company names need nearer 200 —
+                so at that width truncating is not an edge case, it is most of a
+                senior-living book. Two lines costs about 18px on the cards that
+                need it and hides nothing; an ellipsis hides the half of
+                "Belmont Village Senior Living" that tells you which Belmont. */}
+            <div className="flex items-start gap-1.5 min-w-0">
+              <p
+                className={`font-semibold text-gray-800 ${
+                  title ? 'text-xs line-clamp-2 leading-snug' : 'text-sm truncate'}`}
+                title={heading}
+              >
+                {heading}
+              </p>
+              {titleBadges && (
+                <span className="flex items-center gap-1 flex-shrink-0">{titleBadges}</span>
               )}
             </div>
+            {/* Second row: why this card is here, then what this relationship
+                is, then what the company is. Signals lead because they are the
+                reason the grid drew the card at all. */}
+            {badgeRow(
+              <>
+                {isStale && <StalePill />}
+                {shownStatuses.map(s => (
+                  <StatusPill key={s} value={s} colorMaps={colorMaps} sizeClass={badgeSize} />
+                ))}
+                {shownTypes.map(t => (
+                  <span key={t} className={`${getBadgeClass(t, colorMaps.company_type || {}, badgeSize)} whitespace-nowrap`}>
+                    {t}
+                  </span>
+                ))}
+              </>,
+            )}
           </div>
-          <svg className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ml-2 mt-0.5 ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
+            aria-expanded={expanded}
+            aria-label={`${expanded ? 'Collapse' : 'Expand'} ${heading}`}
+            className="flex-shrink-0 ml-1 -mr-1 p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
         </div>
-      </button>
+      </div>
 
       {expanded && (
-        <div className="border-t border-gray-100 px-3 py-2.5 space-y-2">
+        /* Uncapped unless the caller asked for a cap, so the four surfaces that
+           were here first gain no max-height, no inner scroll and no new
+           overflow context. scrollbar-thin rather than scrollbar-desktop-thin:
+           the latter hides the bar below 1024px, and this view renders from
+           640px up, so a capped body would clip silently in that band. */
+        <div
+          className={`border-t border-gray-100 px-3 py-2.5 space-y-2${
+            bodyMaxHeight ? ' overflow-y-auto scrollbar-thin' : ''}`}
+          style={bodyMaxHeight ? { maxHeight: bodyMaxHeight } : undefined}
+        >
           <div className="flex items-center gap-2">
             {/* flex-1 min-w-0: ScrollRow's scroller is w-0 flex-1 inside, so
                 without a width to claim here it collapses to just a chevron. */}
@@ -252,6 +407,10 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
               rel={shown}
               onClose={() => setUpdating(false)}
               onSaved={result => { setSaved(result); onUpdated?.(); }}
+              // Again after a switch is recorded: that writes to relationships
+              // this card is not showing, and the optimistic copy above cannot
+              // stand in for them.
+              onRefresh={onUpdated}
             />
           )}
 
