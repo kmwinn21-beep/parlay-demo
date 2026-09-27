@@ -50,8 +50,6 @@ export function EntityPicker({ companies, icpTypes, selectedId, onSelect, classN
   return (
     <div className={`${className} flex flex-col min-h-0 rounded-xl border border-gray-200 bg-white`}>
       <div className="p-3 border-b border-gray-100 space-y-3">
-        <p className="text-sm font-bold text-brand-primary font-serif">Select an entity</p>
-
         <input
           type="search"
           value={search}

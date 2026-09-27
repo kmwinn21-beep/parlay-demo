@@ -490,8 +490,17 @@ console.log('\n— the view toggle —');
     /view-competitive/.test(rail), true);
   eq('  and that class is not also content',
     /className="view-competitive"|>view-competitive</.test(rail), false);
-  eq('signals only shares the heading row',
-    /font-serif">Signals<\/p>[\s\S]{0,400}checked=\{signalsOnly\}/.test(rail), true);
+  // The heading moved onto the collapse strip, which is the one thing that
+  // stays visible when the rail is folded. Leaving a copy inside would say it
+  // twice while open and lose it entirely while closed.
+  eq('the rail carries no heading of its own',
+    /font-serif">Signals<\/p>/.test(rail), false);
+  eq('  the strip says it instead',
+    /\{view === 'competitive' \? 'Signals' : 'Select an entity'\}/.test(modal), true);
+  eq('  and the picker gave up its heading too',
+    /Select an entity/.test(strip('components/relationship-map/EntityPicker.tsx')), false);
+  eq('signals only still leads the rail',
+    /checked=\{signalsOnly\}/.test(rail), true);
   eq('  show connectors sits below it',
     rail.indexOf('checked={signalsOnly}') < rail.indexOf('checked={showConnectors}'), true);
   eq('  three signal filters, named from the shared map',
@@ -691,8 +700,8 @@ console.log('\n— the card header, and the grid it had to change for —');
   eq('  read from the full map, not the abbreviations',
     /\{SIGNAL_FULL_LABELS\[key\]\}/.test(modal)
       && /SIGNAL_ABBREVIATIONS/.test(modal) === false, true);
-  eq('  which the rail\u2019s narrower rows still abbreviate',
-    SIGNAL_LABELS.internalRelationship, 'Int. Relationship');
+  eq('  where the rail counts them in the plural',
+    SIGNAL_LABELS.internalRelationship, 'Internal Relationships');
   // One badge component, so the card and the legend cannot drift apart.
   eq('the card and the legend share one badge',
     /export function SignalBadge/.test(grid)
@@ -829,6 +838,55 @@ console.log('\n— the card header, and the grid it had to change for —');
     /dedupe|distinctBy|new Set\(shown\.map\(c => c\.companyId\)\)/.test(grid), false);
   eq('  and the cells are grouped by row AND column, not by account',
     /const key = `\$\{c\.row\}:\$\{c\.competitorId\}`;/.test(grid), true);
+
+  // ── The grid refreshes from its OWN payload after an update ──
+  //
+  // Every cell's ROW, every signal and every connector comes from the map
+  // payload. Refreshing the spoke list instead left the card's own pill correct
+  // — it keeps an optimistic copy of what it just wrote — and the grid around it
+  // describing the state the modal opened with: the right status in the wrong
+  // row, which is indistinguishable from a classification bug.
+  eq('the map payload is a callback, so a change can re-run it',
+    /const loadMap = useCallback\(\(silent = false\) => \{/.test(modal), true);
+  eq('  the grid refreshes from it, not from the spoke list',
+    /onUpdated=\{\(\) => \{ void loadMap\(true\); \}\}/.test(modal), true);
+  // Both Map surfaces — the mobile card list and the desktop canvas. One of
+  // them losing its refresh looks exactly like the bug this fixes.
+  eq('  the Map view still refreshes its spokes, on both its surfaces',
+    (modal.match(/onUpdated=\{\(\) => loadRels\(hubNode\.id\)\}/g) || []).length, 2);
+  // A refetch that unmounts the grid collapses every open card and throws away
+  // the scroll position of somebody mid-read.
+  eq('  silently, so the grid is not unmounted under the reader',
+    /if \(!silent\) setLoading\(true\);/.test(modal)
+      && /if \(!silent\) setLoading\(false\)/.test(modal), true);
+  eq('  and the first load is not silent',
+    /useEffect\(\(\) => \{ void loadMap\(\); \}, \[loadMap\]\);/.test(modal), true);
+
+  // ── The rail folds away ──
+  eq('the rail collapses to a strip, like the attendee column opposite it',
+    /style=\{\{ width: railOpen \? 288 : 40 \}\}/.test(modal), true);
+  eq('  reporting its state', /aria-expanded=\{railOpen\}/.test(modal), true);
+  eq('  naming what it holds, which differs by view',
+    /view === 'competitive' \? 'Collapse signals' : 'Collapse the company list'/.test(modal), true);
+  // Kept mounted: a search typed into the picker and a set of signal filters
+  // both have to survive folding it away.
+  eq('  and stays mounted while folded',
+    /flex-1 min-h-0 flex \$\{railOpen \? '' : 'invisible'\}/.test(modal), true);
+  eq('  on both views, not just one',
+    /\{view === 'competitive' \? \(\s*\n\s*<CompetitiveRail[\s\S]{0,900}<EntityPicker/.test(modal), true);
+
+  // ── The column heading says what the competitor IS ──
+  //
+  // The cards under it carry the ACCOUNT's type, so the column never said its
+  // own — and "Competitor" is worth reading exactly once, on the heading.
+  eq('the column heading carries the competitor\u2019s type',
+    /c\.types\.slice\(0, 1\)\.map\(t => \(/.test(grid), true);
+  eq('  at badge size, beside the name',
+    /getBadgeClass\(t, colorMaps\.company_type \|\| \{\}, 'text-\[10px\]'\)/.test(grid), true);
+  eq('  with the name a size up from the cards',
+    /text-sm font-bold text-brand-primary font-serif truncate/.test(grid), true);
+  eq('  fed from the resolver rather than looked up again',
+    /types: companies\.get\(id\)\?\.types \?\? \[\]/.test(strip('lib/competitiveResolution.ts')), true);
 
   // A resolved relationship with no card is a scoping bug, not a gap.
   eq('a missing card says so rather than leaving a hole',

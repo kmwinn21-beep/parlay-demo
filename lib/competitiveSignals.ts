@@ -79,8 +79,8 @@ export const ROW_LABELS: Record<GridRow, string> = {
 export const SIGNAL_LABELS: Record<SignalKey, string> = {
   evaluatingAlternatives: 'Evaluating Alternatives',
   switched: 'Switched Vendors',
-  recentChange: 'Recent Change',
-  internalRelationship: 'Int. Relationship',
+  recentChange: 'Recent Changes',
+  internalRelationship: 'Internal Relationships',
 };
 
 /**
@@ -101,11 +101,10 @@ export const SIGNAL_ABBREVIATIONS: Record<SignalKey, string> = {
 /**
  * The names spelled out, for the legend.
  *
- * Not SIGNAL_LABELS: those are sized for the rail's filter rows, which have a
- * count badge eating the end of the line, and "Int. Relationship" is the
- * abbreviation that buys. The legend has a whole row to itself and is the one
- * place a reader goes to find out what IR means, so abbreviating it there would
- * answer the question with the question.
+ * Not SIGNAL_LABELS. Those head a filter row with a count beside it — "8
+ * Recent Changes" — so they name a quantity and read plural. The legend names
+ * the signal itself, once, in the singular, and is the one place a reader goes
+ * to find out what IR means.
  */
 export const SIGNAL_FULL_LABELS: Record<SignalKey, string> = {
   evaluatingAlternatives: 'Evaluating Alternatives',

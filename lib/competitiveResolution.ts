@@ -64,6 +64,8 @@ export interface CompetitorColumnData {
   id: number;
   name: string;
   accountCount: number;
+  /** Resolved company_type values, for the badge beside the column heading. */
+  types: string[];
 }
 
 export interface ResolutionResult {
@@ -276,6 +278,7 @@ export function resolveCompetitive({
       id,
       name: companies.get(id)?.name ?? '',
       accountCount: accounts.size,
+      types: companies.get(id)?.types ?? [],
     }))
     // Widest column first, so the competitor most of the book touches leads.
     // Name breaks the tie rather than insertion order, which would reshuffle

@@ -201,6 +201,13 @@ It fails silently. The module swallows all errors by design, and an empty recipi
   fix is a window on the record's created_at rather than on the statuses —
   worth measuring against real data before choosing a number.
 
+- **A relationship changed outside the modal still goes stale.** The grid now
+  refetches its own payload after an Update made on one of its cards, which is
+  what fixes a status landing in the wrong row. A change made anywhere else
+  while the modal is open — another tab, the company record behind it — still
+  is not seen until it is reopened. Lower stakes than the original bug, since
+  nothing on screen contradicts itself, but the same shape.
+
 - **Nobody is asked twice, but nothing uses that yet.** vendor_switches is
   indexed on (account, incumbent, incoming) so "have we already asked about
   these two?" is a cheap lookup, and detectSwitchPrompt does not yet make it.

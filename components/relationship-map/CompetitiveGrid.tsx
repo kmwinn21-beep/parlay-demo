@@ -6,6 +6,7 @@ import {
   byRecency, hasAnySignal, ROW_LABELS, SIGNAL_ABBREVIATIONS, SIGNAL_FULL_LABELS, SIGNAL_TONE,
   type AlternativePair, type GridRow, type SignalCell, type SignalKey, type SwitchPair,
 } from '@/lib/competitiveSignals';
+import { getBadgeClass } from '@/lib/colors';
 import type { CompetitorColumn } from '@/components/relationship-map/CompetitiveRail';
 import type { UserOption } from '@/lib/useUserOptions';
 
@@ -322,9 +323,20 @@ export function CompetitiveGrid({
           <div className="px-2 py-2" />
           {competitors.map(c => (
             <div key={c.id} className="px-2 py-2 min-w-0 border-l border-gray-100">
-              <p className="text-xs font-bold text-brand-primary font-serif truncate" title={c.name}>
-                {c.name}
-              </p>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <p className="text-sm font-bold text-brand-primary font-serif truncate" title={c.name}>
+                  {c.name}
+                </p>
+                {/* What the company IS, beside what it is called. The cards
+                    below carry the ACCOUNT's type, so without this the column
+                    never says its own — and "Competitor" on the heading is the
+                    one place that word is worth reading. */}
+                {c.types.slice(0, 1).map(t => (
+                  <span key={t} className={`${getBadgeClass(t, colorMaps.company_type || {}, 'text-[10px]')} flex-shrink-0 whitespace-nowrap`}>
+                    {t}
+                  </span>
+                ))}
+              </div>
               <p className="text-[10px] text-gray-400">
                 {c.accountCount} account{c.accountCount === 1 ? '' : 's'}
               </p>

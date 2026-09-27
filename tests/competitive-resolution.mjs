@@ -294,9 +294,13 @@ console.log('\n— the competitor columns —');
   ]);
   eq('a column per competitor, widest first',
     res.competitors, [
-      { id: 200, name: 'Teton Systems', accountCount: 2 },
-      { id: 201, name: 'Vireo Software', accountCount: 1 },
+      { id: 200, name: 'Teton Systems', accountCount: 2, types: ['Competitor'] },
+      { id: 201, name: 'Vireo Software', accountCount: 1, types: ['Vendor', 'Competitor'] },
     ]);
+  // The cards under a column carry the ACCOUNT's type, so without this the
+  // column never says its own.
+  eq('  each carrying its own types for the column heading',
+    res.competitors.map(c => c.types), [['Competitor'], ['Vendor', 'Competitor']]);
   eq('  so the count never promises more cards than the grid draws',
     res.competitors.reduce((n, c) => n + c.accountCount, 0),
     deriveSignals({ relationships: res.relationships }).cells.length);

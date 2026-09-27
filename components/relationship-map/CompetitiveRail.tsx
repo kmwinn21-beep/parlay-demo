@@ -7,6 +7,8 @@ export interface CompetitorColumn {
   id: number;
   name: string;
   accountCount: number;
+  /** What the company is, for the badge beside the column heading. */
+  types: string[];
 }
 
 /**
@@ -62,8 +64,7 @@ export function CompetitiveRail({
         {/* Signals only shares the heading's row: it applies to everything
             below it, and a checkbox under the filters would read as a fourth
             filter rather than the switch that governs the other three. */}
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-bold text-brand-primary font-serif">Signals</p>
+        <div className="flex items-center justify-end gap-2">
           <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-600 cursor-pointer">
             <input
               type="checkbox"

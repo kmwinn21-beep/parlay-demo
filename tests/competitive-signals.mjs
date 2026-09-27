@@ -422,9 +422,13 @@ console.log('\n— labels live in one place —');
   // The key is what the status class maps to and does not follow the wording.
   eq('  while the KEY is still recentChange',
     Object.keys(ROW_LABELS).includes('recentChange'), true);
-  eq('  and the signal names',
+  // The rail's rows head a filter with a count beside them — "8 Recent
+  // Changes" — so they name a quantity and read plural.
+  eq('  and the signal names, as the rail counts them',
     [SIGNAL_LABELS.evaluatingAlternatives, SIGNAL_LABELS.recentChange, SIGNAL_LABELS.internalRelationship],
-    ['Evaluating Alternatives', 'Recent Change', 'Int. Relationship']);
+    ['Evaluating Alternatives', 'Recent Changes', 'Internal Relationships']);
+  eq('  none of which is abbreviated either',
+    Object.values(SIGNAL_LABELS).some(v => v.includes('.')), false);
   // Three names for three jobs, and none of them is the others shortened by
   // accident. The rail has a filter row with a count eating the end of it, the
   // badge beside a company name has room for two letters, and the legend is

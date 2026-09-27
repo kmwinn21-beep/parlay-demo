@@ -138,6 +138,8 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
    */
   const [internal, setInternal] = useState<RelationshipRow[]>([]);
   const [internalOpen, setInternalOpen] = useState(true);
+  /** The left rail folds away, the way the attendee column on the right does. */
+  const [railOpen, setRailOpen] = useState(true);
   // Mobile shows one panel at a time, the way the pre-conference tab does.
   const [mobileTab, setMobileTab] = useState<'companies' | 'relationships'>('companies');
 
@@ -183,16 +185,29 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
     return () => { cancelled = true; };
   }, [conferenceId]);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    fetch(`/api/conferences/${conferenceId}/relationship-map?scope=${scope}`, { cache: 'no-store' })
+  /**
+   * The map's whole payload — nodes, edges and the competitive read.
+   *
+   * A callback rather than an effect body, because a relationship changing has
+   * to be able to re-run it. Every cell's ROW, every signal and every connector
+   * comes from here, so without a refetch an update left the card's own pill
+   * correct (it keeps an optimistic copy of what it just wrote) and the grid
+   * around it describing the state at the moment the modal opened: the right
+   * status sitting in the wrong row.
+   *
+   * `silent` skips the spinner. A refetch after an update must not unmount the
+   * grid — that would collapse every open card and throw away the scroll
+   * position of somebody who is mid-read.
+   */
+  const loadMap = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
+    return fetch(`/api/conferences/${conferenceId}/relationship-map?scope=${scope}`, { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : null))
       .then((d: {
         nodes?: GraphNode[]; edges?: GraphEdge[]; icpTypes?: string[];
         atConference?: number[]; competitive?: Partial<CompetitivePayload>;
       } | null) => {
-        if (cancelled || !d) return;
+        if (!d) return;
         setNodes(d.nodes ?? []);
         setEdges(d.edges ?? []);
         setIcpTypes(d.icpTypes ?? []);
@@ -200,9 +215,10 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
         setCompetitiveData({ ...EMPTY_COMPETITIVE, ...(d.competitive ?? {}) });
       })
       .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .finally(() => { if (!silent) setLoading(false); });
   }, [conferenceId, scope]);
+
+  useEffect(() => { void loadMap(); }, [loadMap]);
 
   // Only companies something connects to. A picker full of rows that open an
   // empty canvas is a list of dead ends.
@@ -498,28 +514,66 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
         </div>
 
         <div className="flex-1 min-h-0 hidden sm:flex gap-3 p-3">
-          {view === 'competitive' ? (
-            <CompetitiveRail
-              signalCounts={signalCounts}
-              competitors={competitors}
-              hiddenCompetitorIds={hiddenCompetitorIds}
-              onToggleCompetitor={toggleCompetitor}
-              signalsOnly={signalsOnly}
-              onSignalsOnly={setSignalsOnly}
-              showConnectors={showConnectors}
-              onShowConnectors={setShowConnectors}
-              activeSignals={activeSignals}
-              onToggleSignal={toggleSignal}
-              unclassifiedCount={competitive.unclassifiedCount}
-            />
-          ) : (
-            <EntityPicker
-              companies={connected}
-              icpTypes={icpTypes}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-            />
-          )}
+          {/* Collapses to a chevron strip, the way Attendee Relationships does
+              on the other side of this modal. Same interaction, same widths,
+              mirrored — this one folds left, so its chevron points the other
+              way and the label goes on the inside.
+
+              Worth having on both views: the grid is four columns wide and the
+              rail is 288 of the canvas, so folding it is the difference
+              between reading a row and scrolling to it. */}
+          <div
+            data-map-rail
+            className="flex-shrink-0 flex flex-col min-h-0 overflow-hidden transition-[width] duration-300 ease-in-out"
+            style={{ width: railOpen ? 288 : 40 }}
+          >
+            <button
+              type="button"
+              onClick={() => setRailOpen(v => !v)}
+              aria-expanded={railOpen}
+              title={railOpen
+                ? (view === 'competitive' ? 'Collapse signals' : 'Collapse the company list')
+                : (view === 'competitive' ? 'Signals' : 'Select an entity')}
+              className="flex items-center gap-1.5 px-2 py-2 text-left text-gray-500 hover:text-brand-secondary transition-colors flex-shrink-0"
+            >
+              <svg className={`w-4 h-4 flex-shrink-0 transition-transform duration-300 ${railOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              {railOpen && (
+                <span className="text-sm font-bold text-brand-primary font-serif whitespace-nowrap">
+                  {view === 'competitive' ? 'Signals' : 'Select an entity'}
+                </span>
+              )}
+            </button>
+            {/* Kept mounted while collapsed, so a search typed into the picker
+                and a set of signal filters both survive folding it away. */}
+            <div className={`flex-1 min-h-0 flex ${railOpen ? '' : 'invisible'}`}>
+              {view === 'competitive' ? (
+                <CompetitiveRail
+                  signalCounts={signalCounts}
+                  competitors={competitors}
+                  hiddenCompetitorIds={hiddenCompetitorIds}
+                  onToggleCompetitor={toggleCompetitor}
+                  signalsOnly={signalsOnly}
+                  onSignalsOnly={setSignalsOnly}
+                  showConnectors={showConnectors}
+                  onShowConnectors={setShowConnectors}
+                  activeSignals={activeSignals}
+                  onToggleSignal={toggleSignal}
+                  unclassifiedCount={competitive.unclassifiedCount}
+                  className="w-[288px] flex-shrink-0"
+                />
+              ) : (
+                <EntityPicker
+                  companies={connected}
+                  icpTypes={icpTypes}
+                  selectedId={selectedId}
+                  onSelect={setSelectedId}
+                  className="w-[288px] flex-shrink-0"
+                />
+              )}
+            </div>
+          </div>
 
           <div className="flex-1 min-w-0 flex flex-col gap-2">
             {view === 'competitive' ? (
@@ -537,7 +591,11 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
                 showConnectors={showConnectors}
                 userOptions={userOptions}
                 colorMaps={colorMaps}
-                onUpdated={() => { if (selectedId != null) loadRels(selectedId); }}
+                // The map payload, not the spoke list. loadRels feeds the MAP
+                // view; the grid's rows, signals and connectors all come from
+                // here, so refreshing the other view's data left this one
+                // describing the state the modal opened with.
+                onUpdated={() => { void loadMap(true); }}
               />
             ) : loading ? (
               <div className="flex-1 flex items-center justify-center">
