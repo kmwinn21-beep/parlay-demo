@@ -31,8 +31,8 @@ export function CompetitiveRail({
   onToggleCompetitor,
   signalsOnly,
   onSignalsOnly,
-  showConnectors,
-  onShowConnectors,
+  highlightSignals,
+  onHighlightSignals,
   activeSignals,
   onToggleSignal,
   unclassifiedCount,
@@ -45,8 +45,9 @@ export function CompetitiveRail({
   onToggleCompetitor: (id: number) => void;
   signalsOnly: boolean;
   onSignalsOnly: (on: boolean) => void;
-  showConnectors: boolean;
-  onShowConnectors: (on: boolean) => void;
+  /** Light every card carrying a signal at once, rather than one on hover. */
+  highlightSignals: boolean;
+  onHighlightSignals: (on: boolean) => void;
   activeSignals: Set<SignalKey>;
   onToggleSignal: (key: SignalKey) => void;
   /**
@@ -80,11 +81,11 @@ export function CompetitiveRail({
         <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-600 cursor-pointer">
           <input
             type="checkbox"
-            checked={showConnectors}
-            onChange={e => onShowConnectors(e.target.checked)}
+            checked={highlightSignals}
+            onChange={e => onHighlightSignals(e.target.checked)}
             className="w-3.5 h-3.5 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary/40"
           />
-          Show connectors
+          Highlight signals
         </label>
       </div>
 

@@ -105,6 +105,11 @@ const RELATIONSHIPS = [
   // An active pilot, which is directional: the value names the thing being
   // piloted, so the account reads as Piloting.
   [1013, 2, 20, 'Active Pilot', 4],
+  // The same account weighing a THIRD competitor. With 1010 (current) and
+  // 1012 (evaluating) this makes one account buying from one competitor and
+  // trying two others — three pairs, one of them between the two trials, and
+  // all three cards lit together on hover.
+  [1014, 3, 22, 'Active Pilot', 6],
   // Neither end a competitor. Not this view's business.
   [1008, 7, 23, 'Current Vendor', 9],
   // The status names company 7 as the vendor, and 7 is not a competitor. The

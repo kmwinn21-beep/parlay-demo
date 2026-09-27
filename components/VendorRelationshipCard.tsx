@@ -114,7 +114,7 @@ function StatusPill({ value, colorMaps, sizeClass = 'text-xs' }: {
  * building a second one that drifts. Omitting onEdit/onDelete drops the actions
  * menu, which is what a read-only surface wants.
  */
-export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete, onUpdated, readOnly = false, defaultExpanded = false, titleBadges, title, typeBadges, statuses, bodyMaxHeight, highlight }: {
+export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete, onUpdated, readOnly = false, defaultExpanded = false, titleBadges, title, typeBadges, statuses, bodyMaxHeight, highlight, titleCompanyId, onOpenTitleCompany }: {
   rel: VendorRelationship;
   userOptions: UserOption[];
   colorMaps: Record<string, Record<string, string | null>>;
@@ -193,6 +193,23 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
    * a thread.
    */
   bodyMaxHeight?: number;
+  /**
+   * The company the heading names, when a caller supplied the heading.
+   *
+   * Defaults to the other end of the relationship, which is what the heading
+   * says everywhere except the competitive grid. Travels with title, for the
+   * same reason the type badges and the statuses do: a name that opens somebody
+   * else's record is worse than a name that opens nothing.
+   */
+  titleCompanyId?: number;
+  /**
+   * Open that company's record. Absent leaves the heading as plain text.
+   *
+   * A callback rather than a drawer: five surfaces render this card, they sit
+   * at different depths, and the one inside a modal has to open over it. What
+   * to open is the surface's business.
+   */
+  onOpenTitleCompany?: (target: { id: number; name: string }) => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   // The form's open state lives here rather than in each surface. Unlike edit
@@ -233,6 +250,7 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
   // reader is not looking at.
   const inbound = shown.direction === 'inbound';
   const heading = title ?? shown.related_company_name;
+  const headingCompanyId = titleCompanyId ?? shown.related_company_id;
   // The status as the heading's subject reads it. saved.relationship_status
   // still wins on the account-side card underneath, so a caller supplying
   // statuses gets a stale pill until the surface reloads — which is the same
@@ -301,13 +319,34 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
                 need it and hides nothing; an ellipsis hides the half of
                 "Belmont Village Senior Living" that tells you which Belmont. */}
             <div className="flex items-start gap-1.5 min-w-0">
-              <p
-                className={`font-semibold text-gray-800 ${
-                  title ? 'text-xs line-clamp-2 leading-snug' : 'text-sm truncate'}`}
-                title={heading}
-              >
-                {heading}
-              </p>
+              {/* A button only where somebody can act on it, so a card on a
+                  surface with nowhere to open still reads as a heading rather
+                  than as a control that does nothing. stopPropagation because
+                  the header around it toggles the card, and a name that both
+                  opened a record and collapsed what you were reading would be
+                  two answers to one click. */}
+              {onOpenTitleCompany && headingCompanyId ? (
+                <button
+                  type="button"
+                  onClick={e => {
+                    e.stopPropagation();
+                    onOpenTitleCompany({ id: headingCompanyId, name: heading });
+                  }}
+                  title={`Open ${heading}`}
+                  className={`text-left font-semibold text-gray-800 hover:text-brand-secondary hover:underline transition-colors ${
+                    title ? 'text-xs line-clamp-2 leading-snug' : 'text-sm truncate'}`}
+                >
+                  {heading}
+                </button>
+              ) : (
+                <p
+                  className={`font-semibold text-gray-800 ${
+                    title ? 'text-xs line-clamp-2 leading-snug' : 'text-sm truncate'}`}
+                  title={heading}
+                >
+                  {heading}
+                </p>
+              )}
               {titleBadges && (
                 <span className="flex items-center gap-1 flex-shrink-0">{titleBadges}</span>
               )}

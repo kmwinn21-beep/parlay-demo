@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EntityPicker } from '@/components/relationship-map/EntityPicker';
 import { CompetitiveRail, type CompetitorColumn } from '@/components/relationship-map/CompetitiveRail';
 import { CompetitiveGrid, SignalBadge } from '@/components/relationship-map/CompetitiveGrid';
+import { QuickViewDrawer } from '@/components/QuickViewDrawer';
 import {
   countSignals, deriveSignals, SIGNAL_FULL_LABELS,
   type SignalKey, type SignalRelationship, type SwitchPair,
@@ -152,21 +153,28 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
   const [internalOpen, setInternalOpen] = useState(true);
   /** The left rail folds away, the way the attendee column on the right does. */
   const [railOpen, setRailOpen] = useState(true);
+  /**
+   * A company's record, opened from a card's name and shown over this modal.
+   *
+   * Over, not instead: the grid is what sent you there and losing it to read
+   * one record would mean finding your place again afterwards.
+   */
+  const [quickView, setQuickView] = useState<{ id: number; name: string } | null>(null);
   // Mobile shows one panel at a time, the way the pre-conference tab does.
   const [mobileTab, setMobileTab] = useState<'companies' | 'relationships'>('companies');
 
   // ── Competitive view ──
   const [signalsOnly, setSignalsOnly] = useState(false);
   /**
-   * Whether the grid draws the lines between an account's two cells.
+   * Whether every card carrying a signal is lit at once.
    *
    * Plain state, deliberately. Not localStorage, not sessionStorage, not a ref
    * outside the component: the modal unmounts when it closes, so this goes back
-   * to unchecked every time it opens. Connectors are a thing you turn on to
-   * answer one question, and finding them already on next week — with no memory
-   * of asking for them — reads as the grid being broken.
+   * to unchecked every time it opens. It is a thing you turn on to answer one
+   * question, and finding it already on next week — with no memory of asking
+   * for it — reads as the grid being broken.
    */
-  const [showConnectors, setShowConnectors] = useState(false);
+  const [highlightSignals, setHighlightSignals] = useState(false);
   const [activeSignals, setActiveSignals] = useState<Set<SignalKey>>(new Set());
   // What is hidden, not what is shown. See the note in CompetitiveRail.
   const [hiddenCompetitorIds, setHiddenCompetitorIds] = useState<Set<number>>(new Set());
@@ -583,8 +591,8 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
                   onToggleCompetitor={toggleCompetitor}
                   signalsOnly={signalsOnly}
                   onSignalsOnly={setSignalsOnly}
-                  showConnectors={showConnectors}
-                  onShowConnectors={setShowConnectors}
+                  highlightSignals={highlightSignals}
+                  onHighlightSignals={setHighlightSignals}
                   activeSignals={activeSignals}
                   onToggleSignal={toggleSignal}
                   unclassifiedCount={competitive.unclassifiedCount}
@@ -618,8 +626,6 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
             {view === 'competitive' ? (
               <CompetitiveGrid
                 cells={competitive.cells}
-                pairs={competitive.pairs}
-                switches={competitive.switches}
                 competitors={shownCompetitors}
                 cardFor={cardFor}
                 nameOf={nameOf}
@@ -627,7 +633,8 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
                 statusesOf={statusesOf}
                 signalsOnly={signalsOnly}
                 activeSignals={activeSignals}
-                showConnectors={showConnectors}
+                highlightSignals={highlightSignals}
+                onOpenCompany={setQuickView}
                 userOptions={userOptions}
                 colorMaps={colorMaps}
                 // The map payload, not the spoke list. loadRels feeds the MAP
@@ -740,6 +747,15 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
           )}
         </div>
       </div>
+      {quickView && (
+        // Above the modal's own z-[200]: it portals to the body, so without a
+        // higher layer it would open behind the thing that opened it.
+        <QuickViewDrawer
+          target={{ type: 'company', id: quickView.id, name: quickView.name }}
+          onClose={() => setQuickView(null)}
+          zClass="z-[250]"
+        />
+      )}
     </div>
   );
 }

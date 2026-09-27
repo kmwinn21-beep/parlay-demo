@@ -13,11 +13,12 @@
  *                           A for B" is a claim about cause, and two end-states
  *                           and a calendar cannot establish one. It arrives
  *                           because somebody was asked and answered.
- *   evaluatingAlternatives  the account buys from one competitor and is trying
- *                           a different one at the same time. The matched pair
- *                           comes back with it, because the connector between
- *                           the two cells is drawn from that pair rather than
- *                           worked out again in the view.
+ *   evaluatingAlternatives  the account is weighing two competitors against
+ *                           each other — one they buy from against one they
+ *                           are trying, or two trials against each other. The
+ *                           matched pair comes back with it, because the
+ *                           connector between the two cells is drawn from that
+ *                           pair rather than worked out again in the view.
  *   recentChange            the status changed inside the window. Not "the row
  *                           was touched" — see statusChangedAt below.
  *   internalRelationship    somebody here knows somebody there. A standing
@@ -189,10 +190,28 @@ export interface SignalInput {
 }
 
 /** The two competitors an account is caught between. */
+/** One end of a pair: which competitor, and the row its cell sits in. */
+export interface PairEnd {
+  competitorId: number;
+  row: GridRow;
+}
+
 export interface AlternativePair {
   companyId: number;
-  currentCompetitorId: number;
-  evaluatingCompetitorId: number;
+  /**
+   * The two competitors, in no meaningful order.
+   *
+   * Named a and b rather than current and evaluating because a pair is not
+   * always one of each: an account weighing two trials against each other is
+   * evaluating alternatives in the plainest sense of the words, and neither end
+   * of that is the incumbent. The order is deterministic so the grid draws the
+   * same line twice in a row, and carries no other meaning.
+   *
+   * Each end knows its row, so a connector can be drawn between any two cells
+   * without the view working out where they landed.
+   */
+  a: PairEnd;
+  b: PairEnd;
 }
 
 export interface SignalCell {
@@ -279,9 +298,22 @@ export function deriveSignals(input: SignalInput): SignalResult {
     }
   }
 
-  // The self-join, once, per company. Current with one competitor and
-  // evaluating a different one — the same competitor on both sides is an
-  // account trying more of what it already buys, not an account in play.
+  /*
+   * The self-join, once, per company. Two shapes count:
+   *
+   *   current x evaluating   they buy from one and are trying another
+   *   evaluating x evaluating   they are trying two, against each other
+   *
+   * The second is the signal's own words taken literally, and it is the case a
+   * rep most wants at a conference: nobody has won yet.
+   *
+   * Two CURRENTS are not a pair. An account running two vendors side by side
+   * has decided; it is not weighing anything, and saying so would put the pill
+   * on half the book.
+   *
+   * The same competitor on both sides is never a pair either — that is an
+   * account trying more of what it already buys, not an account in play.
+   */
   const pairs: AlternativePair[] = [];
   const byCompany = new Map<number, Array<SignalRelationship & { statusClass: StatusClass }>>();
   for (const r of classified) {
@@ -289,17 +321,24 @@ export function deriveSignals(input: SignalInput): SignalResult {
     list.push(r);
     byCompany.set(r.companyId, list);
   }
+  const end = (r: { competitorId: number; statusClass: StatusClass }): PairEnd =>
+    ({ competitorId: r.competitorId, row: ROW_FOR_CLASS[r.statusClass] });
   for (const [companyId, rels] of Array.from(byCompany.entries())) {
     const current = rels.filter(r => r.statusClass === 'current');
     const evaluating = rels.filter(r => r.statusClass === 'evaluating');
     for (const c of current) {
       for (const e of evaluating) {
         if (c.competitorId === e.competitorId) continue;
-        pairs.push({
-          companyId,
-          currentCompetitorId: c.competitorId,
-          evaluatingCompetitorId: e.competitorId,
-        });
+        pairs.push({ companyId, a: end(c), b: end(e) });
+      }
+    }
+    // Every unordered pair of evaluations, once. i < j rather than a seen-set:
+    // (A,B) and (B,A) are one fact, and emitting both would draw the same line
+    // twice and count the signal twice in the rail.
+    for (let i = 0; i < evaluating.length; i++) {
+      for (let j = i + 1; j < evaluating.length; j++) {
+        if (evaluating[i].competitorId === evaluating[j].competitorId) continue;
+        pairs.push({ companyId, a: end(evaluating[i]), b: end(evaluating[j]) });
       }
     }
   }
@@ -307,8 +346,8 @@ export function deriveSignals(input: SignalInput): SignalResult {
   // Which competitors each company is caught between, for flagging the cells.
   const inPair = new Set<string>();
   for (const p of pairs) {
-    inPair.add(`${p.companyId}:${p.currentCompetitorId}`);
-    inPair.add(`${p.companyId}:${p.evaluatingCompetitorId}`);
+    inPair.add(`${p.companyId}:${p.a.competitorId}`);
+    inPair.add(`${p.companyId}:${p.b.competitorId}`);
   }
 
   const cells: SignalCell[] = classified.map(r => ({

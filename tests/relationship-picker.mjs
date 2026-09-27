@@ -497,9 +497,12 @@ console.log('\n— the view toggle —');
   eq('  Map still names the selected company',
     /: \(hubNode\?\.name \?\? 'Select a company'\)/.test(header), true);
 
-  // Show connectors is per-opening. Nothing outlives the modal.
-  eq('show connectors starts off',
-    /const \[showConnectors, setShowConnectors\] = useState\(false\)/.test(modal), true);
+  // The highlight is per-opening. Nothing outlives the modal.
+  eq('the signal highlight starts off',
+    /const \[highlightSignals, setHighlightSignals\] = useState\(false\)/.test(modal), true);
+  // It shows no connectors, so it no longer says it does.
+  eq('  and is not called what it stopped doing',
+    /showConnectors|highlightConnected/.test(modal), false);
   eq('  and is not persisted anywhere',
     /localStorage|sessionStorage/.test(modal), false);
   eq('  nor parked in a ref that outlives a render',
@@ -527,8 +530,12 @@ console.log('\n— the view toggle —');
     /Select an entity/.test(strip('components/relationship-map/EntityPicker.tsx')), false);
   eq('signals only still leads the rail',
     /checked=\{signalsOnly\}/.test(rail), true);
-  eq('  show connectors sits below it',
-    rail.indexOf('checked={signalsOnly}') < rail.indexOf('checked={showConnectors}'), true);
+  eq('  the signal highlight sits beside it',
+    rail.indexOf('checked={signalsOnly}') < rail.indexOf('checked={highlightSignals}'), true);
+  // It draws nothing, so it says nothing about connectors.
+  eq('  labelled for what it does',
+    /Highlight signals/.test(rail)
+      && /Show connectors|Highlight connections/.test(rail) === false, true);
   eq('  three signal filters, named from the shared map',
     /\(Object\.keys\(SIGNAL_LABELS\) as SignalKey\[\]\)\.map/.test(rail), true);
   eq('  each with its count',
@@ -746,97 +753,72 @@ console.log('\n— the card header, and the grid it had to change for —');
   eq('  and getBadgeClass defaults to what every other surface already had',
     /sizeClass = 'text-xs',/.test(strip('lib/colors.ts')), true);
 
-  // ── Hover lights the pair; it no longer draws a line ──
-  eq('hover draws no connector',
-    /showConnectors && lines\.length > 0 && \(/.test(grid), true);
-  eq('  the hover branch is gone from the overlay',
-    /showConnectors \|\| hovered !== null/.test(grid), false);
-  eq('hover lights both ends of the pair',
-    /highlight=\{isLit\(cell, hovered\) \? SIGNAL_TONE\[hovered!\.signal\] : null\}/.test(grid), true);
-  eq('  in the card\u2019s own border and fill',
-    /borderColor: highlight, backgroundColor: `\$\{highlight\}14`/.test(card), true);
-  eq('  and greys everything that is not one of them',
-    /hovered !== null && !isLit\(cell, hovered\) \? 'opacity-30' : ''/.test(grid), true);
-  // Hovering an account's third, unconnected card would otherwise light two
-  // cells elsewhere and dim the one under the cursor.
-  eq('only a card carrying the signal starts a hover',
-    /const sig = CONNECTOR_SIGNALS\.find\(k => cell\.signals\[k\]\);\s*\n\s*if \(sig\) setHovered/.test(grid), true);
-  eq('  and lit means the same account AND that signal',
-    /cell\.companyId === hovered\.companyId\s*\n?\s*&& cell\.signals\[hovered\.signal\]/.test(grid), true);
-  // A bright line over two greyed cards points at the account the hover says
-  // to ignore.
-  eq('a line recedes with the cards it joins',
-    /hovered\.companyId === l\.companyId && hovered\.signal === l\.signal\)\s*\n?\s*\? 0\.9 : 0\.15/.test(grid), true);
-  // One name for the signal a connector is drawn for, so a second one is a
-  // list rather than a hunt.
-  // Two connector signals now, listed in one place so a third is a list entry
-  // rather than a hunt through everything that draws or lights something.
-  eq('the connector signals are named once, as a list',
-    (grid.match(/CONNECTOR_SIGNALS: SignalKey\[\] = \['evaluatingAlternatives', 'switched'\]/g) || []).length, 1);
-  // The two places that must cover ALL of them read the list. Each join call
-  // naming its own signal is the point — that is what it is drawing.
-  eq('  the arrowheads are generated from the list',
-    /CONNECTOR_SIGNALS\.map\(sig => \(/.test(grid), true);
-  eq('  and so is the hover lookup',
-    /CONNECTOR_SIGNALS\.find\(k => cell\.signals\[k\]\)/.test(grid), true);
-
-  // ── The switch connector ──
+  // ── Highlighting, not lines ──
   //
-  // A switch has a direction — this account moved FROM one TO another — so it
-  // gets one arrowhead, on the end it moved to. An alternatives pair has no
-  // first and second and gets two.
-  eq('a switch joins the Left Competitor cell to the Use Competitor cell',
-    /`recentChange:\$\{sw\.companyId\}:\$\{sw\.fromCompetitorId\}`/.test(grid)
-      && /`useCompetitor:\$\{sw\.companyId\}:\$\{sw\.toCompetitorId\}`/.test(grid), true);
-  eq('  drawn directional, where the pair is not',
-    /'switched',[\s\S]{0,160}true,\n/.test(grid)
-      && /'evaluatingAlternatives',[\s\S]{0,160}false,\n/.test(grid), true);
-  eq('  the head stays on the end it moved to, whichever side that is',
-    /arrowStart: !directional \|\| !aIsLeft,/.test(grid)
-      && /arrowEnd: !directional \|\| aIsLeft,/.test(grid), true);
-  eq('  and each signal gets its own head, since a marker cannot inherit a stroke',
-    /id=\{`competitive-arrow-\$\{sig\}`\}/.test(grid)
-      && /stroke=\{SIGNAL_TONE\[l\.signal\]\}/.test(grid), true);
-  eq('the grid reads recorded switches rather than deriving them',
-    /switches: SwitchPair\[\];/.test(grid) && /for \(const sw of switches\)/.test(grid), true);
-  eq('  fed from the payload, which reads the table',
-    /switches=\{competitive\.switches\}/.test(modal)
-      && /switches: competitiveData\.switches,/.test(modal), true);
+  // A connector line appeared under the cursor and vanished with it, which is
+  // not something a reader can follow, and it crossed the cards it was joining
+  // on the way. Nothing is drawn now: the cards in play are painted in their
+  // signal's colour and everything else recedes, which says the same thing
+  // where the reader is already looking.
+  eq('the grid draws no lines at all',
+    /<svg|<line|<marker|markerStart|strokeDasharray/.test(grid), false);
+  eq('  and keeps nothing that measured them',
+    /getBoundingClientRect|ResizeObserver|headerRefs|CONNECTOR_GAP/.test(grid), false);
+  eq('  nor the pairs and switches that fed them',
+    /pairs: AlternativePair|switches: SwitchPair/.test(grid), false);
+  // The signal is already on the cell; a second copy of the pairing in the
+  // view would be a second answer to the same question.
+  eq('  reading the signal off the cell instead',
+    /CONNECTOR_SIGNALS\.find\(k => cell\.signals\[k\]\) \?\? null/.test(grid), true);
 
-  // Connectors are drawn from pairs and anchored on the HEADER.
-  eq('connectors come from the derived pairs, not a second self-join',
-    /for \(const p of pairs\)/.test(grid) && /evaluatingAlternatives/.test(grid), true);
-  eq('  anchored on the card header, which does not move when a card expands',
-    /headerRefs\.current\.get\(fromKey\)/.test(grid)
-      && /querySelector\('\[data-card-header\]'\)/.test(grid), true);
-  // Nearest sides, not centres: a line into the middle of a card runs across
-  // the name it points at and hides its own arrowhead under the card.
-  eq('  edge to edge, on the two nearest sides',
-    /const aIsLeft = ra\.left <= rb\.left;/.test(grid)
-      && /const \[left, right\] = aIsLeft \? \[ra, rb\] : \[rb, ra\];/.test(grid), true);
-  eq('  the left card\u2019s right edge and the right card\u2019s left edge',
-    /x1: left\.right - origin\.left \+ CONNECTOR_GAP/.test(grid)
-      && /x2: right\.left - origin\.left - CONNECTOR_GAP/.test(grid), true);
-  eq('  at each card\u2019s vertical middle',
-    /y1: left\.top - origin\.top \+ left\.height \/ 2/.test(grid)
-      && /y2: right\.top - origin\.top \+ right\.height \/ 2/.test(grid), true);
-  eq('  clear of the card, so the arrowhead is not behind it',
-    /const CONNECTOR_GAP = 7;/.test(grid), true);
-  eq('  with an arrowhead at both ends of a pair',
-    /markerStart=\{l\.arrowStart \?/.test(grid) && /markerEnd=\{l\.arrowEnd \?/.test(grid), true);
-  eq('  reversed at the start, or both would point the same way',
-    /orient="auto-start-reverse"/.test(grid), true);
-  eq('  thicker and darker than the hover line it replaced',
-    /strokeWidth=\{2\.5\}/.test(grid), true);
-  eq('  measured against the scrolled CONTENT, not the viewport',
-    /const host = contentRef\.current;/.test(grid)
-      && /host\.scrollLeft/.test(grid) === false, true);
-  eq('  and re-measured when a card changes height',
-    /new ResizeObserver\(measure\)/.test(grid), true);
-  eq('  a connector with an end filtered out draws nothing',
-    /if \(!a \|\| !b\) return;/.test(grid), true);
+  eq('the checkbox lights every card carrying a signal at once',
+    /if \(!highlightSignals\) return null;/.test(grid), true);
+  eq('  in that signal\u2019s own colour',
+    /return sig \? SIGNAL_TONE\[sig\] : null;/.test(grid), true);
+  eq('  and greys every card that carries none',
+    /anyHighlight && litWith\(cell\) === null \? 'opacity-30' : ''/.test(grid), true);
+  // Hovering asks a narrower question — what is THIS account weighing — and
+  // leaving the broad highlight on underneath would make it unanswerable.
+  eq('hovering narrows it to one account',
+    /if \(hovered\) return isLit\(cell, hovered\) \? SIGNAL_TONE\[hovered\.signal\] : null;/.test(grid), true);
+  eq('  lighting every cell that carries the signal for it',
+    /cell\.companyId === hovered\.companyId\s*\n?\s*&& cell\.signals\[hovered\.signal\]/.test(grid), true);
+  // Only a card that carries one starts a hover: any other card of the same
+  // account would light two cells elsewhere and dim the one being pointed at.
+  eq('only a card carrying a connector signal starts a hover',
+    /const sig = connectorSignalOf\(cell\);\s*\n\s*if \(sig\) setHovered/.test(grid), true);
+  // One card can be weighing alternatives AND have switched, and it has one
+  // border.
+  eq('a card carrying both takes the first of them',
+    (grid.match(/CONNECTOR_SIGNALS: SignalKey\[\] = \['evaluatingAlternatives', 'switched'\]/g) || []).length, 1);
+  eq('  and the card paints what it is handed',
+    /borderColor: highlight, backgroundColor: `\$\{highlight\}14`/.test(card), true);
 
-  // Recent Change orders by recency; the other rows have no clock.
+  // ── A card's name opens that company ──
+  //
+  // A button only where somebody can act on it, so a card on a surface with
+  // nowhere to open still reads as a heading rather than a control that does
+  // nothing.
+  eq('the heading is a button only when there is somewhere to open',
+    /onOpenTitleCompany && headingCompanyId \? \(/.test(card), true);
+  // The header around it toggles the card. A name that both opened a record
+  // and collapsed what you were reading would be two answers to one click.
+  eq('  and does not also collapse the card',
+    /e\.stopPropagation\(\);\s*\n\s*onOpenTitleCompany\(/.test(card), true);
+  // Defaults to the other end, which is what the heading says everywhere but
+  // the grid. A name that opens somebody else's record is worse than one that
+  // opens nothing.
+  eq('  naming the company the heading names',
+    /const headingCompanyId = titleCompanyId \?\? shown\.related_company_id;/.test(card), true);
+  eq('  which the grid overrides with the account',
+    /titleCompanyId=\{cell\.companyId\}/.test(grid), true);
+  // It portals to the body, so without a higher layer it opens behind the
+  // thing that opened it.
+  eq('the record opens over the modal, not behind it',
+    /zClass="z-\[250\]"/.test(modal)
+      && /zClass = 'z-50'/.test(strip('components/QuickViewDrawer.tsx')), true);
+  eq('  over it rather than instead of it',
+    /\{quickView && \(/.test(modal) && /setQuickView\(null\)/.test(modal), true);
   eq('the Recent Change cells sort by recency',
     /key\.startsWith\('recentChange:'\)\s*\?\s*list\.slice\(\)\.sort\(byRecency\)/.test(grid), true);
   eq('  and the others alphabetically, so nothing is arbitrary',
@@ -940,8 +922,8 @@ console.log('\n— the card header, and the grid it had to change for —');
     railSrc.indexOf('flex flex-wrap items-center gap-x-4 gap-y-2'),
     railSrc.indexOf('scrollbar-desktop-thin'),
   );
-  eq('signals only and show connectors share one row',
-    /checked=\{signalsOnly\}/.test(switchRow) && /checked=\{showConnectors\}/.test(switchRow), true);
+  eq('both switches share one row',
+    /checked=\{signalsOnly\}/.test(switchRow) && /checked=\{highlightSignals\}/.test(switchRow), true);
   eq('  neither left on a line of its own',
     (railSrc.match(/<label className="flex items-center gap-1\.5/g) || []).length, 0);
   // Wraps rather than truncating: a tenant with longer words should lose a

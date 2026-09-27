@@ -19,9 +19,16 @@ const BASE_PATHS: Record<QuickViewTarget['type'], string> = {
 interface Props {
   target: QuickViewTarget;
   onClose: () => void;
+  /**
+   * The layer it opens on. Default clears the page.
+   *
+   * It portals to the body, so a caller that is itself above the page — a
+   * modal — has to say so, or this opens behind the thing that opened it.
+   */
+  zClass?: string;
 }
 
-export function QuickViewDrawer({ target, onClose }: Props) {
+export function QuickViewDrawer({ target, onClose, zClass = 'z-50' }: Props) {
   const [mounted, setMounted] = useState(false);
   const { panelStyle, handleResizeStart } = useDrawerResize(480);
 
@@ -35,7 +42,7 @@ export function QuickViewDrawer({ target, onClose }: Props) {
   if (!mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end sm:items-stretch sm:justify-end">
+    <div className={`fixed inset-0 ${zClass} flex items-end sm:items-stretch sm:justify-end`}>
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       {/* Panel */}
