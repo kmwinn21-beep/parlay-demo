@@ -1,20 +1,23 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { EntityPicker } from '@/components/relationship-map/EntityPicker';
 import { CompetitiveRail, type CompetitorColumn } from '@/components/relationship-map/CompetitiveRail';
 import { CompetitiveGrid, SignalBadge } from '@/components/relationship-map/CompetitiveGrid';
 import { QuickViewDrawer } from '@/components/QuickViewDrawer';
 import {
+  useSidebarCollapse, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_EXPANDED_WIDTH,
+} from '@/components/SidebarCollapseContext';
+import {
   countSignals, deriveSignals, SIGNAL_FULL_LABELS,
   type SignalKey, type SignalRelationship, type SwitchPair,
 } from '@/lib/competitiveSignals';
 import { MapCanvas, TONE_COLOR, type Spoke } from '@/components/relationship-map/MapCanvas';
-import { VendorRelationshipCard, type VendorRelationship } from '@/components/VendorRelationshipCard';
+import type { VendorRelationship } from '@/components/VendorRelationshipCard';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useUserOptions } from '@/lib/useUserOptions';
 import { toneFor, type PickerCompany } from '@/lib/relationshipPicker';
-import { RelationshipAttendeeCard, SectionHead } from '@/components/pre-conference/RelationshipsTab';
+import { RelationshipAttendeeCard } from '@/components/pre-conference/RelationshipsTab';
 import type { RelationshipRow } from '@/components/PreConferenceReview';
 // The presenter's own shape, which carries company_id. VendorRelationship is
 // what the CARD needs and deliberately omits it — the surface rendering one
@@ -119,6 +122,7 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
   onClose: () => void;
 }) {
   const colorMaps = useConfigColors();
+  const { collapsed: sidebarCollapsed } = useSidebarCollapse();
   const userOptions = useUserOptions();
 
   const [scope, setScope] = useState<'conference' | 'all'>('conference');
@@ -160,9 +164,6 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
    * one record would mean finding your place again afterwards.
    */
   const [quickView, setQuickView] = useState<{ id: number; name: string } | null>(null);
-  // Mobile shows one panel at a time, the way the pre-conference tab does.
-  const [mobileTab, setMobileTab] = useState<'companies' | 'relationships'>('companies');
-
   // ── Competitive view ──
   const [signalsOnly, setSignalsOnly] = useState(false);
   /**
@@ -384,11 +385,30 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
     : 'All relationships';
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+    /* Desktop only, and by not rendering rather than by hiding the contents.
+       Narrowing the window with it open would otherwise leave the shell of a
+       modal with nothing in it. The state survives, so widening brings it
+       back — the same rule the view toggle follows across the breakpoint. */
+    <div className="fixed inset-0 z-[200] hidden sm:block">
+      {/* The backdrop covers everything, sidebar included: a click anywhere
+          outside the panel closes, and dimming only part of the screen would
+          say the rest was still live. */}
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      {/* Centred in what is LEFT of the screen, not in the screen. The sidebar
+          is opaque and permanent, so centring over it put the modal visibly
+          left of the content it belongs to.
+
+          A sibling of the backdrop rather than its child, so the panel's clicks
+          have nowhere to bubble to — and pointer-events-none lets a click in
+          the margin fall through to the backdrop and close.
+
+          The transition matches the sidebar's own 300ms, so the two move
+          together instead of the modal jumping after it. */}
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-[1360px] h-[88vh] flex flex-col"
-        onClick={e => e.stopPropagation()}
+        className="absolute inset-0 sm:left-[var(--sidebar-w)] flex items-center justify-center p-4 pointer-events-none transition-[left] duration-300 ease-in-out"
+        style={{ '--sidebar-w': `${sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH}px` } as CSSProperties}
       >
+        <div className="pointer-events-auto bg-white rounded-2xl shadow-2xl w-full max-w-[1360px] h-[88vh] flex flex-col">
         {/* px-3, not px-5, so the title's left edge sits over the rail's and
             the close button's right edge over the canvas's. */}
         <div className="flex items-center justify-between px-3 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
@@ -459,95 +479,6 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
           </div>
         </div>
 
-        {/* ── Mobile layout ──
-            The same two panels the pre-conference relationships tab uses: a
-            list, then the chosen company's relationships, with a toggle
-            between them. No hub and spokes — a canvas you rearrange by
-            dragging is of no use on a phone, and the cards are the content. */}
-        <div className="flex-1 min-h-0 sm:hidden flex flex-col p-3">
-          <div className="flex flex-shrink-0 border-b border-gray-200 mb-3">
-            <button
-              type="button"
-              onClick={() => setMobileTab('companies')}
-              className={`flex-1 py-2 text-sm font-semibold transition-colors ${
-                mobileTab === 'companies'
-                  ? 'text-brand-primary border-b-2 border-brand-primary'
-                  : 'text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              Companies
-            </button>
-            <button
-              type="button"
-              onClick={() => setMobileTab('relationships')}
-              className={`flex-1 py-2 text-sm font-semibold truncate transition-colors ${
-                mobileTab === 'relationships'
-                  ? 'text-brand-primary border-b-2 border-brand-primary'
-                  : 'text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              {hubNode ? hubNode.name : 'Relationships'}
-            </button>
-          </div>
-
-          {mobileTab === 'companies' ? (
-            <EntityPicker
-              companies={connected}
-              icpTypes={icpTypes}
-              selectedId={selectedId}
-              onSelect={id => { setSelectedId(id); setMobileTab('relationships'); }}
-              className="flex-1 min-h-0"
-            />
-          ) : (
-            <div className="flex-1 overflow-y-auto pb-4 space-y-6" style={{ scrollbarWidth: 'none' }}>
-              {!hubNode ? (
-                <p className="text-gray-400 text-sm text-center py-12">Select a company to view its relationships.</p>
-              ) : (
-                <>
-                  {internalCards.length > 0 && (
-                    <div>
-                      <SectionHead label="Internal" count={internalCards.length} />
-                      <div className="space-y-3">
-                        {internalCards.map(c => (
-                          <RelationshipAttendeeCard
-                            key={c.key}
-                            attendee={c.attendee}
-                            repNames={c.repNames}
-                            descriptions={c.descriptions}
-                            isTarget={false}
-                            onToggleTarget={() => {}}
-                            readOnly
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div>
-                    <SectionHead label="Vendor / Other Relationships" count={spokes.length} />
-                    {spokes.length === 0 ? (
-                      <p className="text-xs text-gray-400 py-2">No relationships recorded for this company.</p>
-                    ) : (
-                      <div className="space-y-3">
-                        {spokes.map(s => (
-                          <VendorRelationshipCard
-                            key={s.id}
-                            rel={s.rel}
-                            userOptions={userOptions}
-                            colorMaps={colorMaps}
-                            onUpdated={() => { loadRels(hubNode.id); void loadMap(true); }}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* overflow-hidden so the canvas sliding in is clipped by the modal
-            rather than escaping its rounded corners for a frame. */}
         <div className="flex-1 min-h-0 hidden sm:flex gap-3 p-3 overflow-hidden">
           {/* Collapses to a chevron strip, the way Attendee Relationships does
               on the other side of this modal. Same interaction, same widths,
@@ -745,6 +676,7 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
               </div>
             </div>
           )}
+        </div>
         </div>
       </div>
       {quickView && (
