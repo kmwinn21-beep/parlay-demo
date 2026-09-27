@@ -403,11 +403,37 @@ console.log('\n— the view toggle —');
   // reads as one four-way choice.
   eq('the toggle sits in the title block',
     /Relationship Map<\/h3>[\s\S]*?setView\(v\)[\s\S]*?<\/div>\s*<\/div>\s*<div className="flex items-center gap-2 flex-shrink-0">/.test(modal), true);
-  eq('  labelled Map and Competitive',
-    /\{v === 'map' \? 'Map' : 'Competitive'\}/.test(modal), true);
-  eq('  and it matches the scope toggle, not a new pattern',
+  eq('  labelled Map and Competition',
+    /\{v === 'map' \? 'Map' : 'Competition'\}/.test(modal), true);
+  eq('  built like the scope toggle, not a new pattern',
     /\(\['map', 'competitive'\] as const\)\.map/.test(modal)
-      && /view === v \? 'bg-brand-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'/.test(modal), true);
+      && /: 'bg-white text-gray-600 hover:bg-gray-50'/.test(modal), true);
+  // brand-accent, not the hex: a tenant that themes the app themes this too,
+  // and a literal would be the one control ignoring their colours. Dark text,
+  // because white on that green is about 1.9:1.
+  eq('  filled with the brand accent',
+    /'bg-brand-accent text-brand-primary'/.test(modal), true);
+  eq('  which is that green, from the theme',
+    /--brand-accent-rgb:\s+52 211 153/.test(readFileSync('app/globals.css', 'utf8')), true);
+  eq('  and no hex is written into the component',
+    /#34D399/.test(modal), false);
+
+  // The toggle starts where the canvas does, and the title where the rail
+  // does — both from one declared width rather than two numbers that match.
+  eq('the rail width is declared once',
+    (modal.match(/const RAIL_WIDTH = 288;/g) || []).length, 1);
+  // The number itself, not just the name: a second 288 is a second number
+  // however it is spelled.
+  eq('  and 288 appears nowhere else',
+    (modal.match(/\b288\b/g) || []).length, 1);
+  eq('  the strip takes it',
+    /width: railOpen \? RAIL_WIDTH : RAIL_FOLDED/.test(modal), true);
+  // Three: the title block, the rail and the picker. Any one of them falling
+  // back to its own width is the alignment quietly coming apart.
+  eq('  the title block and both rails are all that width',
+    (modal.match(/style=\{\{ width: RAIL_WIDTH \}\}/g) || []).length, 3);
+  eq('  and the header is padded like the row below it',
+    /px-3 pt-4 pb-3 border-b border-gray-100/.test(modal), true);
   eq('  pressed state is exposed, not only coloured',
     /aria-pressed=\{view === v\}/.test(header), true);
 
@@ -871,7 +897,7 @@ console.log('\n— the card header, and the grid it had to change for —');
 
   // ── The rail folds away ──
   eq('the rail collapses to a strip, like the attendee column opposite it',
-    /style=\{\{ width: railOpen \? 288 : 40 \}\}/.test(modal), true);
+    /style=\{\{ width: railOpen \? RAIL_WIDTH : RAIL_FOLDED \}\}/.test(modal), true);
   eq('  reporting its state', /aria-expanded=\{railOpen\}/.test(modal), true);
   eq('  naming what it holds, which differs by view',
     /view === 'competitive' \? 'Collapse signals' : 'Collapse the company list'/.test(modal), true);
@@ -881,6 +907,46 @@ console.log('\n— the card header, and the grid it had to change for —');
     /flex-1 min-h-0 flex \$\{railOpen \? '' : 'invisible'\}/.test(modal), true);
   eq('  on both views, not just one',
     /\{view === 'competitive' \? \(\s*\n\s*<CompetitiveRail[\s\S]{0,900}<EntityPicker/.test(modal), true);
+
+  // ── The view slides in from the side it sits on ──
+  //
+  // Competition is to the right of Map on the toggle, so it enters from the
+  // right and Map from the left. The direction is read off the view itself;
+  // remembering the previous one would be a second source of truth for
+  // something the toggle already says.
+  eq('the canvas is keyed on the view, so the animation restarts',
+    /key=\{view\}/.test(modal), true);
+  eq('  entering from the side the view sits on',
+    /view === 'competitive' \? 'view-enter-right' : 'view-enter-left'/.test(modal), true);
+  const cssText = readFileSync('app/globals.css', 'utf8');
+  eq('  with both keyframes defined',
+    /@keyframes viewEnterFromRight/.test(cssText) && /@keyframes viewEnterFromLeft/.test(cssText), true);
+  eq('  travelling opposite ways',
+    /viewEnterFromRight \{\s*from \{ transform: translateX\(6%\)/.test(cssText)
+      && /viewEnterFromLeft \{\s*from \{ transform: translateX\(-6%\)/.test(cssText), true);
+  // Somebody who asked their machine to stop moving things asked for this too.
+  eq('  and stopped for anyone who asked for less motion',
+    /prefers-reduced-motion: reduce\)[\s\S]{0,120}view-enter-right,[\s\S]{0,60}animation: none/.test(cssText), true);
+  // Sliding content would otherwise escape the modal's rounded corners.
+  eq('  clipped by the row it slides inside',
+    /hidden sm:flex gap-3 p-3 overflow-hidden/.test(modal), true);
+
+  // ── Both switches on one row ──
+  //
+  // Neither is a filter — they govern what the whole grid does — so a
+  // checkbox on its own line below read as one more of the three beneath it.
+  const railSrc = strip('components/relationship-map/CompetitiveRail.tsx');
+  const switchRow = railSrc.slice(
+    railSrc.indexOf('flex flex-wrap items-center gap-x-4 gap-y-2'),
+    railSrc.indexOf('scrollbar-desktop-thin'),
+  );
+  eq('signals only and show connectors share one row',
+    /checked=\{signalsOnly\}/.test(switchRow) && /checked=\{showConnectors\}/.test(switchRow), true);
+  eq('  neither left on a line of its own',
+    (railSrc.match(/<label className="flex items-center gap-1\.5/g) || []).length, 0);
+  // Wraps rather than truncating: a tenant with longer words should lose a
+  // line, not a label.
+  eq('  and the row wraps', /flex-wrap/.test(switchRow), true);
 
   // ── The column heading says what the competitor IS ──
   //

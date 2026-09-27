@@ -37,6 +37,7 @@ export function CompetitiveRail({
   onToggleSignal,
   unclassifiedCount,
   className = 'w-72 flex-shrink-0',
+  style,
 }: {
   signalCounts: Record<SignalKey, number>;
   competitors: CompetitorColumn[];
@@ -57,26 +58,26 @@ export function CompetitiveRail({
    */
   unclassifiedCount: number;
   className?: string;
+  /** Its width, when the caller owns it. See RAIL_WIDTH. */
+  style?: React.CSSProperties;
 }) {
   return (
-    <div className={`${className} view-competitive flex flex-col min-h-0 rounded-xl border border-gray-200 bg-white`}>
-      <div className="p-3 border-b border-gray-100 space-y-2.5">
-        {/* Signals only shares the heading's row: it applies to everything
-            below it, and a checkbox under the filters would read as a fourth
-            filter rather than the switch that governs the other three. */}
-        <div className="flex items-center justify-end gap-2">
-          <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-600 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={signalsOnly}
-              onChange={e => onSignalsOnly(e.target.checked)}
-              className="w-3.5 h-3.5 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary/40"
-            />
-            Signals only
-          </label>
-        </div>
-
-        <label className="flex items-center gap-1.5 text-[11px] font-medium text-gray-600 cursor-pointer">
+    <div style={style} className={`${className} view-competitive flex flex-col min-h-0 rounded-xl border border-gray-200 bg-white`}>
+      {/* One row, both switches. Neither is a filter — they govern what the
+          whole grid does — so they sit together above the filters rather than
+          reading as two more of them. Wraps rather than truncating, because a
+          tenant with longer words should lose a line, not a label. */}
+      <div className="p-3 border-b border-gray-100 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-600 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={signalsOnly}
+            onChange={e => onSignalsOnly(e.target.checked)}
+            className="w-3.5 h-3.5 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary/40"
+          />
+          Signals only
+        </label>
+        <label className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-600 cursor-pointer">
           <input
             type="checkbox"
             checked={showConnectors}

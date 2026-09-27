@@ -80,6 +80,18 @@ interface CompetitivePayload {
   /** Rows folded into a pair already logged from the other side. */
   duplicates: number;
 }
+/**
+ * The left rail's width, open.
+ *
+ * Used twice and declared once: the strip is this wide, and the header's title
+ * block is the same, so the view toggle beside it starts exactly where the
+ * canvas does. Two numbers that happen to be equal today are two numbers that
+ * disagree after somebody widens the rail.
+ */
+const RAIL_WIDTH = 288;
+/** Folded: enough for the chevron and nothing else. */
+const RAIL_FOLDED = 40;
+
 const EMPTY_COMPETITIVE: CompetitivePayload = {
   relationships: [], competitors: [], companiesWithInternal: [], cards: [],
   inverses: {}, switches: [], notCompetitive: 0, duplicates: 0,
@@ -369,9 +381,15 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
         className="bg-white rounded-2xl shadow-2xl w-full max-w-[1360px] h-[88vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
+        {/* px-3, not px-5, so the title's left edge sits over the rail's and
+            the close button's right edge over the canvas's. */}
+        <div className="flex items-center justify-between px-3 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
           <div className="min-w-0 flex items-center gap-3">
-            <div className="min-w-0">
+            {/* As wide as the rail, with the same gap after it, so the toggle
+                below starts exactly where the canvas does. A number that is
+                the rail's width rather than a number that happens to match it:
+                RAIL_WIDTH is the one place either is declared. */}
+            <div className="min-w-0 flex-1 sm:flex-none" style={{ width: RAIL_WIDTH }}>
               <h3 className="text-base font-semibold text-brand-primary font-serif">Relationship Map</h3>
               <p className="text-xs text-gray-400 mt-0.5 truncate">
                 {view === 'competitive'
@@ -394,11 +412,18 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
                   type="button"
                   onClick={() => setView(v)}
                   aria-pressed={view === v}
+                  // brand-accent, not the hex. It is #34D399 by default and a
+                  // tenant that themes the app themes this with it; a literal
+                  // would be the one control that ignored their colours.
+                  // brand-primary for the text — white on that green is about
+                  // 1.9:1 and unreadable.
                   className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                    view === v ? 'bg-brand-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                    view === v
+                      ? 'bg-brand-accent text-brand-primary'
+                      : 'bg-white text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  {v === 'map' ? 'Map' : 'Competitive'}
+                  {v === 'map' ? 'Map' : 'Competition'}
                 </button>
               ))}
             </div>
@@ -513,7 +538,9 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
           )}
         </div>
 
-        <div className="flex-1 min-h-0 hidden sm:flex gap-3 p-3">
+        {/* overflow-hidden so the canvas sliding in is clipped by the modal
+            rather than escaping its rounded corners for a frame. */}
+        <div className="flex-1 min-h-0 hidden sm:flex gap-3 p-3 overflow-hidden">
           {/* Collapses to a chevron strip, the way Attendee Relationships does
               on the other side of this modal. Same interaction, same widths,
               mirrored — this one folds left, so its chevron points the other
@@ -525,7 +552,7 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
           <div
             data-map-rail
             className="flex-shrink-0 flex flex-col min-h-0 overflow-hidden transition-[width] duration-300 ease-in-out"
-            style={{ width: railOpen ? 288 : 40 }}
+            style={{ width: railOpen ? RAIL_WIDTH : RAIL_FOLDED }}
           >
             <button
               type="button"
@@ -561,7 +588,8 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
                   activeSignals={activeSignals}
                   onToggleSignal={toggleSignal}
                   unclassifiedCount={competitive.unclassifiedCount}
-                  className="w-[288px] flex-shrink-0"
+                  className="flex-shrink-0"
+                  style={{ width: RAIL_WIDTH }}
                 />
               ) : (
                 <EntityPicker
@@ -569,13 +597,24 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
                   icpTypes={icpTypes}
                   selectedId={selectedId}
                   onSelect={setSelectedId}
-                  className="w-[288px] flex-shrink-0"
+                  className="flex-shrink-0"
+                  style={{ width: RAIL_WIDTH }}
                 />
               )}
             </div>
           </div>
 
-          <div className="flex-1 min-w-0 flex flex-col gap-2">
+          {/* Keyed on the view so the animation restarts on every toggle, and
+              named for the side the view sits on: Competition is to the right
+              of Map, so it enters from the right and Map from the left. The
+              direction is read off the view itself — remembering the previous
+              one would be a second source of truth for something the toggle
+              already says. */}
+          <div
+            key={view}
+            className={`flex-1 min-w-0 flex flex-col gap-2 ${
+              view === 'competitive' ? 'view-enter-right' : 'view-enter-left'}`}
+          >
             {view === 'competitive' ? (
               <CompetitiveGrid
                 cells={competitive.cells}

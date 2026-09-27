@@ -510,3 +510,25 @@ h1, h2, h3 {
     max-height: calc(100dvh - (env(safe-area-inset-top) + 0.75rem));
   }
 }
+
+/* The relationship map's two views, sliding in from the side they sit on.
+   Competition is to the right of Map on the toggle, so it enters from the
+   right and Map enters from the left — the movement says which way you went
+   without anything having to label it. */
+@keyframes viewEnterFromRight {
+  from { transform: translateX(6%); opacity: 0; }
+  to   { transform: translateX(0);  opacity: 1; }
+}
+@keyframes viewEnterFromLeft {
+  from { transform: translateX(-6%); opacity: 0; }
+  to   { transform: translateX(0);   opacity: 1; }
+}
+.view-enter-right { animation: viewEnterFromRight 0.28s ease-out; }
+.view-enter-left  { animation: viewEnterFromLeft  0.28s ease-out; }
+
+/* Somebody who has asked their machine to stop moving things has asked for
+   this too. The view still changes; it just does not travel. */
+@media (prefers-reduced-motion: reduce) {
+  .view-enter-right,
+  .view-enter-left { animation: none; }
+}
