@@ -96,14 +96,39 @@ console.log('\n— the badges —');
   eq('nothing clips or scrolls inside the cell',
     /overflow-x-auto|max-w-full/.test(badges), false);
   eq('  the badges report how much room they need',
-    /onWidthChange\?\.\(px\)/.test(badges), true);
+    /latest\.current\?\.\(px\)/.test(badges), true);
   // Measured every frame of the widening, not once when it starts: the badges
   // animate over 300ms, so a single reading is of the row still folded — the
   // column grew by about a fifth of what it needed and clipped the rest.
   eq('  measured as they spread, not once when they start',
     /const ro = new ResizeObserver\(measure\);\s*\n\s*ro\.observe\(el\);/.test(badges), true);
   eq('  and nothing left behind by a row that unmounts mid-spread',
-    /useEffect\(\(\) => \(\) => onWidthChange\?\.\(null\), \[onWidthChange\]\)/.test(badges), true);
+    /useEffect\(\(\) => \(\) => latest\.current\?\.\(null\), \[\]\)/.test(badges), true);
+  /*
+   * Neither effect may depend on the caller's callback, and this is the whole
+   * bug rather than a style note.
+   *
+   * A caller writes `onWidthChange={px => setWidth(id, px)}`, which is a new
+   * function on every render. As a dependency that re-runs both effects every
+   * render: the measuring one reports a width, the clearing one's cleanup
+   * reports null, and each report re-renders the caller. One click on a badge
+   * produced twelve thousand renders before React stopped it with "maximum
+   * update depth exceeded" — a blank page with an error boundary on it.
+   *
+   * So the rule is checked, not the two call sites: any dependency array that
+   * names the callback brings the loop back.
+   */
+  eq('  and no effect depends on the caller’s identity',
+    /\[[^\][]*onWidthChange[^\][]*\]/.test(badges), false);
+  eq('  the reporter being stable for the same reason',
+    /const report = useCallback\(\(px: number \| null\) => latest\.current\?\.\(px\), \[\]\)/.test(badges), true);
+  eq('  so measuring is keyed on the spread alone',
+    /\}, \[expanded, report\]\);/.test(badges), true);
+  // Kept current, or the ref pins whichever callback was passed at mount. That
+  // works only for as long as a mounted badge row keeps the same company, which
+  // is true of this table today and is not something this component knows.
+  eq('  with the held callback kept current',
+    /useLayoutEffect\(\(\) => \{ latest\.current = onWidthChange; \}\);/.test(badges), true);
   eq('the column takes the widest spread row',
     /Math\.max\(\s*\n\s*colWidths\.signals \?\? COL_DEFAULT_WIDTH,\s*\n\s*\.\.\.Object\.values\(signalWidths\)\.map\(w => w \+ 24\),/.test(table2), true);
   // Keyed by company so two rows open at once do not fight over one number.

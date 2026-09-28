@@ -27,6 +27,9 @@ export interface ConflictItem {
   proposedValue: string;
   acceptLabel?: string;
   ignoreLabel?: string;
+  acceptShows?: 'current' | 'proposed';
+  acceptCaption?: string;
+  ignoreCaption?: string;
   defaultResolution?: 'accept' | 'ignore';
   detail?: string;
 }
@@ -145,6 +148,7 @@ export async function POST(
         if (!askedIdentity.has(normalized)) {
           askedIdentity.add(normalized);
           const affected = valid.filter(q => q.company?.trim() === coName).length;
+          const who = `${affected} attendee${affected !== 1 ? 's' : ''}`;
           conflicts.push({
             entityType: 'company_identity',
             entityId: existing.id,
@@ -153,10 +157,18 @@ export async function POST(
             fieldLabel: 'Company',
             currentValue: existing.name,
             proposedValue: `Add "${coName}" as a new company`,
+            // "Same company" is a judgement about the two names; the label on
+            // the other side names its OUTCOME, because that is the part a
+            // reader cannot infer. Both captions then say where the attendees
+            // land, which is the only thing this answer actually decides.
             acceptLabel: 'Same company',
-            ignoreLabel: 'Different',
+            ignoreLabel: 'New company',
+            // Yes puts them on the EXISTING company, in the left column.
+            acceptShows: 'current',
+            acceptCaption: `← ${who} ${affected === 1 ? 'joins' : 'join'} this company`,
+            ignoreCaption: `← ${who} ${affected === 1 ? 'gets' : 'get'} a new one`,
             defaultResolution: 'ignore',
-            detail: `${affected} attendee${affected !== 1 ? 's' : ''} in this file · closest existing match`,
+            detail: `${who} in this file · closest existing match`,
           });
         }
         // Its field values belong to a company that may not be this one, so
