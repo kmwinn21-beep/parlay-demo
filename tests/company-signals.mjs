@@ -86,6 +86,35 @@ console.log('\n— the badges —');
   // The row underneath usually opens something.
   eq('  and reading them does not open the row',
     /e\.stopPropagation\(\)/.test(badges), true);
+
+  // ── The column grows, rather than the names hiding behind it ──
+  //
+  // The companies table lays out FIXED, so a cell cannot widen to its own
+  // contents the way the meetings table's can — spread names simply vanished
+  // under the column to the right. The column is told instead.
+  const table2 = strip('components/CompanyTable.tsx');
+  eq('nothing clips or scrolls inside the cell',
+    /overflow-x-auto|max-w-full/.test(badges), false);
+  eq('  the badges report how much room they need',
+    /onWidthChange\?\.\(px\)/.test(badges), true);
+  // Measured every frame of the widening, not once when it starts: the badges
+  // animate over 300ms, so a single reading is of the row still folded — the
+  // column grew by about a fifth of what it needed and clipped the rest.
+  eq('  measured as they spread, not once when they start',
+    /const ro = new ResizeObserver\(measure\);\s*\n\s*ro\.observe\(el\);/.test(badges), true);
+  eq('  and nothing left behind by a row that unmounts mid-spread',
+    /useEffect\(\(\) => \(\) => onWidthChange\?\.\(null\), \[onWidthChange\]\)/.test(badges), true);
+  eq('the column takes the widest spread row',
+    /Math\.max\(\s*\n\s*colWidths\.signals \?\? COL_DEFAULT_WIDTH,\s*\n\s*\.\.\.Object\.values\(signalWidths\)\.map\(w => w \+ 24\),/.test(table2), true);
+  // Keyed by company so two rows open at once do not fight over one number.
+  eq('  keyed by company, so two open rows do not fight',
+    /const \[signalWidths, setSignalWidths\] = useState<Record<number, number>>\(\{\}\);/.test(table2), true);
+  eq('  and the header reads that width, not its own',
+    /style=\{\{ width: signalsWidth \}\}/.test(table2), true);
+  eq('  moving with the badges rather than after them',
+    /transition-\[width\] duration-300 ease-out" style=\{\{ width: signalsWidth \}\}/.test(table2), true);
+  eq('  and giving it back when they fold',
+    /if \(px == null\) \{[\s\S]{0,160}delete next\[companyId\];/.test(table2), true);
   // Order is declared, not whatever the data happened to arrive in.
   eq('they read the same way down on every row',
     /SIGNAL_KEYS\.filter\(k => signals\?\.includes\(k\)\)/.test(badges), true);
@@ -137,8 +166,10 @@ console.log('\n— where they sit —');
   // of punctuation.
   eq('  showing nothing rather than a dash when there are none',
     /emptyLabel=\{null\}/.test(table), true);
+  // The desktop cell keeps the dash the other columns use, and it is the one
+  // that reports its width — the phone card has no column to widen.
   eq('  while the desktop cell keeps the dash the other columns use',
-    /<CompanySignalBadges signals=\{companySignals\[company\.id\]\} \/>/.test(table), true);
+    /<CompanySignalBadges\s*\n\s*signals=\{companySignals\[company\.id\]\}\s*\n\s*onWidthChange=/.test(table), true);
 
   // The badge is about the company, not about this show.
   eq('the table asks for every signal, not this conference\u2019s',

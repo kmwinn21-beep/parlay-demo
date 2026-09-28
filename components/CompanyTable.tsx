@@ -189,6 +189,29 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
    * reads as the badge being unreliable rather than as a scope.
    */
   const companySignals = useCompanySignals();
+  /**
+   * How wide the Signals column has to be while a row's badges are spread.
+   *
+   * The table lays out fixed, so a cell cannot widen to its contents — the
+   * column is told instead, and everything to its right moves over, which is
+   * what the meetings table gets for free from an auto layout.
+   *
+   * Keyed by company so two rows open at once do not fight over one number;
+   * the column takes the widest of them.
+   */
+  const [signalWidths, setSignalWidths] = useState<Record<number, number>>({});
+  const setSignalWidth = useCallback((companyId: number, px: number | null) => {
+    setSignalWidths(prev => {
+      if (px == null) {
+        if (!(companyId in prev)) return prev;
+        const next = { ...prev };
+        delete next[companyId];
+        return next;
+      }
+      if (prev[companyId] === px) return prev;
+      return { ...prev, [companyId]: px };
+    });
+  }, []);
   const customColumns = useCustomColumns(tableName);
 
   const { panelStyle: qvPanelStyle, handleResizeStart: qvResizeStart } = useDrawerResize(480);
@@ -326,6 +349,13 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS);
   const COL_DEFAULT_WIDTH = 120;
+  /* The Signals column's width: its own, or wide enough for whichever row has
+     its badges spread. Declared here because it reads colWidths. */
+  const signalsWidth = Math.max(
+    colWidths.signals ?? COL_DEFAULT_WIDTH,
+    // Padding, so the last name does not end flush against the next column.
+    ...Object.values(signalWidths).map(w => w + 24),
+  );
   // Selection is a primary action on this table, so the checkboxes are always
   // there rather than appearing on hover.
   const selWidth = selectionColumnWidth(true);
@@ -950,7 +980,10 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
             </div>
           </td>;
           case 'signals': return <td key="signals" className="px-3 py-3">
-            <CompanySignalBadges signals={companySignals[company.id]} />
+            <CompanySignalBadges
+              signals={companySignals[company.id]}
+              onWidthChange={px => setSignalWidth(company.id, px)}
+            />
           </td>;
           case 'type': return <td key="type" className="px-3 py-3">
             {editingCell?.companyId === company.id && editingCell.field === 'company_type' ? (
@@ -2079,7 +2112,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                   if (!isVisible(col.key)) return null;
                   switch (col.key) {
                     case 'name': return <th key="name" className={`${thCls} sticky z-30 bg-gray-50`} style={{ width: colWidths.name, left: companyNameStickyLeft }} onClick={() => handleSort('name')}>Company Name <SortIcon col="name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="name" /></th>;
-                    case 'signals': return <th key="signals" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap" style={{ width: colWidths.signals }}>Signals<ResizeHandle col="signals" /></th>;
+                    case 'signals': return <th key="signals" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap transition-[width] duration-300 ease-out" style={{ width: signalsWidth }}>Signals<ResizeHandle col="signals" /></th>;
                     case 'type': return <th key="type" className={thCls} style={{ width: colWidths.type }} onClick={() => handleSort('company_type')}>Type <SortIcon col="company_type" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="type" /></th>;
                     case 'sfowner': return <th key="sfowner" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none relative" style={{ width: colWidths.sfowner }}>SF Owner<ResizeHandle col="sfowner" /></th>;
                     case 'status': return <th key="status" className={thCls} style={{ width: colWidths.status }} onClick={() => handleSort('status')}>Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="status" /></th>;
