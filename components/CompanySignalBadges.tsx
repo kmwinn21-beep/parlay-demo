@@ -55,7 +55,22 @@ export function CompanySignalBadges({ signals, emptyLabel = '—', onWidthChange
    * No feedback loop: the row is inline-flex and sized by its own contents, so
    * the column widening underneath it does not change its width.
    */
-  const report = useCallback((px: number | null) => onWidthChange?.(px), [onWidthChange]);
+  /*
+   * Held in a ref, and this is load-bearing rather than tidiness.
+   *
+   * The caller passes a fresh closure on every render — `px => setWidth(id, px)`
+   * is a new function each time, which is the ordinary way to write it. Used as
+   * an effect dependency, that makes both effects below re-run on every render:
+   * the measuring one reports a width, the clearing one's cleanup reports null,
+   * each report re-renders the parent, and the two sat there overwriting each
+   * other about a thousand times a second until React gave up with "maximum
+   * update depth exceeded". Through the ref, neither effect depends on the
+   * caller's identity, so they run when their own subject changes and not when
+   * the parent happens to re-render.
+   */
+  const latest = useRef(onWidthChange);
+  useLayoutEffect(() => { latest.current = onWidthChange; });
+  const report = useCallback((px: number | null) => latest.current?.(px), []);
   useLayoutEffect(() => {
     if (!expanded) { report(null); return; }
     const el = rowRef.current;
@@ -67,8 +82,9 @@ export function CompanySignalBadges({ signals, emptyLabel = '—', onWidthChange
     return () => ro.disconnect();
   }, [expanded, report]);
   // A row that unmounts mid-expansion would otherwise leave the column wide
-  // with nothing in it.
-  useEffect(() => () => onWidthChange?.(null), [onWidthChange]);
+  // with nothing in it. On unmount only — keyed on the caller's callback this
+  // fired on every render and undid the measurement above.
+  useEffect(() => () => latest.current?.(null), []);
 
   // Through the declared order rather than whatever order they arrived in, so
   // a row of badges reads the same way down as the legend that explains them.
