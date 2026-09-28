@@ -23,6 +23,15 @@ const ROW_ORDER: GridRow[] = ['activeEvaluation', 'useCompetitor', 'recentChange
  * grid. minmax lets them grow past this when there are fewer.
  */
 const COL_WIDTH = 232;
+/**
+ * Every rule in the grid, declared once.
+ *
+ * The bands and the columns are the thing being separated, so they are drawn
+ * in one weight — a heading underlined more heavily than the column beside it
+ * reads as two tables rather than one grid. Darker than the hairlines it
+ * replaced, which disappeared entirely once the canvas stopped being white.
+ */
+const GRID_LINE = 'border-gray-400';
 const LABEL_WIDTH = 92;
 
 /**
@@ -192,12 +201,12 @@ export function CompetitiveGrid({
         {/* Column headings. Sticky, because the grid scrolls in both directions
             and a column you have scrolled past is a column you cannot name. */}
         <div
-          className="grid sticky top-0 z-10 bg-gray-100/95 backdrop-blur-sm border-b border-gray-200"
+          className={`grid sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b ${GRID_LINE}`}
           style={{ gridTemplateColumns: gridTemplate }}
         >
           <div className="px-2 py-2" />
           {competitors.map(c => (
-            <div key={c.id} className="px-2 py-2 min-w-0 border-l border-gray-100">
+            <div key={c.id} className={`px-2 py-2 min-w-0 border-l ${GRID_LINE}`}>
               <div className="flex items-center gap-1.5 min-w-0">
                 <p className="text-sm font-bold text-brand-primary font-serif truncate" title={c.name}>
                   {c.name}
@@ -227,16 +236,16 @@ export function CompetitiveGrid({
           return (
             <div
               key={gridRow}
-              className="grid border-b border-gray-100 last:border-b-0"
+              className={`grid border-b ${GRID_LINE} last:border-b-0`}
               style={{ gridTemplateColumns: gridTemplate }}
             >
-              <div className="px-2 py-2.5 sticky left-0 bg-gray-100 z-[5] border-r border-gray-100">
+              <div className={`px-2 py-2.5 sticky left-0 bg-white z-[5] border-r ${GRID_LINE}`}>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 leading-tight">
                   {ROW_LABELS[gridRow]}
                 </p>
               </div>
               {competitors.map((c, i) => (
-                <div key={c.id} className="px-2 py-2.5 min-w-0 space-y-2 border-l border-gray-100">
+                <div key={c.id} className={`px-2 py-2.5 min-w-0 space-y-2 border-l ${GRID_LINE}`}>
                   {rowCells[i].map(cell => {
                     const rel = cardFor(cell.companyId, cell.competitorId);
                     const key = `${cell.row}:${cell.companyId}:${cell.competitorId}`;

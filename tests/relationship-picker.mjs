@@ -1199,12 +1199,24 @@ console.log('\n— the canvases are grey, and the cards on them are white —');
     /overflow-hidden rounded-xl border border-gray-200 bg-gray-100/.test(map), true);
   eq('the competition grid is grey',
     /relative rounded-xl border border-gray-200 bg-gray-100/.test(grid), true);
-  // The two sticky surfaces sit ON the canvas, so they take its colour or they
-  // read as panels floating over it.
-  eq('  including the headings that float over it',
-    /sticky top-0 z-10 bg-gray-100\/95/.test(grid), true);
-  eq('  and the row labels down its left edge',
-    /sticky left-0 bg-gray-100 z-\[5\]/.test(grid), true);
+  // The headings and the row labels are white against it, so the grid reads as
+  // a table on a surface rather than one flat field.
+  eq('  with white column headings over it',
+    /sticky top-0 z-10 bg-white\/95/.test(grid), true);
+  eq('  and a white column of row labels',
+    /sticky left-0 bg-white z-\[5\]/.test(grid), true);
+
+  // One weight for every rule. A heading underlined more heavily than the
+  // column beside it reads as two tables rather than one grid, so the bands,
+  // the columns and the line under the headings are all the same.
+  // Dark enough to read against BOTH surfaces it divides — the grey canvas and
+  // the white heading strip. The hairline it replaced was invisible on the
+  // canvas, which is why the sections ran together.
+  eq('the rules are one declared weight, and a dark one',
+    /const GRID_LINE = 'border-gray-[4-9]00';/.test(grid), true);
+  const rules = (grid.match(/border-[btlr] \$\{GRID_LINE\}/g) ?? []).length;
+  eq('  used on every rule in the grid', rules, 5);
+  eq('  and nothing draws its own', /border-[btlr] border-gray-\d00/.test(grid), false);
   // The card had no background of its own and took whatever was underneath,
   // which was white until the canvas stopped being white.
   eq('a card carries its own white',
