@@ -1189,6 +1189,8 @@ export interface ParsedAttendee {
   linkedin_url?: string;
   /** Company-level: the company's record in the CRM. */
   crm_link?: string;
+  /** The attendee's own CRM record, as distinct from the company's. */
+  crm_contact_link?: string;
   /** Stand-in row from a company-only upload — see ColumnMapping.company_only. */
   is_placeholder?: boolean;
 }

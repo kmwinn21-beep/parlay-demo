@@ -19,6 +19,23 @@ const LINKEDIN_ALIASES = [
 ];
 
 /**
+ * Headers that name the ATTENDEE's record in the CRM.
+ *
+ * Claimed before the company's CRM link, not after: every one of these
+ * contains "crm" or "contact", which the company aliases match as substrings,
+ * so looking that up first would file a contact URL against the account. The
+ * same precedence LinkedIn has over Website, for the same reason.
+ */
+const CRM_CONTACT_LINK_ALIASES = [
+  'crm_contact_link', 'crm contact link', 'crm_contact_url', 'crm contact url',
+  'crm_contact', 'crm contact', 'contact_link', 'contact link',
+  'contact_url', 'contact url', 'contact_record', 'contact record',
+  'salesforce_contact', 'salesforce contact', 'sfdc_contact', 'sfdc contact',
+  'hubspot_contact', 'hubspot contact', 'lead_link', 'lead link',
+  'lead_url', 'lead url',
+];
+
+/**
  * Headers that name the company's record in the CRM.
  *
  * Shared by both parse paths — the explicit-mapping suggestion and the
@@ -79,8 +96,13 @@ export function extractRawRows(buffer: Buffer, filename: string): Record<string,
 /** Return auto-suggested column mapping based on file headers. */
 export function suggestMapping(headers: string[]): ColumnMapping {
   const linkedin = findColumn(headers, ...LINKEDIN_ALIASES);
-  const crmLink = findColumn(headers, ...CRM_LINK_ALIASES);
-  const claimed = new Set([linkedin, crmLink].filter((h): h is string => h !== null));
+  // The contact link first, then the account link against what is left: the
+  // company aliases match "crm" as a substring and would otherwise take a
+  // "CRM Contact URL" column for the account's.
+  const crmContactLink = findColumn(headers, ...CRM_CONTACT_LINK_ALIASES);
+  const forCrmLink = crmContactLink ? headers.filter(h => h !== crmContactLink) : headers;
+  const crmLink = findColumn(forCrmLink, ...CRM_LINK_ALIASES);
+  const claimed = new Set([linkedin, crmLink, crmContactLink].filter((h): h is string => h !== null));
   const forWebsite = claimed.size > 0 ? headers.filter(h => !claimed.has(h)) : headers;
   return {
     first_name:    findColumn(headers, 'first_name', 'firstname', 'first name', 'fname', 'given_name', 'given name'),
@@ -100,6 +122,7 @@ export function suggestMapping(headers: string[]): ColumnMapping {
     function:      findColumn(headers, 'function', 'department', 'dept', 'business_function', 'business function', 'job_function', 'job function', 'functional_area', 'functional area'),
     product:       findColumn(headers, 'product', 'products', 'product_interest', 'product interest', 'product_line', 'product line'),
     crm_link:      crmLink,
+    crm_contact_link: crmContactLink,
     linkedin_url:  linkedin,
     consent:       findColumn(headers, 'consent', 'opt_in', 'opt in', 'opt_out', 'opt out', 'optin', 'optout', 'email_consent', 'email consent', 'marketing_consent', 'marketing consent', 'communication_preference', 'communication preference', 'contact_permission', 'contact permission', 'gdpr', 'permission'),
   };
@@ -154,6 +177,7 @@ function parseRowsWithMapping(rows: Record<string, unknown>[], mapping: ColumnMa
     if (mapping.email         && row[mapping.email])         attendee.email          = String(row[mapping.email]).trim();
     if (mapping.website       && row[mapping.website])       attendee.website        = String(row[mapping.website]).trim();
     if (mapping.crm_link      && row[mapping.crm_link])      attendee.crm_link       = String(row[mapping.crm_link]).trim();
+    if (mapping.crm_contact_link && row[mapping.crm_contact_link]) attendee.crm_contact_link = String(row[mapping.crm_contact_link]).trim();
     if (mapping.linkedin_url  && row[mapping.linkedin_url])  attendee.linkedin_url   = String(row[mapping.linkedin_url]).trim();
     if (mapping.company_type  && row[mapping.company_type])  attendee.company_type   = String(row[mapping.company_type]).trim();
     if (mapping.assigned_user && row[mapping.assigned_user]) attendee.assigned_user  = String(row[mapping.assigned_user]).trim();
@@ -269,8 +293,15 @@ function parseRows(rows: Record<string, unknown>[]): ParsedAttendee[] {
   const companyCol = findColumn(headers, 'company', 'company_name', 'company name', 'organization', 'org', 'employer', 'firm');
   const emailCol = findColumn(headers, 'email', 'email_address', 'email address', 'e_mail', 'e-mail');
   const linkedinCol = findColumn(headers, ...LINKEDIN_ALIASES);
-  const crmLinkCol = findColumn(headers, ...CRM_LINK_ALIASES);
-  const claimedCols = new Set([linkedinCol, crmLinkCol].filter((h): h is string => h !== null));
+  // Contact before account, as in suggestMapping and for the same reason.
+  const crmContactLinkCol = findColumn(headers, ...CRM_CONTACT_LINK_ALIASES);
+  const crmLinkCol = findColumn(
+    crmContactLinkCol ? headers.filter(h => h !== crmContactLinkCol) : headers,
+    ...CRM_LINK_ALIASES,
+  );
+  const claimedCols = new Set(
+    [linkedinCol, crmLinkCol, crmContactLinkCol].filter((h): h is string => h !== null),
+  );
   const websiteCol = findColumn(headers.filter(h => !claimedCols.has(h)), ...WEBSITE_ALIASES);
   const companyTypeCol = findColumn(headers, 'company_type', 'company type', 'registration_type', 'registration type', 'reg_type', 'reg type', 'attendee_type', 'attendee type', 'type');
   const assignedUserCol = findColumn(headers, 'assigned_user', 'assigned user', 'salesforce_owner', 'salesforce owner', 'sf_owner', 'sf owner', 'account_owner', 'account owner', 'owner', 'rep', 'sales_rep', 'sales rep', 'account_rep', 'account rep', 'sales_representative', 'sales representative', 'account_manager', 'account manager');
@@ -331,6 +362,9 @@ function parseRows(rows: Record<string, unknown>[]): ParsedAttendee[] {
     }
     if (crmLinkCol && row[crmLinkCol]) {
       attendee.crm_link = String(row[crmLinkCol]).trim();
+    }
+    if (crmContactLinkCol && row[crmContactLinkCol]) {
+      attendee.crm_contact_link = String(row[crmContactLinkCol]).trim();
     }
     if (linkedinCol && row[linkedinCol]) {
       attendee.linkedin_url = String(row[linkedinCol]).trim();

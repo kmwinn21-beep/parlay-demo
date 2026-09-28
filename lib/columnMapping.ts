@@ -5,7 +5,7 @@ export type SystemFieldKey =
   | 'first_name' | 'last_name' | 'full_name' | 'title' | 'company'
   | 'email' | 'website' | 'company_type' | 'assigned_user' | 'state' | 'wse'
   | 'services' | 'icp' | 'industry' | 'function' | 'product' | 'consent'
-  | 'crm_link' | 'linkedin_url';
+  | 'crm_link' | 'crm_contact_link' | 'linkedin_url';
 
 export interface ColumnMapping {
   first_name: string | null;
@@ -27,6 +27,7 @@ export interface ColumnMapping {
   product: string | null;
   consent: string | null;
   crm_link: string | null;
+  crm_contact_link: string | null;
   /**
    * Company-only list: the file has no people in it. The parser stands in a
    * placeholder attendee per company so the company registers as present.
@@ -60,10 +61,11 @@ export const SYSTEM_FIELD_LABELS: Record<SystemFieldKey, SystemFieldMeta> = {
   product:       { label: 'Product',             description: 'Product(s) associated with this contact (comma-separated)' },
   consent:       { label: 'Consent',             description: 'Opt-in / Opt-out / Consent Not Recorded' },
   crm_link:      { label: 'CRM Link',            description: 'Link to the company record in your CRM' },
+  crm_contact_link: { label: 'CRM Contact Link', description: "Link to the attendee's contact record in your CRM" },
 };
 
 export const FIELD_ORDER: SystemFieldKey[] = [
   'first_name', 'last_name', 'full_name', 'title', 'company',
   'email', 'linkedin_url', 'website', 'company_type', 'assigned_user', 'state', 'wse', 'services', 'icp',
-  'industry', 'function', 'product', 'consent', 'crm_link',
+  'industry', 'function', 'product', 'consent', 'crm_link', 'crm_contact_link',
 ];

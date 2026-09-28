@@ -2746,6 +2746,13 @@ export const migrations: string[] = [
        AND value = 'Active Pilot'
        AND (inverse_value IS NULL OR inverse_value = 'Active Pilot')`,
 
+  // ── An attendee's own record in the CRM ────────────────────────────────────
+  //
+  // Beside companies.crm_link rather than reusing it: that one points at the
+  // ACCOUNT, and a rep opening a contact from here wants the contact. A single
+  // column would have had to mean whichever the last import wrote.
+  `ALTER TABLE attendees ADD COLUMN crm_contact_link TEXT`,
+
   // ── A vendor switch, recorded rather than inferred ────────────────────────
   //
   // "They left Red Moon for Nova Moon" is a claim about cause, and no
