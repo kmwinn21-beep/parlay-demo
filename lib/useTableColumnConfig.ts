@@ -43,6 +43,10 @@ export const TABLE_COLUMN_DEFS: Record<string, ColumnDef[]> = {
   ],
   companies: [
     { key: 'name',          label: 'Company Name' },
+    // Second, beside the name it is about: the badges say why a row is worth
+    // reading, and a reader who has to find them three columns over has
+    // already decided it is not.
+    { key: 'signals',       label: 'Signals' },
     { key: 'type',          label: 'Type' },
     { key: 'sfowner',       label: 'SF Owner' },
     { key: 'status',        label: 'Status' },
@@ -157,6 +161,10 @@ export const TABLE_COLUMN_DEFS: Record<string, ColumnDef[]> = {
   ],
   conference_companies: [
     { key: 'name',          label: 'Company Name' },
+    // Second, beside the name it is about: the badges say why a row is worth
+    // reading, and a reader who has to find them three columns over has
+    // already decided it is not.
+    { key: 'signals',       label: 'Signals' },
     { key: 'type',          label: 'Type' },
     { key: 'sfowner',       label: 'SF Owner' },
     { key: 'status',        label: 'Status' },

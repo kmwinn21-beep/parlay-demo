@@ -155,6 +155,14 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
    */
   const [internal, setInternal] = useState<RelationshipRow[]>([]);
   const [internalOpen, setInternalOpen] = useState(true);
+  /**
+   * The company whose contacts the right column shows in Competition.
+   *
+   * Cleared when the modal's view changes: the column names a company, and
+   * carrying the last one across a view switch would leave it naming somebody
+   * the reader is no longer looking at.
+   */
+  const [internalPick, setInternalPick] = useState<number | null>(null);
   /** The left rail folds away, the way the attendee column on the right does. */
   const [railOpen, setRailOpen] = useState(true);
   /**
@@ -278,17 +286,32 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
    * Relationships" to contacts who did not come would mean computing the
    * health ring outside that route, which is five cross-conference queries.
    */
-  const internalCards = useMemo(() => {
-    if (!hubNode) return [];
+  const cardsForCompany = useCallback((companyId: number | null) => {
+    if (companyId == null) return [];
     return internal
-      .filter(r => r.company_id === hubNode.id)
+      .filter(r => r.company_id === companyId)
       .flatMap(r => r.attendees.map(a => ({
         key: `${r.id}:${a.id}`,
         attendee: { ...a, company_name: r.company_name, company_id: r.company_id },
         repNames: r.rep_names,
         descriptions: [r.description].filter(Boolean),
       })));
-  }, [internal, hubNode]);
+  }, [internal]);
+
+  /**
+   * Whose contacts the column is showing.
+   *
+   * In Map that is the hub, which is the only company on screen. The grid has
+   * no hub, so it is whichever card's IR badge was last clicked — the badge
+   * says somebody here knows somebody there, and this is where you find out
+   * who.
+   */
+  const internalCompanyId = view === 'map' ? (hubNode?.id ?? null) : internalPick;
+  const internalCards = useMemo(
+    () => cardsForCompany(internalCompanyId), [cardsForCompany, internalCompanyId],
+  );
+  const internalCompanyName = internalCompanyId != null
+    ? byId.get(internalCompanyId)?.name ?? '' : '';
 
   const spokes: Spoke[] = useMemo(() => {
     if (!hubNode) return [];
@@ -438,7 +461,7 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
                 <button
                   key={v}
                   type="button"
-                  onClick={() => setView(v)}
+                  onClick={() => { setView(v); setInternalPick(null); }}
                   aria-pressed={view === v}
                   // brand-accent, not the hex. It is #34D399 by default and a
                   // tenant that themes the app themes this with it; a literal
@@ -566,6 +589,7 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
                 activeSignals={activeSignals}
                 highlightSignals={highlightSignals}
                 onOpenCompany={setQuickView}
+                onOpenInternal={id => { setInternalPick(id); setInternalOpen(true); }}
                 userOptions={userOptions}
                 colorMaps={colorMaps}
                 // The map payload, not the spoke list. loadRels feeds the MAP
@@ -633,12 +657,12 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
               Absent entirely when it does not, rather than an empty column
               taking width from the map.
 
-              Map only. These cards are the SELECTED company's contacts, and
-              Competitive has no selected company — the column would show the
-              last hub's people beside a grid of everybody else's, which reads
-              as the grid's own contacts. Dropping the column takes its collapse
-              chevron with it. */}
-          {view === 'map' && internalCards.length > 0 && (
+              In Map it follows the hub. In Competition there is no hub, so it
+              opens only when an IR badge asks for it — the badge says somebody
+              here knows somebody there, and this is where you find out who.
+              Without that it would show the last hub's people beside a grid of
+              everybody else's, which reads as the grid's own contacts. */}
+          {internalCompanyId != null && (view === 'map' ? internalCards.length > 0 : true) && (
             <div
               className="flex-shrink-0 flex flex-col min-h-0 overflow-hidden transition-[width] duration-300 ease-in-out"
               style={{ width: internalOpen ? 320 : 40 }}
@@ -648,20 +672,38 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
                 onClick={() => setInternalOpen(v => !v)}
                 aria-expanded={internalOpen}
                 title={internalOpen ? 'Collapse internal relationships' : 'Internal relationships'}
-                className="flex items-center gap-1.5 px-2 py-2 text-left text-gray-500 hover:text-brand-secondary transition-colors flex-shrink-0"
+                className="flex items-start gap-1.5 px-2 py-2 text-left text-gray-500 hover:text-brand-secondary transition-colors flex-shrink-0 min-w-0"
               >
-                <svg className={`w-4 h-4 flex-shrink-0 transition-transform duration-300 ${internalOpen ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className={`w-4 h-4 flex-shrink-0 mt-0.5 transition-transform duration-300 ${internalOpen ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
                 {internalOpen && (
-                  <span className="text-sm font-bold text-brand-primary font-serif whitespace-nowrap">
-                    Attendee Relationships
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-brand-primary font-serif whitespace-nowrap">
+                      Internal Relationship{internalCards.length === 1 ? '' : 's'}
+                    </span>
+                    {/* Whose. In Competition the column is opened from one card
+                        among dozens, and a list of people with no company over
+                        it is a list of strangers. */}
+                    <span className="block text-xs text-gray-400 truncate" title={internalCompanyName}>
+                      {internalCompanyName}
+                    </span>
                   </span>
                 )}
               </button>
               {/* Kept mounted while collapsed so reopening does not refetch
                   every timeline the cards load for themselves. */}
               <div className={`flex-1 min-h-0 overflow-y-auto scrollbar-desktop-thin space-y-3 pr-1 ${internalOpen ? '' : 'invisible'}`}>
+                {/* The badge is set from an account-wide read and these cards
+                    come from the conference's own attendee list, so a company
+                    can carry IR and have nobody here. Said out loud: the
+                    relationship is real, it is just not with anyone at this
+                    show. */}
+                {internalCards.length === 0 && (
+                  <p className="text-xs text-gray-400 px-1 py-2">
+                    No internal relationships with anyone at this conference.
+                  </p>
+                )}
                 {internalCards.map(c => (
                   <RelationshipAttendeeCard
                     key={c.key}

@@ -11,6 +11,8 @@ import { useDrawerResize } from '@/lib/useDrawerResize';
 import { ScrollRow } from '@/components/ScrollRow';
 import { AddToConferenceModal } from './AddToConferenceModal';
 import { useConfigColors } from '@/lib/useConfigColors';
+import { useCompanySignals } from '@/lib/useCompanySignals';
+import { CompanySignalBadges } from '@/components/CompanySignalBadges';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { resolveEntityDesignation } from '@/lib/entityStructureLabels';
 import { getBadgeClass, getPreset, formatStatusLabel} from '@/lib/colors';
@@ -152,7 +154,7 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
     : <svg className="w-3 h-3 ml-1 text-brand-secondary inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>;
 }
 
-const DEFAULT_WIDTHS: Record<string, number> = { name: 220, type: 160, sfowner: 140, status: 140, attendees: 110, conferences: 120, actions: 110, updated_on: 110, value: 120 };
+const DEFAULT_WIDTHS: Record<string, number> = { name: 220, signals: 110, type: 160, sfowner: 140, status: 140, attendees: 110, conferences: 120, actions: 110, updated_on: 110, value: 120 };
 
 function fmtDate(dateStr?: string): string {
   if (!dateStr) return '—';
@@ -177,6 +179,39 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const avgCostPerUnit = useAvgCostPerUnit();
   const userOptionsFull = useUserOptions();
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
+  /**
+   * The competitive signals, by company.
+   *
+   * Every relationship, never narrowed to this conference. The badge answers
+   * "what is going on with this company", which does not stop being true
+   * because the other end of it did not come — and a row that carries EA at one
+   * conference and nothing at another, for the same company on the same day,
+   * reads as the badge being unreliable rather than as a scope.
+   */
+  const companySignals = useCompanySignals();
+  /**
+   * How wide the Signals column has to be while a row's badges are spread.
+   *
+   * The table lays out fixed, so a cell cannot widen to its contents — the
+   * column is told instead, and everything to its right moves over, which is
+   * what the meetings table gets for free from an auto layout.
+   *
+   * Keyed by company so two rows open at once do not fight over one number;
+   * the column takes the widest of them.
+   */
+  const [signalWidths, setSignalWidths] = useState<Record<number, number>>({});
+  const setSignalWidth = useCallback((companyId: number, px: number | null) => {
+    setSignalWidths(prev => {
+      if (px == null) {
+        if (!(companyId in prev)) return prev;
+        const next = { ...prev };
+        delete next[companyId];
+        return next;
+      }
+      if (prev[companyId] === px) return prev;
+      return { ...prev, [companyId]: px };
+    });
+  }, []);
   const customColumns = useCustomColumns(tableName);
 
   const { panelStyle: qvPanelStyle, handleResizeStart: qvResizeStart } = useDrawerResize(480);
@@ -314,6 +349,13 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS);
   const COL_DEFAULT_WIDTH = 120;
+  /* The Signals column's width: its own, or wide enough for whichever row has
+     its badges spread. Declared here because it reads colWidths. */
+  const signalsWidth = Math.max(
+    colWidths.signals ?? COL_DEFAULT_WIDTH,
+    // Padding, so the last name does not end flush against the next column.
+    ...Object.values(signalWidths).map(w => w + 24),
+  );
   // Selection is a primary action on this table, so the checkboxes are always
   // there rather than appearing on hover.
   const selWidth = selectionColumnWidth(true);
@@ -751,7 +793,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
    * alone rather than corrected here.
    */
   const tableColSpan = 1
-    + (['name','type','sfowner','status','attendees','conferences','wse','updated_on','relationships'] as const).filter(k => isVisible(k)).length
+    + (['name','signals','type','sfowner','status','attendees','conferences','wse','updated_on','relationships'] as const).filter(k => isVisible(k)).length
     + customColumns.filter(c => c.visible).length
     + (rowAction ? 1 : 0)
     + (conferenceId != null ? 1 : 0);
@@ -936,6 +978,12 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
               </p>
             )}
             </div>
+          </td>;
+          case 'signals': return <td key="signals" className="px-3 py-3">
+            <CompanySignalBadges
+              signals={companySignals[company.id]}
+              onWidthChange={px => setSignalWidth(company.id, px)}
+            />
           </td>;
           case 'type': return <td key="type" className="px-3 py-3">
             {editingCell?.companyId === company.id && editingCell.field === 'company_type' ? (
@@ -1179,6 +1227,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 </div>
               </td>
             );
+            case 'signals': return <td key="signals" className="px-3 py-3" />;
             case 'type': return (
               <td key="type" className="px-3 py-3">
                 {family.parent?.company_type ? (
@@ -1347,6 +1396,24 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const renderCompanyCard = (company: Company, opts?: { inFamily?: boolean; isFamilyParent?: boolean; index?: number }) => {
     const inFamily = !!opts?.inFamily;
     const isFamilyParent = !!opts?.isFamilyParent;
+    /* A company with nothing to show gets two rows, not three with an empty
+       one. The signals are the only reason the card grows. */
+    const showSignalRow = isVisible('signals')
+      && (companySignals[company.id] ?? []).length > 0;
+    /* Built once and placed on whichever row turns out to be the last, so the
+       card always ends on a line that has the menu at the end of it. */
+    const kebab = conferenceId != null ? (
+      <div className="flex-shrink-0">
+        <RowActionsKebab
+          entityType="company"
+          conferenceId={conferenceId}
+          companyId={company.id}
+          companyName={company.name}
+          onDone={onRefresh}
+          onOpenChange={open => setActionsCompanyId(open ? company.id : null)}
+        />
+      </div>
+    ) : null;
     return (
     /* Under a family the card steps in and takes a rule down its left edge.
        An indent alone is easy to miss at this width — a card and a slightly
@@ -1498,19 +1565,32 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
           ) : null;
         })()}
       </ScrollRow>
-      {conferenceId != null && (
-        <div className="flex-shrink-0">
-          <RowActionsKebab
-            entityType="company"
-            conferenceId={conferenceId}
-            companyId={company.id}
-            companyName={company.name}
-            onDone={onRefresh}
-            onOpenChange={open => setActionsCompanyId(open ? company.id : null)}
-          />
+      {/* No signals, no third row: the menu stays where it has always been,
+          at the end of the pill line, and the card ends there. */}
+      {!showSignalRow && kebab}
+      </div>
+      {/* Row 3, only when there is something to put in it.
+          The badges spread into full names when tapped, which needs a line of
+          its own — on the pill row above they would push the type and the
+          counts off the end every time somebody read them. The menu comes down
+          with them so the card still ends on one row rather than two, and so
+          the badges get the width. */}
+      {showSignalRow && (
+        <div className="mt-2 ml-6">
+          <p className="text-[9px] uppercase tracking-wide text-gray-400 font-medium mb-1">
+            Signal{(companySignals[company.id] ?? []).length === 1 ? '' : 's'}
+          </p>
+          {/* Scrolls rather than wrapping: four spread names are wider than the
+              card, and the menu is pushed along in front of them rather than
+              sitting on top of the last one. ml-auto holds it at the right edge
+              until the badges need the room, and resolves to nothing once they
+              overflow. */}
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+            <CompanySignalBadges signals={companySignals[company.id]} emptyLabel={null} />
+            {kebab && <div className="ml-auto">{kebab}</div>}
+          </div>
         </div>
       )}
-      </div>
     </div>
     </MobileCard>
     );
@@ -2048,6 +2128,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                   if (!isVisible(col.key)) return null;
                   switch (col.key) {
                     case 'name': return <th key="name" className={`${thCls} sticky z-30 bg-gray-50`} style={{ width: colWidths.name, left: companyNameStickyLeft }} onClick={() => handleSort('name')}>Company Name <SortIcon col="name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="name" /></th>;
+                    case 'signals': return <th key="signals" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap transition-[width] duration-300 ease-out" style={{ width: signalsWidth }}>Signals<ResizeHandle col="signals" /></th>;
                     case 'type': return <th key="type" className={thCls} style={{ width: colWidths.type }} onClick={() => handleSort('company_type')}>Type <SortIcon col="company_type" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="type" /></th>;
                     case 'sfowner': return <th key="sfowner" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none relative" style={{ width: colWidths.sfowner }}>SF Owner<ResizeHandle col="sfowner" /></th>;
                     case 'status': return <th key="status" className={thCls} style={{ width: colWidths.status }} onClick={() => handleSort('status')}>Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="status" /></th>;
