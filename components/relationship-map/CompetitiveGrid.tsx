@@ -187,12 +187,12 @@ export function CompetitiveGrid({
   const gridTemplate = `${LABEL_WIDTH}px repeat(${competitors.length}, minmax(${COL_WIDTH}px, 1fr))`;
 
   return (
-    <div className="view-competitive flex-1 min-h-0 overflow-auto scrollbar-desktop-thin relative rounded-xl border border-gray-200 bg-white">
+    <div className="view-competitive flex-1 min-h-0 overflow-auto scrollbar-desktop-thin relative rounded-xl border border-gray-200 bg-gray-100">
       <div className="relative" style={{ minWidth: 'min-content' }}>
         {/* Column headings. Sticky, because the grid scrolls in both directions
             and a column you have scrolled past is a column you cannot name. */}
         <div
-          className="grid sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-200"
+          className="grid sticky top-0 z-10 bg-gray-100/95 backdrop-blur-sm border-b border-gray-200"
           style={{ gridTemplateColumns: gridTemplate }}
         >
           <div className="px-2 py-2" />
@@ -230,7 +230,7 @@ export function CompetitiveGrid({
               className="grid border-b border-gray-100 last:border-b-0"
               style={{ gridTemplateColumns: gridTemplate }}
             >
-              <div className="px-2 py-2.5 sticky left-0 bg-white z-[5] border-r border-gray-100">
+              <div className="px-2 py-2.5 sticky left-0 bg-gray-100 z-[5] border-r border-gray-100">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 leading-tight">
                   {ROW_LABELS[gridRow]}
                 </p>

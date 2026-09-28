@@ -14,6 +14,7 @@ import {
 } from '@/lib/competitiveSignals';
 import { MapCanvas, TONE_COLOR, type Spoke } from '@/components/relationship-map/MapCanvas';
 import type { VendorRelationship } from '@/components/VendorRelationshipCard';
+import { bestTier, normalizeTier } from '@/lib/targetTiers';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useUserOptions } from '@/lib/useUserOptions';
 import { toneFor, type PickerCompany } from '@/lib/relationshipPicker';
@@ -260,6 +261,36 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
     if (selectedId !== null || connected.length === 0) return;
     setSelectedId(connected.reduce((a, b) => (b.relationshipCount > a.relationshipCount ? b : a)).id);
   }, [connected, selectedId]);
+
+  /**
+   * companyId → the best tier anyone there was targeted at.
+   *
+   * A target is an ATTENDEE, so a company with two targeted people at
+   * different tiers has to resolve to one: the higher, because a company with
+   * a Must Target contact is a Must Target company whoever else works there.
+   *
+   * Always this conference, never the "All Relationships" scope — a target is
+   * a decision about a trip, and there is no such thing as a target in
+   * general. Loaded once on open for that reason.
+   */
+  const [targetTiers, setTargetTiers] = useState<Map<number, string>>(new Map());
+  useEffect(() => {
+    let live = true;
+    fetch(`/api/conferences/${conferenceId}/targets`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : []))
+      .then((rows: { companyId: number | null; tier: string }[]) => {
+        if (!live) return;
+        const best = new Map<number, string>();
+        for (const t of Array.isArray(rows) ? rows : []) {
+          if (t.companyId == null) continue;
+          const seen = best.get(t.companyId);
+          best.set(t.companyId, seen == null ? (normalizeTier(t.tier) ?? 'unassigned') : bestTier(seen, t.tier));
+        }
+        setTargetTiers(best);
+      })
+      .catch(() => { if (live) setTargetTiers(new Map()); });
+    return () => { live = false; };
+  }, [conferenceId]);
 
   const loadRels = useCallback((companyId: number) => {
     setLoadingRels(true);
@@ -559,6 +590,8 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
                   icpTypes={icpTypes}
                   selectedId={selectedId}
                   onSelect={setSelectedId}
+                  targetTiers={targetTiers}
+                  conferenceName={conferenceName}
                   className="flex-shrink-0"
                   style={{ width: RAIL_WIDTH }}
                 />

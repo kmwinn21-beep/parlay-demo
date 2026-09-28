@@ -164,7 +164,10 @@ console.log('\n— stale is not a status —');
   // The six status colours carry meaning already. A stale card is drained,
   // not recoloured, and the pill is outlined rather than filled so it does not
   // read with the weight of a statement of fact.
-  eq('the stale card is washed out', /isStale \? 'border-gray-200 border-dashed bg-gray-50\/70' : 'border-gray-200'/.test(card), true);
+  // The stale branch only. Spelling out the other one coupled this to a
+  // question it is not about — it broke when the ordinary card was given a
+  // background of its own, which says nothing about staleness.
+  eq('the stale card is washed out', /isStale \? 'border-gray-200 border-dashed bg-gray-50\/70'/.test(card), true);
   eq('  and its contents dimmed', /isStale \? 'opacity-60' : ''/.test(card), true);
   eq('  with an outlined pill, not a filled one',
     /border border-dashed border-gray-400 text-gray-500 bg-white/.test(card), true);
