@@ -2984,7 +2984,11 @@ export default function ConferenceDetailPage() {
   );
 
   return (
-    <div ref={pageRootRef} className="max-w-6xl mx-auto space-y-6">
+    /* As wide as the other two pages that host these tables. The Companies tab
+       runs the same fixed-layout table as /companies, whose columns come to
+       about 1200px; at max-w-6xl the last one fell off the right edge here and
+       nowhere else, which read as a broken table rather than a narrow page. */
+    <div ref={pageRootRef} className="max-w-7xl mx-auto space-y-6">
       <BackButton />
       {/* Column mapping modal */}
       {columnMappingData && pendingUploadFile && (
