@@ -66,7 +66,7 @@ const CONNECTOR_SIGNALS: SignalKey[] = ['evaluatingAlternatives', 'switched'];
  * told them where to look.
  */
 export function CompetitiveGrid({
-  cells, competitors, cardFor, nameOf, typesOf, statusesOf, onOpenCompany,
+  cells, competitors, cardFor, nameOf, typesOf, statusesOf, onOpenCompany, onOpenInternal,
   signalsOnly, activeSignals, highlightSignals,
   userOptions, colorMaps, onUpdated,
 }: {
@@ -84,6 +84,8 @@ export function CompetitiveGrid({
   statusesOf: (card: VendorRelationship) => string[];
   /** Opens a company's record beside the grid. Absent leaves names unclickable. */
   onOpenCompany?: (target: { id: number; name: string }) => void;
+  /** Shows that company's internal relationships. Absent leaves IR unclickable. */
+  onOpenInternal?: (companyId: number) => void;
   signalsOnly: boolean;
   activeSignals: Set<SignalKey>;
   /** Light every card carrying a signal at once, rather than one account on hover. */
@@ -275,7 +277,9 @@ export function CompetitiveGrid({
                           typeBadges={typesOf(cell.companyId)}
                           statuses={statusesOf(rel)}
                           bodyMaxHeight={GRID_BODY_MAX_HEIGHT}
-                          titleBadges={<SignalBadges cell={cell} />}
+                          titleBadges={
+                            <SignalBadges cell={cell} onOpenInternal={onOpenInternal} />
+                          }
                           highlight={litWith(cell)}
                           titleCompanyId={cell.companyId}
                           onOpenTitleCompany={onOpenCompany}
@@ -320,27 +324,56 @@ function isLit(
  * Nothing at all when the card carries no signal, which happens with "Signals
  * only" off. An empty row is better than a placeholder saying it is empty.
  */
-function SignalBadges({ cell }: { cell: SignalCell }) {
+function SignalBadges({ cell, onOpenInternal }: {
+  cell: SignalCell;
+  onOpenInternal?: (companyId: number) => void;
+}) {
   const on = (Object.keys(SIGNAL_ABBREVIATIONS) as SignalKey[]).filter(k => cell.signals[k]);
   if (on.length === 0) return null;
   return (
     <>
-      {on.map(k => <SignalBadge key={k} signal={k} />)}
+      {on.map(k => (
+        <SignalBadge
+          key={k}
+          signal={k}
+          // Only IR leads anywhere. The badge says somebody here knows somebody
+          // there, and the column it opens is where you find out who — the
+          // other two have nothing behind them to show.
+          onClick={k === 'internalRelationship' && onOpenInternal
+            ? () => onOpenInternal(cell.companyId)
+            : undefined}
+        />
+      ))}
     </>
   );
 }
 
 /** The badge itself, so the card and the legend draw one thing. */
-export function SignalBadge({ signal }: { signal: SignalKey }) {
+export function SignalBadge({ signal, onClick }: {
+  signal: SignalKey;
+  /** Makes it a button. Absent leaves it the plain mark the legend needs. */
+  onClick?: () => void;
+}) {
+  const shared = 'inline-flex items-center justify-center w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none';
+  const style = { color: SIGNAL_TONE[signal], backgroundColor: `${SIGNAL_TONE[signal]}1F` };
+  // The full name on hover. A tooltip repeating the two letters already on
+  // screen tells the one reader who needed it nothing.
+  const label = SIGNAL_FULL_LABELS[signal];
+  if (!onClick) {
+    return <span className={shared} style={style} title={label}>{SIGNAL_ABBREVIATIONS[signal]}</span>;
+  }
   return (
-    <span
-      className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none"
-      style={{ color: SIGNAL_TONE[signal], backgroundColor: `${SIGNAL_TONE[signal]}1F` }}
-      // The full name on hover. A tooltip repeating the two letters already on
-      // screen tells the one reader who needed it nothing.
-      title={SIGNAL_FULL_LABELS[signal]}
+    <button
+      type="button"
+      // The header around it toggles the card, and a badge that both opened a
+      // column and collapsed what you were reading would be two answers to one
+      // click.
+      onClick={e => { e.stopPropagation(); onClick(); }}
+      title={`${label} — see who`}
+      className={`${shared} hover:ring-2 hover:ring-offset-1 transition-shadow cursor-pointer`}
+      style={{ ...style, '--tw-ring-color': SIGNAL_TONE[signal] } as React.CSSProperties}
     >
       {SIGNAL_ABBREVIATIONS[signal]}
-    </span>
+    </button>
   );
 }

@@ -273,8 +273,51 @@ console.log('\n— the pieces on the page —');
   eq('  and read-only, since the map is not where targets are set',
     /readOnly\s*\n?\s*\/>/.test(modal), true);
   // An empty column would take width from the map for nothing.
-  eq('the column is absent when there are no internal relationships',
-    /\{view === 'map' && internalCards\.length > 0 && \(/.test(modal), true);
+  // In Map it follows the hub and is absent when that company has nobody. In
+  // Competition there is no hub, so it opens only when an IR badge asks —
+  // otherwise it would show the last hub's people beside a grid of everybody
+  // else's, which reads as the grid's own contacts.
+  eq('the column follows the hub in Map and a click in Competition',
+    /\{internalCompanyId != null && \(view === 'map' \? internalCards\.length > 0 : true\) && \(/.test(modal), true);
+  eq('  taking its company from the view',
+    /const internalCompanyId = view === 'map' \? \(hubNode\?\.id \?\? null\) : internalPick;/.test(modal), true);
+  // The column names a company; carrying the last one across a view switch
+  // would leave it naming somebody the reader is no longer looking at.
+  eq('  and forgetting the pick when the view changes',
+    /setView\(v\); setInternalPick\(null\);/.test(modal), true);
+
+  // ── The IR badge opens it ──
+  const grid = strip('components/relationship-map/CompetitiveGrid.tsx');
+  eq('the IR badge is the only one that leads anywhere',
+    /k === 'internalRelationship' && onOpenInternal/.test(grid), true);
+  eq('  becoming a button only when it does',
+    /if \(!onClick\) \{\s*\n\s*return <span/.test(grid), true);
+  // The header around it toggles the card.
+  eq('  and not also collapsing the card',
+    /onClick=\{e => \{ e\.stopPropagation\(\); onClick\(\); \}\}/.test(grid), true);
+  eq('  the legend still gets the plain mark',
+    /<SignalBadge signal=\{key\} \/>/.test(modal), true);
+  eq('  and clicking it opens the column on that company',
+    /onOpenInternal=\{id => \{ setInternalPick\(id\); setInternalOpen\(true\); \}\}/.test(modal), true);
+
+  // ── What the column says it is ──
+  eq('the column is named for what it holds',
+    /Internal Relationship\{internalCards\.length === 1 \? '' : 's'\}/.test(modal), true);
+  eq('  no longer for the attendees inside it',
+    /Attendee Relationships/.test(modal), false);
+  // Opened from one card among dozens, a list of people with no company over
+  // it is a list of strangers.
+  eq('  with the company under it',
+    /text-xs text-gray-400 truncate" title=\{internalCompanyName\}>\s*\n\s*\{internalCompanyName\}/.test(modal), true);
+  // Under the title, not beside it — the title says what the column is and the
+  // company says whose.
+  eq('  below the title, not instead of it',
+    modal.indexOf('Internal Relationship{') < modal.indexOf('{internalCompanyName}'), true);
+  // The badge comes from an account-wide read and these cards from the
+  // conference's own attendee list, so a company can carry IR and have nobody
+  // here. The relationship is real, it is just not with anyone at this show.
+  eq('an IR badge with nobody at this conference says so',
+    /No internal relationships with anyone at this conference\./.test(modal), true);
   eq('  and collapses to a strip rather than disappearing',
     /width: internalOpen \? 320 : 40/.test(modal), true);
   eq('  with the width animated both ways',
@@ -473,12 +516,12 @@ console.log('\n— the view toggle —');
     /Drag the grip on a card to rearrange[\s\S]*?\) : \(/.test(desktopBlock)
       || /view === 'competitive' \? \([\s\S]*?Drag the grip on a card to rearrange/.test(desktopBlock), true);
 
-  // The internal column is the SELECTED company's contacts. Competitive has no
-  // selected company, so the column goes — and its chevron with it.
-  eq('the internal column is Map only',
-    /\{view === 'map' && internalCards\.length > 0 && \(/.test(desktopBlock), true);
-  eq('  so the collapse chevron cannot appear in Competitive',
-    /setInternalOpen/.test(desktopBlock.slice(desktopBlock.indexOf("view === 'map' && internalCards"))), true);
+  // The column shows one company's contacts. In Map that is the hub; in
+  // Competition it is whichever IR badge was clicked, and nothing before that.
+  eq('the internal column names a company in both views',
+    /\{internalCompanyId != null && \(view === 'map' \? internalCards\.length > 0 : true\) && \(/.test(desktopBlock), true);
+  eq('  and still collapses to a strip',
+    /setInternalOpen/.test(desktopBlock.slice(desktopBlock.indexOf('internalCompanyId != null'))), true);
 
   // The subtitle says what you are looking at. One company in Map; the size of
   // the field in Competitive.
@@ -705,11 +748,16 @@ console.log('\n— the card header, and the grid it had to change for —');
     /\{titleBadges && \(\s*\n\s*<span className="flex items-center gap-1 flex-shrink-0">/.test(card), true);
   eq('  above the status and type row',
     card.indexOf('titleBadges && (') < card.indexOf('badgeRow('), true);
+  // Both the plain mark and the button form.
   eq('  rendered as two letters',
-    /\{SIGNAL_ABBREVIATIONS\[signal\]\}\s*\n\s*<\/span>/.test(grid), true);
+    (grid.match(/\{SIGNAL_ABBREVIATIONS\[signal\]\}/g) || []).length, 2);
   // A tooltip repeating the two letters already on screen helps nobody.
+  // Both forms carry it: the plain mark plainly, the button with what
+  // clicking it does.
   eq('  with the full name on hover',
-    /title=\{SIGNAL_FULL_LABELS\[signal\]\}/.test(grid), true);
+    /const label = SIGNAL_FULL_LABELS\[signal\];/.test(grid)
+      && /title=\{label\}/.test(grid)
+      && /title=\{`\$\{label\} — see who`\}/.test(grid), true);
   eq('  in a circle at 9px',
     /rounded-full text-\[9px\] font-bold/.test(grid), true);
   eq('the abbreviations are EA, RC and IR',
