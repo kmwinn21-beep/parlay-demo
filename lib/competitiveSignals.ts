@@ -52,6 +52,17 @@ export type SignalKey =
   'evaluatingAlternatives' | 'switched' | 'recentChange' | 'internalRelationship';
 
 /**
+ * Every signal, in the order they are shown.
+ *
+ * Declared once so a row of badges, a rail of filters and a legend all read
+ * the same way down, and so anything iterating them does not have to pick a
+ * map and hope its keys are the whole set.
+ */
+export const SIGNAL_KEYS: SignalKey[] = [
+  'evaluatingAlternatives', 'switched', 'recentChange', 'internalRelationship',
+];
+
+/**
  * Display strings, in one place.
  *
  * Render sites read from here so a wording change is one edit.

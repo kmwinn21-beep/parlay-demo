@@ -11,6 +11,8 @@ import { useDrawerResize } from '@/lib/useDrawerResize';
 import { ScrollRow } from '@/components/ScrollRow';
 import { AddToConferenceModal } from './AddToConferenceModal';
 import { useConfigColors } from '@/lib/useConfigColors';
+import { useCompanySignals } from '@/lib/useCompanySignals';
+import { CompanySignalBadges } from '@/components/CompanySignalBadges';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { resolveEntityDesignation } from '@/lib/entityStructureLabels';
 import { getBadgeClass, getPreset, formatStatusLabel} from '@/lib/colors';
@@ -152,7 +154,7 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
     : <svg className="w-3 h-3 ml-1 text-brand-secondary inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>;
 }
 
-const DEFAULT_WIDTHS: Record<string, number> = { name: 220, type: 160, sfowner: 140, status: 140, attendees: 110, conferences: 120, actions: 110, updated_on: 110, value: 120 };
+const DEFAULT_WIDTHS: Record<string, number> = { name: 220, signals: 110, type: 160, sfowner: 140, status: 140, attendees: 110, conferences: 120, actions: 110, updated_on: 110, value: 120 };
 
 function fmtDate(dateStr?: string): string {
   if (!dateStr) return '—';
@@ -177,6 +179,14 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const avgCostPerUnit = useAvgCostPerUnit();
   const userOptionsFull = useUserOptions();
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
+  /**
+   * The competitive signals, by company.
+   *
+   * Scoped to the conference when there is one, which is what the relationship
+   * map's own "At this conference" means — a table of one show's companies
+   * should not badge a relationship with somebody who did not come.
+   */
+  const companySignals = useCompanySignals(conferenceId ?? undefined);
   const customColumns = useCustomColumns(tableName);
 
   const { panelStyle: qvPanelStyle, handleResizeStart: qvResizeStart } = useDrawerResize(480);
@@ -751,7 +761,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
    * alone rather than corrected here.
    */
   const tableColSpan = 1
-    + (['name','type','sfowner','status','attendees','conferences','wse','updated_on','relationships'] as const).filter(k => isVisible(k)).length
+    + (['name','signals','type','sfowner','status','attendees','conferences','wse','updated_on','relationships'] as const).filter(k => isVisible(k)).length
     + customColumns.filter(c => c.visible).length
     + (rowAction ? 1 : 0)
     + (conferenceId != null ? 1 : 0);
@@ -936,6 +946,9 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
               </p>
             )}
             </div>
+          </td>;
+          case 'signals': return <td key="signals" className="px-3 py-3">
+            <CompanySignalBadges signals={companySignals[company.id]} />
           </td>;
           case 'type': return <td key="type" className="px-3 py-3">
             {editingCell?.companyId === company.id && editingCell.field === 'company_type' ? (
@@ -1179,6 +1192,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 </div>
               </td>
             );
+            case 'signals': return <td key="signals" className="px-3 py-3" />;
             case 'type': return (
               <td key="type" className="px-3 py-3">
                 {family.parent?.company_type ? (
@@ -1498,19 +1512,34 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
           ) : null;
         })()}
       </ScrollRow>
-      {conferenceId != null && (
-        <div className="flex-shrink-0">
-          <RowActionsKebab
-            entityType="company"
-            conferenceId={conferenceId}
-            companyId={company.id}
-            companyName={company.name}
-            onDone={onRefresh}
-            onOpenChange={open => setActionsCompanyId(open ? company.id : null)}
-          />
+      </div>
+      {/* Row 5: the signals, and the actions menu beside them.
+          The badges spread into full names when tapped, which needs a line of
+          its own — on the pill row above they would have pushed the type and
+          the counts off the end every time somebody read them. The menu came
+          down with them so the card still ends on one row rather than two, and
+          so the badges get the width. */}
+      {(isVisible('signals') || conferenceId != null) && (
+        <div className="mt-2 ml-6 flex items-center justify-between gap-2">
+          <span className="min-w-0">
+            {isVisible('signals') && (
+              <CompanySignalBadges signals={companySignals[company.id]} emptyLabel={null} />
+            )}
+          </span>
+          {conferenceId != null && (
+            <div className="flex-shrink-0">
+              <RowActionsKebab
+                entityType="company"
+                conferenceId={conferenceId}
+                companyId={company.id}
+                companyName={company.name}
+                onDone={onRefresh}
+                onOpenChange={open => setActionsCompanyId(open ? company.id : null)}
+              />
+            </div>
+          )}
         </div>
       )}
-      </div>
     </div>
     </MobileCard>
     );
@@ -2048,6 +2077,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                   if (!isVisible(col.key)) return null;
                   switch (col.key) {
                     case 'name': return <th key="name" className={`${thCls} sticky z-30 bg-gray-50`} style={{ width: colWidths.name, left: companyNameStickyLeft }} onClick={() => handleSort('name')}>Company Name <SortIcon col="name" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="name" /></th>;
+                    case 'signals': return <th key="signals" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap" style={{ width: colWidths.signals }}>Signals<ResizeHandle col="signals" /></th>;
                     case 'type': return <th key="type" className={thCls} style={{ width: colWidths.type }} onClick={() => handleSort('company_type')}>Type <SortIcon col="company_type" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="type" /></th>;
                     case 'sfowner': return <th key="sfowner" className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider select-none relative" style={{ width: colWidths.sfowner }}>SF Owner<ResizeHandle col="sfowner" /></th>;
                     case 'status': return <th key="status" className={thCls} style={{ width: colWidths.status }} onClick={() => handleSort('status')}>Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} /><ResizeHandle col="status" /></th>;
