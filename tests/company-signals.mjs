@@ -152,6 +152,37 @@ console.log('\n— the badges —');
     /onKeyDown=\{e => \{ if \(e\.key === 'Enter' \|\| e\.key === ' '\)/.test(badges), true);
 }
 
+console.log('\n— the pages are wide enough to hold the table —');
+{
+  /*
+   * The table lays out fixed, so its columns come to a fixed number — about
+   * 1200px with Signals in — and a page narrower than that does not compress
+   * it, it cuts the last column off. The conference tab was max-w-6xl (1152)
+   * while the other two were max-w-7xl (1280), so the same table lost its
+   * last column there and nowhere else, which reads as a broken table rather
+   * than as a narrow page.
+   *
+   * Checked as an agreement between the three rather than against a literal:
+   * whoever changes one is told about the others.
+   */
+  // EVERY container in each file, not just the first: two of these pages have
+  // a second one for their loading state, and a page that loads at one width
+  // and settles at another jumps under the reader.
+  const pageWidths = (f) =>
+    [...readFileSync(f, 'utf8').matchAll(/className="(max-w-\w+) mx-auto space-y-6"/g)].map(m => m[1]);
+  const hosts = {
+    companies: 'app/companies/page.tsx',
+    attendees: 'app/attendees/page.tsx',
+    conference: 'app/conferences/[id]/page.tsx',
+  };
+  const widths = Object.fromEntries(Object.entries(hosts).map(([k, f]) => [k, pageWidths(f)]));
+  for (const [name, found] of Object.entries(widths)) {
+    eq(`${name} declares a width`, found.length > 0, true);
+  }
+  eq('every page hosting a wide table is the same width',
+    [...new Set(Object.values(widths).flat())], ['max-w-7xl']);
+}
+
 console.log('\n— where they sit —');
 {
   const table = strip('components/CompanyTable.tsx');
