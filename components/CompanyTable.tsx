@@ -13,6 +13,7 @@ import { AddToConferenceModal } from './AddToConferenceModal';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useCompanySignals } from '@/lib/useCompanySignals';
 import { CompanySignalBadges } from '@/components/CompanySignalBadges';
+import { SIGNAL_TONE } from '@/lib/competitiveSignals';
 import { useConfigOptions } from '@/lib/useConfigOptions';
 import { resolveEntityDesignation } from '@/lib/entityStructureLabels';
 import { getBadgeClass, getPreset, formatStatusLabel} from '@/lib/colors';
@@ -267,10 +268,32 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
       })
       .catch(() => {});
   }, []);
-  const quickFilterTypeButtons = useMemo(() => {
-    const dynamicTypes = icpCompanyTypeOptions.filter(t => t !== 'Customer' && t !== 'Competitor');
-    return [...dynamicTypes, 'Customer', 'Competitor'];
-  }, [icpCompanyTypeOptions]);
+  /**
+   * The company types that make a company worth pursuing, as one bucket.
+   *
+   * These were a button each — Operator, Prospect, SNF, and whatever else the
+   * account had configured — which is a row that grows with the ICP settings
+   * and asks the reader to know which types they care about today. They are
+   * one idea, so they are one button.
+   *
+   * Customer and Competitor are deliberately not in it. They are appended to
+   * the row below rather than read from the ICP rules, and they are what a
+   * prospect is NOT, so the three buttons divide the list rather than overlap.
+   */
+  const prospectTypes = useMemo(
+    () => icpCompanyTypeOptions.filter(t => t !== 'Customer' && t !== 'Competitor'),
+    [icpCompanyTypeOptions],
+  );
+  /** Kept as their own toggles: neither is an ICP parameter. */
+  const quickFilterTypeButtons: [string, string][] = [['Customer', 'Customers'], ['Competitor', 'Competitors']];
+  const [quickFilterProspects, setQuickFilterProspects] = useState(false);
+  /**
+   * Companies carrying at least one competitive signal.
+   *
+   * The same set the Signals column draws, so the button and the column can
+   * never disagree about which rows have something going on.
+   */
+  const [quickFilterSignals, setQuickFilterSignals] = useState(false);
   const toggleQuickFilterType = (type: string) => {
     setQuickFilterTypes(prev => {
       const next = new Set(prev);
@@ -400,7 +423,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
 
   useEffect(() => {
     setPage(1);
-  }, [search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, wseMin, wseMax, quickFilterIcp, quickFilterTypes, quickFilterMyAccounts, groupByParent]);
+  }, [search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, wseMin, wseMax, quickFilterIcp, quickFilterTypes, quickFilterProspects, quickFilterSignals, quickFilterMyAccounts, groupByParent]);
 
   // Read once on mount rather than in a lazy initialiser: this renders on the
   // server too, where localStorage does not exist.
@@ -476,15 +499,19 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         || (filterHierarchy === 'child' && !!c.parent_company_id);
       const matchQuickIcp = !quickFilterIcp || c.icp === 'Yes';
       const matchQuickTypes = quickFilterTypes.size === 0 || quickFilterTypes.has(c.company_type || '');
+      const matchQuickProspects = !quickFilterProspects || prospectTypes.includes(c.company_type || '');
+      // Read from the same map the Signals column renders, so a row with a
+      // badge is a row this button keeps.
+      const matchQuickSignals = !quickFilterSignals || (companySignals[c.id]?.length ?? 0) > 0;
       const matchQuickMyAccounts = !quickFilterMyAccounts || (currentUser?.configId != null && parseRepIds(c.assigned_user).includes(currentUser.configId));
-      return matchSearch && matchSFOwner && matchType && matchStatus && matchConf && matchConference && matchICP && matchWSE && matchUpdatedWithin && matchHierarchy && matchQuickIcp && matchQuickTypes && matchQuickMyAccounts;
+      return matchSearch && matchSFOwner && matchType && matchStatus && matchConf && matchConference && matchICP && matchWSE && matchUpdatedWithin && matchHierarchy && matchQuickIcp && matchQuickTypes && matchQuickProspects && matchQuickSignals && matchQuickMyAccounts;
     });
     // Same comparator the grouped view orders families and their members with,
     // so the two views agree about what "sorted by name" means.
     list.sort((a, b) => compareCompanies(a, b, sortKey, sortDir));
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localCompanies, search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, filterHierarchy, wseFilterActive, effectiveWseMin, effectiveWseMax, sortKey, sortDir, userScopedStatusMap, quickFilterIcp, quickFilterTypes, quickFilterMyAccounts]);
+  }, [localCompanies, search, filterSFOwner, filterType, filterStatus, filterConfCounts, filterConference, filterICP, filterUpdatedWithin, filterHierarchy, wseFilterActive, effectiveWseMin, effectiveWseMax, sortKey, sortDir, userScopedStatusMap, quickFilterIcp, quickFilterTypes, quickFilterProspects, prospectTypes, quickFilterSignals, companySignals, quickFilterMyAccounts]);
 
   /**
    * Grouping is offered on a conference only. `grouped` is the one flag the
@@ -807,7 +834,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const activeFilterCount = (filterSFOwner ? 1 : 0) + (filterType ? 1 : 0) + (filterStatus ? 1 : 0) + (filterConfCounts.size > 0 ? 1 : 0) + (filterConference ? 1 : 0) + (filterICP ? 1 : 0) + (wseFilterActive ? 1 : 0) + (filterUpdatedWithin ? 1 : 0) + (filterHierarchy ? 1 : 0);
 
   // With a filter on, the others recede so the active one reads at a glance.
-  const anyQuickFilter = quickFilterIcp || quickFilterTypes.size > 0 || quickFilterMyAccounts;
+  const anyQuickFilter = quickFilterIcp || quickFilterTypes.size > 0 || quickFilterProspects || quickFilterSignals || quickFilterMyAccounts;
   const quickDim = (active: boolean) => (anyQuickFilter && !active ? ' opacity-40 grayscale' : '');
 
   // Quick filters + the Filters toggle. Mobile keeps them on one
@@ -825,6 +852,36 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
           My Accounts
         </button>
       )}
+      {/* Second, beside My Accounts: after "is this mine" the next question is
+          "is anything happening with it". The icon carries the Evaluating
+          Alternatives colour so it reads as the same subject as the badges in
+          the Signals column, taken from the same map so the two cannot drift. */}
+      <button
+        type="button"
+        onClick={() => setQuickFilterSignals(v => !v)}
+        title="Companies with a signal"
+        aria-label="Companies with a signal"
+        aria-pressed={quickFilterSignals}
+        className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+          quickFilterSignals
+            ? 'border-brand-accent bg-brand-accent/20'
+            : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+        }${quickDim(quickFilterSignals)}`}
+      >
+        <svg
+          className="w-4 h-4"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={SIGNAL_TONE.evaluatingAlternatives}
+          strokeWidth={2}
+          strokeLinecap="round"
+          aria-hidden="true"
+        >
+          <path d="M4 11a9 9 0 0 1 9 9" />
+          <path d="M4 4a16 16 0 0 1 16 16" />
+          <circle cx="5" cy="19" r="1.5" fill={SIGNAL_TONE.evaluatingAlternatives} stroke="none" />
+        </svg>
+      </button>
       <button
         type="button"
         onClick={() => setQuickFilterIcp(v => !v)}
@@ -836,7 +893,25 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
       >
         ICP
       </button>
-      {quickFilterTypeButtons.map(type => (
+      {/* One button for every type the ICP settings name, rather than one
+          button each. Hidden until they load: a Prospects button that matches
+          nothing is worse than no button. */}
+      {prospectTypes.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setQuickFilterProspects(v => !v)}
+          title={`Company type is ${prospectTypes.join(', ')}`}
+          aria-pressed={quickFilterProspects}
+          className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+            quickFilterProspects
+              ? 'border-brand-accent bg-brand-accent/20 text-brand-primary'
+              : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+          }${quickDim(quickFilterProspects)}`}
+        >
+          Prospects
+        </button>
+      )}
+      {quickFilterTypeButtons.map(([type, label]) => (
         <button
           key={type}
           type="button"
@@ -847,7 +922,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
               : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
           }${quickDim(quickFilterTypes.has(type))}`}
         >
-          {type === 'Customer' ? 'Customers' : type === 'Competitor' ? 'Competitors' : type}
+          {label}
         </button>
       ))}
       {beforeFiltersButton}
