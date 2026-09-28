@@ -56,6 +56,8 @@ interface Attendee {
   company_id?: number; company_name?: string; company_type?: string; company_website?: string; company_assigned_user?: string;
   email?: string; notes?: string; action?: string; next_steps?: string;
   next_steps_notes?: string; status?: string; seniority?: string; linkedin_url?: string; phone?: string;
+  /** The attendee's own record in the CRM, as distinct from the company's. */
+  crm_contact_link?: string;
   function?: string; products?: string; consent?: string; title_match_metadata?: TitleMatchMetadata;
   photo_url?: string | null;
   created_at: string; conferences: Conference[];
@@ -108,7 +110,7 @@ export default function AttendeeDetailPage() {
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [photoSaving, setPhotoSaving] = useState(false);
   const [photoDragging, setPhotoDragging] = useState(false);
-  const [editData, setEditData] = useState<{ first_name?: string; last_name?: string; title?: string; company_id?: string; email?: string; seniority?: string; linkedin_url?: string; phone?: string; function?: string; consent?: string }>({});
+  const [editData, setEditData] = useState<{ first_name?: string; last_name?: string; title?: string; company_id?: string; email?: string; seniority?: string; linkedin_url?: string; phone?: string; crm_contact_link?: string; function?: string; consent?: string }>({});
   const [showPhonePopup, setShowPhonePopup] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -296,7 +298,7 @@ export default function AttendeeDetailPage() {
           })
           .map((o: { value: string; color: string | null }) => ({ value: String(o.value), color: o.color ?? null }))
       );
-      setEditData({ first_name: atData.first_name, last_name: atData.last_name, title: atData.title || '', company_id: atData.company_id?.toString() || '', email: atData.email || '', seniority: atData.seniority || '', linkedin_url: atData.linkedin_url || '', phone: atData.phone || '', function: atData.function || '', consent: atData.consent || 'Consent Not Recorded' });
+      setEditData({ first_name: atData.first_name, last_name: atData.last_name, title: atData.title || '', company_id: atData.company_id?.toString() || '', email: atData.email || '', seniority: atData.seniority || '', linkedin_url: atData.linkedin_url || '', phone: atData.phone || '', crm_contact_link: atData.crm_contact_link || '', function: atData.function || '', consent: atData.consent || 'Consent Not Recorded' });
     } catch {
       toast.error('Failed to load attendee');
       routerRef.current.push('/attendees');
@@ -998,6 +1000,19 @@ export default function AttendeeDetailPage() {
                             )}
                           </div>
                         )}
+                        {/* The CONTACT's CRM record — the same affordance the
+                            company header gives for the account's. */}
+                        {attendee.crm_contact_link && (
+                          <a
+                            href={attendee.crm_contact_link.startsWith('http') ? attendee.crm_contact_link : `https://${attendee.crm_contact_link}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Open contact in CRM"
+                            className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-teal-50 hover:bg-teal-100 transition-colors flex-shrink-0"
+                          >
+                            <svg className="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-label="Open contact in CRM"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7c0-1.657 3.582-3 8-3s8 1.343 8 3-3.582 3-8 3-8-1.343-8-3z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7v5c0 1.657-3.582 3-8 3s-8-1.343-8-3V7" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12v5c0 1.657-3.582 3-8 3s-8-1.343-8-3v-5" /></svg>
+                          </a>
+                        )}
     </>
   );
 
@@ -1121,6 +1136,10 @@ export default function AttendeeDetailPage() {
                   </div>
                   <div><label className="label">LinkedIn URL</label><input type="url" value={editData.linkedin_url || ''} onChange={e => setEditData(p => ({ ...p, linkedin_url: e.target.value }))} placeholder="https://linkedin.com/in/…" className="input-field" /></div>
                   <div><label className="label">Phone Number</label><input type="tel" value={editData.phone || ''} onChange={e => setEditData(p => ({ ...p, phone: e.target.value }))} placeholder="+1 (555) 000-0000" className="input-field" /></div>
+                  {/* The CONTACT's record, not the account's — the company page
+                      carries that one. A rep opening this from here wants the
+                      person they are about to meet. */}
+                  <div><label className="label">CRM Contact Link</label><input type="url" value={editData.crm_contact_link || ''} onChange={e => setEditData(p => ({ ...p, crm_contact_link: e.target.value }))} placeholder="https://…/lightning/r/Contact/…" className="input-field" /></div>
                   {functionOptions.length > 0 && (
                     <div>
                       <label className="label">Function</label>

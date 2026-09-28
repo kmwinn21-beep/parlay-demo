@@ -55,7 +55,7 @@ export async function PUT(
   const db = await getDb(authResult?.accountId);
   try {
     const body = await request.json();
-    const { first_name, last_name, title, company_id, email, notes, action, next_steps, next_steps_notes, status, seniority, linkedin_url, phone, consent } = body;
+    const { first_name, last_name, title, company_id, email, notes, action, next_steps, next_steps_notes, status, seniority, linkedin_url, phone, consent, crm_contact_link } = body;
     const functionVal = body['function'];
 
     if (!first_name || !last_name) {
@@ -74,7 +74,7 @@ export async function PUT(
     const existingConsent = existingResult.rows[0].consent != null ? String(existingResult.rows[0].consent) : 'Consent Not Recorded';
 
     const updatedResult = await db.execute({
-      sql: 'UPDATE attendees SET first_name = ?, last_name = ?, title = ?, company_id = ?, email = ?, notes = ?, action = ?, next_steps = ?, next_steps_notes = ?, status = ?, seniority = ?, linkedin_url = ?, phone = ?, "function" = ?, consent = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
+      sql: 'UPDATE attendees SET first_name = ?, last_name = ?, title = ?, company_id = ?, email = ?, notes = ?, action = ?, next_steps = ?, next_steps_notes = ?, status = ?, seniority = ?, linkedin_url = ?, phone = ?, crm_contact_link = ?, "function" = ?, consent = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING *',
       args: [
         first_name,
         last_name,
@@ -89,6 +89,7 @@ export async function PUT(
         seniority || null,
         linkedin_url || null,
         phone || null,
+        crm_contact_link || null,
         'function' in body ? (functionVal || null) : existingFunction,
         'consent' in body ? (consent || 'Consent Not Recorded') : existingConsent,
         params.id,
@@ -233,6 +234,10 @@ export async function PATCH(
     if ('consent' in body) {
       setClauses.push('consent = ?');
       args.push((body.consent as string | undefined) || 'Consent Not Recorded');
+    }
+    if ('crm_contact_link' in body) {
+      setClauses.push('crm_contact_link = ?');
+      args.push((body.crm_contact_link as string | undefined) || null);
     }
 
     // company_type and wse live on the company, not the attendee, so a request

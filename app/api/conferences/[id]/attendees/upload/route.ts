@@ -936,9 +936,9 @@ export async function POST(
     };
 
     const attendeeIdCache = new Map<string, number>();
-    type NewAttendee = { first_name: string; last_name: string; title?: string; company_id: number | null; email?: string; linkedin_url?: string; function?: string; product?: string; consent?: string; seniority?: string; is_placeholder?: boolean };
+    type NewAttendee = { first_name: string; last_name: string; title?: string; company_id: number | null; email?: string; linkedin_url?: string; crm_contact_link?: string; function?: string; product?: string; consent?: string; seniority?: string; is_placeholder?: boolean };
     const newAttendees: NewAttendee[] = [];
-    type ExistingAttendeeUpdate = { id: number; company_id: number | null; title: string | null; email: string | null; linkedin_url: string | null; function?: string; product?: string; consent?: string };
+    type ExistingAttendeeUpdate = { id: number; company_id: number | null; title: string | null; email: string | null; linkedin_url: string | null; crm_contact_link: string | null; function?: string; product?: string; consent?: string };
     const existingAttendeeUpdates: ExistingAttendeeUpdate[] = [];
     const seen = new Set<string>();
 
@@ -962,13 +962,14 @@ export async function POST(
         const rawProduct = p.product?.trim() || undefined;
         const autoProduct = !rawProduct ? computeAutoProducts(undefined, p.title?.trim(), functionVal) : null;
         const consentVal = p.consent?.trim() ? normalizeConsentValue(p.consent.trim()) : undefined;
-        const hasUpdate = (companyId && companyId > 0) || p.title?.trim() || p.email?.trim() || p.linkedin_url?.trim() || functionVal || rawProduct || autoProduct || consentVal;
+        const hasUpdate = (companyId && companyId > 0) || p.title?.trim() || p.email?.trim() || p.linkedin_url?.trim() || p.crm_contact_link?.trim() || functionVal || rawProduct || autoProduct || consentVal;
         if (hasUpdate) existingAttendeeUpdates.push({
           id: hit.match.id,
           company_id: companyId && companyId > 0 ? companyId : null,
           title: p.title?.trim() || null,
           email: p.email?.trim() || null,
           linkedin_url: p.linkedin_url?.trim() || null,
+          crm_contact_link: p.crm_contact_link?.trim() || null,
           function: functionVal,
           product: rawProduct ?? autoProduct ?? undefined,
           consent: consentVal,
@@ -989,6 +990,7 @@ export async function POST(
           company_id: companyId && companyId > 0 ? companyId : null,
           email: p.email?.trim() || undefined,
           linkedin_url: p.linkedin_url?.trim() || undefined,
+          crm_contact_link: p.crm_contact_link?.trim() || undefined,
           function: functionVal,
           product: rawProduct ?? autoProduct ?? undefined,
           consent: consentVal,
@@ -1021,13 +1023,14 @@ export async function POST(
         const rawProduct = p.product?.trim() || undefined;
         const autoProduct = !rawProduct ? computeAutoProducts(undefined, p.title?.trim(), functionVal) : null;
         const consentVal = p.consent?.trim() ? normalizeConsentValue(p.consent.trim()) : undefined;
-        const hasUpdate = (companyId && companyId > 0) || p.title?.trim() || p.email?.trim() || p.linkedin_url?.trim() || functionVal || rawProduct || autoProduct || consentVal;
+        const hasUpdate = (companyId && companyId > 0) || p.title?.trim() || p.email?.trim() || p.linkedin_url?.trim() || p.crm_contact_link?.trim() || functionVal || rawProduct || autoProduct || consentVal;
         if (hasUpdate) existingAttendeeUpdates.push({
           id: existingId,
           company_id: companyId && companyId > 0 ? companyId : null,
           title: p.title?.trim() || null,
           email: p.email?.trim() || null,
           linkedin_url: p.linkedin_url?.trim() || null,
+          crm_contact_link: p.crm_contact_link?.trim() || null,
           function: functionVal,
           product: rawProduct ?? autoProduct ?? undefined,
           consent: consentVal,
@@ -1068,6 +1071,14 @@ export async function POST(
         if (u.linkedin_url) {
           setClauses.push("linkedin_url = CASE WHEN (linkedin_url IS NULL OR linkedin_url = '') THEN ? ELSE linkedin_url END");
           setArgs.push(u.linkedin_url);
+        }
+
+        // crm_contact_link: fill-if-blank, for the same reason as LinkedIn. It
+        // is not offered for resolution either, so a re-upload must not
+        // overwrite a link a rep pasted in by hand.
+        if (u.crm_contact_link) {
+          setClauses.push("crm_contact_link = CASE WHEN (crm_contact_link IS NULL OR crm_contact_link = '') THEN ? ELSE crm_contact_link END");
+          setArgs.push(u.crm_contact_link);
         }
 
         // function
@@ -1111,8 +1122,8 @@ export async function POST(
     // Batch-insert new attendees
     if (newAttendees.length > 0) {
       const results = await batchInsert(db, newAttendees, (a) => ({
-        sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email, linkedin_url, "function", products, consent, seniority, is_placeholder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
-        args: [a.first_name, a.last_name, a.title ?? null, a.company_id, a.email ?? null, a.linkedin_url ?? null, a.function ?? null, a.product ?? null, a.consent ?? 'Consent Not Recorded', a.seniority ?? null, a.is_placeholder ? 1 : 0],
+        sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email, linkedin_url, crm_contact_link, "function", products, consent, seniority, is_placeholder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+        args: [a.first_name, a.last_name, a.title ?? null, a.company_id, a.email ?? null, a.linkedin_url ?? null, a.crm_contact_link ?? null, a.function ?? null, a.product ?? null, a.consent ?? 'Consent Not Recorded', a.seniority ?? null, a.is_placeholder ? 1 : 0],
       }));
       for (let i = 0; i < newAttendees.length; i++) {
         const key = `${newAttendees[i].first_name} ${newAttendees[i].last_name}`.toLowerCase();
