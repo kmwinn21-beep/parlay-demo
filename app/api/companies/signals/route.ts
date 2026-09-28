@@ -19,9 +19,14 @@ import { deriveSignals, SIGNAL_KEYS, type SignalKey } from '@/lib/competitiveSig
  * A competitor's own cells belong to the accounts above them, so a competitor
  * carries a signal here only when somebody is weighing IT against another.
  *
- * conference_id narrows it to relationships whose both ends are at that show,
- * which is what the map's "At this conference" scope means. Without it the
- * whole book is read, which is what the companies page shows.
+ * Every relationship, never narrowed to one conference. A badge here answers
+ * "what is going on with this company", which does not stop being true because
+ * the other end of it did not come to this show — and a row that carries EA at
+ * one conference and nothing at another, for the same company on the same day,
+ * reads as the badge being unreliable rather than as a scope.
+ *
+ * That is the opposite of the map's grid, which IS about one show. The two
+ * questions are different and now have different answers on purpose.
  */
 
 function splitList(raw: unknown): string[] {
@@ -34,27 +39,7 @@ export async function GET(request: NextRequest) {
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
 
-  const conferenceId = Number(new URL(request.url).searchParams.get('conference_id') ?? 0);
-
   try {
-    // Who is at this show, when there is a show. The map's conference scope is
-    // "both ends here", and a table of that conference's companies should not
-    // badge a relationship with somebody who did not come.
-    let atConference: Set<number> | null = null;
-    if (conferenceId) {
-      const here = await db.execute({
-        sql: `SELECT DISTINCT a.company_id AS id
-              FROM conference_attendees ca
-              JOIN attendees a ON a.id = ca.attendee_id
-              WHERE ca.conference_id = ? AND a.company_id IS NOT NULL`,
-        args: [conferenceId],
-      }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
-      atConference = new Set(here.rows.map(r => Number(r.id)).filter(Boolean));
-      if (atConference.size === 0) {
-        return NextResponse.json({ signals: {} }, { headers: { 'Cache-Control': 'no-store' } });
-      }
-    }
-
     const relRes = await db.execute({
       sql: `SELECT id, company_id, related_company_id, relationship_status, status_changed_at
             FROM vendor_relationships`,
@@ -66,19 +51,13 @@ export async function GET(request: NextRequest) {
       args: [],
     }).catch(() => ({ rows: [] as Record<string, unknown>[] })));
 
-    const rows: RawRelationshipRow[] = [];
-    for (const r of relRes.rows) {
-      const a = Number(r.company_id);
-      const z = Number(r.related_company_id);
-      if (atConference && !(atConference.has(a) && atConference.has(z))) continue;
-      rows.push({
-        id: Number(r.id),
-        companyId: a,
-        relatedCompanyId: z,
-        statuses: splitList(r.relationship_status),
-        statusChangedAt: r.status_changed_at ? String(r.status_changed_at) : null,
-      });
-    }
+    const rows: RawRelationshipRow[] = relRes.rows.map(r => ({
+      id: Number(r.id),
+      companyId: Number(r.company_id),
+      relatedCompanyId: Number(r.related_company_id),
+      statuses: splitList(r.relationship_status),
+      statusChangedAt: r.status_changed_at ? String(r.status_changed_at) : null,
+    }));
     if (rows.length === 0) {
       return NextResponse.json({ signals: {} }, { headers: { 'Cache-Control': 'no-store' } });
     }

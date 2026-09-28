@@ -182,11 +182,13 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   /**
    * The competitive signals, by company.
    *
-   * Scoped to the conference when there is one, which is what the relationship
-   * map's own "At this conference" means — a table of one show's companies
-   * should not badge a relationship with somebody who did not come.
+   * Every relationship, never narrowed to this conference. The badge answers
+   * "what is going on with this company", which does not stop being true
+   * because the other end of it did not come — and a row that carries EA at one
+   * conference and nothing at another, for the same company on the same day,
+   * reads as the badge being unreliable rather than as a scope.
    */
-  const companySignals = useCompanySignals(conferenceId ?? undefined);
+  const companySignals = useCompanySignals();
   const customColumns = useCustomColumns(tableName);
 
   const { panelStyle: qvPanelStyle, handleResizeStart: qvResizeStart } = useDrawerResize(480);

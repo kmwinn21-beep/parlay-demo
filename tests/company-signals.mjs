@@ -140,10 +140,9 @@ console.log('\n— where they sit —');
   eq('  while the desktop cell keeps the dash the other columns use',
     /<CompanySignalBadges signals=\{companySignals\[company\.id\]\} \/>/.test(table), true);
 
-  // Scoped to the conference when there is one, which is what the map's own
-  // "At this conference" means.
-  eq('scoped to the conference when there is one',
-    /useCompanySignals\(conferenceId \?\? undefined\)/.test(table), true);
+  // The badge is about the company, not about this show.
+  eq('the table asks for every signal, not this conference\u2019s',
+    /const companySignals = useCompanySignals\(\);/.test(table), true);
 }
 
 console.log('\n— the same answer as the map, not a second rule —');
@@ -158,11 +157,16 @@ console.log('\n— the same answer as the map, not a second rule —');
   // Recorded, never inferred — the same restriction the grid's connector has.
   eq('only a recorded switch counts',
     /answer = 'replacing' AND incoming_company_id IS NOT NULL/.test(route), true);
-  // Both ends at the show, which is what the map's conference scope means.
-  eq('a conference narrows it to relationships with both ends there',
-    /!\(atConference\.has\(a\) && atConference\.has\(z\)\)/.test(route), true);
-  eq('  and without one the whole book is read',
-    /const conferenceId = Number\(new URL\(request\.url\)\.searchParams\.get\('conference_id'\) \?\? 0\);/.test(route), true);
+  // Never narrowed to one show. A badge answers "what is going on with this
+  // company", which does not stop being true because the other end of it did
+  // not come — and a row carrying EA at one conference and nothing at another,
+  // for the same company on the same day, reads as the badge being unreliable
+  // rather than as a scope. The map's grid IS about one show; these are
+  // different questions and now have different answers on purpose.
+  eq('every relationship counts, whatever conference it touches',
+    /conference_id|atConference|conference_attendees/.test(route), false);
+  eq('  so the rows go straight into the resolver',
+    /const rows: RawRelationshipRow\[\] = relRes\.rows\.map/.test(route), true);
   // Keyed by the account: a competitor's cells belong to the accounts above
   // them, so a competitor carries a signal here only when it is being weighed.
   eq('keyed by the account the cell belongs to',
@@ -176,12 +180,14 @@ console.log('\n— the same answer as the map, not a second rule —');
   eq('a failed load leaves the table alone',
     /\.catch\(\(\) => \(\{\} as CompanySignals\)\)/.test(hook), true);
   // The conference answer and the whole-book answer are different answers.
-  // Both the loader and the hook derive it, and either one falling back to a
-  // single key would serve the conference answer to the whole-book question.
-  eq('the cache is keyed by scope, not shared across them',
-    (hook.match(/conferenceId \? `conference:\$\{conferenceId\}` : 'all'/g) || []).length, 2);
-  eq('  and one fetch is shared rather than one per table',
-    /inFlight/.test(hook), true);
+  // One answer, so one cache. A scope key for a thing with one scope is a
+  // parameter nothing passes.
+  eq('one answer, cached once',
+    /let cache: CompanySignals \| null = null;/.test(hook), true);
+  eq('  with no scope left to key it by',
+    /conferenceId/.test(hook), false);
+  eq('  and one fetch shared rather than one per table',
+    /if \(inFlight\) return inFlight;/.test(hook), true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
