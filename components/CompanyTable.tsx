@@ -1396,6 +1396,24 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const renderCompanyCard = (company: Company, opts?: { inFamily?: boolean; isFamilyParent?: boolean; index?: number }) => {
     const inFamily = !!opts?.inFamily;
     const isFamilyParent = !!opts?.isFamilyParent;
+    /* A company with nothing to show gets two rows, not three with an empty
+       one. The signals are the only reason the card grows. */
+    const showSignalRow = isVisible('signals')
+      && (companySignals[company.id] ?? []).length > 0;
+    /* Built once and placed on whichever row turns out to be the last, so the
+       card always ends on a line that has the menu at the end of it. */
+    const kebab = conferenceId != null ? (
+      <div className="flex-shrink-0">
+        <RowActionsKebab
+          entityType="company"
+          conferenceId={conferenceId}
+          companyId={company.id}
+          companyName={company.name}
+          onDone={onRefresh}
+          onOpenChange={open => setActionsCompanyId(open ? company.id : null)}
+        />
+      </div>
+    ) : null;
     return (
     /* Under a family the card steps in and takes a rule down its left edge.
        An indent alone is easy to miss at this width — a card and a slightly
@@ -1547,32 +1565,30 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
           ) : null;
         })()}
       </ScrollRow>
+      {/* No signals, no third row: the menu stays where it has always been,
+          at the end of the pill line, and the card ends there. */}
+      {!showSignalRow && kebab}
       </div>
-      {/* Row 5: the signals, and the actions menu beside them.
+      {/* Row 3, only when there is something to put in it.
           The badges spread into full names when tapped, which needs a line of
-          its own — on the pill row above they would have pushed the type and
-          the counts off the end every time somebody read them. The menu came
-          down with them so the card still ends on one row rather than two, and
-          so the badges get the width. */}
-      {(isVisible('signals') || conferenceId != null) && (
-        <div className="mt-2 ml-6 flex items-center justify-between gap-2">
-          <span className="min-w-0">
-            {isVisible('signals') && (
-              <CompanySignalBadges signals={companySignals[company.id]} emptyLabel={null} />
-            )}
-          </span>
-          {conferenceId != null && (
-            <div className="flex-shrink-0">
-              <RowActionsKebab
-                entityType="company"
-                conferenceId={conferenceId}
-                companyId={company.id}
-                companyName={company.name}
-                onDone={onRefresh}
-                onOpenChange={open => setActionsCompanyId(open ? company.id : null)}
-              />
-            </div>
-          )}
+          its own — on the pill row above they would push the type and the
+          counts off the end every time somebody read them. The menu comes down
+          with them so the card still ends on one row rather than two, and so
+          the badges get the width. */}
+      {showSignalRow && (
+        <div className="mt-2 ml-6">
+          <p className="text-[9px] uppercase tracking-wide text-gray-400 font-medium mb-1">
+            Signal{(companySignals[company.id] ?? []).length === 1 ? '' : 's'}
+          </p>
+          {/* Scrolls rather than wrapping: four spread names are wider than the
+              card, and the menu is pushed along in front of them rather than
+              sitting on top of the last one. ml-auto holds it at the right edge
+              until the badges need the room, and resolves to nothing once they
+              overflow. */}
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+            <CompanySignalBadges signals={companySignals[company.id]} emptyLabel={null} />
+            {kebab && <div className="ml-auto">{kebab}</div>}
+          </div>
         </div>
       )}
     </div>

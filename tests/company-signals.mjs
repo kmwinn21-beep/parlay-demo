@@ -142,26 +142,37 @@ console.log('\n— where they sit —');
   eq('  and an empty cell on the family row',
     /case 'signals': return <td key="signals" className="px-3 py-3" \/>;/.test(table), true);
 
-  // On a phone the badges spread into full names, which needs a line of its
+  // ── The phone card grows only when there is something to grow for ──
+  //
+  // The badges spread into full names when tapped, which needs a line of its
   // own — on the pill row they would push the type and the counts off the end
-  // every time somebody read them.
-  eq('a row of their own on a phone',
-    /mt-2 ml-6 flex items-center justify-between gap-2/.test(table), true);
-  // The pill row scrolls; the menu used to sit at the end of it and stay put
-  // while the pills passed behind. It is on the signals row now, which is also
-  // where it gets the width.
-  // Read unstripped: the two rows are told apart by the comments that head
-  // them, and strip() takes those out.
+  // every time somebody read them. But a card with no signals has nothing to
+  // put on that line, and an empty third row is a row of nothing.
+  eq('a third row only when the company has signals',
+    /const showSignalRow = isVisible\('signals'\)\s*\n\s*&& \(companySignals\[company\.id\] \?\? \[\]\)\.length > 0;/.test(table), true);
+  eq('  with an eyebrow saying what they are',
+    /Signal\{\(companySignals\[company\.id\] \?\? \[\]\)\.length === 1 \? '' : 's'\}/.test(table), true);
+  // One menu, placed on whichever row turns out to be the card's last, so the
+  // card always ends on a line that has it.
+  eq('the menu is built once and placed, not written twice',
+    (table.match(/<RowActionsKebab/g) || []).length, 3);
+  eq('  staying on the pill row when there is no third one',
+    /\{!showSignalRow && kebab\}/.test(table), true);
+  eq('  and coming down to the signals row when there is',
+    /\{kebab && <div className="ml-auto">\{kebab\}<\/div>\}/.test(table), true);
+  // Four spread names are wider than the card. The menu is pushed along in
+  // front of them rather than sitting on top of the last one — ml-auto holds it
+  // at the right edge until the badges need the room, then resolves to nothing.
+  // Read unstripped and sliced to the row itself: justify-between appears on
+  // unrelated rows elsewhere in this file, and a match anywhere would say
+  // nothing about this one.
   const raw = readFileSync('components/CompanyTable.tsx', 'utf8');
-  const pillRow = raw.slice(
-    raw.indexOf('Rows 2-4 ride one scrolling line'),
-    raw.indexOf('Row 5: the signals'),
-  );
-  const signalRow = raw.slice(raw.indexOf('Row 5: the signals'));
-  eq('  with the actions menu brought down beside them',
-    /RowActionsKebab/.test(signalRow), true);
-  eq('  and none left on the pill row above',
-    /RowActionsKebab/.test(pillRow), false);
+  const signalRow = raw.slice(raw.indexOf('Row 3, only when there is something'));
+  eq('  pushed along by the badges rather than pinned',
+    /flex items-center gap-2 overflow-x-auto scrollbar-hide/.test(signalRow), true);
+  eq('  never pinned to the far edge of the card',
+    /justify-between/.test(signalRow.slice(0, signalRow.indexOf('</div>'))), false);
+
   // Nothing to say and nothing to show: an em-dash on a phone card is a row
   // of punctuation.
   eq('  showing nothing rather than a dash when there are none',
