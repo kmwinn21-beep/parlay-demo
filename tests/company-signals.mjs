@@ -152,6 +152,69 @@ console.log('\n— the badges —');
     /onKeyDown=\{e => \{ if \(e\.key === 'Enter' \|\| e\.key === ' '\)/.test(badges), true);
 }
 
+console.log('\n— filtering the list down to rows that have a signal —');
+{
+  const table = strip('components/CompanyTable.tsx');
+
+  // The same map the column renders from. Read from anywhere else and the
+  // button would keep rows with no badge, or drop rows that have one.
+  eq('the button keeps rows the column would badge',
+    /matchQuickSignals = !quickFilterSignals \|\| \(companySignals\[c\.id\]\?\.length \?\? 0\) > 0/.test(table), true);
+  eq('  and it is applied, not merely computed',
+    /&& matchQuickSignals &&/.test(table), true);
+  eq('  and counts as a quick filter, so the others recede behind it',
+    /const anyQuickFilter = [^;]*quickFilterSignals/.test(table), true);
+  // Paging is reset when a filter changes, or page 3 of an unfiltered list
+  // becomes an empty page 3 of a filtered one.
+  eq('  and returns the reader to the first page',
+    /\}, \[search[^\]]*quickFilterSignals[^\]]*groupByParent\]\);/.test(table), true);
+
+  // Colour by reference. The icon is meant to read as the same subject as the
+  // EA badge; a hex copied here drifts the first time that palette moves.
+  eq('the icon borrows the signal palette rather than a copy of it',
+    /stroke=\{SIGNAL_TONE\.evaluatingAlternatives\}/.test(table), true);
+  eq('  with no hardcoded hex beside it',
+    /#D97706/.test(table), false);
+  // An icon with no text needs a name for anyone not looking at it.
+  eq('  and is named for screen readers',
+    /aria-label="Companies with a signal"/.test(table), true);
+
+  // Second in the row, as asked: after "is this mine", "is anything happening".
+  const row = table.slice(table.indexOf('const filterButtons'), table.indexOf('{beforeFiltersButton}'));
+  const order = [...row.matchAll(/setQuickFilter(\w+)\(v => !v\)/g)].map(m => m[1]);
+  eq('the order of the quick filters', order, ['MyAccounts', 'Signals', 'Icp', 'Prospects']);
+}
+
+console.log('\n— one Prospects button instead of one per ICP type —');
+{
+  const table = strip('components/CompanyTable.tsx');
+
+  // The ICP company types were a button each, so the row grew with the
+  // settings. They are one idea, so they are one button.
+  eq('the ICP types are gathered into one bucket',
+    /const prospectTypes = useMemo\(\s*\n\s*\(\) => icpCompanyTypeOptions\.filter\(t => t !== 'Customer' && t !== 'Competitor'\)/.test(table), true);
+  eq('  which the button filters by',
+    /matchQuickProspects = !quickFilterProspects \|\| prospectTypes\.includes\(c\.company_type \|\| ''\)/.test(table), true);
+  eq('  and which is applied',
+    /&& matchQuickProspects &&/.test(table), true);
+
+  // Customer and Competitor are what a prospect is not, and neither is an ICP
+  // parameter — they keep their own toggles, so the three divide the list.
+  eq('Customers and Competitors keep their own buttons',
+    /const quickFilterTypeButtons: \[string, string\]\[\] = \[\['Customer', 'Customers'\], \['Competitor', 'Competitors'\]\];/.test(table), true);
+  eq('  and are not swept into the bucket',
+    /prospectTypes[\s\S]{0,120}t !== 'Customer' && t !== 'Competitor'/.test(table), true);
+
+  // The ICP rules arrive over the network. Until they do the bucket is empty,
+  // and a Prospects button that matches nothing is worse than no button.
+  eq('nothing is offered until the ICP types load',
+    /\{prospectTypes\.length > 0 && \(\s*\n\s*<button/.test(table), true);
+  // The types it stands for, for a reader who cannot know what is in the ICP
+  // settings from the word "Prospects".
+  eq('  and the button says which types it means',
+    /title=\{`Company type is \$\{prospectTypes\.join\(', '\)\}`\}/.test(table), true);
+}
+
 console.log('\n— the pages are wide enough to hold the table —');
 {
   /*
