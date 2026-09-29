@@ -4,7 +4,7 @@ import { getDb } from '@/lib/getDb';
 import { waitUntil } from '@vercel/functions';
 import { extractFromNote, storeSuggestions, noteProvenance } from '@/lib/suggestions/extract';
 import { resolveNoteCompany } from '@/lib/suggestions/noteContext';
-import { getConfigIdByEmail } from '@/lib/notifications';
+import { noteAuthorName } from '@/lib/noteAuthor';
 
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAuth(request);
@@ -106,7 +106,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     });
     if (noteRow.rows.length === 0) return NextResponse.json({ error: 'Note not found' }, { status: 404 });
     const content = String(noteRow.rows[0].content);
-    const rep = user.email ?? null;
+    /*
+     * The author's NAME, not their address.
+     *
+     * This stored `user.email` verbatim, and the pill on a note card derives
+     * its initials straight from this column — so a floor note assigned to a
+     * conference wore the one letter an address like `kevin@…` can honestly
+     * give, while every other pill for the same person said KW. Resolved the
+     * same way /api/notes resolves it, from the one helper.
+     */
+    const rep = await noteAuthorName(db, user.email);
 
     const inserts: Array<{ entity_type: string; entity_id: number }> = [];
     if (conference_id) inserts.push({ entity_type: 'conference', entity_id: conference_id });
@@ -117,8 +126,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
     const written = await db.batch(
       inserts.map(({ entity_type, entity_id }) => ({
-        sql: `INSERT INTO entity_notes (entity_type, entity_id, content, rep, conference_name, company_name, attendee_name)
-              VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        // author_user_id alongside the name: `rep` is what a reader sees and
+        // can be edited, and this is the record of who actually wrote it.
+        // /api/notes has always set it; this route never did, so a floor note
+        // assigned to a conference had no author at all.
+        sql: `INSERT INTO entity_notes (entity_type, entity_id, content, rep, conference_name, company_name, attendee_name, author_user_id)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           entity_type,
           entity_id,
@@ -127,6 +140,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           conference_name ?? null,
           company_name ?? null,
           attendee_name ?? null,
+          user.id,
         ],
       })),
       'write'
@@ -182,17 +196,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
           try {
             const ctx = await resolveNoteCompany(db, target.type, target.id);
             if (!ctx.companyId) return;
-            let author: string = user.email;
-            try {
-              const configId = await getConfigIdByEmail(db, user.email);
-              if (configId) {
-                const nameRow = await db.execute({
-                  sql: 'SELECT value FROM config_options WHERE id = ?',
-                  args: [configId],
-                });
-                if (nameRow.rows.length > 0 && nameRow.rows[0].value) author = String(nameRow.rows[0].value);
-              }
-            } catch { /* the email still names them */ }
+            const author = await noteAuthorName(db, user.email);
             const result = await extractFromNote(db, {
               noteId: sourceNoteId,
               content,

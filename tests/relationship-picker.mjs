@@ -273,12 +273,23 @@ console.log('\n— the pieces on the page —');
   eq('the modal is wider', /max-w-\[1360px\]/.test(modal), true);
 
   // Internal relationships beside the map, using the pre-conference review's
-  // own card. Health behind that card is five cross-conference queries, so a
-  // second one here would have meant duplicating them.
+  // own CARD — the card is shared, the data behind it is not.
   eq('the internal column uses the pre-conference card',
     /<RelationshipAttendeeCard/.test(modal), true);
-  eq('  fed from that endpoint rather than a query of its own',
-    /\/pre-conference`, \{ cache: 'no-store' \}/.test(modal), true);
+  /*
+   * Fed from the map's own payload, not the conference's.
+   *
+   * It used to read the pre-conference endpoint, which resolves a
+   * relationship's contacts against THAT show's attendee list. The IR badge
+   * beside it is set from an account-wide read, so a company could carry the
+   * badge and have nobody at the show — and clicking it opened onto "no
+   * internal relationships with anyone at this conference" about a company
+   * whose own record listed two. See tests/internal-relationships.mjs.
+   */
+  eq('  fed from the map\u2019s own payload',
+    /competitiveData\.internalRows/.test(modal), true);
+  eq('    not from the conference\u2019s',
+    /\/pre-conference`, \{ cache: 'no-store' \}/.test(modal), false);
   eq('  and read-only, since the map is not where targets are set',
     /readOnly\s*\n?\s*\/>/.test(modal), true);
   // An empty column would take width from the map for nothing.
@@ -322,11 +333,12 @@ console.log('\n— the pieces on the page —');
   // company says whose.
   eq('  below the title, not instead of it',
     modal.indexOf('Internal Relationship{') < modal.indexOf('{internalCompanyName}'), true);
-  // The badge comes from an account-wide read and these cards from the
-  // conference's own attendee list, so a company can carry IR and have nobody
-  // here. The relationship is real, it is just not with anyone at this show.
-  eq('an IR badge with nobody at this conference says so',
-    /No internal relationships with anyone at this conference\./.test(modal), true);
+  // The badge and the column are read the same way now, so an empty column
+  // means the company genuinely has none — not that its people did not come.
+  eq('an empty column says the company has none',
+    /No internal relationships recorded for this company\./.test(modal), true);
+  eq('  rather than blaming the conference for it',
+    /with anyone at this conference/.test(modal), false);
   eq('  and collapses to a strip rather than disappearing',
     /width: internalOpen \? 320 : 40/.test(modal), true);
   eq('  with the width animated both ways',

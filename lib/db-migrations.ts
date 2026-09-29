@@ -2785,4 +2785,34 @@ export const migrations: string[] = [
   // The pair, for "have we already asked about these two?".
   `CREATE INDEX IF NOT EXISTS idx_vendor_switches_pair
      ON vendor_switches(account_company_id, incumbent_company_id, incoming_company_id)`,
+  /*
+   * Notes whose author was recorded as an email address, given their name.
+   *
+   * `entity_notes.rep` is read as a DISPLAY value — the pill on a note card
+   * derives its initials straight from it — and assigning a floor note to a
+   * conference stored `user.email` verbatim. The pill then showed the one
+   * letter an address like `kevin@…` can honestly yield, while every other
+   * pill for the same person said KW. The route now resolves the name before
+   * writing; this gives the notes already written the same name.
+   *
+   * The EXISTS is what protects the column: a row is rewritten only where its
+   * `rep` IS some user's address, so a rep deliberately named here is left
+   * alone and an address nobody owns keeps naming somebody rather than going
+   * NULL. `rep` is not always the author — some flows put the person a
+   * follow-up was assigned to in it — so leaving those untouched matters.
+   *
+   * The LIKE in front of it narrows the scan and says the intent out loud; it
+   * is not the guard, and removing it would change nothing.
+   *
+   * Idempotent, which it has to be: migrations run on every boot, and after
+   * this one those rows hold names that are nobody's address.
+   */
+  `UPDATE entity_notes
+      SET rep = (SELECT co.value FROM users u
+                   JOIN config_options co ON co.id = u.config_id
+                  WHERE u.email = entity_notes.rep)
+    WHERE rep LIKE '%@%'
+      AND EXISTS (SELECT 1 FROM users u
+                    JOIN config_options co ON co.id = u.config_id
+                   WHERE u.email = entity_notes.rep AND co.value IS NOT NULL AND co.value <> '')`,
 ];
