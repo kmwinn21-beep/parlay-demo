@@ -27,6 +27,8 @@ import {
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
 import { CustomColumnCell } from './CustomColumnCell';
 import { ScrollRow } from '@/components/ScrollRow';
+import { calcTooltipPos, type TooltipPos } from '@/lib/tooltipPosition';
+import { PeopleTooltipCard, type TooltipPerson } from '@/components/PeopleTooltipCard';
 import { useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
 import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import type { AdditionalAttendeeRecord } from '@/lib/additionalAttendees';
@@ -167,23 +169,11 @@ function nameInitials(name: string): string {
   return name.trim().split(/\s+/).filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase();
 }
 
-/**
- * Location, additional attendees and company value for the mobile card — one
- * scrolling line, since three pills rarely fit a phone.
- */
-/**
- * The Title column, closed and hovered.
- *
- * Narrow enough to leave room for Location beside it; wide enough hovered that
- * all but the longest titles finish. Declared rather than written into the
- * class list twice, because the transition runs BETWEEN these two numbers and
- * two numbers that happen to agree today are two numbers that stop agreeing.
- */
 /** How close the outcome menu may come to the edge of the screen. */
 const MENU_MARGIN = 8;
 
+/** How wide the Title column is, leaving room for Location beside it. */
 const TITLE_WIDTH = 150;
-const TITLE_HOVER_WIDTH = 420;
 
 /** The label above every value on the mobile card. Declared once so they match. */
 const EYEBROW = 'text-[9px] uppercase tracking-wide text-gray-400 font-medium mb-1';
@@ -200,6 +190,22 @@ const PILL_TEXT = 'text-[10px]';
 
 /** The pill shape the mobile card's values share. */
 const DETAIL_PILL = `inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${PILL_TEXT} font-medium whitespace-nowrap border`;
+
+/**
+ * Everyone a meeting is with, primary attendee first.
+ *
+ * The guests' titles are clipped in the same column as the primary one, so
+ * the tooltip answers for the whole cell rather than for its first line.
+ */
+function meetingPeople(m: Meeting): TooltipPerson[] {
+  return [
+    { name: `${m.first_name} ${m.last_name}`.trim(), title: m.title },
+    ...(m.additional_attendee_records ?? []).map(a => ({
+      name: `${a.first_name} ${a.last_name}`.trim(),
+      title: a.title,
+    })),
+  ].filter(p => p.name);
+}
 
 function LocationIcon() {
   return (
@@ -1370,6 +1376,16 @@ export function MeetingsTable({
    * component has — the account's cost per unit, and whether this list spans
    * conferences at all.
    */
+  /**
+   * The title cell being hovered, and where its tooltip goes.
+   *
+   * One at a time for the whole table rather than a hook per row: a row is a
+   * branch of a switch here, not a component, so there is nowhere to put
+   * per-row state.
+   */
+  const [titleTip, setTitleTip] = useState<{ id: number; pos: TooltipPos } | null>(null);
+  const titleCellRefs = useRef<Record<number, HTMLSpanElement | null>>({});
+
   const mobileValue = (m: Meeting) =>
     m.company_wse != null && avgCostPerUnit > 0
       ? abbreviateValue(Math.round(m.company_wse * avgCostPerUnit))
@@ -1722,57 +1738,47 @@ export function MeetingsTable({
               </div>
             ))}
           </td>;
-          case 'title': return <td key="title" className="px-3 py-2 text-gray-600 leading-snug align-top relative group/title" style={{ maxWidth: TITLE_WIDTH }}>
-            {/* With guests below, each title line takes the height of the
-                matching name line's avatar so the two columns stay in step.
-                One line, cut with an ellipsis, so the column stays narrow
-                enough for Location to sit beside it. */}
-            {/* The tooltip stays, for the titles too long to finish even
-                expanded, and for anyone not using a pointer. */}
+          case 'title': return <td key="title" className="px-3 py-2 text-gray-600 leading-snug align-top relative" style={{ maxWidth: TITLE_WIDTH }}>
+            {/*
+             * One line, cut with an ellipsis, so the column stays narrow
+             * enough for Location to sit beside it. With guests below, each
+             * title line takes the height of the matching name line's avatar
+             * so the two columns stay in step.
+             *
+             * The whole title is read in a tooltip rather than by expanding
+             * this in place. Expanding it meant an opaque copy sliding over
+             * the neighbouring cell, which could only ever be one line wide —
+             * a long title ran out of room and was cut off again, which is the
+             * problem it was there to solve.
+             */}
             <span
-              title={m.title ?? ''}
+              ref={el => { titleCellRefs.current[m.id] = el; }}
+              onMouseEnter={() => {
+                const el = titleCellRefs.current[m.id];
+                if (el) setTitleTip({ id: m.id, pos: calcTooltipPos(el) });
+              }}
+              onMouseLeave={() => setTitleTip(null)}
               className={`block text-xs font-semibold leading-snug truncate ${
                 (m.additional_attendee_records?.length ?? 0) > 0
                   ? `flex items-center ${showAttendeeAvatar ? 'min-h-[28px]' : 'min-h-[20px]'}`
                   : ''
               }`}
             >{m.title || <span className="text-gray-300">\u2014</span>}</span>
-            {/*
-             * The whole title, over the cell rather than in it.
-             *
-             * A block inside the cell cannot be wider than the cell, so the
-             * expansion has to leave the flow. Widening the CELL would be
-             * worse anyway: the table lays out automatically, so every row
-             * would be re-measured and the whole thing would jump under the
-             * pointer. The line above keeps the row's height; this one grows
-             * over the neighbour, which is why it is opaque.
-             *
-             * Always mounted and faded rather than toggled, or there is no
-             * width for the transition to start from. pointer-events-none, so
-             * it never swallows a click meant for what it covers.
-             *
-             * Plain text, not a pill: no border, no rounding, no shadow.
-             *
-             * Its background is white with the row's hover tint laid over it,
-             * which is the colour the row underneath is already showing —
-             * hovering the title necessarily hovers the row. Two layers
-             * rather than one because the tint is semi-transparent: on its
-             * own it lets the column behind show through the title, and one
-             * line of text over another is unreadable. The gradient is a flat
-             * colour; it is only a gradient because that paints ON the white
-             * rather than replacing it.
-             */}
-            {m.title && (
-              <span
-                aria-hidden
-                /* Both widths as classes. An inline max-width would win over
-                   the hover rule no matter what it said, and the expansion
-                   would never happen — the numbers reach the stylesheet as
-                   custom properties on the table instead. */
-                className="pointer-events-none absolute left-3 top-2 z-20 block max-w-[var(--title-rest)] overflow-hidden whitespace-nowrap bg-white bg-gradient-to-r from-brand-highlight/20 to-brand-highlight/20 text-xs font-semibold leading-snug text-gray-600 opacity-0 transition-all duration-300 ease-out group-hover/title:max-w-[var(--title-hover)] group-hover/title:opacity-100"
+            {/* Everyone the meeting is with, not just the one whose title is
+                cut off: the guests' titles are clipped in the same column, and
+                a tooltip that answers for one line of a cell and not the rest
+                is a tooltip you have to hover four times. */}
+            {titleTip?.id === m.id && meetingPeople(m).length > 0 && (
+              <div
+                style={{
+                  position: 'fixed', top: titleTip.pos.top, left: titleTip.pos.left,
+                  width: titleTip.pos.width, zIndex: 9999,
+                  transform: titleTip.pos.above ? 'translateY(-100%)' : 'translateY(0)',
+                }}
+                className="pointer-events-none"
               >
-                {m.title}
-              </span>
+                <PeopleTooltipCard heading="Attendees" people={meetingPeople(m)} />
+              </div>
             )}
             {(m.additional_attendee_records ?? []).map(extra => (
               <span key={extra.id} className="flex items-center h-6 mt-1.5 text-xs font-normal text-gray-400 leading-snug truncate" title={extra.title ?? ''}>
@@ -2018,7 +2024,7 @@ export function MeetingsTable({
       <div className={CARD_TABLE_SCROLL}>
         {/* border-spacing gives the cards the gap between them that a plain
             table has nowhere to put. */}
-        <table className={`w-full ${CARD_TABLE}`} style={{ fontSize: '0.7rem', ['--title-rest' as string]: `${TITLE_WIDTH}px`, ['--title-hover' as string]: `${TITLE_HOVER_WIDTH}px` }}>
+        <table className={`w-full ${CARD_TABLE}`} style={{ fontSize: '0.7rem' }}>
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               {hasSelection && (

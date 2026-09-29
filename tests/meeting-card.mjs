@@ -185,51 +185,68 @@ console.log('\n— the desktop table gained a Location column —');
 console.log('\n— and the title column made room for it —');
 {
   const cell = table.slice(table.indexOf("case 'title': return <td"), table.indexOf("case 'rep': return <td"));
-  // The span carrying the title itself — the guest titles under it truncate
-  // too, and satisfied a looser match while the title above them wrapped.
-  const flowSpan = cell.slice(cell.indexOf("title={m.title ?? ''}"), cell.indexOf('{m.title && ('));
+
+  // The flow span, not the guest-title spans under it, which truncate too.
+  const flowSpan = cell.slice(cell.indexOf('<span'), cell.indexOf('{titleTip?.id === m.id'));
   eq('the title is one line, cut short', /truncate/.test(flowSpan), true);
-  eq('  with the full text still reachable without a pointer', /title=\{m\.title \?\? ''\}/.test(cell), true);
-
-  // The expansion leaves the flow. A block inside the cell cannot be wider
-  // than the cell, and widening the CELL re-measures an auto-layout table —
-  // the whole thing would jump under the pointer.
-  const overlayTag = cell.slice(cell.indexOf('{m.title && ('), cell.indexOf('>', cell.indexOf('pointer-events-none absolute')));
-  eq('the expansion is taken out of the flow', /pointer-events-none absolute/.test(cell), true);
-  eq('  and never swallows a click', /pointer-events-none/.test(cell), true);
-  eq('  it is mounted and faded, not toggled', /opacity-0 transition-all/.test(cell), true);
-  // Plain text, not a pill. The background is opaque only so the text stays
-  // readable over the column it slides across; anything else — a border, a
-  // rounding, a shadow — makes a title look like a status.
-  eq('  and reads as text, not as a pill',
-    /rounded|shadow|border/.test(overlayTag), false);
-  /*
-   * Two background layers, and both are needed.
-   *
-   * The tint alone is semi-transparent, so the column behind shows through the
-   * expanded title and two lines of text sit on top of each other. White alone
-   * is opaque but wrong: hovering the title hovers the row, so the row under
-   * it is tinted and the expansion reads as a white hole in it. White with the
-   * tint painted over it is the colour the row is already showing.
-   */
-  eq('  over an opaque background', /bg-white/.test(overlayTag), true);
-  eq('  tinted to match the row it covers',
-    /from-brand-highlight\/20 to-brand-highlight\/20/.test(overlayTag), true);
-  eq('  growing on hover', /group-hover\/title:max-w-\[var\(--title-hover\)\]/.test(cell), true);
-  eq('  from the group the cell declares', /group\/title/.test(cell), true);
 
   /*
-   * Both widths reach the stylesheet as custom properties.
+   * Read in a tooltip, not by expanding the cell.
    *
-   * This is the bug the first attempt had: the resting width was an inline
-   * style, which beats any class, so the hover rule was applied and did
-   * nothing at all. Asserted as the ABSENCE of an inline max-width on the
-   * expanding span, because that is what silently disables the whole effect.
+   * The expansion was an opaque copy of the title sliding over the next
+   * column, which could only ever be one line wide: a long title ran out of
+   * room and was cut off again — the very thing it existed to fix. None of
+   * that machinery should come back.
    */
-  eq('the expanding span sets no inline width at all', /style=/.test(overlayTag), false);
-  eq('  taking both from the table', /--title-rest[\s\S]{0,120}--title-hover/.test(table), true);
-  eq('  which are declared once each',
-    /const TITLE_WIDTH = \d+;\s*\nconst TITLE_HOVER_WIDTH = \d+;/.test(table), true);
+  eq('nothing expands over the neighbouring cell',
+    /pointer-events-none absolute left-3 top-2/.test(cell), false);
+  eq('  no hover width is declared', /TITLE_HOVER_WIDTH|--title-hover|--title-rest/.test(table), false);
+  eq('  and no hover group on the cell', /group\/title/.test(table), false);
+
+  // The tooltip itself: the shared card, positioned by the shared helper.
+  eq('hovering the title opens a tooltip',
+    /onMouseEnter=\{\(\) => \{[\s\S]{0,160}setTitleTip\(\{ id: m\.id, pos: calcTooltipPos\(el\) \}\)/.test(cell), true);
+  eq('  and leaving closes it', /onMouseLeave=\{\(\) => setTitleTip\(null\)\}/.test(cell), true);
+  eq('  only over the row being hovered', /titleTip\?\.id === m\.id/.test(cell), true);
+  eq('  it never swallows a click', /className="pointer-events-none"/.test(cell), true);
+  eq('  and it is the shared card', /<PeopleTooltipCard heading="Attendees" people=\{meetingPeople\(m\)\} \/>/.test(cell), true);
+
+  // Everyone on the meeting. The guests' titles are clipped in this same
+  // column, so a tooltip answering only for the first line would have to be
+  // hovered once per person.
+  eq('the tooltip lists the guests too',
+    /function meetingPeople[\s\S]{0,400}additional_attendee_records \?\? \[\]/.test(table), true);
+  eq('  with the meeting\u2019s own attendee first',
+    /function meetingPeople[\s\S]{0,200}\$\{m\.first_name\} \$\{m\.last_name\}/.test(table), true);
+  // A name is the whole point of the line; a row with neither is not a person.
+  eq('  and nobody nameless in it', /\.filter\(p => p\.name\)/.test(table), true);
+}
+
+console.log('\n— the tooltip card, and where it goes, are shared —');
+{
+  const card = strip('components/PeopleTooltipCard.tsx');
+  eq('the card reads "Name \u00b7 Title"',
+    /<span className="font-medium">\{p\.name\}<\/span>[\s\S]{0,160}\u00b7 \{p\.title\}/.test(card), true);
+  eq('  under a heading the caller names', /uppercase tracking-wide text-\[10px\]">\{heading\}/.test(card), true);
+  eq('  with a bullet a line', /rounded-full bg-yellow-400/.test(card), true);
+
+  // The count pill in the companies table drew this itself. Two copies of one
+  // tooltip is how the same information comes to be laid out two ways.
+  const pills = strip('components/CountPills.tsx');
+  eq('the attendees pill uses the same card',
+    /<PeopleTooltipCard heading="Attendees" people=\{attendees\} \/>/.test(pills), true);
+
+  // calcTooltipPos was written out identically in three components and a
+  // fourth was about to be added.
+  const shared = strip('lib/tooltipPosition.ts');
+  eq('the position is worked out in one place',
+    /export function calcTooltipPos/.test(shared), true);
+  for (const f of ['components/CompanyTable.tsx', 'components/PriorityLeads.tsx', 'components/CountPills.tsx', 'components/MeetingsTable.tsx']) {
+    const src = strip(f);
+    eq(`  ${f.split('/').pop()} imports it`,
+      /import \{ calcTooltipPos[^}]*\} from '@\/lib\/tooltipPosition'/.test(src), true);
+    eq(`  and declares none of its own`, /^function calcTooltipPos/m.test(src), false);
+  }
 }
 
 console.log('\n— the outcome menu stays on the screen —');

@@ -11,6 +11,7 @@ import { useDrawerResize } from '@/lib/useDrawerResize';
 import { ScrollRow } from '@/components/ScrollRow';
 import { AddToConferenceModal } from './AddToConferenceModal';
 import { useConfigColors } from '@/lib/useConfigColors';
+import { calcTooltipPos, type TooltipPos } from '@/lib/tooltipPosition';
 import { useCompanySignals } from '@/lib/useCompanySignals';
 import { CompanySignalBadges } from '@/components/CompanySignalBadges';
 import { SIGNAL_TONE } from '@/lib/competitiveSignals';
@@ -97,15 +98,6 @@ function CompetitorTypePill({ competitorType, badgeClass, children }: { competit
   );
 }
 
-type TooltipPos = { top: number; left: number; width: number; above: boolean };
-
-function calcTooltipPos(el: HTMLElement, maxW = 260): TooltipPos {
-  const rect = el.getBoundingClientRect();
-  const w = Math.min(maxW, window.innerWidth - 16);
-  const left = Math.max(8, Math.min(rect.left + rect.width / 2 - w / 2, window.innerWidth - w - 8));
-  const above = rect.top > 180;
-  return { top: above ? rect.top - 8 : rect.bottom + 8, left, width: w, above };
-}
 
 interface CompanyTableProps {
   companies: Company[];

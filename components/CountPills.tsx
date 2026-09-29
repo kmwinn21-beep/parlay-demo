@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { calcTooltipPos, type TooltipPos } from '@/lib/tooltipPosition';
+import { PeopleTooltipCard } from '@/components/PeopleTooltipCard';
 
 /**
  * The two count pills a company row carries: how many attendees it has here,
@@ -11,15 +13,6 @@ import { useEffect, useRef, useState } from 'react';
  * thing drawn twice, and only one of the two was a pill.
  */
 
-type TooltipPos = { top: number; left: number; width: number; above: boolean };
-
-function calcTooltipPos(el: HTMLElement, maxW = 260): TooltipPos {
-  const rect = el.getBoundingClientRect();
-  const w = Math.min(maxW, window.innerWidth - 16);
-  const left = Math.max(8, Math.min(rect.left + rect.width / 2 - w / 2, window.innerWidth - w - 8));
-  const above = rect.top > 180;
-  return { top: above ? rect.top - 8 : rect.bottom + 8, left, width: w, above };
-}
 
 /**
  * Whether the device actually hovers. On a touchscreen a tap fires mouseenter,
@@ -89,17 +82,7 @@ export function AttendeeTooltip({ count, summary, onClick, disableTooltip = fals
       )}
       {pos && attendees.length > 0 && (
         <div style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999, transform: pos.above ? 'translateY(-100%)' : 'translateY(0)' }}>
-          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2.5">
-            <p className="font-semibold mb-1.5 text-gray-300 uppercase tracking-wide text-[10px]">Attendees</p>
-            <ul className="space-y-1">
-              {attendees.map((a, i) => (
-                <li key={i} className="flex items-start gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0 mt-1" />
-                  <span><span className="font-medium">{a.name}</span>{a.title && <span className="text-gray-300"> · {a.title}</span>}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <PeopleTooltipCard heading="Attendees" people={attendees} />
         </div>
       )}
     </div>
