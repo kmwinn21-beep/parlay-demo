@@ -188,8 +188,18 @@ const TITLE_HOVER_WIDTH = 420;
 /** The label above every value on the mobile card. Declared once so they match. */
 const EYEBROW = 'text-[9px] uppercase tracking-wide text-gray-400 font-medium mb-1';
 
+/**
+ * The text size every pill on the mobile card is set in.
+ *
+ * Declared rather than written out at each one: Type is a plain rounded tag
+ * and Location is a bordered pill, so they share no class list — but they sit
+ * on the same row under matching labels, and a row of values at two sizes
+ * reads as two kinds of thing.
+ */
+const PILL_TEXT = 'text-[10px]';
+
 /** The pill shape the mobile card's values share. */
-const DETAIL_PILL = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap border';
+const DETAIL_PILL = `inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${PILL_TEXT} font-medium whitespace-nowrap border`;
 
 function LocationIcon() {
   return (
@@ -1563,7 +1573,7 @@ export function MeetingsTable({
                   {m.meeting_type && (
                     <div className="flex-shrink-0">
                       <p className={EYEBROW}>Type</p>
-                      <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded whitespace-nowrap">{m.meeting_type}</span>
+                      <span className={`${PILL_TEXT} text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded whitespace-nowrap`}>{m.meeting_type}</span>
                     </div>
                   )}
                   {mobileValue(m) && (

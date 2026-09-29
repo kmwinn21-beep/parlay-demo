@@ -56,6 +56,16 @@ console.log('\n— every value is under a word saying what it is —');
     (card.match(/className=\{EYEBROW\}/g) ?? []).length, labels.length);
   eq('  with none writing its own',
     /text-\[9px\] uppercase tracking-wide/.test(card), false);
+
+  // The values match each other too. Type is a plain rounded tag and Location
+  // is a bordered pill, so they share no class list — but they sit on one row
+  // under matching labels, and two text sizes read as two kinds of thing.
+  eq('the values are all one text size', /const PILL_TEXT = 'text-\[\d+px\]';/.test(table), true);
+  eq('  which the location pill takes', /rounded-full \$\{PILL_TEXT\} font-medium/.test(table), true);
+  eq('  and the type tag takes as well',
+    /\$\{PILL_TEXT\} text-gray-500 bg-gray-100[^`]*`}>\{m\.meeting_type\}/.test(card), true);
+  eq('  with neither setting a size of its own',
+    /text-xs[^`"]*>\{m\.meeting_type\}/.test(card), false);
 }
 
 console.log('\n— where, when nobody set a where —');
