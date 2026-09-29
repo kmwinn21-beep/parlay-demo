@@ -5,16 +5,8 @@ import Link from 'next/link';
 import { getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { useUserOptions, parseRepIds, getRepInitials } from '@/lib/useUserOptions';
+import { calcTooltipPos, type TooltipPos } from '@/lib/tooltipPosition';
 
-type TooltipPos = { top: number; left: number; width: number; above: boolean };
-
-function calcTooltipPos(el: HTMLElement, maxW = 260): TooltipPos {
-  const rect = el.getBoundingClientRect();
-  const w = Math.min(maxW, window.innerWidth - 16);
-  const left = Math.max(8, Math.min(rect.left + rect.width / 2 - w / 2, window.innerWidth - w - 8));
-  const above = rect.top > 180;
-  return { top: above ? rect.top - 8 : rect.bottom + 8, left, width: w, above };
-}
 
 function conferenceBadgeClass(count: number) {
   if (count >= 4) return 'inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700';

@@ -6,6 +6,7 @@
  * it — which groups lead, what a company with two types does, where a company
  * with none goes — and none of that is visible in a screenshot of the result.
  */
+import { TIER_LABEL, TIER_ORDER, normalizeTier, type TierKey } from '@/lib/targetTiers';
 
 export interface PickerCompany {
   id: number;
@@ -135,6 +136,48 @@ export function filterCompanies(
     if (q && !c.name.toLowerCase().includes(q)) return false;
     return true;
   });
+}
+
+/**
+ * The same companies, gathered under their target tier instead of their type.
+ *
+ * A separate function rather than a mode on groupCompanies: the two answer
+ * different questions and share nothing but the sort. Tiers are a ranking, so
+ * the groups come out in tier order — not by size, and not alphabetically,
+ * which would put High Priority above Must Target.
+ *
+ * Only tiers that have somebody in them get a heading; an empty "Monitor" tells
+ * the reader nothing they could act on.
+ */
+export function groupByTier(
+  companies: PickerCompany[],
+  tierOf: (id: number) => string | null | undefined,
+): TierGroup[] {
+  const byTier = new Map<TierKey, PickerCompany[]>();
+  for (const c of companies) {
+    const tier = normalizeTier(tierOf(c.id)) ?? 'unassigned';
+    const list = byTier.get(tier) ?? [];
+    list.push(c);
+    byTier.set(tier, list);
+  }
+  return TIER_ORDER.flatMap(t => {
+    const list = byTier.get(t);
+    if (!list || list.length === 0) return [];
+    return [{
+      tier: t,
+      label: TIER_LABEL[t],
+      // Same order as within a type group, for the same reason: the hub is
+      // what the panel exists to find.
+      companies: list.sort((a, b) =>
+        b.relationshipCount - a.relationshipCount || a.name.localeCompare(b.name)),
+    }];
+  });
+}
+
+export interface TierGroup {
+  tier: TierKey;
+  label: string;
+  companies: PickerCompany[];
 }
 
 /** The four buckets the map's legend offers. */

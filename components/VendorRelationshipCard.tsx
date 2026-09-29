@@ -291,7 +291,7 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
     // claiming anything about what the relationship is.
     <div
       className={`rounded-lg border overflow-hidden transition-colors ${
-        isStale ? 'border-gray-200 border-dashed bg-gray-50/70' : 'border-gray-200'
+        isStale ? 'border-gray-200 border-dashed bg-gray-50/70' : 'border-gray-200 bg-white'
       }`}
       // Inline, because the colour is a signal's and signals are data. A
       // Tailwind class per signal would be a second place they are declared.

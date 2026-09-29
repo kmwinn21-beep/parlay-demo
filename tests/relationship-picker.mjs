@@ -23,8 +23,10 @@ const eq = (label, got, want) => {
   else { fail++; console.log(`  FAIL ${label}\n       got  ${g}\n       want ${w}`); }
 };
 
-const { typesPresent, groupFor, groupCompanies, filterCompanies, toneFor, NO_TYPE_GROUP } =
+const { typesPresent, groupFor, groupCompanies, groupByTier, filterCompanies, toneFor, NO_TYPE_GROUP } =
   await import('@/lib/relationshipPicker');
+const { TIER_ORDER, TIER_LABEL, normalizeTier, tierRank, bestTier, tierLabel } =
+  await import('@/lib/targetTiers');
 
 
 const strip = (f) => readFileSync(f, 'utf8')
@@ -177,7 +179,7 @@ console.log('\n— the pieces on the page —');
   eq('  two rows before the rest fold away',
     /const ROWS_COLLAPSED = 2;/.test(picker) && /const COLS = 3;/.test(picker), true);
   eq('  counted off the collapsed slice, so the control survives expanding',
-    /Math\.max\(0, allTypes\.length - VISIBLE\)/.test(picker), true);
+    /Math\.max\(0, allTypes\.length - typeSlots\)/.test(picker), true);
   eq('  with an animated expansion', /transition-\[max-height\]/.test(picker), true);
   eq('  and a chip toggles off when clicked again',
     /prev\.includes\(t\) \? prev\.filter\(x => x !== t\) : \[\.\.\.prev, t\]/.test(picker), true);
@@ -189,7 +191,14 @@ console.log('\n— the pieces on the page —');
 
   // ICP rows show the numbers; everything else shows the type.
   eq('ICP rows carry units and attendees',
-    /\{group\.isIcp \? \(/.test(picker) && /units\.toLocaleString\(\)/.test(picker), true);
+    /\{section\.showCounts \? \(/.test(picker) && /units\.toLocaleString\(\)/.test(picker), true);
+  // Still keyed on ICP-ness for a type group — the flag renamed the question,
+  // it did not change the answer. A tier group counts as one too: it is a list
+  // of accounts, so it reads the way ICP does.
+  eq('  which a type group takes from its ICP-ness',
+    /showCounts: g\.isIcp/.test(picker), true);
+  eq('  and a tier group always shows them',
+    /label: g\.label, companies: g\.companies, showCounts: true/.test(picker), true);
   eq('  and other rows carry the type pill',
     /c\.company_types\.slice\(0, 2\)\.map/.test(picker), true);
   eq('every row carries its relationship count',
@@ -1071,6 +1080,147 @@ console.log('\n— the card header, and the grid it had to change for —');
     const sameClass = /value IN \('Current Vendor', 'Preferred Partner'\)/.test(seeded);
     eq('  because two statuses share the Use Competitor class', sameClass, true);
   }
+}
+
+console.log('\n— target tiers, as one vocabulary —');
+{
+  // The tier column is free text and has been written both ways: '1' by the
+  // targets board, the words by older imports. Both have to read the same, or
+  // a company lands under "Monitor" because somebody typed "Must Target".
+  eq('the stored shapes both resolve', [normalizeTier('1'), normalizeTier('Must Target')], ['1', '1']);
+  eq('  case and spacing do not matter', normalizeTier('  HIGH priority '), '2');
+  eq('  and the underscored form too', normalizeTier('worth_engaging'), '3');
+  eq('  monitor is the unassigned bucket',
+    [normalizeTier('unassigned'), normalizeTier('Monitor')], ['unassigned', 'unassigned']);
+  eq('something else is not a tier', normalizeTier('platinum'), null);
+  eq('  nor is nothing', [normalizeTier(null), normalizeTier('')], [null, null]);
+
+  // Best-first, and an unknown tier sorts after every known one rather than
+  // ahead of them, which is what a 0 would have done.
+  eq('the ranking is the declared order',
+    TIER_ORDER.map(t => tierRank(t)), [0, 1, 2, 3]);
+  eq('  and an unknown tier ranks last', tierRank('platinum') > tierRank('unassigned'), true);
+
+  // A target is an attendee, so a company with two targeted people needs one
+  // answer. The higher: a company with a Must Target contact is a Must Target
+  // company whoever else works there.
+  eq('the better of two tiers wins', bestTier('3', '1'), '1');
+  eq('  in either order', bestTier('1', '3'), '1');
+  eq('  and an unknown one never beats a known one', bestTier('platinum', '3'), '3');
+  eq('the labels are the account\u2019s words', TIER_ORDER.map(t => TIER_LABEL[t]),
+    ['Must Target', 'High Priority', 'Worth Engaging', 'Monitor']);
+  eq('  and an unrecognised tier still reads as something', tierLabel('platinum'), 'Monitor');
+}
+
+console.log('\n— the companies, gathered by tier —');
+{
+  const rows = [
+    co(1, 'Alpha', ['Operator'], null, 0, 2),
+    // Charlie is the hub and sorts LAST by name, so the two orderings differ
+    // and the assertion below can tell them apart.
+    co(2, 'Bravo', ['Operator'], null, 0, 1),
+    co(3, 'Charlie', ['Capital'], null, 0, 9),
+    co(4, 'Delta', ['Vendor'], null, 0, 4),
+  ];
+  const tiers = new Map([[1, '3'], [2, '1'], [3, '1'], [4, 'unassigned']]);
+  const groups = groupByTier(rows, id => tiers.get(id));
+
+  // Tier order, not alphabetical and not by size — "High Priority" above
+  // "Must Target" is the one ordering a ranking must never produce.
+  eq('the groups come out in tier order', groups.map(g => g.label),
+    ['Must Target', 'Worth Engaging', 'Monitor']);
+  eq('  and an empty tier gets no heading', groups.some(g => g.label === 'High Priority'), false);
+  // Within a tier, the same order as within a type group: the hub first.
+  eq('the most connected company leads its tier',
+    groups[0].companies.map(c => c.name), ['Charlie', 'Bravo']);
+
+  // A company nobody targeted, handed in anyway, has to land somewhere rather
+  // than vanish from a list that says it is showing companies.
+  const stray = groupByTier([co(9, 'Echo', [], null, 0, 0)], () => undefined);
+  eq('an untiered company falls to Monitor', stray.map(g => g.label), ['Monitor']);
+}
+
+console.log('\n— the Targets button —');
+{
+  const picker = strip('components/relationship-map/EntityPicker.tsx');
+
+  // Red whether or not it is on, and grey only when there is nothing to show.
+  eq('it is red while there are targets',
+    /border-red-300 bg-gray-50 text-red-600/.test(picker), true);
+  eq('  and fills light red when selected',
+    /border-red-400 bg-red-100 text-red-700/.test(picker), true);
+  eq('  and greys out when none are set',
+    /border-gray-200 bg-gray-50 text-gray-300/.test(picker), true);
+  // Pressable even when grey: the list is what says whether it is empty or
+  // broken, and a disabled button says neither.
+  eq('  but is never disabled', /disabled/.test(picker), false);
+
+  // First cell of the grid, ahead of the type chips.
+  eq('it leads the first row',
+    picker.indexOf('setTargetsOnly') < picker.indexOf('visibleTypes.map'), true);
+  // And it takes one of the six collapsed cells rather than pushing a type
+  // chip onto an orphan third row.
+  eq('  taking a slot from the types', /const typeSlots = VISIBLE - 1;/.test(picker), true);
+
+  eq('the empty state names the conference',
+    /No Targets set for \{conferenceName \?\? 'this conference'\}/.test(picker), true);
+  // Composed, not exclusive: Targets narrows to the trip, the type chips
+  // narrow within it.
+  eq('the two filters compose',
+    /if \(!targetsOnly\) return byType;\s*\n\s*return byType\.filter\(c => targetTiers\?\.has\(c\.id\)\);/.test(picker), true);
+  eq('  and the headings become the tiers',
+    /targetsOnly \? groupByTier\(shown, id => targetTiers\?\.get\(id\)\) : \[\]/.test(picker), true);
+}
+
+console.log('\n— the map reads targets from the conference, once —');
+{
+  const modal = strip('components/RelationshipMapModal.tsx');
+  eq('the targets are loaded for this conference',
+    /fetch\(`\/api\/conferences\/\$\{conferenceId\}\/targets`/.test(modal), true);
+  // Read out of THIS effect rather than the file: several effects here take
+  // [conferenceId], so a loose match is satisfied by one of the others and
+  // says nothing about this one.
+  const effect = modal.slice(modal.indexOf('/targets`'), modal.indexOf('/targets`') + 900);
+  const deps = effect.match(/\}, \[([^\]]*)\]\);/)?.[1];
+  // Not re-read when the scope toggles: a target is a decision about a trip,
+  // so there is no such thing as a target at "All Relationships".
+  eq('  keyed on the conference and nothing else', deps, 'conferenceId');
+  eq('  with several targets at one company resolved to the best',
+    /bestTier\(seen, t\.tier\)/.test(effect), true);
+}
+
+console.log('\n— the canvases are grey, and the cards on them are white —');
+{
+  const map = strip('components/relationship-map/MapCanvas.tsx');
+  const grid = strip('components/relationship-map/CompetitiveGrid.tsx');
+  const card = strip('components/VendorRelationshipCard.tsx');
+
+  eq('the hub and spoke canvas is grey',
+    /overflow-hidden rounded-xl border border-gray-200 bg-gray-100/.test(map), true);
+  eq('the competition grid is grey',
+    /relative rounded-xl border border-gray-200 bg-gray-100/.test(grid), true);
+  // The headings and the row labels are white against it, so the grid reads as
+  // a table on a surface rather than one flat field.
+  eq('  with white column headings over it',
+    /sticky top-0 z-10 bg-white\/95/.test(grid), true);
+  eq('  and a white column of row labels',
+    /sticky left-0 bg-white z-\[5\]/.test(grid), true);
+
+  // One weight for every rule. A heading underlined more heavily than the
+  // column beside it reads as two tables rather than one grid, so the bands,
+  // the columns and the line under the headings are all the same.
+  // Dark enough to read against BOTH surfaces it divides — the grey canvas and
+  // the white heading strip. The hairline it replaced was invisible on the
+  // canvas, which is why the sections ran together.
+  eq('the rules are one declared weight, and a dark one',
+    /const GRID_LINE = 'border-gray-[4-9]00';/.test(grid), true);
+  const rules = (grid.match(/border-[btlr] \$\{GRID_LINE\}/g) ?? []).length;
+  eq('  used on every rule in the grid', rules, 5);
+  eq('  and nothing draws its own', /border-[btlr] border-gray-\d00/.test(grid), false);
+  // The card had no background of its own and took whatever was underneath,
+  // which was white until the canvas stopped being white.
+  eq('a card carries its own white',
+    /isStale \? 'border-gray-200 border-dashed bg-gray-50\/70' : 'border-gray-200 bg-white'/.test(card), true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

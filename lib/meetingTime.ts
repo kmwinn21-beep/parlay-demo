@@ -40,3 +40,17 @@ export const MEETING_TIME_OPTIONS: { value: string; label: string }[] = [
     return { value, label: formatMeetingTime(value) };
   }),
 ];
+
+/**
+ * "Sun, 7/05" - the mobile card's date.
+ *
+ * Shorter than the table's "Jul 5, 2026", and led by the weekday: the card is
+ * read under a date heading that already gives the year, and at a conference
+ * the day of the week is the part somebody is actually navigating by.
+ */
+export function formatCardDate(d: string): string {
+  if (!d) return '';
+  const dt = new Date(d + 'T00:00:00');
+  const weekday = dt.toLocaleDateString('en-US', { weekday: 'short' });
+  return `${weekday}, ${dt.getMonth() + 1}/${String(dt.getDate()).padStart(2, '0')}`;
+}

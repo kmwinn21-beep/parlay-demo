@@ -191,7 +191,7 @@ export function MapCanvas({ hub, spokes, userOptions, colorMaps, onUpdated }: {
   return (
     <div
       ref={boxRef}
-      className="relative flex-1 min-h-0 overflow-hidden rounded-xl border border-gray-200 bg-white"
+      className="relative flex-1 min-h-0 overflow-hidden rounded-xl border border-gray-200 bg-gray-100"
     >
       <svg className="absolute inset-0 pointer-events-none" width={size.w} height={size.h}>
         {spokes.map(s => {

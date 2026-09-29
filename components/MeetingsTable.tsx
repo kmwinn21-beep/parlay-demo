@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, Fragment } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { QuickViewDrawer, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { getPreset, getHex, type ColorMap } from '@/lib/colors';
-import { MEETING_TIME_OPTIONS, formatMeetingTime } from '@/lib/meetingTime';
+import { MEETING_TIME_OPTIONS, formatMeetingTime, formatCardDate } from '@/lib/meetingTime';
 import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
@@ -27,7 +27,10 @@ import {
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
 import { CustomColumnCell } from './CustomColumnCell';
 import { ScrollRow } from '@/components/ScrollRow';
+import { calcTooltipPos, type TooltipPos } from '@/lib/tooltipPosition';
+import { PeopleTooltipCard, type TooltipPerson } from '@/components/PeopleTooltipCard';
 import { useAvgCostPerUnit } from '@/lib/useAvgCostPerUnit';
+import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import type { AdditionalAttendeeRecord } from '@/lib/additionalAttendees';
 import { announceNoteSaved } from '@/lib/suggestions/announce';
 
@@ -98,7 +101,12 @@ function RepPills({
 }: {
   scheduledBy: string | null;
   userOptions: UserOption[];
-  size?: 'sm' | 'xs';
+  /**
+   * 'md' matches the outcome pill it sits opposite on the mobile card — same
+   * height, same text, same weight, so the two ends of that line read as a
+   * pair rather than as a label and a control.
+   */
+  size?: 'md' | 'sm' | 'xs';
   /** Leads each pill with the user glyph, as the mobile card does. */
   withIcon?: boolean;
 }) {
@@ -107,17 +115,21 @@ function RepPills({
   if (users.length === 0) return <span className="text-gray-300">—</span>;
 
   const baseClass =
-    size === 'xs'
-      ? 'inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap'
-      : 'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap';
+    size === 'md'
+      ? 'inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap'
+      : size === 'xs'
+        ? 'inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap'
+        : 'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap';
 
   return (
     <span className="inline-flex flex-wrap gap-1">
       {users.map((user, i) => (
         <span key={i} className={`${baseClass} gap-1 ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
+          {/* Full strength at 'md', where it sits beside semibold text and a
+              faded glyph reads as a different weight from the initials. */}
           {withIcon && (
-            <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            <svg className={`w-3 h-3 flex-shrink-0 ${size === 'md' ? '' : 'opacity-70'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={size === 'md' ? 2.5 : 2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
           )}
           {getRepInitials(user!.value)}
@@ -166,62 +178,97 @@ function nameInitials(name: string): string {
   return name.trim().split(/\s+/).filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase();
 }
 
+/** How close the outcome menu may come to the edge of the screen. */
+const MENU_MARGIN = 8;
+
+/** How wide the Title column is, leaving room for Location beside it. */
+const TITLE_WIDTH = 150;
+
+/** The label above every value on the mobile card. Declared once so they match. */
+const EYEBROW = 'text-[9px] uppercase tracking-wide text-gray-400 font-medium mb-1';
+
 /**
- * Location, additional attendees and company value for the mobile card — one
- * scrolling line, since three pills rarely fit a phone.
+ * The text size every pill on the mobile card is set in.
+ *
+ * Declared rather than written out at each one: Type is a plain rounded tag
+ * and Location is a bordered pill, so they share no class list — but they sit
+ * on the same row under matching labels, and a row of values at two sizes
+ * reads as two kinds of thing.
  */
-function MeetingDetailPills({ meeting, avgCostPerUnit, showConference = false }: {
-  meeting: Meeting;
-  avgCostPerUnit: number;
-  /** For lists that span conferences, or sit outside a conference page. */
-  showConference?: boolean;
-}) {
-  // Only the typed-in names. Guests picked off the conference roster get their
-  // own name-and-title row on the card, so a pill for them repeated what was
-  // already sitting a line above it.
-  const extras = (meeting.additional_attendees || '').split(',').map(n => n.trim()).filter(Boolean);
-  const value = meeting.company_wse != null && avgCostPerUnit > 0
-    ? abbreviateValue(Math.round(meeting.company_wse * avgCostPerUnit))
-    : null;
-  const conference = showConference ? meeting.conference_name : null;
-  if (!conference && !meeting.location && extras.length === 0 && !value) return null;
+const PILL_TEXT = 'text-[10px]';
 
-  const pill = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap flex-shrink-0 border';
+/** The pill shape the mobile card's values share. */
+const DETAIL_PILL = `inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${PILL_TEXT} font-medium whitespace-nowrap border`;
 
+/**
+ * The same pill, for the row that answers when and where.
+ *
+ * Set larger than the row below it on purpose: those are what a rep checks
+ * first, and the row below is what they read once one of them is worth a
+ * second look.
+ */
+const FACT_PILL = 'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap border';
+
+/**
+ * The second row's pills: Type, the unit count, Value and the rest.
+ *
+ * One declared HEIGHT, not just one padding. They carry different things — a
+ * few words, a number, a count with a glyph — so their text and padding differ
+ * and nothing else would line them up. A row of pills at four heights reads as
+ * four kinds of thing rather than one band of facts, and the support stack
+ * beside them is square at the same height so it stays a circle.
+ */
+const ROW_PILL_H = 'h-6';
+const ROW_PILL = `inline-flex items-center ${ROW_PILL_H} px-2 rounded-xl border ${PILL_TEXT} font-semibold whitespace-nowrap`;
+
+/**
+ * A label with its value under it, on the card's two rows of facts.
+ *
+ * A COLUMN rather than a plain block, which is what keeps the pills' top
+ * edges level. A pill is inline-flex, so its line box reserves room under the
+ * baseline — and a pill whose first child is an icon has no text baseline to
+ * use, so the browser synthesises one from the icon's edge instead. The unit
+ * count sat 1.8px above Type and Value for exactly that reason. As flex items
+ * the pills are blockified and no baseline is involved at all.
+ */
+const CARD_FIELD = 'flex-shrink-0 flex flex-col items-start';
+
+/** "Rep:" and "Status:", beside the pill rather than stacked above it. */
+const INLINE_LABEL = 'text-[10px] font-medium text-gray-400 flex-shrink-0';
+
+/**
+ * Everyone a meeting is with, primary attendee first.
+ *
+ * The guests' titles are clipped in the same column as the primary one, so
+ * the tooltip answers for the whole cell rather than for its first line.
+ */
+function meetingPeople(m: Meeting): TooltipPerson[] {
+  return [
+    { name: `${m.first_name} ${m.last_name}`.trim(), title: m.title },
+    ...(m.additional_attendee_records ?? []).map(a => ({
+      name: `${a.first_name} ${a.last_name}`.trim(),
+      title: a.title,
+    })),
+  ].filter(p => p.name);
+}
+
+function LocationIcon() {
   return (
-    <ScrollRow className="mt-1.5" gapClass="gap-1.5" step={120}>
-      {conference && (
-        <span className={`${pill} bg-brand-secondary/10 text-brand-secondary border-brand-secondary/30`} title={conference}>
-          <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          {conference}
-        </span>
-      )}
-      {meeting.location && (
-        <span className={`${pill} bg-gray-50 text-gray-600 border-gray-200`} title={meeting.location}>
-          <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          {meeting.location}
-        </span>
-      )}
-      {extras.length > 0 && (
-        <span className={`${pill} bg-blue-50 text-blue-700 border-blue-200`} title={extras.join(', ')}>
-          <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-          {extras.map(nameInitials).join(' | ')}
-        </span>
-      )}
-      {value && (
-        <span className={`${pill} bg-green-100 text-green-700 border-green-300 font-semibold`}>
-          {value}
-        </span>
-      )}
-    </ScrollRow>
+    <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
   );
+}
+
+/**
+ * Only the typed-in guest names.
+ *
+ * Guests picked off the conference roster get their own name-and-title row on
+ * the card, so a pill for them repeats what is already a line above it.
+ */
+function mobileGuests(m: Meeting): string[] {
+  return (m.additional_attendees || '').split(',').map(n => n.trim()).filter(Boolean);
 }
 
 /**
@@ -238,7 +285,7 @@ const BOOTH_HOURS_COLOR = '#7c3aed';
 const ACTIONS_MENU_WIDTH = 160;
 
 /** Row actions — the notetaker and edit entries the icons used to carry. */
-function MeetingActionsMenu({ hasNotes, hasConferenceNotes, onNotes, onQuickNote, onViewNotes, onEdit }: {
+function MeetingActionsMenu({ hasNotes, hasConferenceNotes, onNotes, onQuickNote, onViewNotes, onEdit, onSelect }: {
   hasNotes: boolean;
   /** Notes already logged against this attendee for this conference — the
    *  button flags them so the menu is worth opening. */
@@ -248,6 +295,13 @@ function MeetingActionsMenu({ hasNotes, hasConferenceNotes, onNotes, onQuickNote
   /** Passed the button's viewport rect so the notes card can hang off it. */
   onViewNotes?: (anchor: DOMRect) => void;
   onEdit: () => void;
+  /**
+   * Starts a selection, on a card whose checkbox is not showing yet.
+   *
+   * Absent wherever the checkboxes are always visible, so the menu does not
+   * offer to reveal something already on screen.
+   */
+  onSelect?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -265,13 +319,13 @@ function MeetingActionsMenu({ hasNotes, hasConferenceNotes, onNotes, onQuickNote
     if (!el) return;
     const r = el.getBoundingClientRect();
     // Roughly two 33px items plus borders; enough to decide on flipping.
-    const height = 41 + (onNotes ? 33 : 0) + (onQuickNote ? 33 : 0) + (onViewNotes ? 33 : 0);
+    const height = 41 + (onNotes ? 33 : 0) + (onQuickNote ? 33 : 0) + (onViewNotes ? 33 : 0) + (onSelect ? 33 : 0);
     const flip = window.innerHeight - r.bottom - 8 < height && r.top - 8 > height;
     setPos({
       top: flip ? r.top - 4 - height : r.bottom + 4,
       left: Math.max(8, Math.min(r.right - ACTIONS_MENU_WIDTH, window.innerWidth - ACTIONS_MENU_WIDTH - 8)),
     });
-  }, [onNotes, onQuickNote, onViewNotes]);
+  }, [onNotes, onQuickNote, onViewNotes, onSelect]);
 
   useEffect(() => {
     if (!open) { setPos(null); return; }
@@ -326,6 +380,14 @@ function MeetingActionsMenu({ hasNotes, hasConferenceNotes, onNotes, onQuickNote
           style={{ position: 'fixed', top: pos.top, left: pos.left, width: ACTIONS_MENU_WIDTH }}
           className="z-[10000] bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
         >
+          {onSelect && (
+            <button type="button" role="menuitem" onClick={() => { setOpen(false); onSelect(); }} className={itemCls}>
+              <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m-9 9h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              Select
+            </button>
+          )}
           {onViewNotes && (
             <button
               type="button"
@@ -435,16 +497,47 @@ function OutcomeButton({
   options,
   colorMap,
   onChange,
+  compact = false,
 }: {
   value: string | null;
   options: string[];
   colorMap: ColorMap;
   onChange: (val: string) => void;
+  /**
+   * Sits it on the mobile card's Where/When row, whose pills are 8px in.
+   *
+   * A prop rather than one padding for both: the table's pill is in a column
+   * of its own where a little more room around the word reads better, and
+   * nobody asked for that to change.
+   */
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; above: boolean } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  /*
+   * Pull the menu back inside the viewport.
+   *
+   * It opens left-aligned under the pill, which on a phone puts half of it off
+   * the right edge — the Status pill sits at the end of its row, and the menu
+   * is wider than the pill. Clamped AFTER it renders rather than against a
+   * guessed width: the widest option decides how wide it is, and that is the
+   * account's own wording.
+   *
+   * No loop: once clamped the measurement agrees with the state and the
+   * effect stops setting it.
+   */
+  useLayoutEffect(() => {
+    if (!open || !dropdownPos) return;
+    const el = menuRef.current;
+    if (!el) return;
+    const width = el.getBoundingClientRect().width;
+    const clamped = Math.max(MENU_MARGIN, Math.min(dropdownPos.left, window.innerWidth - width - MENU_MARGIN));
+    if (clamped !== dropdownPos.left) setDropdownPos(p => (p ? { ...p, left: clamped } : p));
+  }, [open, dropdownPos]);
 
   useEffect(() => {
     if (!open) return;
@@ -466,9 +559,10 @@ function OutcomeButton({
   };
 
   const preset = value ? getPreset(colorMap[value]) : null;
+  const pad = compact ? 'px-2 py-1' : 'px-2.5 py-1';
   const btnClass = preset
-    ? `${preset.pillClass} px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer whitespace-nowrap`
-    : 'bg-gray-100 text-gray-500 border border-gray-300 px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer whitespace-nowrap';
+    ? `${preset.pillClass} ${pad} rounded-full text-xs font-semibold cursor-pointer whitespace-nowrap`
+    : `bg-gray-100 text-gray-500 border border-gray-300 ${pad} rounded-full text-xs font-semibold cursor-pointer whitespace-nowrap`;
 
   return (
     <div ref={ref} className="relative inline-block">
@@ -499,6 +593,7 @@ function OutcomeButton({
       </button>
       {open && dropdownPos && (
         <div
+          ref={menuRef}
           style={{
             position: 'fixed',
             top: dropdownPos.top,
@@ -506,7 +601,9 @@ function OutcomeButton({
             zIndex: 9999,
             transform: dropdownPos.above ? 'translateY(-100%)' : 'translateY(0)',
           }}
-          className="bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[160px]"
+          /* Never wider than the screen it has to fit on, so the clamp above
+             always has somewhere to put it. */
+          className="bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[160px] max-w-[calc(100vw-1rem)]"
         >
           <button
             type="button"
@@ -1099,6 +1196,14 @@ export function MeetingsTable({
   // offers them, and any selection keeps them out.
   const [checksHovered, setChecksHovered] = useState(false);
   const checksRevealed = checksHovered || selectedIds.size > 0;
+  /**
+   * Whether a selection is under way.
+   *
+   * The mobile cards hide their checkboxes until it is, and the kebab offers
+   * Select only while it is not — so the menu never offers to reveal a box
+   * that is already on screen.
+   */
+  const anySelected = selectedIds.size > 0;
   const [bulkRepIds, setBulkRepIds] = useState<number[]>([]);
   const tableColorMaps = useConfigColors();
   const kanbanScrollRef = useRef<HTMLDivElement>(null);
@@ -1138,6 +1243,7 @@ export function MeetingsTable({
   const hasSelection = !!(onBulkDelete || onBulkUpdate);
   const { user } = useUser();
   const avgCostPerUnit = useAvgCostPerUnit();
+  const unitTypeLabel = useUnitTypeLabel();
 
   // Deleting a meeting belongs to the rep who booked it. Administrators keep
   // the ability to clean up, and meetings with nobody on scheduled_by have no
@@ -1341,6 +1447,29 @@ export function MeetingsTable({
     </th>
   );
 
+  /**
+   * The two values the mobile card computes from more than the meeting row.
+   *
+   * Closures rather than module helpers: both need something only this
+   * component has — the account's cost per unit, and whether this list spans
+   * conferences at all.
+   */
+  /**
+   * The title cell being hovered, and where its tooltip goes.
+   *
+   * One at a time for the whole table rather than a hook per row: a row is a
+   * branch of a switch here, not a component, so there is nowhere to put
+   * per-row state.
+   */
+  const [titleTip, setTitleTip] = useState<{ id: number; pos: TooltipPos } | null>(null);
+  const titleCellRefs = useRef<Record<number, HTMLSpanElement | null>>({});
+
+  const mobileValue = (m: Meeting) =>
+    m.company_wse != null && avgCostPerUnit > 0
+      ? abbreviateValue(Math.round(m.company_wse * avgCostPerUnit))
+      : null;
+  const mobileConference = (m: Meeting) => (showConferencePill ? m.conference_name : null);
+
   const renderMobileCard = (m: Meeting) => (
       <div key={m.id} className="p-4 bg-white">
         {editingId === m.id && onEdit ? (
@@ -1360,7 +1489,34 @@ export function MeetingsTable({
             {/* A long company name scrolls sideways under the kebab rather
                 than being cut off by it — the kebab sits on the card's own
                 background, so the name slides out of sight behind it. */}
-            <div className="relative flex items-start mb-2 min-h-[1.25rem]">
+            {/* Ruled off from the people below it, so the card reads as a
+                company and then who from it was in the room. */}
+            <div className="relative flex items-start gap-2 mb-2 pb-2 border-b border-gray-100 min-h-[1.25rem]">
+              {/* Selecting a card is a thing you do TO the card, so it leads
+                  the line the card is titled with rather than riding the row
+                  of facts at the bottom. */}
+              {/*
+               * Shown once a selection is under way, and not before.
+               *
+               * A phone has no hover, so a checkbox per card is either always
+               * there — a column of empty boxes down a list somebody is mostly
+               * reading — or it is summoned. Select in the menu starts one, and
+               * every card's box appears with it so the second and third are
+               * one tap each.
+               *
+               * Derived from the selection rather than kept as its own flag:
+               * the last box being unticked IS the end of the selection, so
+               * there is no second piece of state to leave switched on.
+               */}
+              {hasSelection && anySelected && (
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(m.id)}
+                  onChange={() => toggleSelect(m.id)}
+                  onClick={e => e.stopPropagation()}
+                  className="flex-shrink-0 mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
+                />
+              )}
               <div className="min-w-0 flex-1 overflow-x-auto scrollbar-hide pr-9">
                 {!hideCompany && (m.company_name && m.company_id ? (
                   <button
@@ -1374,6 +1530,8 @@ export function MeetingsTable({
                   <p className="text-sm font-semibold text-gray-500 whitespace-nowrap">{m.company_name}</p>
                 ) : null)}
               </div>
+              {/* Opaque, and the name scrolls underneath: a long company name
+                  slides out of sight behind this rather than being cut off. */}
               {(onEdit || onNotesClick) && (
                 <div className="absolute right-0 top-0 pl-1.5 bg-white">
                   <MeetingActionsMenu
@@ -1383,20 +1541,16 @@ export function MeetingsTable({
                     onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
                     onViewNotes={anchor => setNotesView({ meeting: m, anchor })}
                     onEdit={() => setEditingId(m.id)}
+                    onSelect={hasSelection && !anySelected ? () => toggleSelect(m.id) : undefined}
                   />
                 </div>
               )}
             </div>
+            {/* Faces down the right edge, under the kebab, rather than
+                leading each name. The primary attendee gets one too — only
+                their guests had one, which read as though the guest were the
+                subject. */}
             <div className="flex items-start justify-between gap-3">
-              {/* The primary attendee gets a face too — only their guests had
-                  one, which read as though the guest were the subject. */}
-              <AttendeeInitialsAvatar
-                name={`${m.first_name} ${m.last_name}`.trim()}
-                photoUrl={m.photo_url}
-                title={m.title}
-                companyName={m.company_name}
-                className="w-6 h-6 text-[9px] mt-0.5 flex-shrink-0"
-              />
               <div className="flex-1 min-w-0">
                 {/* Names open the quick-view drawer rather than the full profile */}
                 <span className="flex items-center gap-1.5 min-w-0">
@@ -1411,12 +1565,23 @@ export function MeetingsTable({
                 </span>
                 {m.title && <p className="text-xs font-semibold text-gray-500 mt-0.5">{m.title}</p>}
               </div>
+              <AttendeeInitialsAvatar
+                name={`${m.first_name} ${m.last_name}`.trim()}
+                photoUrl={m.photo_url}
+                title={m.title}
+                companyName={m.company_name}
+                className="w-6 h-6 text-[9px] mt-0.5 flex-shrink-0"
+              />
             </div>
             {/* Guests and the company sit outside the name column, so their
                 avatars start where the primary attendee's does and the company
                 name lines up with both rather than being pushed in by it. */}
             {(m.additional_attendee_records ?? []).map(extra => (
               <div key={extra.id} className="flex items-center gap-3 mt-1.5 min-w-0">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-normal text-gray-600 truncate">{extra.first_name} {extra.last_name}</p>
+                  {extra.title && <p className="text-xs font-normal text-gray-400 truncate">{extra.title}</p>}
+                </div>
                 <AttendeeInitialsAvatar
                   name={`${extra.first_name} ${extra.last_name}`}
                   photoUrl={extra.photo_url}
@@ -1424,65 +1589,146 @@ export function MeetingsTable({
                   companyName={extra.company_name}
                   className="w-6 h-6 text-[9px] flex-shrink-0"
                 />
-                <div className="min-w-0">
-                  <p className="text-xs font-normal text-gray-600 truncate">{extra.first_name} {extra.last_name}</p>
-                  {extra.title && <p className="text-xs font-normal text-gray-400 truncate">{extra.title}</p>}
-                </div>
               </div>
             ))}
 
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {m.meeting_type && (
-                <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{m.meeting_type}</span>
-              )}
-              <span className="text-xs text-gray-600">
-                {formatMeetingDate(m.meeting_date)} at {formatMeetingTime(m.meeting_time)}
-              </span>
-            </div>
-            {/* Location, additional attendees and company value — one scrolling line */}
-            <MeetingDetailPills meeting={m} avgCostPerUnit={avgCostPerUnit} showConference={showConferencePill} />
-            <div className="mt-2 flex items-center justify-between gap-2">
-              <OutcomeButton
-                value={m.outcome}
-                options={actionOptions}
-                colorMap={colorMap}
-                onChange={(val) => changeOutcome(m, val)}
-              />
-              <RepPills scheduledBy={splitInternalIds(m).repIds} userOptions={userOptions} size="xs" withIcon />
-            </div>
-            {/* Support — the same overlapping stack the table's Support column
-                uses, rather than a pill each. Four names wrapped onto two rows
-                and cost the card more height than they were worth.
-
-                The select checkbox rides this row rather than the header, which
-                lets the name, title and company start at the card's left edge
-                like every other line on it. */}
-            {(hasSelection || splitInternalIds(m).supportIds) && (
-              <div className="mt-2 flex items-end justify-between gap-2 min-w-0">
-                <div className="min-w-0">
-                  {splitInternalIds(m).supportIds && (
-                    <>
-                      <p className="text-[9px] uppercase tracking-wide text-gray-400 font-medium mb-1">Support</p>
-                      <OverlappingRepPills
-                        repIds={splitInternalIds(m).supportIds}
-                        userOptions={userOptions}
-                        size="xs"
-                        emptyLabel={null}
-                      />
-                    </>
-                  )}
-                </div>
-                {hasSelection && (
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(m.id)}
-                    onChange={() => toggleSelect(m.id)}
-                    onClick={e => e.stopPropagation()}
-                    className="flex-shrink-0 h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
-                  />
+            {/*
+             * The facts, in two labelled rows.
+             *
+             * These were scattered down the card — the time beside the type,
+             * the location in a scrolling strip of pills, the status next to
+             * the rep, the support badges below that — so answering "when,
+             * where, and did it happen" meant reading the whole card. Each
+             * value now sits under a word saying what it is.
+             */}
+            <div className="mt-3 flex items-start gap-3">
+              <div className={CARD_FIELD}>
+                <p className={EYEBROW}>When</p>
+                <span className={`${FACT_PILL} bg-gray-50 text-gray-600 border-gray-200`}>
+                  {formatCardDate(m.meeting_date)} at {formatMeetingTime(m.meeting_time)}
+                </span>
+              </div>
+              <div className={`${CARD_FIELD} min-w-0 flex-1`}>
+                <p className={EYEBROW}>Where</p>
+                {m.location ? (
+                  <span className={`${FACT_PILL} bg-gray-50 text-gray-600 border-gray-200 max-w-full`} title={m.location}>
+                    <LocationIcon />
+                    <span className="truncate">{m.location}</span>
+                  </span>
+                ) : (
+                  /* An empty slot that says what is missing and takes you where
+                     to fix it, rather than a gap that reads as "no location
+                     needed". Dashed, because it is a placeholder and not a
+                     value, and wordmark only — a pin drawn over "+ Location"
+                     labels a location that is not there. */
+                  <button
+                    type="button"
+                    onClick={() => setEditingId(m.id)}
+                    title="Set a location"
+                    className={`${FACT_PILL} border-dashed border-gray-300 text-gray-400 hover:text-gray-600 hover:border-gray-400 transition-colors`}
+                  >
+                    + Location
+                  </button>
                 )}
               </div>
+            </div>
+
+            {/*
+             * What the meeting was, who else was on it, and what the account is
+             * worth — on one line that scrolls.
+             *
+             * Type leads, under When: the two read as one sentence about the
+             * meeting, and a reader going down the left edge gets both without
+             * crossing the card. Every pill on the line is the same height, so
+             * the row reads as one band rather than as four things of different
+             * sizes; the support stack is square so it stays a circle.
+             */}
+            {(m.meeting_type || splitInternalIds(m).supportIds || m.company_wse != null
+              || mobileValue(m) || mobileConference(m) || mobileGuests(m).length > 0) && (
+              <ScrollRow className="mt-3" gapClass="gap-3" step={120}>
+                {m.meeting_type && (
+                  <div className={CARD_FIELD}>
+                    <p className={EYEBROW}>Type</p>
+                    <span className={`${ROW_PILL} text-gray-500 bg-gray-100 border-gray-200`}>{m.meeting_type}</span>
+                  </div>
+                )}
+                {splitInternalIds(m).supportIds && (
+                  <div className={CARD_FIELD}>
+                    <p className={EYEBROW}>Support</p>
+                    <OverlappingRepPills
+                      repIds={splitInternalIds(m).supportIds}
+                      userOptions={userOptions}
+                      size="sm"
+                      emptyLabel={null}
+                    />
+                  </div>
+                )}
+                {/* Named for whatever the account calls a unit — beds, keys,
+                    doors — rather than for the column it is stored in. */}
+                {m.company_wse != null && (
+                  <div className={CARD_FIELD}>
+                    <p className={EYEBROW}>{unitTypeLabel}</p>
+                    <span className={`${ROW_PILL} bg-yellow-50 text-yellow-700 border-yellow-200 gap-1`}>
+                      <svg className="w-3 h-3 text-yellow-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+                      {Number(m.company_wse).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+                {mobileValue(m) && (
+                  <div className={CARD_FIELD}>
+                    <p className={EYEBROW}>Value</p>
+                    <span className={`${ROW_PILL} bg-green-100 text-green-700 border-green-300`}>
+                      {mobileValue(m)}
+                    </span>
+                  </div>
+                )}
+                {/* Neither is in the rows above, and both were in the strip of
+                    pills this replaced — dropped rather than relabelled, they
+                    would just be gone. */}
+                {mobileConference(m) && (
+                  <div className={CARD_FIELD}>
+                    <p className={EYEBROW}>Conference</p>
+                    <span className={`${ROW_PILL} bg-brand-secondary/10 text-brand-secondary border-brand-secondary/30`} title={mobileConference(m)!}>
+                      {mobileConference(m)}
+                    </span>
+                  </div>
+                )}
+                {mobileGuests(m).length > 0 && (
+                  <div className={CARD_FIELD}>
+                    <p className={EYEBROW}>Guests</p>
+                    <span className={`${ROW_PILL} bg-blue-50 text-blue-700 border-blue-200`} title={mobileGuests(m).join(', ')}>
+                      {mobileGuests(m).map(nameInitials).join(' | ')}
+                    </span>
+                  </div>
+                )}
+              </ScrollRow>
             )}
+
+            {/*
+             * Who owns it and how it went, under a rule.
+             *
+             * These two are the card's outcome rather than its description, so
+             * they are separated from the facts above rather than listed among
+             * them. Labelled inline instead of with an eyebrow: there are two
+             * of them on one line, at opposite ends, and a label stacked above
+             * each would read as the start of another row of facts.
+             */}
+            <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-1.5 min-w-0">
+                <span className={INLINE_LABEL}>Rep:</span>
+                <RepPills scheduledBy={splitInternalIds(m).repIds} userOptions={userOptions} size="md" withIcon />
+              </span>
+              <span className="inline-flex items-center gap-1.5 flex-shrink-0">
+                <span className={INLINE_LABEL}>Status:</span>
+                <OutcomeButton
+                  value={m.outcome}
+                  options={actionOptions}
+                  colorMap={colorMap}
+                  onChange={(val) => changeOutcome(m, val)}
+                  compact
+                />
+              </span>
+            </div>
           </>
         )}
       </div>
@@ -1590,14 +1836,48 @@ export function MeetingsTable({
               </div>
             ))}
           </td>;
-          case 'title': return <td key="title" className="px-3 py-2 text-gray-600 leading-snug align-top">
-            {/* With guests below, each title line takes the height of the
-                matching name line's avatar so the two columns stay in step. */}
-            <span className={`block text-xs font-semibold leading-snug break-words whitespace-normal ${
-              (m.additional_attendee_records?.length ?? 0) > 0
-                ? `flex items-center ${showAttendeeAvatar ? 'min-h-[28px]' : 'min-h-[20px]'}`
-                : ''
-            }`}>{m.title || <span className="text-gray-300">—</span>}</span>
+          case 'title': return <td key="title" className="px-3 py-2 text-gray-600 leading-snug align-top relative" style={{ maxWidth: TITLE_WIDTH }}>
+            {/*
+             * One line, cut with an ellipsis, so the column stays narrow
+             * enough for Location to sit beside it. With guests below, each
+             * title line takes the height of the matching name line's avatar
+             * so the two columns stay in step.
+             *
+             * The whole title is read in a tooltip rather than by expanding
+             * this in place. Expanding it meant an opaque copy sliding over
+             * the neighbouring cell, which could only ever be one line wide —
+             * a long title ran out of room and was cut off again, which is the
+             * problem it was there to solve.
+             */}
+            <span
+              ref={el => { titleCellRefs.current[m.id] = el; }}
+              onMouseEnter={() => {
+                const el = titleCellRefs.current[m.id];
+                if (el) setTitleTip({ id: m.id, pos: calcTooltipPos(el) });
+              }}
+              onMouseLeave={() => setTitleTip(null)}
+              className={`block text-xs font-semibold leading-snug truncate ${
+                (m.additional_attendee_records?.length ?? 0) > 0
+                  ? `flex items-center ${showAttendeeAvatar ? 'min-h-[28px]' : 'min-h-[20px]'}`
+                  : ''
+              }`}
+            >{m.title || <span className="text-gray-300">\u2014</span>}</span>
+            {/* Everyone the meeting is with, not just the one whose title is
+                cut off: the guests' titles are clipped in the same column, and
+                a tooltip that answers for one line of a cell and not the rest
+                is a tooltip you have to hover four times. */}
+            {titleTip?.id === m.id && meetingPeople(m).length > 0 && (
+              <div
+                style={{
+                  position: 'fixed', top: titleTip.pos.top, left: titleTip.pos.left,
+                  width: titleTip.pos.width, zIndex: 9999,
+                  transform: titleTip.pos.above ? 'translateY(-100%)' : 'translateY(0)',
+                }}
+                className="pointer-events-none"
+              >
+                <PeopleTooltipCard heading="Attendees" people={meetingPeople(m)} />
+              </div>
+            )}
             {(m.additional_attendee_records ?? []).map(extra => (
               <span key={extra.id} className="flex items-center h-6 mt-1.5 text-xs font-normal text-gray-400 leading-snug truncate" title={extra.title ?? ''}>
                 {extra.title || '—'}
@@ -1615,6 +1895,14 @@ export function MeetingsTable({
           case 'datetime': return <td key="datetime" className="px-3 py-2 text-gray-600 leading-snug">
             <div className="font-medium">{formatMeetingDate(m.meeting_date)}</div>
             <div className="text-gray-400">{formatMeetingTime(m.meeting_time)}</div>
+          </td>;
+          case 'location': return <td key="location" className="px-3 py-2 text-gray-600 leading-snug">
+            {m.location ? (
+              <span className={`${DETAIL_PILL} bg-gray-50 text-gray-600 border-gray-200 max-w-full`} title={m.location}>
+                <LocationIcon />
+                <span className="truncate">{m.location}</span>
+              </span>
+            ) : <span className="text-gray-300">&mdash;</span>}
           </td>;
           case 'conference': return <td key="conference" className="px-3 py-2 text-gray-600 leading-snug">
             <Link href={`/conferences/${m.conference_id}`} className="text-brand-secondary hover:underline">{m.conference_name}</Link>
@@ -1860,6 +2148,7 @@ export function MeetingsTable({
                   case 'datetime': return <SortHeader key="datetime" label="Date/Time" col="datetime" />;
                   case 'conference': return <SortHeader key="conference" label="Conference" col="conference" />;
                   case 'meeting_type': return <SortHeader key="meeting_type" label="Type" col="meeting_type" />;
+                  case 'location': return <th key="location" className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Location</th>;
                   case 'support': return <th key="support" className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wider">Support</th>;
                   case 'outcome': return <SortHeader key="outcome" label="Outcome" col="outcome" />;
                   default: return null;
