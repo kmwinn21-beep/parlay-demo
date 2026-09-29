@@ -85,11 +85,17 @@ console.log('\n— the top is measured, not assumed —');
 
 console.log('\n— one note, three places, one set of tags —');
 {
-  // Drawn once and imported, so the feed and the record cannot drift apart.
-  for (const [name, src] of [['the feed', feed], ['the attendee record', noteCard]]) {
-    eq(`${name} uses the shared pills`,
-      /from '@\/components\/NotePills'/.test(src), true);
+  // Drawn once and imported, so the three cannot drift apart. The feed and
+  // the meeting row's card reach them through the shared LAYOUT, which is
+  // what makes those two identical rather than merely similar.
+  eq('the attendee record uses the shared pills',
+    /from '@\/components\/NotePills'/.test(noteCard), true);
+  for (const [name, src] of [['the feed', feed], ['the meeting row\u2019s card', popover]]) {
+    eq(`${name} uses the shared layout`,
+      /from '@\/components\/NoteSheetLayout'/.test(src), true);
   }
+  eq('  and neither lays out a note of its own',
+    /px-5 pt-5 pb-3 border-b border-gray-100/.test(feed + popover), false);
   eq('the record draws no meeting-note pill of its own',
     /bg-purple-50 text-purple-700/.test(noteCard), false);
   eq('  nor its own conference pill',
@@ -100,11 +106,14 @@ console.log('\n— one note, three places, one set of tags —');
   eq('no pill repeats the attendee', /attendee_name|item\.subject/.test(pills), false);
 
   // Conference trails the row, as it does on the record — least specific last.
-  const sheetPills = feed.slice(feed.indexOf('<ScrollRow className="mt-2"'), feed.indexOf('</ScrollRow>', feed.indexOf('<ScrollRow className="mt-2"')));
+  const layout = strip('components/NoteSheetLayout.tsx');
+  const sheetPills = layout.slice(layout.indexOf('function NoteSheetTags'), layout.indexOf('export function NoteSheetBody'));
   eq('the conference trails the row',
-    sheetPills.indexOf('item.pills.map') < sheetPills.indexOf('NoteConferencePill'), true);
-  eq('  and the row scrolls rather than wrapping',
-    /<ScrollRow className="mt-2"/.test(feed), true);
+    sheetPills.indexOf('tags.map') < sheetPills.indexOf('NoteConferencePill'), true);
+  eq('  and the row scrolls rather than wrapping', /<ScrollRow/.test(sheetPills), true);
+  // Nothing at all rather than an empty line where the tags would be.
+  eq('  and is not drawn when there are none',
+    /if \(tags\.length === 0 && !conference\) return null;/.test(layout), true);
 }
 
 console.log('\n— a stored tag reads as a tag —');
@@ -122,8 +131,25 @@ console.log('\n— a stored tag reads as a tag —');
 
 console.log('\n— the meeting row s card is the same sheet on a phone —');
 {
-  eq('the card opens as the sheet below sm',
-    /if \(isPhone\) \{\s*\n\s*return <NoteSheet/.test(popover), true);
+  eq('the card opens as the sheet below sm', /if \(isPhone\) \{/.test(popover), true);
+  /*
+   * The same LAYOUT, not just the same chrome.
+   *
+   * It was a two-column table of dates and text inside the sheet, which is a
+   * second way of showing the one thing the feed already shows: who wrote it,
+   * when, what it is about, what it is tagged with, and then the note.
+   */
+  eq('  laid out as the feed lays a note out',
+    /<NoteSheetHeader[\s\S]{0,900}<NoteSheetBody>\{n\.content\}<\/NoteSheetBody>/.test(popover), true);
+  eq('  with no table left in it', /<table|<thead|<tbody/.test(popover.slice(popover.indexOf('if (isPhone)'), popover.indexOf('return createPortal'))), false);
+  // One block per note: the control asks for an attendee's notes, and there
+  // can be several.
+  eq('  one block per note', /notes\.map\(\(n, i\) =>/.test(popover), true);
+  // The footer the feed has, and no more — writing a note is the kebab's own
+  // Add Note entry, one item above the View Notes that opened this.
+  const footer = popover.slice(popover.indexOf('<NoteSheetFooter>'), popover.indexOf('</NoteSheetFooter>'));
+  eq('  the feed\u2019s two buttons', /Open \{subject\}[\s\S]{0,200}Close/.test(footer), true);
+  eq('  and not a third that duplicates the menu', /Add New Note/.test(footer), false);
   // With a pointer it stays anchored to the control that opened it, which is
   // what makes it read as belonging to that row.
   eq('  and stays anchored with a pointer',

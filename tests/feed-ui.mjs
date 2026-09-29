@@ -349,8 +349,11 @@ console.log('\n— a note card opens the note, not the record —');
   // the class deleted from the markup.
   const bodyLine = popup.split('\n').find(l => l.includes('{item.body}')) ?? '';
   eq('the body element was found', bodyLine.length > 0, true);
-  eq('  and keeps the line breaks the author typed',
-    bodyLine.includes('whitespace-pre-wrap'), true);
+  // Drawn by the shared layout now, which the meeting row's notes use too, so
+  // the rule is checked where it is enforced rather than dropped.
+  eq('  through the shared body', bodyLine.includes('<NoteSheetBody>'), true);
+  eq('  which keeps the line breaks the author typed',
+    /function NoteSheetBody[\s\S]{0,400}whitespace-pre-wrap/.test(readFileSync('components/NoteSheetLayout.tsx', 'utf8')), true);
   eq('  scrolling a long note rather than growing past the viewport',
     popup.includes('overflow-y-auto'), true);
   // The record is still reachable — the popup replaces the navigation, it does

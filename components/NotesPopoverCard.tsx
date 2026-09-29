@@ -7,7 +7,16 @@ import toast from 'react-hot-toast';
 import { useUser } from '@/components/UserContext';
 import { announceNoteSaved } from '@/lib/suggestions/announce';
 import { NoteSheet } from '@/components/NoteSheet';
+import { NoteSheetBody, NoteSheetFooter, NoteSheetHeader } from '@/components/NoteSheetLayout';
+import { avatarColour, initials } from '@/lib/authorAvatar';
 import { useIsPhone } from '@/lib/useIsPhone';
+
+/** "Aug 14, 2026 at 10:00 AM" — the sheet reads a note for the record. */
+function formatNoteDateTime(dt: string) {
+  const d = new Date(dt.endsWith('Z') || dt.includes('+') ? dt : dt + 'Z');
+  if (isNaN(d.getTime())) return dt;
+  return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+}
 
 function formatNoteDate(dt: string) {
   const d = new Date(dt.endsWith('Z') || dt.includes('+') ? dt : dt + 'Z');
@@ -66,6 +75,19 @@ export interface PopoverNote {
   created_at: string;
   conference_name?: string | null;
   rep?: string | null;
+  /** The record the note is about — named in the sheet's title line. */
+  attendee_name?: string | null;
+  /** Stored tags, drawn as the same pills the attendee's record uses. */
+  note_type?: string | null;
+  status?: string | null;
+  touchpoint_type?: string | null;
+}
+
+/** The tags a note wears, in the order the record shows them. */
+function noteTags(n: PopoverNote): string[] {
+  return [n.note_type, n.touchpoint_type, n.status]
+    .map(t => (t ?? '').trim())
+    .filter(Boolean);
 }
 
 /**
@@ -358,8 +380,76 @@ export function NotesPopoverCard({
     </>
   );
 
+  /*
+   * On a phone this is the sheet a note from the feed opens in — the same
+   * chrome AND the same layout, because it is the same note read from a
+   * different place. The two-column table of dates and text this replaces was
+   * a second way of showing one thing.
+   *
+   * One block per note rather than one sheet per note: the control that opens
+   * this asks for an attendee's notes, and there can be several.
+   */
   if (isPhone) {
-    return <NoteSheet onClose={onClose} labelledBy="notes-card-title">{body}</NoteSheet>;
+    const subject = notes.find(n => n.attendee_name)?.attendee_name ?? 'this record';
+    return (
+      <NoteSheet onClose={onClose} labelledBy="notes-card-title">
+        {notes.length === 0 ? (
+          <>
+            <NoteSheetHeader
+              titleId="notes-card-title"
+              onClose={onClose}
+              head={{
+                authorName: 'Notes', authorInitials: '\u2014', authorColour: '#9CA3AF',
+                when: loading ? 'Loading\u2026' : 'None yet',
+                actionPrefix: 'Notes on', subject, tags: [],
+                conference: conferenceName ?? null,
+              }}
+            />
+            <div className="px-5 py-4 flex-1">
+              <p className="text-sm text-gray-400 italic">
+                {loading
+                  ? 'Loading\u2026'
+                  : conferenceName ? `No notes for ${conferenceName} yet.` : 'No notes yet.'}
+              </p>
+            </div>
+          </>
+        ) : (
+          <div className="overflow-y-auto flex-1 divide-y divide-gray-100">
+            {notes.map((n, i) => (
+              <div key={n.id}>
+                <NoteSheetHeader
+                  titleId={i === 0 ? 'notes-card-title' : undefined}
+                  onClose={i === 0 ? onClose : undefined}
+                  head={{
+                    authorName: n.rep || 'Unknown',
+                    authorInitials: initials(n.rep || ''),
+                    authorColour: avatarColour(n.rep || ''),
+                    when: formatNoteDateTime(n.created_at),
+                    actionPrefix: 'Note on',
+                    subject: n.attendee_name || subject,
+                    tags: noteTags(n),
+                    conference: n.conference_name ?? null,
+                  }}
+                />
+                <div className="px-5 py-4">
+                  <NoteSheetBody>{n.content}</NoteSheetBody>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {/* The two the feed's sheet has, and no more. Writing a note is the
+            kebab's own Add Note entry, one item above the View Notes that
+            opened this — a third button here duplicates it and wraps the row
+            onto two lines at 390px. */}
+        <NoteSheetFooter>
+          <Link href={`/attendees/${attendeeId}`} onClick={onClose} className="btn-secondary text-sm">
+            Open {subject}
+          </Link>
+          <button type="button" onClick={onClose} className="btn-primary text-sm">Close</button>
+        </NoteSheetFooter>
+      </NoteSheet>
+    );
   }
 
   return createPortal(

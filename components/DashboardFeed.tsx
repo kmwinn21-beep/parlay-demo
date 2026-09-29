@@ -15,10 +15,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { startPolling, stopPolling } from '@/lib/pollingManager';
 import { useMobileCollapse } from '@/lib/useMobileCollapse';
-import { ScrollRow } from '@/components/ScrollRow';
 import { NoteSheet } from '@/components/NoteSheet';
-import { MeetingNotePill, NoteConferencePill, NoteTagPill } from '@/components/NotePills';
-import { isMeetingNoteTag } from '@/lib/noteTags';
+import { avatarColour, initials } from '@/lib/authorAvatar';
+import { NoteSheetBody, NoteSheetFooter, NoteSheetHeader } from '@/components/NoteSheetLayout';
 import {
   FEED_SCOPES, matchesFilter, rendersBody,
   type FeedColour, type FeedFilter, type FeedItem, type FeedKind, type FeedScope,
@@ -61,19 +60,6 @@ function conferenceColour(name: string): string {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
   return CONFERENCE_PALETTE[Math.abs(hash) % CONFERENCE_PALETTE.length];
-}
-
-const AVATAR_PALETTE = ['#0B3C62', '#2E7D8F', '#B8562F', '#5B4B8A', '#2F7A4F', '#8A6D1F', '#7A2F4F', '#3E5C76'];
-function avatarColour(seed: string): string {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) | 0;
-  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
 }
 
 /* ─── Time ─── */
@@ -207,67 +193,33 @@ function NotePopup({ item, onClose }: { item: FeedItem; onClose: () => void }) {
       labelledBy="feed-note-title"
       className={item.pinned ? 'border-l-4 border-l-amber-400' : ''}
     >
-        <div className="px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <span
-                className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-white text-[10px] font-semibold"
-                style={{ backgroundColor: item.actor.system ? '#9CA3AF' : avatarColour(item.actor.avatarSeed) }}
-              >
-                {item.actor.system ? '◆' : initials(item.actor.avatarSeed)}
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-gray-800 truncate">{item.actor.name}</p>
-                {/* The full timestamp, not "3w" — a note being read in full is
-                    being read for the record, and "3w ago" is not a date. */}
-                <p className="text-[11px] text-gray-400">
-                  {formatDateOnly(item.occurredAt)} at {formatTimeOnly(item.occurredAt.slice(11))}
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 flex-shrink-0"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+        <NoteSheetHeader
+          titleId="feed-note-title"
+          onClose={onClose}
+          head={{
+            authorName: item.actor.name,
+            authorInitials: item.actor.system ? '\u25c6' : initials(item.actor.avatarSeed),
+            authorColour: item.actor.system ? '#9CA3AF' : avatarColour(item.actor.avatarSeed),
+            when: `${formatDateOnly(item.occurredAt)} at ${formatTimeOnly(item.occurredAt.slice(11))}`,
+            actionPrefix: actionPrefix(item),
+            subject: item.subject,
+            tags: item.pills,
+            conference: item.conference?.name ?? null,
+          }}
+        />
 
-          <p id="feed-note-title" className="text-sm text-gray-700 mt-3 leading-snug">
-            {actionPrefix(item)}{' '}
-            <span className="font-semibold text-brand-primary">{item.subject}</span>
-          </p>
-
-          {/* The same tags, in the same shapes, as the note wears on the
-              attendee's own record — one scrolling line, conference last
-              because it is the least specific of them. The attendee is the
-              subject line directly above, so no pill repeats it. */}
-          <ScrollRow className="mt-2" gapClass="gap-2">
-            {item.pills.map(p => (
-              isMeetingNoteTag(p) ? <MeetingNotePill key={p} /> : <NoteTagPill key={p} label={p} />
-            ))}
-            {item.conference && <NoteConferencePill name={item.conference.name} />}
-          </ScrollRow>
-        </div>
-
-        {/* The note itself. `whitespace-pre-wrap` because notes are typed with
-            line breaks and the card's clamp hid that they existed. */}
         <div className="px-5 py-4 overflow-y-auto flex-1">
-          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words">{item.body}</p>
+          <NoteSheetBody>{item.body}</NoteSheetBody>
         </div>
 
-        <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-end gap-2 flex-shrink-0">
+        <NoteSheetFooter>
           {item.href && (
             <Link href={item.href} className="btn-secondary text-sm">
               Open {item.subject}
             </Link>
           )}
           <button type="button" onClick={onClose} className="btn-primary text-sm">Close</button>
-        </div>
+        </NoteSheetFooter>
     </NoteSheet>
   );
 }
