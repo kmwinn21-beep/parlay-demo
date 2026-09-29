@@ -52,12 +52,23 @@ interface CompetitivePayload {
   /**
    * Companies somebody here already knows somebody at.
    *
-   * From the endpoint's own DISTINCT read over internal_relationships, not from
-   * the conference-scoped pre-conference load the Map's internal column uses —
-   * that one is narrow because it computes a health ring, and inheriting it
-   * would leave this signal quietly low at "All Relationships".
+   * From the endpoint's own DISTINCT read over internal_relationships, across
+   * the account rather than the conference — inheriting the conference-scoped
+   * read would leave this signal quietly low at "All Relationships".
    */
   companiesWithInternal: number[];
+  /**
+   * WHOSE those relationships are — one row per stored relationship, with the
+   * contacts it was tagged on.
+   *
+   * Read across the account, like the signal above it. The conference's own
+   * pre-conference payload builds the same rows but resolves their contacts
+   * against THIS show's attendee list, so a relationship tagged on somebody
+   * who did not come arrives with no contacts on it. Taking these from there
+   * is how the IR badge came to open onto "no internal relationships with
+   * anyone at this conference" about a company whose record shows two.
+   */
+  internalRows: RelationshipRow[];
   /**
    * The cards the grid renders, read from each ACCOUNT's side.
    *
@@ -98,8 +109,8 @@ const RAIL_WIDTH = 288;
 const RAIL_FOLDED = 40;
 
 const EMPTY_COMPETITIVE: CompetitivePayload = {
-  relationships: [], competitors: [], companiesWithInternal: [], cards: [],
-  inverses: {}, switches: [], notCompetitive: 0, duplicates: 0,
+  relationships: [], competitors: [], companiesWithInternal: [], internalRows: [],
+  cards: [], inverses: {}, switches: [], notCompetitive: 0, duplicates: 0,
 };
 
 /**
@@ -146,15 +157,6 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
   const [rels, setRels] = useState<VendorRelationship[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingRels, setLoadingRels] = useState(false);
-  /**
-   * The internal relationships for every company at this conference.
-   *
-   * From the pre-conference endpoint rather than a query of my own: that is
-   * where this card already comes from, health ring and all, and the health
-   * behind it is five cross-conference queries that would have had to be
-   * duplicated to build it here.
-   */
-  const [internal, setInternal] = useState<RelationshipRow[]>([]);
   const [internalOpen, setInternalOpen] = useState(true);
   /**
    * The company whose contacts the right column shows in Competition.
@@ -203,17 +205,6 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
       return next;
     });
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`/api/conferences/${conferenceId}/pre-conference`, { cache: 'no-store' })
-      .then(r => (r.ok ? r.json() : null))
-      .then((d: { relationships?: RelationshipRow[] } | null) => {
-        if (!cancelled && d) setInternal(d.relationships ?? []);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [conferenceId]);
 
   /**
    * The map's whole payload — nodes, edges and the competitive read.
@@ -311,15 +302,17 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
   /**
    * The internal relationships to show beside the map.
    *
-   * One card per tagged contact. Every contact here is at this conference
-   * already — the pre-conference route tags them from the conference's own
-   * attendee list — so both scopes show the same cards today. Widening "All
-   * Relationships" to contacts who did not come would mean computing the
-   * health ring outside that route, which is five cross-conference queries.
+   * One card per tagged contact, from the map's own payload rather than from
+   * the conference's pre-conference load. That load resolves a relationship's
+   * contacts against THIS show's attendee list, which is right for the
+   * pre-conference views and wrong here: the IR badge is set from an
+   * account-wide read, so a company can carry it and have nobody at the show,
+   * and the column then opened onto "no internal relationships with anyone at
+   * this conference" about a company whose own record shows two.
    */
   const cardsForCompany = useCallback((companyId: number | null) => {
     if (companyId == null) return [];
-    return internal
+    return competitiveData.internalRows
       .filter(r => r.company_id === companyId)
       .flatMap(r => r.attendees.map(a => ({
         key: `${r.id}:${a.id}`,
@@ -327,7 +320,7 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
         repNames: r.rep_names,
         descriptions: [r.description].filter(Boolean),
       })));
-  }, [internal]);
+  }, [competitiveData.internalRows]);
 
   /**
    * Whose contacts the column is showing.
@@ -727,14 +720,13 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
               {/* Kept mounted while collapsed so reopening does not refetch
                   every timeline the cards load for themselves. */}
               <div className={`flex-1 min-h-0 overflow-y-auto scrollbar-desktop-thin space-y-3 pr-1 ${internalOpen ? '' : 'invisible'}`}>
-                {/* The badge is set from an account-wide read and these cards
-                    come from the conference's own attendee list, so a company
-                    can carry IR and have nobody here. Said out loud: the
-                    relationship is real, it is just not with anyone at this
-                    show. */}
+                {/* Both these cards and the badge that opens them are read
+                    across the account now, so this is the genuinely-empty
+                    case rather than the badge and the column disagreeing about
+                    which people count. */}
                 {internalCards.length === 0 && (
                   <p className="text-xs text-gray-400 px-1 py-2">
-                    No internal relationships with anyone at this conference.
+                    No internal relationships recorded for this company.
                   </p>
                 )}
                 {internalCards.map(c => (

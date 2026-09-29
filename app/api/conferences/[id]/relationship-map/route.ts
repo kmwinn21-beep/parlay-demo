@@ -10,6 +10,7 @@ import { buildGraph, pruneIsolated, type GraphCompany, type GraphEdgeInput } fro
 import {
   resolveCompetitive, type RawRelationshipRow, type ResolutionCompany,
 } from '@/lib/competitiveResolution';
+import { loadInternalRelationships } from '@/lib/internalRelationshipRows';
 
 /**
  * The relationship map for one conference.
@@ -95,8 +96,8 @@ export async function GET(
       return NextResponse.json({
         scope, nodes: [], edges: [],
         competitive: {
-          relationships: [], competitors: [], companiesWithInternal: [], cards: [],
-          inverses: {}, switches: [], notCompetitive: 0, duplicates: 0,
+          relationships: [], competitors: [], companiesWithInternal: [], internalRows: [],
+          cards: [], inverses: {}, switches: [], notCompetitive: 0, duplicates: 0,
         },
       }, { headers: { 'Cache-Control': 'no-store' } });
     }
@@ -217,8 +218,8 @@ export async function GET(
       const ids = Array.from(inSet);
       if (ids.length === 0) {
         return {
-          relationships: [], competitors: [], companiesWithInternal: [], cards: [],
-          inverses: {}, switches: [], notCompetitive: 0, duplicates: 0,
+          relationships: [], competitors: [], companiesWithInternal: [], internalRows: [],
+          cards: [], inverses: {}, switches: [], notCompetitive: 0, duplicates: 0,
         };
       }
 
@@ -292,6 +293,14 @@ export async function GET(
         }).catch(() => ({ rows: [] as Record<string, unknown>[] })),
       ]);
 
+      /* And WHOSE, for the column the badge opens.
+         The signal above says a relationship exists; this says who it is with.
+         Read the same way — across the account, resolving contacts from the
+         attendees table — because reading it from the conference's own list is
+         how the badge came to open onto "no internal relationships with anyone
+         at this conference" for a company whose record shows two. */
+      const internalRows = await loadInternalRelationships(db, ids);
+
       const companyMap = new Map<number, ResolutionCompany>(
         companies.map(c => [c.id, { id: c.id, name: c.name, types: c.company_types }]),
       );
@@ -358,6 +367,7 @@ export async function GET(
         companiesWithInternal: internalRes.rows
           .map(r => Number(r.company_id))
           .filter(id => id && inSet.has(id)),
+        internalRows,
       };
     })();
 
