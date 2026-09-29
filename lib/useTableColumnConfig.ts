@@ -118,6 +118,9 @@ export const TABLE_COLUMN_DEFS: Record<string, ColumnDef[]> = {
     { key: 'rep',          label: 'Rep' },
     { key: 'company',      label: 'Company' },
     { key: 'datetime',     label: 'Date/Time' },
+    // Beside the time, because the two are one question — a meeting is at a
+    // time AND a place, and a rep checking one is checking the other.
+    { key: 'location',     label: 'Location' },
     { key: 'meeting_type', label: 'Type' },
     { key: 'support',      label: 'Support' },
     { key: 'outcome',      label: 'Outcome' },
