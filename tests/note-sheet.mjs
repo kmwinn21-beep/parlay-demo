@@ -39,6 +39,7 @@ const feed = strip('components/DashboardFeed.tsx');
 const popover = strip('components/NotesPopoverCard.tsx');
 const noteCard = strip('components/NoteCard.tsx');
 const pills = strip('components/NotePills.tsx');
+const layout = strip('components/NoteSheetLayout.tsx');
 
 console.log('\n— the sheet fills a fixed span, not the note —');
 {
@@ -106,7 +107,6 @@ console.log('\n— one note, three places, one set of tags —');
   eq('no pill repeats the attendee', /attendee_name|item\.subject/.test(pills), false);
 
   // Conference trails the row, as it does on the record — least specific last.
-  const layout = strip('components/NoteSheetLayout.tsx');
   const sheetPills = layout.slice(layout.indexOf('function NoteSheetTags'), layout.indexOf('export function NoteSheetBody'));
   eq('the conference trails the row',
     sheetPills.indexOf('tags.map') < sheetPills.indexOf('NoteConferencePill'), true);
@@ -144,7 +144,32 @@ console.log('\n— the meeting row s card is the same sheet on a phone —');
   eq('  with no table left in it', /<table|<thead|<tbody/.test(popover.slice(popover.indexOf('if (isPhone)'), popover.indexOf('return createPortal'))), false);
   // One block per note: the control asks for an attendee's notes, and there
   // can be several.
-  eq('  one block per note', /notes\.map\(\(n, i\) =>/.test(popover), true);
+  eq('  one block per note', /notes\.map\(n =>/.test(popover), true);
+
+  /*
+   * Titled once, at the top.
+   *
+   * Every note in here belongs to the same person, so a "Note on Tina Thomas"
+   * line above each of them says the same thing as many times as there are
+   * notes. The sheet says it instead, and the note blocks carry no subject at
+   * all — which is why the field is optional on the shared head.
+   */
+  eq('  the sheet is titled with the record',
+    /<NoteSheetTitle title=\{`\$\{subject\} Notes`\}/.test(popover), true);
+  eq('  and no note inside it names the record',
+    /actionPrefix|subject:/.test(popover.slice(popover.indexOf('notes.map'), popover.indexOf('</NoteSheetFooter>'))), false);
+  eq('  the subject line is optional on the shared head',
+    /actionPrefix\?: string;\s*\n\s*subject\?: string;/.test(layout), true);
+  eq('  and is not drawn without one',
+    /\{head\.subject && \(/.test(layout), true);
+  // One close, in the title bar, rather than one per note.
+  eq('  one way out, in the title bar',
+    (popover.slice(popover.indexOf('if (isPhone)'), popover.indexOf('return createPortal')).match(/aria-label="Close"/g) ?? []).length, 0);
+  eq('    which the title bar provides', /aria-label="Close"/.test(layout), true);
+
+  // The feed still names its subject: there the note arrives on its own, with
+  // no heading above it saying whose it is.
+  eq('the feed still says what its note is on', /actionPrefix: actionPrefix\(item\)/.test(feed), true);
   // The footer the feed has, and no more — writing a note is the kebab's own
   // Add Note entry, one item above the View Notes that opened this.
   const footer = popover.slice(popover.indexOf('<NoteSheetFooter>'), popover.indexOf('</NoteSheetFooter>'));

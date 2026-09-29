@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import { useUser } from '@/components/UserContext';
 import { announceNoteSaved } from '@/lib/suggestions/announce';
 import { NoteSheet } from '@/components/NoteSheet';
-import { NoteSheetBody, NoteSheetFooter, NoteSheetHeader } from '@/components/NoteSheetLayout';
+import { NoteSheetBody, NoteSheetFooter, NoteSheetHeader, NoteSheetTitle } from '@/components/NoteSheetLayout';
 import { avatarColour, initials } from '@/lib/authorAvatar';
 import { useIsPhone } from '@/lib/useIsPhone';
 
@@ -393,40 +393,27 @@ export function NotesPopoverCard({
     const subject = notes.find(n => n.attendee_name)?.attendee_name ?? 'this record';
     return (
       <NoteSheet onClose={onClose} labelledBy="notes-card-title">
+        {/* Titled once. Every note in here is the same person's, so naming
+            them above each one says it as many times as there are notes. */}
+        <NoteSheetTitle title={`${subject} Notes`} titleId="notes-card-title" onClose={onClose} />
         {notes.length === 0 ? (
-          <>
-            <NoteSheetHeader
-              titleId="notes-card-title"
-              onClose={onClose}
-              head={{
-                authorName: 'Notes', authorInitials: '\u2014', authorColour: '#9CA3AF',
-                when: loading ? 'Loading\u2026' : 'None yet',
-                actionPrefix: 'Notes on', subject, tags: [],
-                conference: conferenceName ?? null,
-              }}
-            />
-            <div className="px-5 py-4 flex-1">
-              <p className="text-sm text-gray-400 italic">
-                {loading
-                  ? 'Loading\u2026'
-                  : conferenceName ? `No notes for ${conferenceName} yet.` : 'No notes yet.'}
-              </p>
-            </div>
-          </>
+          <div className="px-5 py-4 flex-1">
+            <p className="text-sm text-gray-400 italic">
+              {loading
+                ? 'Loading\u2026'
+                : conferenceName ? `No notes for ${conferenceName} yet.` : 'No notes yet.'}
+            </p>
+          </div>
         ) : (
           <div className="overflow-y-auto flex-1 divide-y divide-gray-100">
-            {notes.map((n, i) => (
+            {notes.map(n => (
               <div key={n.id}>
                 <NoteSheetHeader
-                  titleId={i === 0 ? 'notes-card-title' : undefined}
-                  onClose={i === 0 ? onClose : undefined}
                   head={{
                     authorName: n.rep || 'Unknown',
                     authorInitials: initials(n.rep || ''),
                     authorColour: avatarColour(n.rep || ''),
                     when: formatNoteDateTime(n.created_at),
-                    actionPrefix: 'Note on',
-                    subject: n.attendee_name || subject,
                     tags: noteTags(n),
                     conference: n.conference_name ?? null,
                   }}

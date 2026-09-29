@@ -23,10 +23,15 @@ export interface NoteSheetHead {
   authorColour: string;
   /** Already formatted: the callers disagree about how to get at a date. */
   when: string;
-  /** "Note on", "Added a note to" — whatever the surface calls the action. */
-  actionPrefix: string;
-  /** The record the note is about. */
-  subject: string;
+  /**
+   * What the note is about, and what to call the relationship.
+   *
+   * Both omitted where the sheet is already titled with the record — a line
+   * saying "Note on Tina Thomas" under a heading reading "Tina Thomas Notes"
+   * says it twice, and says it again for every note in the list.
+   */
+  actionPrefix?: string;
+  subject?: string;
   /** Stored tags — `meeting_note`, a status, a touchpoint. */
   tags: string[];
   conference?: string | null;
@@ -68,16 +73,47 @@ export function NoteSheetHeader({ head, titleId, onClose }: {
         )}
       </div>
 
-      <p id={titleId} className="text-sm text-gray-700 mt-3 leading-snug">
-        {head.actionPrefix}{' '}
-        <span className="font-semibold text-brand-primary">{head.subject}</span>
-      </p>
+      {head.subject && (
+        <p id={titleId} className="text-sm text-gray-700 mt-3 leading-snug">
+          {head.actionPrefix}{' '}
+          <span className="font-semibold text-brand-primary">{head.subject}</span>
+        </p>
+      )}
 
       {/* The same tags, in the same shapes, as the note wears on the attendee's
           own record — one scrolling line, conference last because it is the
-          least specific of them. The attendee is the subject line directly
-          above, so no pill repeats it. */}
+          least specific of them. The attendee is named above — in the subject
+          line, or in the sheet's own title — so no pill repeats it. */}
       <NoteSheetTags tags={head.tags} conference={head.conference} />
+    </div>
+  );
+}
+
+/**
+ * The sheet's own heading, for a sheet holding more than one note.
+ *
+ * Named once at the top rather than on every note: the list is all one
+ * record's notes, and repeating "Note on Tina Thomas" above each of them says
+ * the same thing as many times as there are notes.
+ */
+export function NoteSheetTitle({ title, titleId, onClose }: {
+  title: string;
+  titleId?: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-shrink-0">
+      <h2 id={titleId} className="text-base font-semibold text-brand-primary font-serif truncate">{title}</h2>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close"
+        className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 flex-shrink-0"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
     </div>
   );
 }
