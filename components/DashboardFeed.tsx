@@ -13,9 +13,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { createPortal } from 'react-dom';
 import { startPolling, stopPolling } from '@/lib/pollingManager';
 import { useMobileCollapse } from '@/lib/useMobileCollapse';
+import { ScrollRow } from '@/components/ScrollRow';
+import { NoteSheet } from '@/components/NoteSheet';
+import { MeetingNotePill, NoteConferencePill, NoteTagPill } from '@/components/NotePills';
+import { isMeetingNoteTag } from '@/lib/noteTags';
 import {
   FEED_SCOPES, matchesFilter, rendersBody,
   type FeedColour, type FeedFilter, type FeedItem, type FeedKind, type FeedScope,
@@ -198,28 +201,12 @@ function actionSuffix(item: FeedItem): string | null {
  * dialog rendered inside it would scroll with the feed behind it.
  */
 function NotePopup({ item, onClose }: { item: FeedItem; onClose: () => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  if (typeof document === 'undefined') return null;
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/40"
-      onClick={onClose}
+  return (
+    <NoteSheet
+      onClose={onClose}
+      labelledBy="feed-note-title"
+      className={item.pinned ? 'border-l-4 border-l-amber-400' : ''}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="feed-note-title"
-        onClick={e => e.stopPropagation()}
-        className={`bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-lg max-h-[80vh] flex flex-col ${
-          item.pinned ? 'border-l-4 border-l-amber-400' : ''
-        }`}
-      >
         <div className="px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
@@ -255,20 +242,16 @@ function NotePopup({ item, onClose }: { item: FeedItem; onClose: () => void }) {
             <span className="font-semibold text-brand-primary">{item.subject}</span>
           </p>
 
-          <div className="flex flex-wrap items-center gap-1.5 mt-2">
-            {item.conference && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-[10px] font-medium text-gray-600">
-                <span
-                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: conferenceColour(item.conference.name) }}
-                />
-                {item.conference.name}
-              </span>
-            )}
+          {/* The same tags, in the same shapes, as the note wears on the
+              attendee's own record — one scrolling line, conference last
+              because it is the least specific of them. The attendee is the
+              subject line directly above, so no pill repeats it. */}
+          <ScrollRow className="mt-2" gapClass="gap-2">
             {item.pills.map(p => (
-              <span key={p} className="px-2 py-0.5 rounded-md bg-gray-100 text-[10px] font-medium text-gray-600">{p}</span>
+              isMeetingNoteTag(p) ? <MeetingNotePill key={p} /> : <NoteTagPill key={p} label={p} />
             ))}
-          </div>
+            {item.conference && <NoteConferencePill name={item.conference.name} />}
+          </ScrollRow>
         </div>
 
         {/* The note itself. `whitespace-pre-wrap` because notes are typed with
@@ -285,9 +268,7 @@ function NotePopup({ item, onClose }: { item: FeedItem; onClose: () => void }) {
           )}
           <button type="button" onClick={onClose} className="btn-primary text-sm">Close</button>
         </div>
-      </div>
-    </div>,
-    document.body,
+    </NoteSheet>
   );
 }
 

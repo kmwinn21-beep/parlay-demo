@@ -6,6 +6,8 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { useUser } from '@/components/UserContext';
 import { announceNoteSaved } from '@/lib/suggestions/announce';
+import { NoteSheet } from '@/components/NoteSheet';
+import { useIsPhone } from '@/lib/useIsPhone';
 
 function formatNoteDate(dt: string) {
   const d = new Date(dt.endsWith('Z') || dt.includes('+') ? dt : dt + 'Z');
@@ -99,6 +101,7 @@ export function NotesPopoverCard({
   const [userOptions, setUserOptions] = useState<string[]>([]);
   const [conferences, setConferences] = useState<{ id: number; name: string }[]>([]);
   const { user } = useUser();
+  const isPhone = useIsPhone();
 
   // Held in a ref: callers pass an inline arrow, so depending on its identity
   // would restart the fetch every time reporting a count re-rendered them.
@@ -215,21 +218,18 @@ export function NotesPopoverCard({
   const left = Math.max(PADDING, Math.min(anchor.left, window.innerWidth - width - PADDING));
   const above = anchor.top > 320;
 
-  return createPortal(
-    <div
-      ref={cardRef}
-      style={{
-        position: 'fixed',
-        top: above ? anchor.top : anchor.bottom + PADDING,
-        left,
-        width,
-        transform: above ? 'translateY(calc(-100% - 8px))' : undefined,
-        zIndex: 10000,
-      }}
-    >
-      <div className="bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden">
+  /*
+   * The card's contents, drawn once for both shapes it takes.
+   *
+   * On a phone it is the same sheet a note from the feed opens in, rising from
+   * the bottom edge; there is nowhere sensible to hang a 480px card off a
+   * kebab on a 390px screen. With a pointer it stays anchored to the control
+   * that opened it, which is what makes it read as belonging to that row.
+   */
+  const body = (
+    <>
         <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
-          <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+          <span id="notes-card-title" className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
             Notes {notes.length > 0 && `(${notes.length})`}
           </span>
           <div className="flex items-center gap-3">
@@ -324,7 +324,7 @@ export function NotesPopoverCard({
           </div>
         )}
 
-        <div className="overflow-y-auto max-h-64">
+        <div className="overflow-y-auto flex-1 sm:flex-none sm:max-h-64">
           {loading ? (
             <p className="text-sm text-gray-400 italic text-center py-6">Loading...</p>
           ) : notes.length === 0 && !isAdding ? (
@@ -355,6 +355,27 @@ export function NotesPopoverCard({
             </table>
           )}
         </div>
+    </>
+  );
+
+  if (isPhone) {
+    return <NoteSheet onClose={onClose} labelledBy="notes-card-title">{body}</NoteSheet>;
+  }
+
+  return createPortal(
+    <div
+      ref={cardRef}
+      style={{
+        position: 'fixed',
+        top: above ? anchor.top : anchor.bottom + PADDING,
+        left,
+        width,
+        transform: above ? 'translateY(calc(-100% - 8px))' : undefined,
+        zIndex: 10000,
+      }}
+    >
+      <div className="bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden">
+        {body}
       </div>
     </div>,
     document.body

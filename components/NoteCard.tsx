@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { ScrollRow } from '@/components/ScrollRow';
+import { MeetingNotePill, NoteCompanyPill, NoteConferencePill } from '@/components/NotePills';
 import toast from 'react-hot-toast';
 import { formatStatusLabel, getBadgeClass, getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -307,11 +308,7 @@ export function NoteCard({
               {note.attendee_name}
             </span>
           )}
-          {note.company_name && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 text-xs font-medium border border-teal-200 whitespace-nowrap flex-shrink-0">
-              {note.company_name}
-            </span>
-          )}
+          {note.company_name && <NoteCompanyPill name={note.company_name} />}
           {taggedNames.map(name => (
             <span key={name} className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 text-xs font-medium border border-violet-200 whitespace-nowrap flex-shrink-0" title={`@${name}`}>
               @{getRepInitials(name)}
@@ -333,19 +330,8 @@ export function NoteCard({
               {note.touchpoint_type}
             </span>
           )}
-          {note.note_type === 'meeting_note' && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-xs font-medium border border-purple-200 whitespace-nowrap flex-shrink-0">
-              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-              </svg>
-              Meeting Note
-            </span>
-          )}
-          {note.conference_name && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-brand-secondary text-xs font-medium border border-blue-100 whitespace-nowrap flex-shrink-0">
-              {note.conference_name}
-            </span>
-          )}
+          {note.note_type === 'meeting_note' && <MeetingNotePill />}
+          {note.conference_name && <NoteConferencePill name={note.conference_name} />}
         </ScrollRow>
         <div className="flex items-center gap-2 flex-shrink-0">
           {repInitials && (
