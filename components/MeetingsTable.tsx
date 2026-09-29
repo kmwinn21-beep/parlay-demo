@@ -285,7 +285,7 @@ const BOOTH_HOURS_COLOR = '#7c3aed';
 const ACTIONS_MENU_WIDTH = 160;
 
 /** Row actions — the notetaker and edit entries the icons used to carry. */
-function MeetingActionsMenu({ hasNotes, hasConferenceNotes, onNotes, onQuickNote, onViewNotes, onEdit }: {
+function MeetingActionsMenu({ hasNotes, hasConferenceNotes, onNotes, onQuickNote, onViewNotes, onEdit, onSelect }: {
   hasNotes: boolean;
   /** Notes already logged against this attendee for this conference — the
    *  button flags them so the menu is worth opening. */
@@ -295,6 +295,13 @@ function MeetingActionsMenu({ hasNotes, hasConferenceNotes, onNotes, onQuickNote
   /** Passed the button's viewport rect so the notes card can hang off it. */
   onViewNotes?: (anchor: DOMRect) => void;
   onEdit: () => void;
+  /**
+   * Starts a selection, on a card whose checkbox is not showing yet.
+   *
+   * Absent wherever the checkboxes are always visible, so the menu does not
+   * offer to reveal something already on screen.
+   */
+  onSelect?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -312,13 +319,13 @@ function MeetingActionsMenu({ hasNotes, hasConferenceNotes, onNotes, onQuickNote
     if (!el) return;
     const r = el.getBoundingClientRect();
     // Roughly two 33px items plus borders; enough to decide on flipping.
-    const height = 41 + (onNotes ? 33 : 0) + (onQuickNote ? 33 : 0) + (onViewNotes ? 33 : 0);
+    const height = 41 + (onNotes ? 33 : 0) + (onQuickNote ? 33 : 0) + (onViewNotes ? 33 : 0) + (onSelect ? 33 : 0);
     const flip = window.innerHeight - r.bottom - 8 < height && r.top - 8 > height;
     setPos({
       top: flip ? r.top - 4 - height : r.bottom + 4,
       left: Math.max(8, Math.min(r.right - ACTIONS_MENU_WIDTH, window.innerWidth - ACTIONS_MENU_WIDTH - 8)),
     });
-  }, [onNotes, onQuickNote, onViewNotes]);
+  }, [onNotes, onQuickNote, onViewNotes, onSelect]);
 
   useEffect(() => {
     if (!open) { setPos(null); return; }
@@ -373,6 +380,14 @@ function MeetingActionsMenu({ hasNotes, hasConferenceNotes, onNotes, onQuickNote
           style={{ position: 'fixed', top: pos.top, left: pos.left, width: ACTIONS_MENU_WIDTH }}
           className="z-[10000] bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
         >
+          {onSelect && (
+            <button type="button" role="menuitem" onClick={() => { setOpen(false); onSelect(); }} className={itemCls}>
+              <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m-9 9h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              Select
+            </button>
+          )}
           {onViewNotes && (
             <button
               type="button"
@@ -1181,6 +1196,14 @@ export function MeetingsTable({
   // offers them, and any selection keeps them out.
   const [checksHovered, setChecksHovered] = useState(false);
   const checksRevealed = checksHovered || selectedIds.size > 0;
+  /**
+   * Whether a selection is under way.
+   *
+   * The mobile cards hide their checkboxes until it is, and the kebab offers
+   * Select only while it is not — so the menu never offers to reveal a box
+   * that is already on screen.
+   */
+  const anySelected = selectedIds.size > 0;
   const [bulkRepIds, setBulkRepIds] = useState<number[]>([]);
   const tableColorMaps = useConfigColors();
   const kanbanScrollRef = useRef<HTMLDivElement>(null);
@@ -1466,11 +1489,26 @@ export function MeetingsTable({
             {/* A long company name scrolls sideways under the kebab rather
                 than being cut off by it — the kebab sits on the card's own
                 background, so the name slides out of sight behind it. */}
-            <div className="relative flex items-start gap-2 mb-2 min-h-[1.25rem]">
+            {/* Ruled off from the people below it, so the card reads as a
+                company and then who from it was in the room. */}
+            <div className="relative flex items-start gap-2 mb-2 pb-2 border-b border-gray-100 min-h-[1.25rem]">
               {/* Selecting a card is a thing you do TO the card, so it leads
                   the line the card is titled with rather than riding the row
                   of facts at the bottom. */}
-              {hasSelection && (
+              {/*
+               * Shown once a selection is under way, and not before.
+               *
+               * A phone has no hover, so a checkbox per card is either always
+               * there — a column of empty boxes down a list somebody is mostly
+               * reading — or it is summoned. Select in the menu starts one, and
+               * every card's box appears with it so the second and third are
+               * one tap each.
+               *
+               * Derived from the selection rather than kept as its own flag:
+               * the last box being unticked IS the end of the selection, so
+               * there is no second piece of state to leave switched on.
+               */}
+              {hasSelection && anySelected && (
                 <input
                   type="checkbox"
                   checked={selectedIds.has(m.id)}
@@ -1503,20 +1541,16 @@ export function MeetingsTable({
                     onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
                     onViewNotes={anchor => setNotesView({ meeting: m, anchor })}
                     onEdit={() => setEditingId(m.id)}
+                    onSelect={hasSelection && !anySelected ? () => toggleSelect(m.id) : undefined}
                   />
                 </div>
               )}
             </div>
+            {/* Faces down the right edge, under the kebab, rather than
+                leading each name. The primary attendee gets one too — only
+                their guests had one, which read as though the guest were the
+                subject. */}
             <div className="flex items-start justify-between gap-3">
-              {/* The primary attendee gets a face too — only their guests had
-                  one, which read as though the guest were the subject. */}
-              <AttendeeInitialsAvatar
-                name={`${m.first_name} ${m.last_name}`.trim()}
-                photoUrl={m.photo_url}
-                title={m.title}
-                companyName={m.company_name}
-                className="w-6 h-6 text-[9px] mt-0.5 flex-shrink-0"
-              />
               <div className="flex-1 min-w-0">
                 {/* Names open the quick-view drawer rather than the full profile */}
                 <span className="flex items-center gap-1.5 min-w-0">
@@ -1531,12 +1565,23 @@ export function MeetingsTable({
                 </span>
                 {m.title && <p className="text-xs font-semibold text-gray-500 mt-0.5">{m.title}</p>}
               </div>
+              <AttendeeInitialsAvatar
+                name={`${m.first_name} ${m.last_name}`.trim()}
+                photoUrl={m.photo_url}
+                title={m.title}
+                companyName={m.company_name}
+                className="w-6 h-6 text-[9px] mt-0.5 flex-shrink-0"
+              />
             </div>
             {/* Guests and the company sit outside the name column, so their
                 avatars start where the primary attendee's does and the company
                 name lines up with both rather than being pushed in by it. */}
             {(m.additional_attendee_records ?? []).map(extra => (
               <div key={extra.id} className="flex items-center gap-3 mt-1.5 min-w-0">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-normal text-gray-600 truncate">{extra.first_name} {extra.last_name}</p>
+                  {extra.title && <p className="text-xs font-normal text-gray-400 truncate">{extra.title}</p>}
+                </div>
                 <AttendeeInitialsAvatar
                   name={`${extra.first_name} ${extra.last_name}`}
                   photoUrl={extra.photo_url}
@@ -1544,10 +1589,6 @@ export function MeetingsTable({
                   companyName={extra.company_name}
                   className="w-6 h-6 text-[9px] flex-shrink-0"
                 />
-                <div className="min-w-0">
-                  <p className="text-xs font-normal text-gray-600 truncate">{extra.first_name} {extra.last_name}</p>
-                  {extra.title && <p className="text-xs font-normal text-gray-400 truncate">{extra.title}</p>}
-                </div>
               </div>
             ))}
 

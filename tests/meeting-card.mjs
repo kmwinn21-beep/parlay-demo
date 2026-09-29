@@ -152,6 +152,31 @@ console.log('\n— every value is under a word saying what it is —');
     /const pad = compact \? 'px-2 py-1' : 'px-2\.5 py-1';/.test(table), true);
 }
 
+console.log('\n— the faces, down the right edge —');
+{
+  const people = card.slice(card.indexOf('flex items-start justify-between gap-3'), card.indexOf('<p className={EYEBROW}>When</p>'));
+  // The name comes first in the markup and the avatar last, so the face sits
+  // at the right edge under the kebab rather than leading the name.
+  eq('the primary attendee\u2019s name leads and the face follows',
+    people.indexOf('m.first_name') < people.indexOf('<AttendeeInitialsAvatar'), true);
+  // Compared against the guest's NAME LINE, not against `extra.first_name` —
+  // the avatar's own name prop reads that too, and sits after the tag.
+  const guest = people.slice(people.indexOf('additional_attendee_records ?? []'));
+  eq('  and the guests read the same way',
+    guest.indexOf('text-xs font-normal text-gray-600') < guest.indexOf('<AttendeeInitialsAvatar'), true);
+  // Source order is the whole claim here, so nothing may turn it around again
+  // in CSS.
+  eq('  and nothing reverses them back', /flex-row-reverse/.test(people), false);
+  // Both, or the two faces sit on opposite edges and neither reads as a column.
+  eq('  both of them still have one',
+    (people.match(/<AttendeeInitialsAvatar/g) ?? []).length, 2);
+
+  // Ruled off from the people below it, so the card reads as a company and
+  // then who from it was in the room.
+  const header = card.slice(card.indexOf('relative flex items-start gap-2'), card.indexOf('AttendeeInitialsAvatar'));
+  eq('the company line is ruled off', /mb-2 pb-2 border-b border-gray-100/.test(header), true);
+}
+
 console.log('\n— the date, as the card writes it —');
 {
   // Run, not read. Grepping the formatter's source said the month came from
@@ -211,6 +236,38 @@ console.log('\n— what must not scroll away —');
   eq('  ahead of the company name',
     header.indexOf('type="checkbox"') < header.indexOf('m.company_name'), true);
   eq('  and cannot shrink', /type="checkbox"[\s\S]{0,400}flex-shrink-0/.test(header), true);
+
+  /*
+   * Summoned, not standing there.
+   *
+   * A phone has no hover, so a checkbox per card is either always on screen —
+   * a column of empty boxes down a list somebody is mostly reading — or it is
+   * asked for. Select in the kebab starts a selection and every card's box
+   * appears with it, so the second and third are one tap each.
+   *
+   * Derived from the selection itself rather than kept as a second flag: the
+   * last box being unticked IS the end of the selection, so there is no state
+   * that can be left switched on after the selection is empty.
+   */
+  eq('the boxes appear only once something is selected',
+    /\{hasSelection && anySelected && \(\s*\n\s*<input/.test(header), true);
+  eq('  which is read straight off the selection',
+    /const anySelected = selectedIds\.size > 0;/.test(table), true);
+  eq('  and is not a flag of its own',
+    /useState[^\n]*[Ss]electMode|setShowChecks|setChecksVisible/.test(table), false);
+
+  // The menu starts one, and only while there is not one running — otherwise
+  // it would offer to reveal a box already on screen.
+  eq('the kebab offers Select',
+    /onSelect=\{hasSelection && !anySelected \? \(\) => toggleSelect\(m\.id\) : undefined\}/.test(card), true);
+  const menu = table.slice(table.indexOf('function MeetingActionsMenu'), table.indexOf('\nfunction ', table.indexOf('function MeetingActionsMenu') + 1));
+  eq('  as the first thing in the menu',
+    menu.indexOf('Select\n') < menu.indexOf('View Notes'), true);
+  eq('  with an icon beside it, like every other entry',
+    /onSelect\(\); \}\} className=\{itemCls\}>\s*\n\s*<svg/.test(menu), true);
+  // The menu decides whether to open upward by counting its own entries.
+  eq('  and counted when the menu works out where to open',
+    /\(onSelect \? 33 : 0\)/.test(menu), true);
   // Once only: a second one further down would be a second answer to the same
   // question.
   eq('  and is the only one on the card', (card.match(/type="checkbox"/g) ?? []).length, 1);
