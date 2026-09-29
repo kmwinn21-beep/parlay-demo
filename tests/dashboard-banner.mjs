@@ -113,6 +113,43 @@ console.log('\n— the banner itself —');
   eq('  in the same voice as a conference name',
     /<h1 className="text-2xl font-bold font-serif">/.test(banner), true);
 
+  /*
+   * The headline's eyebrow: what stage, then where in that stage.
+   *
+   * Two pills rather than one sentence. The stage used to carry its countdown
+   * along with it — "Post-Conference · 10 days left" — which put the least
+   * changeable fact and the most changeable one in one breath, and left the
+   * planning case with no stage on it at all, just a number.
+   */
+  eq('the stage and its detail are two pills',
+    /<span className=\{`\$\{PILL\} \$\{tone\.fill\}`\}>[\s\S]{0,400}<span className=\{`\$\{PILL\} \$\{tone\.outline\}`\}>\{detail\}<\/span>/.test(banner), true);
+  eq('  with the stage first', banner.indexOf('tone.fill') < banner.indexOf('tone.outline'), true);
+  eq('  and the old compound line gone',
+    /Post-Conference · \{left\} days left|days away/.test(banner), false);
+  /*
+   * The detail is the CARD'S line, from the card's own functions.
+   *
+   * Written out again here it would be a second answer to "which day is it",
+   * and the headline and the card sitting inches apart would come to disagree.
+   */
+  for (const [stage, fn] of [
+    ['a show under way says which day', /conferenceDayLabel\(c\.start_date, c\.end_date\)/],
+    ['one closing says when it shuts', /closesInLabel\(postConferenceDaysRemaining\(/],
+    ['one still planned says when it starts', /startsInLabel\(daysUntil\(c\.start_date\)\)/],
+  ]) {
+    eq(`  ${stage}`, fn.test(banner), true);
+  }
+  eq('    all from the card’s own module',
+    /from '@\/lib\/conferenceCardBar'/.test(banner), true);
+  // Measured in Chromium against a fixed clock: the detail pill's border comes
+  // out emerald at 0.4 on a live show, amber on one closing, white on one
+  // planned — each the hue of the stage pill beside it.
+  eq('  the pair share a hue, the detail taking the border',
+    /border border-emerald-400\/40[\s\S]{0,400}border border-amber-400\/40[\s\S]{0,400}border border-white\/25/.test(banner), true);
+  // Only the stage that is happening right now earns the dot.
+  eq('  and only a live show gets the dot',
+    /kind === 'in_progress' && <span className="w-1\.5 h-1\.5 rounded-full bg-emerald-400" \/>/.test(banner), true);
+
   // The expanded half is the Program tab's card, not a copy of it.
   eq('the cards are the Program tab’s own', /<ProgramConferenceCard/.test(banner), true);
   eq('  fed from the same endpoint it reads',
