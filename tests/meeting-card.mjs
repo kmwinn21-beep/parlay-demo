@@ -108,9 +108,20 @@ console.log('\n— the size of the company, beside its name —');
   const header = card.slice(card.indexOf('relative flex items-start mb-2'), card.indexOf('AttendeeInitialsAvatar'));
   eq('the units pill sits in the company row',
     /m\.company_wse != null && \([\s\S]{0,300}bg-yellow-50 text-yellow-700/.test(header), true);
-  // Left of the kebab, and only while there is a kebab to be left of.
-  eq('  to the left of the kebab',
-    /onEdit \|\| onNotesClick \? 'right-7' : 'right-0'/.test(header), true);
+  /*
+   * One cluster, laid out together.
+   *
+   * They were positioned separately, which meant guessing how wide the kebab
+   * is in order to place the pill beside it — and the guess was short, so the
+   * pill lost its right edge behind the menu's border. Side by side in a flex
+   * row they cannot overlap whatever either one measures.
+   */
+  eq('  laid out beside the kebab rather than offset by a guess',
+    /absolute right-0 top-0 flex items-start gap-1\.5 pl-1\.5 bg-white/.test(header), true);
+  eq('  with no guessed offset left',
+    /right-7/.test(table), false);
+  eq('  and the kebab inside the same cluster',
+    header.indexOf('flex items-start gap-1.5') < header.indexOf('<MeetingActionsMenu'), true);
   // It is a fact about the company, so it goes where the company name goes.
   // The GATE, not the padding expression on the same row — which also reads
   // "!hideCompany && m.company_wse != null" and satisfied a looser match.
@@ -209,6 +220,34 @@ console.log('\n— and the title column made room for it —');
   eq('  taking both from the table', /--title-rest[\s\S]{0,120}--title-hover/.test(table), true);
   eq('  which are declared once each',
     /const TITLE_WIDTH = \d+;\s*\nconst TITLE_HOVER_WIDTH = \d+;/.test(table), true);
+}
+
+console.log('\n— the outcome menu stays on the screen —');
+{
+  // To the next top-level function AFTER it. Naming a specific one is how the
+  // slice comes out backwards when that function turns out to be declared
+  // above this one.
+  const from = table.indexOf('function OutcomeButton');
+  const btn = table.slice(from, table.indexOf('\nfunction ', from + 1));
+
+  // It opens left-aligned under the pill. On a phone the Status pill is at the
+  // end of its row and the menu is wider than it, so half of it was off the
+  // right edge. The vertical overflow was already handled; this is the other
+  // axis.
+  eq('the menu is pulled back inside the viewport',
+    /Math\.max\(MENU_MARGIN, Math\.min\(dropdownPos\.left, window\.innerWidth - width - MENU_MARGIN\)\)/.test(btn), true);
+  // Measured, not guessed: the widest option decides the width, and that is
+  // the account's own wording.
+  eq('  against its measured width',
+    /const width = el\.getBoundingClientRect\(\)\.width;/.test(btn), true);
+  eq('  which means the menu is held',
+    /ref=\{menuRef\}/.test(btn), true);
+  // The guard is what stops the clamp from setting state forever.
+  eq('  and stops once it agrees',
+    /if \(clamped !== dropdownPos\.left\) setDropdownPos/.test(btn), true);
+  // A menu wider than the screen has nowhere to be clamped to.
+  eq('  never wider than the screen', /max-w-\[calc\(100vw-1rem\)\]/.test(btn), true);
+  eq('the margin is declared once', /const MENU_MARGIN = \d+;/.test(table), true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

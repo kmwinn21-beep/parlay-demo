@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, Fragment } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -179,6 +179,9 @@ function nameInitials(name: string): string {
  * class list twice, because the transition runs BETWEEN these two numbers and
  * two numbers that happen to agree today are two numbers that stop agreeing.
  */
+/** How close the outcome menu may come to the edge of the screen. */
+const MENU_MARGIN = 8;
+
 const TITLE_WIDTH = 150;
 const TITLE_HOVER_WIDTH = 420;
 
@@ -428,6 +431,28 @@ function OutcomeButton({
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; above: boolean } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  /*
+   * Pull the menu back inside the viewport.
+   *
+   * It opens left-aligned under the pill, which on a phone puts half of it off
+   * the right edge — the Status pill sits at the end of its row, and the menu
+   * is wider than the pill. Clamped AFTER it renders rather than against a
+   * guessed width: the widest option decides how wide it is, and that is the
+   * account's own wording.
+   *
+   * No loop: once clamped the measurement agrees with the state and the
+   * effect stops setting it.
+   */
+  useLayoutEffect(() => {
+    if (!open || !dropdownPos) return;
+    const el = menuRef.current;
+    if (!el) return;
+    const width = el.getBoundingClientRect().width;
+    const clamped = Math.max(MENU_MARGIN, Math.min(dropdownPos.left, window.innerWidth - width - MENU_MARGIN));
+    if (clamped !== dropdownPos.left) setDropdownPos(p => (p ? { ...p, left: clamped } : p));
+  }, [open, dropdownPos]);
 
   useEffect(() => {
     if (!open) return;
@@ -482,6 +507,7 @@ function OutcomeButton({
       </button>
       {open && dropdownPos && (
         <div
+          ref={menuRef}
           style={{
             position: 'fixed',
             top: dropdownPos.top,
@@ -489,7 +515,9 @@ function OutcomeButton({
             zIndex: 9999,
             transform: dropdownPos.above ? 'translateY(-100%)' : 'translateY(0)',
           }}
-          className="bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[160px]"
+          /* Never wider than the screen it has to fit on, so the clamp above
+             always has somewhere to put it. */
+          className="bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[160px] max-w-[calc(100vw-1rem)]"
         >
           <button
             type="button"
@@ -1376,24 +1404,35 @@ export function MeetingsTable({
                   by opening the company. Part of the same opaque cluster the
                   kebab sits in, so a long name still slides away underneath
                   both rather than being cut off by either. */}
-              {!hideCompany && m.company_wse != null && (
-                <div className={`absolute top-0 pl-1.5 bg-white ${onEdit || onNotesClick ? 'right-7' : 'right-0'}`}>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200 whitespace-nowrap" title={`${Number(m.company_wse).toLocaleString()} ${unitTypeLabel}`}>
-                    <svg className="w-3 h-3 text-yellow-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
-                    {Number(m.company_wse).toLocaleString()}
-                  </span>
-                </div>
-              )}
-              {(onEdit || onNotesClick) && (
-                <div className="absolute right-0 top-0 pl-1.5 bg-white">
-                  <MeetingActionsMenu
-                    hasNotes={!!m.has_notes}
-                    hasConferenceNotes={noteCount(m) > 0}
-                    onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
-                    onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
-                    onViewNotes={anchor => setNotesView({ meeting: m, anchor })}
-                    onEdit={() => setEditingId(m.id)}
-                  />
+              {/*
+               * The units pill and the kebab, in ONE cluster.
+               *
+               * Two separately positioned boxes meant guessing how wide the
+               * kebab is to place the pill beside it, and the guess was short
+               * — the pill lost its right edge behind the menu's border. Laid
+               * out together they cannot overlap whatever either one measures.
+               *
+               * Opaque, and the name scrolls underneath: a long company name
+               * slides out of sight behind this rather than being cut off.
+               */}
+              {((!hideCompany && m.company_wse != null) || onEdit || onNotesClick) && (
+                <div className="absolute right-0 top-0 flex items-start gap-1.5 pl-1.5 bg-white">
+                  {!hideCompany && m.company_wse != null && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200 whitespace-nowrap" title={`${Number(m.company_wse).toLocaleString()} ${unitTypeLabel}`}>
+                      <svg className="w-3 h-3 text-yellow-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+                      {Number(m.company_wse).toLocaleString()}
+                    </span>
+                  )}
+                  {(onEdit || onNotesClick) && (
+                    <MeetingActionsMenu
+                      hasNotes={!!m.has_notes}
+                      hasConferenceNotes={noteCount(m) > 0}
+                      onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
+                      onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
+                      onViewNotes={anchor => setNotesView({ meeting: m, anchor })}
+                      onEdit={() => setEditingId(m.id)}
+                    />
+                  )}
                 </div>
               )}
             </div>
