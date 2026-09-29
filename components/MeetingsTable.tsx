@@ -221,6 +221,18 @@ const FACT_PILL = 'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs
 const ROW_PILL_H = 'h-6';
 const ROW_PILL = `inline-flex items-center ${ROW_PILL_H} px-2 rounded-xl border ${PILL_TEXT} font-semibold whitespace-nowrap`;
 
+/**
+ * A label with its value under it, on the card's two rows of facts.
+ *
+ * A COLUMN rather than a plain block, which is what keeps the pills' top
+ * edges level. A pill is inline-flex, so its line box reserves room under the
+ * baseline — and a pill whose first child is an icon has no text baseline to
+ * use, so the browser synthesises one from the icon's edge instead. The unit
+ * count sat 1.8px above Type and Value for exactly that reason. As flex items
+ * the pills are blockified and no baseline is involved at all.
+ */
+const CARD_FIELD = 'flex-shrink-0 flex flex-col items-start';
+
 /** "Rep:" and "Status:", beside the pill rather than stacked above it. */
 const INLINE_LABEL = 'text-[10px] font-medium text-gray-400 flex-shrink-0';
 
@@ -1549,13 +1561,13 @@ export function MeetingsTable({
              * value now sits under a word saying what it is.
              */}
             <div className="mt-3 flex items-start gap-3">
-              <div className="flex-shrink-0">
+              <div className={CARD_FIELD}>
                 <p className={EYEBROW}>When</p>
                 <span className={`${FACT_PILL} bg-gray-50 text-gray-600 border-gray-200`}>
                   {formatCardDate(m.meeting_date)} at {formatMeetingTime(m.meeting_time)}
                 </span>
               </div>
-              <div className="min-w-0 flex-1">
+              <div className={`${CARD_FIELD} min-w-0 flex-1`}>
                 <p className={EYEBROW}>Where</p>
                 {m.location ? (
                   <span className={`${FACT_PILL} bg-gray-50 text-gray-600 border-gray-200 max-w-full`} title={m.location}>
@@ -1594,13 +1606,13 @@ export function MeetingsTable({
               || mobileValue(m) || mobileConference(m) || mobileGuests(m).length > 0) && (
               <ScrollRow className="mt-3" gapClass="gap-3" step={120}>
                 {m.meeting_type && (
-                  <div className="flex-shrink-0">
+                  <div className={CARD_FIELD}>
                     <p className={EYEBROW}>Type</p>
                     <span className={`${ROW_PILL} text-gray-500 bg-gray-100 border-gray-200`}>{m.meeting_type}</span>
                   </div>
                 )}
                 {splitInternalIds(m).supportIds && (
-                  <div className="flex-shrink-0">
+                  <div className={CARD_FIELD}>
                     <p className={EYEBROW}>Support</p>
                     <OverlappingRepPills
                       repIds={splitInternalIds(m).supportIds}
@@ -1613,7 +1625,7 @@ export function MeetingsTable({
                 {/* Named for whatever the account calls a unit — beds, keys,
                     doors — rather than for the column it is stored in. */}
                 {m.company_wse != null && (
-                  <div className="flex-shrink-0">
+                  <div className={CARD_FIELD}>
                     <p className={EYEBROW}>{unitTypeLabel}</p>
                     <span className={`${ROW_PILL} bg-yellow-50 text-yellow-700 border-yellow-200 gap-1`}>
                       <svg className="w-3 h-3 text-yellow-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
@@ -1622,7 +1634,7 @@ export function MeetingsTable({
                   </div>
                 )}
                 {mobileValue(m) && (
-                  <div className="flex-shrink-0">
+                  <div className={CARD_FIELD}>
                     <p className={EYEBROW}>Value</p>
                     <span className={`${ROW_PILL} bg-green-100 text-green-700 border-green-300`}>
                       {mobileValue(m)}
@@ -1633,7 +1645,7 @@ export function MeetingsTable({
                     pills this replaced — dropped rather than relabelled, they
                     would just be gone. */}
                 {mobileConference(m) && (
-                  <div className="flex-shrink-0">
+                  <div className={CARD_FIELD}>
                     <p className={EYEBROW}>Conference</p>
                     <span className={`${ROW_PILL} bg-brand-secondary/10 text-brand-secondary border-brand-secondary/30`} title={mobileConference(m)!}>
                       {mobileConference(m)}
@@ -1641,7 +1653,7 @@ export function MeetingsTable({
                   </div>
                 )}
                 {mobileGuests(m).length > 0 && (
-                  <div className="flex-shrink-0">
+                  <div className={CARD_FIELD}>
                     <p className={EYEBROW}>Guests</p>
                     <span className={`${ROW_PILL} bg-blue-50 text-blue-700 border-blue-200`} title={mobileGuests(m).join(', ')}>
                       {mobileGuests(m).map(nameInitials).join(' | ')}

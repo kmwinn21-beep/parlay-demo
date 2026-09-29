@@ -78,7 +78,7 @@ console.log('\n— every value is under a word saying what it is —');
    * behind by a removed value looks like.
    */
   eq('  each shown only when there is something to show',
-    /\{m\.meeting_type && \(\s*\n\s*<div className="flex-shrink-0">\s*\n\s*<p className=\{EYEBROW\}>Type<\/p>/.test(card), true);
+    /\{m\.meeting_type && \(\s*\n\s*<div className=\{CARD_FIELD\}>\s*\n\s*<p className=\{EYEBROW\}>Type<\/p>/.test(card), true);
   eq('  and nothing is switched off', /\{false &&/.test(card), false);
 
   // One declared class. Written out at each site they drift, and a row of
@@ -118,6 +118,23 @@ console.log('\n— every value is under a word saying what it is —');
   eq('  worn by every pill on it', rowPills, 5);
   // The support stack is the sixth thing on that row and is not a pill; it is
   // sized square at the same height so it stays a circle.
+  /*
+   * The pills' TOP EDGES line up, which the heights alone do not give you.
+   *
+   * A pill is inline-flex, so its line box reserves room under the baseline —
+   * and a pill whose first child is an icon has no text baseline to use, so
+   * the browser synthesises one from the icon's edge instead. The unit count
+   * sat 1.8px above Type and Value for exactly that reason, at the same
+   * height as both. Every label-and-value stack is a flex COLUMN, which
+   * blockifies the pill and takes baselines out of it.
+   */
+  eq('each label and its value is a flex column',
+    /const CARD_FIELD = 'flex-shrink-0 flex flex-col items-start';/.test(table), true);
+  const fields = (card.match(/CARD_FIELD/g) ?? []).length;
+  eq('  worn by every field on both rows', fields, 8);
+  eq('  with none left as a plain block',
+    /<div className="flex-shrink-0">\s*\n\s*<p className=\{EYEBROW\}>/.test(card), false);
+
   eq('  and the support stack is square at that height',
     /<p className=\{EYEBROW\}>Support<\/p>\s*\n\s*<OverlappingRepPills[\s\S]{0,160}size="sm"/.test(card), true);
   eq('  which is the size that is 24px', /const dim = size === 'xs' \? 'w-5 h-5[^']*' : 'w-6 h-6/.test(strip('components/OverlappingRepPills.tsx')), true);
