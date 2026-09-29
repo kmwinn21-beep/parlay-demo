@@ -99,6 +99,7 @@ console.log('\n— the banner itself —');
   const banner = strip('components/DashboardConferenceBanner.tsx');
   const page = strip('app/page.tsx');
   const css = readFileSync('app/globals.css', 'utf8');
+  const card = strip('components/ProgramConferenceCard.tsx');
 
   // The headline row: one line, scrolling, ruled between each.
   eq('the headline is one scrolling row', /<ScrollRow className="min-w-0 flex-1"/.test(banner), true);
@@ -159,7 +160,6 @@ console.log('\n— the banner itself —');
    * that page is unchanged.
    */
   eq('the banner asks for the list pill alone', /showOutreach=\{false\}/.test(banner), true);
-  const card = strip('components/ProgramConferenceCard.tsx');
   eq('  which is what that prop hides',
     /\{showOutreach && <OutreachStatusPill/.test(card), true);
   // The list pill is NOT behind it — hiding both would leave a rule with
@@ -171,6 +171,63 @@ console.log('\n— the banner itself —');
     /showOutreach = true/.test(card), true);
   eq('    without passing anything',
     /showOutreach/.test(strip('app/conferences/page.tsx')), false);
+
+  /*
+   * The way into a conference is a button, not the whole card.
+   *
+   * These cards sit in a row you swipe, inside a panel that opens over the
+   * page — a card-sized link there fires on the way past it.
+   */
+  eq('the banner asks for a button, not a clickable card',
+    /linkMode="button"/.test(banner), true);
+  eq('  and the card obeys by not being a link',
+    /return asLink\s*\n\s*\? <Link href=\{`\/conferences\/\$\{conference\.id\}`\} className=\{shell\}>\{body\}<\/Link>\s*\n\s*: <div className=\{shell\}>\{body\}<\/div>;/.test(card), true);
+  // The hover lift goes with the link. Left behind it keeps promising a click
+  // that does nothing.
+  eq('    losing the hover lift with it',
+    /asLink \? ' hover:shadow-md transition-all hover:border-brand-secondary' : ''/.test(card), true);
+  // The button, in the row with the pills, pushed to the right edge.
+  eq('  the button is drawn where the pills are',
+    /<ListStatusPill[^\n]*\n\s*\{!asLink && <GoToButton conferenceId=\{conference\.id\} \/>\}/.test(card), true);
+  eq('    aligned right', /marginLeft: 'auto'/.test(card), true);
+  eq('    and it goes to the conference',
+    /href=\{`\/conferences\/\$\{conferenceId\}`\}/.test(card), true);
+  /*
+   * Including on a closed one, which has stats where the pills would be.
+   *
+   * Without this those cards would be the only ones in the banner with no way
+   * into them at all — the card stopped being a link and nothing replaced it.
+   */
+  // Anchored FROM the branch, not from the start of the file: an earlier
+  // ternary closes with the same `) : (` and sliced this to nothing, which
+  // reads as the assertion passing on an empty string.
+  const closedFrom = card.indexOf('{isClosed ? (');
+  const closedTo = card.indexOf(') : (', closedFrom);
+  const closedRow = card.slice(closedFrom, closedTo);
+  eq('  a closed card gets one too',
+    closedFrom >= 0 && closedTo > closedFrom
+    && /Pipeline/.test(closedRow)
+    && /<GoToButton conferenceId=\{conference\.id\} \/>/.test(closedRow), true);
+  // Default unchanged: the Program tab's whole card is still the link.
+  eq('  the Program tab keeps its clickable card',
+    /linkMode = 'card'/.test(card), true);
+  eq('    without asking for it', /linkMode/.test(strip('app/conferences/page.tsx')), false);
+
+  /*
+   * And the banner opens shut.
+   *
+   * The dashboard's own sections are what the page is for; this is its
+   * header, and opening by default put a panel of cards over them on every
+   * load. Absent means collapsed, so the default reaches everyone who has not
+   * expressed a preference; only somebody who opened it gets it back.
+   */
+  eq('the banner starts collapsed', /useState\(true\);/.test(banner.slice(banner.indexOf('const [collapsed'), banner.indexOf('const [conferences'))), true);
+  eq('  and only an explicit choice reopens it',
+    /localStorage\.getItem\('parlay_banner_collapsed'\) !== 'false'/.test(banner), true);
+  // Read after mount, never during the first render: this banner sits in a
+  // Suspense boundary and a hydration mismatch here took the dashboard down.
+  eq('  read after mount, not during the first render',
+    /useEffect\(\(\) => \{\s*\n\s*setCollapsed\(localStorage/.test(banner), true);
 
   // The expanded half is the Program tab's card, not a copy of it.
   eq('the cards are the Program tab’s own', /<ProgramConferenceCard/.test(banner), true);
