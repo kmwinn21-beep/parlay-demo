@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
+import { noteAuthorName } from '@/lib/noteAuthor';
 import {
   getConfigIdByEmail,
   notifyCompanyAssignees,
@@ -118,26 +119,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'entity_type, entity_id, and content are required' }, { status: 400 });
     }
 
-    // Resolve rep server-side if not provided by client (e.g. user has no displayName set)
-    let resolvedRep = rep || null;
-    if (!resolvedRep) {
-      try {
-        const configId = await getConfigIdByEmail(db, user.email);
-        if (configId) {
-          const nameRow = await db.execute({
-            sql: 'SELECT value FROM config_options WHERE id = ?',
-            args: [configId],
-          });
-          if (nameRow.rows.length > 0 && nameRow.rows[0].value) {
-            resolvedRep = String(nameRow.rows[0].value);
-          }
-        }
-      } catch { /* non-fatal */ }
-    }
-    // Final fallback: store email so the pill can derive initials (e.g. "kwinn@..." → "KW")
-    if (!resolvedRep) {
-      resolvedRep = user.email;
-    }
+    /*
+     * Resolve the rep server-side when the client did not send one — the user
+     * may have no display name set.
+     *
+     * Falls back to the address, which names somebody even though the initials
+     * it yields can be thin: `kwinn@…` has no separator in its local part, so
+     * it is one letter, not "KW". That is the helper being honest rather than
+     * inventing a surname, and it is why the name is looked up first.
+     */
+    const resolvedRep = rep || await noteAuthorName(db, user.email);
 
     // Callers pass the conference by name; resolve it to an id here so counting
     // notes per conference doesn't depend on that text staying identical.
@@ -209,17 +200,7 @@ export async function POST(request: NextRequest) {
           if (!ctx.companyId) return;
           // The author, not the note's `rep` — some flows put the person the
           // follow-up was assigned to in that column, which is someone else.
-          let author: string = user.email;
-          try {
-            const configId = await getConfigIdByEmail(db, user.email);
-            if (configId) {
-              const nameRow = await db.execute({
-                sql: 'SELECT value FROM config_options WHERE id = ?',
-                args: [configId],
-              });
-              if (nameRow.rows.length > 0 && nameRow.rows[0].value) author = String(nameRow.rows[0].value);
-            }
-          } catch { /* the email still names them */ }
+          const author = await noteAuthorName(db, user.email);
           const result = await extractFromNote(db, {
             noteId,
             content: noteText,
