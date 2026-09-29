@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
-  SIGNAL_ABBREVIATIONS, SIGNAL_FULL_LABELS, SIGNAL_KEYS, SIGNAL_TONE,
+  SIGNAL_ABBREVIATIONS, SIGNAL_FULL_LABELS, SIGNAL_KEYS, SIGNAL_OUTLINED, SIGNAL_TONE,
   type SignalKey,
 } from '@/lib/competitiveSignals';
 
@@ -121,6 +121,11 @@ export function CompanySignalBadges({ signals, emptyLabel = '—', onWidthChange
             zIndex: on.length - i,
             color: SIGNAL_TONE[k],
             backgroundColor: `${SIGNAL_TONE[k]}1F`,
+            // At Risk alone is outlined, the same way it is on the grid — see
+            // SIGNAL_OUTLINED. Inside the border, not outside it: these badges
+            // overlap when folded, and an outside border would shift each one
+            // a pixel out of the stack.
+            boxShadow: SIGNAL_OUTLINED[k] ? `inset 0 0 0 1px ${SIGNAL_TONE[k]}` : undefined,
           }}
           /* The same element in both states: the width, the padding and the
              overlap all transition, so the stack spreads and the names appear

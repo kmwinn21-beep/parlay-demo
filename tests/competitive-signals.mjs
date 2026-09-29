@@ -31,8 +31,9 @@ const eq = (label, got, want) => {
 };
 
 const {
-  deriveSignals, countSignals, hasAnySignal, isRecent, daysSince,
+  deriveSignals, countSignals, hasAnySignal, isRecent, daysSince, isCustomerType,
   RECENT_DAYS, ROW_LABELS, SIGNAL_LABELS, SIGNAL_ABBREVIATIONS, SIGNAL_FULL_LABELS,
+  SIGNAL_KEYS, SIGNAL_OUTLINED, SIGNAL_TONE,
 } = await import('@/lib/competitiveSignals');
 
 const strip = (f) => readFileSync(f, 'utf8')
@@ -482,6 +483,138 @@ console.log('\n— ordering a Recent Change cell —');
     relationships: [rel(1, 1, 10, 'former', daysAgo(5))], now: NOW,
   });
   eq('the cell carries the change date through', derived.cells[0]?.statusChangedAt, daysAgo(5));
+}
+
+console.log('\n— at risk: ours, and being competed for —');
+{
+  /*
+   * Both halves have to be true of the SAME cell.
+   *
+   * A customer with nothing competitive logged is not at risk of anything,
+   * and an account weighing competitors that we do not have is a deal we have
+   * not won rather than one we are losing.
+   */
+  const ours = [1];
+  const at = (relationships, customers = ours) =>
+    deriveSignals({ relationships, customerCompanyIds: customers, now: NOW });
+
+  eq('a customer piloting a competitor',
+    flagged(at([rel(1, 1, 10, 'evaluating')]), 1, 10, 'atRisk'), true);
+  eq('  and one already buying from one',
+    flagged(at([rel(1, 1, 10, 'current')]), 1, 10, 'atRisk'), true);
+
+  /*
+   * NOT the Left Competitor row.
+   *
+   * That account walked AWAY from a competitor, which is the opposite of at
+   * risk — badging it red would have the alarm firing on good news.
+   */
+  eq('but not one that left a competitor',
+    flagged(at([rel(1, 1, 10, 'former')]), 1, 10, 'atRisk'), false);
+
+  // Not ours: a prospect evaluating competitors is a deal, not a loss.
+  eq('and not an account we do not have',
+    flagged(at([rel(1, 2, 10, 'evaluating')]), 2, 10, 'atRisk'), false);
+  // Nobody at all is the quiet default, not everybody.
+  eq('  nor anyone when no customers are passed',
+    deriveSignals({ relationships: [rel(1, 1, 10, 'current')], now: NOW })
+      .cells[0].signals.atRisk, false);
+
+  /*
+   * Per CELL, not per company.
+   *
+   * One customer can be evaluating one competitor and have left another. The
+   * first card is the alarm; the second is not, and flagging the company
+   * rather than the relationship would put red on both.
+   */
+  const mixed = at([rel(1, 1, 10, 'evaluating'), rel(2, 1, 20, 'former')]);
+  eq('the alarm lands on the relationship, not the company',
+    [flagged(mixed, 1, 10, 'atRisk'), flagged(mixed, 1, 20, 'atRisk')], [true, false]);
+
+  // And it counts like every other signal — cells, so the rail's number and
+  // the badges on screen agree.
+  eq('counted by cell, like the rest', countSignals(mixed.cells).atRisk, 1);
+
+  // An unclassified status has no row to sit in, so it cannot be at risk in
+  // one. It is counted as unclassified and takes part in nothing.
+  const unclassified = at([{ id: 1, companyId: 1, competitorId: 10, statusClass: null }]);
+  eq('an unclassified status is not an alarm',
+    [unclassified.cells.length, unclassified.unclassifiedCount], [0, 1]);
+}
+
+console.log('\n— which company types count as ours —');
+{
+  eq('the seeded Customer type', isCustomerType(['Operator', 'Customer']), true);
+  // These arrive from a comma-separated column and from imports.
+  eq('  however it was cased or spaced', isCustomerType([' customer ']), true);
+  /*
+   * Former Customer is NOT one.
+   *
+   * An account that has already left is not at risk of leaving, and badging it
+   * would put the alarm on the one group it cannot help. A substring match
+   * would have caught it — which is why this is an equality on the trimmed
+   * value rather than an `includes`.
+   */
+  eq('but not Former Customer', isCustomerType(['Former Customer']), false);
+  eq('  nor Prospect, Operator or Competitor',
+    isCustomerType(['Prospect', 'Operator', 'Competitor']), false);
+  eq('  nor nothing at all', isCustomerType([]), false);
+}
+
+console.log('\n— the alarm is drawn as one —');
+{
+  const grid = strip('components/relationship-map/CompetitiveGrid.tsx');
+  const table = strip('components/CompanySignalBadges.tsx');
+
+  // Bright red, and the only red among the five.
+  eq('At Risk is red', SIGNAL_TONE.atRisk, '#DC2626');
+  eq('  and alone in it',
+    SIGNAL_KEYS.filter(k => SIGNAL_TONE[k] === SIGNAL_TONE.atRisk).length, 1);
+  // Fill, border and font, as asked — the other four keep fill and font only.
+  eq('  and alone in taking a border',
+    SIGNAL_KEYS.filter(k => SIGNAL_OUTLINED[k]), ['atRisk']);
+  eq('the grid draws that border',
+    /border: SIGNAL_OUTLINED\[signal\] \? `1px solid \$\{SIGNAL_TONE\[signal\]\}` : undefined/.test(grid), true);
+  /*
+   * Inside the badge in the table, not outside it.
+   *
+   * Those badges overlap while folded, so an outside border would shift each
+   * one a pixel out of the stack.
+   */
+  eq('  and the company table draws it inside the badge',
+    /boxShadow: SIGNAL_OUTLINED\[k\] \? `inset 0 0 0 1px \$\{SIGNAL_TONE\[k\]\}` : undefined/.test(table), true);
+  // Both carry fill and font from the same tone, so the three agree.
+  for (const [where, src] of [['the grid', grid], ['the company table', table]]) {
+    eq(`  ${where} fills and letters it from the same tone`,
+      /color: SIGNAL_TONE\[\w+\],\s*\n\s*backgroundColor: `\$\{SIGNAL_TONE\[\w+\]\}1F`/.test(src), true);
+  }
+}
+
+console.log('\n— and both surfaces know who is a customer —');
+{
+  const route = strip('app/api/companies/signals/route.ts');
+  const modal = strip('components/RelationshipMapModal.tsx');
+
+  // The company table's badges.
+  eq('the signals route passes its customers',
+    /customerCompanyIds: customerIds/.test(route), true);
+  eq('  read from the companies it already loaded',
+    /Array\.from\(companies\.values\(\)\)\s*\n\s*\.filter\(c => isCustomerType\(c\.types\)\)/.test(route), true);
+
+  // The relationship map's grid.
+  eq('the map passes its customers too',
+    /customerCompanyIds: customerIds/.test(modal), true);
+  /*
+   * Off the map's own nodes, which is what the grid reads to draw a card's
+   * type pills — so the badge and the pill beside it cannot disagree about
+   * whether a company is a customer.
+   */
+  eq('  from the same nodes the type pills come from',
+    /nodes\.filter\(n => isCustomerType\(n\.company_types\)\)/.test(modal), true);
+  // One rule, imported, not two spellings of it.
+  for (const [where, src] of [['the route', route], ['the modal', modal]]) {
+    eq(`  ${where} uses the shared rule`, /isCustomerType/.test(src), true);
+  }
 }
 
 console.log('\n— labels live in one place —');

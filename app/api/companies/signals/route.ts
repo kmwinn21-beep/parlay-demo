@@ -4,7 +4,9 @@ import { getDb } from '@/lib/getDb';
 import {
   resolveCompetitive, type RawRelationshipRow, type ResolutionCompany,
 } from '@/lib/competitiveResolution';
-import { deriveSignals, SIGNAL_KEYS, type SignalKey } from '@/lib/competitiveSignals';
+import {
+  deriveSignals, isCustomerType, SIGNAL_KEYS, type SignalKey,
+} from '@/lib/competitiveSignals';
 
 /**
  * Which competitive signals each company carries.
@@ -124,8 +126,17 @@ export async function GET(request: NextRequest) {
       args: [],
     }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
 
+    /* Accounts of ours, for the At Risk signal.
+       Read off the company records already loaded above rather than queried
+       again: their types are resolved there, and a second read would be a
+       second place for "what counts as a customer" to be decided. */
+    const customerIds = Array.from(companies.values())
+      .filter(c => isCustomerType(c.types))
+      .map(c => c.id);
+
     const derived = deriveSignals({
       relationships: resolved.relationships,
+      customerCompanyIds: customerIds,
       companiesWithInternal: internalRes.rows.map(r => Number(r.company_id)).filter(Boolean),
       switches: switchRes.rows.map(r => ({
         companyId: Number(r.account_company_id),
