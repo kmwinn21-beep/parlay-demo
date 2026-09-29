@@ -150,6 +150,28 @@ console.log('\n— the banner itself —');
   eq('  and only a live show gets the dot',
     /kind === 'in_progress' && <span className="w-1\.5 h-1\.5 rounded-full bg-emerald-400" \/>/.test(banner), true);
 
+  /*
+   * One pill on the card here, two on the Program tab.
+   *
+   * The card is narrower in this row than in that page's grid and the two
+   * pills wrapped onto separate lines. The dashboard's question is whether
+   * the list is in; outreach is assigned on the page that shows both, and
+   * that page is unchanged.
+   */
+  eq('the banner asks for the list pill alone', /showOutreach=\{false\}/.test(banner), true);
+  const card = strip('components/ProgramConferenceCard.tsx');
+  eq('  which is what that prop hides',
+    /\{showOutreach && <OutreachStatusPill/.test(card), true);
+  // The list pill is NOT behind it — hiding both would leave a rule with
+  // nothing under it.
+  eq('  leaving the list pill drawn either way',
+    /\{showOutreach && <OutreachStatusPill[^\n]*\n\s*<ListStatusPill/.test(card), true);
+  // Default on, so the Program tab keeps both without asking.
+  eq('  and the Program tab keeps both by default',
+    /showOutreach = true/.test(card), true);
+  eq('    without passing anything',
+    /showOutreach/.test(strip('app/conferences/page.tsx')), false);
+
   // The expanded half is the Program tab's card, not a copy of it.
   eq('the cards are the Program tab’s own', /<ProgramConferenceCard/.test(banner), true);
   eq('  fed from the same endpoint it reads',

@@ -243,13 +243,23 @@ export function TerritoryPill({ conference, territories }: { conference: Program
   return null;
 }
 
-export function ProgramConferenceCard({ conference, territories, planYear, allConferences, onRepsUpdated, onQuickView }: {
+export function ProgramConferenceCard({ conference, territories, planYear, allConferences, onRepsUpdated, onQuickView, showOutreach = true }: {
   conference: ProgramCardConference;
   territories: ProgramCardTerritory[];
   planYear: number;
   allConferences: Array<{ conferenceId: number; name: string; startDate: string; assignedReps: AssignedRep[] }>;
   onRepsUpdated: (conferenceId: number, reps: AssignedRep[]) => void;
   onQuickView: (target: QuickViewTarget) => void;
+  /**
+   * Whether the outreach pill sits beside the list one.
+   *
+   * On by default, which is the Program tab: that page is where outreach gets
+   * assigned, so whether it has been is one of the things it is for. The
+   * dashboard banner turns it off — the card is narrower there and the two
+   * pills wrapped onto separate lines, and a rep glancing at the dashboard is
+   * asking whether the list is in, not how far the assignment has got.
+   */
+  showOutreach?: boolean;
 }) {
   const daysUntil = Math.max(0, Math.ceil((new Date(conference.start_date + 'T00:00:00').getTime() - Date.now()) / 86_400_000));
   const bar = topBarFor(conference, daysUntil);
@@ -329,7 +339,7 @@ export function ProgramConferenceCard({ conference, territories, planYear, allCo
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', borderTop: '0.5px solid var(--border, #E5E7EB)', paddingTop: 8, marginTop: 8 }}>
-            <OutreachStatusPill outreachProgress={conference.outreachProgress} />
+            {showOutreach && <OutreachStatusPill outreachProgress={conference.outreachProgress} />}
             <ListStatusPill hasAttendeeList={conference.hasAttendeeList} attendeeCount={conference.attendeeCount} />
           </div>
         )}

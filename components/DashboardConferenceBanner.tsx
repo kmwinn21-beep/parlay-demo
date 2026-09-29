@@ -280,6 +280,12 @@ export function DashboardConferenceBanner() {
                       allConferences={[]}
                       onRepsUpdated={() => {}}
                       onQuickView={setQuickView}
+                      // Just the list pill here. The card is narrower in this
+                      // row than it is on the Program tab and the two pills
+                      // wrapped onto separate lines; the dashboard's question
+                      // is whether the list is in, and outreach is assigned on
+                      // the page that shows both.
+                      showOutreach={false}
                     />
                   </div>
                 ))}
