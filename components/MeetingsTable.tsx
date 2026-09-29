@@ -6,7 +6,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { QuickViewDrawer, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { getPreset, getHex, type ColorMap } from '@/lib/colors';
-import { MEETING_TIME_OPTIONS, formatMeetingTime } from '@/lib/meetingTime';
+import { MEETING_TIME_OPTIONS, formatMeetingTime, formatCardDate } from '@/lib/meetingTime';
 import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
@@ -190,6 +190,15 @@ const PILL_TEXT = 'text-[10px]';
 
 /** The pill shape the mobile card's values share. */
 const DETAIL_PILL = `inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${PILL_TEXT} font-medium whitespace-nowrap border`;
+
+/**
+ * The same pill, for the row that answers when, where and how it went.
+ *
+ * Set larger than the row below it on purpose: those three are what a rep
+ * checks first, and the second row is what they read once one of them is
+ * worth a second look.
+ */
+const FACT_PILL = 'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap border';
 
 /**
  * Everyone a meeting is with, primary attendee first.
@@ -437,11 +446,20 @@ function OutcomeButton({
   options,
   colorMap,
   onChange,
+  compact = false,
 }: {
   value: string | null;
   options: string[];
   colorMap: ColorMap;
   onChange: (val: string) => void;
+  /**
+   * Sits it on the mobile card's Where/When row, whose pills are 8px in.
+   *
+   * A prop rather than one padding for both: the table's pill is in a column
+   * of its own where a little more room around the word reads better, and
+   * nobody asked for that to change.
+   */
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; above: boolean } | null>(null);
@@ -490,9 +508,10 @@ function OutcomeButton({
   };
 
   const preset = value ? getPreset(colorMap[value]) : null;
+  const pad = compact ? 'px-2 py-1' : 'px-2.5 py-1';
   const btnClass = preset
-    ? `${preset.pillClass} px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer whitespace-nowrap`
-    : 'bg-gray-100 text-gray-500 border border-gray-300 px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer whitespace-nowrap';
+    ? `${preset.pillClass} ${pad} rounded-full text-xs font-semibold cursor-pointer whitespace-nowrap`
+    : `bg-gray-100 text-gray-500 border border-gray-300 ${pad} rounded-full text-xs font-semibold cursor-pointer whitespace-nowrap`;
 
   return (
     <div ref={ref} className="relative inline-block">
@@ -1518,14 +1537,14 @@ export function MeetingsTable({
             <div className="mt-3 flex items-start gap-3">
               <div className="flex-shrink-0">
                 <p className={EYEBROW}>When</p>
-                <p className="text-xs text-gray-600 whitespace-nowrap">
-                  {formatMeetingDate(m.meeting_date)} at {formatMeetingTime(m.meeting_time)}
-                </p>
+                <span className={`${FACT_PILL} bg-gray-50 text-gray-600 border-gray-200`}>
+                  {formatCardDate(m.meeting_date)} at {formatMeetingTime(m.meeting_time)}
+                </span>
               </div>
               <div className="min-w-0 flex-1">
                 <p className={EYEBROW}>Where</p>
                 {m.location ? (
-                  <span className={`${DETAIL_PILL} bg-gray-50 text-gray-600 border-gray-200 max-w-full`} title={m.location}>
+                  <span className={`${FACT_PILL} bg-gray-50 text-gray-600 border-gray-200 max-w-full`} title={m.location}>
                     <LocationIcon />
                     <span className="truncate">{m.location}</span>
                   </span>
@@ -1533,14 +1552,14 @@ export function MeetingsTable({
                   /* An empty slot that says what is missing and takes you where
                      to fix it, rather than a gap that reads as "no location
                      needed". Dashed, because it is a placeholder and not a
-                     value. */
+                     value, and wordmark only — a pin drawn over "+ Location"
+                     labels a location that is not there. */
                   <button
                     type="button"
                     onClick={() => setEditingId(m.id)}
                     title="Set a location"
-                    className={`${DETAIL_PILL} border-dashed border-gray-300 text-gray-400 hover:text-gray-600 hover:border-gray-400 transition-colors`}
+                    className={`${FACT_PILL} border-dashed border-gray-300 text-gray-400 hover:text-gray-600 hover:border-gray-400 transition-colors`}
                   >
-                    <LocationIcon />
                     + Location
                   </button>
                 )}
@@ -1552,6 +1571,7 @@ export function MeetingsTable({
                   options={actionOptions}
                   colorMap={colorMap}
                   onChange={(val) => changeOutcome(m, val)}
+                  compact
                 />
               </div>
             </div>
@@ -1589,7 +1609,7 @@ export function MeetingsTable({
                   {m.meeting_type && (
                     <div className="flex-shrink-0">
                       <p className={EYEBROW}>Type</p>
-                      <span className={`${PILL_TEXT} text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded whitespace-nowrap`}>{m.meeting_type}</span>
+                      <span className={`${PILL_TEXT} font-semibold text-gray-500 bg-gray-100 border border-gray-200 px-1.5 py-1 rounded-xl whitespace-nowrap`}>{m.meeting_type}</span>
                     </div>
                   )}
                   {mobileValue(m) && (

@@ -19,6 +19,11 @@
  *
  * Exits non-zero on the first failing expectation, so it can gate a build.
  */
+// Set before anything reads a Date. A card date is parsed as LOCAL midnight;
+// parsed as UTC it lands on the previous day anywhere behind Greenwich, and a
+// container running in UTC cannot tell the two apart.
+process.env.TZ = 'America/Los_Angeles';
+
 import { readFileSync } from 'node:fs';
 
 let pass = 0;
@@ -32,6 +37,8 @@ const eq = (label, got, want) => {
 
 const strip = (f) => readFileSync(f, 'utf8')
   .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+const { formatCardDate } = await import('@/lib/meetingTime');
 
 const SRC = 'components/MeetingsTable.tsx';
 const table = strip(SRC);
@@ -57,15 +64,59 @@ console.log('\n— every value is under a word saying what it is —');
   eq('  with none writing its own',
     /text-\[9px\] uppercase tracking-wide/.test(card), false);
 
-  // The values match each other too. Type is a plain rounded tag and Location
-  // is a bordered pill, so they share no class list — but they sit on one row
-  // under matching labels, and two text sizes read as two kinds of thing.
-  eq('the values are all one text size', /const PILL_TEXT = 'text-\[\d+px\]';/.test(table), true);
-  eq('  which the location pill takes', /rounded-full \$\{PILL_TEXT\} font-medium/.test(table), true);
-  eq('  and the type tag takes as well',
-    /\$\{PILL_TEXT\} text-gray-500 bg-gray-100[^`]*`}>\{m\.meeting_type\}/.test(card), true);
+  /*
+   * Two sizes, one per row, and each row internally consistent.
+   *
+   * When, Where and Status are what a rep checks first, so they are set
+   * larger; Rep, Support, Type and Value are what gets read once one of those
+   * is worth a second look. Within a row the size is declared once, because
+   * Type is a rounded tag and Value is a pill and nothing else keeps them in
+   * step — which is how they came to differ before.
+   */
+  eq('the second row is one declared size', /const PILL_TEXT = 'text-\[\d+px\]';/.test(table), true);
+  eq('  which the type tag takes',
+    /\$\{PILL_TEXT\} font-semibold text-gray-500 bg-gray-100[^`]*`}>\{m\.meeting_type\}/.test(card), true);
+  eq('  and the value pill takes through the shared shape',
+    /rounded-full \$\{PILL_TEXT\} font-medium/.test(table), true);
   eq('  with neither setting a size of its own',
     /text-xs[^`"]*>\{m\.meeting_type\}/.test(card), false);
+
+  // The first row's pill, declared once and used by all three of them.
+  eq('the first row is one declared pill',
+    /const FACT_PILL = 'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap border';/.test(table), true);
+  const factPills = (card.match(/\$\{FACT_PILL\}/g) ?? []).length;
+  eq('  worn by the date and both states of the location', factPills, 3);
+  // Status is the third, and comes from a component the table shares with the
+  // desktop view — so it is told to match rather than restyled for everyone.
+  eq('  and the status pill is asked to match',
+    /onChange=\{\(val\) => changeOutcome\(m, val\)\}\s*\n\s*compact\s*\n/.test(card), true);
+  eq('  which only narrows it here',
+    /const pad = compact \? 'px-2 py-1' : 'px-2\.5 py-1';/.test(table), true);
+}
+
+console.log('\n— the date, as the card writes it —');
+{
+  // Run, not read. Grepping the formatter's source said the month came from
+  // getMonth() and the day was padded, and was satisfied by a version that
+  // padded both and dropped the weekday entirely.
+  eq('a date reads "Sun, 7/05"', formatCardDate('2026-07-05'), 'Sun, 7/05');
+  eq('  the month is not padded', formatCardDate('2026-07-05').split(', ')[1], '7/05');
+  eq('  the day is', formatCardDate('2026-11-03'), 'Tue, 11/03');
+  eq('  a two-digit month stays two digits', formatCardDate('2026-12-25'), 'Fri, 12/25');
+  eq('  and the year is not in it', /2026/.test(formatCardDate('2026-07-05')), false);
+  eq('nothing in, nothing out', formatCardDate(''), '');
+
+  // Read as local midnight. Parsed as UTC it lands on the previous day for
+  // every reader behind Greenwich — this file runs in Los Angeles so that the
+  // difference is visible at all.
+  eq('the run is not in UTC', new Date().getTimezoneOffset() !== 0, true);
+  eq('  and the date is not shifted by the time zone', formatCardDate('2026-01-01'), 'Thu, 1/01');
+
+  // The card uses it; the table keeps its own longer form.
+  eq('the card is written with it',
+    /\{formatCardDate\(m\.meeting_date\)\} at \{formatMeetingTime\(m\.meeting_time\)\}/.test(card), true);
+  eq('  and the table is not',
+    /formatCardDate/.test(table.slice(table.indexOf("case 'datetime': return <td"))), false);
 }
 
 console.log('\n— where, when nobody set a where —');
@@ -75,6 +126,10 @@ console.log('\n— where, when nobody set a where —');
   // difference between that and nobody having filled it in.
   eq('a missing location offers to take one',
     /\+ Location/.test(card), true);
+  // Wordmark only: a pin drawn over "+ Location" labels a location that is
+  // not there.
+  const placeholder = card.slice(card.indexOf('title="Set a location"'), card.indexOf('+ Location'));
+  eq('  with no pin on it', /<LocationIcon \/>/.test(placeholder), false);
   eq('  drawn as a placeholder, not a value',
     /border-dashed border-gray-300 text-gray-400/.test(card), true);
   eq('  and opens the edit form for this meeting',
