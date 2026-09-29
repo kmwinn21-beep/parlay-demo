@@ -42,7 +42,21 @@ const { formatCardDate } = await import('@/lib/meetingTime');
 
 const SRC = 'components/MeetingsTable.tsx';
 const table = strip(SRC);
-const card = table.slice(table.indexOf('const renderMobileCard'), table.indexOf('const renderRow'));
+/*
+ * The mobile card alone.
+ *
+ * Ended at the next thing declared after it, and CHECKED — an end anchor that
+ * is not in the file makes indexOf return -1, and the slice quietly becomes
+ * the whole rest of the component. Every assertion below would then be
+ * satisfied by the desktop table markup underneath it.
+ */
+const cardStart = table.indexOf('const renderMobileCard');
+const cardEnd = table.indexOf('const attendeeNameNode');
+if (cardStart < 0 || cardEnd <= cardStart) {
+  console.log('  FAIL could not isolate the mobile card');
+  process.exit(1);
+}
+const card = table.slice(cardStart, cardEnd);
 
 console.log('\n— every value is under a word saying what it is —');
 {
@@ -50,10 +64,22 @@ console.log('\n— every value is under a word saying what it is —');
   // moved is a label this notices — the point of the change is that a reader
   // knows where to look, and that is a claim about sequence.
   const labels = [...card.matchAll(/<p className=\{EYEBROW\}>([^<]+)<\/p>/g)].map(m => m[1]);
-  eq('the first row answers when, where and how it went',
-    labels.slice(0, 3), ['When', 'Where', 'Status']);
-  eq('  and the second one, who and what',
-    labels.slice(3), ['Rep', 'Support', 'Type', 'Value', 'Conference', 'Guests']);
+  eq('the first row answers when and where',
+    labels.slice(0, 2), ['When', 'Where']);
+  // Type leads, under When: the two read as one sentence about the meeting,
+  // and a reader going down the left edge gets both without crossing the card.
+  // The unit count is labelled with whatever the account calls a unit.
+  eq('  and the second, what it was and what it is worth',
+    labels.slice(2), ['Type', 'Support', '{unitTypeLabel}', 'Value', 'Conference', 'Guests']);
+  /*
+   * The labels are read out of the source, so a block switched off still
+   * shows its label here. Each one is gated on the thing it displays, and
+   * nothing is gated on a constant — which is exactly what a label left
+   * behind by a removed value looks like.
+   */
+  eq('  each shown only when there is something to show',
+    /\{m\.meeting_type && \(\s*\n\s*<div className="flex-shrink-0">\s*\n\s*<p className=\{EYEBROW\}>Type<\/p>/.test(card), true);
+  eq('  and nothing is switched off', /\{false &&/.test(card), false);
 
   // One declared class. Written out at each site they drift, and a row of
   // labels that do not match reads as several things rather than one row.
@@ -74,12 +100,27 @@ console.log('\n— every value is under a word saying what it is —');
    * step — which is how they came to differ before.
    */
   eq('the second row is one declared size', /const PILL_TEXT = 'text-\[\d+px\]';/.test(table), true);
-  eq('  which the type tag takes',
-    /\$\{PILL_TEXT\} font-semibold text-gray-500 bg-gray-100[^`]*`}>\{m\.meeting_type\}/.test(card), true);
-  eq('  and the value pill takes through the shared shape',
-    /rounded-full \$\{PILL_TEXT\} font-medium/.test(table), true);
-  eq('  with neither setting a size of its own',
+  eq('  which every pill on it takes through one shape',
+    /const ROW_PILL = `inline-flex items-center \$\{ROW_PILL_H\} px-2 rounded-xl border \$\{PILL_TEXT\} font-semibold whitespace-nowrap`;/.test(table), true);
+  eq('  including the type tag', /\$\{ROW_PILL\}[^`]*`}>\{m\.meeting_type\}/.test(card), true);
+  eq('  with none setting a size of its own',
     /text-xs[^`"]*>\{m\.meeting_type\}/.test(card), false);
+
+  /*
+   * One declared HEIGHT for that row, not just one padding.
+   *
+   * The pills carry different things — a few words, a number, a count with a
+   * glyph — so their text and padding differ and nothing else lines them up. A
+   * row at four heights reads as four kinds of thing rather than one band.
+   */
+  eq('the second row is one declared height', /const ROW_PILL_H = 'h-\d+';/.test(table), true);
+  const rowPills = (card.match(/\$\{ROW_PILL\}/g) ?? []).length;
+  eq('  worn by every pill on it', rowPills, 5);
+  // The support stack is the sixth thing on that row and is not a pill; it is
+  // sized square at the same height so it stays a circle.
+  eq('  and the support stack is square at that height',
+    /<p className=\{EYEBROW\}>Support<\/p>\s*\n\s*<OverlappingRepPills[\s\S]{0,160}size="sm"/.test(card), true);
+  eq('  which is the size that is 24px', /const dim = size === 'xs' \? 'w-5 h-5[^']*' : 'w-6 h-6/.test(strip('components/OverlappingRepPills.tsx')), true);
 
   // The first row's pill, declared once and used by all three of them.
   eq('the first row is one declared pill',
@@ -142,15 +183,46 @@ console.log('\n— where, when nobody set a where —');
 
 console.log('\n— what must not scroll away —');
 {
-  // Selecting rows is the one thing on this row that has to work without
-  // hunting for it. Inside the ScrollRow it is reachable only after paging.
-  const row = card.slice(card.indexOf('<ScrollRow'), card.indexOf('</div>', card.indexOf('</ScrollRow>')));
-  eq('the checkbox is outside the scrolling region',
-    row.indexOf('</ScrollRow>') < row.indexOf('type="checkbox"'), true);
-  eq('  and cannot shrink',
-    /type="checkbox"[\s\S]{0,400}flex-shrink-0/.test(card), true);
-  // The row pages rather than wrapping, which is what carries the rest.
-  eq('the rest of the row scrolls', /<ScrollRow className="flex-1 min-w-0"/.test(card), true);
+  /*
+   * Selecting a card is a thing you do TO the card, so it leads the line the
+   * card is titled with. It used to ride the end of the row of facts, where it
+   * sat beside a ScrollRow and had to be kept out of it by hand; on the title
+   * line there is nothing to scroll and nothing to keep it out of.
+   */
+  const header = card.slice(card.indexOf('relative flex items-start gap-2 mb-2'), card.indexOf('AttendeeInitialsAvatar'));
+  eq('the checkbox leads the title line', /type="checkbox"/.test(header), true);
+  eq('  ahead of the company name',
+    header.indexOf('type="checkbox"') < header.indexOf('m.company_name'), true);
+  eq('  and cannot shrink', /type="checkbox"[\s\S]{0,400}flex-shrink-0/.test(header), true);
+  // Once only: a second one further down would be a second answer to the same
+  // question.
+  eq('  and is the only one on the card', (card.match(/type="checkbox"/g) ?? []).length, 1);
+  // The row of facts still pages rather than wrapping.
+  eq('the row of facts scrolls', /<ScrollRow className="mt-3" gapClass="gap-3"/.test(card), true);
+}
+
+console.log('\n— who owns it and how it went, under a rule —');
+{
+  const tail = card.slice(card.indexOf('border-t border-gray-100'));
+  eq('the last row is ruled off from the facts above it',
+    /mt-3 pt-3 border-t border-gray-100 flex items-center justify-between/.test(card), true);
+  // Labelled inline rather than with an eyebrow: there are two of them on one
+  // line, at opposite ends, and a label stacked above each would read as the
+  // start of another row of facts.
+  eq('  Rep is labelled beside its pill', /<span className=\{INLINE_LABEL\}>Rep:<\/span>/.test(tail), true);
+  eq('  and Status beside its own', /<span className=\{INLINE_LABEL\}>Status:<\/span>/.test(tail), true);
+  eq('  with neither taking an eyebrow', /EYEBROW/.test(tail), false);
+  eq('  Rep at the left and Status at the right',
+    tail.indexOf('Rep:') < tail.indexOf('Status:'), true);
+
+  // The two ends of that line read as a pair, so they are the same height,
+  // text and weight — which is what the rep pill's 'md' size is for.
+  eq('the rep pill is sized to the outcome pill', /size="md" withIcon/.test(tail), true);
+  eq('  which matches its padding, text and weight',
+    /size === 'md'\s*\n\s*\? 'inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap'/.test(table), true);
+  eq('  and carries the glyph at full strength beside it',
+    /size === 'md' \? '' : 'opacity-70'/.test(table), true);
+  eq('the outcome pill is the narrow one', /compact/.test(tail), true);
 }
 
 console.log('\n— support keeps its stack, and its expansion —');
@@ -168,34 +240,22 @@ console.log('\n— support keeps its stack, and its expansion —');
     /Array\.from\(el\.children\)\.forEach\(c => ro\.observe\(c\)\)/.test(scroll), true);
 }
 
-console.log('\n— the size of the company, beside its name —');
+console.log('\n— the size of the company, among the facts —');
 {
-  const header = card.slice(card.indexOf('relative flex items-start mb-2'), card.indexOf('AttendeeInitialsAvatar'));
-  eq('the units pill sits in the company row',
-    /m\.company_wse != null && \([\s\S]{0,300}bg-yellow-50 text-yellow-700/.test(header), true);
-  /*
-   * One cluster, laid out together.
-   *
-   * They were positioned separately, which meant guessing how wide the kebab
-   * is in order to place the pill beside it — and the guess was short, so the
-   * pill lost its right edge behind the menu's border. Side by side in a flex
-   * row they cannot overlap whatever either one measures.
-   */
-  eq('  laid out beside the kebab rather than offset by a guess',
-    /absolute right-0 top-0 flex items-start gap-1\.5 pl-1\.5 bg-white/.test(header), true);
-  eq('  with no guessed offset left',
-    /right-7/.test(table), false);
-  eq('  and the kebab inside the same cluster',
-    header.indexOf('flex items-start gap-1.5') < header.indexOf('<MeetingActionsMenu'), true);
-  // It is a fact about the company, so it goes where the company name goes.
-  // The GATE, not the padding expression on the same row — which also reads
-  // "!hideCompany && m.company_wse != null" and satisfied a looser match.
-  eq('  and is hidden wherever the company is',
-    /\{!hideCompany && m\.company_wse != null && \(/.test(header), true);
-  // The name scrolls UNDER the cluster rather than being cut off by it, so the
-  // room reserved for that cluster has to grow when the pill joins it.
-  eq('  with room reserved for it',
-    /!hideCompany && m\.company_wse != null \? 'pr-24' : 'pr-9'/.test(header), true);
+  // It was in the title line, wedged beside the kebab. It is a fact about the
+  // account like Value is, and it now sits with the facts — immediately before
+  // Value, which is computed from it.
+  const header = card.slice(card.indexOf('relative flex items-start gap-2 mb-2'), card.indexOf('AttendeeInitialsAvatar'));
+  eq('the title line carries no unit count', /company_wse/.test(header), false);
+  eq('  nor any offset left over from it', /right-7|pr-24/.test(table), false);
+
+  const labels = [...card.matchAll(/<p className=\{EYEBROW\}>([^<]+)<\/p>/g)].map(m => m[1]);
+  eq('the unit count sits before Value',
+    labels.indexOf('{unitTypeLabel}') + 1, labels.indexOf('Value'));
+  // Named for whatever the account calls a unit — beds, keys, doors — rather
+  // than for the column it is stored in.
+  eq('  and is labelled from the admin setting',
+    /<p className=\{EYEBROW\}>\{unitTypeLabel\}<\/p>/.test(card), true);
 }
 
 console.log('\n— the strip of pills it replaced left nothing behind —');

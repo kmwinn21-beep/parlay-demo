@@ -101,7 +101,12 @@ function RepPills({
 }: {
   scheduledBy: string | null;
   userOptions: UserOption[];
-  size?: 'sm' | 'xs';
+  /**
+   * 'md' matches the outcome pill it sits opposite on the mobile card — same
+   * height, same text, same weight, so the two ends of that line read as a
+   * pair rather than as a label and a control.
+   */
+  size?: 'md' | 'sm' | 'xs';
   /** Leads each pill with the user glyph, as the mobile card does. */
   withIcon?: boolean;
 }) {
@@ -110,17 +115,21 @@ function RepPills({
   if (users.length === 0) return <span className="text-gray-300">—</span>;
 
   const baseClass =
-    size === 'xs'
-      ? 'inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap'
-      : 'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap';
+    size === 'md'
+      ? 'inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap'
+      : size === 'xs'
+        ? 'inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap'
+        : 'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap';
 
   return (
     <span className="inline-flex flex-wrap gap-1">
       {users.map((user, i) => (
         <span key={i} className={`${baseClass} gap-1 ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
+          {/* Full strength at 'md', where it sits beside semibold text and a
+              faded glyph reads as a different weight from the initials. */}
           {withIcon && (
-            <svg className="w-3 h-3 opacity-70 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            <svg className={`w-3 h-3 flex-shrink-0 ${size === 'md' ? '' : 'opacity-70'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={size === 'md' ? 2.5 : 2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
           )}
           {getRepInitials(user!.value)}
@@ -192,13 +201,28 @@ const PILL_TEXT = 'text-[10px]';
 const DETAIL_PILL = `inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${PILL_TEXT} font-medium whitespace-nowrap border`;
 
 /**
- * The same pill, for the row that answers when, where and how it went.
+ * The same pill, for the row that answers when and where.
  *
- * Set larger than the row below it on purpose: those three are what a rep
- * checks first, and the second row is what they read once one of them is
- * worth a second look.
+ * Set larger than the row below it on purpose: those are what a rep checks
+ * first, and the row below is what they read once one of them is worth a
+ * second look.
  */
 const FACT_PILL = 'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap border';
+
+/**
+ * The second row's pills: Type, the unit count, Value and the rest.
+ *
+ * One declared HEIGHT, not just one padding. They carry different things — a
+ * few words, a number, a count with a glyph — so their text and padding differ
+ * and nothing else would line them up. A row of pills at four heights reads as
+ * four kinds of thing rather than one band of facts, and the support stack
+ * beside them is square at the same height so it stays a circle.
+ */
+const ROW_PILL_H = 'h-6';
+const ROW_PILL = `inline-flex items-center ${ROW_PILL_H} px-2 rounded-xl border ${PILL_TEXT} font-semibold whitespace-nowrap`;
+
+/** "Rep:" and "Status:", beside the pill rather than stacked above it. */
+const INLINE_LABEL = 'text-[10px] font-medium text-gray-400 flex-shrink-0';
 
 /**
  * Everyone a meeting is with, primary attendee first.
@@ -1430,8 +1454,20 @@ export function MeetingsTable({
             {/* A long company name scrolls sideways under the kebab rather
                 than being cut off by it — the kebab sits on the card's own
                 background, so the name slides out of sight behind it. */}
-            <div className="relative flex items-start mb-2 min-h-[1.25rem]">
-              <div className={`min-w-0 flex-1 overflow-x-auto scrollbar-hide ${!hideCompany && m.company_wse != null ? 'pr-24' : 'pr-9'}`}>
+            <div className="relative flex items-start gap-2 mb-2 min-h-[1.25rem]">
+              {/* Selecting a card is a thing you do TO the card, so it leads
+                  the line the card is titled with rather than riding the row
+                  of facts at the bottom. */}
+              {hasSelection && (
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(m.id)}
+                  onChange={() => toggleSelect(m.id)}
+                  onClick={e => e.stopPropagation()}
+                  className="flex-shrink-0 mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
+                />
+              )}
+              <div className="min-w-0 flex-1 overflow-x-auto scrollbar-hide pr-9">
                 {!hideCompany && (m.company_name && m.company_id ? (
                   <button
                     type="button"
@@ -1444,40 +1480,18 @@ export function MeetingsTable({
                   <p className="text-sm font-semibold text-gray-500 whitespace-nowrap">{m.company_name}</p>
                 ) : null)}
               </div>
-              {/* The size of the company, beside its name — the one number a
-                  rep sizes an account by, and on mobile it was only reachable
-                  by opening the company. Part of the same opaque cluster the
-                  kebab sits in, so a long name still slides away underneath
-                  both rather than being cut off by either. */}
-              {/*
-               * The units pill and the kebab, in ONE cluster.
-               *
-               * Two separately positioned boxes meant guessing how wide the
-               * kebab is to place the pill beside it, and the guess was short
-               * — the pill lost its right edge behind the menu's border. Laid
-               * out together they cannot overlap whatever either one measures.
-               *
-               * Opaque, and the name scrolls underneath: a long company name
-               * slides out of sight behind this rather than being cut off.
-               */}
-              {((!hideCompany && m.company_wse != null) || onEdit || onNotesClick) && (
-                <div className="absolute right-0 top-0 flex items-start gap-1.5 pl-1.5 bg-white">
-                  {!hideCompany && m.company_wse != null && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200 whitespace-nowrap" title={`${Number(m.company_wse).toLocaleString()} ${unitTypeLabel}`}>
-                      <svg className="w-3 h-3 text-yellow-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
-                      {Number(m.company_wse).toLocaleString()}
-                    </span>
-                  )}
-                  {(onEdit || onNotesClick) && (
-                    <MeetingActionsMenu
-                      hasNotes={!!m.has_notes}
-                      hasConferenceNotes={noteCount(m) > 0}
-                      onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
-                      onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
-                      onViewNotes={anchor => setNotesView({ meeting: m, anchor })}
-                      onEdit={() => setEditingId(m.id)}
-                    />
-                  )}
+              {/* Opaque, and the name scrolls underneath: a long company name
+                  slides out of sight behind this rather than being cut off. */}
+              {(onEdit || onNotesClick) && (
+                <div className="absolute right-0 top-0 pl-1.5 bg-white">
+                  <MeetingActionsMenu
+                    hasNotes={!!m.has_notes}
+                    hasConferenceNotes={noteCount(m) > 0}
+                    onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
+                    onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
+                    onViewNotes={anchor => setNotesView({ meeting: m, anchor })}
+                    onEdit={() => setEditingId(m.id)}
+                  />
                 </div>
               )}
             </div>
@@ -1564,8 +1578,95 @@ export function MeetingsTable({
                   </button>
                 )}
               </div>
-              <div className="flex-shrink-0">
-                <p className={EYEBROW}>Status</p>
+            </div>
+
+            {/*
+             * What the meeting was, who else was on it, and what the account is
+             * worth — on one line that scrolls.
+             *
+             * Type leads, under When: the two read as one sentence about the
+             * meeting, and a reader going down the left edge gets both without
+             * crossing the card. Every pill on the line is the same height, so
+             * the row reads as one band rather than as four things of different
+             * sizes; the support stack is square so it stays a circle.
+             */}
+            {(m.meeting_type || splitInternalIds(m).supportIds || m.company_wse != null
+              || mobileValue(m) || mobileConference(m) || mobileGuests(m).length > 0) && (
+              <ScrollRow className="mt-3" gapClass="gap-3" step={120}>
+                {m.meeting_type && (
+                  <div className="flex-shrink-0">
+                    <p className={EYEBROW}>Type</p>
+                    <span className={`${ROW_PILL} text-gray-500 bg-gray-100 border-gray-200`}>{m.meeting_type}</span>
+                  </div>
+                )}
+                {splitInternalIds(m).supportIds && (
+                  <div className="flex-shrink-0">
+                    <p className={EYEBROW}>Support</p>
+                    <OverlappingRepPills
+                      repIds={splitInternalIds(m).supportIds}
+                      userOptions={userOptions}
+                      size="sm"
+                      emptyLabel={null}
+                    />
+                  </div>
+                )}
+                {/* Named for whatever the account calls a unit — beds, keys,
+                    doors — rather than for the column it is stored in. */}
+                {m.company_wse != null && (
+                  <div className="flex-shrink-0">
+                    <p className={EYEBROW}>{unitTypeLabel}</p>
+                    <span className={`${ROW_PILL} bg-yellow-50 text-yellow-700 border-yellow-200 gap-1`}>
+                      <svg className="w-3 h-3 text-yellow-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+                      {Number(m.company_wse).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+                {mobileValue(m) && (
+                  <div className="flex-shrink-0">
+                    <p className={EYEBROW}>Value</p>
+                    <span className={`${ROW_PILL} bg-green-100 text-green-700 border-green-300`}>
+                      {mobileValue(m)}
+                    </span>
+                  </div>
+                )}
+                {/* Neither is in the rows above, and both were in the strip of
+                    pills this replaced — dropped rather than relabelled, they
+                    would just be gone. */}
+                {mobileConference(m) && (
+                  <div className="flex-shrink-0">
+                    <p className={EYEBROW}>Conference</p>
+                    <span className={`${ROW_PILL} bg-brand-secondary/10 text-brand-secondary border-brand-secondary/30`} title={mobileConference(m)!}>
+                      {mobileConference(m)}
+                    </span>
+                  </div>
+                )}
+                {mobileGuests(m).length > 0 && (
+                  <div className="flex-shrink-0">
+                    <p className={EYEBROW}>Guests</p>
+                    <span className={`${ROW_PILL} bg-blue-50 text-blue-700 border-blue-200`} title={mobileGuests(m).join(', ')}>
+                      {mobileGuests(m).map(nameInitials).join(' | ')}
+                    </span>
+                  </div>
+                )}
+              </ScrollRow>
+            )}
+
+            {/*
+             * Who owns it and how it went, under a rule.
+             *
+             * These two are the card's outcome rather than its description, so
+             * they are separated from the facts above rather than listed among
+             * them. Labelled inline instead of with an eyebrow: there are two
+             * of them on one line, at opposite ends, and a label stacked above
+             * each would read as the start of another row of facts.
+             */}
+            <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-1.5 min-w-0">
+                <span className={INLINE_LABEL}>Rep:</span>
+                <RepPills scheduledBy={splitInternalIds(m).repIds} userOptions={userOptions} size="md" withIcon />
+              </span>
+              <span className="inline-flex items-center gap-1.5 flex-shrink-0">
+                <span className={INLINE_LABEL}>Status:</span>
                 <OutcomeButton
                   value={m.outcome}
                   options={actionOptions}
@@ -1573,84 +1674,8 @@ export function MeetingsTable({
                   onChange={(val) => changeOutcome(m, val)}
                   compact
                 />
-              </div>
+              </span>
             </div>
-
-            {/*
-             * Everything else, on one line that scrolls.
-             *
-             * The checkbox sits OUTSIDE the scrolling region: selecting rows is
-             * the one thing here that has to work without finding it first, and
-             * a checkbox that scrolls out of reach is a checkbox that is gone.
-             * Support keeps its click-to-expand — the row is a ScrollRow, so
-             * widening it pushes the rest along and the chevrons appear.
-             */}
-            {(splitInternalIds(m).repIds || splitInternalIds(m).supportIds || m.meeting_type
-              || mobileValue(m) || mobileConference(m) || mobileGuests(m).length > 0 || hasSelection) && (
-              <div className="mt-3 flex items-center gap-2">
-                <ScrollRow className="flex-1 min-w-0" gapClass="gap-3" step={120}>
-                  {splitInternalIds(m).repIds && (
-                    <div className="flex-shrink-0">
-                      <p className={EYEBROW}>Rep</p>
-                      <RepPills scheduledBy={splitInternalIds(m).repIds} userOptions={userOptions} size="xs" withIcon />
-                    </div>
-                  )}
-                  {splitInternalIds(m).supportIds && (
-                    <div className="flex-shrink-0">
-                      <p className={EYEBROW}>Support</p>
-                      <OverlappingRepPills
-                        repIds={splitInternalIds(m).supportIds}
-                        userOptions={userOptions}
-                        size="xs"
-                        emptyLabel={null}
-                      />
-                    </div>
-                  )}
-                  {m.meeting_type && (
-                    <div className="flex-shrink-0">
-                      <p className={EYEBROW}>Type</p>
-                      <span className={`${PILL_TEXT} font-semibold text-gray-500 bg-gray-100 border border-gray-200 px-1.5 py-1 rounded-xl whitespace-nowrap`}>{m.meeting_type}</span>
-                    </div>
-                  )}
-                  {mobileValue(m) && (
-                    <div className="flex-shrink-0">
-                      <p className={EYEBROW}>Value</p>
-                      <span className={`${DETAIL_PILL} bg-green-100 text-green-700 border-green-300 font-semibold`}>
-                        {mobileValue(m)}
-                      </span>
-                    </div>
-                  )}
-                  {/* Neither is in the row above, and both were in the strip of
-                      pills this replaced — dropped rather than relabelled, they
-                      would just be gone. */}
-                  {mobileConference(m) && (
-                    <div className="flex-shrink-0">
-                      <p className={EYEBROW}>Conference</p>
-                      <span className={`${DETAIL_PILL} bg-brand-secondary/10 text-brand-secondary border-brand-secondary/30`} title={mobileConference(m)!}>
-                        {mobileConference(m)}
-                      </span>
-                    </div>
-                  )}
-                  {mobileGuests(m).length > 0 && (
-                    <div className="flex-shrink-0">
-                      <p className={EYEBROW}>Guests</p>
-                      <span className={`${DETAIL_PILL} bg-blue-50 text-blue-700 border-blue-200`} title={mobileGuests(m).join(', ')}>
-                        {mobileGuests(m).map(nameInitials).join(' | ')}
-                      </span>
-                    </div>
-                  )}
-                </ScrollRow>
-                {hasSelection && (
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(m.id)}
-                    onChange={() => toggleSelect(m.id)}
-                    onClick={e => e.stopPropagation()}
-                    className="flex-shrink-0 h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
-                  />
-                )}
-              </div>
-            )}
           </>
         )}
       </div>
