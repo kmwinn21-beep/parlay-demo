@@ -6,6 +6,7 @@ import { ProgramConferenceCard, type ProgramCardConference, type ProgramCardTerr
 import { QuickViewDrawer, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { postConferenceDaysRemaining } from '@/lib/conference-stage';
 import { bannerBands, bannerHeadline, type BannerHeadlineKind } from '@/lib/dashboardBannerConferences';
+import { closesInLabel, conferenceDayLabel, startsInLabel } from '@/lib/conferenceCardBar';
 import { useIsPhone } from '@/lib/useIsPhone';
 
 /**
@@ -53,33 +54,76 @@ function daysUntil(startDate: string): number {
 }
 
 /**
- * The eyebrow over each headline conference.
+ * The eyebrow over each headline conference: what stage it is in, and where
+ * in that stage it is.
  *
- * Coloured by what it says rather than uniformly: green is a show that is
- * happening, amber one whose window is closing, and the plain one is a date in
- * the future. The same three colours the Program tab's cards use for the same
- * three states.
+ * Two pills rather than one sentence. The stage was carrying its countdown
+ * along with it — "Post-Conference · 10 days left" — which put the least
+ * changeable fact and the most changeable one in the same breath and left the
+ * planning case with no stage on it at all, just a number.
+ *
+ * The second pill says exactly what the card below it says on its own top bar,
+ * from the same functions, so the headline and the card cannot come to
+ * disagree about which day of a show it is.
+ *
+ * Coloured by stage rather than uniformly: green is a show that is happening,
+ * amber one whose window is closing, and the plain one is a date in the
+ * future — the same three states the Program tab's cards colour the same way.
+ * The pair share a colour so they read as one thing said twice over, and the
+ * detail takes a border to sit apart from the stage without taking a second
+ * hue to do it.
  */
-function HeadlinePill({ kind, conference }: { kind: BannerHeadlineKind; conference: ProgramCardConference }) {
-  if (kind === 'in_progress') {
-    return (
-      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-400/20 text-emerald-300 text-[11px] font-semibold whitespace-nowrap">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-        In Progress
-      </span>
-    );
-  }
+const PILL = 'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap';
+
+const STAGE_TONE: Record<Exclude<BannerHeadlineKind, 'none'>, { fill: string; outline: string; label: string }> = {
+  in_progress: {
+    fill: 'bg-emerald-400/20 text-emerald-300',
+    outline: 'border border-emerald-400/40 text-emerald-300',
+    label: 'In Progress',
+  },
+  post_conference: {
+    fill: 'bg-amber-400/20 text-amber-200',
+    outline: 'border border-amber-400/40 text-amber-200',
+    label: 'Post-Conference',
+  },
+  planning: {
+    fill: 'bg-white/10 text-white/70',
+    outline: 'border border-white/25 text-white/70',
+    label: 'Planning',
+  },
+  closed: {
+    fill: 'bg-white/10 text-white/70',
+    outline: 'border border-white/25 text-white/70',
+    label: 'Closed',
+  },
+};
+
+/** Where in its stage the conference is — the card's own top-bar line. */
+function stageDetail(kind: BannerHeadlineKind, c: ProgramCardConference): string | null {
+  if (kind === 'in_progress') return conferenceDayLabel(c.start_date, c.end_date);
   if (kind === 'post_conference') {
-    const left = postConferenceDaysRemaining({ end_date: conference.end_date, post_conference_days: conference.post_conference_days ?? null });
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-200 text-[11px] font-semibold whitespace-nowrap">
-        Post-Conference · {left} days left
-      </span>
-    );
+    return closesInLabel(postConferenceDaysRemaining({
+      end_date: c.end_date,
+      post_conference_days: c.post_conference_days ?? null,
+    }));
   }
+  if (kind === 'planning') return startsInLabel(daysUntil(c.start_date));
+  // A closed conference is never a headline, so there is no countdown to draw.
+  return null;
+}
+
+function HeadlinePill({ kind, conference }: { kind: BannerHeadlineKind; conference: ProgramCardConference }) {
+  if (kind === 'none') return null;
+  const tone = STAGE_TONE[kind];
+  const detail = stageDetail(kind, conference);
   return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-white/10 text-white/70 text-[11px] font-semibold whitespace-nowrap">
-      {daysUntil(conference.start_date)} days away
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`${PILL} ${tone.fill}`}>
+        {/* The one stage that is happening right now gets the dot. */}
+        {kind === 'in_progress' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+        {tone.label}
+      </span>
+      {detail && <span className={`${PILL} ${tone.outline}`}>{detail}</span>}
     </span>
   );
 }
@@ -236,6 +280,12 @@ export function DashboardConferenceBanner() {
                       allConferences={[]}
                       onRepsUpdated={() => {}}
                       onQuickView={setQuickView}
+                      // Just the list pill here. The card is narrower in this
+                      // row than it is on the Program tab and the two pills
+                      // wrapped onto separate lines; the dashboard's question
+                      // is whether the list is in, and outreach is assigned on
+                      // the page that shows both.
+                      showOutreach={false}
                     />
                   </div>
                 ))}

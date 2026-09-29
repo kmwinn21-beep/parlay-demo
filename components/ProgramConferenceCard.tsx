@@ -6,6 +6,7 @@ import { ConferenceAvatar } from './ConferenceAvatar';
 import { RepAssignmentPopover, type AssignedRep } from './RepAssignmentPopover';
 import { QuickViewIcon, type QuickViewTarget } from './QuickViewDrawer';
 import { postConferenceDaysRemaining, type ConferenceStage } from '@/lib/conference-stage';
+import { closesInLabel, conferenceDayLabel, startsInLabel } from '@/lib/conferenceCardBar';
 
 export interface ProgramCardRep {
   userId: number;
@@ -128,20 +129,29 @@ function formatMonthYear(d: string): string {
 
 interface TopBarStyle { bg: string; border: string; textColor: string; label: string }
 
+/*
+ * The bar says where the conference is in its own life; the badge beside it
+ * says which stage that is. So the bar no longer repeats the stage's own word
+ * back at it — "Post-conference · 10 days remaining" next to a badge reading
+ * Post-Conference said it twice and buried the number.
+ */
 function topBarFor(conference: ProgramCardConference, daysUntil: number): TopBarStyle {
   const stage = conference.stage;
   if (stage === 'planning') {
+    const label = startsInLabel(daysUntil);
     if (daysUntil <= 30) {
-      return { bg: 'var(--bg-warning, #FFFBEB)', border: 'var(--border-warning, #FDE68A)', textColor: 'var(--text-warning, #B45309)', label: `in ${daysUntil} days` };
+      return { bg: 'var(--bg-warning, #FFFBEB)', border: 'var(--border-warning, #FDE68A)', textColor: 'var(--text-warning, #B45309)', label };
     }
-    return { bg: 'var(--surface-1, #F9FAFB)', border: 'var(--border, #E5E7EB)', textColor: 'var(--text-muted, #9CA3AF)', label: `in ${daysUntil} days` };
+    return { bg: 'var(--surface-1, #F9FAFB)', border: 'var(--border, #E5E7EB)', textColor: 'var(--text-muted, #9CA3AF)', label };
   }
   if (stage === 'in_progress') {
-    return { bg: 'var(--bg-success, #ECFDF5)', border: 'var(--border-success, #A7F3D0)', textColor: 'var(--text-success, #047857)', label: 'Happening now' };
+    // Which morning of the show it is. "Happening now" was true of every live
+    // conference at once and told a rep nothing about where they were in it.
+    return { bg: 'var(--bg-success, #ECFDF5)', border: 'var(--border-success, #A7F3D0)', textColor: 'var(--text-success, #047857)', label: conferenceDayLabel(conference.start_date, conference.end_date) };
   }
   if (stage === 'post_conference') {
     const daysRemaining = postConferenceDaysRemaining({ end_date: conference.end_date, post_conference_days: conference.post_conference_days ?? null });
-    return { bg: 'var(--bg-warning, #FFFBEB)', border: 'var(--border-warning, #FDE68A)', textColor: 'var(--text-warning, #B45309)', label: `Post-conference · ${daysRemaining} days remaining` };
+    return { bg: 'var(--bg-warning, #FFFBEB)', border: 'var(--border-warning, #FDE68A)', textColor: 'var(--text-warning, #B45309)', label: closesInLabel(daysRemaining) };
   }
   // closed (or null, shouldn't render for null since Program tab excludes historical)
   return { bg: 'var(--surface-1, #F9FAFB)', border: 'var(--border, #E5E7EB)', textColor: 'var(--text-muted, #9CA3AF)', label: `Completed · ${formatMonthYear(conference.end_date)}` };
@@ -233,13 +243,23 @@ export function TerritoryPill({ conference, territories }: { conference: Program
   return null;
 }
 
-export function ProgramConferenceCard({ conference, territories, planYear, allConferences, onRepsUpdated, onQuickView }: {
+export function ProgramConferenceCard({ conference, territories, planYear, allConferences, onRepsUpdated, onQuickView, showOutreach = true }: {
   conference: ProgramCardConference;
   territories: ProgramCardTerritory[];
   planYear: number;
   allConferences: Array<{ conferenceId: number; name: string; startDate: string; assignedReps: AssignedRep[] }>;
   onRepsUpdated: (conferenceId: number, reps: AssignedRep[]) => void;
   onQuickView: (target: QuickViewTarget) => void;
+  /**
+   * Whether the outreach pill sits beside the list one.
+   *
+   * On by default, which is the Program tab: that page is where outreach gets
+   * assigned, so whether it has been is one of the things it is for. The
+   * dashboard banner turns it off — the card is narrower there and the two
+   * pills wrapped onto separate lines, and a rep glancing at the dashboard is
+   * asking whether the list is in, not how far the assignment has got.
+   */
+  showOutreach?: boolean;
 }) {
   const daysUntil = Math.max(0, Math.ceil((new Date(conference.start_date + 'T00:00:00').getTime() - Date.now()) / 86_400_000));
   const bar = topBarFor(conference, daysUntil);
@@ -319,7 +339,7 @@ export function ProgramConferenceCard({ conference, territories, planYear, allCo
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', borderTop: '0.5px solid var(--border, #E5E7EB)', paddingTop: 8, marginTop: 8 }}>
-            <OutreachStatusPill outreachProgress={conference.outreachProgress} />
+            {showOutreach && <OutreachStatusPill outreachProgress={conference.outreachProgress} />}
             <ListStatusPill hasAttendeeList={conference.hasAttendeeList} attendeeCount={conference.attendeeCount} />
           </div>
         )}

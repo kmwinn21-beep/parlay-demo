@@ -113,6 +113,65 @@ console.log('\n— the banner itself —');
   eq('  in the same voice as a conference name',
     /<h1 className="text-2xl font-bold font-serif">/.test(banner), true);
 
+  /*
+   * The headline's eyebrow: what stage, then where in that stage.
+   *
+   * Two pills rather than one sentence. The stage used to carry its countdown
+   * along with it — "Post-Conference · 10 days left" — which put the least
+   * changeable fact and the most changeable one in one breath, and left the
+   * planning case with no stage on it at all, just a number.
+   */
+  eq('the stage and its detail are two pills',
+    /<span className=\{`\$\{PILL\} \$\{tone\.fill\}`\}>[\s\S]{0,400}<span className=\{`\$\{PILL\} \$\{tone\.outline\}`\}>\{detail\}<\/span>/.test(banner), true);
+  eq('  with the stage first', banner.indexOf('tone.fill') < banner.indexOf('tone.outline'), true);
+  eq('  and the old compound line gone',
+    /Post-Conference · \{left\} days left|days away/.test(banner), false);
+  /*
+   * The detail is the CARD'S line, from the card's own functions.
+   *
+   * Written out again here it would be a second answer to "which day is it",
+   * and the headline and the card sitting inches apart would come to disagree.
+   */
+  for (const [stage, fn] of [
+    ['a show under way says which day', /conferenceDayLabel\(c\.start_date, c\.end_date\)/],
+    ['one closing says when it shuts', /closesInLabel\(postConferenceDaysRemaining\(/],
+    ['one still planned says when it starts', /startsInLabel\(daysUntil\(c\.start_date\)\)/],
+  ]) {
+    eq(`  ${stage}`, fn.test(banner), true);
+  }
+  eq('    all from the card’s own module',
+    /from '@\/lib\/conferenceCardBar'/.test(banner), true);
+  // Measured in Chromium against a fixed clock: the detail pill's border comes
+  // out emerald at 0.4 on a live show, amber on one closing, white on one
+  // planned — each the hue of the stage pill beside it.
+  eq('  the pair share a hue, the detail taking the border',
+    /border border-emerald-400\/40[\s\S]{0,400}border border-amber-400\/40[\s\S]{0,400}border border-white\/25/.test(banner), true);
+  // Only the stage that is happening right now earns the dot.
+  eq('  and only a live show gets the dot',
+    /kind === 'in_progress' && <span className="w-1\.5 h-1\.5 rounded-full bg-emerald-400" \/>/.test(banner), true);
+
+  /*
+   * One pill on the card here, two on the Program tab.
+   *
+   * The card is narrower in this row than in that page's grid and the two
+   * pills wrapped onto separate lines. The dashboard's question is whether
+   * the list is in; outreach is assigned on the page that shows both, and
+   * that page is unchanged.
+   */
+  eq('the banner asks for the list pill alone', /showOutreach=\{false\}/.test(banner), true);
+  const card = strip('components/ProgramConferenceCard.tsx');
+  eq('  which is what that prop hides',
+    /\{showOutreach && <OutreachStatusPill/.test(card), true);
+  // The list pill is NOT behind it — hiding both would leave a rule with
+  // nothing under it.
+  eq('  leaving the list pill drawn either way',
+    /\{showOutreach && <OutreachStatusPill[^\n]*\n\s*<ListStatusPill/.test(card), true);
+  // Default on, so the Program tab keeps both without asking.
+  eq('  and the Program tab keeps both by default',
+    /showOutreach = true/.test(card), true);
+  eq('    without passing anything',
+    /showOutreach/.test(strip('app/conferences/page.tsx')), false);
+
   // The expanded half is the Program tab's card, not a copy of it.
   eq('the cards are the Program tab’s own', /<ProgramConferenceCard/.test(banner), true);
   eq('  fed from the same endpoint it reads',
