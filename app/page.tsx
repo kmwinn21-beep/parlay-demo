@@ -6,178 +6,12 @@ import { getDb } from '@/lib/getDb';
 import { QuickNotesSection } from '@/components/QuickNotesSection';
 import { DashboardRightColumn } from '@/components/DashboardRightColumn';
 import { getServerSessionUser } from '@/lib/auth';
-import { DashboardConferenceBanner, type BannerData } from '@/components/DashboardConferenceBanner';
+import { DashboardConferenceBanner } from '@/components/DashboardConferenceBanner';
 import type { DashboardConference } from '@/components/RecentSection';
 import { DashboardTargetsSection } from '@/components/DashboardTargetsSection';
 import { DashboardActionCard } from '@/components/DashboardActionCard';
 import { UpgradeSuccessBanner } from '@/components/UpgradeSuccessBanner';
 export const dynamic = 'force-dynamic';
-
-async function getUserDisplayName(tenantDb: Client, userId: number): Promise<string> {
-  try {
-    const r = await tenantDb.execute({
-      sql: 'SELECT co.value AS display_name FROM users u JOIN config_options co ON u.config_id = co.id WHERE u.id = ?',
-      args: [userId],
-    });
-    return r.rows[0] ? String(r.rows[0].display_name ?? '').trim() : '';
-  } catch { return ''; }
-}
-
-async function getBannerData(tenantDb: Client, userId: number): Promise<BannerData> {
-  await dbReady;
-  try {
-    const today = new Date().toISOString().slice(0, 10);
-    const displayName = await getUserDisplayName(tenantDb, userId);
-    const displayNameLower = displayName.toLowerCase();
-
-    // Find active conference where user is internal attendee
-    const activeRes = await tenantDb.execute({
-      sql: `SELECT id, name, start_date, end_date, location, location_city, location_state FROM conferences
-            WHERE start_date <= ? AND end_date >= ?
-              AND LOWER(',' || COALESCE(internal_attendees,'') || ',') LIKE ?
-            ORDER BY start_date ASC LIMIT 1`,
-      args: [today, today, `%,${displayNameLower},%`],
-    });
-
-    if (activeRes.rows[0]) {
-      const conf = activeRes.rows[0];
-      const confId = Number(conf.id);
-      const startDate = String(conf.start_date);
-      const endDate = String(conf.end_date);
-      const dayNumber = Math.floor((new Date(today).getTime() - new Date(startDate + 'T00:00:00').getTime()) / 86400000) + 1;
-      const totalDays = Math.floor((new Date(endDate + 'T00:00:00').getTime() - new Date(startDate + 'T00:00:00').getTime()) / 86400000) + 1;
-
-      // Parallel queries for stats + today's meetings
-      const [companiesRes, meetingsHeldRes, touchpointsRes, unengagedRes, todayMeetingsRes] = await Promise.all([
-        tenantDb.execute({
-          sql: `SELECT COUNT(DISTINCT company_id) as cnt FROM (
-                  SELECT a.company_id FROM meetings m JOIN attendees a ON m.attendee_id = a.id WHERE m.conference_id = ? AND a.company_id IS NOT NULL
-                  UNION
-                  SELECT a.company_id FROM attendee_touchpoints tp JOIN attendees a ON tp.attendee_id = a.id WHERE tp.conference_id = ? AND a.company_id IS NOT NULL
-                )`,
-          args: [confId, confId],
-        }).catch(() => ({ rows: [{ cnt: 0 }] })),
-        tenantDb.execute({
-          sql: `SELECT COUNT(*) as cnt FROM meetings m
-                JOIN config_options cop ON cop.category = 'action' AND LOWER(m.outcome) = LOWER(cop.value)
-                WHERE m.conference_id = ? AND cop.action_key = 'meeting_held'`,
-          args: [confId],
-        }).catch(() => ({ rows: [{ cnt: 0 }] })),
-        tenantDb.execute({
-          sql: `SELECT COUNT(*) as cnt FROM attendee_touchpoints WHERE conference_id = ?`,
-          args: [confId],
-        }).catch(() => ({ rows: [{ cnt: 0 }] })),
-        tenantDb.execute({
-          sql: `SELECT COUNT(DISTINCT a.company_id) as cnt
-                FROM conference_targets ct JOIN attendees a ON ct.attendee_id = a.id
-                WHERE ct.conference_id = ? AND ct.tier = '1' AND a.company_id IS NOT NULL
-                  AND a.company_id NOT IN (
-                    SELECT att.company_id FROM meetings m JOIN attendees att ON m.attendee_id = att.id
-                    WHERE m.conference_id = ? AND att.company_id IS NOT NULL
-                    UNION
-                    SELECT att.company_id FROM attendee_touchpoints tp JOIN attendees att ON tp.attendee_id = att.id
-                    WHERE tp.conference_id = ? AND att.company_id IS NOT NULL
-                  )`,
-          args: [confId, confId, confId],
-        }).catch(() => ({ rows: [{ cnt: 0 }] })),
-        tenantDb.execute({
-          sql: `SELECT m.id, m.meeting_time, m.outcome, m.location,
-                       a.first_name, a.last_name, co.name AS company_name
-                FROM meetings m
-                JOIN attendees a ON m.attendee_id = a.id
-                LEFT JOIN companies co ON a.company_id = co.id
-                WHERE m.conference_id = ? AND m.meeting_date = ?
-                ORDER BY m.meeting_time ASC`,
-          args: [confId, today],
-        }).catch(() => ({ rows: [] })),
-      ]);
-
-      return {
-        state: 'active',
-        conference: { id: confId, name: String(conf.name), start_date: startDate, end_date: endDate, location: conf.location ? String(conf.location) : null, location_city: conf.location_city ? String(conf.location_city) : null, location_state: conf.location_state ? String(conf.location_state) : null },
-        dayNumber,
-        totalDays,
-        stats: {
-          companiesEngaged: Number((companiesRes.rows[0] as { cnt?: unknown })?.cnt ?? 0),
-          meetingsHeld: Number((meetingsHeldRes.rows[0] as { cnt?: unknown })?.cnt ?? 0),
-          touchpoints: Number((touchpointsRes.rows[0] as { cnt?: unknown })?.cnt ?? 0),
-          mustTargetUnengaged: Number((unengagedRes.rows[0] as { cnt?: unknown })?.cnt ?? 0),
-        },
-        todayMeetings: todayMeetingsRes.rows.map(r => ({
-          id: Number(r.id),
-          meeting_time: String(r.meeting_time ?? ''),
-          outcome: r.outcome ? String(r.outcome) : null,
-          location: r.location ? String(r.location) : null,
-          attendee_first_name: String(r.first_name ?? ''),
-          attendee_last_name: String(r.last_name ?? ''),
-          company_name: r.company_name ? String(r.company_name) : null,
-        })),
-      };
-    }
-
-    // No active conference — find next upcoming where user is internal attendee
-    const upcomingCols = `id, name, start_date, end_date, location, location_city, location_state, pre_conference_review_marked_at`;
-    let upcomingRes = await tenantDb.execute({
-      sql: `SELECT ${upcomingCols} FROM conferences
-            WHERE start_date > ?
-              AND LOWER(',' || COALESCE(internal_attendees,'') || ',') LIKE ?
-            ORDER BY start_date ASC LIMIT 1`,
-      args: [today, `%,${displayNameLower},%`],
-    });
-
-    // Not down for any of them? Still show what's next. The banner is a prep
-    // checklist for the conference, not a personal itinerary, and someone who
-    // isn't on the attendee list is often the person doing the prep.
-    if (!upcomingRes.rows[0]) {
-      upcomingRes = await tenantDb.execute({
-        sql: `SELECT ${upcomingCols} FROM conferences
-              WHERE start_date > ?
-              ORDER BY start_date ASC LIMIT 1`,
-        args: [today],
-      });
-    }
-
-    if (upcomingRes.rows[0]) {
-      const conf = upcomingRes.rows[0];
-      const confId = Number(conf.id);
-      const startDate = String(conf.start_date);
-      const daysUntil = Math.ceil((new Date(startDate + 'T00:00:00').getTime() - new Date(today + 'T00:00:00').getTime()) / 86400000);
-
-      const [attendeeCountRes, icpRes, targetsRes, outreachRes, meetingsRes] = await Promise.all([
-        tenantDb.execute({ sql: `SELECT COUNT(*) as cnt FROM conference_attendees WHERE conference_id = ?`, args: [confId] }).catch(() => ({ rows: [{ cnt: 0 }] })),
-        tenantDb.execute({ sql: `SELECT COUNT(*) as cnt FROM icp_rules`, args: [] }).catch(() => ({ rows: [{ cnt: 0 }] })),
-        tenantDb.execute({ sql: `SELECT COUNT(*) as cnt FROM conference_targets WHERE conference_id = ? AND tier != 'unassigned'`, args: [confId] }).catch(() => ({ rows: [{ cnt: 0 }] })),
-        tenantDb.execute({ sql: `SELECT COUNT(*) as cnt FROM outreach_assignments WHERE conference_id = ?`, args: [confId] }).catch(() => ({ rows: [{ cnt: 0 }] })),
-        tenantDb.execute({ sql: `SELECT COUNT(*) as cnt FROM meetings WHERE conference_id = ?`, args: [confId] }).catch(() => ({ rows: [{ cnt: 0 }] })),
-      ]);
-
-      const attendeeCount = Number((attendeeCountRes.rows[0] as { cnt?: unknown })?.cnt ?? 0);
-
-      const prepChecklist = {
-        attendeesUploaded: attendeeCount > 0,
-        icpConfigured: Number((icpRes.rows[0] as { cnt?: unknown })?.cnt ?? 0) > 0,
-        targetsSet: Number((targetsRes.rows[0] as { cnt?: unknown })?.cnt ?? 0) > 0,
-        preConferenceReview: Boolean(conf.pre_conference_review_marked_at),
-        outreachAssigned: Number((outreachRes.rows[0] as { cnt?: unknown })?.cnt ?? 0) > 0,
-        meetingsScheduled: Number((meetingsRes.rows[0] as { cnt?: unknown })?.cnt ?? 0) > 0,
-      };
-
-      return {
-        state: 'upcoming',
-        conference: { id: confId, name: String(conf.name), start_date: startDate, end_date: String(conf.end_date ?? ''), location: conf.location ? String(conf.location) : null, location_city: conf.location_city ? String(conf.location_city) : null, location_state: conf.location_state ? String(conf.location_state) : null },
-        daysUntil,
-        attendeeCount,
-        mustTargetCount: 0,
-        prepChecklist,
-      };
-    }
-
-    return { state: 'none' };
-  } catch (e) {
-    console.error('getBannerData error:', e);
-    return { state: 'none' };
-  }
-}
 
 async function getAllConferences(tenantDb: Client): Promise<DashboardConference[]> {
   await dbReady;
@@ -267,15 +101,13 @@ function TargetsSkeleton() {
 async function StatsSection() {
   const sessionUser = await getServerSessionUser();
   const tenantDb = await getDb(sessionUser?.accountId);
-  const bannerData = sessionUser ? await getBannerData(tenantDb, sessionUser.id) : { state: 'none' as const };
-
   return (
     // Three columns, banner over two and the action panel over one. Stretched
     // rather than top-aligned so the two cards share a height instead of the
     // banner floating short beside a taller panel.
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
       <div className="lg:col-span-2">
-        <DashboardConferenceBanner bannerData={bannerData} />
+        <DashboardConferenceBanner />
       </div>
       <div className="h-full">
         <DashboardActionCard />

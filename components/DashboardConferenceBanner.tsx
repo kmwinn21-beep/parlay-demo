@@ -1,398 +1,115 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import toast from 'react-hot-toast';
+import { useEffect, useMemo, useState } from 'react';
+import { ScrollRow } from '@/components/ScrollRow';
+import { ProgramConferenceCard, type ProgramCardConference, type ProgramCardTerritory } from '@/components/ProgramConferenceCard';
+import { QuickViewDrawer, type QuickViewTarget } from '@/components/QuickViewDrawer';
+import { postConferenceDaysRemaining } from '@/lib/conference-stage';
+import { bannerBands, bannerHeadline, type BannerHeadlineKind } from '@/lib/dashboardBannerConferences';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+/**
+ * The dashboard's conference banner.
+ *
+ * It used to name the one conference a rep was going to next and spend its
+ * expanded half on a prep checklist for it. The checklist went unused, and the
+ * one-conference headline was silent whenever the next thing was not the
+ * interesting thing — a show under way, or one still being written up.
+ *
+ * Collapsed it now leads with whatever is actually happening; expanded it is
+ * the Program tab's own cards, so the dashboard and the conferences page show
+ * one thing rather than two views of it.
+ */
 
-export interface TodayMeeting {
-  id: number;
-  meeting_time: string;
-  outcome: string | null;
-  location: string | null;
-  attendee_first_name: string;
-  attendee_last_name: string;
-  company_name: string | null;
-}
-
-export interface ActiveStats {
-  companiesEngaged: number;
-  meetingsHeld: number;
-  touchpoints: number;
-  mustTargetUnengaged: number;
-}
-
-export interface PrepChecklist {
-  attendeesUploaded: boolean;
-  icpConfigured: boolean;
-  targetsSet: boolean;
-  preConferenceReview: boolean;
-  outreachAssigned: boolean;
-  meetingsScheduled: boolean;
-}
-
-export interface ConferenceInfo {
-  id: number;
-  name: string;
-  start_date: string;
-  end_date: string;
-  location: string | null;
-  location_city: string | null;
-  location_state: string | null;
-}
-
-export type BannerData =
-  | { state: 'active'; conference: ConferenceInfo; dayNumber: number; totalDays: number; stats: ActiveStats; todayMeetings: TodayMeeting[] }
-  | { state: 'upcoming'; conference: ConferenceInfo; daysUntil: number; attendeeCount: number; mustTargetCount: number; prepChecklist: PrepChecklist }
-  | { state: 'none' };
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
+/**
+ * How tall the expanded half may grow.
+ *
+ * Two rows of cards, which is what fits between the banner and the Targets
+ * section below it. Past that it scrolls rather than pushing Targets off the
+ * screen — the banner is the dashboard's header, not its content.
+ */
+const EXPANDED_MAX_HEIGHT = 430;
 
 function formatDateRange(startDate: string, endDate: string): string {
   const start = new Date(startDate + 'T00:00:00');
   const end = new Date(endDate + 'T00:00:00');
   const startStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const endStr = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  const year = end.getFullYear();
-  return `${startStr} – ${endStr}, ${year}`;
+  return `${startStr} – ${endStr}, ${end.getFullYear()}`;
 }
 
-function cityStateLabel(conference: ConferenceInfo): string | null {
-  if (conference.location_city && conference.location_state) return `${conference.location_city}, ${conference.location_state}`;
-  return conference.location;
+function cityStateLabel(c: ProgramCardConference): string | null {
+  if (c.location_city && c.location_state) return `${c.location_city}, ${c.location_state}`;
+  return c.location || null;
 }
 
-function getMeetingStatus(outcome: string | null): { label: string; className: string } {
-  if (!outcome) return { label: 'Scheduled', className: 'bg-white/15 text-white/80' };
-  const lower = outcome.toLowerCase();
-  if (lower.includes('held') || lower.includes('completed')) return { label: 'Held', className: 'bg-teal-500/30 text-teal-200' };
-  if (lower.includes('cancel')) return { label: 'Cancelled', className: 'bg-red-500/30 text-red-200' };
-  return { label: outcome, className: 'bg-white/15 text-white/80' };
+function daysUntil(startDate: string): number {
+  return Math.max(0, Math.ceil((new Date(startDate + 'T00:00:00').getTime() - Date.now()) / 86_400_000));
 }
-
-// ── Sub-components ─────────────────────────────────────────────────────────────
 
 /**
- * On desktop the expanded half of the banner is lifted out of flow and painted
- * over the Floor Notes section below, so opening the banner no longer pushes
- * the rest of the dashboard down and leaves a gap where it used to sit. The
- * shadow is what separates the two. Purely how it paints — the element mounts
- * and unmounts exactly as before, on the same `collapsed` state.
+ * The eyebrow over each headline conference.
+ *
+ * Coloured by what it says rather than uniformly: green is a show that is
+ * happening, amber one whose window is closing, and the plain one is a date in
+ * the future. The same three colours the Program tab's cards use for the same
+ * three states.
  */
-const EXPANDED_BODY_CLASS = [
-  'mt-4 flex-1 flex flex-col',
-  'lg:absolute lg:left-0 lg:right-0 lg:top-[calc(100%-1.5rem)] lg:z-30',
-  'lg:mt-0 lg:flex-none lg:bg-brand-primary lg:rounded-b-2xl',
-  'lg:px-6 lg:pt-4 lg:pb-6 lg:shadow-2xl',
-].join(' ');
-
-function ChevronIcon({ collapsed }: { collapsed: boolean }) {
+function HeadlinePill({ kind, conference }: { kind: BannerHeadlineKind; conference: ProgramCardConference }) {
+  if (kind === 'in_progress') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-400/20 text-emerald-300 text-[11px] font-semibold whitespace-nowrap">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+        In Progress
+      </span>
+    );
+  }
+  if (kind === 'post_conference') {
+    const left = postConferenceDaysRemaining({ end_date: conference.end_date, post_conference_days: conference.post_conference_days ?? null });
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-200 text-[11px] font-semibold whitespace-nowrap">
+        Post-Conference · {left} days left
+      </span>
+    );
+  }
   return (
-    <svg
-      className={`w-5 h-5 text-white/60 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-    </svg>
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-white/10 text-white/70 text-[11px] font-semibold whitespace-nowrap">
+      {daysUntil(conference.start_date)} days away
+    </span>
   );
 }
 
-function BannerStateActive({ data, collapsed, onToggle }: {
-  data: Extract<BannerData, { state: 'active' }>;
-  collapsed: boolean;
-  onToggle: () => void;
-}) {
-  const statPills = (
-    <>
-      <span className="text-xs px-2 py-1 rounded-full bg-white/10 text-white whitespace-nowrap">{data.todayMeetings.length} meetings</span>
-      {data.stats.mustTargetUnengaged > 0 && (
-        <span className="text-xs px-2 py-1 rounded-full bg-red-500/30 text-red-200 whitespace-nowrap">{data.stats.mustTargetUnengaged} unengaged</span>
-      )}
-    </>
-  );
-
-  return (
-    <div className="bg-brand-primary rounded-2xl p-6 text-white h-full flex flex-col lg:relative">
-      {/* Collapsed header — always visible */}
-      <div className="cursor-pointer" onClick={onToggle}>
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-white/60 text-xs font-medium">Today · Day {data.dayNumber} of {data.totalDays}</p>
-            <h1 className="text-2xl font-bold font-serif">{data.conference.name}</h1>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {/* From sm the pills ride the name row; on a phone they'd squeeze
-                the conference name down to a couple of words, so they drop to
-                their own row below. */}
-            {collapsed && <span className="hidden sm:contents">{statPills}</span>}
-            <ChevronIcon collapsed={collapsed} />
-          </div>
-        </div>
-        {collapsed && (
-          <div className="flex items-center gap-2 mt-2 sm:hidden">{statPills}</div>
-        )}
-      </div>
-
-      {/* Expanded content */}
-      {!collapsed && (
-        <div className={EXPANDED_BODY_CLASS}>
-          {/* Quick stats row */}
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { label: 'Companies', value: data.stats.companiesEngaged, className: 'text-white' },
-              { label: 'Meetings Held', value: data.stats.meetingsHeld, className: 'text-white' },
-              { label: 'Touchpoints', value: data.stats.touchpoints, className: 'text-white' },
-            ].map(stat => (
-              <div key={stat.label} className="bg-white/10 rounded-xl p-3 text-center">
-                <p className={`text-2xl font-bold ${stat.className}`}>{stat.value}</p>
-                <p className="text-white/60 text-[10px] font-medium mt-0.5">{stat.label}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Today's meetings */}
-          <div className="bg-white/10 rounded-xl p-3 mt-3">
-            <p className="text-white/50 text-[10px] font-bold uppercase tracking-widest mb-2">Your Meetings Today</p>
-            {data.todayMeetings.length === 0 ? (
-              <p className="text-white/40 text-sm text-center py-2">No meetings scheduled for today</p>
-            ) : (
-              <div className="space-y-2">
-                {data.todayMeetings.map(meeting => {
-                  const status = getMeetingStatus(meeting.outcome);
-                  return (
-                    <div key={meeting.id} className="flex items-center gap-2">
-                      <span className="text-white/50 text-xs w-12 flex-shrink-0">{meeting.meeting_time}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white font-medium text-sm truncate">
-                          {meeting.attendee_first_name} {meeting.attendee_last_name}
-                          {meeting.company_name ? ` · ${meeting.company_name}` : ''}
-                        </p>
-                        {meeting.location && (
-                          <p className="text-white/50 text-xs truncate">{meeting.location}</p>
-                        )}
-                      </div>
-                      <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${status.className}`}>
-                        {status.label}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Must target nudge */}
-          {data.stats.mustTargetUnengaged > 0 && (
-            <div className="flex items-center gap-2 mt-3 bg-red-500/20 rounded-xl px-3 py-2">
-              <div className="w-2 h-2 rounded-full bg-red-400 flex-shrink-0" />
-              <p className="text-sm text-red-200 flex-1">
-                {data.stats.mustTargetUnengaged} Must Target companies not yet engaged
-              </p>
-              <Link href={`/conferences/${data.conference.id}`} className="text-xs text-red-300 hover:text-white underline flex-shrink-0">
-                View targets →
-              </Link>
-            </div>
-          )}
-
-          {/* All-clear state */}
-          {data.stats.mustTargetUnengaged === 0 && data.todayMeetings.length === 0 && (
-            <p className="text-white/50 text-sm text-center mt-3">You&apos;re all caught up for today ✓</p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function BannerStateUpcoming({ data, collapsed, onToggle }: {
-  data: Extract<BannerData, { state: 'upcoming' }>;
-  collapsed: boolean;
-  onToggle: () => void;
-}) {
-  const checklistItems: { key: keyof PrepChecklist; label: string; href: string }[] = [
-    { key: 'attendeesUploaded', label: 'Attendees uploaded', href: `/conferences/${data.conference.id}` },
-    { key: 'icpConfigured', label: 'ICP configured', href: '/admin?tab=icp' },
-    { key: 'targetsSet', label: 'Targets set', href: `/conferences/${data.conference.id}` },
-    { key: 'preConferenceReview', label: 'Pre-conference review', href: `/conferences/${data.conference.id}` },
-    { key: 'outreachAssigned', label: 'Outreach assigned', href: `/conferences/${data.conference.id}` },
-    { key: 'meetingsScheduled', label: 'Meetings scheduled', href: `/conferences/${data.conference.id}` },
-  ];
-
-  // Pre-conference review has no automatic completion signal, so it's the
-  // only checklist item the user can toggle by hand — track it locally
-  // (seeded from the server value) so the click feels instant, and PATCH the
-  // conference record in the background.
-  const [reviewOverride, setReviewOverride] = useState<boolean | null>(null);
-  const [togglingReview, setTogglingReview] = useState(false);
-  const reviewDone = reviewOverride ?? data.prepChecklist.preConferenceReview;
-  const effectiveChecklist = { ...data.prepChecklist, preConferenceReview: reviewDone };
-
-  const toggleReview = async () => {
-    const next = !reviewDone;
-    setReviewOverride(next);
-    setTogglingReview(true);
-    try {
-      const res = await fetch(`/api/conferences/${data.conference.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pre_conference_review_marked: next }),
-      });
-      if (!res.ok) throw new Error();
-    } catch {
-      setReviewOverride(!next);
-      toast.error('Failed to update pre-conference review status.');
-    } finally {
-      setTogglingReview(false);
-    }
-  };
-
-  const doneCount = Object.values(effectiveChecklist).filter(Boolean).length;
-  const allDone = doneCount === checklistItems.length;
-
-  return (
-    <div className="bg-brand-primary rounded-2xl p-6 text-white h-full flex flex-col lg:relative">
-      {/* Collapsed header — always visible */}
-      <div className="cursor-pointer flex items-center justify-between" onClick={onToggle}>
-        <div>
-          <p className="text-white/60 text-xs font-medium">{data.daysUntil} days away</p>
-          {/* Name and dates share a line on desktop. Narrow screens stack them,
-              where a leading dash on the wrapped line would just read as debris. */}
-          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-2">
-            <h1 className="text-2xl font-bold font-serif">{data.conference.name}</h1>
-            <span className="text-white/60 text-sm mt-0.5 sm:mt-0">
-              <span className="hidden sm:inline">&ndash; </span>
-              {formatDateRange(data.conference.start_date, data.conference.end_date)}
-            </span>
-          </div>
-          {cityStateLabel(data.conference) && (
-            <p className="text-white/60 text-sm mt-0.5">{cityStateLabel(data.conference)}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {collapsed && (
-            <span className="text-xs px-2 py-1 rounded-full bg-amber-400/30 text-amber-200 text-center">
-              {doneCount}/{checklistItems.length} Done
-            </span>
-          )}
-          <ChevronIcon collapsed={collapsed} />
-        </div>
-      </div>
-
-      {/* Expanded content */}
-      {!collapsed && (
-        <div className={EXPANDED_BODY_CLASS}>
-          {/* Prep checklist */}
-          <div className="bg-white/10 rounded-xl p-3">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-white/70 text-xs font-semibold">Conference prep</p>
-              <span className={`text-xs font-semibold ${allDone ? 'text-teal-300' : 'text-amber-300'}`}>
-                {doneCount}/{checklistItems.length} complete
-              </span>
-            </div>
-            <div className="space-y-2">
-              {checklistItems.map(item => {
-                const done = effectiveChecklist[item.key];
-                const checkIcon = (
-                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                  </svg>
-                );
-                return (
-                  <div key={item.key} className="flex items-center gap-2.5">
-                    {item.key === 'preConferenceReview' ? (
-                      <button
-                        type="button"
-                        onClick={toggleReview}
-                        disabled={togglingReview}
-                        aria-pressed={done}
-                        aria-label={done ? 'Mark pre-conference review as not done' : 'Mark pre-conference review as done'}
-                        title={done ? 'Mark as not done' : 'Mark as done'}
-                        className={`w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center cursor-pointer transition-colors disabled:opacity-60 ${done ? 'bg-teal-500 hover:bg-teal-400' : 'border-2 border-dashed border-white/30 hover:border-white/60'}`}
-                      >
-                        {done && checkIcon}
-                      </button>
-                    ) : (
-                      <div className={`w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center ${done ? 'bg-teal-500' : 'border-2 border-dashed border-white/30'}`}>
-                        {done && checkIcon}
-                      </div>
-                    )}
-                    <span className={`flex-1 text-sm ${done ? 'line-through text-white/40' : 'text-white'}`}>
-                      {item.label}
-                    </span>
-                    {!done && (
-                      <Link href={item.href} className="text-xs text-white/50 hover:text-white flex-shrink-0">
-                        →
-                      </Link>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Quick stats */}
-          <div className="grid grid-cols-2 gap-3 mt-3">
-            <div className="bg-white/10 rounded-xl p-3 text-center">
-              <p className="text-2xl font-bold text-white">{data.attendeeCount}</p>
-              <p className="text-white/60 text-[10px] font-medium mt-0.5">Attendees</p>
-            </div>
-            <div className="bg-white/10 rounded-xl p-3 text-center">
-              <p className={`text-2xl font-bold ${data.mustTargetCount > 0 ? 'text-red-300' : 'text-white'}`}>{data.mustTargetCount}</p>
-              <p className="text-white/60 text-[10px] font-medium mt-0.5">Must Target</p>
-            </div>
-          </div>
-
-          {/* CTA buttons */}
-          <div className="flex gap-3 mt-4">
-            <Link
-              href={`/conferences/${data.conference.id}`}
-              className="flex-1 text-center bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-            >
-              Pre-conference review
-            </Link>
-            <Link
-              href={`/conferences/${data.conference.id}`}
-              className="flex-1 text-center bg-brand-highlight text-brand-primary font-bold rounded-lg px-4 py-2 text-sm transition-opacity hover:opacity-90"
-            >
-              Schedule meetings →
-            </Link>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function BannerStateNone() {
-  return (
-    <div className="bg-brand-primary rounded-2xl p-8 text-white text-center h-full flex flex-col items-center justify-center">
-      <h2 className="text-xl font-bold font-serif mb-2">No upcoming conferences</h2>
-      <p className="text-white/60 text-sm mb-5">Add your first conference to start tracking meetings, contacts, and pipeline influence.</p>
-      <Link
-        href="/conferences/new"
-        className="inline-flex items-center gap-2 bg-brand-highlight text-brand-primary font-bold rounded-lg px-5 py-2.5 text-sm hover:opacity-90 transition-opacity"
-      >
-        Add your first conference →
-      </Link>
-    </div>
-  );
-}
-
-// ── Main export ────────────────────────────────────────────────────────────────
-
-export function DashboardConferenceBanner({ bannerData }: { bannerData: BannerData }) {
+export function DashboardConferenceBanner() {
   // Starts expanded to match what the server rendered, then takes the stored
   // preference after mount. Reading localStorage during the first render made
   // anyone who had collapsed the banner disagree with the server HTML, and this
   // banner sits in a Suspense boundary, so that mismatch took the whole
   // dashboard down (React #418 → #422 → a crash inside React's recovery).
   const [collapsed, setCollapsed] = useState(false);
+  const [conferences, setConferences] = useState<ProgramCardConference[] | null>(null);
+  const [territories, setTerritories] = useState<ProgramCardTerritory[]>([]);
+  const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
 
   useEffect(() => {
     setCollapsed(localStorage.getItem('parlay_banner_collapsed') === 'true');
+  }, []);
+
+  /*
+   * The same payload the Program tab reads, rather than a second query that
+   * answers nearly the same question. The cards below are that page's own
+   * cards, so anything less than its own rows would be a shape to keep in
+   * step by hand.
+   */
+  useEffect(() => {
+    let live = true;
+    fetch('/api/conferences?enriched=1')
+      .then(r => (r.ok ? r.json() : []))
+      .then((rows: ProgramCardConference[]) => { if (live) setConferences(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (live) setConferences([]); });
+    fetch('/api/admin/territories')
+      .then(r => (r.ok ? r.json() : []))
+      .then((rows: ProgramCardTerritory[]) => { if (live) setTerritories(Array.isArray(rows) ? rows : []); })
+      .catch(() => {});
+    return () => { live = false; };
   }, []);
 
   const toggle = () => {
@@ -403,7 +120,83 @@ export function DashboardConferenceBanner({ bannerData }: { bannerData: BannerDa
     });
   };
 
-  if (bannerData.state === 'none') return <BannerStateNone />;
-  if (bannerData.state === 'active') return <BannerStateActive data={bannerData} collapsed={collapsed} onToggle={toggle} />;
-  return <BannerStateUpcoming data={bannerData} collapsed={collapsed} onToggle={toggle} />;
+  const headline = useMemo(() => bannerHeadline(conferences ?? []), [conferences]);
+  const bands = useMemo(() => bannerBands(conferences ?? []), [conferences]);
+  const planYear = new Date().getFullYear();
+
+  return (
+    <div className="bg-brand-primary rounded-2xl p-6 text-white h-full flex flex-col">
+      {/* Collapsed header — always visible */}
+      <div className="cursor-pointer flex items-start justify-between gap-3" onClick={toggle}>
+        {headline.items.length > 0 ? (
+          /* One line, scrolling, with a rule between each. Several shows run at
+             once often enough that stacking them would push the rest of the
+             dashboard down for a week at a time. */
+          <ScrollRow className="min-w-0 flex-1" gapClass="gap-0" step={260}>
+            {headline.items.map((c, i) => (
+              <div key={c.id} className={`min-w-0 flex-shrink-0 ${i > 0 ? 'border-l border-white/20 pl-5 ml-5' : ''}`}>
+                <HeadlinePill kind={headline.kind} conference={c} />
+                <h1 className="text-2xl font-bold font-serif whitespace-nowrap mt-1">{c.name}</h1>
+                {/* Dates and place on one line: two facts about where to be,
+                    which read as one. */}
+                <p className="text-white/60 text-sm mt-0.5 whitespace-nowrap">
+                  {formatDateRange(c.start_date, c.end_date)}
+                  {cityStateLabel(c) && <> · {cityStateLabel(c)}</>}
+                </p>
+              </div>
+            ))}
+          </ScrollRow>
+        ) : (
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl font-bold font-serif">
+              {/* A non-breaking space would hold the line too, but it is
+                  invisible in the source; this says what it is doing. */}
+              {conferences === null
+                ? <span className="opacity-0">Loading conferences</span>
+                : 'No Active or Upcoming Conferences'}
+            </h1>
+          </div>
+        )}
+        <svg
+          className={`w-5 h-5 text-white/60 flex-shrink-0 mt-1 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+
+      {/* Expanded content — the Program tab's cards, in its own three bands. */}
+      {!collapsed && bands.length > 0 && (
+        <div
+          className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 content-start overflow-y-auto scrollbar-desktop-thin pr-1"
+          style={{ maxHeight: EXPANDED_MAX_HEIGHT }}
+        >
+          {bands.map(band => (
+            <div key={band.label} className="contents">
+              <p className="sm:col-span-2 text-white/50 text-[11px] font-semibold uppercase tracking-wider">
+                {band.label}
+              </p>
+              {band.items.map(c => (
+                /* The card paints on white and the banner is dark, so it keeps
+                   its own surface rather than being restyled for this one
+                   place — it is the Program tab's card, not a copy of it. */
+                <div key={c.id} className="bg-white rounded-xl overflow-hidden">
+                  <ProgramConferenceCard
+                    conference={c}
+                    territories={territories}
+                    planYear={planYear}
+                    allConferences={[]}
+                    onRepsUpdated={() => {}}
+                    onQuickView={setQuickView}
+                  />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {quickView && <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />}
+    </div>
+  );
 }
