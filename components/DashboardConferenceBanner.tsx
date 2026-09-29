@@ -20,15 +20,6 @@ import { bannerBands, bannerHeadline, type BannerHeadlineKind } from '@/lib/dash
  * one thing rather than two views of it.
  */
 
-/**
- * How tall the expanded half may grow.
- *
- * Two rows of cards, which is what fits between the banner and the Targets
- * section below it. Past that it scrolls rather than pushing Targets off the
- * screen — the banner is the dashboard's header, not its content.
- */
-const EXPANDED_MAX_HEIGHT = 430;
-
 function formatDateRange(startDate: string, endDate: string): string {
   const start = new Date(startDate + 'T00:00:00');
   const end = new Date(endDate + 'T00:00:00');
@@ -174,29 +165,39 @@ export function DashboardConferenceBanner() {
 
       {/* Expanded content — the Program tab's cards, in its own three bands. */}
       {!collapsed && bands.length > 0 && (
-        <div
-          className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 content-start overflow-y-auto scrollbar-desktop-thin pr-1"
-          style={{ maxHeight: EXPANDED_MAX_HEIGHT }}
-        >
+        /*
+         * As tall as the cards it holds.
+         *
+         * It used to be capped at two rows and scroll past that, and the cap
+         * landed wherever it landed — through the middle of a card, under a
+         * band heading with nothing visible beneath it. A card sliced in half
+         * reads as something failing to load rather than as something to
+         * scroll, and the thin scrollbar that would have said otherwise only
+         * appears once a pointer is over it.
+         *
+         * Nothing needs a cap here: the whole half is behind the chevron, and
+         * that choice is remembered, so anyone who wants the dashboard short
+         * collapses it once.
+         */
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 content-start">
           {bands.map(band => (
             <div key={band.label} className="contents">
               <p className="sm:col-span-2 text-white/50 text-[11px] font-semibold uppercase tracking-wider">
                 {band.label}
               </p>
+              {/* The Program tab's card, unwrapped — it paints its own white
+                  surface, and the wrapper that used to sit around it clipped
+                  the shadow it lifts on hover. */}
               {band.items.map(c => (
-                /* The card paints on white and the banner is dark, so it keeps
-                   its own surface rather than being restyled for this one
-                   place — it is the Program tab's card, not a copy of it. */
-                <div key={c.id} className="bg-white rounded-xl overflow-hidden">
-                  <ProgramConferenceCard
-                    conference={c}
-                    territories={territories}
-                    planYear={planYear}
-                    allConferences={[]}
-                    onRepsUpdated={() => {}}
-                    onQuickView={setQuickView}
-                  />
-                </div>
+                <ProgramConferenceCard
+                  key={c.id}
+                  conference={c}
+                  territories={territories}
+                  planYear={planYear}
+                  allConferences={[]}
+                  onRepsUpdated={() => {}}
+                  onQuickView={setQuickView}
+                />
               ))}
             </div>
           ))}

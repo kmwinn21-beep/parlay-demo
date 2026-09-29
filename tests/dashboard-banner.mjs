@@ -98,6 +98,7 @@ console.log('\n— the banner itself —');
 {
   const banner = strip('components/DashboardConferenceBanner.tsx');
   const page = strip('app/page.tsx');
+  const css = readFileSync('app/globals.css', 'utf8');
 
   // The headline row: one line, scrolling, ruled between each.
   eq('the headline is one scrolling row', /<ScrollRow className="min-w-0 flex-1"/.test(banner), true);
@@ -156,13 +157,29 @@ console.log('\n— the banner itself —');
   eq('the territories route answers with an object too',
     /return NextResponse\.json\(\{ territories \}\)/.test(terrRoute), true);
   eq('  and is read the same way', /data\.territories \?\? \[\]/.test(banner), true);
-  // Declared AND applied. A constant nothing reads caps nothing, which is how
-  // the expanded half comes to push Targets off the bottom of the screen.
-  eq('  capped rather than pushing the page down',
-    /const EXPANDED_MAX_HEIGHT = \d+;/.test(banner), true);
-  eq('    with the cap actually on the scrolling half',
-    /style=\{\{ maxHeight: EXPANDED_MAX_HEIGHT \}\}/.test(banner), true);
-  eq('    which scrolls past it', /overflow-y-auto/.test(banner), true);
+  /*
+   * And nothing between them cuts one in half.
+   *
+   * The expanded half used to be capped at two rows and scroll past that. The
+   * cap landed wherever it landed — measured in Chromium at 1500px it fell
+   * through the Past band, leaving a heading with a sliced card under it, and
+   * at 390px it cut the second of five. A card in halves reads as something
+   * failing to load rather than as something to scroll, and the thin
+   * scrollbar that would have said otherwise only shows under a pointer.
+   *
+   * Both halves of that are pinned: the cap is gone, AND nothing else in the
+   * banner bounds a height — a max-height moved onto the wrapper would clip
+   * exactly the same way while leaving the constant deleted.
+   */
+  eq('no cap slices the cards', /EXPANDED_MAX_HEIGHT|maxHeight|max-h-/.test(banner), false);
+  eq('  and nothing scrolls under one', /overflow-y-auto|overflow-hidden/.test(banner), false);
+  // The card paints its own white surface (.card is bg-white rounded-xl), so
+  // the wrapper that used to sit around each one was a second one — and its
+  // overflow-hidden clipped the shadow the card lifts on hover.
+  eq('  the card is the grid item, unwrapped',
+    /\{band\.items\.map\(c => \(\s*\n\s*<ProgramConferenceCard/.test(banner), true);
+  eq('    on a surface it brings with it',
+    /bg-white rounded-xl/.test(css.slice(css.indexOf('.card {'), css.indexOf('}', css.indexOf('.card {')))), true);
 
   /*
    * The old banner is gone, not orphaned.
