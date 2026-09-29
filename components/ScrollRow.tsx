@@ -9,11 +9,20 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
  */
 export function ScrollRow({
   children, className = '', gapClass = 'gap-2', step = 160, fade = false,
+  alignClass = 'items-center',
 }: {
   children: ReactNode;
   className?: string;
   /** Spacing between children. */
   gapClass?: string;
+  /**
+   * How the children sit against each other vertically.
+   *
+   * Centred by default, which is right for a row of pills. A row of CARDS
+   * wants `items-stretch` instead: cards of different heights centred on one
+   * line leave a ragged gap above and below each one.
+   */
+  alignClass?: string;
   /** Pixels moved per chevron press. */
   step?: number;
   /**
@@ -67,7 +76,7 @@ export function ScrollRow({
         onScroll={updateArrows}
         // w-0 flex-1 keeps the nowrap content from widening the parent — the
         // row takes the space that's left and scrolls the overflow.
-        className={`flex items-center flex-nowrap overflow-x-auto scrollbar-hide min-w-0 w-0 flex-1 ${gapClass}`}
+        className={`flex ${alignClass} flex-nowrap overflow-x-auto scrollbar-hide min-w-0 w-0 flex-1 ${gapClass}`}
       >
         {children}
       </div>

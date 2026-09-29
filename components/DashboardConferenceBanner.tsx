@@ -6,6 +6,7 @@ import { ProgramConferenceCard, type ProgramCardConference, type ProgramCardTerr
 import { QuickViewDrawer, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { postConferenceDaysRemaining } from '@/lib/conference-stage';
 import { bannerBands, bannerHeadline, type BannerHeadlineKind } from '@/lib/dashboardBannerConferences';
+import { useIsPhone } from '@/lib/useIsPhone';
 
 /**
  * The dashboard's conference banner.
@@ -19,6 +20,20 @@ import { bannerBands, bannerHeadline, type BannerHeadlineKind } from '@/lib/dash
  * the Program tab's own cards, so the dashboard and the conferences page show
  * one thing rather than two views of it.
  */
+
+/**
+ * How wide a card sits in its row.
+ *
+ * A width rather than a column, because a card in a scrolling row has no
+ * column to take one from. Two of them: a phone has about 310px of banner to
+ * work with and the chevron takes 26 of it, so the desktop width overhangs
+ * the row and the last card on the line comes out clipped. Both measured in
+ * Chromium, against the real dashboard layout at 1500px and at 390px.
+ */
+const CARD_WIDTH = 288;
+const CARD_WIDTH_PHONE = 248;
+/** One card and the gap after it, so a chevron lands on a card edge. */
+const cardStep = (width: number) => width + 12;
 
 function formatDateRange(startDate: string, endDate: string): string {
   const start = new Date(startDate + 'T00:00:00');
@@ -79,6 +94,7 @@ export function DashboardConferenceBanner() {
   const [conferences, setConferences] = useState<ProgramCardConference[] | null>(null);
   const [territories, setTerritories] = useState<ProgramCardTerritory[]>([]);
   const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
+  const isPhone = useIsPhone();
 
   useEffect(() => {
     setCollapsed(localStorage.getItem('parlay_banner_collapsed') === 'true');
@@ -122,8 +138,22 @@ export function DashboardConferenceBanner() {
   const bands = useMemo(() => bannerBands(conferences ?? []), [conferences]);
   const planYear = new Date().getFullYear();
 
+  /*
+   * The expanded half floats over the dashboard rather than lifting it.
+   *
+   * It used to be a block inside the banner, so opening it grew the banner and
+   * pushed Attendees / Agenda / Meetings and everything under them down the
+   * page — the sections you are reading move out from under you, and closing
+   * it snaps them back. The header stays in flow, so the row it sits in keeps
+   * the height it has when the banner is shut, and the cards drop over what is
+   * below on their own layer.
+   */
+  const expanded = !collapsed && bands.length > 0;
+  const cardWidth = isPhone ? CARD_WIDTH_PHONE : CARD_WIDTH;
+
   return (
-    <div className="bg-brand-primary rounded-2xl p-6 text-white h-full flex flex-col">
+    <div className="relative h-full">
+      <div className={`bg-brand-primary p-6 text-white h-full flex flex-col rounded-2xl ${expanded ? 'rounded-b-none shadow-2xl' : ''}`}>
       {/* Collapsed header — always visible */}
       <div className="cursor-pointer flex items-start justify-between gap-3" onClick={toggle}>
         {headline.items.length > 0 ? (
@@ -162,43 +192,54 @@ export function DashboardConferenceBanner() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </div>
+      </div>
 
       {/* Expanded content — the Program tab's cards, in its own three bands. */}
-      {!collapsed && bands.length > 0 && (
+      {expanded && (
         /*
-         * As tall as the cards it holds.
+         * One line per band, scrolled rather than wrapped.
          *
-         * It used to be capped at two rows and scroll past that, and the cap
-         * landed wherever it landed — through the middle of a card, under a
-         * band heading with nothing visible beneath it. A card sliced in half
-         * reads as something failing to load rather than as something to
-         * scroll, and the thin scrollbar that would have said otherwise only
-         * appears once a pointer is over it.
+         * It was a two-column grid, so a band of six cards was three rows deep
+         * and the three bands together ran past the fold — which is how the
+         * expanded half came to be the tallest thing on the dashboard. A band
+         * is now one line: the chevrons page through it, and a touch screen
+         * swipes it.
          *
-         * Nothing needs a cap here: the whole half is behind the chevron, and
-         * that choice is remembered, so anyone who wants the dashboard short
-         * collapses it once.
+         * `top-full` puts it directly under the header, whose bottom corners
+         * are squared off while this is open so the two read as one surface.
          */
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 content-start">
+        <div className="absolute left-0 right-0 top-full z-30 bg-brand-primary rounded-b-2xl px-6 pb-6 pt-1 shadow-2xl">
           {bands.map(band => (
-            <div key={band.label} className="contents">
-              <p className="sm:col-span-2 text-white/50 text-[11px] font-semibold uppercase tracking-wider">
+            <div key={band.label} className="mt-3 first:mt-1">
+              <p className="text-white/50 text-[11px] font-semibold uppercase tracking-wider mb-2">
                 {band.label}
               </p>
-              {/* The Program tab's card, unwrapped — it paints its own white
-                  surface, and the wrapper that used to sit around it clipped
-                  the shadow it lifts on hover. */}
-              {band.items.map(c => (
-                <ProgramConferenceCard
-                  key={c.id}
-                  conference={c}
-                  territories={territories}
-                  planYear={planYear}
-                  allConferences={[]}
-                  onRepsUpdated={() => {}}
-                  onQuickView={setQuickView}
-                />
-              ))}
+              {/* One card plus its gap per press, so a chevron lands on a card
+                  edge rather than part-way through one. */}
+              <ScrollRow gapClass="gap-3" alignClass="items-stretch" step={cardStep(cardWidth)}>
+                {band.items.map(c => (
+                  /* A fixed width, because a card in a scrolling row has no
+                     column to take one from. `grid` rather than `flex` on the
+                     wrapper: a lone grid item stretches to both the width set
+                     here and the height of the tallest card on the line, which
+                     is what keeps the row's bottom edge straight.
+
+                     The Program tab's card itself is unwrapped in every other
+                     sense — it paints its own white surface, and a wrapper with
+                     a background of its own clipped the shadow it lifts on
+                     hover. */
+                  <div key={c.id} className="flex-shrink-0 grid" style={{ width: cardWidth }}>
+                    <ProgramConferenceCard
+                      conference={c}
+                      territories={territories}
+                      planYear={planYear}
+                      allConferences={[]}
+                      onRepsUpdated={() => {}}
+                      onQuickView={setQuickView}
+                    />
+                  </div>
+                ))}
+              </ScrollRow>
             </div>
           ))}
         </div>

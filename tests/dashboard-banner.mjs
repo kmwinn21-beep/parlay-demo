@@ -172,14 +172,69 @@ console.log('\n— the banner itself —');
    * exactly the same way while leaving the constant deleted.
    */
   eq('no cap slices the cards', /EXPANDED_MAX_HEIGHT|maxHeight|max-h-/.test(banner), false);
-  eq('  and nothing scrolls under one', /overflow-y-auto|overflow-hidden/.test(banner), false);
-  // The card paints its own white surface (.card is bg-white rounded-xl), so
-  // the wrapper that used to sit around each one was a second one — and its
-  // overflow-hidden clipped the shadow the card lifts on hover.
-  eq('  the card is the grid item, unwrapped',
-    /\{band\.items\.map\(c => \(\s*\n\s*<ProgramConferenceCard/.test(banner), true);
-  eq('    on a surface it brings with it',
+  eq('  and nothing scrolls under one vertically', /overflow-y-auto|overflow-hidden/.test(banner), false);
+  /*
+   * One line per band, scrolled sideways.
+   *
+   * It was a two-column grid, so a band of six cards was three rows deep and
+   * the three bands together were the tallest thing on the dashboard.
+   */
+  eq('each band is one scrolling row',
+    /<ScrollRow gapClass="gap-3" alignClass="items-stretch"/.test(banner), true);
+  eq('  and nothing wraps it back into columns',
+    /sm:grid-cols-2|sm:col-span-2/.test(banner), false);
+  // ScrollRow's own chevrons, which appear only when there is somewhere to go
+  // — and its row scrolls under a finger without them.
+  const row = strip('components/ScrollRow.tsx');
+  eq('  the chevrons are the row\u2019s own',
+    /title="Scroll left"[\s\S]{0,600}title="Scroll right"/.test(row), true);
+  // Shown from a measurement, not from a count of cards: a row of three that
+  // happens to fit needs no chevron, and one of two that does not, does.
+  eq('    each shown only when that side has somewhere to go',
+    /setCanLeft\(el\.scrollLeft > 1\)/.test(row)
+    && /setCanRight\(el\.scrollLeft \+ el\.clientWidth < el\.scrollWidth - 1\)/.test(row), true);
+  eq('    re-measured when the row or its cards resize',
+    /new ResizeObserver\(updateArrows\)/.test(row) && /Array\.from\(el\.children\)\.forEach\(c => ro\.observe\(c\)\)/.test(row), true);
+  eq('    over a row that scrolls by touch too', /overflow-x-auto/.test(row), true);
+  // Cards of different heights centred on a line leave a ragged gap above and
+  // below each one, which is what items-center gave.
+  eq('    with the cards squared off against each other',
+    /className=\{`flex \$\{alignClass\} flex-nowrap/.test(row), true);
+
+  // A card in a scrolling row has no column to take a width from.
+  eq('the cards carry their own width', /style=\{\{ width: cardWidth \}\}/.test(banner), true);
+  // Two of them: the desktop width overhangs a phone's row once the chevron
+  // has taken its 26px, and the last card on the line comes out clipped.
+  eq('  narrower on a phone', /CARD_WIDTH_PHONE/.test(banner), true);
+  eq('    chosen by the viewport, not by a class',
+    /const cardWidth = isPhone \? CARD_WIDTH_PHONE : CARD_WIDTH;/.test(banner), true);
+  // The card paints its own white surface (.card is bg-white rounded-xl), so a
+  // wrapper with a background of its own is a second one — and the one that
+  // used to be here clipped the shadow the card lifts on hover.
+  eq('  in a wrapper that paints nothing',
+    /className="flex-shrink-0 grid"/.test(banner), true);
+  eq('    on a surface the card brings with it',
     /bg-white rounded-xl/.test(css.slice(css.indexOf('.card {'), css.indexOf('}', css.indexOf('.card {')))), true);
+
+  /*
+   * And the whole half floats over the dashboard rather than lifting it.
+   *
+   * It was a block inside the banner, so opening it pushed Attendees / Agenda
+   * / Meetings and everything under them down the page: the sections you are
+   * reading move out from under you, and closing it snaps them back. Measured
+   * in Chromium against the real dashboard layout — with the banner open and
+   * shut, at 1500px and at 390px, every section below keeps its top edge and
+   * the page keeps its height.
+   */
+  eq('the expanded half is taken out of the flow',
+    /<div className="absolute left-0 right-0 top-full z-30 bg-brand-primary/.test(banner), true);
+  eq('  under a header that stays in it, so the row keeps its height',
+    /<div className="relative h-full">\s*\n\s*<div className=\{`bg-brand-primary p-6/.test(banner), true);
+  // Squared off where they meet, so the two read as one surface rather than as
+  // a card with another card under it.
+  eq('  meeting the header without a seam',
+    /expanded \? 'rounded-b-none shadow-2xl' : ''/.test(banner), true);
+  eq('    and rounded off at the bottom', /rounded-b-2xl/.test(banner), true);
 
   /*
    * The old banner is gone, not orphaned.
