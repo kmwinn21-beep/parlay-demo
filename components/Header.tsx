@@ -189,7 +189,7 @@ export function Header() {
   };
 
   return (
-    <header className="header-mobile-dark relative bg-brand-primary lg:bg-white border-b border-transparent lg:border-gray-200 rounded-b-3xl lg:rounded-none min-h-[85px] lg:min-h-0 px-4 lg:px-6 py-3 flex items-center justify-between flex-shrink-0">
+    <header data-app-header className="header-mobile-dark relative bg-brand-primary lg:bg-white border-b border-transparent lg:border-gray-200 rounded-b-3xl lg:rounded-none min-h-[85px] lg:min-h-0 px-4 lg:px-6 py-3 flex items-center justify-between flex-shrink-0">
       {/* `contents` on phones: the letter mark becomes a direct flex child of the
           header, so the row's space-between distributes it and every icon with
           one equal gap. Restored to a block from sm up, where the app name sits

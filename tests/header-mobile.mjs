@@ -39,7 +39,7 @@ const cssNoComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 // The <header> tag itself, not the whole file — several nested elements carry
 // similar utilities and a file-wide search would match one of those instead.
-const tag = header.slice(header.indexOf('<header className='), header.indexOf('>', header.indexOf('<header className=')) + 1);
+const tag = header.slice(header.indexOf('<header '), header.indexOf('>', header.indexOf('<header ')) + 1);
 
 console.log('\n— the fill is mobile-only —');
 {

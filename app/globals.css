@@ -532,3 +532,27 @@ h1, h2, h3 {
   .view-enter-right,
   .view-enter-left { animation: none; }
 }
+
+/* A note read on a phone: a sheet filling the screen from just under the app
+   header down to the bottom edge, and an ordinary centred dialog from sm up.
+   Fixed to that span rather than sized to the note, so a two-line note opens
+   where a twenty-line one does instead of hugging the bottom of the screen. */
+.note-sheet {
+  position: fixed;
+  top: var(--sheet-top, 0px);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-top-left-radius: 1rem;
+  border-top-right-radius: 1rem;
+}
+
+@media (min-width: 640px) {
+  .note-sheet {
+    position: static;
+    width: 100%;
+    max-width: 32rem;
+    max-height: 80vh;
+    border-radius: 1rem;
+  }
+}

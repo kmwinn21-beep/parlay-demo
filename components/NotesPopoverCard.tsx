@@ -6,6 +6,17 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { useUser } from '@/components/UserContext';
 import { announceNoteSaved } from '@/lib/suggestions/announce';
+import { NoteSheet } from '@/components/NoteSheet';
+import { NoteSheetBody, NoteSheetFooter, NoteSheetHeader, NoteSheetTitle } from '@/components/NoteSheetLayout';
+import { avatarColour, initials } from '@/lib/authorAvatar';
+import { useIsPhone } from '@/lib/useIsPhone';
+
+/** "Aug 14, 2026 at 10:00 AM" — the sheet reads a note for the record. */
+function formatNoteDateTime(dt: string) {
+  const d = new Date(dt.endsWith('Z') || dt.includes('+') ? dt : dt + 'Z');
+  if (isNaN(d.getTime())) return dt;
+  return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+}
 
 function formatNoteDate(dt: string) {
   const d = new Date(dt.endsWith('Z') || dt.includes('+') ? dt : dt + 'Z');
@@ -64,6 +75,19 @@ export interface PopoverNote {
   created_at: string;
   conference_name?: string | null;
   rep?: string | null;
+  /** The record the note is about — named in the sheet's title line. */
+  attendee_name?: string | null;
+  /** Stored tags, drawn as the same pills the attendee's record uses. */
+  note_type?: string | null;
+  status?: string | null;
+  touchpoint_type?: string | null;
+}
+
+/** The tags a note wears, in the order the record shows them. */
+function noteTags(n: PopoverNote): string[] {
+  return [n.note_type, n.touchpoint_type, n.status]
+    .map(t => (t ?? '').trim())
+    .filter(Boolean);
 }
 
 /**
@@ -99,6 +123,7 @@ export function NotesPopoverCard({
   const [userOptions, setUserOptions] = useState<string[]>([]);
   const [conferences, setConferences] = useState<{ id: number; name: string }[]>([]);
   const { user } = useUser();
+  const isPhone = useIsPhone();
 
   // Held in a ref: callers pass an inline arrow, so depending on its identity
   // would restart the fetch every time reporting a count re-rendered them.
@@ -215,21 +240,18 @@ export function NotesPopoverCard({
   const left = Math.max(PADDING, Math.min(anchor.left, window.innerWidth - width - PADDING));
   const above = anchor.top > 320;
 
-  return createPortal(
-    <div
-      ref={cardRef}
-      style={{
-        position: 'fixed',
-        top: above ? anchor.top : anchor.bottom + PADDING,
-        left,
-        width,
-        transform: above ? 'translateY(calc(-100% - 8px))' : undefined,
-        zIndex: 10000,
-      }}
-    >
-      <div className="bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden">
+  /*
+   * The card's contents, drawn once for both shapes it takes.
+   *
+   * On a phone it is the same sheet a note from the feed opens in, rising from
+   * the bottom edge; there is nowhere sensible to hang a 480px card off a
+   * kebab on a 390px screen. With a pointer it stays anchored to the control
+   * that opened it, which is what makes it read as belonging to that row.
+   */
+  const body = (
+    <>
         <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
-          <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+          <span id="notes-card-title" className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
             Notes {notes.length > 0 && `(${notes.length})`}
           </span>
           <div className="flex items-center gap-3">
@@ -324,7 +346,7 @@ export function NotesPopoverCard({
           </div>
         )}
 
-        <div className="overflow-y-auto max-h-64">
+        <div className="overflow-y-auto flex-1 sm:flex-none sm:max-h-64">
           {loading ? (
             <p className="text-sm text-gray-400 italic text-center py-6">Loading...</p>
           ) : notes.length === 0 && !isAdding ? (
@@ -355,6 +377,82 @@ export function NotesPopoverCard({
             </table>
           )}
         </div>
+    </>
+  );
+
+  /*
+   * On a phone this is the sheet a note from the feed opens in — the same
+   * chrome AND the same layout, because it is the same note read from a
+   * different place. The two-column table of dates and text this replaces was
+   * a second way of showing one thing.
+   *
+   * One block per note rather than one sheet per note: the control that opens
+   * this asks for an attendee's notes, and there can be several.
+   */
+  if (isPhone) {
+    const subject = notes.find(n => n.attendee_name)?.attendee_name ?? 'this record';
+    return (
+      <NoteSheet onClose={onClose} labelledBy="notes-card-title">
+        {/* Titled once. Every note in here is the same person's, so naming
+            them above each one says it as many times as there are notes. */}
+        <NoteSheetTitle title={`${subject} Notes`} titleId="notes-card-title" onClose={onClose} />
+        {notes.length === 0 ? (
+          <div className="px-5 py-4 flex-1">
+            <p className="text-sm text-gray-400 italic">
+              {loading
+                ? 'Loading\u2026'
+                : conferenceName ? `No notes for ${conferenceName} yet.` : 'No notes yet.'}
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-y-auto flex-1 divide-y divide-gray-100">
+            {notes.map(n => (
+              <div key={n.id}>
+                <NoteSheetHeader
+                  head={{
+                    authorName: n.rep || 'Unknown',
+                    authorInitials: initials(n.rep || ''),
+                    authorColour: avatarColour(n.rep || ''),
+                    when: formatNoteDateTime(n.created_at),
+                    tags: noteTags(n),
+                    conference: n.conference_name ?? null,
+                  }}
+                />
+                <div className="px-5 py-4">
+                  <NoteSheetBody>{n.content}</NoteSheetBody>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {/* The two the feed's sheet has, and no more. Writing a note is the
+            kebab's own Add Note entry, one item above the View Notes that
+            opened this — a third button here duplicates it and wraps the row
+            onto two lines at 390px. */}
+        <NoteSheetFooter>
+          <Link href={`/attendees/${attendeeId}`} onClick={onClose} className="btn-secondary text-sm">
+            Open {subject}
+          </Link>
+          <button type="button" onClick={onClose} className="btn-primary text-sm">Close</button>
+        </NoteSheetFooter>
+      </NoteSheet>
+    );
+  }
+
+  return createPortal(
+    <div
+      ref={cardRef}
+      style={{
+        position: 'fixed',
+        top: above ? anchor.top : anchor.bottom + PADDING,
+        left,
+        width,
+        transform: above ? 'translateY(calc(-100% - 8px))' : undefined,
+        zIndex: 10000,
+      }}
+    >
+      <div className="bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden">
+        {body}
       </div>
     </div>,
     document.body

@@ -349,18 +349,34 @@ console.log('\n— a note card opens the note, not the record —');
   // the class deleted from the markup.
   const bodyLine = popup.split('\n').find(l => l.includes('{item.body}')) ?? '';
   eq('the body element was found', bodyLine.length > 0, true);
-  eq('  and keeps the line breaks the author typed',
-    bodyLine.includes('whitespace-pre-wrap'), true);
+  // Drawn by the shared layout now, which the meeting row's notes use too, so
+  // the rule is checked where it is enforced rather than dropped.
+  eq('  through the shared body', bodyLine.includes('<NoteSheetBody>'), true);
+  eq('  which keeps the line breaks the author typed',
+    /function NoteSheetBody[\s\S]{0,400}whitespace-pre-wrap/.test(readFileSync('components/NoteSheetLayout.tsx', 'utf8')), true);
   eq('  scrolling a long note rather than growing past the viewport',
-    popup.includes('max-h-[80vh]') && popup.includes('overflow-y-auto'), true);
+    popup.includes('overflow-y-auto'), true);
   // The record is still reachable — the popup replaces the navigation, it does
   // not remove the destination.
   eq('the record is one click away', /Open \{item\.subject\}/.test(popup), true);
-  eq('Escape closes it', popup.includes("e.key === 'Escape'"), true);
-  eq('  as does the backdrop', /onClick=\{onClose\}/.test(popup), true);
+
+  /*
+   * The chrome moved into NoteSheet, which the meeting card's notes use too.
+   *
+   * These three still have to hold, so they are followed to where they are
+   * enforced rather than dropped: a rule nobody asserts is a rule that comes
+   * back as a bug in the surface that inherited it.
+   */
+  eq('the note opens in the shared sheet', /<NoteSheet/.test(popup), true);
+  const sheet = readFileSync('components/NoteSheet.tsx', 'utf8');
+  eq('Escape closes it', sheet.includes("e.key === 'Escape'"), true);
+  eq('  as does the backdrop', /onClick=\{onClose\}/.test(sheet), true);
   // The stream is an overflow-y-auto column; a dialog inside it would scroll
   // away with the feed behind it.
-  eq('it is portalled out of the scrolling column', popup.includes('createPortal('), true);
+  eq('it is portalled out of the scrolling column', sheet.includes('createPortal('), true);
+  // Capped from sm, where it is a centred dialog rather than a full sheet.
+  eq('  and capped as a dialog from sm',
+    /@media \(min-width: 640px\)[\s\S]{0,200}max-height: 80vh;/.test(readFileSync('app/globals.css', 'utf8')), true);
 
   // Rendered outside the collapsible body, so folding the section on a phone
   // cannot take the open note with it.
