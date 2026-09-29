@@ -116,6 +116,46 @@ console.log('\n— the banner itself —');
   eq('the cards are the Program tab’s own', /<ProgramConferenceCard/.test(banner), true);
   eq('  fed from the same endpoint it reads',
     /fetch\('\/api\/conferences\?enriched=1'\)/.test(banner), true);
+
+  /*
+   * And unwrapped the way that endpoint answers.
+   *
+   * It replies with an OBJECT around its rows, not a bare array. Read as an
+   * array the banner sat empty while the request succeeded — no error, no
+   * empty-state bug, just a headline saying there was nothing on when there
+   * was. Both ends are pinned here, because the fixture in a browser check is
+   * written by the same person who misread the route.
+   */
+  /*
+   * EVERY answer it gives, not just the last one written.
+   *
+   * The route returns early when there is nothing to enrich, and a check that
+   * matched any one of its returns was satisfied by whichever it happened to
+   * find — the empty-list path is exactly the one a quiet account takes.
+   */
+  const confRoute = strip('app/api/conferences/route.ts');
+  const from = confRoute.indexOf('async function getEnrichedConferences');
+  // To the handler that follows it. Anchoring on the next `async function`
+  // ran straight past `export async function GET`, whose OTHER branch returns
+  // a bare array on purpose — so the slice picked up returns from a function
+  // this rule does not govern.
+  const to = confRoute.indexOf('export async function GET', from);
+  const enriched = confRoute.slice(from, to);
+  eq('the enriched function was isolated',
+    from >= 0 && to > from && /committed_to_program = 1/.test(enriched), true);
+  const answers = enriched.match(/return NextResponse\.json\(/g) ?? [];
+  const wrapped = enriched.match(/return NextResponse\.json\(\{ conferences/g) ?? [];
+  eq('the enriched route answers with an object', answers.length > 0, true);
+  eq('  on every path it can take', wrapped.length, answers.length);
+  eq('  and the banner reads its rows out of it',
+    /data\.conferences \?\? \[\]/.test(banner), true);
+  eq('  never treating the response as the rows',
+    /Array\.isArray\(rows\)/.test(banner), false);
+
+  const terrRoute = strip('app/api/admin/territories/route.ts');
+  eq('the territories route answers with an object too',
+    /return NextResponse\.json\(\{ territories \}\)/.test(terrRoute), true);
+  eq('  and is read the same way', /data\.territories \?\? \[\]/.test(banner), true);
   // Declared AND applied. A constant nothing reads caps nothing, which is how
   // the expanded half comes to push Targets off the bottom of the screen.
   eq('  capped rather than pushing the page down',

@@ -101,13 +101,20 @@ export function DashboardConferenceBanner() {
    */
   useEffect(() => {
     let live = true;
+    // Both of these answer with an OBJECT around their rows, not a bare array.
+    // Reading them as arrays leaves the banner permanently empty while the
+    // request succeeds, which is what it did.
     fetch('/api/conferences?enriched=1')
-      .then(r => (r.ok ? r.json() : []))
-      .then((rows: ProgramCardConference[]) => { if (live) setConferences(Array.isArray(rows) ? rows : []); })
+      .then(r => (r.ok ? r.json() : { conferences: [] }))
+      .then((data: { conferences?: ProgramCardConference[] }) => {
+        if (live) setConferences(data.conferences ?? []);
+      })
       .catch(() => { if (live) setConferences([]); });
     fetch('/api/admin/territories')
-      .then(r => (r.ok ? r.json() : []))
-      .then((rows: ProgramCardTerritory[]) => { if (live) setTerritories(Array.isArray(rows) ? rows : []); })
+      .then(r => (r.ok ? r.json() : { territories: [] }))
+      .then((data: { territories?: ProgramCardTerritory[] }) => {
+        if (live) setTerritories(data.territories ?? []);
+      })
       .catch(() => {});
     return () => { live = false; };
   }, []);
