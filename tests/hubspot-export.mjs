@@ -197,6 +197,18 @@ console.log('\n— what the route does with it —');
 {
   const route = strip('app/api/conferences/[id]/hubspot-export/route.ts');
 
+  /*
+   * Gated on the capability, not merely on a session.
+   *
+   * One request here returns every contact, email, note and meeting for a
+   * conference. The older export leans on its menu item being hidden, which
+   * governs the button rather than the URL; a new endpoint does not inherit
+   * that.
+   */
+  eq('the export needs the CRM-export capability',
+    /requireCapability\(request, 'crm_export'\)/.test(route), true);
+  eq('  not just any signed-in session', /requireAuth\(/.test(route), false);
+
   // The spec's filter: a conference list is mostly people nobody spoke to.
   eq('only people who did something are exported',
     /if \(touches\.length === 0 && notes\.length === 0 && !follow && !hasMeeting\.has\(id\)\) continue;/.test(route), true);
@@ -257,6 +269,14 @@ console.log('\n— what the route does with it —');
     /Generic CRM files \(matched on email\)/.test(page), true);
   eq('  and again where the provider is picked',
     /match records on <strong>email address<\/strong>/.test(modal), true);
+  /*
+   * Without pointing at an export the account may not have.
+   *
+   * Most tenants have no CRM bridge; telling them to use its export instead
+   * is a puzzle rather than a warning. The note says what these files ARE.
+   */
+  eq('    without sending them to a bridge they may not have',
+    /CRM bridge/.test(modal), false);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

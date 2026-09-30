@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import JSZip from 'jszip';
-import { requireAuth } from '@/lib/auth';
+import { requireCapability } from '@/lib/requireCapability';
 import { getDb } from '@/lib/getDb';
 import {
   csvFile, meetingStartISO, notesString, outcomeLabel, touchpointsString,
@@ -33,7 +33,15 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  const authResult = await requireAuth(request);
+  /*
+   * Gated on the capability, not just on a session.
+   *
+   * This hands out every contact, email, note and meeting for a conference in
+   * one file. The older crm-export route beside it checks only for a session
+   * and leans on the menu item being hidden — which governs the button, not
+   * the URL. A new endpoint should not inherit that.
+   */
+  const authResult = await requireCapability(request, 'crm_export');
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
   const conferenceId = Number(params.id);

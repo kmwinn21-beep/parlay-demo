@@ -35,15 +35,24 @@ const LINKEDIN_ALIASES = [
  * company-name alias, and both match as substrings, so without claiming these
  * first `hubspot_contact_id` filed itself as a link and `hubspot_company_id`
  * could be read as the company name.
+ *
+ * Every alias names HubSpot, and a bare `contact_id` or `company_id` is
+ * deliberately NOT one.
+ *
+ * Most tenants here have no HubSpot bridge, and a registration export's own
+ * `contact_id` is not a HubSpot record id. Nothing read that column before,
+ * so capturing it would not break an existing mapping — it would do something
+ * worse quietly: write a foreign number into a column that pairs a person
+ * with a CRM record and is admin-only to change once set. The file Kristian
+ * sends uses the prefixed names, so nothing is lost by being strict.
  */
 const HUBSPOT_CONTACT_ID_ALIASES = [
   'hubspot_contact_id', 'hubspot contact id', 'hubspot_contactid',
   'hs_contact_id', 'hs contact id', 'hubspot_record_id', 'hubspot record id',
-  'contact_id', 'contact id',
 ];
 const HUBSPOT_COMPANY_ID_ALIASES = [
   'hubspot_company_id', 'hubspot company id', 'hubspot_companyid',
-  'hs_company_id', 'hs company id', 'company_id', 'company id',
+  'hs_company_id', 'hs company id',
 ];
 const EVENT_CODE_ALIASES = [
   'event_code', 'event code', 'conference_code', 'conference code',

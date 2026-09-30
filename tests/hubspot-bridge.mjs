@@ -165,6 +165,49 @@ console.log('\n— the file in, mapped —');
     headers.filter(h => !claimed.has(h)), ['account_status', 'open_deal_stage']);
 }
 
+console.log('\n— and no other tenant s file is touched —');
+{
+  /*
+   * Most accounts here have no HubSpot bridge, and this shipped into all of
+   * them. Every alias for the pairing key names HubSpot on purpose.
+   *
+   * A conference registration export very plausibly carries its own
+   * `contact_id`. Nothing mapped that column before, so capturing it would
+   * not break an existing mapping — it would do something quieter and worse:
+   * write a foreign number into the column that pairs a person with a CRM
+   * record, which is admin-only to change once set.
+   */
+  const plain = suggestMapping([
+    'contact_id', 'first_name', 'last_name', 'job_title', 'company', 'email', 'phone', 'reg_type',
+  ]);
+  eq('a registration file\u2019s own contact_id is not a HubSpot id',
+    plain.hubspot_contact_id, null);
+  eq('  and a bare company_id is not one either',
+    suggestMapping(['company_id', 'company', 'first_name', 'last_name']).hubspot_company_id, null);
+  // The rest of that file still maps exactly as it did before the bridge.
+  eq('  while the rest of the file is unaffected',
+    [plain.first_name, plain.last_name, plain.title, plain.company, plain.email, plain.phone],
+    ['first_name', 'last_name', 'job_title', 'company', 'email', 'phone']);
+
+  // A Salesforce tenant keeps its CRM link columns.
+  const sf = suggestMapping(['first_name', 'last_name', 'company', 'email', 'crm_contact_link', 'crm_link']);
+  eq('a Salesforce tenant keeps its link columns',
+    [sf.crm_contact_link, sf.crm_link], ['crm_contact_link', 'crm_link']);
+  eq('  and gains no HubSpot id from them',
+    [sf.hubspot_contact_id, sf.hubspot_company_id], [null, null]);
+
+  // Every alias names HubSpot. Stated as a rule so widening one is a
+  // deliberate act rather than a convenience.
+  const parsersSrc = strip('lib/parsers.ts');
+  const block = parsersSrc.slice(
+    parsersSrc.indexOf('const HUBSPOT_CONTACT_ID_ALIASES'),
+    parsersSrc.indexOf('const EVENT_CODE_ALIASES'),
+  );
+  const aliases = block.match(/'[^']+'/g) ?? [];
+  eq('every pairing-key alias names HubSpot',
+    aliases.filter(a => !/hubspot|hs_|hs /.test(a)), []);
+}
+
 console.log('\n— a link pasted by hand reads the same as a file id —');
 {
   // What a rep actually does: copies the URL out of a HubSpot tab.
