@@ -226,7 +226,14 @@ export function CrmExportModal({ conferenceId, conferenceName, startDate, endDat
           {/* ── STEP 1 — Select CRM ── */}
           {step === 1 && (
             <div>
-              <h2 className="text-lg font-bold text-gray-900 mb-1">Select your CRM</h2>
+              <h2 className="text-lg font-bold text-gray-900 mb-1">Generic CRM files</h2>
+              {/* Said once, at the top, where somebody who opened the wrong
+                  thing will read it before picking a provider. */}
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+                These files match records on <strong>email address</strong>. If your account
+                has a CRM bridge configured, use its own export instead — that one pairs on
+                the CRM&rsquo;s record ids.
+              </p>
               <p className="text-sm text-gray-500 mb-5">
                 Choose the CRM you want to import this data into. Files will be formatted and named for the selected platform.
               </p>

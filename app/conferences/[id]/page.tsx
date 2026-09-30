@@ -3630,7 +3630,14 @@ export default function ConferenceDetailPage() {
                             <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                             </svg>
-                            Export CRM Files
+                            {/* Named for what it produces, not for where it
+                                is going. Teton's HubSpot bridge has its own
+                                export that pairs on record ids; this one
+                                matches on EMAIL and is for an account with no
+                                bridge. Two menu entries both reading "CRM"
+                                is how the wrong one gets run on the Monday
+                                after a conference. */}
+                            Generic CRM files (matched on email)
                           </button>
                         )}
                         {/* The header's own actions, kept apart from the
