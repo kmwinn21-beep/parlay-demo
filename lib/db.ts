@@ -1,5 +1,6 @@
 import { createClient, type Client } from '@libsql/client';
 import { migrations } from '@/lib/db-migrations';
+import { reconcileOnce } from '@/lib/schemaReconcile';
 
 export const db = createClient({
   url: process.env.TURSO_DATABASE_URL!,
@@ -230,6 +231,7 @@ async function runFullMigrations(): Promise<void> {
       await db.execute({ sql: 'ALTER TABLE companies ADD COLUMN products TEXT', args: [] }).catch(() => {});
     }
     await ensureConfigOptionsColumns(db);
+    await reconcileOnce(db, migrations);
     // Ensure accounts table has multi-tenant columns (added after initial schema deployment)
     try {
       const accountCols = await db.execute({ sql: 'PRAGMA table_info(accounts)', args: [] });
@@ -1107,6 +1109,21 @@ export async function migrateTenantDb(client: Client): Promise<void> {
       }
     }
   }
+
+  /*
+   * And then make the columns match regardless of what the counter says.
+   *
+   * The loop above swallows every statement's error, because an ALTER adding
+   * a column that is already there is expected to fail. The price is that it
+   * cannot tell that from a real failure: a transient error looks like
+   * success, the checkpoint moves past it, and the column is missing for the
+   * life of this database with nothing left to retry it.
+   *
+   * That happened — attendees.crm_contact_link went missing on a live tenant
+   * and every attendee edit failed with "no such column" while the version
+   * said the schema was current. See lib/schemaReconcile.ts.
+   */
+  await reconcileOnce(client, migrations);
 }
 
 export interface Conference {
