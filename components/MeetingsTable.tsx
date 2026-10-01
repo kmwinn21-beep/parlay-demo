@@ -184,6 +184,15 @@ const MENU_MARGIN = 8;
 /** How wide the Title column is, leaving room for Location beside it. */
 const TITLE_WIDTH = 150;
 
+/**
+ * How wide the Name column is on a table whose titles read under the names.
+ *
+ * Wider than the 220 it gets beside a Title column, because it now carries
+ * what that column used to: a title cut at 220 would be no better read under
+ * the name than it was in a 150px cell.
+ */
+const NAME_WIDTH_WITH_TITLE = 300;
+
 /** The label above every value on the mobile card. Declared once so they match. */
 const EYEBROW = 'text-[9px] uppercase tracking-wide text-gray-400 font-medium mb-1';
 
@@ -1101,6 +1110,15 @@ export function MeetingsTable({
   showAttendeeAvatar?: boolean;
 }) {
   const { isVisible, orderedColumns } = useTableColumnConfig(tableName);
+  /**
+   * Whether this table has a Title column at all.
+   *
+   * Where it does not, the title reads under the name instead — the same
+   * arrangement the conference attendees table uses. Keyed off the column
+   * list rather than off `isVisible` on purpose: hiding Title from the
+   * column menu should hide the title, not move it.
+   */
+  const titleUnderName = !orderedColumns.some(col => col.key === 'title');
   const customColumns = useCustomColumns(tableName);
   const [sortKey, setSortKey] = useState<SortKey>('datetime');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -1455,14 +1473,18 @@ export function MeetingsTable({
    * conferences at all.
    */
   /**
-   * The title cell being hovered, and where its tooltip goes.
+   * The name cell being hovered, and where its tooltip goes.
    *
    * One at a time for the whole table rather than a hook per row: a row is a
    * branch of a switch here, not a component, so there is nowhere to put
    * per-row state.
+   *
+   * It hangs off Name rather than Title because on a table whose titles read
+   * under the names there is no Title cell to hover, and a card listing who
+   * the meeting is with belongs beside the names either way.
    */
-  const [titleTip, setTitleTip] = useState<{ id: number; pos: TooltipPos } | null>(null);
-  const titleCellRefs = useRef<Record<number, HTMLSpanElement | null>>({});
+  const [peopleTip, setPeopleTip] = useState<{ id: number; pos: TooltipPos } | null>(null);
+  const nameCellRefs = useRef<Record<number, HTMLElement | null>>({});
 
   const mobileValue = (m: Meeting) =>
     m.company_wse != null && avgCostPerUnit > 0
@@ -1805,34 +1827,73 @@ export function MeetingsTable({
       {orderedColumns.map(col => {
         if (!isVisible(col.key)) return null;
         switch (col.key) {
-          case 'name': return <td key="name" className="px-3 py-2 font-medium text-gray-800 overflow-hidden align-top" style={{ maxWidth: 220 }}>
-            <div className="flex items-center gap-1.5 group">
+          case 'name': return <td
+            key="name"
+            ref={el => { nameCellRefs.current[m.id] = el; }}
+            onMouseEnter={() => {
+              const el = nameCellRefs.current[m.id];
+              if (el) setPeopleTip({ id: m.id, pos: calcTooltipPos(el) });
+            }}
+            onMouseLeave={() => setPeopleTip(null)}
+            className="px-3 py-2 font-medium text-gray-800 overflow-hidden align-top relative"
+            style={{ maxWidth: titleUnderName ? NAME_WIDTH_WITH_TITLE : 220 }}
+          >
+            {/* The avatar keeps the top of the stack, so the name sits on the
+                same line as the date beside it and the title on the time's. */}
+            <div className={`flex gap-1.5 group ${titleUnderName ? 'items-start' : 'items-center'}`}>
               {showAttendeeAvatar && (
                 <AttendeeInitialsAvatar
                   name={`${m.first_name} ${m.last_name}`}
                   photoUrl={m.photo_url}
                   title={m.title}
                   companyName={m.company_name}
-                  className="w-7 h-7 text-[10px]"
+                  className="w-7 h-7 text-[10px] flex-shrink-0"
                 />
               )}
-              {attendeeNameNode(m, 'text-xs font-semibold text-brand-secondary hover:underline leading-snug block truncate')}
+              <div className="min-w-0 flex-1">
+                {attendeeNameNode(m, 'text-xs font-semibold text-brand-secondary hover:underline leading-snug block truncate')}
+                {/* Set like the time rather than like the name: the second line
+                    of this cell and the second line of Date/Time are both the
+                    quieter half of the pair. */}
+                {titleUnderName && m.title && (
+                  <div className="font-normal text-gray-400 leading-snug truncate" title={m.title}>{m.title}</div>
+                )}
+              </div>
               {m.as_additional_attendee && <AdditionalAttendeeBadge />}
             </div>
-            {/* Guests on the meeting, stacked under its subject and lined up
-                with their titles in the next column. */}
+            {/* Everyone the meeting is with, read in one card rather than by
+                hovering each clipped line of the cell in turn. */}
+            {peopleTip?.id === m.id && meetingPeople(m).length > 0 && (
+              <div
+                style={{
+                  position: 'fixed', top: peopleTip.pos.top, left: peopleTip.pos.left,
+                  width: peopleTip.pos.width, zIndex: 9999,
+                  transform: peopleTip.pos.above ? 'translateY(-100%)' : 'translateY(0)',
+                }}
+                className="pointer-events-none"
+              >
+                <PeopleTooltipCard heading="Attendees" people={meetingPeople(m)} />
+              </div>
+            )}
+            {/* Guests on the meeting, in the same two-line shape as the
+                attendee above them. */}
             {(m.additional_attendee_records ?? []).map(extra => (
-              <div key={extra.id} className="flex items-center gap-1.5 mt-1.5">
+              <div key={extra.id} className={`flex gap-1.5 mt-1.5 ${titleUnderName ? 'items-start' : 'items-center'}`}>
                 <AttendeeInitialsAvatar
                   name={`${extra.first_name} ${extra.last_name}`}
                   photoUrl={extra.photo_url}
                   title={extra.title}
                   companyName={extra.company_name}
-                  className="w-6 h-6 text-[9px]"
+                  className={titleUnderName ? 'w-7 h-7 text-[10px] flex-shrink-0' : 'w-6 h-6 text-[9px] flex-shrink-0'}
                 />
-                <span className="text-xs font-normal text-gray-500 leading-snug truncate" title={`${extra.first_name} ${extra.last_name}`}>
-                  {extra.first_name} {extra.last_name}
-                </span>
+                <div className="min-w-0 flex-1">
+                  <span className="text-xs font-normal text-gray-500 leading-snug block truncate" title={`${extra.first_name} ${extra.last_name}`}>
+                    {extra.first_name} {extra.last_name}
+                  </span>
+                  {titleUnderName && extra.title && (
+                    <div className="font-normal text-gray-400 leading-snug truncate" title={extra.title}>{extra.title}</div>
+                  )}
+                </div>
               </div>
             ))}
           </td>;
@@ -1843,41 +1904,20 @@ export function MeetingsTable({
              * title line takes the height of the matching name line's avatar
              * so the two columns stay in step.
              *
-             * The whole title is read in a tooltip rather than by expanding
-             * this in place. Expanding it meant an opaque copy sliding over
-             * the neighbouring cell, which could only ever be one line wide —
-             * a long title ran out of room and was cut off again, which is the
-             * problem it was there to solve.
+             * The whole title is read in the card the Name column opens on
+             * hover, rather than by expanding this in place. Expanding it
+             * meant an opaque copy sliding over the neighbouring cell, which
+             * could only ever be one line wide — a long title ran out of room
+             * and was cut off again, which is the problem it was there to
+             * solve.
              */}
             <span
-              ref={el => { titleCellRefs.current[m.id] = el; }}
-              onMouseEnter={() => {
-                const el = titleCellRefs.current[m.id];
-                if (el) setTitleTip({ id: m.id, pos: calcTooltipPos(el) });
-              }}
-              onMouseLeave={() => setTitleTip(null)}
               className={`block text-xs font-semibold leading-snug truncate ${
                 (m.additional_attendee_records?.length ?? 0) > 0
                   ? `flex items-center ${showAttendeeAvatar ? 'min-h-[28px]' : 'min-h-[20px]'}`
                   : ''
               }`}
             >{m.title || <span className="text-gray-300">\u2014</span>}</span>
-            {/* Everyone the meeting is with, not just the one whose title is
-                cut off: the guests' titles are clipped in the same column, and
-                a tooltip that answers for one line of a cell and not the rest
-                is a tooltip you have to hover four times. */}
-            {titleTip?.id === m.id && meetingPeople(m).length > 0 && (
-              <div
-                style={{
-                  position: 'fixed', top: titleTip.pos.top, left: titleTip.pos.left,
-                  width: titleTip.pos.width, zIndex: 9999,
-                  transform: titleTip.pos.above ? 'translateY(-100%)' : 'translateY(0)',
-                }}
-                className="pointer-events-none"
-              >
-                <PeopleTooltipCard heading="Attendees" people={meetingPeople(m)} />
-              </div>
-            )}
             {(m.additional_attendee_records ?? []).map(extra => (
               <span key={extra.id} className="flex items-center h-6 mt-1.5 text-xs font-normal text-gray-400 leading-snug truncate" title={extra.title ?? ''}>
                 {extra.title || '—'}
@@ -1892,7 +1932,7 @@ export function MeetingsTable({
               </div>
             ) : (<span className="text-gray-300">—</span>)}
           </td> : null;
-          case 'datetime': return <td key="datetime" className="px-3 py-2 text-gray-600 leading-snug">
+          case 'datetime': return <td key="datetime" className="px-3 py-2 text-gray-600 leading-snug align-top">
             <div className="font-medium">{formatMeetingDate(m.meeting_date)}</div>
             <div className="text-gray-400">{formatMeetingTime(m.meeting_time)}</div>
           </td>;
